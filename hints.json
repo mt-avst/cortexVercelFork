@@ -1,0 +1,19 @@
+[
+  {
+    "id": "hapi_search_issues",
+    "keywords": [
+      "Issues.search",
+      "JQL",
+      "ORDER BY",
+      "project ="
+    ],
+    "novice_hint": "HAPI runs JQL and returns Issue objects you can iterate. Start with a narrow filter, then add clauses.",
+    "novice_snippet": "Issues.search(\"project = DEMO AND issuetype = Task ORDER BY updated DESC\").each { issue ->\n  log.warn(issue.key)\n}",
+    "expert_hint": "Keep searches index-friendly. Restrict date ranges and sort on indexed fields. Stream results when possible.",
+    "expert_snippet": "Issues.search(\"project = DEMO AND status IN (\\\"In Progress\\\", \\\"Blocked\\\") AND updated >= -7d ORDER BY updated DESC\").each { it -> /* act */ }",
+    "feed_novice": "Tip: quote multi-word values and add ORDER BY to stabilise results.",
+    "feed_expert": "Prefer IN over long OR chains. Validate performance in large projects.",
+    "sidebar_novice": "HAPI search returns Issue objects. Use simple JQL, then iterate.",
+    "sidebar_expert": "Performance: narrow scope, avoid wildcards, prefer indexed sorts, test on prod-like data."
+  }
+]

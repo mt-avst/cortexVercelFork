@@ -1,0 +1,436 @@
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.btn-secondary {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #545b62;
+}
+
+.header {
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+  padding: 1rem 0;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.logo {
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #007bff;
+  text-decoration: none;
+}
+
+.nav {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.main {
+  padding: 2rem 0;
+}
+
+.card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+/* Individual research opportunity cards */
+.opportunity-card {
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Filter form styling */
+.filter-section {
+  background-color: #f8f9fa;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e9ecef;
+}
+
+.filter-section .row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+}
+
+.filter-section .col-md-4,
+.filter-section .col-md-8 {
+  flex: 0 0 auto;
+}
+
+.filter-section .col-md-4 {
+  width: 30%;
+}
+
+.filter-section .col-md-8 {
+  width: 70%;
+}
+
+.filter-section .form-label {
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 0.75rem;
+}
+
+.filter-section .form-select,
+.filter-section .form-control {
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.filter-section .form-select:focus,
+.filter-section .form-control:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  outline: 0;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.mb-3 {
+  margin-bottom: 1rem;
+}
+
+.loading {
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.nav {
+  min-height: 40px;
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* CSS Custom Properties for Calendar Hover Effects */
+:root {
+  --calendar-hover-transition: all 0.2s ease;
+  --calendar-hover-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  --calendar-hover-transform: translateY(-1px);
+  --calendar-hover-scale: scale(1.02);
+  --calendar-hover-shadow-selected: 0 4px 8px rgba(0, 123, 255, 0.3);
+}
+
+/* Custom calendar slot colors */
+.calendar-slot-available {
+  background-color: #28a745 !important; /* Bootstrap success green */
+  border-color: #28a745 !important;
+  color: white !important;
+}
+
+.calendar-slot-available:hover:not(:disabled) {
+  background-color: #218838 !important; /* Darker green on hover */
+  border-color: #1e7e34 !important;
+  transform: var(--calendar-hover-transform);
+  box-shadow: var(--calendar-hover-shadow);
+}
+
+/* Hover states for different slot types */
+.calendar-slot-busy:hover {
+  background-color: rgba(108, 117, 125, 0.1) !important;
+  border-color: rgba(108, 117, 125, 0.3) !important;
+  cursor: not-allowed !important;
+}
+
+.calendar-slot-selected:hover {
+  transform: var(--calendar-hover-scale) !important;
+  box-shadow: var(--calendar-hover-shadow-selected) !important;
+}
+
+.calendar-slot-existing:hover {
+  background-color: rgba(40, 167, 69, 0.1) !important;
+  border-color: rgba(40, 167, 69, 0.3) !important;
+  transform: var(--calendar-hover-transform);
+  box-shadow: var(--calendar-hover-shadow);
+}
+
+/* Calendar slot container */
+.calendar-slot-container {
+  position: relative;
+  overflow: hidden;
+  border-radius: 4px;
+  height: 80px;
+  width: 100%;
+  min-height: 80px;
+  max-height: 80px;
+  min-width: 100%;
+  max-width: 100%;
+}
+
+/* Ensure all calendar slots have consistent sizing */
+.calendar-slot-btn {
+  height: 80px !important;
+  min-height: 80px !important;
+  max-height: 80px !important;
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 8px !important;
+  border-radius: 4px !important;
+  border: 1px solid transparent !important;
+  transition: var(--calendar-hover-transition) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.calendar-slot-btn:hover:not(:disabled) {
+  transform: var(--calendar-hover-transform);
+  box-shadow: var(--calendar-hover-shadow);
+}
+
+.calendar-slot-btn:disabled {
+  opacity: 0.7 !important;
+  cursor: not-allowed !important;
+}
+
+/* Ensure table cells have consistent sizing */
+.calendar-grid table td {
+  height: 100px !important;
+  min-height: 100px !important;
+  max-height: 100px !important;
+  width: 200px !important;
+  min-width: 200px !important;
+  max-width: 200px !important;
+  vertical-align: middle !important;
+  padding: 8px !important;
+}
+
+.calendar-grid table th {
+  height: 60px !important;
+  vertical-align: middle !important;
+}
+
+/* Ensure table has fixed layout for consistent column widths */
+.calendar-grid table {
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+/* Confirmation buttons styling */
+.confirmation-buttons {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.confirmation-btn {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 24px !important;
+  min-height: 24px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+  transition: all 0.2s ease !important;
+}
+
+.confirmation-btn:hover {
+  transform: scale(1.1) !important;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+.confirm-btn {
+  background-color: #28a745 !important;
+  border-color: #28a745 !important;
+  color: white !important;
+}
+
+.confirm-btn:hover {
+  background-color: #218838 !important;
+  border-color: #1e7e34 !important;
+}
+
+.cancel-btn {
+  background-color: #dc3545 !important;
+  border-color: #dc3545 !important;
+  color: white !important;
+}
+
+.cancel-btn:hover {
+  background-color: #c82333 !important;
+  border-color: #bd2130 !important;
+}
+
+/* Accessibility Features */
+/* Respect user's motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .calendar-slot-btn {
+    transition: none !important;
+  }
+  
+  .calendar-slot-btn:hover {
+    transform: none !important;
+  }
+  
+  .calendar-slot-available:hover {
+    transform: none !important;
+  }
+  
+  .calendar-slot-selected:hover {
+    transform: none !important;
+  }
+  
+  .calendar-slot-existing:hover {
+    transform: none !important;
+  }
+  
+  .confirmation-btn:hover {
+    transform: none !important;
+  }
+}
+
+/* Add focus states for keyboard navigation */
+.calendar-slot-btn:focus {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+
+.calendar-slot-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .calendar-slot-btn {
+    border-width: 2px !important;
+  }
+  
+  .calendar-slot-available {
+    border-color: #000 !important;
+  }
+  
+  .calendar-slot-available:hover {
+    border-color: #000 !important;
+  }
+}
+
+/* Booking success banner */
+.booking-success-banner {
+  position: fixed;
+  top: 70px;
+  left: 0;
+  right: 0;
+  z-index: 1050;
+  background-color: rgba(40, 167, 69, 0.1);
+  padding: 10px 0 20px 0;
+}
+
+.booking-success-banner .alert {
+  background-color: rgba(40, 167, 69, 0.15) !important;
+  border: 1px solid rgba(40, 167, 69, 0.3) !important;
+  color: #155724 !important;
+  font-weight: 500;
+  padding: 15px 20px;
+  font-size: 1.1rem;
+}
+
+/* Admin table zebra stripes */
+.table-striped tbody tr:nth-of-type(odd) {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+.table-striped tbody tr:nth-of-type(even) {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+
+.table-striped tbody tr:hover {
+  background-color: rgba(0, 123, 255, 0.1) !important;
+}
+
+/* Admin table row spacing */
+.table-striped tbody tr {
+  height: 60px !important;
+}
+
+.table-striped tbody td {
+  padding: 16px 12px !important;
+  vertical-align: middle !important;
+}
+
+.table-striped thead th {
+  padding: 16px 12px !important;
+  vertical-align: middle !important;
+}

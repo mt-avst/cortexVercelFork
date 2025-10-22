@@ -1,0 +1,26 @@
+{
+  "name": "adaptalabs-root",
+  "version": "1.0.0",
+  "description": "Adaptalabs recruitment app root package",
+  "private": true,
+  "scripts": {
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test",
+    "test:e2e": "playwright test",
+    "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e",
+    "test:coverage": "cd backend && npm run test -- --coverage && cd ../frontend && npm run test -- --coverage",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "build:all": "cd backend && npm run build && cd ../frontend && npm run build",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm start",
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/express": "^5.0.3",
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  }
+}
