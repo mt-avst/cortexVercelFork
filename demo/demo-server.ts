@@ -113,7 +113,7 @@ app.get('/auth/login', (req, res) => {
 app.get('/auth/admin-login', (req, res) => {
   // Demo: Create a mock admin user session
   const demoAdmin = {
-    id: 'demo-admin-456',
+    id: 'b96e81d0-be56-40bd-9eee-bdb95ef2d273',
     name: 'Demo Admin',
     email: 'admin@example.com',
     business_unit: 'Research',
@@ -164,85 +164,8 @@ app.get('/api/me', (req, res) => {
 app.get('/api/opportunities', (req, res) => {
   console.log('API /opportunities called');
   
-  // Return mock opportunities with sessions
-  const mockOpportunities = [
-    {
-      id: 'opp-1',
-      type: 'test',
-      title: 'User Interface Testing',
-      purpose_one_liner: 'Help us test the new user interface design',
-      description_optional: 'We need feedback on our new UI design. This will take about 30 minutes.',
-      product_optional: 'Web Application',
-      default_duration_minutes: 30,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-      sessions: [
-        {
-          id: 'session-1',
-          opportunity_id: 'opp-1',
-          start_time: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
-          end_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
-          capacity: 5,
-          booked_count: 2,
-          location_or_meet_link_optional: 'Conference Room A',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          remaining: 3
-        },
-        {
-          id: 'session-2',
-          opportunity_id: 'opp-1',
-          start_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // Day after tomorrow
-          end_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
-          capacity: 3,
-          booked_count: 0,
-          location_or_meet_link_optional: 'Conference Room B',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          remaining: 3
-        }
-      ]
-    },
-    {
-      id: 'opp-2',
-      type: 'poll',
-      title: 'Product Feedback Survey',
-      purpose_one_liner: 'Share your thoughts on our latest product features',
-      description_optional: 'Quick 5-minute survey about product features',
-      product_optional: 'Mobile App',
-      default_duration_minutes: 5,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: 'https://example.com/survey',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-      sessions: []
-    },
-    {
-      id: 'opp-3',
-      type: 'question',
-      title: 'What feature would improve your daily workflow?',
-      purpose_one_liner: 'Share the one feature that would make the biggest difference in your daily work',
-      description_optional: 'We want to understand what single feature would have the most impact on your productivity. Please be specific about how this feature would help you.',
-      product_optional: 'Product Suite',
-      default_duration_minutes: 5,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-      sessions: []
-    }
-  ];
+  // Return empty opportunities array - user will create their own test data
+  const mockOpportunities: any[] = [];
   
   res.json(mockOpportunities);
 });
@@ -251,133 +174,8 @@ app.get('/api/opportunities/:id', (req, res) => {
   const { id } = req.params;
   console.log('API /opportunities/:id called with id:', id);
   
-  // Return mock opportunity detail based on ID
-  const mockOpportunities = [
-    {
-      id: 'opp-1',
-      type: 'test',
-      title: 'User Interface Testing',
-      purpose_one_liner: 'Help us test the new user interface design',
-      description_optional: 'We need feedback on our new UI design. This will take about 30 minutes.',
-      product_optional: 'Web Application',
-      default_duration_minutes: 30,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-             sessions: [
-               {
-                 id: 'session-1',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).toISOString(), // Tomorrow 9:00 AM
-                 end_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).toISOString(), // Tomorrow 10:00 AM
-                 capacity: 5,
-                 booked_count: 5, // Fully booked
-                 location_or_meet_link_optional: 'Conference Room A',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 0
-               },
-               {
-                 id: 'session-2',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 10 * 30 * 60 * 1000).toISOString(), // Tomorrow 10:30 AM
-                 end_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 11 * 30 * 60 * 1000).toISOString(), // Tomorrow 11:30 AM
-                 capacity: 3,
-                 booked_count: 1, // Partially booked
-                 location_or_meet_link_optional: 'Conference Room B',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 2
-               },
-               {
-                 id: 'session-3',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000).toISOString(), // Tomorrow 2:00 PM
-                 end_time: new Date(Date.now() + 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000).toISOString(), // Tomorrow 3:00 PM
-                 capacity: 4,
-                 booked_count: 0, // Available
-                 location_or_meet_link_optional: 'Conference Room C',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 4
-               },
-               {
-                 id: 'session-4',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).toISOString(), // Day after tomorrow 9:00 AM
-                 end_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).toISOString(), // Day after tomorrow 10:00 AM
-                 capacity: 3,
-                 booked_count: 2, // Partially booked
-                 location_or_meet_link_optional: 'Conference Room A',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 1
-               },
-               {
-                 id: 'session-5',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 10 * 30 * 60 * 1000).toISOString(), // Day after tomorrow 10:30 AM
-                 end_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 11 * 30 * 60 * 1000).toISOString(), // Day after tomorrow 11:30 AM
-                 capacity: 2,
-                 booked_count: 2, // Fully booked
-                 location_or_meet_link_optional: 'Conference Room B',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 0
-               },
-               {
-                 id: 'session-6',
-                 opportunity_id: 'opp-1',
-                 start_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000).toISOString(), // Day after tomorrow 2:00 PM
-                 end_time: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000).toISOString(), // Day after tomorrow 3:00 PM
-                 capacity: 3,
-                 booked_count: 0, // Available
-                 location_or_meet_link_optional: 'Conference Room C',
-                 created_at: new Date().toISOString(),
-                 updated_at: new Date().toISOString(),
-                 remaining: 3
-               }
-             ]
-    },
-    {
-      id: 'opp-2',
-      type: 'poll',
-      title: 'Product Feedback Survey',
-      purpose_one_liner: 'Share your thoughts on our latest product features',
-      description_optional: 'Quick 5-minute survey about product features',
-      product_optional: 'Mobile App',
-      default_duration_minutes: 5,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: 'https://example.com/survey',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-      sessions: []
-    },
-    {
-      id: 'opp-3',
-      type: 'question',
-      title: 'What feature would improve your daily workflow?',
-      purpose_one_liner: 'Share the one feature that would make the biggest difference in your daily work',
-      description_optional: 'We want to understand what single feature would have the most impact on your productivity. Please be specific about how this feature would help you.',
-      product_optional: 'Product Suite',
-      default_duration_minutes: 5,
-      status: 'published',
-      owner_user_id: 'demo-admin-456',
-      external_link_optional: null,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      owner_name: 'Demo Admin',
-      owner_email: 'admin@example.com',
-      sessions: []
-    }
-  ];
+  // Return empty opportunities array - user will create their own test data
+  const mockOpportunities: any[] = [];
   
   const opportunity = mockOpportunities.find(opp => opp.id === id);
   if (!opportunity) {
@@ -565,7 +363,7 @@ app.post('/api/opportunities/:id/duplicate', (req, res) => {
     product_optional: 'Demo Product',
     default_duration_minutes: 30,
     status: 'draft',
-    owner_user_id: 'demo-admin-456',
+    owner_user_id: 'b96e81d0-be56-40bd-9eee-bdb95ef2d273',
     external_link_optional: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

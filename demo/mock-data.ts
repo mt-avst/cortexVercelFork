@@ -1,254 +1,5 @@
 // Mock data service for development when database is not available
-let dynamicMockOpportunities = [
-  {
-    id: '1',
-    type: 'test' as const,
-    title: 'User Interface Testing',
-    purpose_one_liner: 'Help us test the new dashboard interface to improve user experience',
-    description_optional: 'We need volunteers to test our new dashboard interface. This will involve navigating through different sections and providing feedback on usability.',
-    product_optional: 'Customer Dashboard',
-    default_duration_minutes: 45,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    participant_type_required: 'internal' as const,
-    participant_type_specific_details: null,
-    created_at: new Date('2024-01-15T10:00:00Z'),
-    updated_at: new Date('2024-01-15T10:00:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '2',
-    type: 'poll' as const,
-    title: 'Feature Preference Survey',
-    purpose_one_liner: 'Share your preferences for upcoming product features',
-    description_optional: 'We want to understand which features are most important to our users.',
-    product_optional: 'Mobile App',
-    default_duration_minutes: 15,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://forms.google.com/example-poll',
-    participant_type_required: 'any' as const,
-    participant_type_specific_details: null,
-    created_at: new Date('2024-01-16T14:30:00Z'),
-    updated_at: new Date('2024-01-16T14:30:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '3',
-    type: 'survey' as const,
-    title: 'Workplace Satisfaction Survey',
-    purpose_one_liner: 'Help us understand workplace satisfaction and identify areas for improvement',
-    description_optional: 'Your feedback is crucial for creating a better work environment for everyone.',
-    product_optional: null,
-    default_duration_minutes: 20,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://surveymonkey.com/example-survey',
-    participant_type_required: 'internal' as const,
-    participant_type_specific_details: null,
-    created_at: new Date('2024-01-17T09:15:00Z'),
-    updated_at: new Date('2024-01-17T09:15:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '4',
-    type: 'test' as const,
-    title: 'Mobile App Beta Testing',
-    purpose_one_liner: 'Test our new mobile app features before public release',
-    description_optional: 'We need beta testers to try out new features and report any bugs or issues.',
-    product_optional: 'Mobile App',
-    default_duration_minutes: 60,
-    status: 'draft' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    participant_type_required: 'external' as const,
-    created_at: new Date('2024-01-18T11:45:00Z'),
-    updated_at: new Date('2024-01-18T11:45:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '5',
-    type: 'test' as const,
-    title: 'API Performance Testing',
-    purpose_one_liner: 'Help us test API performance under various load conditions',
-    description_optional: 'We need to test how our APIs perform under different load conditions.',
-    product_optional: 'Backend Services',
-    default_duration_minutes: 90,
-    status: 'closed' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    participant_type_required: 'specific' as const,
-    participant_type_specific_details: 'Must have 3+ years experience with React and TypeScript. Experience with testing frameworks like Jest and Cypress preferred.',
-    created_at: new Date('2024-01-10T08:00:00Z'),
-    updated_at: new Date('2024-01-19T16:20:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '6',
-    type: 'test' as const,
-    title: 'Accessibility Testing',
-    purpose_one_liner: 'Help us ensure our application is accessible to all users',
-    description_optional: 'We need volunteers to test our application with screen readers and other accessibility tools.',
-    product_optional: 'Web Application',
-    default_duration_minutes: 30,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    participant_type_required: 'any' as const,
-    created_at: new Date('2024-01-20T13:00:00Z'),
-    updated_at: new Date('2024-01-20T13:00:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '7',
-    type: 'poll' as const,
-    title: 'Design System Feedback',
-    purpose_one_liner: 'Share your thoughts on our new design system components',
-    description_optional: 'We are updating our design system and need your input on the new components.',
-    product_optional: 'Design System',
-    default_duration_minutes: 25,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://forms.google.com/design-feedback',
-    created_at: new Date('2024-01-21T10:30:00Z'),
-    updated_at: new Date('2024-01-21T10:30:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '8',
-    type: 'survey' as const,
-    title: 'Product Usage Analytics',
-    purpose_one_liner: 'Help us understand how you use our products in your daily workflow',
-    description_optional: 'Understanding usage patterns helps us prioritize features and improvements.',
-    product_optional: 'Product Suite',
-    default_duration_minutes: 35,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://surveymonkey.com/usage-analytics',
-    created_at: new Date('2024-01-22T15:45:00Z'),
-    updated_at: new Date('2024-01-22T15:45:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '9',
-    type: 'test' as const,
-    title: 'Security Testing',
-    purpose_one_liner: 'Help us identify potential security vulnerabilities in our systems',
-    description_optional: 'We need security-conscious users to help us test for potential vulnerabilities.',
-    product_optional: 'Security Platform',
-    default_duration_minutes: 75,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    created_at: new Date('2024-01-23T09:20:00Z'),
-    updated_at: new Date('2024-01-23T09:20:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '10',
-    type: 'poll' as const,
-    title: 'Training Preferences',
-    purpose_one_liner: 'Tell us about your preferred learning methods and training formats',
-    description_optional: 'We want to improve our training programs based on your preferences.',
-    product_optional: null,
-    default_duration_minutes: 10,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://forms.google.com/training-preferences',
-    created_at: new Date('2024-01-24T14:10:00Z'),
-    updated_at: new Date('2024-01-24T14:10:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '11',
-    type: 'test' as const,
-    title: 'Cross-Platform Compatibility',
-    purpose_one_liner: 'Test our application across different browsers and operating systems',
-    description_optional: 'We need to ensure our application works consistently across various platforms.',
-    product_optional: 'Web Application',
-    default_duration_minutes: 50,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    created_at: new Date('2024-01-25T11:15:00Z'),
-    updated_at: new Date('2024-01-25T11:15:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '12',
-    type: 'survey' as const,
-    title: 'Customer Support Experience',
-    purpose_one_liner: 'Share your experience with our customer support team',
-    description_optional: 'Help us improve our customer support by sharing your recent experiences.',
-    product_optional: 'Support Platform',
-    default_duration_minutes: 15,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: 'https://surveymonkey.com/support-experience',
-    created_at: new Date('2024-01-26T16:30:00Z'),
-    updated_at: new Date('2024-01-26T16:30:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '13',
-    type: 'question' as const,
-    title: 'What feature would improve your daily workflow?',
-    purpose_one_liner: 'Share the one feature that would make the biggest difference in your daily work',
-    description_optional: 'We want to understand what single feature would have the most impact on your productivity. Please be specific about how this feature would help you.',
-    product_optional: 'Product Suite',
-    default_duration_minutes: 5,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    created_at: new Date('2024-01-27T10:00:00Z'),
-    updated_at: new Date('2024-01-27T10:00:00Z'),
-    owner_name: 'Sarah Johnson',
-    owner_email: 'sarah.johnson@adaptalabs.com',
-    sessions: []
-  },
-  {
-    id: '14',
-    type: 'question' as const,
-    title: 'What is your biggest challenge with our current tools?',
-    purpose_one_liner: 'Tell us about the main obstacle you face when using our products',
-    description_optional: 'Help us identify the most significant pain points in our current toolset. Your input will directly influence our product roadmap.',
-    product_optional: 'Development Tools',
-    default_duration_minutes: 3,
-    status: 'published' as const,
-    owner_user_id: 'demo-admin-456',
-    external_link_optional: null,
-    created_at: new Date('2024-01-28T14:15:00Z'),
-    updated_at: new Date('2024-01-28T14:15:00Z'),
-    owner_name: 'Mike Chen',
-    owner_email: 'mike.chen@adaptalabs.com',
-    sessions: []
-  }
-];
+let dynamicMockOpportunities: any[] = [];
 
 // Export the original static data for reference
 export const mockOpportunities = dynamicMockOpportunities;
@@ -303,6 +54,97 @@ export const deleteMockOpportunity = (id: string) => {
   const index = dynamicMockOpportunities.findIndex(opp => opp.id === id);
   if (index !== -1) {
     dynamicMockOpportunities.splice(index, 1);
+    return true;
+  }
+  return false;
+};
+
+// Mock sessions storage
+let dynamicMockSessions: any[] = [];
+
+// Function to add sessions to an opportunity in mock data
+export const addMockSessions = (opportunityId: string, sessions: any[]) => {
+  const opportunity = getMockOpportunity(opportunityId);
+  if (!opportunity) {
+    throw new Error('Opportunity not found');
+  }
+
+  const newSessions = sessions.map(session => ({
+    id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    opportunity_id: opportunityId,
+    start_time: session.start_time,
+    end_time: session.end_time,
+    capacity: session.capacity,
+    booked_count: 0,
+    location_or_meet_link_optional: session.location_or_meet_link_optional || null,
+    created_at: new Date(),
+    updated_at: new Date(),
+    remaining: session.capacity
+  }));
+
+  // Add to global sessions array
+  dynamicMockSessions.push(...newSessions);
+
+  // Update the opportunity's sessions array with the same session objects
+  opportunity.sessions = [...(opportunity.sessions || []), ...newSessions];
+
+  return newSessions;
+};
+
+// Function to get sessions for an opportunity
+export const getMockSessions = (opportunityId: string) => {
+  return dynamicMockSessions.filter(session => session.opportunity_id === opportunityId);
+};
+
+// Function to get all sessions (for finding by ID)
+export const getAllMockSessions = () => {
+  return dynamicMockSessions;
+};
+
+// Function to update a session in mock data
+export const updateMockSession = (sessionId: string, updates: any) => {
+  const sessionIndex = dynamicMockSessions.findIndex(session => session.id === sessionId);
+  if (sessionIndex !== -1) {
+    const updatedSession = { 
+      ...dynamicMockSessions[sessionIndex], 
+      ...updates,
+      updated_at: new Date()
+    };
+    
+    // Recalculate remaining field if capacity or booked_count changed
+    if (updates.capacity !== undefined || updates.booked_count !== undefined) {
+      updatedSession.remaining = updatedSession.capacity - updatedSession.booked_count;
+    }
+    
+    dynamicMockSessions[sessionIndex] = updatedSession;
+    
+    // Also update the session in the opportunity's sessions array
+    const opportunity = getMockOpportunity(updatedSession.opportunity_id);
+    if (opportunity && opportunity.sessions) {
+      const oppSessionIndex = opportunity.sessions.findIndex((s: any) => s.id === sessionId);
+      if (oppSessionIndex !== -1) {
+        opportunity.sessions[oppSessionIndex] = updatedSession;
+      }
+    }
+    
+    return updatedSession;
+  }
+  return null;
+};
+
+// Function to delete a session from mock data
+export const deleteMockSession = (sessionId: string) => {
+  const sessionIndex = dynamicMockSessions.findIndex(session => session.id === sessionId);
+  if (sessionIndex !== -1) {
+    const session = dynamicMockSessions[sessionIndex];
+    dynamicMockSessions.splice(sessionIndex, 1);
+    
+    // Remove from opportunity's sessions array
+    const opportunity = getMockOpportunity(session.opportunity_id);
+    if (opportunity && opportunity.sessions) {
+      opportunity.sessions = opportunity.sessions.filter((s: any) => s.id !== sessionId);
+    }
+    
     return true;
   }
   return false;
