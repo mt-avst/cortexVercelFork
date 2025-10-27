@@ -6,6 +6,8 @@ import { pool } from '../config';
 
 import { SessionUser } from '../types';
 
+console.log('🔍 Auth module loaded, OIDC_ISSUER:', process.env.OIDC_ISSUER);
+
 const router: Router = Router();
 let client: Client;
 
@@ -24,17 +26,50 @@ setInterval(() => {
 
 // Initialize OIDC client
 async function initializeClient() {
-  const issuer = await Issuer.discover(process.env.OIDC_ISSUER!);
-  client = new issuer.Client({
-    client_id: process.env.OIDC_CLIENT_ID!,
-    client_secret: process.env.OIDC_CLIENT_SECRET!,
-    redirect_uris: [process.env.OIDC_REDIRECT_URL!],
-    response_types: ['code'],
-  });
+  try {
+    console.log('🔍 OIDC Debug:', {
+      NODE_ENV: process.env.NODE_ENV,
+      OIDC_ISSUER: process.env.OIDC_ISSUER,
+      OIDC_CLIENT_ID: process.env.OIDC_CLIENT_ID,
+      OIDC_CLIENT_SECRET: process.env.OIDC_CLIENT_SECRET,
+      OIDC_REDIRECT_URL: process.env.OIDC_REDIRECT_URL
+    });
+    
+    // Skip OIDC initialization in development if issuer is not available or is a placeholder
+    if (process.env.NODE_ENV === 'development' && 
+        (!process.env.OIDC_ISSUER || 
+         process.env.OIDC_ISSUER.includes('your-oidc-provider.com') ||
+         process.env.OIDC_ISSUER.includes('demo-idp.com') ||
+         process.env.OIDC_ISSUER.includes('your-idp.com'))) {
+      console.log('Skipping OIDC initialization in development mode - using placeholder issuer');
+      return;
+    }
+    
+    const issuer = await Issuer.discover(process.env.OIDC_ISSUER!);
+    client = new issuer.Client({
+      client_id: process.env.OIDC_CLIENT_ID!,
+      client_secret: process.env.OIDC_CLIENT_SECRET!,
+      redirect_uris: [process.env.OIDC_REDIRECT_URL!],
+      response_types: ['code'],
+    });
+    console.log('OIDC client initialized successfully');
+  } catch (error) {
+    console.error('Failed to initialize OIDC client:', error);
+    // In development, we can continue without OIDC
+    if (process.env.NODE_ENV !== 'development') {
+      throw error;
+    }
+  }
 }
 
 // Initialize client on startup
-initializeClient().catch(console.error);
+initializeClient().catch((error) => {
+  if (process.env.NODE_ENV === 'development') {
+    console.log('OIDC initialization failed, continuing in development mode');
+  } else {
+    console.error('OIDC initialization failed:', error);
+  }
+});
 
 /**
  * GET /auth/login - Initiate OIDC flow
@@ -49,6 +84,16 @@ initializeClient().catch(console.error);
  */
 router.get('/login', async (req, res) => {
   try {
+    // Check if OIDC client is available
+    if (!client) {
+      if (process.env.NODE_ENV === 'development') {
+        // In development, redirect to demo login
+        return res.redirect('/auth/demo-login');
+      } else {
+        return res.status(500).json({ error: 'Authentication service unavailable' });
+      }
+    }
+    
     // Generate cryptographically secure state parameter
     const state = crypto.randomBytes(32).toString('hex');
     
@@ -81,6 +126,16 @@ router.get('/login', async (req, res) => {
  */
 router.get('/callback', async (req, res) => {
   try {
+    // Check if OIDC client is available
+    if (!client) {
+      if (process.env.NODE_ENV === 'development') {
+        // In development, redirect to demo login
+        return res.redirect('/auth/demo-login');
+      } else {
+        return res.status(500).json({ error: 'Authentication service unavailable' });
+      }
+    }
+    
     const params = client.callbackParams(req);
     const state = params.state;
     
@@ -215,9 +270,9 @@ if (process.env.NODE_ENV === 'development') {
   // GET /auth/admin-login - Demo admin login
   router.get('/admin-login', (req, res) => {
     const demoAdmin: SessionUser = {
-      id: 'cc96d45d-2422-429c-9f50-ad734188a975',
-      name: 'Demo Admin',
-      email: 'admin@example.com',
+      id: '633608bc-4b0e-4d60-a498-e680ee97c252', // Use actual admin ID from database
+      name: 'Test Admin',
+      email: 'admin@test.com',
       business_unit: 'Research',
       role_title: 'Research Manager',
       role: 'researcher_admin',

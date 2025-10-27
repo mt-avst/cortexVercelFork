@@ -157,10 +157,10 @@ const OpportunityDetail: React.FC = () => {
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'published': return 'badge bg-success';
-      case 'draft': return 'badge bg-warning';
-      case 'closed': return 'badge bg-secondary';
-      default: return 'badge bg-secondary';
+      case 'published': return 'badge bg-success text-white';
+      case 'draft': return 'badge bg-warning text-white';
+      case 'closed': return 'badge bg-secondary text-white';
+      default: return 'badge bg-secondary text-white';
     }
   };
 
@@ -211,30 +211,11 @@ const OpportunityDetail: React.FC = () => {
           <button 
             className="btn btn-outline-secondary mb-3"
             onClick={() => navigate('/')}
+            style={{ color: '#ffffff' }}
           >
-            ← Back to Opportunities
+            ← Back to Impact Lab
           </button>
 
-          {/* Success message */}
-          {bookingSuccess && (
-            <div className="alert alert-success alert-dismissible fade show" role="alert">
-              {bookingSuccess}
-              <div className="mt-2">
-                <button 
-                  className="btn btn-sm btn-outline-success me-2"
-                  onClick={() => navigate('/my-bookings')}
-                >
-                  <i className="bi bi-calendar-check me-1"></i>
-                  View My Bookings
-                </button>
-              </div>
-              <button 
-                type="button" 
-                className="btn-close" 
-                onClick={() => setBookingSuccess(null)}
-              ></button>
-            </div>
-          )}
 
           {/* Error message */}
           {error && (
@@ -316,49 +297,104 @@ const OpportunityDetail: React.FC = () => {
             </div>
             
             <div className="card-body">
-              {/* Purpose - only show for non-question types */}
-              {opportunity.type !== 'question' && (
-                <div className="mb-4">
-                  <h5>Purpose</h5>
-                  <p className="text-muted">{opportunity.purpose_one_liner}</p>
-                </div>
-              )}
+              {/* Three-column layout for opportunity details */}
+              <div className="row mb-4">
+                {/* Column 1: Purpose and Description */}
+                <div className="col-md-4">
+                  {/* Purpose - only show for non-question types */}
+                  {opportunity.type !== 'question' && (
+                    <div className="mb-3">
+                      <h6 className="fw-bold">Purpose</h6>
+                      <p className="text-muted mb-0">{opportunity.purpose_one_liner}</p>
+                    </div>
+                  )}
 
-              {/* Description */}
-              {opportunity.description_optional && (
-                <div className="mb-4">
-                  {opportunity.type === 'question' ? (
-                    <p>{opportunity.description_optional}</p>
-                  ) : (
-                    <>
-                      <h5>Description</h5>
-                      <p>{opportunity.description_optional}</p>
-                    </>
+                  {/* Description */}
+                  {opportunity.description_optional && (
+                    <div className="mb-3">
+                      <h6 className="fw-bold">Description</h6>
+                      <p className="mb-0">{opportunity.description_optional}</p>
+                    </div>
                   )}
                 </div>
-              )}
 
-              {/* Product - only show for non-question types */}
-              {opportunity.type !== 'question' && opportunity.product_optional && (
-                <div className="mb-4">
-                  <h5>Product</h5>
-                  <p>{opportunity.product_optional}</p>
+                {/* Column 2: Product and Duration */}
+                <div className="col-md-4">
+                  {/* Product - only show for non-question types */}
+                  {opportunity.type !== 'question' && opportunity.product_optional && (
+                    <div className="mb-3">
+                      <h6 className="fw-bold">Product</h6>
+                      <p className="mb-0">{opportunity.product_optional}</p>
+                    </div>
+                  )}
+
+                  {/* Duration - only show for test and interview types */}
+                  {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                    <div className="mb-3">
+                      <h6 className="fw-bold">Duration</h6>
+                      <p className="mb-0">{opportunity.default_duration_minutes} minutes</p>
+                    </div>
+                  )}
                 </div>
-              )}
 
-              {/* Duration - only show for non-question types */}
-              {opportunity.type !== 'question' && (
-                <div className="mb-4">
-                  <h5>Duration</h5>
-                  <p>{opportunity.default_duration_minutes} minutes</p>
+                {/* Column 3: Participants Sought */}
+                <div className="col-md-4">
+                  <div className="mb-3">
+                    <h6 className="fw-bold">Participants Sought</h6>
+                    <p className="mb-0">
+                      {(() => {
+                        switch (opportunity.participant_type_required) {
+                          case 'any': return '👥 Any participants';
+                          case 'internal': return '🏢 Internal employees only';
+                          case 'external': return '🌐 External participants only';
+                          case 'specific': 
+                            return (
+                              <>
+                                <span>🎯 {opportunity.participant_type_specific_details || 'Specific participants'}</span>
+                              </>
+                            );
+                          default: return '👥 Any participants';
+                        }
+                      })()}
+                    </p>
+                  </div>
                 </div>
-              )}
+              </div>
 
-              {/* Sessions for test opportunities */}
-              {opportunity.type === 'test' && (
-                <div className="mb-4">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h5>Available Sessions</h5>
+              {/* Sessions for test and interview opportunities */}
+              {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                <>
+                  {/* Help bar for test opportunities */}
+                  {bookingSuccess ? (
+                    <div className="alert alert-success d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }}>
+                      <div>
+                        <i className="bi bi-check-circle me-2"></i>
+                        {bookingSuccess}
+                        <button 
+                          className="btn btn-sm btn-outline-success ms-3"
+                          onClick={() => navigate('/my-bookings')}
+                        >
+                          <i className="bi bi-calendar-check me-1"></i>
+                          View My Bookings
+                        </button>
+                      </div>
+                      <button 
+                        type="button" 
+                        className="btn-close" 
+                        onClick={() => setBookingSuccess(null)}
+                        aria-label="Close"
+                      ></button>
+                    </div>
+                  ) : (
+                    <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
+                      <i className="bi bi-info-circle me-2"></i>
+                      Click on a timeslot to book yourself in
+                    </div>
+                  )}
+                  
+                  <div className="mb-4">
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h5>Available Sessions</h5>
                     <div className="d-flex gap-2">
                       <button
                         type="button"
@@ -462,82 +498,36 @@ const OpportunityDetail: React.FC = () => {
                       Sessions will appear here when they are added by the researcher.
                     </div>
                   )}
-                </div>
+                  </div>
+                </>
               )}
 
-              {/* Text entry for question type */}
-              {opportunity.type === 'question' && (
+              {/* External link for polls, surveys, and questions - only show if not test or interview */}
+              {opportunity.type !== 'test' && opportunity.type !== 'interview' && (
                 <div className="mb-4">
-                  <h5>Your Answer</h5>
-                  <textarea
-                    className="form-control"
-                    rows={12}
-                    placeholder="Please provide your response here..."
-                    style={{ resize: 'vertical', width: '50%' }}
-                  ></textarea>
-                  <div className="mt-2">
-                    <button className="btn btn-primary">
-                      Submit Answer
-                    </button>
+                  <div className="row">
+                    <div className="col-md-4">
+                      {opportunity.type === 'poll' ? (
+                        <button 
+                          className="btn btn-primary w-100"
+                          onClick={() => navigate(`/poll/${opportunity.id}`)}
+                        >
+                          Open Poll
+                        </button>
+                      ) : (
+                        <a 
+                          href={opportunity.external_link_optional}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-primary w-100"
+                        >
+                          {opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
+                        </a>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
-
-              {/* External link for polls/surveys */}
-              {opportunity.type !== 'test' && opportunity.type !== 'question' && (
-                <div className="mb-4">
-                  <h5>Participate</h5>
-                  {opportunity.type === 'poll' ? (
-                    <button 
-                      className="btn btn-primary"
-                      onClick={() => navigate(`/poll/${opportunity.id}`)}
-                    >
-                      Open Poll
-                    </button>
-                  ) : (
-                    <a 
-                      href={opportunity.external_link_optional}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-primary"
-                    >
-                      Open Survey
-                    </a>
-                  )}
-                </div>
-              )}
-
-              {/* Action buttons */}
-              <div className="mt-4 pt-4 border-top">
-                {opportunity.type === 'test' ? (
-                  <div className="alert alert-info">
-                    <i className="bi bi-info-circle me-2"></i>
-                    Use the "Book" buttons in the sessions table above to book a specific time slot.
-                  </div>
-                ) : opportunity.type === 'poll' ? (
-                  <button 
-                    className="btn btn-primary btn-lg"
-                    onClick={() => navigate(`/poll/${opportunity.id}`)}
-                  >
-                    Open Poll
-                  </button>
-                ) : opportunity.type === 'question' ? (
-                  <div></div>
-                ) : opportunity.external_link_optional ? (
-                  <a 
-                    href={opportunity.external_link_optional}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary btn-lg"
-                  >
-                    Open Survey
-                  </a>
-                ) : (
-                  <div className="alert alert-warning">
-                    External link not available
-                  </div>
-                )}
-              </div>
             </div>
 
             {/* Footer with owner info (admin only) */}

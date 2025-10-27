@@ -1,5 +1,126 @@
 // Mock data service for development when database is not available
-let dynamicMockOpportunities: any[] = [];
+let dynamicMockOpportunities: any[] = [
+  {
+    id: 'mock-1',
+    type: 'test',
+    title: 'User Interface Testing',
+    purpose_one_liner: 'Help us improve our mobile app interface',
+    description_optional: 'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions.',
+    product_optional: 'Mobile Banking App',
+    default_duration_minutes: 45,
+    status: 'published',
+    owner_user_id: 'admin-user-id',
+    external_link_optional: null,
+    participant_type_required: 'any',
+    participant_type_specific_details: null,
+    created_at: new Date('2024-01-15T10:00:00Z'),
+    updated_at: new Date('2024-01-15T10:00:00Z'),
+    owner_name: 'Research Team',
+    owner_email: 'research@adaptalabs.com',
+    sessions: [
+      {
+        id: 'session-1',
+        opportunity_id: 'mock-1',
+        start_time: new Date('2024-12-01T14:00:00Z').toISOString(),
+        end_time: new Date('2024-12-01T14:45:00Z').toISOString(),
+        capacity: 5,
+        booked_count: 2,
+        location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+        created_at: new Date('2024-01-15T10:00:00Z'),
+        updated_at: new Date('2024-01-15T10:00:00Z'),
+        remaining: 3
+      },
+      {
+        id: 'session-2',
+        opportunity_id: 'mock-1',
+        start_time: new Date('2024-12-02T10:00:00Z').toISOString(),
+        end_time: new Date('2024-12-02T10:45:00Z').toISOString(),
+        capacity: 5,
+        booked_count: 0,
+        location_or_meet_link_optional: 'https://meet.google.com/xyz-1234-uvw',
+        created_at: new Date('2024-01-15T10:00:00Z'),
+        updated_at: new Date('2024-01-15T10:00:00Z'),
+        remaining: 5
+      }
+    ]
+  },
+  {
+    id: 'mock-2',
+    type: 'survey',
+    title: 'Customer Satisfaction Survey',
+    purpose_one_liner: 'Share your thoughts about our service experience',
+    description_optional: 'We value your feedback! Please take 10 minutes to complete our customer satisfaction survey.',
+    product_optional: 'E-commerce Platform',
+    default_duration_minutes: 10,
+    status: 'published',
+    owner_user_id: 'admin-user-id',
+    external_link_optional: null,
+    participant_type_required: 'any',
+    participant_type_specific_details: null,
+    created_at: new Date('2024-01-10T09:00:00Z'),
+    updated_at: new Date('2024-01-10T09:00:00Z'),
+    owner_name: 'Customer Success Team',
+    owner_email: 'success@adaptalabs.com',
+    sessions: []
+  },
+  {
+    id: 'mock-3',
+    type: 'poll',
+    title: 'Feature Preference Poll',
+    purpose_one_liner: 'Vote on which features you would like to see next',
+    description_optional: 'Help us prioritize our development roadmap by voting on potential new features.',
+    product_optional: 'Project Management Tool',
+    default_duration_minutes: 5,
+    status: 'published',
+    owner_user_id: 'admin-user-id',
+    external_link_optional: null,
+    participant_type_required: 'any',
+    participant_type_specific_details: null,
+    created_at: new Date('2024-01-12T11:30:00Z'),
+    updated_at: new Date('2024-01-12T11:30:00Z'),
+    owner_name: 'Product Team',
+    owner_email: 'product@adaptalabs.com',
+    sessions: []
+  },
+  {
+    id: 'mock-4',
+    type: 'question',
+    title: 'Quick Feedback Question',
+    purpose_one_liner: 'Answer one question about your experience',
+    description_optional: 'A single question to help us understand user preferences.',
+    product_optional: 'Learning Platform',
+    default_duration_minutes: 2,
+    status: 'published',
+    owner_user_id: 'admin-user-id',
+    external_link_optional: null,
+    participant_type_required: 'any',
+    participant_type_specific_details: null,
+    created_at: new Date('2024-01-14T16:00:00Z'),
+    updated_at: new Date('2024-01-14T16:00:00Z'),
+    owner_name: 'UX Team',
+    owner_email: 'ux@adaptalabs.com',
+    sessions: []
+  },
+  {
+    id: 'mock-5',
+    type: 'test',
+    title: 'Website Performance Testing',
+    purpose_one_liner: 'Test our website performance and provide feedback',
+    description_optional: 'Help us identify performance issues by testing our website on different devices and browsers.',
+    product_optional: 'Corporate Website',
+    default_duration_minutes: 30,
+    status: 'draft',
+    owner_user_id: 'admin-user-id',
+    external_link_optional: null,
+    participant_type_required: 'any',
+    participant_type_specific_details: null,
+    created_at: new Date('2024-01-16T08:00:00Z'),
+    updated_at: new Date('2024-01-16T08:00:00Z'),
+    owner_name: 'DevOps Team',
+    owner_email: 'devops@adaptalabs.com',
+    sessions: []
+  }
+];
 
 // Export the original static data for reference
 export const mockOpportunities = dynamicMockOpportunities;

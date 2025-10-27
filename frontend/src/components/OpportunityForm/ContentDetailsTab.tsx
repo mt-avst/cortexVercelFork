@@ -5,6 +5,7 @@ interface ContentDetailsTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: any) => void;
+  handleBlur?: (field: string, value: any) => void;
 }
 
 const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
@@ -38,13 +39,13 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
               <textarea
                 id="description_optional"
                 className={`form-control ${validationErrors.description_optional ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: '120px', resize: 'vertical', width: '50%' }}
+                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: '120px', resize: 'vertical' }}
                 value={formData.description_optional}
                 onChange={(e) => handleInputChange('description_optional', e.target.value)}
                 placeholder="Provide detailed information about the opportunity, what participants will be doing, what they need to prepare, etc."
               />
               {validationErrors.description_optional && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.description_optional}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.description_optional}</div>
               )}
             </div>
           </div>
@@ -63,13 +64,13 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 type="text"
                 id="product_optional"
                 className={`form-control ${validationErrors.product_optional ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '50%' }}
+                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                 value={formData.product_optional}
                 onChange={(e) => handleInputChange('product_optional', e.target.value)}
                 placeholder="e.g., Mobile App, Dashboard, API, etc."
               />
               {validationErrors.product_optional && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.product_optional}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.product_optional}</div>
               )}
             </div>
           </div>
@@ -97,7 +98,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 <option value="specific" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Specific criteria</option>
               </select>
               {validationErrors.participant_type_required && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.participant_type_required}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.participant_type_required}</div>
               )}
             </div>
           </div>
@@ -122,7 +123,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                   required={formData.participant_type_required === 'specific'}
                 />
                 {validationErrors.participant_type_specific_details && (
-                  <div className="invalid-feedback fw-semibold">{validationErrors.participant_type_specific_details}</div>
+                  <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.participant_type_specific_details}</div>
                 )}
               </div>
             )}

@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Container, Row, Col, Card, Button, Badge, Alert, Spinner } from 'react-bootstrap';
 import { getMyBookings, getMyBookingsDebug, cancelBooking, rescheduleBooking } from '../api/client';
 import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 const MyBookings: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [bookings, setBookings] = useState<{ upcoming: BookingWithDetails[]; past: BookingWithDetails[] }>({ upcoming: [], past: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [cancelConfirm, setCancelConfirm] = useState<{ show: boolean; bookingId: string | null }>({ show: false, bookingId: null });
+  const [rescheduleConfirm, setRescheduleConfirm] = useState<{ show: boolean; bookingId: string | null; targetSessionId: string | null }>({ show: false, bookingId: null, targetSessionId: null });
 
   useEffect(() => {
     loadBookings();
@@ -49,25 +54,18 @@ const MyBookings: React.FC = () => {
     }
   };
 
-  const handleCancelBooking = async (bookingId: string) => {
-    // Enhanced confirmation dialog with more details
-    const confirmed = window.confirm(
-      'Are you sure you want to cancel this booking?\n\n' +
-      'This action will:\n' +
-      '• Free up the slot for other participants\n' +
-      '• Send cancellation notifications\n' +
-      '• Cannot be undone\n\n' +
-      'Click OK to confirm cancellation, or Cancel to keep your booking.'
-    );
-    
-    if (!confirmed) {
-      return;
-    }
+  const handleCancelBooking = (bookingId: string) => {
+    setCancelConfirm({ show: true, bookingId });
+  };
 
+  const confirmCancelBooking = async () => {
+    if (!cancelConfirm.bookingId) return;
+    
     try {
-      setActionLoading(bookingId);
-      await cancelBooking(bookingId);
+      setActionLoading(cancelConfirm.bookingId);
+      await cancelBooking(cancelConfirm.bookingId);
       await loadBookings(); // Reload to update the list
+      setCancelConfirm({ show: false, bookingId: null });
     } catch (err: any) {
       console.error('Error cancelling booking:', err);
       // Show more specific error message if available
@@ -78,25 +76,22 @@ const MyBookings: React.FC = () => {
     }
   };
 
-  const handleRescheduleBooking = async (bookingId: string, targetSessionId: string) => {
-    // Enhanced confirmation dialog for rescheduling
-    const confirmed = window.confirm(
-      'Are you sure you want to reschedule this booking?\n\n' +
-      'This action will:\n' +
-      '• Move your booking to the selected time slot\n' +
-      '• Free up your current slot for other participants\n' +
-      '• Send rescheduling notifications\n\n' +
-      'Click OK to confirm rescheduling, or Cancel to keep your current booking.'
-    );
-    
-    if (!confirmed) {
-      return;
-    }
+  const cancelCancelBooking = () => {
+    setCancelConfirm({ show: false, bookingId: null });
+  };
 
+  const handleRescheduleBooking = (bookingId: string, targetSessionId: string) => {
+    setRescheduleConfirm({ show: true, bookingId, targetSessionId });
+  };
+
+  const confirmRescheduleBooking = async () => {
+    if (!rescheduleConfirm.bookingId || !rescheduleConfirm.targetSessionId) return;
+    
     try {
-      setActionLoading(bookingId);
-      await rescheduleBooking(bookingId, { target_session_id: targetSessionId });
+      setActionLoading(rescheduleConfirm.bookingId);
+      await rescheduleBooking(rescheduleConfirm.bookingId, { target_session_id: rescheduleConfirm.targetSessionId });
       await loadBookings(); // Reload to update the list
+      setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
     } catch (err: any) {
       console.error('Error rescheduling booking:', err);
       // Show more specific error message if available
@@ -105,6 +100,10 @@ const MyBookings: React.FC = () => {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const cancelRescheduleBooking = () => {
+    setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
   };
 
   const formatDateTime = (dateString: string) => {
@@ -168,10 +167,18 @@ const MyBookings: React.FC = () => {
     <Container className="mt-4">
       <Row>
         <Col>
-          <div className="d-flex justify-content-between align-items-center">
+          <div className="d-flex justify-content-between align-items-start">
             <div>
+              <button
+                className="btn btn-outline-secondary mb-3"
+                onClick={() => navigate('/')}
+                title="Back to Impact Lab"
+              >
+                <i className="bi bi-arrow-left me-1"></i>
+                Back to Impact Lab
+              </button>
               <h2>My Bookings</h2>
-              <p className="text-muted">Manage your research opportunity bookings</p>
+              <p className="text-muted">Manage your impact lab activity bookings</p>
             </div>
             <button
               className="btn btn-outline-primary"
@@ -308,6 +315,28 @@ const MyBookings: React.FC = () => {
           )}
         </Col>
       </Row>
+
+      <ConfirmationModal
+        show={cancelConfirm.show}
+        title="Cancel Booking"
+        message="Are you sure you want to cancel this booking? This action will free up the slot for other participants and cannot be undone."
+        confirmLabel="Yes, Cancel Booking"
+        cancelLabel="Keep My Booking"
+        variant="danger"
+        onConfirm={confirmCancelBooking}
+        onCancel={cancelCancelBooking}
+      />
+
+      <ConfirmationModal
+        show={rescheduleConfirm.show}
+        title="Reschedule Booking"
+        message="Are you sure you want to reschedule this booking? This action will move your booking to the selected time slot, free up your current slot, and cannot be undone."
+        confirmLabel="Yes, Reschedule"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={confirmRescheduleBooking}
+        onCancel={cancelRescheduleBooking}
+      />
     </Container>
   );
 };

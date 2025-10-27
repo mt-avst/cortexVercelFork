@@ -36,19 +36,116 @@ export async function runMigrations() {
       )
     `);
 
+    // Create user_profiles table for AdaptaBits
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_profiles (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE NOT NULL,
+        total_points INTEGER NOT NULL DEFAULT 0 CHECK (total_points >= 0),
+        monthly_points INTEGER NOT NULL DEFAULT 0 CHECK (monthly_points >= 0),
+        level INTEGER NOT NULL DEFAULT 1 CHECK (level >= 1),
+        sessions_completed INTEGER NOT NULL DEFAULT 0 CHECK (sessions_completed >= 0),
+        surveys_completed INTEGER NOT NULL DEFAULT 0 CHECK (surveys_completed >= 0),
+        polls_completed INTEGER NOT NULL DEFAULT 0 CHECK (polls_completed >= 0),
+        questions_completed INTEGER NOT NULL DEFAULT 0 CHECK (questions_completed >= 0),
+        last_activity_date TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Create achievements table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS achievements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        name TEXT NOT NULL UNIQUE,
+        description TEXT NOT NULL,
+        icon TEXT NOT NULL,
+        points_required INTEGER NOT NULL CHECK (points_required >= 0),
+        category TEXT NOT NULL CHECK (category IN ('participation', 'milestone', 'special')),
+        badge_color TEXT NOT NULL DEFAULT '#28a745',
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Create user_achievements table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_achievements (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        achievement_id UUID REFERENCES achievements(id) ON DELETE CASCADE NOT NULL,
+        earned_at TIMESTAMPTZ DEFAULT NOW(),
+        CONSTRAINT unique_user_achievement UNIQUE (user_id, achievement_id)
+      )
+    `);
+
+    // Create points_transactions table for tracking point history
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS points_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        points INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+        session_id UUID REFERENCES sessions(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes for AdaptaBits tables
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_profiles_points 
+      ON user_profiles(total_points DESC, monthly_points DESC)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id 
+      ON user_profiles(user_id)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_achievements_user_id 
+      ON user_achievements(user_id)
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_points_transactions_user_id 
+      ON points_transactions(user_id, created_at DESC)
+    `);
+
+    // Create triggers for user_profiles updated_at
+    await client.query(`
+      DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+      CREATE TRIGGER update_user_profiles_updated_at 
+      BEFORE UPDATE ON user_profiles 
+      FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    `);
+
     // Create opportunity types enum
     await client.query(`
-      CREATE TYPE opportunity_type AS ENUM ('test', 'poll', 'survey', 'question')
+      DO $$ BEGIN
+        CREATE TYPE opportunity_type AS ENUM ('test', 'poll', 'survey', 'question', 'interview');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
     `);
 
     // Create opportunity status enum
     await client.query(`
-      CREATE TYPE opportunity_status AS ENUM ('draft', 'published', 'closed')
+      DO $$ BEGIN
+        CREATE TYPE opportunity_status AS ENUM ('draft', 'published', 'closed');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
     `);
 
     // Create participant type enum
     await client.query(`
-      CREATE TYPE participant_type AS ENUM ('any', 'internal', 'external', 'specific')
+      DO $$ BEGIN
+        CREATE TYPE participant_type AS ENUM ('any', 'internal', 'external', 'specific');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
     `);
 
     // Create opportunities table
@@ -95,6 +192,7 @@ export async function runMigrations() {
 
     // Create trigger for opportunities updated_at
     await client.query(`
+      DROP TRIGGER IF EXISTS update_opportunities_updated_at ON opportunities;
       CREATE TRIGGER update_opportunities_updated_at 
       BEFORE UPDATE ON opportunities 
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
@@ -130,6 +228,7 @@ export async function runMigrations() {
 
     // Create trigger for sessions updated_at
     await client.query(`
+      DROP TRIGGER IF EXISTS update_sessions_updated_at ON sessions;
       CREATE TRIGGER update_sessions_updated_at 
       BEFORE UPDATE ON sessions 
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
@@ -137,7 +236,11 @@ export async function runMigrations() {
 
     // Create booking status enum
     await client.query(`
-      CREATE TYPE booking_status AS ENUM ('booked', 'cancelled')
+      DO $$ BEGIN
+        CREATE TYPE booking_status AS ENUM ('booked', 'cancelled');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
     `);
 
     // Create bookings table
@@ -150,9 +253,38 @@ export async function runMigrations() {
         gcal_event_id TEXT,
         cancelled_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),
-        updated_at TIMESTAMPTZ DEFAULT NOW(),
-        CONSTRAINT unique_user_session_booking UNIQUE (user_id, session_id)
+        updated_at TIMESTAMPTZ DEFAULT NOW()
       )
+    `);
+    
+    // Create partial unique index for active bookings only
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS unique_user_session_booking_active 
+      ON bookings(user_id, session_id) 
+      WHERE status = 'booked'
+    `);
+
+    // Add completion status fields to bookings table
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS completion_status TEXT DEFAULT 'pending' 
+      CHECK (completion_status IN ('pending', 'completed', 'approved', 'rejected'))
+    `);
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS completed_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id)
+    `);
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS admin_notes TEXT
     `);
 
     // Create indexes for bookings
@@ -176,8 +308,14 @@ export async function runMigrations() {
       ON bookings(user_id, status)
     `);
 
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_completion_status 
+      ON bookings(completion_status)
+    `);
+
     // Create trigger for bookings updated_at
     await client.query(`
+      DROP TRIGGER IF EXISTS update_bookings_updated_at ON bookings;
       CREATE TRIGGER update_bookings_updated_at 
       BEFORE UPDATE ON bookings 
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
@@ -203,6 +341,28 @@ export async function runMigrations() {
     } catch (error: any) {
       // Log the error but don't fail the migration
       console.log('ℹ️  Could not add question type to enum (may already exist):', error.message);
+    }
+
+    // Add 'interview' type to existing enum if it doesn't exist
+    try {
+      // Check if the enum value already exists
+      const enumCheck = await client.query(`
+        SELECT 1 FROM pg_enum 
+        WHERE enumlabel = 'interview' 
+        AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'opportunity_type')
+      `);
+      
+      if (enumCheck.rows.length === 0) {
+        await client.query(`
+          ALTER TYPE opportunity_type ADD VALUE 'interview'
+        `);
+        console.log('✅ Added interview type to opportunity_type enum');
+      } else {
+        console.log('ℹ️  Interview type already exists in opportunity_type enum');
+      }
+    } catch (error: any) {
+      // Log the error but don't fail the migration
+      console.log('ℹ️  Could not add interview type to enum (may already exist):', error.message);
     }
 
     // Add participant_type_required column if it doesn't exist
@@ -297,6 +457,23 @@ export async function runMigrations() {
       }
     } catch (error: any) {
       console.log('ℹ️  Could not migrate is_researcher_admin to role (may already be migrated):', error.message);
+    }
+
+    // Migrate unique constraint to partial unique index (for cancelled bookings to allow rebooking)
+    try {
+      await client.query(`
+        ALTER TABLE bookings DROP CONSTRAINT IF EXISTS unique_user_session_booking
+      `);
+      
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS unique_user_session_booking_active 
+        ON bookings(user_id, session_id) 
+        WHERE status = 'booked'
+      `);
+      
+      console.log('✅ Migrated unique constraint to partial unique index');
+    } catch (error: any) {
+      console.log('ℹ️  Could not migrate unique constraint (may already be migrated):', error.message);
     }
 
     console.log('✅ Database migrations completed successfully');

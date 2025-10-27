@@ -24,7 +24,7 @@ export class EmailService {
   constructor(config: EmailServiceConfig = {}) {
     this.config = {
       fromEmail: config.fromEmail || 'noreply@adaptalabs.com',
-      fromName: config.fromName || 'Adaptalabs Research Platform',
+      fromName: config.fromName || 'Adaptalabs Impact Lab',
       ...config
     };
   }
@@ -103,7 +103,7 @@ export class EmailService {
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated message from the Adaptalabs Research Platform.
+          This is an automated message from the Adaptalabs Impact Lab.
         </p>
       </div>
     `;
@@ -129,7 +129,7 @@ Please make sure to:
 If you need to reschedule or cancel, you can manage your booking at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings
 
-This is an automated message from the Adaptalabs Research Platform.
+This is an automated message from the Adaptalabs Impact Lab.
     `;
     
     return { subject, html, text };
@@ -164,11 +164,11 @@ This is an automated message from the Adaptalabs Research Platform.
         <p>If you have any questions about this cancellation, please contact the researcher directly.</p>
         
         <p>You can view other available opportunities at:</p>
-        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="color: #007bff;">Research Opportunities</a></p>
+        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}" style="color: #007bff;">Impact Lab</a></p>
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated message from the Adaptalabs Research Platform.
+          This is an automated message from the Adaptalabs Impact Lab.
         </p>
       </div>
     `;
@@ -189,7 +189,7 @@ If you have any questions about this cancellation, please contact the researcher
 You can view other available opportunities at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}
 
-This is an automated message from the Adaptalabs Research Platform.
+This is an automated message from the Adaptalabs Impact Lab.
     `;
     
     return { subject, html, text };
@@ -232,7 +232,7 @@ This is an automated message from the Adaptalabs Research Platform.
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated reminder from the Adaptalabs Research Platform.
+          This is an automated reminder from the Adaptalabs Impact Lab.
         </p>
       </div>
     `;
@@ -255,7 +255,7 @@ Please make sure you're prepared and ready for the session.
 If you need to reschedule or cancel, you can manage your booking at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings
 
-This is an automated reminder from the Adaptalabs Research Platform.
+This is an automated reminder from the Adaptalabs Impact Lab.
     `;
     
     return { subject, html, text };
@@ -292,7 +292,7 @@ This is an automated reminder from the Adaptalabs Research Platform.
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated notification from the Adaptalabs Research Platform.
+          This is an automated notification from the Adaptalabs Impact Lab.
         </p>
       </div>
     `;
@@ -310,7 +310,7 @@ Action: ${action === 'booked' ? 'Booked' : 'Cancelled'}
 You can manage your opportunities at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin
 
-This is an automated notification from the Adaptalabs Research Platform.
+This is an automated notification from the Adaptalabs Impact Lab.
     `;
     
     return { subject, html, text };
@@ -320,7 +320,7 @@ This is an automated notification from the Adaptalabs Research Platform.
 // Create a singleton instance
 const emailService = new EmailService({
   fromEmail: process.env.EMAIL_FROM || 'noreply@adaptalabs.com',
-  fromName: process.env.EMAIL_FROM_NAME || 'Adaptalabs Research Platform',
+  fromName: process.env.EMAIL_FROM_NAME || 'Adaptalabs Impact Lab',
 });
 
 export default emailService;

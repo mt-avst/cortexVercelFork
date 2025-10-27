@@ -1,10 +1,12 @@
 body {
   margin: 0;
+  padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: #000000;
 }
 
 code {
@@ -14,6 +16,77 @@ code {
 
 * {
   box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background-color: #000000;
+  color: #ffffff;
+}
+
+/* CRITICAL: Force all error text to be red with MAXIMUM specificity to override body color */
+div.text-danger,
+span.text-danger,
+p.text-danger,
+*[class*="text-danger"],
+div.fw-semibold.text-danger {
+  color: #dc3545 !important;
+}
+
+/* Global text color for black backgrounds - excluding div to allow text-danger to work */
+h1, h2, h3, h4, h5, h6, a, label, small, .text-muted, .lead {
+  color: #ffffff !important;
+}
+
+/* Ensure paragraphs are white, but not if they have text-danger class */
+p:not(.text-danger) {
+  color: #ffffff !important;
+}
+
+/* Don't apply white color to badges - let them use their own colors */
+span.badge {
+  color: inherit !important;
+}
+
+/* Force white text on badges with text-white class */
+.badge.text-white {
+  color: white !important;
+}
+
+/* Override Bootstrap text-muted for black backgrounds */
+.text-muted {
+  color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Duplicate rule removed - error text color is already defined above */
+
+/* Don't apply white color to generic divs - let them inherit */
+/* This allows error messages with inline styles to show properly */
+
+/* Ensure links are visible on black background */
+a {
+  color: #ffffff !important;
+}
+
+a:hover {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Ensure form labels are white */
+label, .form-label {
+  color: #ffffff !important;
+}
+
+/* Ensure small text is visible */
+small, .small {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.App {
+  background-color: #000000;
+  min-height: 100vh;
+  color: #ffffff;
 }
 
 .container {
@@ -34,12 +107,26 @@ code {
 }
 
 .btn-primary {
-  background-color: #007bff;
-  color: white;
+  background-color: #007bff !important;
+  color: white !important;
 }
 
 .btn-primary:hover {
-  background-color: #0056b3;
+  background-color: #0056b3 !important;
+}
+
+/* Ensure btn-primary text is always white */
+.btn-primary,
+.btn-primary *,
+.card .btn-primary,
+.card .btn-primary * {
+  color: white !important;
+}
+
+/* Compact button style for Participate button */
+.btn-compact {
+  display: inline-block !important;
+  width: auto !important;
 }
 
 .btn-secondary {
@@ -52,9 +139,10 @@ code {
 }
 
 .header {
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
+  background-color: #000000;
+  border-bottom: none;
   padding: 1rem 0;
+  color: #ffffff;
 }
 
 .header-content {
@@ -63,10 +151,22 @@ code {
   align-items: center;
 }
 
+.nav-items {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.user-greeting {
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+}
+
 .logo {
   font-size: 1.5rem;
   font-weight: bold;
-  color: #007bff;
+  color: #ffffff;
   text-decoration: none;
 }
 
@@ -78,6 +178,9 @@ code {
 
 .main {
   padding: 2rem 0;
+  background-color: #000000;
+  min-height: calc(100vh - 80px);
+  color: #ffffff;
 }
 
 .card {
@@ -87,7 +190,29 @@ code {
   margin-bottom: 1rem;
 }
 
-/* Individual research opportunity cards */
+/* White cards should have dark text */
+.card, .card-header, .card-body, .card-footer {
+  color: #000000 !important;
+}
+
+.card h1, .card h2, .card h3, .card h4, .card h5, .card h6,
+.card p, .card span, .card div, .card label, .card small {
+  color: #000000 !important;
+}
+
+.card .text-muted {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.card a {
+  color: #007bff !important;
+}
+
+.card a:hover {
+  color: #0056b3 !important;
+}
+
+/* Individual impact lab activity cards */
 .opportunity-card {
   background-color: #f8f9fa;
   border-radius: 12px;
@@ -95,6 +220,26 @@ code {
   margin-bottom: 1rem;
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Light background cards should have dark text */
+.opportunity-card, .opportunity-card h1, .opportunity-card h2, .opportunity-card h3, 
+.opportunity-card h4, .opportunity-card h5, .opportunity-card h6,
+.opportunity-card p, .opportunity-card span, .opportunity-card div, 
+.opportunity-card label, .opportunity-card small {
+  color: #000000 !important;
+}
+
+.opportunity-card .text-muted {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.opportunity-card a {
+  color: #007bff !important;
+}
+
+.opportunity-card a:hover {
+  color: #0056b3 !important;
 }
 
 /* Filter form styling */
@@ -105,6 +250,26 @@ code {
   margin-bottom: 2rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   border: 1px solid #e9ecef;
+}
+
+/* Light background filter sections should have dark text */
+.filter-section, .filter-section h1, .filter-section h2, .filter-section h3, 
+.filter-section h4, .filter-section h5, .filter-section h6,
+.filter-section p, .filter-section span, .filter-section div, 
+.filter-section label, .filter-section small {
+  color: #000000 !important;
+}
+
+.filter-section .text-muted {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+.filter-section a {
+  color: #007bff !important;
+}
+
+.filter-section a:hover {
+  color: #0056b3 !important;
 }
 
 .filter-section .row {
@@ -433,4 +598,203 @@ code {
 .table-striped thead th {
   padding: 16px 12px !important;
   vertical-align: middle !important;
+}
+
+/* Alert messages styling for dark backgrounds */
+.alert {
+  color: #000000 !important;
+}
+
+.alert-info {
+  background-color: #d1ecf1 !important;
+  border-color: #bee5eb !important;
+  color: #0c5460 !important;
+}
+
+.alert-danger {
+  background-color: #f8d7da !important;
+  border-color: #f5c6cb !important;
+  color: #721c24 !important;
+}
+
+.alert-success {
+  background-color: #d4edda !important;
+  border-color: #c3e6cb !important;
+  color: #155724 !important;
+}
+
+.alert-warning {
+  background-color: #fff3cd !important;
+  border-color: #ffeaa7 !important;
+  color: #856404 !important;
+}
+
+/* Custom type badge colors */
+.badge.type-test {
+  background-color: #0dcaf0 !important; /* Teal/Cyan */
+  color: white !important;
+}
+
+.badge.type-interview {
+  background-color: #198754 !important; /* Green (unique for interviews) */
+  color: white !important;
+}
+
+.badge.type-poll {
+  background-color: #e91e63 !important; /* Pink/Magenta */
+  color: white !important;
+}
+
+.badge.type-survey {
+  background-color: #6f42c1 !important; /* Purple */
+  color: white !important;
+}
+
+.badge.type-question {
+  background-color: #fd7e14 !important; /* Orange */
+  color: white !important;
+}
+
+/* ============================================================
+   MOBILE RESPONSIVENESS IMPROVEMENTS
+   ============================================================ */
+
+/* Mobile-first responsive improvements for Calendar and Forms */
+@media (max-width: 768px) {
+  /* Calendar Grid Improvements */
+  .calendar-grid .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .calendar-grid table {
+    font-size: 0.8rem;
+    min-width: 600px;
+  }
+  
+  .calendar-grid .table th,
+  .calendar-grid .table td {
+    padding: 0.5rem 0.25rem;
+    vertical-align: middle;
+  }
+  
+  .calendar-slot-btn {
+    font-size: 0.75rem !important;
+    padding: 0.5rem !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  
+  .calendar-grid .fw-bold {
+    font-size: 0.7rem;
+  }
+  
+  .calendar-grid .bi {
+    display: none; /* Hide icons on mobile to save space */
+  }
+  
+  /* Form improvements for mobile */
+  .form-section .row > div[style*="width: 50%"] {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  .form-section .col-6 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  .form-section .col-md-6,
+  .form-section .col-md-3,
+  .form-section .col-md-2 {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  /* Input field improvements */
+  .form-control,
+  .form-select {
+    font-size: 1rem !important; /* Larger for mobile for easier tapping */
+  }
+  
+  /* Buttons on mobile */
+  .btn {
+    padding: 0.75rem 1.5rem !important;
+    font-size: 1rem !important;
+    min-height: 44px; /* Apple's recommended touch target size */
+  }
+  
+  /* Card padding adjustments */
+  .card-body {
+    padding: 1rem !important;
+  }
+  
+  /* Reduce spacing on mobile */
+  .mb-4 {
+    margin-bottom: 1rem !important;
+  }
+  
+  .mb-5 {
+    margin-bottom: 1.5rem !important;
+  }
+}
+
+/* Extra small devices (phones, 576px and down) */
+@media (max-width: 576px) {
+  .calendar-grid table {
+    font-size: 0.7rem;
+  }
+  
+  .calendar-slot-btn {
+    font-size: 0.7rem !important;
+    padding: 0.4rem !important;
+  }
+  
+  .calendar-grid .fw-bold {
+    font-size: 0.65rem;
+  }
+  
+  /* Stack all form elements vertically on extra small screens */
+  .row > * {
+    flex: 0 0 auto;
+    width: 100% !important;
+  }
+  
+  /* Reduce font sizes slightly */
+  h2, .h4 {
+    font-size: 1.25rem !important;
+  }
+  
+  p, .text-muted {
+    font-size: 0.875rem !important;
+  }
+}
+
+/* Landscape orientation improvements for tablets */
+@media (min-width: 769px) and (max-width: 1024px) and (orientation: landscape) {
+  .calendar-grid table {
+    font-size: 0.85rem;
+  }
+  
+  .form-section .col-md-6 {
+    flex: 0 0 50%;
+    max-width: 50%;
+  }
+}
+
+/* Modal text color override - ensure black text in modals */
+.modal-content {
+  background-color: white !important;
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  background-color: white !important;
+}
+
+.modal-title,
+.modal-body p,
+.modal-body * {
+  color: #000000 !important;
 }

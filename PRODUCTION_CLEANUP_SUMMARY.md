@@ -1,6 +1,6 @@
 # Production Cleanup Summary
 
-This document summarizes the cleanup work performed to prepare the Adaptalabs recruitment/research opportunity management system for production deployment.
+This document summarizes the cleanup work performed to prepare the Adaptalabs Impact Lab system for production deployment.
 
 ## Cleanup Actions Completed
 

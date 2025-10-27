@@ -2,17 +2,22 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../config';
 import { requireAdmin, optionalAuth } from '../middleware/authenticate';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
-import { getMockOpportunity, addMockOpportunity } from '../../../demo/mock-data';
+import { getMockOpportunity, addMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
 
 const router: Router = Router();
 
 // Helper function to check if database is available
 const isDatabaseAvailable = async (): Promise<boolean> => {
   try {
+    // Check if DATABASE_URL is set
+    if (!process.env.DATABASE_URL) {
+      console.log('DATABASE_URL not set, using mock data');
+      return false;
+    }
     await pool.query('SELECT 1');
     return true;
   } catch (error) {
-    console.log('Database not available, using mock data');
+    console.log('Database not available, using mock data:', (error as any).message);
     return false;
   }
 };
@@ -115,243 +120,9 @@ const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promise<void
   }
 };
 
-// GET /api/opportunities/:id/sessions - List sessions for an opportunity
-router.get('/opportunities/:id/sessions', optionalAuth, async (req: Request, res: Response) => {
-  try {
-    const { id: opportunityId } = req.params;
-    const { from, include_past } = req.query;
-    
-    // Check if database is available
-    const dbAvailable = await isDatabaseAvailable();
-    if (!dbAvailable) {
-      return res.json([]); // Return empty array for mock mode
-    }
-    
-    // Check if opportunity exists and user has access
-    const opportunityCheck = await pool.query(`
-      SELECT o.*, u.name as owner_name, u.email as owner_email
-      FROM opportunities o
-      JOIN users u ON o.owner_user_id = u.id
-      WHERE o.id = $1
-    `, [opportunityId]);
-    
-    if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
-    }
-    
-    const opportunity = opportunityCheck.rows[0];
-    const isAdmin = req.user?.role === 'researcher_admin';
-    
-    // Non-admin users can only see published opportunities
-    if (!isAdmin && opportunity.status !== 'published') {
-      return res.status(404).json({ error: 'Opportunity not found' });
-    }
-    
-    // Build query for sessions
-    let query = `
-      SELECT *, (capacity - booked_count) as remaining
-      FROM sessions 
-      WHERE opportunity_id = $1
-    `;
-    const params: any[] = [opportunityId];
-    let paramCount = 1;
-    
-    // Filter by start time if provided
-    if (from) {
-      paramCount++;
-      query += ` AND start_time >= $${paramCount}`;
-      params.push(from);
-    }
-    
-    // Filter out past sessions unless explicitly requested
-    if (include_past !== 'true') {
-      query += ` AND end_time >= NOW()`;
-    }
-    
-    query += ` ORDER BY start_time ASC`;
-    
-    const result = await pool.query(query, params);
-    
-    // Auto-close opportunity if all sessions are past
-    await autoCloseOpportunityIfNeeded(opportunityId);
-    
-    // Serialize dates for API response
-    const sessions = result.rows.map(session => ({
-      ...session,
-      start_time: session.start_time.toISOString(),
-      end_time: session.end_time.toISOString(),
-      created_at: session.created_at.toISOString(),
-      updated_at: session.updated_at.toISOString(),
-    }));
-    
-    res.json(sessions);
-  } catch (error) {
-    console.error('Error fetching sessions:', error);
-    res.status(500).json({ error: 'Failed to fetch sessions' });
-  }
-});
-
-// POST /api/opportunities/:id/sessions - Create sessions for an opportunity
-router.post('/opportunities/:id/sessions', requireAdmin, async (req: Request, res: Response) => {
-  try {
-    // Check if database is available
-    const dbAvailable = await isDatabaseAvailable();
-    if (!dbAvailable) {
-      return res.status(503).json({ error: 'Database not available. Please set up PostgreSQL to create sessions.' });
-    }
-    
-    const { id: opportunityId } = req.params;
-    const sessionsData = req.body;
-    
-    // Handle both single session and array of sessions
-    const sessions = Array.isArray(sessionsData) ? sessionsData : [sessionsData];
-    
-    if (sessions.length === 0) {
-      return res.status(400).json({ error: 'At least one session is required' });
-    }
-    
-    // Check opportunity ownership
-    const opportunityCheck = await pool.query(
-      'SELECT owner_user_id FROM opportunities WHERE id = $1',
-      [opportunityId]
-    );
-    
-    if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
-    }
-    
-    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
-    if (!isOwner) {
-      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
-    }
-    
-    // Validate all sessions
-    const validationErrors: string[] = [];
-    sessions.forEach((session, index) => {
-      const errors = validateSessionData(session);
-      errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
-    });
-    
-    if (validationErrors.length > 0) {
-      return res.status(400).json({ error: 'Validation failed', details: validationErrors });
-    }
-    
-    // Check for overlaps within the batch
-    for (let i = 0; i < sessions.length; i++) {
-      for (let j = i + 1; j < sessions.length; j++) {
-        const session1 = sessions[i];
-        const session2 = sessions[j];
-        const start1 = new Date(session1.start_time);
-        const end1 = new Date(session1.end_time);
-        const start2 = new Date(session2.start_time);
-        const end2 = new Date(session2.end_time);
-        
-        if ((start1 < end2) && (start2 < end1)) {
-          return res.status(409).json({ 
-            error: `Sessions ${i + 1} and ${j + 1} overlap in time` 
-          });
-        }
-      }
-    }
-    
-    // Optional: Check calendar conflicts if calendar service is available
-    try {
-      const calendarService = require('../services/calendar').default;
-      const timeSlots = sessions.map(session => ({
-        start_time: session.start_time,
-        end_time: session.end_time
-      }));
-      
-      const conflictsResult = await calendarService.checkTimeSlotAvailability(
-        new Date(sessions[0].start_time),
-        new Date(sessions[sessions.length - 1].end_time),
-        sessions[0].capacity || 30 // Use capacity as duration fallback
-      );
-      
-      if (!conflictsResult.success) {
-        console.warn('Calendar conflict check failed:', conflictsResult.error);
-        // Continue with session creation even if calendar check fails
-      }
-    } catch (error) {
-      console.warn('Calendar service not available for conflict checking');
-      // Continue with session creation
-    }
-    
-    // Create sessions in a transaction
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      
-      // Check for overlaps with existing sessions INSIDE the transaction
-      // This prevents race conditions where another request creates overlapping sessions
-      // between the initial check and the actual creation
-      for (const session of sessions) {
-        const startTime = new Date(session.start_time);
-        const endTime = new Date(session.end_time);
-        
-        const hasOverlap = await checkSessionOverlaps(opportunityId, startTime, endTime, undefined, client);
-        if (hasOverlap) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ 
-            error: 'Session overlaps with existing sessions' 
-          });
-        }
-      }
-      
-      const createdSessions: Session[] = [];
-      
-      for (const session of sessions) {
-        const query = `
-          INSERT INTO sessions (
-            opportunity_id, start_time, end_time, capacity, 
-            location_or_meet_link_optional
-          ) VALUES ($1, $2, $3, $4, $5)
-          RETURNING *, (capacity - booked_count) as remaining
-        `;
-        
-        const values = [
-          opportunityId,
-          session.start_time,
-          session.end_time,
-          session.capacity,
-          session.location_or_meet_link_optional || null
-        ];
-        
-        const result = await client.query(query, values);
-        const createdSession = {
-          ...result.rows[0],
-          start_time: result.rows[0].start_time.toISOString(),
-          end_time: result.rows[0].end_time.toISOString(),
-          created_at: result.rows[0].created_at.toISOString(),
-          updated_at: result.rows[0].updated_at.toISOString(),
-        };
-        createdSessions.push(createdSession);
-      }
-      
-      await client.query('COMMIT');
-      
-      res.status(201).json(createdSessions);
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  } catch (error) {
-    console.error('Error creating sessions:', error);
-    res.status(500).json({ error: 'Failed to create sessions' });
-  }
-});
-
 // PATCH /api/sessions/:id - Update a session
 router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
-    // Check if database is available
-    const dbAvailable = await isDatabaseAvailable();
-    if (!dbAvailable) {
-      return res.status(503).json({ error: 'Database not available. Please set up PostgreSQL to edit sessions.' });
-    }
-    
     const { id: sessionId } = req.params;
     const data: UpdateSessionRequest = req.body;
     
@@ -359,6 +130,32 @@ router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
     const errors = validateSessionData(data);
     if (errors.length > 0) {
       return res.status(400).json({ error: 'Validation failed', details: errors });
+    }
+    
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      // Use mock data for development
+      const sessions = getAllMockSessions(); // Get all sessions
+      const session = sessions.find(s => s.id === sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      // Check ownership through opportunity
+      const opportunity = getMockOpportunity(session.opportunity_id);
+      if (!opportunity || opportunity.owner_user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the owner can edit this session' });
+      }
+      
+      // Update mock session
+      const updatedSession = updateMockSession(sessionId, data);
+      if (!updatedSession) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      return res.json(updatedSession);
     }
     
     // Check session ownership
@@ -457,13 +254,33 @@ router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
 // DELETE /api/sessions/:id - Delete a session
 router.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {
+    const { id: sessionId } = req.params;
+    
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
     if (!dbAvailable) {
-      return res.status(503).json({ error: 'Database not available. Please set up PostgreSQL to delete sessions.' });
+      // Use mock data for development
+      const sessions = getAllMockSessions(); // Get all sessions
+      const session = sessions.find(s => s.id === sessionId);
+      
+      if (!session) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      // Check ownership through opportunity
+      const opportunity = getMockOpportunity(session.opportunity_id);
+      if (!opportunity || opportunity.owner_user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the owner can delete this session' });
+      }
+      
+      // Delete mock session
+      const deleted = deleteMockSession(sessionId);
+      if (!deleted) {
+        return res.status(404).json({ error: 'Session not found' });
+      }
+      
+      return res.status(204).send();
     }
-    
-    const { id: sessionId } = req.params;
     
     // Check session ownership
     const isOwner = await checkSessionOwnership(sessionId, req.user!.id);
@@ -628,67 +445,42 @@ router.post('/opportunities/:id/close-if-past', requireAdmin, async (req: Reques
   }
 });
 
-// DELETE /api/opportunities/:id/sessions - Delete all sessions for an opportunity
-router.delete('/opportunities/:id/sessions', requireAdmin, async (req: Request, res: Response) => {
+// POST /api/sessions/sync-booked-counts - Sync booked_count with actual bookings (admin only)
+router.post('/sync-booked-counts', requireAdmin, async (req: Request, res: Response) => {
   try {
-    // Check if database is available
-    const dbAvailable = await isDatabaseAvailable();
-    if (!dbAvailable) {
-      return res.status(503).json({ error: 'Database not available. Please set up PostgreSQL to delete sessions.' });
+    console.log('Starting booked_count sync...');
+    
+    // Get all sessions
+    const sessionsResult = await pool.query('SELECT id FROM sessions');
+    
+    let syncedCount = 0;
+    
+    for (const session of sessionsResult.rows) {
+      // Count actual active bookings for this session
+      const bookingsResult = await pool.query(
+        'SELECT COUNT(*) as count FROM bookings WHERE session_id = $1 AND status = $2',
+        [session.id, 'booked']
+      );
+      
+      const actualCount = parseInt(bookingsResult.rows[0].count);
+      
+      // Update booked_count to match actual bookings
+      await pool.query(
+        'UPDATE sessions SET booked_count = $1 WHERE id = $2',
+        [actualCount, session.id]
+      );
+      
+      syncedCount++;
     }
     
-    const { id: opportunityId } = req.params;
-    
-    // Check opportunity ownership
-    const opportunityCheck = await pool.query(
-      'SELECT owner_user_id FROM opportunities WHERE id = $1',
-      [opportunityId]
-    );
-    
-    if (opportunityCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'Opportunity not found' });
-    }
-    
-    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
-    if (!isOwner) {
-      return res.status(403).json({ error: 'Only the owner can delete sessions for this opportunity' });
-    }
-    
-    // Check if any sessions have bookings
-    const sessionsWithBookings = await pool.query(`
-      SELECT s.id, s.start_time, s.end_time, s.booked_count
-      FROM sessions s
-      WHERE s.opportunity_id = $1 AND s.booked_count > 0
-    `, [opportunityId]);
-    
-    if (sessionsWithBookings.rows.length > 0) {
-      return res.status(400).json({ 
-        error: 'Cannot delete sessions with existing bookings',
-        details: {
-          sessions_with_bookings: sessionsWithBookings.rows.length,
-          sessions: sessionsWithBookings.rows.map(s => ({
-            id: s.id,
-            start_time: s.start_time.toISOString(),
-            end_time: s.end_time.toISOString(),
-            booked_count: s.booked_count
-          }))
-        }
-      });
-    }
-    
-    // Delete all sessions for the opportunity
-    const deleteResult = await pool.query(
-      'DELETE FROM sessions WHERE opportunity_id = $1 RETURNING id',
-      [opportunityId]
-    );
-    
+    console.log(`Sync complete: ${syncedCount} sessions updated`);
     res.json({ 
-      message: `Successfully deleted ${deleteResult.rows.length} sessions`,
-      deleted_count: deleteResult.rows.length
+      message: `Successfully synced booked_count for ${syncedCount} sessions`,
+      synced_count: syncedCount
     });
   } catch (error) {
-    console.error('Error deleting all sessions:', error);
-    res.status(500).json({ error: 'Failed to delete sessions' });
+    console.error('Error syncing booked_count:', error);
+    res.status(500).json({ error: 'Failed to sync booked_count' });
   }
 });
 

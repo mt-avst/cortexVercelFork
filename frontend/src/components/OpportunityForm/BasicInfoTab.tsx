@@ -6,12 +6,14 @@ interface BasicInfoTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: any) => void;
+  handleBlur?: (field: string, value: any) => void;
 }
 
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
-  handleInputChange
+  handleInputChange,
+  handleBlur
 }) => {
   return (
     <div className="tab-pane active">
@@ -31,10 +33,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           <div className="col-6" style={{ width: '50%', maxWidth: '50%' }}>
             <div className="form-group mb-3">
               <label htmlFor="type" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
-                Opportunity Type *
+                Research Study Type *
               </label>
               <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
-                {formData.type === 'test' && 'Creates bookable time slots for interactive sessions'}
+                {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
                 {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
                 {formData.type === 'survey' && 'Opens external survey tool for detailed feedback'}
@@ -47,13 +49,15 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 onChange={(e) => handleInputChange('type', e.target.value)}
                 required
               >
-                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
-                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ Question - Single question session</option>
+                <option value="" disabled>Please select research study type</option>
+                <option value="interview" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>💼 Interview - Research interview session</option>
                 <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📊 Poll - Quick opinion gathering</option>
+                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ Question - Single question session</option>
                 <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
+                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
               </select>
               {validationErrors.type && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.type}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.type}</div>
               )}
             </div>
           </div>
@@ -75,7 +79,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
               </select>
               {validationErrors.status && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.status}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.status}</div>
               )}
             </div>
           </div>
@@ -101,7 +105,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.title && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.title}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.title}</div>
               )}
             </div>
           </div>
@@ -127,38 +131,41 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.purpose_one_liner && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.purpose_one_liner}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.purpose_one_liner}</div>
               )}
             </div>
           </div>
         </div>
 
-        <div className="row g-3">
-          <div className="col-auto">
-            <div className="form-group mb-3">
-              <label htmlFor="default_duration_minutes" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
-                Default Duration (minutes) *
-              </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
-                Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
+        {/* Duration - only show for test and interview types */}
+        {(formData.type === 'test' || formData.type === 'interview') && (
+          <div className="row g-3">
+            <div className="col-auto">
+              <div className="form-group mb-3">
+                <label htmlFor="default_duration_minutes" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+                  Default Duration (minutes) *
+                </label>
+                <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
+                  Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
+                </div>
+                <input
+                  type="number"
+                  id="default_duration_minutes"
+                  className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
+                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '7ch' }}
+                  value={formData.default_duration_minutes}
+                  onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
+                  min={SESSION_DURATION.MIN_MINUTES}
+                  max={SESSION_DURATION.MAX_MINUTES}
+                  required
+                />
+                {validationErrors.default_duration_minutes && (
+                  <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.default_duration_minutes}</div>
+                )}
               </div>
-              <input
-                type="number"
-                id="default_duration_minutes"
-                className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '7ch' }}
-                value={formData.default_duration_minutes}
-                onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
-                min={SESSION_DURATION.MIN_MINUTES}
-                max={SESSION_DURATION.MAX_MINUTES}
-                required
-              />
-              {validationErrors.default_duration_minutes && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.default_duration_minutes}</div>
-              )}
             </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

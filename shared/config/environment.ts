@@ -22,10 +22,10 @@ export const backendEnvSchema = z.object({
   SESSION_SECRET: z.string().min(32, 'Session secret must be at least 32 characters'),
   
   // OIDC Configuration
-  OIDC_ISSUER: z.string().url('OIDC issuer must be a valid URL'),
-  OIDC_CLIENT_ID: z.string().min(1, 'OIDC client ID is required'),
-  OIDC_CLIENT_SECRET: z.string().min(1, 'OIDC client secret is required'),
-  OIDC_REDIRECT_URL: z.string().url('OIDC redirect URL must be a valid URL'),
+  OIDC_ISSUER: z.string().url('OIDC issuer must be a valid URL').optional(),
+  OIDC_CLIENT_ID: z.string().min(1, 'OIDC client ID is required').optional(),
+  OIDC_CLIENT_SECRET: z.string().min(1, 'OIDC client secret is required').optional(),
+  OIDC_REDIRECT_URL: z.string().url('OIDC redirect URL must be a valid URL').optional(),
   
   // Admin Configuration
   ADMIN_EMAILS: z.string().optional().transform(val => 

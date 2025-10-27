@@ -9,6 +9,7 @@ import OpportunityForm from './pages/OpportunityForm';
 import MyBookings from './pages/MyBookings';
 import Admin from './pages/Admin';
 import Poll from './pages/Poll';
+import GamificationPage from './pages/Gamification';
 
 function App() {
   return (
@@ -27,6 +28,7 @@ function App() {
                   <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
                   <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
                   <Route path="/my-bookings" element={<MyBookings />} />
+                  <Route path="/gamification" element={<GamificationPage />} />
                 </Routes>
               </div>
             </main>

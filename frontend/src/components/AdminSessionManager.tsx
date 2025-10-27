@@ -11,6 +11,8 @@ interface AdminSessionManagerProps {
   defaultDurationMinutes: number;
   disabled?: boolean;
   isTemporary?: boolean;
+  onOpportunitySave?: () => Promise<void>; // New prop for saving opportunity
+  onBack?: () => void; // Prop for back navigation
 }
 
 interface CalendarViewProps {
@@ -67,9 +69,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const isSlotSelected = (slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
-    const isSelected = selectedSlots.has(slotKey);
-    console.log('isSlotSelected check:', { slotKey, isSelected, selectedSlots: Array.from(selectedSlots) });
-    return isSelected;
+    return selectedSlots.has(slotKey);
   };
 
   const isSlotConfirmed = (slot: AvailableSlot) => {
@@ -102,18 +102,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     });
   };
 
-  // Get session for a specific time slot
-  const getSessionForSlot = (slot: AvailableSlot) => {
+  // Get session for a specific time slot - memoized to prevent excessive re-renders
+  const getSessionForSlot = useCallback((slot: AvailableSlot) => {
     const slotStart = new Date(slot.start);
     const slotEnd = new Date(slot.end);
     
-    return sessions.find(session => {
+    const session = sessions.find(session => {
       const sessionStart = new Date(session.start_time);
       const sessionEnd = new Date(session.end_time);
       // Find exact matches (existing sessions)
       return (slotStart.getTime() === sessionStart.getTime() && slotEnd.getTime() === sessionEnd.getTime());
     });
-  };
+    
+    return session;
+  }, [sessions]);
 
   // Generate all days in the selected range (UTC)
   const generateDaysInRange = (): Date[] => {
@@ -121,26 +123,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const current = new Date(startDate);
     const end = new Date(endDate);
     
-    // If excluding weekends, we need to extend the end date to compensate for removed weekend days
-    let actualEnd = new Date(end);
-    if (excludeWeekends) {
-      // Calculate how many weekend days are in the original range (UTC)
-      let weekendCount = 0;
-      const tempCurrent = new Date(startDate);
-      while (tempCurrent <= end) {
-        const dayOfWeek = tempCurrent.getUTCDay(); // Use UTC
-        if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
-          weekendCount++;
-        }
-        tempCurrent.setUTCDate(tempCurrent.getUTCDate() + 1); // Use UTC
-      }
-      
-      // Extend the end date by the number of weekend days (UTC)
-      actualEnd = new Date(end);
-      actualEnd.setUTCDate(actualEnd.getUTCDate() + weekendCount);
-    }
-    
-    while (current <= actualEnd) {
+    // Simple approach: just iterate through the date range and filter weekends if needed
+    while (current <= end) {
       if (excludeWeekends) {
         const dayOfWeek = current.getUTCDay(); // Use UTC
         // Only include weekdays (Monday = 1, Tuesday = 2, ..., Friday = 5)
@@ -239,7 +223,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   border: '1px solid #dee2e6'
                 }}>
                   <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem' }}>
-                    {column.slots.length > 0 ? formatDate(column.slots[0].start) : formatDate(column.date)}
+                    {formatDate(column.date)}
                   </h6>
                   <small className="text-muted">
                     {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
@@ -260,7 +244,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   {column.slots.length === 0 ? (
                     <div className="text-center text-muted py-3" style={{ fontSize: '0.8rem' }}>
                       <i className="bi bi-calendar-x me-1"></i>
-                      No slots
+                      No available slots
                     </div>
                   ) : (
                     column.slots.map((slot, slotIndex) => {
@@ -271,34 +255,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     const isAllocated = isSlotAllocated(slot);
                     const session = getSessionForSlot(slot);
                     
-                    // Debug confirmed slot calculation
-                    if (slot.start === '2025-10-20T09:00:00.000Z' && slot.end === '2025-10-20T09:30:00.000Z') {
-                      console.log('🔍 DEBUG SLOT STATE:', {
-                        slotKey: `${slot.start}|${slot.end}`,
-                        isSelected,
-                        isConfirmed,
-                        isBusy,
-                        isAllocated,
-                        hasSession: !!session,
-                        sessionId: session?.id,
-                        confirmedSlots: Array.from(confirmedSlots),
-                        confirmedSlotsHasKey: confirmedSlots.has(`${slot.start}|${slot.end}`)
-                      });
-                    }
-                    
                     // Determine slot styling based on session status
                     let slotClass = '';
                     let slotStyle = {};
                     
                     if (isConfirmed) {
                       // Confirmed state takes priority - show green for created sessions
-                      slotClass = 'bg-success text-white';
+                      slotClass = 'calendar-slot-available'; // Use the same class as user calendar
                       slotStyle = { 
-                        backgroundColor: '#198754 !important', 
+                        backgroundColor: '#28a745 !important', 
                         color: 'white !important',
-                        borderColor: '#198754'
+                        borderColor: '#28a745 !important'
                       };
-                      console.log('🟢 APPLYING CONFIRMED STYLE:', { slotKey: `${slot.start}|${slot.end}`, slotClass, slotStyle });
                     } else if (isSelected) {
                       // Selected state - show light green for pending creation
                       slotClass = 'text-dark';
@@ -320,10 +288,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                       slotClass = 'bg-light border-secondary'; // Free slot
                     }
                     
-                    // Debug final styling
-                    if (slot.start === '2025-10-20T09:00:00.000Z' && slot.end === '2025-10-20T09:30:00.000Z') {
-                      console.log('🎨 FINAL STYLING:', {
+                    // Debug confirmed slot matching
+                    if (isConfirmed || session) {
+                      console.log('🎨 SLOT STYLING DEBUG:', {
                         slotKey: `${slot.start}|${slot.end}`,
+                        isConfirmed,
+                        isSelected,
+                        hasSession: !!session,
+                        sessionId: session?.id,
+                        sessionRemaining: session?.remaining,
+                        confirmedSlotsSize: confirmedSlots.size,
+                        confirmedSlotsArray: Array.from(confirmedSlots),
                         slotClass,
                         slotStyle,
                         finalClassName: `calendar-slot calendar-slot-btn p-2 border rounded cursor-pointer position-relative ${slotClass}`
@@ -569,6 +544,17 @@ const ListView: React.FC<{
   sessions: Session[];
   isTemporary: boolean;
 }> = ({ sessions, isTemporary }) => {
+  console.log('📋 ListView rendering with sessions:', {
+    sessionsCount: sessions.length,
+    sessions: sessions.map(s => ({
+      id: s.id,
+      start_time: s.start_time,
+      end_time: s.end_time,
+      capacity: s.capacity,
+      booked_count: s.booked_count
+    }))
+  });
+  
   return (
     <div className="list-view">
       <div className="card">
@@ -648,7 +634,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   onSessionsChange,
   defaultDurationMinutes,
   disabled = false,
-  isTemporary = false
+  isTemporary = false,
+  onOpportunitySave,
+  onBack
 }) => {
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -686,6 +674,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(getStoredSelectedSlots);
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
+  
+  // Calendar view mode
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
 
   // Debug component mount
   useEffect(() => {
@@ -696,8 +692,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       sessionsCount: sessions.length,
       selectedSlotsCount: selectedSlots.size,
       confirmedSlotsCount: confirmedSlots.size,
-      selectedSlots: Array.from(selectedSlots),
-      confirmedSlots: Array.from(confirmedSlots)
+      viewMode,
+      sessions: sessions.map(s => ({
+        id: s.id,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        capacity: s.capacity,
+        booked_count: s.booked_count
+      }))
     });
   }, []);
 
@@ -723,32 +725,28 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       console.warn('Failed to persist confirmed slots:', error);
     }
   };
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string>('');
-  const [isUpdating, setIsUpdating] = useState(false);
-  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
   
   // Calendar view controls - use UTC to match backend
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
+    date.setUTCDate(date.getUTCDate() + 1); // Start from tomorrow
     date.setUTCHours(0, 0, 0, 0); // Start at midnight UTC for consistent day boundaries
+    console.log('🗓️ Calendar startDate initialized:', date.toISOString());
     return date;
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 2); // 2 days ahead
+    date.setUTCDate(date.getUTCDate() + 7); // 7 days from today (1 week)
     date.setUTCHours(23, 59, 59, 999); // End at end of day UTC
+    console.log('🗓️ Calendar endDate initialized:', date.toISOString());
     return date;
   });
-  const [durationMinutes, setDurationMinutes] = useState(30); // 30 minutes
-  const [excludeWeekends, setExcludeWeekends] = useState(true);
+  const [durationMinutes, setDurationMinutes] = useState(defaultDurationMinutes || 30); // Use prop or default to 30 minutes
+  const [excludeWeekends, setExcludeWeekends] = useState(true); // Exclude weekends by default
   
   // Pagination controls - now based on days instead of slots
   const [currentPage, setCurrentPage] = useState(0);
   const [daysPerPage, setDaysPerPage] = useState(5); // Show 5 days per page by default
-  
-  // Calendar view mode
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Sync confirmed slots with existing sessions
   useEffect(() => {
@@ -757,8 +755,37 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       const slotKey = `${session.start_time}|${session.end_time}`;
       sessionSlots.add(slotKey);
     });
-    setConfirmedSlots(sessionSlots);
-    persistConfirmedSlots(sessionSlots);
+    
+    // Only update if the confirmed slots have actually changed
+    const currentConfirmedSlots = Array.from(confirmedSlots).sort();
+    const newConfirmedSlots = Array.from(sessionSlots).sort();
+    const hasChanged = currentConfirmedSlots.length !== newConfirmedSlots.length || 
+                      !currentConfirmedSlots.every((slot, index) => slot === newConfirmedSlots[index]);
+    
+    if (hasChanged) {
+      console.log('🔄 Updating confirmed slots due to session changes:', {
+        oldSlots: currentConfirmedSlots,
+        newSlots: newConfirmedSlots,
+        sessionsCount: sessions.length
+      });
+      setConfirmedSlots(sessionSlots);
+      persistConfirmedSlots(sessionSlots);
+    }
+    
+    // Debug: Log all sessions being processed
+    console.log('🔄 Syncing confirmed slots with sessions:', {
+      sessionsCount: sessions.length,
+      sessions: sessions.map(s => ({
+        id: s.id,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        capacity: s.capacity,
+        booked_count: s.booked_count,
+        slotKey: `${s.start_time}|${s.end_time}`
+      })),
+      confirmedSlotsCount: sessionSlots.size,
+      confirmedSlotsArray: Array.from(sessionSlots)
+    });
   }, [sessions, opportunityId]);
 
   // Cleanup persisted state when opportunity changes
@@ -784,25 +811,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       setError('');
       
       const startTime = startDate.toISOString();
+      const actualEndTime = endDate.toISOString();
       
-      // Calculate the actual end time - extend it if excluding weekends
-      let actualEndTime = endDate.toISOString();
-      if (excludeWeekends) {
-        // Calculate how many weekend days are in the original range (UTC)
-        let weekendCount = 0;
-        const tempCurrent = new Date(startDate);
-        while (tempCurrent <= endDate) {
-          const dayOfWeek = tempCurrent.getUTCDay(); // Use UTC to match backend
-          if (dayOfWeek === 0 || dayOfWeek === 6) { // Sunday or Saturday
-            weekendCount++;
-          }
-          tempCurrent.setUTCDate(tempCurrent.getUTCDate() + 1); // Use UTC date operations
-        }
-        
-        // Extend the end date by the number of weekend days (UTC)
-        const extendedEndDate = new Date(endDate);
-        extendedEndDate.setUTCDate(extendedEndDate.getUTCDate() + weekendCount);
-        actualEndTime = extendedEndDate.toISOString();
+      // Validate date range before making API calls
+      if (startDate >= endDate) {
+        console.error('Invalid date range: start date is not before end date');
+        setError('Invalid date range: start date must be before end date');
+        return;
       }
       
       // Load calendar events and availability in parallel
@@ -813,6 +828,21 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       
       setCalendarEvents(eventsResult);
       setAvailableSlots(availabilityResult.available_slots);
+      
+      // Debug: Log available slots and sessions to see if they match (only when sessions change)
+      if (sessions.length > 0) {
+        console.log('📅 Calendar data loaded:', {
+          eventsCount: eventsResult.length,
+          availableSlotsCount: availabilityResult.available_slots.length,
+          sessionsCount: sessions.length,
+          sessions: sessions.map(session => ({
+            id: session.id,
+            start_time: session.start_time,
+            end_time: session.end_time,
+            slotKey: `${session.start_time}|${session.end_time}`
+          }))
+        });
+      }
       
       // Reset pagination when new data is loaded
       setCurrentPage(0);
@@ -927,6 +957,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return;
     }
 
+    // Validate opportunityId for non-temporary sessions
+    if (!isTemporary && (!opportunityId || opportunityId.trim() === '')) {
+      setError('Cannot create sessions: Opportunity ID is missing. Please save the opportunity first.');
+      return;
+    }
+
     try {
       setLoading(true);
       setError('');
@@ -946,7 +982,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         // For temporary opportunities, create local sessions that will be saved later
         const tempSessions: Session[] = sessionData.map((session, index) => ({
           id: `temp-session-${Date.now()}-${index}`,
-          opportunity_id: opportunityId,
+          opportunity_id: opportunityId || 'temp', // Use 'temp' as fallback
           start_time: session.start_time,
           end_time: session.end_time,
           capacity: session.capacity,
@@ -968,6 +1004,23 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         setSelectedSlots(new Set());
         persistSelectedSlots(new Set());
         
+        // If we have an opportunity save callback, save the opportunity
+        if (onOpportunitySave) {
+          console.log('🚀 Calling onOpportunitySave callback for temporary opportunity');
+          // Small delay to ensure state has propagated to parent component
+          await new Promise(resolve => setTimeout(resolve, 100));
+          try {
+            await onOpportunitySave();
+            console.log('✅ onOpportunitySave completed successfully for temporary opportunity');
+          } catch (saveError) {
+            console.error('❌ Error saving temporary opportunity:', saveError);
+            // Don't fail the entire operation if opportunity save fails
+            // Sessions were already created successfully
+          }
+        } else {
+          console.log('⚠️ onOpportunitySave callback not provided for temporary opportunity');
+        }
+        
         // Refresh calendar to show updated state immediately
         await loadCalendarData();
         return;
@@ -982,7 +1035,33 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       // Create sessions via API
       const createdSessions = await createSessions(opportunityId, sessionData);
+      console.log('✅ Sessions created successfully:', {
+        createdCount: createdSessions.length,
+        createdSessions: createdSessions.map(s => ({
+          id: s.id,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          capacity: s.capacity
+        })),
+        existingSessionsCount: sessions.length
+      });
+      
       onSessionsChange([...sessions, ...createdSessions]);
+      
+      // If we have an opportunity save callback, save the opportunity
+      if (onOpportunitySave) {
+        console.log('🚀 Calling onOpportunitySave callback');
+        try {
+          await onOpportunitySave();
+          console.log('✅ onOpportunitySave completed successfully');
+        } catch (saveError) {
+          console.error('❌ Error saving opportunity:', saveError);
+          // Don't fail the entire operation if opportunity save fails
+          // Sessions were already created successfully
+        }
+      } else {
+        console.log('⚠️ onOpportunitySave callback not provided');
+      }
       
       // Mark selected slots as confirmed
       setConfirmedSlots(prev => {
@@ -1086,7 +1165,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       {error && (
         <div className="alert alert-danger" role="alert">
+          <i className="bi bi-exclamation-triangle me-2"></i>
           {error}
+        </div>
+      )}
+
+      {disabled && !isTemporary && !opportunityId && (
+        <div className="alert alert-info" role="alert">
+          <i className="bi bi-info-circle me-2"></i>
+          Please wait while the opportunity loads, or save the opportunity first before adding sessions.
         </div>
       )}
 
@@ -1194,7 +1281,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
                     const newDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0));
-                    setStartDate(newDate);
+                    
+                    // Validate that start date is not after end date
+                    if (newDate <= endDate) {
+                      setStartDate(newDate);
+                    } else {
+                      console.warn('Start date cannot be after end date');
+                    }
                   }}
                   disabled={disabled}
                 />
@@ -1210,7 +1303,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
                     const newDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59));
-                    setEndDate(newDate);
+                    
+                    // Validate that end date is not before start date
+                    if (newDate >= startDate) {
+                      setEndDate(newDate);
+                    } else {
+                      console.warn('End date cannot be before start date');
+                    }
                   }}
                   disabled={disabled}
                 />
@@ -1318,19 +1417,6 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   </button>
                 </div>
                 <div className="col-auto ms-auto">
-                  <small className="text-muted me-2">
-                    S:{sessions.length} Sel:{selectedSlots.size} Conf:{confirmedSlots.size}
-                  </small>
-                  <button
-                    type="button"
-                    className="btn btn-outline-warning btn-sm me-2"
-                    onClick={handleClearVisualState}
-                    disabled={disabled || loading}
-                    title="Clear all visual slot assignments"
-                  >
-                    <i className="bi bi-arrow-clockwise me-1"></i>
-                    Clear Visual State
-                  </button>
                   <button
                     type="button"
                     className="btn btn-outline-danger btn-sm"
@@ -1365,32 +1451,33 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   </div>
                   <div className="mt-2 text-muted">Fetching calendar data...</div>
                 </div>
-              ) : availableSlots.length === 0 ? (
-                <div className="text-center py-4">
-                  <i className="bi bi-calendar-x text-muted" style={{ fontSize: '3rem' }}></i>
-                  <h6 className="mt-3 text-muted">No Available Time Slots</h6>
-                  <p className="text-muted mb-0">
-                    No available time slots found for the selected date range and duration.
-                    Try adjusting the date range or duration.
-                  </p>
-                </div>
               ) : viewMode === 'grid' ? (
-                <CalendarView
-                  events={calendarEvents}
-                  availableSlots={availableSlots}
-                  selectedSlots={selectedSlots}
-                  confirmedSlots={confirmedSlots}
-                  onSlotSelect={handleSlotSelect}
-                  onSlotDeselect={handleSlotDeselect}
-                  durationMinutes={durationMinutes}
-                  currentPage={currentPage}
-                  onPageChange={handlePageChange}
-                  daysPerPage={daysPerPage}
-                  startDate={startDate}
-                  endDate={endDate}
-                  excludeWeekends={excludeWeekends}
-                  sessions={sessions}
-                />
+                <div>
+                  {availableSlots.length === 0 && (
+                    <div className="alert alert-warning mb-3">
+                      <i className="bi bi-exclamation-triangle me-2"></i>
+                      <strong>No available time slots found</strong> for the selected date range and duration.
+                      Try adjusting the date range, duration, or including weekends.
+                    </div>
+                  )}
+                  <CalendarView
+                    key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
+                    events={calendarEvents}
+                    availableSlots={availableSlots}
+                    selectedSlots={selectedSlots}
+                    confirmedSlots={confirmedSlots}
+                    onSlotSelect={handleSlotSelect}
+                    onSlotDeselect={handleSlotDeselect}
+                    durationMinutes={durationMinutes}
+                    currentPage={currentPage}
+                    onPageChange={handlePageChange}
+                    daysPerPage={daysPerPage}
+                    startDate={startDate}
+                    endDate={endDate}
+                    excludeWeekends={excludeWeekends}
+                    sessions={sessions}
+                  />
+                </div>
               ) : (
                 <ListView
                   key={`list-${startDate.toISOString()}-${endDate.toISOString()}-${durationMinutes}-${availableSlots.length}`}
@@ -1403,56 +1490,93 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
           {/* Selected Slots Actions */}
           {selectedSlots.size > 0 && (
-            <div className="card mb-3">
-              <div className="card-body">
+            <div className="mb-3">
+              <div>
                 <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr auto',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem',
                   alignItems: 'center',
-                  width: '100%',
-                  minHeight: '40px',
-                  gap: '1rem'
+                  justifyContent: 'center',
+                  padding: '1.5rem 0',
+                  textAlign: 'center'
                 }}>
-                  <div>
+                  {/* Slots selected indicator */}
+                  <div style={{ fontSize: '1rem', color: '#495057' }}>
                     <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
                   </div>
+                  
+                  {/* Create Opportunity Button */}
+                  <button
+                    type="button"
+                    className="btn btn-success btn-sm"
+                    onClick={handleCreateSessionsFromSelected}
+                    disabled={disabled || loading}
+                    style={{
+                      minWidth: '180px'
+                    }}
+                  >
+                    {loading ? 'Creating...' : 'Create Opportunity'}
+                  </button>
+                  
+                  {/* Clear Selection and Back buttons on same row */}
                   <div style={{
                     display: 'flex',
-                    gap: '8px',
-                    justifyContent: 'flex-end',
-                    width: '100%'
+                    width: '100%',
+                    position: 'relative'
                   }}>
-                    <button
-                      type="button"
-                      className="btn btn-outline-secondary btn-sm"
-                      onClick={handleClearSelected}
-                      disabled={disabled}
-                      style={{
-                        float: 'none',
-                        textAlign: 'center',
-                        marginLeft: '0',
-                        marginRight: '0'
-                      }}
-                    >
-                      Clear Selection
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      onClick={handleCreateSessionsFromSelected}
-                      disabled={disabled || loading}
-                      style={{
-                        float: 'none',
-                        textAlign: 'center',
-                        marginLeft: '0',
-                        marginRight: '0'
-                      }}
-                    >
-                      {loading ? 'Creating...' : `Create ${selectedSlots.size} Session${selectedSlots.size !== 1 ? 's' : ''}`}
-                    </button>
+                    {/* Back button - left aligned */}
+                    {onBack && (
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={onBack}
+                        disabled={disabled || loading}
+                      >
+                        <i className="bi bi-arrow-left me-2"></i>
+                        Back
+                      </button>
+                    )}
+                    {/* Clear Selection - centered */}
+                    <div style={{
+                      flex: '1',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      position: 'absolute',
+                      left: '0',
+                      right: '0',
+                      top: '0',
+                      bottom: '0',
+                      alignItems: 'center'
+                    }}>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={handleClearSelected}
+                        disabled={disabled}
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* Back button when no slots selected - left-aligned */}
+          {!selectedSlots.size && onBack && (
+            <div className="mt-4" style={{ textAlign: 'left' }}>
+              <button
+                type="button"
+                className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                onClick={onBack}
+                disabled={disabled || loading}
+                style={{ fontSize: '0.95rem' }}
+              >
+                <i className="bi bi-arrow-left me-2"></i>
+                Back
+              </button>
             </div>
           )}
         </div>

@@ -5,6 +5,7 @@ import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types'
 // import calendarService from '../services/calendar';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
+import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
 
 const router: Router = Router();
 
@@ -55,10 +56,9 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     // Lock session row for update to prevent race conditions
     const sessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
-             o.owner_user_id, u.name as owner_name, u.email as owner_email
+             o.owner_user_id
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
-      JOIN users u ON o.owner_user_id = u.id
       WHERE s.id = $1
       FOR UPDATE NOWAIT
     `, [sessionId]);
@@ -69,6 +69,20 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     }
 
     const session = sessionResult.rows[0];
+
+    // Get owner user details if they exist
+    let ownerName = 'Unknown User';
+    let ownerEmail = 'unknown@example.com';
+    if (session.owner_user_id) {
+      const ownerResult = await client.query(
+        'SELECT name, email FROM users WHERE id = $1',
+        [session.owner_user_id]
+      );
+      if (ownerResult.rows.length > 0) {
+        ownerName = ownerResult.rows[0].name;
+        ownerEmail = ownerResult.rows[0].email;
+      }
+    }
 
     // Guardrails
     if (session.opportunity_status !== 'published') {
@@ -146,8 +160,8 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
         new Date(session.start_time),
         new Date(session.end_time),
         session.location_or_meet_link_optional,
-        session.owner_name,
-        session.owner_email
+        ownerName,
+        ownerEmail
       );
 
       await emailService.sendEmail(
@@ -167,7 +181,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       );
 
       await emailService.sendEmail(
-        { email: session.owner_email, name: session.owner_name },
+        { email: ownerEmail, name: ownerName },
         adminTemplate
       );
     } catch (emailError) {
@@ -185,6 +199,17 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
 
   } catch (error) {
     await client.query('ROLLBACK');
+    
+    // Log the specific error for debugging
+    console.error('Booking error details:', {
+      error: error,
+      message: (error as any).message,
+      code: (error as any).code,
+      constraint: (error as any).constraint,
+      detail: (error as any).detail,
+      sessionId,
+      userId
+    });
     
     // Handle lock timeout specifically
     if ((error as any).code === '55P03') { // Lock not available
@@ -685,5 +710,279 @@ router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res:
     res.status(500).json({ error: 'Failed to fetch opportunity bookings' });
   }
 });
+
+// POST /api/bookings/sessions/:id/complete - Mark session as completed and award AdaptaBits
+router.post('/sessions/:id/complete', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new AppError('Database not available. Please set up PostgreSQL to complete sessions.', 503);
+  }
+
+  const { id: sessionId } = req.params;
+  const userId = req.user!.id;
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get session and opportunity details
+    const sessionResult = await client.query(`
+      SELECT s.*, o.type as opportunity_type, o.title as opportunity_title,
+             o.owner_user_id, b.id as booking_id, b.status as booking_status
+      FROM sessions s
+      JOIN opportunities o ON s.opportunity_id = o.id
+      LEFT JOIN bookings b ON s.id = b.session_id AND b.user_id = $1 AND b.status = 'booked'
+      WHERE s.id = $2
+    `, [userId, sessionId]);
+
+    if (sessionResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Session');
+    }
+
+    const session = sessionResult.rows[0];
+
+    // Check if user has an active booking for this session
+    if (!session.booking_id) {
+      await client.query('ROLLBACK');
+      throw new ValidationError('You are not booked for this session');
+    }
+
+    // Check if session has already ended (can only complete after session ends)
+    const now = new Date();
+    const sessionEndTime = new Date(session.end_time);
+    
+    if (now < sessionEndTime) {
+      await client.query('ROLLBACK');
+      throw new ValidationError('Cannot complete session before it ends');
+    }
+
+    // Check if session has already been marked as completed
+    const existingCompletion = await client.query(`
+      SELECT completion_status FROM bookings 
+      WHERE user_id = $1 AND session_id = $2 AND completion_status != 'pending'
+    `, [userId, sessionId]);
+
+    if (existingCompletion.rows.length > 0) {
+      await client.query('ROLLBACK');
+      throw new ConflictError('Session completion already submitted');
+    }
+
+    // Mark session as completed (pending admin approval)
+    await client.query(`
+      UPDATE bookings 
+      SET completion_status = 'completed', completed_at = NOW()
+      WHERE user_id = $1 AND session_id = $2
+    `, [userId, sessionId]);
+
+    await client.query('COMMIT');
+
+    res.json({
+      message: 'Session completion submitted successfully. Awaiting admin approval for AdaptaBits.',
+      status: 'completed',
+      awaitingApproval: true
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+// GET /api/bookings/pending-approvals - Get sessions pending admin approval
+router.get('/pending-approvals', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new AppError('Database not available. Please set up PostgreSQL to view pending approvals.', 503);
+  }
+
+  const userId = req.user!.id;
+
+  // Check if user is admin
+  const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
+  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+    throw new ForbiddenError('Only admins can view pending approvals');
+  }
+
+  const result = await pool.query(`
+    SELECT 
+      b.id as booking_id,
+      b.user_id,
+      b.session_id,
+      b.completed_at,
+      b.admin_notes,
+      u.name as user_name,
+      u.email as user_email,
+      s.start_time,
+      s.end_time,
+      o.title as opportunity_title,
+      o.type as opportunity_type,
+      o.owner_user_id
+    FROM bookings b
+    JOIN users u ON b.user_id = u.id
+    JOIN sessions s ON b.session_id = s.id
+    JOIN opportunities o ON s.opportunity_id = o.id
+    WHERE b.completion_status = 'completed'
+    ORDER BY b.completed_at ASC
+  `);
+
+  res.json(result.rows);
+}));
+
+// POST /api/bookings/:bookingId/approve - Approve a completed session
+router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new AppError('Database not available. Please set up PostgreSQL to approve sessions.', 503);
+  }
+
+  const { bookingId } = req.params;
+  const { adminNotes } = req.body;
+  const adminId = req.user!.id;
+
+  // Check if user is admin
+  const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
+  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+    throw new ForbiddenError('Only admins can approve sessions');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get booking details
+    const bookingResult = await client.query(`
+      SELECT b.*, s.start_time, s.end_time, o.title as opportunity_title, o.type as opportunity_type,
+             o.owner_user_id, u.name as user_name
+      FROM bookings b
+      JOIN sessions s ON b.session_id = s.id
+      JOIN opportunities o ON s.opportunity_id = o.id
+      JOIN users u ON b.user_id = u.id
+      WHERE b.id = $1 AND b.completion_status = 'completed'
+    `, [bookingId]);
+
+    if (bookingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Completed session booking');
+    }
+
+    const booking = bookingResult.rows[0];
+
+    // Check if admin owns the opportunity or is a super admin
+    if (booking.owner_user_id !== adminId) {
+      await client.query('ROLLBACK');
+      throw new ForbiddenError('You can only approve sessions for your own opportunities');
+    }
+
+    // Update booking status to approved
+    await client.query(`
+      UPDATE bookings 
+      SET completion_status = 'approved', 
+          approved_at = NOW(), 
+          approved_by = $1,
+          admin_notes = $2
+      WHERE id = $3
+    `, [adminId, adminNotes || null, bookingId]);
+
+    await client.query('COMMIT');
+
+    // Award AdaptaBits after approval
+    const pointsResult = await awardPointsAfterApproval(
+      booking.user_id,
+      booking.opportunity_type,
+      booking.opportunity_id,
+      booking.session_id,
+      adminId
+    );
+
+    res.json({
+      message: 'Session approved successfully',
+      pointsAwarded: pointsResult.points,
+      newLevel: pointsResult.newLevel,
+      levelUp: pointsResult.levelUp,
+      totalPoints: pointsResult.totalPoints
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+// POST /api/bookings/:bookingId/reject - Reject a completed session
+router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new AppError('Database not available. Please set up PostgreSQL to reject sessions.', 503);
+  }
+
+  const { bookingId } = req.params;
+  const { adminNotes } = req.body;
+  const adminId = req.user!.id;
+
+  // Check if user is admin
+  const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
+  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+    throw new ForbiddenError('Only admins can reject sessions');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Get booking details
+    const bookingResult = await client.query(`
+      SELECT b.*, o.owner_user_id
+      FROM bookings b
+      JOIN sessions s ON b.session_id = s.id
+      JOIN opportunities o ON s.opportunity_id = o.id
+      WHERE b.id = $1 AND b.completion_status = 'completed'
+    `, [bookingId]);
+
+    if (bookingResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      throw new NotFoundError('Completed session booking');
+    }
+
+    const booking = bookingResult.rows[0];
+
+    // Check if admin owns the opportunity or is a super admin
+    if (booking.owner_user_id !== adminId) {
+      await client.query('ROLLBACK');
+      throw new ForbiddenError('You can only reject sessions for your own opportunities');
+    }
+
+    // Update booking status to rejected
+    await client.query(`
+      UPDATE bookings 
+      SET completion_status = 'rejected', 
+          approved_at = NOW(), 
+          approved_by = $1,
+          admin_notes = $2
+      WHERE id = $3
+    `, [adminId, adminNotes || null, bookingId]);
+
+    await client.query('COMMIT');
+
+    res.json({
+      message: 'Session rejected successfully',
+      status: 'rejected'
+    });
+
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
 
 export default router;

@@ -4,7 +4,7 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { createOpportunity, updateOpportunity, getOpportunity } from '../api/client';
 import AdminSessionManager from '../components/AdminSessionManager';
-import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FormActions } from '../components/OpportunityForm';
+import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 
@@ -15,7 +15,7 @@ const OpportunityForm: React.FC = () => {
   const isEdit = Boolean(id);
   
   const [formData, setFormData] = useState({
-    type: 'test' as 'test' | 'poll' | 'survey' | 'question',
+    type: '' as 'test' | 'interview' | 'poll' | 'survey' | 'question' | '',
     title: '',
     purpose_one_liner: '',
     description_optional: '',
@@ -42,11 +42,11 @@ const OpportunityForm: React.FC = () => {
       { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
     ];
 
-    if (['poll', 'survey'].includes(formData.type)) {
+    if (['poll', 'survey', 'question'].includes(formData.type)) {
       tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
     }
 
-    if (formData.type === 'test' || formData.type === 'question') {
+    if (formData.type === 'test' || formData.type === 'interview') {
       tabs.push({ 
         id: 3, 
         title: 'Session Management', 
@@ -74,6 +74,19 @@ const OpportunityForm: React.FC = () => {
     }
   }, [formData.type, activeTab]);
 
+  // Set active tab when editing existing opportunity
+  // Only user tests and interviews should go to tab 3 (Session Management)
+  // All other types should go to tab 1 (Basic Information)
+  useEffect(() => {
+    if (isEdit && opportunityId && formData.type) {
+      if (formData.type === 'test' || formData.type === 'interview') {
+        setActiveTab(3); // Go to tab 3 (Session Management) for tests and interviews
+      } else {
+        setActiveTab(1); // Go to tab 1 (Basic Information) for all other types
+      }
+    }
+  }, [isEdit, opportunityId, formData.type]);
+
   const loadOpportunity = async () => {
     if (!id) return;
     
@@ -97,9 +110,26 @@ const OpportunityForm: React.FC = () => {
       
       setSessions(opportunity.sessions || []);
       setOpportunityId(opportunity.id);
-    } catch (err) {
+      
+      // Debug: Log sessions data
+      console.log('🔍 Loaded opportunity sessions:', {
+        opportunityId: opportunity.id,
+        sessionsCount: opportunity.sessions?.length || 0,
+        sessions: opportunity.sessions?.map(s => ({
+          id: s.id,
+          start_time: s.start_time,
+          end_time: s.end_time,
+          capacity: s.capacity,
+          booked_count: s.booked_count
+        }))
+      });
+    } catch (err: any) {
       console.error('Error loading opportunity:', err);
-      setError('Failed to load opportunity');
+      if (err.response?.status === 404) {
+        setError('Opportunity not found. It may have been deleted or you may not have permission to edit it.');
+      } else {
+        setError('Failed to load opportunity');
+      }
     } finally {
       setLoadingOpportunity(false);
     }
@@ -107,6 +137,11 @@ const OpportunityForm: React.FC = () => {
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
+    
+    // Validate research study type
+    if (!formData.type) {
+      errors.type = 'Please select a research study type';
+    }
     
     if (!formData.title.trim()) {
       errors.title = 'Title is required';
@@ -124,13 +159,16 @@ const OpportunityForm: React.FC = () => {
       errors.purpose_one_liner = 'Purpose must be no more than 180 characters';
     }
     
-    if (formData.default_duration_minutes < 5 || formData.default_duration_minutes > 240) {
-      errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
+    // Only validate duration for test and interview type opportunities
+    if (formData.type === 'test' || formData.type === 'interview') {
+      if (formData.default_duration_minutes < 5 || formData.default_duration_minutes > 240) {
+        errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
+      }
     }
     
-    if (formData.status === 'published' && ['poll', 'survey'].includes(formData.type)) {
+    if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional.trim()) {
-        errors.external_link_optional = 'External link is required for published polls and surveys';
+        errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
       } else {
         try {
           new URL(formData.external_link_optional);
@@ -153,12 +191,85 @@ const OpportunityForm: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
+  // Validate single field
+  const validateField = (fieldName: string, value: any) => {
+    const fieldErrors: Record<string, string> = { ...validationErrors };
+    
+    switch (fieldName) {
+      case 'title':
+        if (!value.trim()) {
+          fieldErrors.title = 'Title is required';
+        } else if (value.trim().length < 4) {
+          fieldErrors.title = 'Title must be at least 4 characters';
+        } else if (value.trim().length > 140) {
+          fieldErrors.title = 'Title must be no more than 140 characters';
+        } else {
+          delete fieldErrors.title;
+        }
+        break;
+      case 'purpose_one_liner':
+        if (!value.trim()) {
+          fieldErrors.purpose_one_liner = 'Purpose is required';
+        } else if (value.trim().length < 10) {
+          fieldErrors.purpose_one_liner = 'Purpose must be at least 10 characters';
+        } else if (value.trim().length > 180) {
+          fieldErrors.purpose_one_liner = 'Purpose must be no more than 180 characters';
+        } else {
+          delete fieldErrors.purpose_one_liner;
+        }
+        break;
+      case 'default_duration_minutes':
+        if (formData.type === 'test' || formData.type === 'interview') {
+          if (value < 5 || value > 240) {
+            fieldErrors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
+          } else {
+            delete fieldErrors.default_duration_minutes;
+          }
+        }
+        break;
+      case 'external_link_optional':
+        if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
+          if (!value.trim()) {
+            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+          } else {
+            try {
+              new URL(value);
+              delete fieldErrors.external_link_optional;
+            } catch {
+              fieldErrors.external_link_optional = 'External link must be a valid URL';
+            }
+          }
+        } else {
+          delete fieldErrors.external_link_optional;
+        }
+        break;
+      case 'participant_type_specific_details':
+        if (formData.participant_type_required === 'specific') {
+          if (!value.trim()) {
+            fieldErrors.participant_type_specific_details = 'Specific participant criteria is required when "Specific" is selected';
+          } else if (value.trim().length < 10) {
+            fieldErrors.participant_type_specific_details = 'Specific participant criteria must be at least 10 characters';
+          } else {
+            delete fieldErrors.participant_type_specific_details;
+          }
+        } else {
+          delete fieldErrors.participant_type_specific_details;
+        }
+        break;
+    }
+    
+    setValidationErrors(fieldErrors);
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
+    console.log('🚀 handleSubmit called', { isEdit, opportunityId, formData });
+    
     if (e) {
       e.preventDefault();
     }
     
     if (!validateForm()) {
+      console.error('Validation errors:', validationErrors);
       return;
     }
     
@@ -166,82 +277,104 @@ const OpportunityForm: React.FC = () => {
       setSaving(true);
       setError('');
       
-      const data = {
-        ...formData,
+      const data: any = {
+        type: formData.type,
         title: formData.title.trim(),
         purpose_one_liner: formData.purpose_one_liner.trim(),
         description_optional: formData.description_optional.trim() || undefined,
         product_optional: formData.product_optional.trim() || undefined,
         external_link_optional: formData.external_link_optional.trim() || undefined,
-        participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined
+        participant_type_required: formData.participant_type_required,
+        participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
+        status: formData.status
       };
+      
+      // Only include default_duration_minutes for test and interview types
+      if (formData.type === 'test' || formData.type === 'interview') {
+        data.default_duration_minutes = formData.default_duration_minutes;
+      }
       
       
       let savedOpportunity: Opportunity;
       if (isEdit && id) {
         savedOpportunity = await updateOpportunity(id, data as UpdateOpportunityRequest);
         
-        // Save any temporary sessions that were created during editing
-        const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
-        console.log('🟡 EDIT MODE - Checking for temporary sessions:', {
-          totalSessions: sessions.length,
-          tempSessions: tempSessions.length,
-          tempSessionIds: tempSessions.map(s => s.id),
-          opportunityId: savedOpportunity.id
-        });
-        
-        if (tempSessions.length > 0) {
-          try {
-            const sessionData = tempSessions.map(session => ({
-              start_time: session.start_time,
-              end_time: session.end_time,
-              capacity: session.capacity,
-              location_or_meet_link_optional: session.location_or_meet_link_optional || ''
-            }));
-            
-            console.log('🟡 EDIT MODE - Creating sessions:', sessionData);
-            const { createSessions } = await import('../api/client');
-            await createSessions(savedOpportunity.id, sessionData);
-            
-            // Reload sessions to get the real IDs
-            const updatedOpportunity = await getOpportunity(savedOpportunity.id);
-            console.log('🟡 EDIT MODE - Updated opportunity sessions:', updatedOpportunity.sessions?.length || 0);
-            setSessions(updatedOpportunity.sessions || []);
-          } catch (sessionError) {
-            console.error('Error saving sessions:', sessionError);
-            setError('Opportunity updated but failed to save sessions. Please add them manually.');
+        // Save any temporary sessions that were created during editing (only for test and interview types)
+        if (formData.type === 'test' || formData.type === 'interview') {
+          const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
+          console.log('🟡 EDIT MODE - Checking for temporary sessions:', {
+            totalSessions: sessions.length,
+            tempSessions: tempSessions.length,
+            tempSessionIds: tempSessions.map(s => s.id),
+            opportunityId: savedOpportunity.id
+          });
+          
+          if (tempSessions.length > 0) {
+            try {
+              const sessionData = tempSessions.map(session => ({
+                start_time: session.start_time,
+                end_time: session.end_time,
+                capacity: session.capacity,
+                location_or_meet_link_optional: session.location_or_meet_link_optional || ''
+              }));
+              
+              console.log('🟡 EDIT MODE - Creating sessions:', sessionData);
+              const { createSessions } = await import('../api/client');
+              await createSessions(savedOpportunity.id, sessionData);
+              
+              // Reload sessions to get the real IDs
+              const updatedOpportunity = await getOpportunity(savedOpportunity.id);
+              console.log('🟡 EDIT MODE - Updated opportunity sessions:', updatedOpportunity.sessions?.length || 0);
+              setSessions(updatedOpportunity.sessions || []);
+            } catch (sessionError) {
+              console.error('Error saving sessions:', sessionError);
+              setError('Opportunity updated but failed to save sessions. Please add them manually.');
+            }
+          } else {
+            console.log('🟡 EDIT MODE - No temporary sessions to save');
           }
-        } else {
-          console.log('🟡 EDIT MODE - No temporary sessions to save');
         }
       } else {
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
         
-        // Save any temporary sessions that were created
-        const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
-        if (tempSessions.length > 0) {
-          try {
-            const sessionData = tempSessions.map(session => ({
-              start_time: session.start_time,
-              end_time: session.end_time,
-              capacity: session.capacity,
-              location_or_meet_link_optional: session.location_or_meet_link_optional || ''
-            }));
-            
-            const { createSessions } = await import('../api/client');
-            await createSessions(savedOpportunity.id, sessionData);
-            
-            // Reload sessions to get the real IDs
-            const updatedOpportunity = await getOpportunity(savedOpportunity.id);
-            setSessions(updatedOpportunity.sessions || []);
-          } catch (sessionError) {
-            console.error('Error saving sessions:', sessionError);
-            setError('Opportunity created but failed to save sessions. Please add them manually.');
+        // Save any temporary sessions that were created (only for test and interview types)
+        if (formData.type === 'test' || formData.type === 'interview') {
+          const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
+          console.log('🔍 CREATE MODE - Checking for temporary sessions:', {
+            totalSessions: sessions.length,
+            tempSessions: tempSessions.length,
+            tempSessionIds: tempSessions.map(s => s.id),
+            opportunityId: savedOpportunity.id
+          });
+          
+          if (tempSessions.length > 0) {
+            try {
+              const sessionData = tempSessions.map(session => ({
+                start_time: session.start_time,
+                end_time: session.end_time,
+                capacity: session.capacity,
+                location_or_meet_link_optional: session.location_or_meet_link_optional || ''
+              }));
+              
+              console.log('🔍 CREATE MODE - Creating sessions:', sessionData);
+              const { createSessions } = await import('../api/client');
+              await createSessions(savedOpportunity.id, sessionData);
+              console.log('✅ CREATE MODE - Sessions created successfully');
+              
+              // Reload sessions to get the real IDs
+              const updatedOpportunity = await getOpportunity(savedOpportunity.id);
+              setSessions(updatedOpportunity.sessions || []);
+              console.log('✅ CREATE MODE - Updated opportunity sessions:', updatedOpportunity.sessions?.length || 0);
+            } catch (sessionError) {
+              console.error('❌ Error saving sessions:', sessionError);
+              setError('Opportunity created but failed to save sessions. Please add them manually.');
+            }
+          } else {
+            console.log('⚠️ CREATE MODE - No temporary sessions to save');
           }
         }
       }
-      
       
       // Navigate to admin page after successful save
       navigate('/admin', { state: { refresh: true } });
@@ -260,7 +393,7 @@ const OpportunityForm: React.FC = () => {
       [field]: value
     }));
     
-    // Clear validation error for this field
+    // Clear validation error for this field immediately when typing
     if (validationErrors[field]) {
       setValidationErrors(prev => {
         const newErrors = { ...prev };
@@ -268,6 +401,11 @@ const OpportunityForm: React.FC = () => {
         return newErrors;
       });
     }
+  };
+
+  const handleBlur = (field: string, value: any) => {
+    // Validate field on blur
+    validateField(field, value);
   };
 
   const handleCancel = () => {
@@ -310,6 +448,15 @@ const OpportunityForm: React.FC = () => {
     <div className="container-fluid py-4">
       <div className="row justify-content-center">
         <div className="col-12 col-xl-10">
+          {/* Back button */}
+          <button 
+            className="btn btn-outline-secondary mb-3"
+            onClick={() => navigate('/admin')}
+          >
+            <i className="bi bi-arrow-left me-1"></i>
+            Back to Admin Dashboard
+          </button>
+          
           <div className="card shadow-sm border-0" style={{ borderRadius: '12px' }}>
             <div className="card-header bg-white border-0 py-4" style={{ borderRadius: '12px 12px 0 0' }}>
               <div className="d-flex align-items-center justify-content-between">
@@ -318,7 +465,7 @@ const OpportunityForm: React.FC = () => {
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
                   <p className="text-muted mb-0" style={{ fontSize: '1rem' }}>
-                    {isEdit ? 'Update opportunity details and sessions' : 'Set up a new research opportunity'}
+                    {isEdit ? 'Update opportunity details and sessions' : 'Set up a new impact lab activity'}
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
@@ -384,34 +531,128 @@ const OpportunityForm: React.FC = () => {
                 <div className="tab-content p-4">
                   {/* Basic Information Tab */}
                   {activeTab === 1 && (
-                    <BasicInfoTab
-                      formData={formData}
-                      validationErrors={validationErrors}
-                      handleInputChange={handleInputChange}
-                    />
+                    <>
+                      <BasicInfoTab
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
+                      />
+                      {/* Navigation Buttons for Tab 1 */}
+                      <div className="border-top mt-4 pt-4">
+                        <div className="d-flex justify-content-end gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-primary px-5 py-2 fw-semibold"
+                            onClick={() => {
+                              // Validate basic info before continuing
+                              if (!validateForm()) {
+                                console.log('Validation failed:', validationErrors);
+                                return;
+                              }
+                              setActiveTab(2);
+                            }}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            Continue to Details
+                            <i className="bi bi-arrow-right ms-2"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
 
                   {/* Content & Details Tab */}
                   {activeTab === 2 && (
-                    <ContentDetailsTab
-                      formData={formData}
-                      validationErrors={validationErrors}
-                      handleInputChange={handleInputChange}
-                    />
+                    <>
+                      <ContentDetailsTab
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
+                      />
+                      {/* Navigation Buttons for Tab 2 */}
+                      <div className="border-top mt-4 pt-4">
+                        <div className="d-flex justify-content-between gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                            onClick={() => setActiveTab(1)}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            <i className="bi bi-arrow-left me-2"></i>
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary px-5 py-2 fw-semibold"
+                            onClick={() => {
+                              // Determine next tab based on opportunity type
+                              const tabs = getTabs();
+                              const nextTab = tabs.find(tab => tab.id > 2)?.id || 2;
+                              setActiveTab(nextTab);
+                            }}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            {formData.type === 'test' || formData.type === 'interview' 
+                              ? 'Continue to Session Setup' 
+                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
+                              ? 'Continue to Link Setup'
+                              : 'Continue'}
+                            <i className="bi bi-arrow-right ms-2"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
 
-                  {/* External Link Tab - Only for polls and surveys */}
-                  {activeTab === 3 && ['poll', 'survey'].includes(formData.type) && (
-                    <ExternalLinkTab
-                      formData={formData}
-                      validationErrors={validationErrors}
-                      handleInputChange={handleInputChange}
-                    />
+                  {/* External Link Tab - Only for polls, surveys, and questions */}
+                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && (
+                    <>
+                      <ExternalLinkTab
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                      />
+                      {/* Navigation Buttons for External Link Tab */}
+                      <div className="border-top mt-4 pt-4">
+                        <div className="d-flex justify-content-between gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                            onClick={() => setActiveTab(2)}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            <i className="bi bi-arrow-left me-2"></i>
+                            Back
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-success px-5 py-2 fw-semibold"
+                            onClick={() => handleSubmit()}
+                            disabled={saving}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            {saving ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2"></span>
+                                {isEdit ? 'Updating...' : 'Creating...'}
+                              </>
+                            ) : (
+                              <>
+                                <i className="bi bi-check-circle me-2"></i>
+                                {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </>
                   )}
 
-                  {/* Session Management - Only for Tests and Questions */}
-                  {activeTab === 3 && (formData.type === 'test' || formData.type === 'question') && (
-                    <div className="tab-pane active">
+                  {/* Session Management - Only for Tests and Interviews */}
+                  {activeTab === 3 && (formData.type === 'test' || formData.type === 'interview') && (
+                    <>
                       <div className="form-section mb-5">
                         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
                           <div>
@@ -422,26 +663,25 @@ const OpportunityForm: React.FC = () => {
                           </div>
                         </div>
                         
-                        <AdminSessionManager
-                          opportunityId={opportunityId}
-                          sessions={sessions}
-                          onSessionsChange={setSessions}
-                          defaultDurationMinutes={formData.default_duration_minutes}
-                          disabled={saving}
-                          isTemporary={!opportunityId}
-                        />
+                        {isEdit && !opportunityId && !loadingOpportunity && error ? (
+                          <div className="alert alert-warning" role="alert">
+                            <i className="bi bi-exclamation-triangle me-2"></i>
+                            Cannot load session management. The opportunity may not exist or you may not have permission to edit it.
+                          </div>
+                        ) : (
+                          <AdminSessionManager
+                            opportunityId={opportunityId}
+                            sessions={sessions}
+                            onSessionsChange={setSessions}
+                            defaultDurationMinutes={formData.default_duration_minutes}
+                            disabled={saving || (isEdit && loadingOpportunity)}
+                            isTemporary={!isEdit || !opportunityId}
+                            onOpportunitySave={handleSubmit}
+                            onBack={() => setActiveTab(2)}
+                          />
+                        )}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Form Actions - Only show on tab 3 */}
-                  {activeTab === 3 && (
-                    <FormActions
-                      isEdit={isEdit}
-                      saving={saving}
-                      onCancel={handleCancel}
-                      onSubmit={() => handleSubmit()}
-                    />
+                    </>
                   )}
                 </div>
               </form>

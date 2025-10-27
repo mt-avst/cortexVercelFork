@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../api/types';
 import { SessionFormData } from '../shared/types';
 import { createSessions, updateSession, deleteSession } from '../api/client';
+import ConfirmationModal from './ConfirmationModal';
 
 interface SessionEditorProps {
   opportunityId: string;
@@ -17,6 +18,7 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
   disabled = false
 }) => {
   const [editingSession, setEditingSession] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; sessionId: string | null }>({ show: false, sessionId: null });
   const [newSession, setNewSession] = useState<SessionFormData>({
     start_time: '',
     end_time: '',
@@ -188,22 +190,29 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
   };
 
   // Handle deleting a session
-  const handleDeleteSession = async (sessionId: string) => {
-    if (!window.confirm('Are you sure you want to delete this session?')) {
-      return;
-    }
+  const handleDeleteSession = (sessionId: string) => {
+    setDeleteConfirm({ show: true, sessionId });
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!deleteConfirm.sessionId) return;
     
     try {
       setSaving(true);
-      await deleteSession(sessionId);
+      await deleteSession(deleteConfirm.sessionId);
       
-      onSessionsChange(sessions.filter(s => s.id !== sessionId));
+      onSessionsChange(sessions.filter(s => s.id !== deleteConfirm.sessionId));
+      setDeleteConfirm({ show: false, sessionId: null });
     } catch (err: any) {
       console.error('Error deleting session:', err);
       setError(err.response?.data?.error || 'Failed to delete session');
     } finally {
       setSaving(false);
     }
+  };
+
+  const cancelDeleteSession = () => {
+    setDeleteConfirm({ show: false, sessionId: null });
   };
 
   // Handle quick add for multi-day sessions
@@ -465,6 +474,17 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
           </div>
         </div>
       )}
+
+      <ConfirmationModal
+        show={deleteConfirm.show}
+        title="Delete Session"
+        message="Are you sure you want to delete this session? This action cannot be undone."
+        confirmLabel="Yes, Delete"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmDeleteSession}
+        onCancel={cancelDeleteSession}
+      />
     </div>
   );
 };

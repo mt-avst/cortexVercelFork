@@ -45,7 +45,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
                 placeholder="https://forms.google.com/your-poll-or-survey"
               />
               {validationErrors.external_link_optional && (
-                <div className="invalid-feedback fw-semibold">{validationErrors.external_link_optional}</div>
+                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.external_link_optional}</div>
               )}
             </div>
           </div>

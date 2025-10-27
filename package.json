@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-root",
-  "version": "1.3.0",
+  "version": "1.15.2",
   "description": "Adaptalabs recruitment app root package",
   "private": true,
   "scripts": {
@@ -13,7 +13,12 @@
     "build:all": "cd backend && npm run build && cd ../frontend && npm run build",
     "dev:backend": "cd backend && npm run dev",
     "dev:frontend": "cd frontend && npm start",
-    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\""
+    "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "start": "./start-dev.sh npm",
+    "start:docker": "./start-dev.sh docker",
+    "stop": "./start-dev.sh stop",
+    "status": "./start-dev.sh status",
+    "clean": "./start-dev.sh clean"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",

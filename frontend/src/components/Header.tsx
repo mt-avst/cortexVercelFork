@@ -1,29 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { demoLogin, demoAdminLogin } from '../api/client';
 import LoadingSpinner from './LoadingSpinner';
+import './Header.css';
 
 const Header: React.FC = () => {
-  const { user, loading, initialAuthCheck, login, logout } = useAuth();
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  const handleDemoLogin = () => {
-    setLoginLoading(true);
-    demoLogin();
-  };
-
-  const handleDemoAdminLogin = () => {
-    setLoginLoading(true);
-    demoAdminLogin();
-  };
-
-  // Reset loading state when user state changes (after login)
-  useEffect(() => {
-    if (user && loginLoading) {
-      setLoginLoading(false);
-    }
-  }, [user, loginLoading]);
+  const { user, loading, initialAuthCheck, logout } = useAuth();
 
   return (
     <header className="header">
@@ -38,41 +20,83 @@ const Header: React.FC = () => {
           </Link>
           
           <nav className="nav">
-            {(loading && initialAuthCheck) || loginLoading ? (
-              <LoadingSpinner size="small" text="Signing in..." />
+            {loading && initialAuthCheck ? (
+              <LoadingSpinner size="small" text="Loading..." />
             ) : user ? (
               <>
-                <Link to="/my-bookings" className="btn btn-secondary">
-                  My Bookings
-                </Link>
+                {user.role !== 'researcher_admin' && (
+                  <>
+                    <Link to="/my-bookings" className="btn btn-secondary">
+                      My Bookings
+                    </Link>
+                  </>
+                )}
                 {user.role === 'researcher_admin' && (
                   <Link to="/admin" className="btn btn-secondary">
                     Admin
                   </Link>
                 )}
-                <div className="nav">
-                  <span className="mb-3">Hello, {user.name}</span>
-                  <button onClick={logout} className="btn btn-secondary">
-                    Logout
-                  </button>
+                <div className="nav-items">
+                  <div className="dropdown">
+                    <button 
+                      className="btn btn-outline-secondary dropdown-toggle" 
+                      type="button" 
+                      id="profileDropdown"
+                      data-bs-toggle="dropdown" 
+                      aria-expanded="false"
+                    >
+                      <i className="bi bi-person-circle me-1"></i>
+                      Your Profile
+                    </button>
+                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown" style={{ minWidth: '200px', backgroundColor: '#ffffff', color: '#000000' }}>
+                      <li>
+                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
+                          <i className="bi bi-person me-2" style={{ color: '#666666' }}></i>
+                          <span style={{ color: '#000000', fontWeight: 'bold', fontSize: '16px' }}>Hello, {user.name || 'Unknown User'}</span>
+                        </div>
+                      </li>
+                      <li><hr className="dropdown-divider" /></li>
+                      <li>
+                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
+                          <i className="bi bi-shield-check me-2" style={{ color: '#666666' }}></i>
+                          <span style={{ color: '#000000', fontSize: '16px' }}>Role: {user.role === 'researcher_admin' ? 'admin' : 'user'}</span>
+                        </div>
+                      </li>
+                      <li>
+                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
+                          <i className="bi bi-gear me-2" style={{ color: '#666666' }}></i>
+                          <span style={{ color: '#000000', fontSize: '16px' }}>Settings</span>
+                        </div>
+                      </li>
+                      {user.role !== 'researcher_admin' && (
+                        <li>
+                          <Link to="/gamification" className="px-3 py-2 d-block" style={{ color: '#000000', backgroundColor: '#ffffff', textDecoration: 'none', fontSize: '16px' }}>
+                            <i className="bi bi-trophy me-2" style={{ color: '#666666' }}></i>
+                            <span style={{ color: '#000000', fontSize: '16px' }}>AdaptaBits</span>
+                          </Link>
+                        </li>
+                      )}
+                      <li><hr className="dropdown-divider" /></li>
+                      <li>
+                        <button 
+                          onClick={(e) => {
+                            e.preventDefault();
+                            logout();
+                          }} 
+                          className="px-3 py-2 w-100 text-start border-0"
+                          style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}
+                        >
+                          <i className="bi bi-box-arrow-right me-2" style={{ color: '#666666' }}></i>
+                          <span style={{ color: '#000000', fontSize: '16px' }}>Logout</span>
+                        </button>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               </>
             ) : (
-              <div className="nav">
-                <button 
-                  onClick={handleDemoLogin} 
-                  className="btn btn-primary"
-                  disabled={loginLoading}
-                >
-                  {loginLoading ? 'Signing in...' : 'Demo Login'}
-                </button>
-                <button 
-                  onClick={handleDemoAdminLogin} 
-                  className="btn btn-secondary"
-                  disabled={loginLoading}
-                >
-                  {loginLoading ? 'Signing in...' : 'Demo Admin'}
-                </button>
+              <div className="nav-items">
+                <span className="text-white-50">Welcome to AdaptaLabs</span>
               </div>
             )}
           </nav>

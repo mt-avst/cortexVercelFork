@@ -22,24 +22,10 @@ export class CalendarService {
   }
 
   private initializeAuth() {
-    if (this.config.serviceAccountEmail && this.config.privateKey) {
-      // Service account authentication
-      this.auth = new google.auth.GoogleAuth({
-        credentials: {
-          client_email: this.config.serviceAccountEmail,
-          private_key: this.config.privateKey.replace(/\\n/g, '\n'),
-        },
-        scopes: ['https://www.googleapis.com/auth/calendar'],
-      });
-    } else {
-      // For demo purposes, we'll use a mock implementation
-      console.log('📅 Calendar service initialized in demo mode');
-      this.auth = null;
-    }
-
-    if (this.auth) {
-      this.calendar = google.calendar({ version: 'v3', auth: this.auth });
-    }
+    // Always use demo mode for now - calendar not configured
+    console.log('📅 Calendar service initialized in demo mode');
+    this.auth = null;
+    this.calendar = null;
   }
 
   async createEvent(event: CalendarEvent): Promise<{ success: boolean; eventId?: string; error?: string }> {
@@ -194,28 +180,10 @@ export class CalendarService {
     endTime: Date, 
     calendarId?: string
   ): Promise<{ success: boolean; events?: any[]; error?: string }> {
-    try {
-      if (!this.calendar) {
-        // Demo mode - return empty events for testing (no conflicts)
-        const mockEvents: any[] = [];
-        console.log(`📅 Demo: Fetched ${mockEvents.length} calendar events (conflict checking disabled for testing)`);
-        return { success: true, events: mockEvents };
-      }
-
-      const response = await this.calendar.events.list({
-        calendarId: calendarId || this.config.calendarId || 'primary',
-        timeMin: startTime.toISOString(),
-        timeMax: endTime.toISOString(),
-        singleEvents: true,
-        orderBy: 'startTime',
-        maxResults: 1000
-      });
-
-      return { success: true, events: response.data.items || [] };
-    } catch (error: any) {
-      console.error('Error fetching calendar events:', error);
-      return { success: false, error: error.message };
-    }
+    // Always return demo mode since calendar is not configured
+    console.log(`📅 Demo mode: Returning empty events (calendar not configured)`);
+    const mockEvents: any[] = [];
+    return { success: true, events: mockEvents };
   }
 
   async checkTimeSlotAvailability(

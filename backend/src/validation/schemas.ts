@@ -26,7 +26,7 @@ export const SessionUserSchema = z.object({
 });
 
 // Opportunity schemas
-export const OpportunityTypeSchema = z.enum(['test', 'poll', 'survey', 'question']);
+export const OpportunityTypeSchema = z.enum(['test', 'poll', 'survey', 'question', 'interview']);
 export const OpportunityStatusSchema = z.enum(['draft', 'published', 'closed']);
 export const ParticipantTypeSchema = z.enum(['any', 'internal', 'external', 'specific']);
 

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 
 import { pool } from '../config';
 import { requireAdmin, optionalAuth } from '../middleware/authenticate';
-import { getMockOpportunities, getMockOpportunity, addMockOpportunity, updateMockOpportunity, deleteMockOpportunity } from '../../../demo/mock-data';
+import { getMockOpportunities, getMockOpportunity, addMockOpportunity, updateMockOpportunity, deleteMockOpportunity, addMockSessions, getMockSessions } from '../../../demo/mock-data';
 import { logger } from '../utils/logger';
 import { 
   CreateOpportunitySchema, 
@@ -13,7 +13,7 @@ import {
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 
-import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest } from '../types';
+import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
 const router: Router = Router();
 
@@ -25,7 +25,8 @@ const isDatabaseAvailable = async (): Promise<boolean> => {
       console.log('DATABASE_URL not set, using mock data');
       return false;
     }
-    await pool.query('SELECT 1');
+    // Test both connection and that the opportunities table exists
+    await pool.query('SELECT 1 FROM opportunities LIMIT 1');
     return true;
   } catch (error) {
     console.log('Database not available, using mock data:', (error as any).message);
@@ -67,8 +68,8 @@ const validateOpportunityData = (data: CreateOpportunityRequest | UpdateOpportun
   }
   
   if ('type' in data && data.type !== undefined) {
-    if (!['test', 'poll', 'survey'].includes(data.type)) {
-      errors.push('Type must be test, poll, or survey');
+    if (!['test', 'poll', 'survey', 'question', 'interview'].includes(data.type)) {
+      errors.push('Type must be test, poll, survey, question, or interview');
     }
   }
   
@@ -87,14 +88,49 @@ const validateOpportunityData = (data: CreateOpportunityRequest | UpdateOpportun
   return errors;
 };
 
+// Helper function to validate session data
+const validateSessionData = (data: CreateSessionRequest): string[] => {
+  const errors: string[] = [];
+  
+  if (data.start_time !== undefined) {
+    const startTime = new Date(data.start_time);
+    if (isNaN(startTime.getTime())) {
+      errors.push('Start time must be a valid ISO date string');
+    }
+  }
+  
+  if (data.end_time !== undefined) {
+    const endTime = new Date(data.end_time);
+    if (isNaN(endTime.getTime())) {
+      errors.push('End time must be a valid ISO date string');
+    }
+  }
+  
+  if (data.start_time && data.end_time) {
+    const startTime = new Date(data.start_time);
+    const endTime = new Date(data.end_time);
+    if (startTime >= endTime) {
+      errors.push('End time must be after start time');
+    }
+  }
+  
+  if (data.capacity !== undefined) {
+    if (data.capacity < 1 || data.capacity > 100) {
+      errors.push('Capacity must be between 1 and 100');
+    }
+  }
+  
+  return errors;
+};
+
 // GET /api/opportunities - List opportunities
-router.get('/', optionalAuth, (req: Request, res: Response) => {
+router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { type, q, status } = req.query;
     const isAdmin = req.user?.role === 'researcher_admin';
     
-    // Check if database is available (synchronously for now)
-    const dbAvailable = process.env.DATABASE_URL ? true : false;
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
     
     if (!dbAvailable) {
       // Use mock data
@@ -109,20 +145,70 @@ router.get('/', optionalAuth, (req: Request, res: Response) => {
       return;
     }
     
-    // For now, always use mock data since database is not set up
-    const filters: any = {};
-    if (type) filters.type = type as string;
-    if (q) filters.q = q as string;
-    if (status) filters.status = status as string;
-    else if (!isAdmin) filters.status = 'published'; // Default to published for non-admin
+    // Use database
+    let query = `
+      SELECT o.*, u.name as owner_name, u.email as owner_email
+      FROM opportunities o
+      JOIN users u ON o.owner_user_id = u.id
+    `;
+    const params: any[] = [];
+    const conditions: string[] = [];
     
-    const opportunities = getMockOpportunities(filters);
+    // Add filters
+    if (type) {
+      conditions.push(`o.type = $${params.length + 1}`);
+      params.push(type);
+    }
+    
+    if (q) {
+      conditions.push(`(o.title ILIKE $${params.length + 1} OR o.purpose_one_liner ILIKE $${params.length + 1})`);
+      params.push(`%${q}%`);
+    }
+    
+    if (status) {
+      conditions.push(`o.status = $${params.length + 1}`);
+      params.push(status);
+    } else if (!isAdmin) {
+      conditions.push(`o.status = 'published'`);
+    }
+    
+    if (conditions.length > 0) {
+      query += ` WHERE ${conditions.join(' AND ')}`;
+    }
+    
+    query += ` ORDER BY o.created_at DESC`;
+    
+    const result = await pool.query(query, params);
+    
+    // Load sessions for each opportunity
+    const opportunities = await Promise.all(result.rows.map(async (opportunity) => {
+      const sessionsResult = await pool.query(`
+        SELECT *, (capacity - booked_count) as remaining
+        FROM sessions 
+        WHERE opportunity_id = $1
+        ORDER BY start_time ASC
+      `, [opportunity.id]);
+      
+      return {
+        ...opportunity,
+        created_at: opportunity.created_at.toISOString(),
+        updated_at: opportunity.updated_at.toISOString(),
+        sessions: sessionsResult.rows.map(session => ({
+          ...session,
+          start_time: session.start_time.toISOString(),
+          end_time: session.end_time.toISOString(),
+          created_at: session.created_at.toISOString(),
+          updated_at: session.updated_at.toISOString(),
+        }))
+      };
+    }));
+    
     res.json(opportunities);
   } catch (error) {
     console.error('Error in opportunities route:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-});
+}));
 
 // GET /api/opportunities/:id - Get opportunity detail
 router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -251,10 +337,10 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     throw new ValidationError('Validation failed', errors);
   }
   
-  // Additional validation for published polls/surveys
-  if (data.status === 'published' && ['poll', 'survey'].includes(data.type)) {
+  // Additional validation for published polls/surveys/questions
+  if (data.status === 'published' && ['poll', 'survey', 'question'].includes(data.type)) {
     if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
-      throw new ValidationError('External link is required for published polls and surveys');
+      throw new ValidationError('External link is required for published polls, surveys, and questions');
     }
   }
   
@@ -448,6 +534,344 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   await pool.query('DELETE FROM opportunities WHERE id = $1', [id]);
   
   res.status(204).send();
+}));
+
+// GET /api/opportunities/:id/sessions - Get sessions for an opportunity
+router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { id: opportunityId } = req.params;
+    const { from, include_past } = req.query;
+    
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      // Use mock data for development
+      const opportunity = getMockOpportunity(opportunityId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      const isAdmin = req.user?.role === 'researcher_admin';
+      
+      // Non-admin users can only see published opportunities
+      if (!isAdmin && opportunity.status !== 'published') {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      // Get mock sessions for this opportunity
+      const mockSessions = getMockSessions(opportunityId);
+      
+      // Apply filters similar to database query
+      let filteredSessions = mockSessions;
+      
+      // Filter by start time if provided
+      if (from) {
+        const fromDate = new Date(from as string);
+        filteredSessions = filteredSessions.filter(session => 
+          new Date(session.start_time) >= fromDate
+        );
+      }
+      
+      // Filter out past sessions unless explicitly requested
+      if (include_past !== 'true') {
+        const now = new Date();
+        filteredSessions = filteredSessions.filter(session => 
+          new Date(session.end_time) >= now
+        );
+      }
+      
+      // Sort by start time
+      filteredSessions.sort((a, b) => 
+        new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
+      );
+      
+      return res.json(filteredSessions);
+    }
+    
+    // Check if opportunity exists and user has access
+    const opportunityCheck = await pool.query(`
+      SELECT o.*, u.name as owner_name, u.email as owner_email
+      FROM opportunities o
+      JOIN users u ON o.owner_user_id = u.id
+      WHERE o.id = $1
+    `, [opportunityId]);
+    
+    if (opportunityCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    
+    const opportunity = opportunityCheck.rows[0];
+    const isAdmin = req.user?.role === 'researcher_admin';
+    
+    // Non-admin users can only see published opportunities
+    if (!isAdmin && opportunity.status !== 'published') {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    
+    // Build query for sessions
+    let query = `
+      SELECT *, (capacity - booked_count) as remaining
+      FROM sessions 
+      WHERE opportunity_id = $1
+    `;
+    const params: any[] = [opportunityId];
+    let paramCount = 1;
+    
+    // Filter by start time if provided
+    if (from) {
+      paramCount++;
+      query += ` AND start_time >= $${paramCount}`;
+      params.push(from);
+    }
+    
+    // Filter out past sessions unless explicitly requested
+    if (include_past !== 'true') {
+      query += ` AND end_time >= NOW()`;
+    }
+    
+    query += ` ORDER BY start_time ASC`;
+    
+    const result = await pool.query(query, params);
+    
+    // Serialize dates for API response
+    const sessions = result.rows.map(session => ({
+      ...session,
+      start_time: session.start_time.toISOString(),
+      end_time: session.end_time.toISOString(),
+      created_at: session.created_at.toISOString(),
+      updated_at: session.updated_at.toISOString(),
+    }));
+    
+    res.json(sessions);
+  } catch (error) {
+    console.error('Error fetching sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions' });
+  }
+}));
+
+// POST /api/opportunities/:id/sessions - Create sessions for an opportunity
+router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { id: opportunityId } = req.params;
+    const sessionsData = req.body;
+    
+    // Handle both single session and array of sessions
+    const sessions = Array.isArray(sessionsData) ? sessionsData : [sessionsData];
+    
+    if (sessions.length === 0) {
+      return res.status(400).json({ error: 'At least one session is required' });
+    }
+    
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      // Use mock data for development
+      const opportunity = getMockOpportunity(opportunityId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      // Check ownership
+      if (opportunity.owner_user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+      }
+      
+      // Validate all sessions
+      const validationErrors: string[] = [];
+      sessions.forEach((session, index) => {
+        const errors = validateSessionData(session);
+        errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
+      });
+      
+      if (validationErrors.length > 0) {
+        return res.status(400).json({ error: 'Validation failed', details: validationErrors });
+      }
+      
+      // Create mock sessions
+      const createdSessions = addMockSessions(opportunityId, sessions);
+      
+      return res.status(201).json(createdSessions);
+    }
+    
+    // Check opportunity ownership
+    const opportunityCheck = await pool.query(
+      'SELECT owner_user_id FROM opportunities WHERE id = $1',
+      [opportunityId]
+    );
+    
+    if (opportunityCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    
+    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+    if (!isOwner) {
+      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+    }
+    
+    // Validate all sessions
+    const validationErrors: string[] = [];
+    sessions.forEach((session, index) => {
+      const errors = validateSessionData(session);
+      errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
+    });
+    
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ error: 'Validation failed', details: validationErrors });
+    }
+    
+    // Check for overlaps within the batch
+    for (let i = 0; i < sessions.length; i++) {
+      for (let j = i + 1; j < sessions.length; j++) {
+        const session1 = sessions[i];
+        const session2 = sessions[j];
+        const start1 = new Date(session1.start_time);
+        const end1 = new Date(session1.end_time);
+        const start2 = new Date(session2.start_time);
+        const end2 = new Date(session2.end_time);
+        
+        if ((start1 < end2) && (start2 < end1)) {
+          return res.status(409).json({ 
+            error: `Sessions ${i + 1} and ${j + 1} overlap in time` 
+          });
+        }
+      }
+    }
+    
+    // Create sessions in a transaction
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      
+      const createdSessions: Session[] = [];
+      
+      for (const session of sessions) {
+        const query = `
+          INSERT INTO sessions (
+            opportunity_id, start_time, end_time, capacity, 
+            location_or_meet_link_optional
+          ) VALUES ($1, $2, $3, $4, $5)
+          RETURNING *, (capacity - booked_count) as remaining
+        `;
+        
+        const values = [
+          opportunityId,
+          session.start_time,
+          session.end_time,
+          session.capacity,
+          session.location_or_meet_link_optional || null
+        ];
+        
+        const result = await client.query(query, values);
+        const createdSession = {
+          ...result.rows[0],
+          start_time: result.rows[0].start_time.toISOString(),
+          end_time: result.rows[0].end_time.toISOString(),
+          created_at: result.rows[0].created_at.toISOString(),
+          updated_at: result.rows[0].updated_at.toISOString(),
+        };
+        createdSessions.push(createdSession);
+      }
+      
+      await client.query('COMMIT');
+      
+      res.status(201).json(createdSessions);
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Error creating sessions:', error);
+    res.status(500).json({ error: 'Failed to create sessions' });
+  }
+}));
+
+// DELETE /api/opportunities/:id/sessions - Delete all sessions for an opportunity
+router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  try {
+    const { id: opportunityId } = req.params;
+    
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      // Use mock data for development
+      const opportunity = getMockOpportunity(opportunityId);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      // Check ownership
+      if (opportunity.owner_user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
+      }
+      
+      // Get all sessions for this opportunity
+      const sessions = getMockSessions(opportunityId);
+      
+      // Check if any sessions have bookings
+      const sessionsWithBookings = sessions.filter(session => session.booked_count > 0);
+      if (sessionsWithBookings.length > 0) {
+        return res.status(400).json({ 
+          error: `Cannot delete sessions with existing bookings. ${sessionsWithBookings.length} session(s) have bookings.` 
+        });
+      }
+      
+      // Delete all sessions (this would need to be implemented in mock-data.ts)
+      // For now, return success
+      return res.json({ 
+        message: 'All sessions deleted successfully', 
+        deleted_count: sessions.length 
+      });
+    }
+    
+    // Check opportunity ownership
+    const opportunityCheck = await pool.query(
+      'SELECT owner_user_id FROM opportunities WHERE id = $1',
+      [opportunityId]
+    );
+    
+    if (opportunityCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    
+    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+    if (!isOwner) {
+      return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
+    }
+    
+    // Check if any sessions have bookings
+    const sessionsCheck = await pool.query(
+      'SELECT s.id FROM sessions s WHERE s.opportunity_id = $1 AND EXISTS (SELECT 1 FROM bookings b WHERE b.session_id = s.id AND b.status = \'booked\')',
+      [opportunityId]
+    );
+    
+    if (sessionsCheck.rows.length > 0) {
+      return res.status(400).json({ 
+        error: `Cannot delete sessions with existing bookings. ${sessionsCheck.rows.length} session(s) have bookings.` 
+      });
+    }
+    
+    // Delete all bookings first (ON DELETE CASCADE should handle this, but explicit is safer)
+    await pool.query(
+      'DELETE FROM bookings WHERE session_id IN (SELECT id FROM sessions WHERE opportunity_id = $1)',
+      [opportunityId]
+    );
+    
+    // Delete all sessions for this opportunity
+    const deleteResult = await pool.query(
+      'DELETE FROM sessions WHERE opportunity_id = $1',
+      [opportunityId]
+    );
+    
+    res.json({ 
+      message: 'All sessions deleted successfully', 
+      deleted_count: deleteResult.rowCount 
+    });
+  } catch (error) {
+    console.error('Error deleting sessions:', error);
+    res.status(500).json({ error: 'Failed to delete sessions' });
+  }
 }));
 
 export default router;

@@ -1,0 +1,48 @@
+/* Custom styles for Header dropdown to ensure text visibility */
+.dropdown-menu {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.dropdown-menu li {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.dropdown-menu li div {
+  background-color: #ffffff !important;
+  color: #000000 !important;
+}
+
+.dropdown-menu li span {
+  color: #000000 !important;
+  font-size: 16px !important;
+}
+
+/* Keep Hello User greeting bold */
+.dropdown-menu li:first-child span {
+  font-weight: bold !important;
+}
+
+.dropdown-menu li a {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+.dropdown-menu li button {
+  color: #000000 !important;
+  background-color: #ffffff !important;
+}
+
+/* Override any Bootstrap text color classes only within dropdown */
+.dropdown-menu .text-white {
+  color: #000000 !important;
+}
+
+.dropdown-menu .text-muted {
+  color: #000000 !important;
+}
+
+.dropdown-menu .text-dark {
+  color: #000000 !important;
+}

@@ -58,11 +58,29 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           // Real session exists for this slot
           const startDate = new Date(session.start_time);
           const endDate = new Date(session.end_time);
+          const now = new Date();
+          const isAvailable = session.remaining > 0 && endDate >= now;
+          
+          // Debug logging
+          console.log('🔍 CalendarGrid session processing:', {
+            sessionId: session.id,
+            startTime: session.start_time,
+            endTime: session.end_time,
+            capacity: session.capacity,
+            bookedCount: session.booked_count,
+            remaining: session.remaining,
+            endDate: endDate.toISOString(),
+            now: now.toISOString(),
+            endDateAfterNow: endDate >= now,
+            remainingGreaterThanZero: session.remaining > 0,
+            isAvailable: isAvailable
+          });
+          
           timeSlots.push({
             session,
             startHour: startDate.getUTCHours(), // Use UTC to match admin calendar
             endHour: endDate.getUTCHours(), // Use UTC to match admin calendar
-            isAvailable: session.remaining > 0 && endDate >= new Date()
+            isAvailable: isAvailable
           });
         } else {
           // No session for this slot - create empty slot with consistent time structure
@@ -146,7 +164,25 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     // Check if this is an empty slot
     if (slot.session.id.startsWith('empty-')) return 'bg-light border';
     if (bookedSlots.has(slot.session.id)) return 'bg-secondary'; // Grey for booked slots
-    if (!slot.isAvailable) return 'bg-danger'; // Red for unavailable slots (full)
+    if (!slot.isAvailable) {
+      console.log('🔴 Slot showing as red/unavailable:', {
+        sessionId: slot.session.id,
+        isAvailable: slot.isAvailable,
+        remaining: slot.session.remaining,
+        bookedCount: slot.session.booked_count,
+        capacity: slot.session.capacity,
+        endTime: slot.session.end_time,
+        isBooked: bookedSlots.has(slot.session.id)
+      });
+      return 'bg-danger'; // Red for unavailable slots (full)
+    }
+    console.log('🟢 Slot showing as green/available:', {
+      sessionId: slot.session.id,
+      isAvailable: slot.isAvailable,
+      remaining: slot.session.remaining,
+      bookedCount: slot.session.booked_count,
+      capacity: slot.session.capacity
+    });
     return 'calendar-slot-available'; // Custom green for available slots
   };
 
@@ -161,6 +197,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       <div className="alert alert-info">
         <i className="bi bi-info-circle me-2"></i>
         No sessions available
+        <div className="mt-2">
+          <small>Debug: Sessions count: {sessions?.length || 0}</small>
+        </div>
       </div>
     );
   }

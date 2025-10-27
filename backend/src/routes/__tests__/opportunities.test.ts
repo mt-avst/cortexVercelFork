@@ -37,7 +37,7 @@ app.use((req, res, next) => {
 app.use('/api/opportunities', opportunitiesRouter);
 
 describe('Opportunities API', () => {
-  const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
+  const mockQuery = pool.query as jest.MockedFunction<any>;
 
   beforeEach(() => {
     jest.clearAllMocks();

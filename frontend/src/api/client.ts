@@ -28,7 +28,16 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && 
         window.location.pathname !== '/' && 
         !window.location.pathname.includes('/auth/')) {
-      window.location.href = '/auth/login';
+      
+      // Determine appropriate login route based on current context
+      const isAdminRoute = window.location.pathname.includes('/admin') || 
+                          window.location.pathname.includes('/opportunities') ||
+                          window.location.pathname.includes('/sessions');
+      
+      const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
+      
+      console.log('🔐 401 error detected, redirecting to:', loginRoute);
+      window.location.href = getAuthUrl(loginRoute);
     }
     return Promise.reject(error);
   }
@@ -172,6 +181,27 @@ export const getMyBookingsDebug = async (): Promise<any> => {
 
 export const cleanupCancelledBookings = async (): Promise<any> => {
   const response = await api.post('/bookings/cleanup-cancelled');
+  return response.data;
+};
+
+// Session completion API functions
+export const completeSession = async (sessionId: string): Promise<{ message: string; status: string; awaitingApproval: boolean }> => {
+  const response = await api.post(`/bookings/sessions/${sessionId}/complete`);
+  return response.data;
+};
+
+export const getPendingApprovals = async (): Promise<any[]> => {
+  const response = await api.get('/bookings/pending-approvals');
+  return response.data;
+};
+
+export const approveSession = async (bookingId: string, adminNotes?: string): Promise<{ message: string; pointsAwarded: number; newLevel: number; levelUp: boolean; totalPoints: number }> => {
+  const response = await api.post(`/bookings/${bookingId}/approve`, { adminNotes });
+  return response.data;
+};
+
+export const rejectSession = async (bookingId: string, adminNotes?: string): Promise<{ message: string; status: string }> => {
+  const response = await api.post(`/bookings/${bookingId}/reject`, { adminNotes });
   return response.data;
 };
 

@@ -21,6 +21,8 @@ export const formatOpportunityType = (type: string): string => {
   switch (type.toLowerCase()) {
     case 'test':
       return 'TEST';
+    case 'interview':
+      return 'INTERVIEW';
     case 'poll':
       return 'POLL';
     case 'survey':
@@ -51,13 +53,15 @@ export const getTypeBadgeClass = (type: string): string => {
   
   switch (baseType.toLowerCase()) {
     case 'test':
-      return 'badge bg-primary';
+      return 'badge type-test text-white'; // Teal/cyan
+    case 'interview':
+      return 'badge type-interview text-white'; // Green (unique color)
     case 'poll':
-      return 'badge bg-info';
+      return 'badge type-poll text-white'; // Pink/magenta
     case 'survey':
-      return 'badge bg-success';
+      return 'badge type-survey'; // Purple (has white text in CSS)
     case 'question':
-      return 'badge bg-warning';
+      return 'badge type-question'; // Orange (has white text in CSS)
     default:
       return 'badge bg-secondary';
   }

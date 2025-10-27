@@ -99,7 +99,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const login = () => {
     // Set a flag to detect when we return from login
     sessionStorage.setItem('loginRedirect', 'true');
-    window.location.href = getAuthUrl('/auth/login');
+    
+    // Determine appropriate login route based on current context
+    const isAdminRoute = window.location.pathname.includes('/admin') || 
+                        window.location.pathname.includes('/opportunities') ||
+                        window.location.pathname.includes('/sessions');
+    
+    const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
+    
+    console.log('🔐 Redirecting to login:', loginRoute);
+    window.location.href = getAuthUrl(loginRoute);
   };
 
   const handleLogout = async () => {
@@ -107,8 +116,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await logout();
       setUser(null);
       setError(null);
+      
+      // Redirect to homepage after logout
+      window.location.href = '/';
     } catch (err) {
       logger.error('Logout failed:', err);
+      // Still redirect even if logout fails
+      window.location.href = '/';
     }
   };
 

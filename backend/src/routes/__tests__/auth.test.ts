@@ -27,8 +27,8 @@ jest.mock('openid-client', () => ({
           department: 'Engineering',
           job_title: 'Developer'
         })
-      }))
-    })
+      })) as any
+    }) as any
   }
 }));
 

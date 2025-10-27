@@ -91,7 +91,25 @@ export const errorHandler = (
   }
 
   // Handle database errors
-  if ((error as any).code && typeof (error as any).code === 'string' && (error as any).code.match(/^[0-9A-Z]{5}$/)) {
+  const dbError = error as any;
+  if (dbError.code && typeof dbError.code === 'string' && dbError.code.match(/^[0-9A-Z]{5}$/)) {
+    // Log the original database error for debugging
+    logger.error('Database error details:', {
+      requestId,
+      method: req.method,
+      url: req.url,
+      error: {
+        code: dbError.code,
+        message: dbError.message,
+        detail: dbError.detail,
+        constraint: dbError.constraint,
+        table: dbError.table,
+        column: dbError.column,
+        stack: dbError.stack,
+      } as any,
+      userId: (req as any).user?.id,
+    });
+    
     const appError = mapDatabaseError(error);
     const response: ErrorResponse = {
       error: appError.message,
