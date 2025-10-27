@@ -16,8 +16,12 @@ const getApiBaseUrl = () => {
     return config.REACT_APP_API_URL;
   }
   
-  // In production, use relative paths (Vercel serves from same domain)
-  if (config.REACT_APP_ENVIRONMENT === 'production') {
+  // Detect production environment automatically
+  // In production (Vercel deployment), use relative paths
+  const isProduction = config.REACT_APP_ENVIRONMENT === 'production' || 
+                       process.env.NODE_ENV === 'production';
+  
+  if (isProduction) {
     return '';
   }
   
