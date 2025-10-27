@@ -13,7 +13,7 @@ import { z } from 'zod';
 export const backendEnvSchema = z.object({
   // Application Configuration
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().transform(Number).default(3001),
+  PORT: z.string().default('3001'),
   
   // Database Configuration
   DATABASE_URL: z.string().min(1, 'Database URL is required'),
@@ -36,13 +36,13 @@ export const backendEnvSchema = z.object({
   CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').default('http://localhost:3000'),
   
   // Security Configuration
-  ENABLE_CSRF: z.string().transform(val => val === 'true').default(false),
+  ENABLE_CSRF: z.string().default('false'),
   
   // Email Configuration (Optional)
   EMAIL_FROM: z.string().email().optional(),
   EMAIL_FROM_NAME: z.string().optional(),
   EMAIL_SMTP_HOST: z.string().optional(),
-  EMAIL_SMTP_PORT: z.string().transform(Number).optional(),
+  EMAIL_SMTP_PORT: z.string().optional(),
   EMAIL_SMTP_USER: z.string().optional(),
   EMAIL_SMTP_PASS: z.string().optional(),
   
@@ -68,8 +68,8 @@ export const frontendEnvSchema = z.object({
   REACT_APP_ENVIRONMENT: z.enum(['development', 'production', 'test']).default('development'),
   
   // Feature Flags
-  REACT_APP_ENABLE_ANALYTICS: z.string().transform(val => val === 'true').default('false'),
-  REACT_APP_ENABLE_DEBUG: z.string().transform(val => val === 'true').default('false'),
+  REACT_APP_ENABLE_ANALYTICS: z.string().default('false'),
+  REACT_APP_ENABLE_DEBUG: z.string().default('false'),
 });
 
 // ============================================================================
