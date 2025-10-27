@@ -133,7 +133,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const clearSessionCookies = () => {
     // Clear the specific session cookie
-    document.cookie = 'adaptalabs_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=localhost';
+    // Try to clear without domain (works for all environments)
     document.cookie = 'adaptalabs_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/';
     logger.log('AuthProvider: Cleared session cookies');
   };

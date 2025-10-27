@@ -16,7 +16,12 @@ const getApiBaseUrl = () => {
     return config.REACT_APP_API_URL;
   }
   
-  // Development default
+  // In production, use relative paths (Vercel serves from same domain)
+  if (config.REACT_APP_ENVIRONMENT === 'production') {
+    return '';
+  }
+  
+  // Development default (only for local dev)
   return 'http://localhost:3001';
 };
 
