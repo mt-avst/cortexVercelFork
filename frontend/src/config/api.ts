@@ -21,6 +21,8 @@ const getApiBaseUrl = () => {
   const isProduction = config.REACT_APP_ENVIRONMENT === 'production' || 
                        process.env.NODE_ENV === 'production';
   
+  console.log('Environment detection:', { isProduction, NODE_ENV: process.env.NODE_ENV, REACT_APP_ENVIRONMENT: config.REACT_APP_ENVIRONMENT });
+  
   if (isProduction) {
     return '';
   }
