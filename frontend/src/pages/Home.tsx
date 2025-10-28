@@ -38,11 +38,12 @@ const Home: React.FC = () => {
       if (!Array.isArray(data)) {
         console.error('API returned non-array data (backend may not be deployed):', typeof data);
         setOpportunities([]);
-        setError('No backend available. This is a production demo with frontend only.');
-      } else if (typeof data === 'string' && data.includes('<!doctype html>')) {
-        console.error('Received HTML instead of JSON - backend not deployed');
-        setOpportunities([]);
-        setError('Backend API not available');
+        if (typeof data === 'string' && (data as string).includes('<!doctype html>')) {
+          console.error('Received HTML instead of JSON - backend not deployed');
+          setError('Backend API not available');
+        } else {
+          setError('No backend available. This is a production demo with frontend only.');
+        }
       } else {
         setOpportunities(data);
         if (data.length > 0) {
