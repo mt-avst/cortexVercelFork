@@ -28,13 +28,16 @@ function writeOpportunities(opportunities) {
 module.exports = async function handler(req, res) {
   try {
     console.log('Opportunities endpoint called', req.method, req.url);
-    console.log('Query params:', JSON.stringify(req.query));
-    console.log('Has query.id?', !!req.query.id);
+    console.log('Full req object keys:', Object.keys(req));
+    console.log('req.query:', req.query);
+    console.log('req.url:', req.url);
     
-    // Check for ID in query parameter (for GET /api/opportunities?id=xxx)
-    let opportunityId = req.query?.id || null;
+    // Parse query string manually if req.query is not populated
+    let opportunityId = null;
+    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    opportunityId = url.searchParams.get('id');
     
-    console.log('Extracted opportunityId from query:', opportunityId);
+    console.log('Extracted opportunityId from URL:', opportunityId);
     
     // Also check URL path for ID (for other methods)
     if (!opportunityId) {
@@ -53,7 +56,7 @@ module.exports = async function handler(req, res) {
       }
     }
     
-    console.log('Opportunity ID:', opportunityId);
+    console.log('Final opportunity ID:', opportunityId);
     
     // If we have an ID, handle specific opportunity operations
     if (opportunityId) {
