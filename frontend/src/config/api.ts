@@ -6,19 +6,8 @@ const config: FrontendEnvironment = getFrontendConfig();
 
 // API configuration
 const getApiBaseUrl = () => {
-  // Check for production environment variables first
-  if (config.REACT_APP_API_BASE_URL) {
-    return config.REACT_APP_API_BASE_URL;
-  }
-  
-  // Fallback to legacy environment variable
-  if (config.REACT_APP_API_URL) {
-    return config.REACT_APP_API_URL;
-  }
-  
-  // Detect production environment automatically
+  // IMPORTANT: Detect production FIRST before falling back to defaults
   // In production (Vercel deployment), use relative paths
-  // Check hostname as final fallback to detect production
   const isProduction = config.REACT_APP_ENVIRONMENT === 'production' || 
                        process.env.NODE_ENV === 'production' ||
                        (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'));
@@ -27,11 +16,22 @@ const getApiBaseUrl = () => {
     isProduction, 
     NODE_ENV: process.env.NODE_ENV, 
     REACT_APP_ENVIRONMENT: config.REACT_APP_ENVIRONMENT,
-    hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A'
+    hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A',
+    REACT_APP_API_URL: config.REACT_APP_API_URL
   });
   
   if (isProduction) {
     return '';
+  }
+  
+  // Check for explicit environment variables
+  if (config.REACT_APP_API_BASE_URL) {
+    return config.REACT_APP_API_BASE_URL;
+  }
+  
+  // Fallback to legacy environment variable (only in development)
+  if (config.REACT_APP_API_URL && config.REACT_APP_API_URL !== 'http://localhost:3001') {
+    return config.REACT_APP_API_URL;
   }
   
   // Development default (only for local dev)
