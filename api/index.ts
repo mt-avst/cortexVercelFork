@@ -5,21 +5,25 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
  * Handles all /api/* routes
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { query } = req;
-  const path = query.path as string[] || [];
+  console.log('API handler called', { method: req.method, url: req.url, query: req.query });
+  
+  const urlPath = req.url || '';
+  const pathParts = urlPath.split('/').filter(p => p && p !== 'api');
+  
+  console.log('Path parts:', pathParts);
   
   // Handle auth routes
-  if (path[0] === 'auth') {
-    return handleAuth(req, res, path.slice(1));
+  if (pathParts[0] === 'auth') {
+    return handleAuth(req, res, pathParts.slice(1));
   }
   
   // Handle opportunities
-  if (path[0] === 'opportunities') {
-    return handleOpportunities(req, res, path.slice(1));
+  if (pathParts[0] === 'opportunities') {
+    return handleOpportunities(req, res, pathParts.slice(1));
   }
   
   // Handle other API routes
-  res.status(404).json({ error: 'Not found' });
+  res.status(404).json({ error: 'Not found', path: pathParts });
 }
 
 async function handleAuth(req: VercelRequest, res: VercelResponse, path: string[]) {
