@@ -20,7 +20,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Set session cookie with proper encoding
   const sessionCookie = JSON.stringify(demoAdmin);
-  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/`);
+  // Domain should match vercel.app to work across all subdomains
+  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app`);
   
   // Redirect to admin dashboard
   const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
