@@ -186,13 +186,15 @@ const Home: React.FC = () => {
               </div>
               
               {error && (
-                <ErrorState
-                  title="Failed to load studies"
-                  message={error}
-                  actionLabel="Reload Studies"
-                  onAction={loadOpportunities}
-                  icon="bi-exclamation-triangle"
-                />
+                <div className="mb-4">
+                  <ErrorState
+                    title="Failed to load studies"
+                    message={error}
+                    actionLabel="Reload Studies"
+                    onAction={loadOpportunities}
+                    icon="bi-exclamation-triangle"
+                  />
+                </div>
               )}
               
               {!loading && !error && opportunities.length === 0 && (
