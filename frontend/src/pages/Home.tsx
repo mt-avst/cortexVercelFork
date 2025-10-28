@@ -32,15 +32,23 @@ const Home: React.FC = () => {
       setError('');
       console.log('Loading opportunities...');
       const data = await getOpportunities({});
-      console.log('Loaded opportunities:', data.length, 'opportunities');
-      if (data.length > 0) {
-        console.log('First opportunity sessions:', data[0].sessions?.length || 0);
+      console.log('Loaded opportunities:', data?.length || 0, 'opportunities');
+      
+      // Ensure data is an array
+      if (!Array.isArray(data)) {
+        console.error('API returned non-array data:', data);
+        setOpportunities([]);
+      } else {
+        setOpportunities(data);
+        if (data.length > 0) {
+          console.log('First opportunity sessions:', data[0].sessions?.length || 0);
+        }
       }
-      setOpportunities(data);
       setCurrentPage(1); // Reset to first page when data loads
     } catch (err) {
       console.error('Error loading opportunities:', err);
       setError('Failed to load opportunities');
+      setOpportunities([]); // Set empty array on error
     } finally {
       setLoading(false);
     }
@@ -117,11 +125,12 @@ const Home: React.FC = () => {
     return daysSinceUpdate <= 3;
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(opportunities.length / itemsPerPage);
+  // Pagination logic - ensure opportunities is always an array
+  const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
+  const totalPages = Math.ceil(safeOpportunities.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedOpportunities = opportunities.slice(startIndex, endIndex);
+  const paginatedOpportunities = safeOpportunities.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
