@@ -100,7 +100,8 @@ export const getOpportunities = async (params?: {
 };
 
 export const getOpportunity = async (id: string, params?: { _t?: number }): Promise<Opportunity> => {
-  const response = await api.get(`/opportunities/${id}`, { params });
+  // Use query parameter for ID since Vercel serverless doesn't support dynamic paths
+  const response = await api.get(`/opportunities?id=${id}`, { params });
   return response.data;
 };
 
