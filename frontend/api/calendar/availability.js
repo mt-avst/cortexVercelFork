@@ -1,6 +1,6 @@
 /**
  * GET /api/calendar/availability
- * Get calendar availability
+ * Get calendar availability - generates time slots automatically
  */
 module.exports = async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -9,14 +9,65 @@ module.exports = async function handler(req, res) {
   
   console.log('Calendar availability endpoint called', req.url);
   
-  // Return proper AvailabilityResponse structure with empty slots
+  const durationMinutes = parseInt(req.query.duration_minutes) || 30;
+  const startTime = req.query.start_time;
+  const endTime = req.query.end_time;
+  const excludeWeekends = req.query.exclude_weekends === 'true';
+  
+  // Generate time slots if we have a date range
+  let available_slots = [];
+  
+  if (startTime && endTime) {
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    
+    // Generate slots for each day
+    const currentDate = new Date(start);
+    currentDate.setHours(9, 0, 0, 0); // Start at 9 AM
+    
+    while (currentDate <= end) {
+      const dayOfWeek = currentDate.getDay();
+      
+      // Skip weekends if exclude_weekends is true
+      if (excludeWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setHours(9, 0, 0, 0);
+        continue;
+      }
+      
+      // Generate slots for this day (9 AM to 5 PM)
+      const dayEnd = new Date(currentDate);
+      dayEnd.setHours(17, 0, 0, 0);
+      
+      while (currentDate < dayEnd) {
+        const slotEnd = new Date(currentDate);
+        slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes);
+        
+        // Only add slot if it ends before 5 PM
+        if (slotEnd <= dayEnd) {
+          available_slots.push({
+            start: currentDate.toISOString(),
+            end: slotEnd.toISOString(),
+            available: true
+          });
+        }
+        
+        currentDate.setMinutes(currentDate.getMinutes() + durationMinutes);
+      }
+      
+      // Move to next day
+      currentDate.setDate(currentDate.getDate() + 1);
+      currentDate.setHours(9, 0, 0, 0);
+    }
+  }
+  
   const response = {
-    available_slots: [],
-    total_slots: 0,
-    duration_minutes: parseInt(req.query.duration_minutes) || 15,
+    available_slots: available_slots,
+    total_slots: available_slots.length,
+    duration_minutes: durationMinutes,
     time_range: {
-      start: req.query.start_time || '',
-      end: req.query.end_time || ''
+      start: startTime || '',
+      end: endTime || ''
     }
   };
   

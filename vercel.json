@@ -1,9 +1,13 @@
 {
-  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
+  "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build && cd ../backend && npm install && npm run build",
   "outputDirectory": "frontend/build",
   "functions": {
     "frontend/api/**/*.js": {
       "maxDuration": 30
+    },
+    "backend/dist/**/*.js": {
+      "maxDuration": 30,
+      "runtime": "nodejs22.x"
     }
   }
 }
