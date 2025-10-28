@@ -18,8 +18,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     role: 'employee',
   };
 
-  // Set session cookie
-  const sessionCookie = Buffer.from(JSON.stringify(demoUser)).toString('base64');
+  // Set session cookie with proper encoding
+  const sessionCookie = JSON.stringify(demoUser);
   res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/`);
   
   // Redirect to frontend

@@ -18,9 +18,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   try {
-    // Decode the session cookie (base64)
-    const sessionData = sessionMatch[1];
-    const user = JSON.parse(Buffer.from(sessionData, 'base64').toString());
+    // Parse the session cookie directly (it's JSON string)
+    const sessionData = decodeURIComponent(sessionMatch[1]);
+    const user = JSON.parse(sessionData);
     res.status(200).json(user);
   } catch (error) {
     console.error('Error parsing session:', error);
