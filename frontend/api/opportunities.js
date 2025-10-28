@@ -28,23 +28,25 @@ function writeOpportunities(opportunities) {
 module.exports = async function handler(req, res) {
   try {
     console.log('Opportunities endpoint called', req.method, req.url);
+    console.log('Query params:', req.query);
     
-    // Parse the URL to get the ID
-    const urlPath = req.url || '';
+    // Check for ID in query parameter (for GET /api/opportunities?id=xxx)
+    let opportunityId = req.query.id || null;
     
-    // Extract ID from URL like /opportunities/:id or /api/opportunities/:id
-    let opportunityId = null;
-    
-    if (urlPath.includes('/api/opportunities/')) {
-      const parts = urlPath.split('/api/opportunities/')[1];
-      if (parts && parts !== '' && parts !== 'opportunities') {
-        // This is a specific opportunity request
-        opportunityId = parts.split('/')[0]; // Get ID, ignore any sub-paths like /sessions
-      }
-    } else if (urlPath.startsWith('/opportunities/')) {
-      const parts = urlPath.split('/opportunities/')[1];
-      if (parts && parts !== '') {
-        opportunityId = parts.split('/')[0];
+    // Also check URL path for ID (for other methods)
+    if (!opportunityId) {
+      const urlPath = req.url || '';
+      
+      if (urlPath.includes('/api/opportunities/')) {
+        const parts = urlPath.split('/api/opportunities/')[1];
+        if (parts && parts !== '' && parts !== 'opportunities') {
+          opportunityId = parts.split('/')[0];
+        }
+      } else if (urlPath.startsWith('/opportunities/')) {
+        const parts = urlPath.split('/opportunities/')[1];
+        if (parts && parts !== '') {
+          opportunityId = parts.split('/')[0];
+        }
       }
     }
     
