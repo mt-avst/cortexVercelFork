@@ -28,10 +28,13 @@ function writeOpportunities(opportunities) {
 module.exports = async function handler(req, res) {
   try {
     console.log('Opportunities endpoint called', req.method, req.url);
-    console.log('Query params:', req.query);
+    console.log('Query params:', JSON.stringify(req.query));
+    console.log('Has query.id?', !!req.query.id);
     
     // Check for ID in query parameter (for GET /api/opportunities?id=xxx)
-    let opportunityId = req.query.id || null;
+    let opportunityId = req.query?.id || null;
+    
+    console.log('Extracted opportunityId from query:', opportunityId);
     
     // Also check URL path for ID (for other methods)
     if (!opportunityId) {
