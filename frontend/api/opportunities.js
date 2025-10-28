@@ -1,8 +1,5 @@
 /**
- * GET /api/opportunities - List all opportunities
- * POST /api/opportunities - Create an opportunity
- * GET /api/opportunities/:id - Get a specific opportunity
- * PATCH /api/opportunities/:id - Update an opportunity
+ * Handler for /api/opportunities with support for nested paths
  */
 const fs = require('fs');
 
@@ -32,17 +29,29 @@ module.exports = async function handler(req, res) {
   try {
     console.log('Opportunities endpoint called', req.method, req.url);
     
+    // Parse the URL to get the ID
     const urlPath = req.url || '';
     
-    // Check if this is a request for a specific opportunity
-    const pathParts = urlPath.split('/').filter(p => p);
-    const isSpecificOpportunity = pathParts.length > 1; // More than just "opportunities"
+    // Extract ID from URL like /opportunities/:id or /api/opportunities/:id
+    let opportunityId = null;
     
-    if (isSpecificOpportunity) {
-      // This is a request like /opportunities/:id
-      const opportunityId = pathParts[1];
-      console.log('Specific opportunity request:', opportunityId);
-      
+    if (urlPath.includes('/api/opportunities/')) {
+      const parts = urlPath.split('/api/opportunities/')[1];
+      if (parts && parts !== '' && parts !== 'opportunities') {
+        // This is a specific opportunity request
+        opportunityId = parts.split('/')[0]; // Get ID, ignore any sub-paths like /sessions
+      }
+    } else if (urlPath.startsWith('/opportunities/')) {
+      const parts = urlPath.split('/opportunities/')[1];
+      if (parts && parts !== '') {
+        opportunityId = parts.split('/')[0];
+      }
+    }
+    
+    console.log('Opportunity ID:', opportunityId);
+    
+    // If we have an ID, handle specific opportunity operations
+    if (opportunityId) {
       const opportunities = readOpportunities();
       
       if (req.method === 'GET') {
@@ -90,9 +99,10 @@ module.exports = async function handler(req, res) {
       return res.status(405).json({ error: 'Method not allowed' });
     }
     
-    // List all opportunities or create a new one
+    // No ID - handle list all or create
+    const opportunities = readOpportunities();
+    
     if (req.method === 'GET') {
-      const opportunities = readOpportunities();
       console.log('Returning', opportunities.length, 'opportunities');
       return res.status(200).json(opportunities);
     }
@@ -109,7 +119,6 @@ module.exports = async function handler(req, res) {
         updated_at: new Date().toISOString()
       };
       
-      const opportunities = readOpportunities();
       opportunities.push(opportunity);
       writeOpportunities(opportunities);
       
