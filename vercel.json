@@ -1,6 +1,14 @@
 {
   "buildCommand": "cd frontend && npm install --legacy-peer-deps && npm run build",
   "outputDirectory": "frontend/build",
+  "functions": {
+    "api/auth/demo-login.ts": {
+      "maxDuration": 10
+    },
+    "api/auth/admin-login.ts": {
+      "maxDuration": 10
+    }
+  },
   "routes": [
     {
       "handle": "filesystem"
