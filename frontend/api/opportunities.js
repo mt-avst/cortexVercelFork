@@ -54,15 +54,21 @@ module.exports = async function handler(req, res) {
     
     // If we have an ID, handle specific opportunity operations
     if (opportunityId) {
+      console.log('Processing request for specific opportunity:', opportunityId);
       const opportunities = readOpportunities();
       
       if (req.method === 'GET') {
+        console.log('Looking for opportunity:', opportunityId);
+        console.log('Available opportunities:', opportunities.map(o => o.id));
+        
         const opportunity = opportunities.find(o => o.id === opportunityId);
         
         if (!opportunity) {
+          console.log('Opportunity not found');
           return res.status(404).json({ error: 'Opportunity not found' });
         }
         
+        console.log('Found opportunity:', opportunity.id);
         return res.status(200).json(opportunity);
       }
       
@@ -105,6 +111,8 @@ module.exports = async function handler(req, res) {
     const opportunities = readOpportunities();
     
     if (req.method === 'GET') {
+      // If query param has ID, this was a request like /api/opportunities?id=xxx
+      // that didn't match the opportunityId check above. Return all.
       console.log('Returning', opportunities.length, 'opportunities');
       return res.status(200).json(opportunities);
     }
