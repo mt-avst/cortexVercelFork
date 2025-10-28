@@ -18,10 +18,17 @@ const getApiBaseUrl = () => {
   
   // Detect production environment automatically
   // In production (Vercel deployment), use relative paths
+  // Check hostname as final fallback to detect production
   const isProduction = config.REACT_APP_ENVIRONMENT === 'production' || 
-                       process.env.NODE_ENV === 'production';
+                       process.env.NODE_ENV === 'production' ||
+                       (typeof window !== 'undefined' && !window.location.hostname.includes('localhost'));
   
-  console.log('Environment detection:', { isProduction, NODE_ENV: process.env.NODE_ENV, REACT_APP_ENVIRONMENT: config.REACT_APP_ENVIRONMENT });
+  console.log('Environment detection:', { 
+    isProduction, 
+    NODE_ENV: process.env.NODE_ENV, 
+    REACT_APP_ENVIRONMENT: config.REACT_APP_ENVIRONMENT,
+    hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A'
+  });
   
   if (isProduction) {
     return '';
