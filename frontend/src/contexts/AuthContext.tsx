@@ -145,9 +145,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Check if we're returning from a login redirect
       // The referrer will be from the backend server after login
-      const backendHost = new URL(API_CONFIG.BASE_URL).hostname;
+      let backendHost = '';
+      if (API_CONFIG.BASE_URL) {
+        try {
+          backendHost = new URL(API_CONFIG.BASE_URL).hostname;
+        } catch (e) {
+          // URL is relative or invalid, use current hostname
+          backendHost = window.location.hostname;
+        }
+      } else {
+        // No BASE_URL means we're using relative paths (production)
+        backendHost = window.location.hostname;
+      }
+      
       const isReturningFromLogin = 
-        document.referrer.includes(backendHost) || 
         document.referrer.includes('/auth/') || 
         window.location.search.includes('auth') ||
         sessionStorage.getItem('loginRedirect') === 'true';
