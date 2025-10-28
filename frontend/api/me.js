@@ -1,10 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
 /**
  * GET /api/me
  * Get current user from session cookie
  */
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+module.exports = async function handler(req, res) {
   console.log('API /me called');
   
   if (req.method !== 'GET') {
@@ -27,10 +25,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Session data:', sessionData);
     const user = JSON.parse(sessionData);
     console.log('Parsed user:', user);
-    res.status(200).json(user);
+    return res.status(200).json(user);
   } catch (error) {
     console.error('Error parsing session:', error);
     return res.status(401).json({ error: 'Invalid session', details: String(error) });
   }
-}
+};
 

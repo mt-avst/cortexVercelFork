@@ -1,0 +1,42 @@
+AdaptaLabs Profiles & AdaptaBits
+==================================
+
+Core Idea:
+Turn internal product testing and research participation into an ongoing, light-hearted competition where participation earns points, prizes, and prestige.
+
+------------------------------------------------------------
+
+Core Mechanics:
+- Profiles as Player Cards:
+  Each employee has a personal profile showing points, achievements, and activity history.
+
+- Points for Participation:
+  Earn points for joining research sessions, completing surveys, and testing products.
+
+- Leaderboards:
+  Live monthly leaderboard for short-term motivation, cumulative annual leaderboard for the grand final.
+
+- Monthly Prizes:
+  Top scorers receive swag, vouchers, or recognition.
+
+- Grand Final:
+  Annual top scorers enter a final challenge or draw to win the AdaptaLabs Champion title.
+
+- Visual Tone:
+  Playful “science lab meets arcade” design – badges, sparks, levelling meters, bright highlights.
+
+------------------------------------------------------------
+
+Design Goals:
+- Encourage ongoing engagement with testing and research activities.
+- Make participation fun, social, and culturally rewarding.
+- Use visual feedback and competition to make contribution feel meaningful.
+
+------------------------------------------------------------
+
+Possible UI Elements:
+- Progress bar or level meter on profile.
+- Badge grid for earned achievements.
+- Leaderboard with monthly and annual tabs.
+- Animated confetti or spark effect when earning points.
+- Champion banner for top contributors.

@@ -34,7 +34,7 @@ api.interceptors.response.use(
                           window.location.pathname.includes('/opportunities') ||
                           window.location.pathname.includes('/sessions');
       
-      const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
+      const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
       
       console.log('🔐 401 error detected, redirecting to:', loginRoute);
       window.location.href = getAuthUrl(loginRoute);
@@ -58,8 +58,8 @@ export const getMe = async (): Promise<User> => {
 };
 
 export const logout = async (): Promise<void> => {
-  // Use direct axios call since logout is not under /api prefix
-  await axios.post(getAuthUrl('/auth/logout'), {}, {
+  // Use API endpoint for logout
+  await axios.post('/api/auth/logout', {}, {
     withCredentials: true,
     timeout: API_CONFIG.TIMEOUT,
   });
@@ -69,13 +69,13 @@ export const logout = async (): Promise<void> => {
 export const demoLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/auth/demo-login');
+  window.location.href = getAuthUrl('/api/auth/demo-login');
 };
 
 export const demoAdminLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/auth/admin-login');
+  window.location.href = getAuthUrl('/api/auth/admin-login');
 };
 
 /**

@@ -1,0 +1,2 @@
+# Prevent macOS from creating extended attributes
+* -xattr

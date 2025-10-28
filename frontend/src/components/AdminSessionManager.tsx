@@ -157,7 +157,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   
 
   // Group all slots by date first (UTC)
-  const allSlotsByDate = availableSlots.reduce((acc, slot) => {
+  const allSlotsByDate = (availableSlots || []).reduce((acc, slot) => {
     const date = new Date(slot.start).toDateString(); // slot.start is already UTC from backend
     if (!acc[date]) {
       acc[date] = [];
@@ -1369,7 +1369,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               </div>
               <div style={{ marginLeft: 'auto', paddingTop: '20px' }}>
                 <small className="text-muted">
-                  {availableSlots.length} slots available
+                  {(availableSlots || []).length} slots available
                 </small>
               </div>
             </div>
@@ -1453,13 +1453,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </div>
               ) : viewMode === 'grid' ? (
                 <div>
-                  {availableSlots.length === 0 && (
-                    <div className="alert alert-warning mb-3">
-                      <i className="bi bi-exclamation-triangle me-2"></i>
-                      <strong>No available time slots found</strong> for the selected date range and duration.
-                      Try adjusting the date range, duration, or including weekends.
-                    </div>
-                  )}
+                  {/* Removed warning - calendar view shows empty state naturally */}
                   <CalendarView
                     key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
                     events={calendarEvents}

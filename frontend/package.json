@@ -4,6 +4,7 @@
   "description": "Adaptalabs recruitment app frontend",
   "private": true,
   "dependencies": {
+    "@vercel/node": "^5.5.0",
     "axios": "^1.6.2",
     "bootstrap": "^5.3.8",
     "react": "^18.2.0",

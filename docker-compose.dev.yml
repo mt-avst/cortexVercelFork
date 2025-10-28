@@ -1,0 +1,64 @@
+services:
+  postgres-dev:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: adaptalabs_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5433:5432"  # Use different port to avoid conflicts
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - adaptalabs-dev-network
+
+  backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3001"  # Use different port for dev
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@postgres-dev:5432/adaptalabs_dev
+      - PORT=3001
+    depends_on:
+      postgres-dev:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - adaptalabs-dev-network
+    restart: unless-stopped
+
+  frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3003:3000"  # Use different port for dev
+    environment:
+      - REACT_APP_API_URL=http://localhost:3002
+    depends_on:
+      - backend-dev
+    networks:
+      - adaptalabs-dev-network
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  adaptalabs-dev-network:
+    driver: bridge
+
+
+
+
+
