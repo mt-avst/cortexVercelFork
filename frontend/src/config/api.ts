@@ -49,12 +49,19 @@ export const API_CONFIG = {
 
 // Helper function to get full auth URL
 export const getAuthUrl = (path: string) => {
-  const baseUrl = API_CONFIG.AUTH_BASE_URL;
+  // Check for production environment variables first
+  if (config.REACT_APP_AUTH_BASE_URL) {
+    return `${config.REACT_APP_AUTH_BASE_URL}${path}`;
+  }
+  
+  // Use dynamic calculation instead of frozen API_CONFIG
+  const baseUrl = getAuthBaseUrl();
   return baseUrl ? `${baseUrl}${path}` : path;
 };
 
 // Helper function to get full API URL
 export const getApiUrl = (path: string) => {
-  const baseUrl = API_CONFIG.BASE_URL;
+  // Use dynamic calculation instead of frozen API_CONFIG
+  const baseUrl = getApiBaseUrl();
   return baseUrl ? `${baseUrl}${path}` : path;
 };
