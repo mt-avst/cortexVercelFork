@@ -144,7 +144,11 @@ export const getSessions = async (opportunityId: string, params?: {
 };
 
 export const createSessions = async (opportunityId: string, data: CreateSessionRequest | CreateSessionRequest[]): Promise<Session[]> => {
-  const response = await api.post(`/opportunities/${opportunityId}/sessions`, data);
+  const sessions = Array.isArray(data) ? data : [data];
+  const response = await api.post('/sessions', { 
+    opportunity_id: opportunityId,
+    sessions 
+  });
   return response.data;
 };
 
