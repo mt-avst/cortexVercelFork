@@ -89,18 +89,24 @@ const Admin: React.FC = () => {
     }
   };
 
-  const loadOpportunities = async () => {
+  const loadOpportunities = async (forceClearFilter = false) => {
     try {
       setLoadingOpportunities(true);
       setError('');
       const params: any = {};
-      if (statusFilter) params.status = statusFilter;
-      if (typeFilter) params.type = typeFilter;
+      // If forceClearFilter is true, don't apply filters to ensure new items are visible
+      if (!forceClearFilter) {
+        if (statusFilter) params.status = statusFilter;
+        if (typeFilter) params.type = typeFilter;
+      }
+      console.log('Loading opportunities with params:', params);
       const data = await getOpportunities(params);
-      setOpportunities(data);
+      console.log('Loaded opportunities:', data?.length || 0);
+      setOpportunities(data || []);
     } catch (err) {
       console.error('Error loading research studies:', err);
       setError('Failed to load research studies');
+      setOpportunities([]);
     } finally {
       setLoadingOpportunities(false);
     }
@@ -115,22 +121,15 @@ const Admin: React.FC = () => {
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
     if (location.state?.refresh && user?.role === 'researcher_admin') {
-      console.log('Admin: Refresh triggered from navigation state');
+      console.log('Admin: Refresh triggered from navigation state', location.state);
       // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
-      // Force refresh with a small delay to ensure navigation is complete
-      // Also clear any status filter temporarily to ensure new items are visible
-      const originalStatusFilter = statusFilter;
-      if (statusFilter) {
-        setStatusFilter('');
-      }
+      // Force refresh without filters to ensure new items are visible
+      // Use a small delay to ensure navigation is complete
       setTimeout(() => {
-        loadOpportunities();
-        // Restore filter after loading if it was set
-        if (originalStatusFilter) {
-          setTimeout(() => setStatusFilter(originalStatusFilter), 100);
-        }
-      }, 100);
+        console.log('Admin: Forcing refresh without filters');
+        loadOpportunities(true); // true = force clear filters
+      }, 150);
     }
   }, [location.state, user, navigate, location.pathname]);
 
