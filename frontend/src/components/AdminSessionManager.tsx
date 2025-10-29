@@ -941,7 +941,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       
     } catch (err: any) {
       console.error('Error loading calendar data:', err);
-      setError(err.response?.data?.error || 'Failed to load calendar data');
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.statusText || 
+                          err.message || 
+                          'Failed to load calendar data';
+      setError(errorMessage);
     } finally {
       setLoading(false);
       setIsUpdating(false);

@@ -11,6 +11,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const slug = req.query.slug as string[] || [];
   const route = slug.join('/');
   
+  // Debug logging
+  console.log('Calendar route handler called:', {
+    url: req.url,
+    path: req.url?.split('?')[0],
+    slug,
+    route,
+    method: req.method
+  });
+  
   // Route to availability endpoint
   if (route === 'availability') {
     if (req.method !== 'GET') {
@@ -159,4 +168,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Unknown route
   return res.status(404).json({ error: 'Calendar endpoint not found' });
 }
+
 
