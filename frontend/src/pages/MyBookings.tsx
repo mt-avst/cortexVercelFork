@@ -69,7 +69,20 @@ const MyBookings: React.FC = () => {
     } catch (err: any) {
       console.error('Error cancelling booking:', err);
       // Show more specific error message if available
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to cancel booking';
+      let errorMessage = 'Failed to cancel booking';
+      if (err?.response?.data?.error) {
+        errorMessage = typeof err.response.data.error === 'string' 
+          ? err.response.data.error 
+          : err.response.data.error?.message || errorMessage;
+      } else if (err?.response?.data?.details) {
+        errorMessage = typeof err.response.data.details === 'string'
+          ? err.response.data.details
+          : errorMessage;
+      } else if (err?.message) {
+        errorMessage = typeof err.message === 'string' ? err.message : errorMessage;
+      } else if (err?.response?.statusText) {
+        errorMessage = err.response.statusText;
+      }
       setError(`Failed to cancel booking: ${errorMessage}`);
     } finally {
       setActionLoading(null);
