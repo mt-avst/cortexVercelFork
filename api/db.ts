@@ -8,17 +8,33 @@ export function getPool(): Pool {
     const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
     
     if (!databaseUrl) {
-      throw new Error('DATABASE_URL or POSTGRES_URL environment variable is not set');
+      const errorMsg = 'DATABASE_URL or POSTGRES_URL environment variable is not set';
+      console.error(errorMsg);
+      console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('DB') || k.includes('POST') || k.includes('DATABASE')));
+      throw new Error(errorMsg);
     }
 
+    // Clean up connection string (remove quotes if present, handle special formatting)
+    let cleanUrl = databaseUrl.trim();
+    if (cleanUrl.startsWith('"') || cleanUrl.startsWith("'")) {
+      cleanUrl = cleanUrl.slice(1, -1);
+    }
+    
+    // Remove psql wrapper if present (from .env file format)
+    if (cleanUrl.startsWith("psql '")) {
+      cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
+    }
+
+    console.log('Connecting to database...', cleanUrl.substring(0, 20) + '...');
+
     pool = new Pool({
-      connectionString: databaseUrl,
+      connectionString: cleanUrl,
       ssl: {
         rejectUnauthorized: false
       },
       max: 1, // Limit connections for serverless (each function instance needs minimal connections)
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 5000, // Increase timeout for serverless
     });
 
     // Handle pool errors
@@ -33,12 +49,22 @@ export function getPool(): Pool {
 // Helper function to execute queries with automatic error handling
 export async function query(text: string, params?: any[]) {
   const pool = getPool();
-  const client = await pool.connect();
+  let client;
   try {
+    client = await pool.connect();
     const result = await client.query(text, params);
     return result;
+  } catch (error: any) {
+    console.error('Database query error:', error.message);
+    console.error('Query:', text.substring(0, 100));
+    if (params) {
+      console.error('Params:', params);
+    }
+    throw error;
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
   }
 }
 
