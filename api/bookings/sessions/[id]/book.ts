@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { query } from '../../db';
+import { getPool } from '../../../db';
 
 /**
  * POST /api/bookings/sessions/[id]/book
@@ -60,7 +60,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = user.id;
 
     // Start transaction for atomic booking
-    const { getPool } = await import('../../../db');
     const client = await getPool().connect();
     
     try {
