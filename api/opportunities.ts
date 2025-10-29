@@ -5,7 +5,19 @@ import path from 'path';
 const DATA_FILE = path.join('/tmp', 'opportunities.json');
 const SESSIONS_FILE = path.join('/tmp', 'sessions.json');
 
-// In-memory cache for opportunities (persists within the same Lambda instance)
+// Global in-memory storage (persists across invocations within same Lambda instance)
+declare global {
+  var __opportunities: any[] | undefined;
+  var __sessions: any[] | undefined;
+}
+
+if (!global.__opportunities) {
+  global.__opportunities = [];
+}
+if (!global.__sessions) {
+  global.__sessions = [];
+}
+
 let opportunitiesCache: any[] | null = null;
 let sessionsCache: any[] | null = null;
 
@@ -18,7 +30,12 @@ function ensureDataFile() {
 
 // Read opportunities from file and cache
 function readOpportunities(): any[] {
-  // Try to use cache first
+  // Try to use global cache first
+  if (global.__opportunities && global.__opportunities.length > 0) {
+    return global.__opportunities;
+  }
+  
+  // Try to use local cache
   if (opportunitiesCache !== null) {
     return opportunitiesCache;
   }
@@ -27,22 +44,25 @@ function readOpportunities(): any[] {
   try {
     const data = fs.readFileSync(DATA_FILE, 'utf-8');
     const opportunities = JSON.parse(data);
-    // Update cache
+    // Update caches
+    global.__opportunities = opportunities;
     opportunitiesCache = opportunities;
     return opportunities;
   } catch (error) {
     console.error('Error reading opportunities:', error);
-    return [];
+    return global.__opportunities || [];
   }
 }
 
 // Write opportunities to file and update cache
 function writeOpportunities(opportunities: any[]): void {
+  // Update global cache immediately (persists across invocations)
+  global.__opportunities = opportunities;
+  opportunitiesCache = opportunities;
+  
   ensureDataFile();
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
-    // Update cache
-    opportunitiesCache = opportunities;
   } catch (error) {
     console.error('Error writing opportunities:', error);
   }
@@ -50,22 +70,31 @@ function writeOpportunities(opportunities: any[]): void {
 
 // Read sessions from file and cache
 function readSessions(): any[] {
+  // Try to use global cache first
+  if (global.__sessions && global.__sessions.length > 0) {
+    return global.__sessions;
+  }
+  
+  // Try to use local cache
   if (sessionsCache !== null) {
     return sessionsCache;
   }
   
   if (!fs.existsSync(SESSIONS_FILE)) {
+    global.__sessions = [];
     sessionsCache = [];
     return [];
   }
   
   try {
     const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
-    sessionsCache = JSON.parse(data);
-    return sessionsCache;
+    const sessions = JSON.parse(data);
+    global.__sessions = sessions;
+    sessionsCache = sessions;
+    return sessions;
   } catch (error) {
     console.error('Error reading sessions:', error);
-    return [];
+    return global.__sessions || [];
   }
 }
 

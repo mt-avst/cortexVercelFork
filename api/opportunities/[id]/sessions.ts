@@ -5,54 +5,79 @@ import path from 'path';
 const DATA_FILE = path.join('/tmp', 'opportunities.json');
 const SESSIONS_FILE = path.join('/tmp', 'sessions.json');
 
-// In-memory cache
+// Global in-memory storage (persists across invocations within same Lambda instance)
+declare global {
+  var __opportunities: any[] | undefined;
+  var __sessions: any[] | undefined;
+}
+
+if (!global.__opportunities) {
+  global.__opportunities = [];
+}
+if (!global.__sessions) {
+  global.__sessions = [];
+}
+
 let opportunitiesCache: any[] | null = null;
 let sessionsCache: any[] | null = null;
 
 // Read opportunities from cache/file
 function readOpportunities(): any[] {
+  if (global.__opportunities && global.__opportunities.length > 0) {
+    return global.__opportunities;
+  }
+  
   if (opportunitiesCache !== null) {
     return opportunitiesCache;
   }
   
   if (!fs.existsSync(DATA_FILE)) {
     opportunitiesCache = [];
+    global.__opportunities = [];
     return [];
   }
   
   try {
     const data = fs.readFileSync(DATA_FILE, 'utf-8');
     opportunitiesCache = JSON.parse(data);
+    global.__opportunities = opportunitiesCache;
     return opportunitiesCache;
   } catch (error) {
     console.error('Error reading opportunities:', error);
-    return [];
+    return global.__opportunities || [];
   }
 }
 
 // Read sessions from cache/file
 function readSessions(): any[] {
+  if (global.__sessions && global.__sessions.length > 0) {
+    return global.__sessions;
+  }
+  
   if (sessionsCache !== null) {
     return sessionsCache;
   }
   
   if (!fs.existsSync(SESSIONS_FILE)) {
     sessionsCache = [];
+    global.__sessions = [];
     return [];
   }
   
   try {
     const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
     sessionsCache = JSON.parse(data);
+    global.__sessions = sessionsCache;
     return sessionsCache;
   } catch (error) {
     console.error('Error reading sessions:', error);
-    return [];
+    return global.__sessions || [];
   }
 }
 
 // Write sessions to cache/file
 function writeSessions(sessions: any[]): void {
+  global.__sessions = sessions;
   sessionsCache = sessions;
   try {
     if (!fs.existsSync(SESSIONS_FILE)) {
@@ -113,9 +138,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         opportunities[opportunityIndex].sessions = [];
       }
       opportunities[opportunityIndex].sessions.push(...createdSessions);
-      opportunitiesCache = opportunities;
-      
-      // Write updated opportunities
+    opportunitiesCache = opportunities;
+    global.__opportunities = opportunities;
+    
+    // Write updated opportunities
       if (!fs.existsSync(DATA_FILE)) {
         fs.writeFileSync(DATA_FILE, JSON.stringify([]));
       }
