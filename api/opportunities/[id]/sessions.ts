@@ -1,87 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import fs from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join('/tmp', 'opportunities.json');
-const SESSIONS_FILE = path.join('/tmp', 'sessions.json');
-
-// Global in-memory storage (persists across invocations within same Lambda instance)
-declare global {
-  var __opportunities: any[] | undefined;
-  var __sessions: any[] | undefined;
-}
-
-if (!global.__opportunities) {
-  global.__opportunities = [];
-}
-if (!global.__sessions) {
-  global.__sessions = [];
-}
-
-let opportunitiesCache: any[] | null = null;
-let sessionsCache: any[] | null = null;
-
-// Read opportunities from cache/file
-function readOpportunities(): any[] {
-  if (global.__opportunities && global.__opportunities.length > 0) {
-    return global.__opportunities;
-  }
-  
-  if (opportunitiesCache !== null) {
-    return opportunitiesCache;
-  }
-  
-  if (!fs.existsSync(DATA_FILE)) {
-    opportunitiesCache = [];
-    global.__opportunities = [];
-    return [];
-  }
-  
-  try {
-    const data = fs.readFileSync(DATA_FILE, 'utf-8');
-    opportunitiesCache = JSON.parse(data);
-    global.__opportunities = opportunitiesCache;
-    return opportunitiesCache;
-  } catch (error) {
-    console.error('Error reading opportunities:', error);
-    return global.__opportunities || [];
-  }
-}
-
-// Read sessions from cache/file
-function readSessions(): any[] {
-  // Always read from file when getting sessions
-  try {
-    if (fs.existsSync(SESSIONS_FILE)) {
-      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
-      const sessions = JSON.parse(data);
-      global.__sessions = sessions;
-      sessionsCache = sessions;
-      return sessions;
-    }
-    
-    global.__sessions = [];
-    sessionsCache = [];
-    return [];
-  } catch (error) {
-    console.error('Error reading sessions:', error);
-    return global.__sessions || [];
-  }
-}
-
-// Write sessions to cache/file
-function writeSessions(sessions: any[]): void {
-  global.__sessions = sessions;
-  sessionsCache = sessions;
-  try {
-    if (!fs.existsSync(SESSIONS_FILE)) {
-      fs.writeFileSync(SESSIONS_FILE, JSON.stringify([]));
-    }
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
-  } catch (error) {
-    console.error('Error writing sessions:', error);
-  }
-}
+import { query } from '../db';
 
 /**
  * GET /api/opportunities/[id]/sessions
@@ -90,63 +8,128 @@ function writeSessions(sessions: any[]): void {
  * Creates sessions for an opportunity
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
+  try {
     const opportunityId = req.query.id as string;
-    console.log('Getting sessions for opportunity:', opportunityId);
     
-    const sessions = readSessions();
-    const opportunitySessions = sessions.filter((session: any) => session.opportunity_id === opportunityId);
-    
-    return res.status(200).json(opportunitySessions);
-  }
-  
-  if (req.method === 'POST') {
-    const opportunityId = req.query.id as string;
-    console.log('Creating sessions for opportunity:', opportunityId);
-    
-    const sessionData = Array.isArray(req.body) ? req.body : [req.body];
-    
-    // Generate sessions with IDs
-    const createdSessions = sessionData.map((session: any) => ({
-      id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      opportunity_id: opportunityId,
-      start_time: session.start_time,
-      end_time: session.end_time,
-      capacity: session.capacity || 1,
-      booked_count: 0,
-      location_or_meet_link_optional: session.location_or_meet_link_optional || '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }));
-    
-    // Read existing sessions and add new ones
-    const sessions = readSessions();
-    sessions.push(...createdSessions);
-    writeSessions(sessions);
-    
-    // Update the opportunity with sessions
-    const opportunities = readOpportunities();
-    const opportunityIndex = opportunities.findIndex((opp: any) => opp.id === opportunityId);
-    if (opportunityIndex !== -1) {
-      if (!opportunities[opportunityIndex].sessions) {
-        opportunities[opportunityIndex].sessions = [];
+    if (!opportunityId) {
+      return res.status(400).json({ error: 'Opportunity ID is required' });
+    }
+
+    if (req.method === 'GET') {
+      console.log('Getting sessions for opportunity:', opportunityId);
+      
+      // Check if opportunity exists
+      const oppCheck = await query(
+        `SELECT id FROM opportunities WHERE id = $1`,
+        [opportunityId]
+      );
+      
+      if (oppCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Opportunity not found' });
       }
-      opportunities[opportunityIndex].sessions.push(...createdSessions);
-    opportunitiesCache = opportunities;
-    global.__opportunities = opportunities;
-    
-    // Write updated opportunities
-      if (!fs.existsSync(DATA_FILE)) {
-        fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+      
+      // Get sessions from database
+      const { include_past } = req.query;
+      let sql = `
+        SELECT * FROM sessions 
+        WHERE opportunity_id = $1
+      `;
+      const params: any[] = [opportunityId];
+      
+      if (include_past === 'false' || include_past === false) {
+        sql += ` AND end_time > NOW()`;
       }
-      fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
+      
+      sql += ` ORDER BY start_time ASC`;
+      
+      const result = await query(sql, params);
+      
+      const sessions = result.rows.map(s => ({
+        ...s,
+        start_time: s.start_time.toISOString(),
+        end_time: s.end_time.toISOString(),
+        created_at: s.created_at.toISOString(),
+        updated_at: s.updated_at.toISOString(),
+        remaining: s.capacity - s.booked_count,
+      }));
+      
+      console.log(`Found ${sessions.length} sessions for opportunity ${opportunityId}`);
+      return res.status(200).json(sessions);
     }
     
-    console.log('Created sessions:', createdSessions.length);
+    if (req.method === 'POST') {
+      console.log('Creating sessions for opportunity:', opportunityId);
+      
+      // Check if opportunity exists
+      const oppCheck = await query(
+        `SELECT id FROM opportunities WHERE id = $1`,
+        [opportunityId]
+      );
+      
+      if (oppCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      const sessionData = Array.isArray(req.body) ? req.body : [req.body];
+      
+      if (sessionData.length === 0) {
+        return res.status(400).json({ error: 'At least one session is required' });
+      }
+      
+      // Validate session data
+      for (const session of sessionData) {
+        if (!session.start_time || !session.end_time) {
+          return res.status(400).json({ error: 'start_time and end_time are required for each session' });
+        }
+      }
+      
+      // Insert sessions into database
+      const createdSessions = [];
+      for (const session of sessionData) {
+        const result = await query(
+          `INSERT INTO sessions (
+            opportunity_id,
+            start_time,
+            end_time,
+            capacity,
+            booked_count,
+            location_or_meet_link_optional
+          ) VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING *`,
+          [
+            opportunityId,
+            session.start_time,
+            session.end_time,
+            session.capacity || 1,
+            0, // booked_count starts at 0
+            session.location_or_meet_link_optional || null,
+          ]
+        );
+        
+        const created = result.rows[0];
+        createdSessions.push({
+          ...created,
+          start_time: created.start_time.toISOString(),
+          end_time: created.end_time.toISOString(),
+          created_at: created.created_at.toISOString(),
+          updated_at: created.updated_at.toISOString(),
+          remaining: created.capacity - created.booked_count,
+        });
+      }
+      
+      console.log(`Created ${createdSessions.length} sessions for opportunity ${opportunityId}`);
+      return res.status(201).json(createdSessions);
+    }
     
-    return res.status(201).json(createdSessions);
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error: any) {
+    console.error('Error in sessions handler:', error);
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: error.message,
+      code: error.code,
+    });
   }
-  
-  return res.status(405).json({ error: 'Method not allowed' });
 }
 
