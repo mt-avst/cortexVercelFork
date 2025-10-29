@@ -1,6 +1,8 @@
-# Vercel Postgres Setup Guide
+# PostgreSQL Setup Guide for Vercel
 
-This guide will help you set up PostgreSQL for your Vercel deployment.
+**UPDATE**: Vercel Postgres may not be available in your dashboard. If you don't see "Postgres" as an option, use **Neon Postgres** instead (see `setup-neon-postgres.md` for detailed instructions).
+
+This guide covers both Vercel Postgres and alternative options.
 
 ## Step 1: Create Vercel Postgres Database
 
