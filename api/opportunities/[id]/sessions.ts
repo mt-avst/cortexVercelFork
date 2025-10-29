@@ -58,7 +58,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             // Handle query param (can be string, string[], or undefined)
             const includePast = Array.isArray(include_past) ? include_past[0] : include_past;
-            if (includePast === 'false' || includePast === false) {
+            // Check if we should exclude past sessions (only if explicitly set to 'false')
+            if (includePast === 'false') {
               sql += ` AND end_time > NOW()`;
             }
       
