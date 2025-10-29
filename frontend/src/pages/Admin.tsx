@@ -184,13 +184,16 @@ const Admin: React.FC = () => {
     }
   };
 
-  // Wait for initial auth check to complete before redirecting
+  // Wait for initial auth check to complete before making redirect decisions
   // This ensures we don't redirect away if auth check is still in progress
+  // CRITICAL: When returning from login, wait for auth to complete before redirecting
   if (loading || !initialAuthCheck) {
     return <div className="card text-center">Loading...</div>;
   }
 
-  if (!user) {
+  // Only redirect if we're sure the user is not authenticated
+  // When returning from login, user might be null temporarily while auth check runs
+  if (!user && initialAuthCheck) {
     return <Navigate to="/" replace />;
   }
 
