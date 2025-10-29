@@ -113,20 +113,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      // Load sessions for this opportunity (always read fresh from file)
-      const allSessions = readSessions();
-      console.log('All sessions loaded:', allSessions.length);
-      const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
-      console.log('Filtered sessions for opportunity:', opportunitySessions.length);
-      opportunity.sessions = opportunitySessions;
+      // Load sessions for this opportunity
+      // Since each Lambda has its own /tmp, we need to load sessions differently
+      // For now, we'll attach an empty sessions array and the frontend can fetch them separately
+      opportunity.sessions = opportunity.sessions || [];
       
       return res.status(200).json(opportunity);
     }
     
-    // For list view, also load sessions for each opportunity
-    const allSessions = readSessions();
+    // For list view, attach empty sessions array
     const opportunitiesWithSessions = opportunities.map((opp: any) => {
-      opp.sessions = allSessions.filter((s: any) => s.opportunity_id === opp.id);
+      opp.sessions = opp.sessions || [];
       return opp;
     });
     
