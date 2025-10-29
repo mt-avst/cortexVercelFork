@@ -9,9 +9,27 @@ import { query } from '../../db';
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    const opportunityId = req.query.id as string;
+    // Try to get ID from query params first (Vercel dynamic routes)
+    let opportunityId = req.query.id as string;
+    
+    // If not in query, try to parse from URL path
+    if (!opportunityId && req.url) {
+      const urlMatch = req.url.match(/\/opportunities\/([^\/]+)\/sessions/);
+      if (urlMatch) {
+        opportunityId = urlMatch[1];
+      }
+    }
+    
+    console.log('Sessions endpoint called:', {
+      method: req.method,
+      url: req.url,
+      query: req.query,
+      opportunityId,
+      body: req.body ? (Array.isArray(req.body) ? `${req.body.length} items` : 'single item') : 'no body'
+    });
     
     if (!opportunityId) {
+      console.error('Opportunity ID not found in query or URL');
       return res.status(400).json({ error: 'Opportunity ID is required' });
     }
 
