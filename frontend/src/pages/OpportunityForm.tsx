@@ -110,26 +110,40 @@ const OpportunityForm: React.FC = () => {
       
       setOpportunityId(opportunity.id);
       
-      // Load sessions separately from the sessions API
-      // The opportunities API doesn't return sessions due to Lambda isolation
-      try {
-        const sessions = await getSessions(opportunity.id);
-        setSessions(sessions);
-        
-        console.log('🔍 Loaded opportunity sessions:', {
+      // Load sessions - try to use sessions from opportunity first, then fallback to separate API call
+      if (opportunity.sessions && opportunity.sessions.length > 0) {
+        console.log('🔍 Using sessions from opportunity object:', {
           opportunityId: opportunity.id,
-          sessionsCount: sessions.length,
-          sessions: sessions.map(s => ({
-            id: s.id,
-            start_time: s.start_time,
-            end_time: s.end_time,
-            capacity: s.capacity,
-            booked_count: s.booked_count
-          }))
+          sessionsCount: opportunity.sessions.length
         });
-      } catch (sessionError) {
-        console.error('Error loading sessions:', sessionError);
-        setSessions([]);
+        setSessions(opportunity.sessions);
+      } else {
+        // Load sessions separately from the sessions API
+        try {
+          console.log('🔍 Loading sessions separately for opportunity:', opportunity.id);
+          const sessions = await getSessions(opportunity.id);
+          setSessions(sessions);
+          
+          console.log('🔍 Loaded opportunity sessions:', {
+            opportunityId: opportunity.id,
+            sessionsCount: sessions.length,
+            sessions: sessions.map(s => ({
+              id: s.id,
+              start_time: s.start_time,
+              end_time: s.end_time,
+              capacity: s.capacity,
+              booked_count: s.booked_count
+            }))
+          });
+        } catch (sessionError: any) {
+          console.error('Error loading sessions:', sessionError);
+          console.error('Session error details:', {
+            message: sessionError.message,
+            response: sessionError.response?.data,
+            status: sessionError.response?.status
+          });
+          setSessions([]);
+        }
       }
     } catch (err: any) {
       console.error('Error loading opportunity:', err);
