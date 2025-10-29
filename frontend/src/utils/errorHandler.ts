@@ -121,12 +121,11 @@ export class ApiClient {
   }
 
   private handleUnauthorized() {
-    // Only redirect if not already on login page
-    if (window.location.pathname !== '/' && 
-        !window.location.pathname.includes('/auth/')) {
-      logger.log('Redirecting to login due to 401 error');
-      window.location.href = '/auth/login';
-    }
+    // DO NOT automatically redirect on 401 errors during initial load
+    // Let components handle auth errors gracefully instead of forcing redirects
+    // This prevents automatic admin login from stale sessions
+    logger.log('Unauthorized error - not redirecting automatically');
+    // Components will handle showing login UI as needed
   }
 
   async get<T>(url: string, config?: any): Promise<T> {

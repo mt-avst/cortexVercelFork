@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 import { getMe, logout } from '../api/client';
 import { getAuthUrl, API_CONFIG } from '../config/api';
@@ -56,12 +56,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(false); // Start with loading false - will be set to true during auth check
   const [error, setError] = useState<string | null>(null);
   const [initialAuthCheck, setInitialAuthCheck] = useState(false); // Track if initial auth check is complete
+  const hasCheckedAuth = useRef(false); // Prevent React StrictMode double-execution
 
   const fetchUser = async (isInitialCheck = false) => {
     try {
       setLoading(true);
       setError(null);
       logger.log('AuthProvider: Fetching user data...', { isInitialCheck });
+      
+      // Set flag to prevent automatic redirects during initial auth check
+      if (isInitialCheck && (window as any).__setInitialAuthCheck) {
+        (window as any).__setInitialAuthCheck(true);
+      }
       
       // Debug: Check cookies before making request
       logger.log('AuthProvider: Current cookies:', document.cookie);
@@ -89,6 +95,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       logger.log('AuthProvider: Setting loading to false');
       setLoading(false);
+      
+      // Clear the initial auth check flag after auth check completes
+      if (isInitialCheck && (window as any).__setInitialAuthCheck) {
+        setTimeout(() => {
+          (window as any).__setInitialAuthCheck(false);
+        }, 100);
+      }
+      
       if (isInitialCheck) {
         logger.log('AuthProvider: Initial auth check complete');
         setInitialAuthCheck(true);
@@ -138,56 +152,77 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logger.log('AuthProvider: Cleared session cookies');
   };
 
-  // Automatically check authentication status on app load
+  // CRITICAL FIX: NEVER automatically check authentication on initial app load.
+  // This prevents automatic login from stale cookies.
+  // Authentication will ONLY be checked when:
+  // 1. User explicitly clicks a login button AND we're returning from that redirect
+  //    (detected by sessionStorage flag that was set RIGHT BEFORE redirect)
+  // 2. Never check based on referrer - it's unreliable and can trigger false positives
+  
   useEffect(() => {
     const checkAuthStatus = async () => {
+      // Prevent double execution in React StrictMode
+      if (hasCheckedAuth.current) {
+        logger.log('AuthProvider: Skipping duplicate mount (React StrictMode)');
+        return;
+      }
+      hasCheckedAuth.current = true;
+      
       logger.log('AuthProvider: Checking authentication status on mount');
       
-      // Check if we're returning from a login redirect
-      // The referrer will be from the backend server after login
-      let backendHost = '';
-      if (API_CONFIG.BASE_URL) {
-        try {
-          backendHost = new URL(API_CONFIG.BASE_URL).hostname;
-        } catch (e) {
-          // URL is relative or invalid, use current hostname
-          backendHost = window.location.hostname;
-        }
-      } else {
-        // No BASE_URL means we're using relative paths (production)
-        backendHost = window.location.hostname;
-      }
+      // CRITICAL: Only check auth if we have a FRESH sessionStorage flag
+      // Clear any stale flags from previous sessions first
+      const loginRedirectFlag = sessionStorage.getItem('loginRedirect');
+      const isReturningFromLogin = loginRedirectFlag === 'true';
       
-      const isReturningFromLogin = 
-        document.referrer.includes('/auth/') || 
-        window.location.search.includes('auth') ||
-        sessionStorage.getItem('loginRedirect') === 'true';
+      // IMPORTANT: Clear the flag immediately, even if true, to prevent reuse
+      sessionStorage.removeItem('loginRedirect');
       
       logger.log('AuthProvider: Login redirect detection:', {
         referrer: document.referrer,
         search: window.location.search,
-        sessionStorage: sessionStorage.getItem('loginRedirect'),
+        hadLoginRedirectFlag: !!loginRedirectFlag,
         isReturningFromLogin
       });
       
       if (isReturningFromLogin) {
-        logger.log('AuthProvider: Detected return from login redirect');
-        // Clear the login redirect flag
-        sessionStorage.removeItem('loginRedirect');
-        
-        // If returning from login, wait a bit for session cookie to be set
-        // and retry authentication check
+        // We were returning from login - check auth after short delay
+        logger.log('AuthProvider: Detected return from login redirect - will check auth');
         setTimeout(async () => {
-          logger.log('AuthProvider: Retrying auth check after login redirect');
-          await fetchUser(false);
-        }, 1000); // Increased delay to 1 second
-      } else {
-        // If not returning from login, just log that we're doing a normal auth check
-        logger.log('AuthProvider: Not returning from login, doing normal auth check');
+          logger.log('AuthProvider: Checking auth after login redirect');
+          await fetchUser(true);
+        }, 500);
+        return;
       }
       
-      // Always check authentication status on mount
-      await fetchUser(true);
+      // NOT returning from login - ABSOLUTELY DO NOT check auth
+      logger.log('AuthProvider: NOT returning from login - starting completely fresh, NO auth check');
+      
+      // Aggressively clear all cookies (client-side)
+      clearSessionCookies();
+      
+      // Clear HttpOnly cookies via logout API calls (silent)
+      const logoutUrls = [
+        API_CONFIG.BASE_URL ? `${API_CONFIG.BASE_URL}/api/auth/logout` : '/api/auth/logout',
+        API_CONFIG.BASE_URL ? `${API_CONFIG.BASE_URL}/auth/logout` : '/auth/logout'
+      ];
+      
+      Promise.allSettled(
+        logoutUrls.map(url => 
+          fetch(url, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+          })
+        )
+      ).catch(() => {}); // Ignore all errors
+      
+      // Set state: logged out, initial check complete, NO auth performed
+      setInitialAuthCheck(true);
+      setUser(null);
+      setLoading(false);
+      
+      logger.log('AuthProvider: Initial load complete - user is logged out, ZERO auth checks performed');
     };
 
     checkAuthStatus();

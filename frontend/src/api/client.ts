@@ -20,12 +20,22 @@ const api = axios.create({
   }
 });
 
+// Track if we're doing an initial auth check to prevent auto-redirects
+let isInitialAuthCheck = false;
+const setInitialAuthCheck = (value: boolean) => {
+  isInitialAuthCheck = value;
+};
+// Export so AuthContext can set this flag
+(window as any).__setInitialAuthCheck = setInitialAuthCheck;
+
 // Add response interceptor to handle 401s
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     // Only redirect to login for actual 401s, not during initial load or after login
+    // IMPORTANT: Don't auto-redirect during initial auth check to prevent automatic admin login
     if (error.response?.status === 401 && 
+        !isInitialAuthCheck &&
         window.location.pathname !== '/' && 
         !window.location.pathname.includes('/auth/')) {
       

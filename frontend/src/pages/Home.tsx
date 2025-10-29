@@ -19,12 +19,8 @@ const Home: React.FC = () => {
   
   const { user } = useAuth();
 
-  // Redirect admin users to admin dashboard
-  useEffect(() => {
-    if (user?.role === 'researcher_admin') {
-      navigate('/admin', { replace: true });
-    }
-  }, [user, navigate]);
+  // Note: Removed automatic redirect to admin dashboard
+  // Admin users can now choose to stay on home page or navigate to admin manually
 
   const loadOpportunities = async () => {
     try {
