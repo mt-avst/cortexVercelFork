@@ -82,49 +82,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   if (req.method === 'POST') {
-  
-  const opportunityId = req.query.id as string;
-  console.log('Creating sessions for opportunity:', opportunityId);
-  
-  const sessionData = Array.isArray(req.body) ? req.body : [req.body];
-  
-  // Generate sessions with IDs
-  const createdSessions = sessionData.map((session: any) => ({
-    id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    opportunity_id: opportunityId,
-    start_time: session.start_time,
-    end_time: session.end_time,
-    capacity: session.capacity || 1,
-    booked_count: 0,
-    location_or_meet_link_optional: session.location_or_meet_link_optional || '',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  }));
-  
-  // Read existing sessions and add new ones
-  const sessions = readSessions();
-  sessions.push(...createdSessions);
-  writeSessions(sessions);
-  
-  // Update the opportunity with sessions
-  const opportunities = readOpportunities();
-  const opportunityIndex = opportunities.findIndex((opp: any) => opp.id === opportunityId);
-  if (opportunityIndex !== -1) {
-    if (!opportunities[opportunityIndex].sessions) {
-      opportunities[opportunityIndex].sessions = [];
-    }
-    opportunities[opportunityIndex].sessions.push(...createdSessions);
-    opportunitiesCache = opportunities;
+    const opportunityId = req.query.id as string;
+    console.log('Creating sessions for opportunity:', opportunityId);
     
-    // Write updated opportunities
-    if (!fs.existsSync(DATA_FILE)) {
-      fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+    const sessionData = Array.isArray(req.body) ? req.body : [req.body];
+    
+    // Generate sessions with IDs
+    const createdSessions = sessionData.map((session: any) => ({
+      id: `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      opportunity_id: opportunityId,
+      start_time: session.start_time,
+      end_time: session.end_time,
+      capacity: session.capacity || 1,
+      booked_count: 0,
+      location_or_meet_link_optional: session.location_or_meet_link_optional || '',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }));
+    
+    // Read existing sessions and add new ones
+    const sessions = readSessions();
+    sessions.push(...createdSessions);
+    writeSessions(sessions);
+    
+    // Update the opportunity with sessions
+    const opportunities = readOpportunities();
+    const opportunityIndex = opportunities.findIndex((opp: any) => opp.id === opportunityId);
+    if (opportunityIndex !== -1) {
+      if (!opportunities[opportunityIndex].sessions) {
+        opportunities[opportunityIndex].sessions = [];
+      }
+      opportunities[opportunityIndex].sessions.push(...createdSessions);
+      opportunitiesCache = opportunities;
+      
+      // Write updated opportunities
+      if (!fs.existsSync(DATA_FILE)) {
+        fs.writeFileSync(DATA_FILE, JSON.stringify([]));
+      }
+      fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
+    
+    console.log('Created sessions:', createdSessions.length);
+    
+    return res.status(201).json(createdSessions);
   }
   
-  console.log('Created sessions:', createdSessions.length);
-  
-  return res.status(201).json(createdSessions);
+  return res.status(405).json({ error: 'Method not allowed' });
 }
 
