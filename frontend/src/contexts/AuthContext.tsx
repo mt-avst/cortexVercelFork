@@ -186,14 +186,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
       
       if (isReturningFromLogin) {
-        // We were returning from login - check auth after short delay
-        logger.log('AuthProvider: Detected return from login redirect - will check auth');
+        // We were returning from login - check auth immediately
+        // Cookies are set synchronously by the browser, so no delay needed
+        logger.log('AuthProvider: Detected return from login redirect - checking auth immediately');
         // Set initialAuthCheck to false initially so Admin page waits
         setInitialAuthCheck(false);
-        setTimeout(async () => {
-          logger.log('AuthProvider: Checking auth after login redirect');
-          await fetchUser(true);
-        }, 500);
+        // Check auth immediately - cookies should already be set by the redirect
+        fetchUser(true).catch((err) => {
+          // If first attempt fails, retry once after short delay (in case cookie wasn't ready)
+          logger.log('AuthProvider: First auth check failed, retrying after brief delay', err);
+          setTimeout(async () => {
+            logger.log('AuthProvider: Retrying auth check after login redirect');
+            await fetchUser(true);
+          }, 200);
+        });
         return;
       }
       
