@@ -112,12 +112,25 @@ const Admin: React.FC = () => {
     }
   }, [user, statusFilter, typeFilter]);
 
-  // Refresh opportunities when returning from editing
+  // Refresh opportunities when returning from editing or creating
   useEffect(() => {
     if (location.state?.refresh && user?.role === 'researcher_admin') {
-      loadOpportunities();
-      // Clear the refresh state to prevent unnecessary re-renders
+      console.log('Admin: Refresh triggered from navigation state');
+      // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
+      // Force refresh with a small delay to ensure navigation is complete
+      // Also clear any status filter temporarily to ensure new items are visible
+      const originalStatusFilter = statusFilter;
+      if (statusFilter) {
+        setStatusFilter('');
+      }
+      setTimeout(() => {
+        loadOpportunities();
+        // Restore filter after loading if it was set
+        if (originalStatusFilter) {
+          setTimeout(() => setStatusFilter(originalStatusFilter), 100);
+        }
+      }, 100);
     }
   }, [location.state, user, navigate, location.pathname]);
 

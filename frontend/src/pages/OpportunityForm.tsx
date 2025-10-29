@@ -385,7 +385,9 @@ const OpportunityForm: React.FC = () => {
       }
       
       // Navigate to admin page after successful save
-      navigate('/admin', { state: { refresh: true } });
+      // Force a fresh load by using a timestamp to bypass any potential caching
+      console.log('✅ Opportunity saved successfully, navigating to admin dashboard');
+      navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
       
     } catch (err: any) {
       console.error('Error saving opportunity:', err);
