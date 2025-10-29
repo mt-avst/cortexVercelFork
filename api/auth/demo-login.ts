@@ -31,10 +31,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set new session cookie with proper encoding
   // CRITICAL: JSON must be URL encoded for cookie value
   const sessionCookie = encodeURIComponent(JSON.stringify(demoUser));
-  // Set cookie WITHOUT domain first (works for exact domain)
-  // Then also set with domain for cross-subdomain compatibility
-  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/`);
-  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app`);
+  // Set cookie WITHOUT domain attribute - works for the exact domain
+  // Using SameSite=None with Secure is required for cross-origin in some cases
+  // But SameSite=Lax should work for same-site redirects
+  // Set without domain to ensure it works for the exact domain
+  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
   res.setHeader('Set-Cookie', cookieArray);
   
   // Redirect to frontend
