@@ -23,9 +23,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Sessions endpoint called:', {
       method: req.method,
       url: req.url,
+      path: (req as any).path,
       query: req.query,
       opportunityId,
-      body: req.body ? (Array.isArray(req.body) ? `${req.body.length} items` : 'single item') : 'no body'
+      body: req.body ? (Array.isArray(req.body) ? `${req.body.length} items` : 'single item') : 'no body',
+      headers: { host: req.headers.host }
     });
     
     if (!opportunityId) {
