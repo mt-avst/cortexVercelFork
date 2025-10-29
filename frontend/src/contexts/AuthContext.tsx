@@ -188,6 +188,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (isReturningFromLogin) {
         // We were returning from login - check auth after short delay
         logger.log('AuthProvider: Detected return from login redirect - will check auth');
+        // Set initialAuthCheck to false initially so Admin page waits
+        setInitialAuthCheck(false);
         setTimeout(async () => {
           logger.log('AuthProvider: Checking auth after login redirect');
           await fetchUser(true);
