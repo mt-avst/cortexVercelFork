@@ -817,7 +817,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return prevConfirmedSlots;
     });
     
-    // Debug: Log all sessions being processed
+    // Debug: Log all sessions being processed and sample available slots for comparison
     console.log('🔄 Syncing confirmed slots with sessions:', {
       sessionsCount: sessions.length,
       sessions: sessions.map(s => {
@@ -833,9 +833,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         };
       }),
       confirmedSlotsCount: sessionSlots.size,
-      confirmedSlotsArray: Array.from(sessionSlots)
+      confirmedSlotsArray: Array.from(sessionSlots),
+      sampleAvailableSlots: availableSlots.slice(0, 5).map(slot => ({
+        start: slot.start instanceof Date ? slot.start.toISOString() : slot.start,
+        end: slot.end instanceof Date ? slot.end.toISOString() : slot.end,
+        slotKey: `${slot.start instanceof Date ? slot.start.toISOString() : slot.start}|${slot.end instanceof Date ? slot.end.toISOString() : slot.end}`,
+        matchesConfirmed: sessionSlots.has(`${slot.start instanceof Date ? slot.start.toISOString() : slot.start}|${slot.end instanceof Date ? slot.end.toISOString() : slot.end}`)
+      }))
     });
-  }, [sessions, opportunityId]);
+  }, [sessions, opportunityId, availableSlots]);
 
   // Cleanup persisted state when opportunity changes
   useEffect(() => {
