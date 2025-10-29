@@ -10,7 +10,7 @@ import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import ConfirmationModal from '../components/ConfirmationModal';
 
 const Admin: React.FC = () => {
-  const { user, loading } = useAuth();
+  const { user, loading, initialAuthCheck } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -184,7 +184,9 @@ const Admin: React.FC = () => {
     }
   };
 
-  if (loading) {
+  // Wait for initial auth check to complete before redirecting
+  // This ensures we don't redirect away if auth check is still in progress
+  if (loading || !initialAuthCheck) {
     return <div className="card text-center">Loading...</div>;
   }
 
