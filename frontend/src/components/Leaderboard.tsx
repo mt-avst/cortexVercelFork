@@ -29,9 +29,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
 
       setLeaderboard(totalData);
       setMonthlyLeaderboard(monthlyData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading leaderboards:', err);
-      setError('Failed to load leaderboards');
+      const errorMessage = err?.response?.data?.error || 
+                           err?.response?.statusText || 
+                           err?.message || 
+                           'Failed to load leaderboards';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

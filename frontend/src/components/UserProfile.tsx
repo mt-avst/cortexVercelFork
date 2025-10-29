@@ -22,9 +22,13 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
 
       const profileData = await gamificationApi.getProfile();
       setProfile(profileData);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading profile data:', err);
-      setError('Failed to load profile data');
+      const errorMessage = err?.response?.data?.error || 
+                           err?.response?.statusText || 
+                           err?.message || 
+                           'Failed to load profile data';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

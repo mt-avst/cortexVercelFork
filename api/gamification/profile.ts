@@ -1,0 +1,152 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getPool } from '../db';
+
+/**
+ * GET /api/gamification/profile
+ * Get user's AdaptaBits profile
+ */
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  try {
+    // Get authenticated user from cookie
+    const cookies = req.headers.cookie || '';
+    const cookiePairs = cookies.split(';').map(c => c.trim());
+    let sessionData: string | null = null;
+
+    // Find session cookie (check from end to get most recent)
+    for (let i = cookiePairs.length - 1; i >= 0; i--) {
+      const pair = cookiePairs[i];
+      if (pair.startsWith('adaptalabs_session=')) {
+        sessionData = pair.substring('adaptalabs_session='.length);
+        break;
+      }
+    }
+
+    if (!sessionData) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // Parse user from cookie
+    let user: any;
+    try {
+      let decodedData: string;
+      try {
+        decodedData = decodeURIComponent(sessionData);
+        if (decodedData === sessionData && sessionData.startsWith('{')) {
+          decodedData = sessionData;
+        }
+      } catch {
+        decodedData = sessionData;
+      }
+      user = JSON.parse(decodedData);
+    } catch (error) {
+      console.error('Error parsing session:', error);
+      return res.status(401).json({ error: 'Invalid session' });
+    }
+
+    if (!user.id) {
+      return res.status(401).json({ error: 'Invalid session - missing user ID' });
+    }
+
+    const userId = user.id;
+    const pool = getPool();
+
+    // Get or create user profile
+    let profileResult = await pool.query(`
+      SELECT * FROM user_profiles WHERE user_id = $1
+    `, [userId]);
+
+    let profile: any;
+    if (profileResult.rows.length === 0) {
+      // Create new profile
+      const createResult = await pool.query(`
+        INSERT INTO user_profiles (user_id) 
+        VALUES ($1) 
+        RETURNING *
+      `, [userId]);
+      profile = createResult.rows[0];
+    } else {
+      profile = profileResult.rows[0];
+    }
+
+    // Get completion counts by opportunity type
+    const completionCounts = await pool.query(`
+      SELECT 
+        o.type,
+        COUNT(*) as count
+      FROM bookings b
+      JOIN sessions s ON b.session_id = s.id
+      JOIN opportunities o ON s.opportunity_id = o.id
+      WHERE b.user_id = $1 AND b.status = 'completed'
+      GROUP BY o.type
+    `, [userId]);
+
+    // Initialize counts
+    let sessions_completed = 0;
+    let surveys_completed = 0;
+    let polls_completed = 0;
+    let questions_completed = 0;
+
+    // Map counts by type
+    completionCounts.rows.forEach((row: any) => {
+      const count = parseInt(row.count);
+      switch (row.type) {
+        case 'test':
+        case 'interview':
+          sessions_completed += count;
+          break;
+        case 'survey':
+          surveys_completed += count;
+          break;
+        case 'poll':
+          polls_completed += count;
+          break;
+        case 'question':
+          questions_completed += count;
+          break;
+      }
+    });
+
+    // Update profile with completion counts if they don't match
+    if (profile.sessions_completed !== sessions_completed ||
+        profile.surveys_completed !== surveys_completed ||
+        profile.polls_completed !== polls_completed ||
+        profile.questions_completed !== questions_completed) {
+      await pool.query(`
+        UPDATE user_profiles
+        SET sessions_completed = $1,
+            surveys_completed = $2,
+            polls_completed = $3,
+            questions_completed = $4,
+            updated_at = NOW()
+        WHERE user_id = $5
+      `, [sessions_completed, surveys_completed, polls_completed, questions_completed, userId]);
+      
+      profile.sessions_completed = sessions_completed;
+      profile.surveys_completed = surveys_completed;
+      profile.polls_completed = polls_completed;
+      profile.questions_completed = questions_completed;
+    }
+
+    // Serialize dates
+    const response = {
+      ...profile,
+      last_activity_date: profile.last_activity_date ? profile.last_activity_date.toISOString() : null,
+      created_at: profile.created_at.toISOString(),
+      updated_at: profile.updated_at.toISOString(),
+    };
+
+    return res.status(200).json(response);
+
+  } catch (error: any) {
+    console.error('Error fetching user profile:', error);
+    return res.status(500).json({
+      error: 'Failed to fetch profile',
+      details: error.message,
+    });
+  }
+}
+
