@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const result = await query(
           `SELECT o.*, u.name as owner_name, u.email as owner_email
            FROM opportunities o
-           JOIN users u ON o.owner_user_id = u.id
+           LEFT JOIN users u ON o.owner_user_id = u.id
            WHERE o.id = $1`,
           [id]
         );
@@ -51,10 +51,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // Build query for list view with filters
+      // Use LEFT JOIN to handle cases where user might not exist yet
       let sql = `
         SELECT o.*, u.name as owner_name, u.email as owner_email
         FROM opportunities o
-        JOIN users u ON o.owner_user_id = u.id
+        LEFT JOIN users u ON o.owner_user_id = u.id
         WHERE 1=1
       `;
       const params: any[] = [];
@@ -181,9 +182,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error: any) {
     console.error('Error in opportunities handler:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      detail: error.detail,
+    });
     return res.status(500).json({
       error: 'Internal server error',
       details: error.message,
+      code: error.code,
     });
   }
 }
