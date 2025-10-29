@@ -70,28 +70,23 @@ function writeOpportunities(opportunities: any[]): void {
 
 // Read sessions from file and cache
 function readSessions(): any[] {
-  // Try to use global cache first
-  if (global.__sessions && global.__sessions.length > 0) {
-    return global.__sessions;
-  }
-  
-  // Try to use local cache
-  if (sessionsCache !== null) {
-    return sessionsCache;
-  }
-  
-  if (!fs.existsSync(SESSIONS_FILE)) {
+  // ALWAYS read from file when returning an opportunity (different Lambda instance may have updated it)
+  // This ensures we get the latest sessions
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+      const sessions = JSON.parse(data);
+      // Update caches
+      global.__sessions = sessions;
+      sessionsCache = sessions;
+      console.log('Read sessions from file:', sessions.length);
+      return sessions;
+    }
+    
+    // File doesn't exist, return empty array
     global.__sessions = [];
     sessionsCache = [];
     return [];
-  }
-  
-  try {
-    const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
-    const sessions = JSON.parse(data);
-    global.__sessions = sessions;
-    sessionsCache = sessions;
-    return sessions;
   } catch (error) {
     console.error('Error reading sessions:', error);
     return global.__sessions || [];
@@ -118,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      // Load sessions for this opportunity
+      // Load sessions for this opportunity (always read fresh from file)
       const allSessions = readSessions();
       const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
       opportunity.sessions = opportunitySessions;
