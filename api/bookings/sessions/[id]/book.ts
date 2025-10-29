@@ -60,7 +60,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const userId = user.id;
 
     // Start transaction for atomic booking
-    const client = await (await import('../../db')).getPool().connect();
+    const { getPool } = await import('../../../db');
+    const client = await getPool().connect();
     
     try {
       await client.query('BEGIN');
