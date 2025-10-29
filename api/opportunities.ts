@@ -41,9 +41,20 @@ function writeOpportunities(opportunities: any[]): void {
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
-    console.log('Opportunities endpoint called - GET');
+    console.log('Opportunities endpoint called - GET', req.query);
     
     const opportunities = readOpportunities();
+    
+    // If an ID is specified, return just that opportunity
+    const id = req.query.id;
+    if (id) {
+      const opportunity = opportunities.find((opp: any) => opp.id === id);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      return res.status(200).json(opportunity);
+    }
+    
     return res.status(200).json(opportunities);
   }
   
