@@ -1,166 +1,190 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import fs from 'fs';
-import path from 'path';
-
-const DATA_FILE = path.join('/tmp', 'opportunities.json');
-const SESSIONS_FILE = path.join('/tmp', 'sessions.json');
-
-// Global in-memory storage (persists across invocations within same Lambda instance)
-declare global {
-  var __opportunities: any[] | undefined;
-  var __sessions: any[] | undefined;
-}
-
-if (!global.__opportunities) {
-  global.__opportunities = [];
-}
-if (!global.__sessions) {
-  global.__sessions = [];
-}
-
-let opportunitiesCache: any[] | null = null;
-let sessionsCache: any[] | null = null;
-
-// Initialize storage file if it doesn't exist
-function ensureDataFile() {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify([]));
-  }
-}
-
-// Read opportunities from file and cache
-function readOpportunities(): any[] {
-  // Try to use global cache first
-  if (global.__opportunities && global.__opportunities.length > 0) {
-    return global.__opportunities;
-  }
-  
-  // Try to use local cache
-  if (opportunitiesCache !== null) {
-    return opportunitiesCache;
-  }
-  
-  ensureDataFile();
-  try {
-    const data = fs.readFileSync(DATA_FILE, 'utf-8');
-    const opportunities = JSON.parse(data);
-    // Update caches
-    global.__opportunities = opportunities;
-    opportunitiesCache = opportunities;
-    return opportunities;
-  } catch (error) {
-    console.error('Error reading opportunities:', error);
-    return global.__opportunities || [];
-  }
-}
-
-// Write opportunities to file and update cache
-function writeOpportunities(opportunities: any[]): void {
-  // Update global cache immediately (persists across invocations)
-  global.__opportunities = opportunities;
-  opportunitiesCache = opportunities;
-  
-  ensureDataFile();
-  try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
-  } catch (error) {
-    console.error('Error writing opportunities:', error);
-  }
-}
-
-// Read sessions from file and cache
-function readSessions(): any[] {
-  // ALWAYS read from file when returning an opportunity (different Lambda instance may have updated it)
-  // This ensures we get the latest sessions
-  try {
-    if (fs.existsSync(SESSIONS_FILE)) {
-      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
-      const sessions = JSON.parse(data);
-      // Update caches
-      global.__sessions = sessions;
-      sessionsCache = sessions;
-      console.log('Read sessions from file:', sessions.length);
-      return sessions;
-    }
-    
-    // File doesn't exist, return empty array
-    global.__sessions = [];
-    sessionsCache = [];
-    return [];
-  } catch (error) {
-    console.error('Error reading sessions:', error);
-    return global.__sessions || [];
-  }
-}
+import { query } from './db';
 
 /**
  * GET /api/opportunities
- * Returns all opportunities
+ * Returns all opportunities (with optional filters)
  * POST /api/opportunities
  * Creates a new opportunity
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method === 'GET') {
-    console.log('Opportunities endpoint called - GET', req.query);
-    
-    const opportunities = readOpportunities();
-    
-    // If an ID is specified, return just that opportunity
-    const id = req.query.id;
-    if (id) {
-      const opportunity = opportunities.find((opp: any) => opp.id === id);
-      if (!opportunity) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+  try {
+    if (req.method === 'GET') {
+      console.log('Opportunities endpoint called - GET', req.query);
+      
+      const { id, type, q, status } = req.query;
+      
+      // If an ID is specified, return just that opportunity
+      if (id) {
+        const result = await query(
+          `SELECT o.*, u.name as owner_name, u.email as owner_email
+           FROM opportunities o
+           JOIN users u ON o.owner_user_id = u.id
+           WHERE o.id = $1`,
+          [id]
+        );
+        
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'Opportunity not found' });
+        }
+        
+        const opportunity = result.rows[0];
+        
+        // Load sessions for this opportunity
+        const sessionsResult = await query(
+          `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
+          [id]
+        );
+        opportunity.sessions = sessionsResult.rows.map(s => ({
+          ...s,
+          start_time: s.start_time.toISOString(),
+          end_time: s.end_time.toISOString(),
+          created_at: s.created_at.toISOString(),
+          updated_at: s.updated_at.toISOString(),
+        }));
+        
+        // Convert timestamps to ISO strings
+        opportunity.created_at = opportunity.created_at.toISOString();
+        opportunity.updated_at = opportunity.updated_at.toISOString();
+        
+        return res.status(200).json(opportunity);
       }
       
-      // Load sessions for this opportunity from the sessions file
-      try {
-        const allSessions = readSessions();
-        const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
-        opportunity.sessions = opportunitySessions;
-        console.log('Loaded sessions for opportunity:', id, 'Count:', opportunitySessions.length);
-      } catch (error) {
-        console.error('Error loading sessions:', error);
-        opportunity.sessions = [];
+      // Build query for list view with filters
+      let sql = `
+        SELECT o.*, u.name as owner_name, u.email as owner_email
+        FROM opportunities o
+        JOIN users u ON o.owner_user_id = u.id
+        WHERE 1=1
+      `;
+      const params: any[] = [];
+      let paramIndex = 1;
+      
+      if (type) {
+        sql += ` AND o.type = $${paramIndex}`;
+        params.push(type);
+        paramIndex++;
       }
       
-      return res.status(200).json(opportunity);
+      if (q) {
+        sql += ` AND (o.title ILIKE $${paramIndex} OR o.purpose_one_liner ILIKE $${paramIndex})`;
+        params.push(`%${q}%`);
+        paramIndex++;
+      }
+      
+      if (status) {
+        sql += ` AND o.status = $${paramIndex}`;
+        params.push(status);
+        paramIndex++;
+      }
+      
+      sql += ` ORDER BY o.created_at DESC`;
+      
+      const result = await query(sql, params);
+      
+      // Load sessions for each opportunity
+      const opportunities = await Promise.all(
+        result.rows.map(async (opp) => {
+          const sessionsResult = await query(
+            `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
+            [opp.id]
+          );
+          
+          return {
+            ...opp,
+            created_at: opp.created_at.toISOString(),
+            updated_at: opp.updated_at.toISOString(),
+            sessions: sessionsResult.rows.map(s => ({
+              ...s,
+              start_time: s.start_time.toISOString(),
+              end_time: s.end_time.toISOString(),
+              created_at: s.created_at.toISOString(),
+              updated_at: s.updated_at.toISOString(),
+            })),
+          };
+        })
+      );
+      
+      return res.status(200).json(opportunities);
     }
     
-    // For list view, attach empty sessions array
-    const opportunitiesWithSessions = opportunities.map((opp: any) => {
-      opp.sessions = opp.sessions || [];
-      return opp;
+    if (req.method === 'POST') {
+      console.log('Opportunities endpoint called - POST', req.body);
+      
+      const {
+        type,
+        title,
+        purpose_one_liner,
+        description_optional,
+        product_optional,
+        default_duration_minutes = 30,
+        status = 'draft',
+        owner_user_id,
+        external_link_optional,
+        participant_type_required = 'any',
+        participant_type_specific_details,
+      } = req.body;
+      
+      // Validate required fields
+      if (!type || !title || !purpose_one_liner) {
+        return res.status(400).json({ error: 'Type, title, and purpose are required' });
+      }
+      
+      // For demo purposes, use a default owner if not provided
+      // In production, this should come from the authenticated user
+      const finalOwnerId = owner_user_id || '633608bc-4b0e-4d60-a498-e680ee97c252'; // Demo admin ID
+      
+      const result = await query(
+        `INSERT INTO opportunities (
+          type, title, purpose_one_liner, description_optional,
+          product_optional, default_duration_minutes, status,
+          owner_user_id, external_link_optional, participant_type_required,
+          participant_type_specific_details
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *`,
+        [
+          type,
+          title.trim(),
+          purpose_one_liner.trim(),
+          description_optional?.trim() || null,
+          product_optional?.trim() || null,
+          default_duration_minutes,
+          status,
+          finalOwnerId,
+          external_link_optional?.trim() || null,
+          participant_type_required,
+          participant_type_specific_details?.trim() || null,
+        ]
+      );
+      
+      const opportunity = result.rows[0];
+      
+      // Get owner info
+      const ownerResult = await query(
+        `SELECT name, email FROM users WHERE id = $1`,
+        [finalOwnerId]
+      );
+      
+      const opportunityWithOwner = {
+        ...opportunity,
+        owner_name: ownerResult.rows[0]?.name || 'Unknown',
+        owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
+        sessions: [],
+        created_at: opportunity.created_at.toISOString(),
+        updated_at: opportunity.updated_at.toISOString(),
+      };
+      
+      console.log('Created opportunity:', opportunityWithOwner.id);
+      return res.status(201).json(opportunityWithOwner);
+    }
+    
+    return res.status(405).json({ error: 'Method not allowed' });
+  } catch (error: any) {
+    console.error('Error in opportunities handler:', error);
+    return res.status(500).json({
+      error: 'Internal server error',
+      details: error.message,
     });
-    
-    return res.status(200).json(opportunitiesWithSessions);
-    
   }
-  
-  if (req.method === 'POST') {
-    console.log('Opportunities endpoint called - POST', req.body);
-    
-    // Read existing opportunities
-    const opportunities = readOpportunities();
-    
-    // Generate a new ID for the opportunity
-    const opportunity = {
-      id: `opp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      ...req.body,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    
-    // Add the new opportunity
-    opportunities.push(opportunity);
-    
-    // Save to file
-    writeOpportunities(opportunities);
-    
-    // Return the created opportunity
-    return res.status(201).json(opportunity);
-  }
-  
-  return res.status(405).json({ error: 'Method not allowed' });
 }
 

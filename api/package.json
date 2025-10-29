@@ -1,0 +1,10 @@
+{
+  "name": "adaptalabs-api",
+  "version": "1.0.0",
+  "description": "Vercel serverless API functions for Adaptalabs",
+  "dependencies": {
+    "@vercel/node": "^3.0.7",
+    "pg": "^8.11.3"
+  }
+}
+
