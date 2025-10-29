@@ -14,19 +14,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Try to get user from cookie
   const cookies = req.headers.cookie || '';
   console.log('Cookies:', cookies);
-  const sessionMatch = cookies.match(/adaptalabs_session=([^;]+)/);
   
-  if (!sessionMatch) {
+  // Parse all cookies to find the session cookie
+  // Look for the LAST occurrence in case there are multiple (prefer most recently set)
+  const cookiePairs = cookies.split(';').map(c => c.trim());
+  let sessionData: string | null = null;
+  
+  // Find session cookie (check from end to get most recent)
+  for (let i = cookiePairs.length - 1; i >= 0; i--) {
+    const pair = cookiePairs[i];
+    if (pair.startsWith('adaptalabs_session=')) {
+      sessionData = pair.substring('adaptalabs_session='.length);
+      break;
+    }
+  }
+  
+  if (!sessionData) {
     console.log('No session cookie found');
     return res.status(401).json({ error: 'Not authenticated' });
   }
   
   try {
     // Parse the session cookie - it's already JSON string
-    const sessionData = sessionMatch[1];
-    console.log('Session data:', sessionData);
-    const user = JSON.parse(sessionData);
+    // URL decode in case it was encoded
+    const decodedData = decodeURIComponent(sessionData);
+    console.log('Session data (raw):', sessionData);
+    console.log('Session data (decoded):', decodedData);
+    const user = JSON.parse(decodedData);
     console.log('Parsed user:', user);
+    
+    // Validate role to prevent accidental admin assignment
+    if (!user.role || typeof user.role !== 'string') {
+      console.error('Invalid user role:', user.role);
+      return res.status(401).json({ error: 'Invalid session - missing role' });
+    }
+    
     res.status(200).json(user);
   } catch (error) {
     console.error('Error parsing session:', error);

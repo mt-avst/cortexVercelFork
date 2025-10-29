@@ -15,13 +15,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     email: 'demo@example.com',
     business_unit: 'Engineering',
     role_title: 'Software Engineer',
-    role: 'employee',
+    role: 'employee', // CRITICAL: Must be 'employee', NOT 'researcher_admin'
   };
 
-  // Set session cookie with proper encoding
+  // Clear any existing session cookies first (including admin cookies)
+  // This ensures no stale cookies interfere
+  const existingCookies = res.getHeader('Set-Cookie') || [];
+  const cookieArray = Array.isArray(existingCookies) ? existingCookies : [existingCookies];
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+  
+  // Set new session cookie with proper encoding
   const sessionCookie = JSON.stringify(demoUser);
   // Domain should match vercel.app to work across all subdomains
-  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app`);
+  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app`);
+  res.setHeader('Set-Cookie', cookieArray);
   
   // Redirect to frontend
   const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
