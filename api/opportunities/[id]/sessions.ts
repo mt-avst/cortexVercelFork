@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { query } from '../db';
+import { query } from '../../db';
 
 /**
  * GET /api/opportunities/[id]/sessions
