@@ -79,18 +79,8 @@ export async function runMigrations() {
       )
     `);
 
-    // Create points_transactions table for tracking point history
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS points_transactions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
-        points INTEGER NOT NULL,
-        reason TEXT NOT NULL,
-        opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
-        session_id UUID REFERENCES sessions(id) ON DELETE SET NULL,
-        created_at TIMESTAMPTZ DEFAULT NOW()
-      )
-    `);
+    // Note: points_transactions table is created AFTER opportunities and sessions tables
+    // because it has foreign key references to both
 
     // Create indexes for AdaptaBits tables
     await client.query(`
@@ -108,9 +98,18 @@ export async function runMigrations() {
       ON user_achievements(user_id)
     `);
 
+    // Note: idx_points_transactions_user_id index is created AFTER points_transactions table
+    // (which is created after opportunities and sessions tables)
+
+    // Create updated_at trigger function (must be created before any triggers use it)
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_points_transactions_user_id 
-      ON points_transactions(user_id, created_at DESC)
+      CREATE OR REPLACE FUNCTION update_updated_at_column()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+      END;
+      $$ language 'plpgsql'
     `);
 
     // Create triggers for user_profiles updated_at
@@ -232,6 +231,26 @@ export async function runMigrations() {
       CREATE TRIGGER update_sessions_updated_at 
       BEFORE UPDATE ON sessions 
       FOR EACH ROW EXECUTE FUNCTION update_updated_at_column()
+    `);
+
+    // Create points_transactions table for tracking point history
+    // Must be created AFTER opportunities and sessions tables (due to foreign key constraints)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS points_transactions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+        points INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE SET NULL,
+        session_id UUID REFERENCES sessions(id) ON DELETE SET NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes for points_transactions
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_points_transactions_user_id 
+      ON points_transactions(user_id, created_at DESC)
     `);
 
     // Create booking status enum
