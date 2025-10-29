@@ -3,9 +3,11 @@ import fs from 'fs';
 import path from 'path';
 
 const DATA_FILE = path.join('/tmp', 'opportunities.json');
+const SESSIONS_FILE = path.join('/tmp', 'sessions.json');
 
 // In-memory cache for opportunities (persists within the same Lambda instance)
 let opportunitiesCache: any[] | null = null;
+let sessionsCache: any[] | null = null;
 
 // Initialize storage file if it doesn't exist
 function ensureDataFile() {
@@ -46,6 +48,27 @@ function writeOpportunities(opportunities: any[]): void {
   }
 }
 
+// Read sessions from file and cache
+function readSessions(): any[] {
+  if (sessionsCache !== null) {
+    return sessionsCache;
+  }
+  
+  if (!fs.existsSync(SESSIONS_FILE)) {
+    sessionsCache = [];
+    return [];
+  }
+  
+  try {
+    const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+    sessionsCache = JSON.parse(data);
+    return sessionsCache;
+  } catch (error) {
+    console.error('Error reading sessions:', error);
+    return [];
+  }
+}
+
 /**
  * GET /api/opportunities
  * Returns all opportunities
@@ -65,10 +88,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!opportunity) {
         return res.status(404).json({ error: 'Opportunity not found' });
       }
+      
+      // Load sessions for this opportunity
+      const allSessions = readSessions();
+      const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
+      opportunity.sessions = opportunitySessions;
+      
       return res.status(200).json(opportunity);
     }
     
-    return res.status(200).json(opportunities);
+    // For list view, also load sessions for each opportunity
+    const allSessions = readSessions();
+    const opportunitiesWithSessions = opportunities.map((opp: any) => {
+      opp.sessions = allSessions.filter((s: any) => s.opportunity_id === opp.id);
+      return opp;
+    });
+    
+    return res.status(200).json(opportunitiesWithSessions);
+    
   }
   
   if (req.method === 'POST') {
