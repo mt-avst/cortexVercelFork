@@ -73,8 +73,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const isSlotConfirmed = (slot: AvailableSlot) => {
-    const slotKey = `${slot.start}|${slot.end}`;
-    return confirmedSlots.has(slotKey);
+    // Ensure slot times are ISO strings for comparison
+    const slotStart = slot.start instanceof Date ? slot.start.toISOString() : slot.start;
+    const slotEnd = slot.end instanceof Date ? slot.end.toISOString() : slot.end;
+    const slotKey = `${slotStart}|${slotEnd}`;
+    const isConfirmed = confirmedSlots.has(slotKey);
+    
+    // Debug logging for first few checks to identify matching issues
+    if (confirmedSlots.size > 0 && !isConfirmed) {
+      // Only log occasionally to avoid spam
+      const shouldLog = Math.random() < 0.01; // Log 1% of the time
+      if (shouldLog) {
+        console.log('🔍 Slot confirmation check:', {
+          slotKey,
+          slotStart,
+          slotEnd,
+          confirmedSlotsCount: confirmedSlots.size,
+          sampleConfirmedSlot: Array.from(confirmedSlots)[0],
+          matches: Array.from(confirmedSlots).some(ck => ck === slotKey)
+        });
+      }
+    }
+    
+    return isConfirmed;
   };
 
   const isSlotBusy = (slot: AvailableSlot) => {
@@ -750,39 +771,67 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   // Sync confirmed slots with existing sessions
   useEffect(() => {
+    if (!sessions || sessions.length === 0) {
+      // Clear confirmed slots if no sessions
+      if (confirmedSlots.size > 0) {
+        console.log('🔄 Clearing confirmed slots (no sessions)');
+        setConfirmedSlots(new Set());
+        persistConfirmedSlots(new Set());
+      }
+      return;
+    }
+
     const sessionSlots = new Set<string>();
     sessions.forEach(session => {
-      const slotKey = `${session.start_time}|${session.end_time}`;
+      // Ensure start_time and end_time are ISO strings
+      const startTime = session.start_time instanceof Date 
+        ? session.start_time.toISOString() 
+        : session.start_time;
+      const endTime = session.end_time instanceof Date 
+        ? session.end_time.toISOString() 
+        : session.end_time;
+      
+      const slotKey = `${startTime}|${endTime}`;
       sessionSlots.add(slotKey);
     });
     
-    // Only update if the confirmed slots have actually changed
-    const currentConfirmedSlots = Array.from(confirmedSlots).sort();
-    const newConfirmedSlots = Array.from(sessionSlots).sort();
-    const hasChanged = currentConfirmedSlots.length !== newConfirmedSlots.length || 
-                      !currentConfirmedSlots.every((slot, index) => slot === newConfirmedSlots[index]);
-    
-    if (hasChanged) {
-      console.log('🔄 Updating confirmed slots due to session changes:', {
-        oldSlots: currentConfirmedSlots,
-        newSlots: newConfirmedSlots,
-        sessionsCount: sessions.length
-      });
-      setConfirmedSlots(sessionSlots);
-      persistConfirmedSlots(sessionSlots);
-    }
+    // Always update confirmed slots to ensure they're in sync
+    // Use functional update to avoid stale state issues
+    setConfirmedSlots(prevConfirmedSlots => {
+      const currentArray = Array.from(prevConfirmedSlots).sort();
+      const newArray = Array.from(sessionSlots).sort();
+      const hasChanged = currentArray.length !== newArray.length || 
+                        !currentArray.every((slot, index) => slot === newArray[index]);
+      
+      if (hasChanged) {
+        console.log('🔄 Updating confirmed slots due to session changes:', {
+          oldSlots: currentArray,
+          newSlots: newArray,
+          oldCount: currentArray.length,
+          newCount: newArray.length,
+          sessionsCount: sessions.length
+        });
+        persistConfirmedSlots(sessionSlots);
+        return sessionSlots;
+      }
+      return prevConfirmedSlots;
+    });
     
     // Debug: Log all sessions being processed
     console.log('🔄 Syncing confirmed slots with sessions:', {
       sessionsCount: sessions.length,
-      sessions: sessions.map(s => ({
-        id: s.id,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        capacity: s.capacity,
-        booked_count: s.booked_count,
-        slotKey: `${s.start_time}|${s.end_time}`
-      })),
+      sessions: sessions.map(s => {
+        const startTime = s.start_time instanceof Date ? s.start_time.toISOString() : s.start_time;
+        const endTime = s.end_time instanceof Date ? s.end_time.toISOString() : s.end_time;
+        return {
+          id: s.id,
+          start_time: startTime,
+          end_time: endTime,
+          capacity: s.capacity,
+          booked_count: s.booked_count,
+          slotKey: `${startTime}|${endTime}`
+        };
+      }),
       confirmedSlotsCount: sessionSlots.size,
       confirmedSlotsArray: Array.from(sessionSlots)
     });
