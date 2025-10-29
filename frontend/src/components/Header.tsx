@@ -7,11 +7,19 @@ import './Header.css';
 const Header: React.FC = () => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
 
+  // Determine logo link based on user role
+  const getLogoLink = () => {
+    if (user?.role === 'researcher_admin') {
+      return '/admin';
+    }
+    return '/';
+  };
+
   return (
     <header className="header">
       <div className="container">
         <div className="header-content">
-          <Link to="/" className="logo">
+          <Link to={getLogoLink()} className="logo">
             <img 
               src="/images/adaptalogo.png" 
               alt="Adaptalabs Logo" 
