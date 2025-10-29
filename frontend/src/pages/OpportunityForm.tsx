@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
-import { createOpportunity, updateOpportunity, getOpportunity } from '../api/client';
+import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
 import AdminSessionManager from '../components/AdminSessionManager';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
@@ -108,21 +108,29 @@ const OpportunityForm: React.FC = () => {
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status
       });
       
-      setSessions(opportunity.sessions || []);
       setOpportunityId(opportunity.id);
       
-      // Debug: Log sessions data
-      console.log('🔍 Loaded opportunity sessions:', {
-        opportunityId: opportunity.id,
-        sessionsCount: opportunity.sessions?.length || 0,
-        sessions: opportunity.sessions?.map(s => ({
-          id: s.id,
-          start_time: s.start_time,
-          end_time: s.end_time,
-          capacity: s.capacity,
-          booked_count: s.booked_count
-        }))
-      });
+      // Load sessions separately from the sessions API
+      // The opportunities API doesn't return sessions due to Lambda isolation
+      try {
+        const sessions = await getSessions(opportunity.id);
+        setSessions(sessions);
+        
+        console.log('🔍 Loaded opportunity sessions:', {
+          opportunityId: opportunity.id,
+          sessionsCount: sessions.length,
+          sessions: sessions.map(s => ({
+            id: s.id,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            capacity: s.capacity,
+            booked_count: s.booked_count
+          }))
+        });
+      } catch (sessionError) {
+        console.error('Error loading sessions:', sessionError);
+        setSessions([]);
+      }
     } catch (err: any) {
       console.error('Error loading opportunity:', err);
       if (err.response?.status === 404) {
