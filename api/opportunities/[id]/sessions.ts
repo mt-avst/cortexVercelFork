@@ -50,25 +50,19 @@ function readOpportunities(): any[] {
 
 // Read sessions from cache/file
 function readSessions(): any[] {
-  if (global.__sessions && global.__sessions.length > 0) {
-    return global.__sessions;
-  }
-  
-  if (sessionsCache !== null) {
-    return sessionsCache;
-  }
-  
-  if (!fs.existsSync(SESSIONS_FILE)) {
-    sessionsCache = [];
-    global.__sessions = [];
-    return [];
-  }
-  
+  // Always read from file when getting sessions
   try {
-    const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
-    sessionsCache = JSON.parse(data);
-    global.__sessions = sessionsCache;
-    return sessionsCache;
+    if (fs.existsSync(SESSIONS_FILE)) {
+      const data = fs.readFileSync(SESSIONS_FILE, 'utf-8');
+      const sessions = JSON.parse(data);
+      global.__sessions = sessions;
+      sessionsCache = sessions;
+      return sessions;
+    }
+    
+    global.__sessions = [];
+    sessionsCache = [];
+    return [];
   } catch (error) {
     console.error('Error reading sessions:', error);
     return global.__sessions || [];
