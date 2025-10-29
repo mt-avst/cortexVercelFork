@@ -41,6 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           end_time: s.end_time.toISOString(),
           created_at: s.created_at.toISOString(),
           updated_at: s.updated_at.toISOString(),
+          remaining: s.capacity - s.booked_count, // Add remaining field
         }));
         
         // Convert timestamps to ISO strings
@@ -109,6 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 end_time: s.end_time.toISOString(),
                 created_at: s.created_at.toISOString(),
                 updated_at: s.updated_at.toISOString(),
+                remaining: s.capacity - s.booked_count, // Add remaining field
               })),
             };
           } catch (sessionError: any) {
