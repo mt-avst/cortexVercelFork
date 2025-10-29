@@ -1,17 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { query } from './db';
+import { query } from '../db';
 
 /**
- * Unified calendar endpoint - handles multiple calendar routes
+ * Catch-all calendar endpoint - handles multiple calendar routes
  * GET /api/calendar/availability
  * GET /api/calendar/events  
  * POST /api/calendar/check-conflicts
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const url = req.url || '';
+  const slug = req.query.slug as string[] || [];
+  const route = slug.join('/');
   
   // Route to availability endpoint
-  if (url.includes('/availability')) {
+  if (route === 'availability') {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -84,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   // Route to events endpoint
-  if (url.includes('/events')) {
+  if (route === 'events') {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
@@ -96,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
   
   // Route to check-conflicts endpoint
-  if (url.includes('/check-conflicts')) {
+  if (route === 'check-conflicts') {
     if (req.method !== 'POST') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
