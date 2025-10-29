@@ -8,7 +8,25 @@ import { query } from '../db';
  * POST /api/calendar/check-conflicts
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const slug = req.query.slug as string[] || [];
+  // Handle catch-all route parameter - Vercel may provide it as array or string
+  let slug: string[] = [];
+  if (req.query.slug) {
+    if (Array.isArray(req.query.slug)) {
+      slug = req.query.slug;
+    } else {
+      slug = [req.query.slug as string];
+    }
+  }
+  
+  // If slug is empty, try to parse from URL path
+  if (slug.length === 0 && req.url) {
+    const urlPath = req.url.split('?')[0]; // Remove query string
+    const match = urlPath.match(/\/calendar\/(.+)$/);
+    if (match) {
+      slug = match[1].split('/');
+    }
+  }
+  
   const route = slug.join('/');
   
   // Debug logging
@@ -17,7 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     path: req.url?.split('?')[0],
     slug,
     route,
-    method: req.method
+    method: req.method,
+    querySlug: req.query.slug,
+    queryKeys: Object.keys(req.query)
   });
   
   // Route to availability endpoint
