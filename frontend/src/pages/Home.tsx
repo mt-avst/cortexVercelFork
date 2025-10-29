@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,10 +17,12 @@ const Home: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 6; // 6 studies per page (2 rows of 3 cards)
   
-  const { user } = useAuth();
+  const { user, loading: authLoading, initialAuthCheck } = useAuth();
 
-  // Note: Removed automatic redirect to admin dashboard
-  // Admin users can now choose to stay on home page or navigate to admin manually
+  // Redirect admin users to admin dashboard
+  if (!authLoading && initialAuthCheck && user?.role === 'researcher_admin') {
+    return <Navigate to="/admin" replace />;
+  }
 
   const loadOpportunities = async () => {
     try {
