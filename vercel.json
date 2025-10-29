@@ -4,10 +4,6 @@
   "functions": {
     "api/**/*.js": {
       "maxDuration": 30
-    },
-    "backend/dist/**/*.js": {
-      "maxDuration": 30,
-      "runtime": "nodejs22.x"
     }
   }
 }
