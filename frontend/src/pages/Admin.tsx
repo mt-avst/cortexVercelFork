@@ -193,7 +193,7 @@ const Admin: React.FC = () => {
 
   // Only redirect if we're sure the user is not authenticated
   // When returning from login, user might be null temporarily while auth check runs
-  if (!user && initialAuthCheck) {
+  if (!user) {
     return <Navigate to="/" replace />;
   }
 
