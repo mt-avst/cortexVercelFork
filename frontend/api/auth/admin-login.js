@@ -13,13 +13,23 @@ module.exports = async function handler(req, res) {
     email: 'admin@test.com',
     business_unit: 'Research',
     role_title: 'Research Manager',
-    role: 'researcher_admin',
+    role: 'researcher_admin', // CRITICAL: Must be 'researcher_admin', NOT 'employee'
   };
 
-  // Set session cookie without domain restriction
+  // Clear any existing session cookies first (including demo user cookies)
+  // This ensures no stale cookies interfere
+  const existingCookies = res.getHeader('Set-Cookie') || [];
+  const cookieArray = Array.isArray(existingCookies) ? existingCookies : [existingCookies];
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
+
+  // Set new session cookie without domain restriction
   // CRITICAL: JSON must be URL encoded for cookie value to handle special characters
   const sessionCookie = encodeURIComponent(JSON.stringify(demoAdmin));
-  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
+  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
+  res.setHeader('Set-Cookie', cookieArray);
   
   // Redirect to admin dashboard
   const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
