@@ -49,16 +49,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // Get sessions from database
-      const { include_past } = req.query;
-      let sql = `
-        SELECT * FROM sessions 
-        WHERE opportunity_id = $1
-      `;
-      const params: any[] = [opportunityId];
-      
-      if (include_past === 'false' || include_past === false) {
-        sql += ` AND end_time > NOW()`;
-      }
+            const { include_past } = req.query;
+            let sql = `
+              SELECT * FROM sessions 
+              WHERE opportunity_id = $1
+            `;
+            const params: any[] = [opportunityId];
+            
+            // Handle query param (can be string, string[], or undefined)
+            const includePast = Array.isArray(include_past) ? include_past[0] : include_past;
+            if (includePast === 'false' || includePast === false) {
+              sql += ` AND end_time > NOW()`;
+            }
       
       sql += ` ORDER BY start_time ASC`;
       
