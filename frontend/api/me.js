@@ -33,9 +33,20 @@ module.exports = async function handler(req, res) {
   }
   
   try {
-    // Parse the session cookie - it's already JSON string
-    // URL decode in case it was encoded
-    const decodedData = decodeURIComponent(sessionData);
+    // Parse the session cookie
+    // Try URL decode first (in case it was encoded), but handle if already decoded
+    let decodedData;
+    try {
+      decodedData = decodeURIComponent(sessionData);
+      // If decodeURIComponent didn't change it and it starts with {, assume it's already decoded
+      if (decodedData === sessionData && sessionData.startsWith('{')) {
+        decodedData = sessionData;
+      }
+    } catch (e) {
+      // If decode fails, assume it's already decoded JSON
+      decodedData = sessionData;
+    }
+    
     console.log('Session data (raw):', sessionData);
     console.log('Session data (decoded):', decodedData);
     const user = JSON.parse(decodedData);

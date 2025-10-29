@@ -24,7 +24,8 @@ module.exports = async function handler(req, res) {
   cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
 
   // Set new session cookie without domain restriction
-  const sessionCookie = JSON.stringify(demoUser);
+  // CRITICAL: JSON must be URL encoded for cookie value
+  const sessionCookie = encodeURIComponent(JSON.stringify(demoUser));
   cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
   res.setHeader('Set-Cookie', cookieArray);
   

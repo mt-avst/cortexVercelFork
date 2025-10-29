@@ -19,7 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
 
   // Set session cookie with proper encoding
-  const sessionCookie = JSON.stringify(demoAdmin);
+  // CRITICAL: JSON must be URL encoded for cookie value to handle special characters
+  const sessionCookie = encodeURIComponent(JSON.stringify(demoAdmin));
   // Domain should match vercel.app to work across all subdomains
   res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app`);
   

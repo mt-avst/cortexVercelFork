@@ -17,7 +17,8 @@ module.exports = async function handler(req, res) {
   };
 
   // Set session cookie without domain restriction
-  const sessionCookie = JSON.stringify(demoAdmin);
+  // CRITICAL: JSON must be URL encoded for cookie value to handle special characters
+  const sessionCookie = encodeURIComponent(JSON.stringify(demoAdmin));
   res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
   
   // Redirect to admin dashboard
