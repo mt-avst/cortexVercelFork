@@ -83,26 +83,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const result = await query(sql, params);
       
+      // If no opportunities found, return empty array
+      if (result.rows.length === 0) {
+        return res.status(200).json([]);
+      }
+      
       // Load sessions for each opportunity
       const opportunities = await Promise.all(
         result.rows.map(async (opp) => {
-          const sessionsResult = await query(
-            `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
-            [opp.id]
-          );
-          
-          return {
-            ...opp,
-            created_at: opp.created_at.toISOString(),
-            updated_at: opp.updated_at.toISOString(),
-            sessions: sessionsResult.rows.map(s => ({
-              ...s,
-              start_time: s.start_time.toISOString(),
-              end_time: s.end_time.toISOString(),
-              created_at: s.created_at.toISOString(),
-              updated_at: s.updated_at.toISOString(),
-            })),
-          };
+          try {
+            const sessionsResult = await query(
+              `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
+              [opp.id]
+            );
+            
+            return {
+              ...opp,
+              created_at: opp.created_at.toISOString(),
+              updated_at: opp.updated_at.toISOString(),
+              owner_name: opp.owner_name || 'Unknown',
+              owner_email: opp.owner_email || 'unknown@example.com',
+              sessions: sessionsResult.rows.map(s => ({
+                ...s,
+                start_time: s.start_time.toISOString(),
+                end_time: s.end_time.toISOString(),
+                created_at: s.created_at.toISOString(),
+                updated_at: s.updated_at.toISOString(),
+              })),
+            };
+          } catch (sessionError: any) {
+            console.error('Error loading sessions for opportunity', opp.id, ':', sessionError.message);
+            // Return opportunity without sessions if session query fails
+            return {
+              ...opp,
+              created_at: opp.created_at.toISOString(),
+              updated_at: opp.updated_at.toISOString(),
+              owner_name: opp.owner_name || 'Unknown',
+              owner_email: opp.owner_email || 'unknown@example.com',
+              sessions: [],
+            };
+          }
         })
       );
       
