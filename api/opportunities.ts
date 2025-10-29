@@ -4,6 +4,9 @@ import path from 'path';
 
 const DATA_FILE = path.join('/tmp', 'opportunities.json');
 
+// In-memory cache for opportunities (persists within the same Lambda instance)
+let opportunitiesCache: any[] | null = null;
+
 // Initialize storage file if it doesn't exist
 function ensureDataFile() {
   if (!fs.existsSync(DATA_FILE)) {
@@ -11,23 +14,33 @@ function ensureDataFile() {
   }
 }
 
-// Read opportunities from file
+// Read opportunities from file and cache
 function readOpportunities(): any[] {
+  // Try to use cache first
+  if (opportunitiesCache !== null) {
+    return opportunitiesCache;
+  }
+  
   ensureDataFile();
   try {
     const data = fs.readFileSync(DATA_FILE, 'utf-8');
-    return JSON.parse(data);
+    const opportunities = JSON.parse(data);
+    // Update cache
+    opportunitiesCache = opportunities;
+    return opportunities;
   } catch (error) {
     console.error('Error reading opportunities:', error);
     return [];
   }
 }
 
-// Write opportunities to file
+// Write opportunities to file and update cache
 function writeOpportunities(opportunities: any[]): void {
   ensureDataFile();
   try {
     fs.writeFileSync(DATA_FILE, JSON.stringify(opportunities, null, 2));
+    // Update cache
+    opportunitiesCache = opportunities;
   } catch (error) {
     console.error('Error writing opportunities:', error);
   }
