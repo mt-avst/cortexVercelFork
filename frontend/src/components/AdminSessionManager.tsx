@@ -73,9 +73,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const isSlotConfirmed = (slot: AvailableSlot) => {
-    // Ensure slot times are ISO strings for comparison
-    const slotStart = slot.start instanceof Date ? slot.start.toISOString() : slot.start;
-    const slotEnd = slot.end instanceof Date ? slot.end.toISOString() : slot.end;
+    // Slot times are ISO strings, use directly
+    // Handle both string and Date (for runtime safety, though type says string)
+    const slotStart = typeof slot.start === 'string' ? slot.start : slot.start.toISOString();
+    const slotEnd = typeof slot.end === 'string' ? slot.end : slot.end.toISOString();
     const slotKey = `${slotStart}|${slotEnd}`;
     const isConfirmed = confirmedSlots.has(slotKey);
     
@@ -783,13 +784,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
     const sessionSlots = new Set<string>();
     sessions.forEach(session => {
-      // Ensure start_time and end_time are ISO strings
-      const startTime = session.start_time instanceof Date 
-        ? session.start_time.toISOString() 
-        : session.start_time;
-      const endTime = session.end_time instanceof Date 
-        ? session.end_time.toISOString() 
-        : session.end_time;
+          // Ensure start_time and end_time are ISO strings
+          const startTime = typeof session.start_time === 'string' 
+            ? session.start_time 
+            : session.start_time.toISOString();
+          const endTime = typeof session.end_time === 'string'
+            ? session.end_time
+            : session.end_time.toISOString();
       
       const slotKey = `${startTime}|${endTime}`;
       sessionSlots.add(slotKey);
@@ -820,9 +821,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     // Debug: Log all sessions being processed and sample available slots for comparison
     console.log('🔄 Syncing confirmed slots with sessions:', {
       sessionsCount: sessions.length,
-      sessions: sessions.map(s => {
-        const startTime = s.start_time instanceof Date ? s.start_time.toISOString() : s.start_time;
-        const endTime = s.end_time instanceof Date ? s.end_time.toISOString() : s.end_time;
+            sessions: sessions.map(s => {
+              const startTime = typeof s.start_time === 'string' ? s.start_time : s.start_time.toISOString();
+              const endTime = typeof s.end_time === 'string' ? s.end_time : s.end_time.toISOString();
         return {
           id: s.id,
           start_time: startTime,
@@ -834,12 +835,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       }),
       confirmedSlotsCount: sessionSlots.size,
       confirmedSlotsArray: Array.from(sessionSlots),
-      sampleAvailableSlots: availableSlots.slice(0, 5).map(slot => ({
-        start: slot.start instanceof Date ? slot.start.toISOString() : slot.start,
-        end: slot.end instanceof Date ? slot.end.toISOString() : slot.end,
-        slotKey: `${slot.start instanceof Date ? slot.start.toISOString() : slot.start}|${slot.end instanceof Date ? slot.end.toISOString() : slot.end}`,
-        matchesConfirmed: sessionSlots.has(`${slot.start instanceof Date ? slot.start.toISOString() : slot.start}|${slot.end instanceof Date ? slot.end.toISOString() : slot.end}`)
-      }))
+      sampleAvailableSlots: availableSlots.slice(0, 5).map(slot => {
+        const start = typeof slot.start === 'string' ? slot.start : slot.start.toISOString();
+        const end = typeof slot.end === 'string' ? slot.end : slot.end.toISOString();
+        const slotKey = `${start}|${end}`;
+        return {
+          start,
+          end,
+          slotKey,
+          matchesConfirmed: sessionSlots.has(slotKey)
+        };
+      })
     });
   }, [sessions, opportunityId, availableSlots]);
 
