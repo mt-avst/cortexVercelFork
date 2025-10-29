@@ -8,18 +8,19 @@ const Header: React.FC = () => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
 
   // Determine logo link based on user role
-  const getLogoLink = () => {
+  // Use useMemo to ensure it updates when user changes
+  const logoLink = React.useMemo(() => {
     if (user?.role === 'researcher_admin') {
       return '/admin';
     }
     return '/';
-  };
+  }, [user?.role]);
 
   return (
     <header className="header">
       <div className="container">
         <div className="header-content">
-          <Link to={getLogoLink()} className="logo">
+          <Link to={logoLink} className="logo">
             <img 
               src="/images/adaptalogo.png" 
               alt="Adaptalabs Logo" 
