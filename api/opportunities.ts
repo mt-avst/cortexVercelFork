@@ -113,10 +113,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      // Load sessions for this opportunity
-      // Since each Lambda has its own /tmp, we need to load sessions differently
-      // For now, we'll attach an empty sessions array and the frontend can fetch them separately
-      opportunity.sessions = opportunity.sessions || [];
+      // Load sessions for this opportunity from the sessions file
+      try {
+        const allSessions = readSessions();
+        const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
+        opportunity.sessions = opportunitySessions;
+        console.log('Loaded sessions for opportunity:', id, 'Count:', opportunitySessions.length);
+      } catch (error) {
+        console.error('Error loading sessions:', error);
+        opportunity.sessions = [];
+      }
       
       return res.status(200).json(opportunity);
     }
