@@ -65,13 +65,23 @@ function writeSessions(sessions: any[]): void {
 }
 
 /**
+ * GET /api/opportunities/[id]/sessions
+ * Gets sessions for an opportunity
  * POST /api/opportunities/[id]/sessions
  * Creates sessions for an opportunity
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method === 'GET') {
+    const opportunityId = req.query.id as string;
+    console.log('Getting sessions for opportunity:', opportunityId);
+    
+    const sessions = readSessions();
+    const opportunitySessions = sessions.filter((session: any) => session.opportunity_id === opportunityId);
+    
+    return res.status(200).json(opportunitySessions);
   }
+  
+  if (req.method === 'POST') {
   
   const opportunityId = req.query.id as string;
   console.log('Creating sessions for opportunity:', opportunityId);
