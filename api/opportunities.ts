@@ -115,7 +115,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // Load sessions for this opportunity (always read fresh from file)
       const allSessions = readSessions();
+      console.log('All sessions loaded:', allSessions.length);
       const opportunitySessions = allSessions.filter((session: any) => session.opportunity_id === id);
+      console.log('Filtered sessions for opportunity:', opportunitySessions.length);
       opportunity.sessions = opportunitySessions;
       
       return res.status(200).json(opportunity);
