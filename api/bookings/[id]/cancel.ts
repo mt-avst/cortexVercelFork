@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../db';
+import { requireAuth } from '../../utils/auth';
+import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 
 /**
  * POST /api/bookings/[id]/cancel
@@ -7,56 +9,18 @@ import { getPool } from '../../db';
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json(createErrorResponse('Method not allowed'));
   }
 
   try {
     const { id: bookingId } = req.query;
 
     if (!bookingId || typeof bookingId !== 'string') {
-      return res.status(400).json({ error: 'Booking ID is required' });
+      return res.status(400).json(createErrorResponse('Booking ID is required'));
     }
 
     // Get authenticated user from cookie
-    const cookies = req.headers.cookie || '';
-    const cookiePairs = cookies.split(';').map(c => c.trim());
-    let sessionData: string | null = null;
-
-    // Find session cookie (check from end to get most recent)
-    for (let i = cookiePairs.length - 1; i >= 0; i--) {
-      const pair = cookiePairs[i];
-      if (pair.startsWith('adaptalabs_session=')) {
-        sessionData = pair.substring('adaptalabs_session='.length);
-        break;
-      }
-    }
-
-    if (!sessionData) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Parse user from cookie
-    let user: any;
-    try {
-      let decodedData: string;
-      try {
-        decodedData = decodeURIComponent(sessionData);
-        if (decodedData === sessionData && sessionData.startsWith('{')) {
-          decodedData = sessionData;
-        }
-      } catch {
-        decodedData = sessionData;
-      }
-      user = JSON.parse(decodedData);
-    } catch (error) {
-      console.error('Error parsing session:', error);
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-
-    if (!user.id) {
-      return res.status(401).json({ error: 'Invalid session - missing user ID' });
-    }
-
+    const user = requireAuth(req);
     const userId = user.id;
     const isAdmin = user.role === 'researcher_admin';
 
@@ -74,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `, [bookingId]);
 
     if (bookingResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Booking not found' });
+      return res.status(404).json(createErrorResponse('Booking not found'));
     }
 
     const booking = bookingResult.rows[0];
@@ -84,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                      (isAdmin && booking.owner_user_id === userId);
     
     if (!canCancel) {
-      return res.status(403).json({ error: 'Not authorized to cancel this booking' });
+      return res.status(403).json(createErrorResponse('Not authorized to cancel this booking'));
     }
 
     // State checks
@@ -93,7 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (new Date(booking.end_time) <= new Date()) {
-      return res.status(400).json({ error: 'Cannot cancel past sessions' });
+      return res.status(400).json(createErrorResponse('Cannot cancel past sessions'));
     }
 
     // Start transaction
@@ -126,12 +90,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client.release();
     }
 
-  } catch (error: any) {
-    console.error('Error cancelling booking:', error);
-    return res.status(500).json({
-      error: 'Failed to cancel booking',
-      details: error.message,
-    });
+  } catch (error: unknown) {
+    // Handle auth errors
+    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+      return res.status(401).json(createErrorResponse(
+        typeof error === 'object' && 'error' in error 
+          ? String(error.error) 
+          : 'Not authenticated'
+      ));
+    }
+
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Failed to cancel booking', errorMessage)
+    );
   }
 }
 

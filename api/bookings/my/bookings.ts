@@ -1,5 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../db';
+import { requireAuth } from '../../utils/auth';
+import { createErrorResponse, getErrorMessage } from '../../utils/errors';
+import { serializeRow } from '../../utils/helpers';
 
 /**
  * GET /api/bookings/my/bookings
@@ -7,50 +10,12 @@ import { getPool } from '../../db';
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json(createErrorResponse('Method not allowed'));
   }
 
   try {
     // Get authenticated user from cookie
-    const cookies = req.headers.cookie || '';
-    const cookiePairs = cookies.split(';').map(c => c.trim());
-    let sessionData: string | null = null;
-
-    // Find session cookie (check from end to get most recent)
-    for (let i = cookiePairs.length - 1; i >= 0; i--) {
-      const pair = cookiePairs[i];
-      if (pair.startsWith('adaptalabs_session=')) {
-        sessionData = pair.substring('adaptalabs_session='.length);
-        break;
-      }
-    }
-
-    if (!sessionData) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Parse user from cookie
-    let user: any;
-    try {
-      let decodedData: string;
-      try {
-        decodedData = decodeURIComponent(sessionData);
-        if (decodedData === sessionData && sessionData.startsWith('{')) {
-          decodedData = sessionData;
-        }
-      } catch {
-        decodedData = sessionData;
-      }
-      user = JSON.parse(decodedData);
-    } catch (error) {
-      console.error('Error parsing session:', error);
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-
-    if (!user.id) {
-      return res.status(401).json({ error: 'Invalid session - missing user ID' });
-    }
-
+    const user = requireAuth(req);
     const userId = user.id;
     const now = new Date();
 
@@ -87,26 +52,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `, [userId, now]);
 
     // Serialize dates for API response
-    const serializeBooking = (booking: any) => ({
-      ...booking,
-      session_start_time: booking.session_start_time.toISOString(),
-      session_end_time: booking.session_end_time.toISOString(),
-      cancelled_at: booking.cancelled_at ? booking.cancelled_at.toISOString() : undefined,
-      created_at: booking.created_at.toISOString(),
-      updated_at: booking.updated_at.toISOString(),
-    });
+    const serializeBooking = (booking: any) => serializeRow(booking, [
+      'session_start_time',
+      'session_end_time',
+      'cancelled_at',
+      'created_at',
+      'updated_at'
+    ]);
 
     return res.status(200).json({
       upcoming: upcomingResult.rows.map(serializeBooking),
       past: pastResult.rows.map(serializeBooking)
     });
 
-  } catch (error: any) {
-    console.error('Error fetching user bookings:', error);
-    return res.status(500).json({
-      error: 'Failed to fetch bookings',
-      details: error.message,
-    });
+  } catch (error: unknown) {
+    // Handle auth errors
+    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+      return res.status(401).json(createErrorResponse(
+        typeof error === 'object' && 'error' in error 
+          ? String(error.error) 
+          : 'Not authenticated'
+      ));
+    }
+
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Failed to fetch bookings', errorMessage)
+    );
   }
 }
+
 

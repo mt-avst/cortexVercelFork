@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../../db';
+import { requireAuth } from '../../../utils/auth';
+import { createErrorResponse, getErrorMessage } from '../../../utils/errors';
 
 /**
  * POST /api/bookings/sessions/[id]/book
@@ -7,56 +9,18 @@ import { getPool } from '../../../db';
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json(createErrorResponse('Method not allowed'));
   }
 
   try {
     const { id: sessionId } = req.query;
 
     if (!sessionId || typeof sessionId !== 'string') {
-      return res.status(400).json({ error: 'Session ID is required' });
+      return res.status(400).json(createErrorResponse('Session ID is required'));
     }
 
     // Get authenticated user from cookie
-    const cookies = req.headers.cookie || '';
-    const cookiePairs = cookies.split(';').map(c => c.trim());
-    let sessionData: string | null = null;
-
-    // Find session cookie (check from end to get most recent)
-    for (let i = cookiePairs.length - 1; i >= 0; i--) {
-      const pair = cookiePairs[i];
-      if (pair.startsWith('adaptalabs_session=')) {
-        sessionData = pair.substring('adaptalabs_session='.length);
-        break;
-      }
-    }
-
-    if (!sessionData) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    // Parse user from cookie
-    let user: any;
-    try {
-      let decodedData: string;
-      try {
-        decodedData = decodeURIComponent(sessionData);
-        if (decodedData === sessionData && sessionData.startsWith('{')) {
-          decodedData = sessionData;
-        }
-      } catch {
-        decodedData = sessionData;
-      }
-      user = JSON.parse(decodedData);
-    } catch (error) {
-      console.error('Error parsing session:', error);
-      return res.status(401).json({ error: 'Invalid session' });
-    }
-
-    if (!user.id) {
-      return res.status(401).json({ error: 'Invalid session - missing user ID' });
-    }
-
+    const user = requireAuth(req);
     const userId = user.id;
 
     // Start transaction for atomic booking
@@ -77,7 +41,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (sessionResult.rows.length === 0) {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Session not found' });
+        return res.status(404).json(createErrorResponse('Session not found'));
       }
 
       const session = sessionResult.rows[0];
@@ -85,12 +49,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Guardrails
       if (session.opportunity_status !== 'published') {
         await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Session not found or opportunity not published' });
+        return res.status(404).json(createErrorResponse('Session not found or opportunity not published'));
       }
 
       if (new Date(session.end_time) <= new Date()) {
         await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Cannot book past sessions' });
+        return res.status(400).json(createErrorResponse('Cannot book past sessions'));
       }
 
       // Check if already booked by this user (only active bookings)
@@ -101,13 +65,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (existingBooking.rows.length > 0) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Already booked for this session' });
+        return res.status(409).json(createErrorResponse('Already booked for this session'));
       }
 
       // Check capacity (double-check after lock)
       if (session.booked_count >= session.capacity) {
         await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Session is full' });
+        return res.status(409).json(createErrorResponse('Session is full'));
       }
 
       // Create booking
