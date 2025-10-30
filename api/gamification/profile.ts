@@ -110,33 +110,77 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     });
 
+    // Ensure profile has all required fields with defaults
+    const profileData = {
+      id: profile.id,
+      user_id: profile.user_id || userId,
+      total_points: parseInt(profile.total_points) || 0,
+      monthly_points: parseInt(profile.monthly_points) || 0,
+      level: parseInt(profile.level) || 1,
+      sessions_completed: parseInt(profile.sessions_completed) || 0,
+      surveys_completed: parseInt(profile.surveys_completed) || 0,
+      polls_completed: parseInt(profile.polls_completed) || 0,
+      questions_completed: parseInt(profile.questions_completed) || 0,
+      last_activity_date: profile.last_activity_date || null,
+      created_at: profile.created_at || new Date(),
+      updated_at: profile.updated_at || new Date(),
+    };
+
     // Update profile with completion counts if they don't match
-    if (profile.sessions_completed !== sessions_completed ||
-        profile.surveys_completed !== surveys_completed ||
-        profile.polls_completed !== polls_completed ||
-        profile.questions_completed !== questions_completed) {
-      await pool.query(`
-        UPDATE user_profiles
-        SET sessions_completed = $1,
-            surveys_completed = $2,
-            polls_completed = $3,
-            questions_completed = $4,
-            updated_at = NOW()
-        WHERE user_id = $5
-      `, [sessions_completed, surveys_completed, polls_completed, questions_completed, userId]);
-      
-      profile.sessions_completed = sessions_completed;
-      profile.surveys_completed = surveys_completed;
-      profile.polls_completed = polls_completed;
-      profile.questions_completed = questions_completed;
+    if (profileData.sessions_completed !== sessions_completed ||
+        profileData.surveys_completed !== surveys_completed ||
+        profileData.polls_completed !== polls_completed ||
+        profileData.questions_completed !== questions_completed) {
+      try {
+        await pool.query(`
+          UPDATE user_profiles
+          SET sessions_completed = $1,
+              surveys_completed = $2,
+              polls_completed = $3,
+              questions_completed = $4,
+              updated_at = NOW()
+          WHERE user_id = $5
+        `, [sessions_completed, surveys_completed, polls_completed, questions_completed, userId]);
+        
+        profileData.sessions_completed = sessions_completed;
+        profileData.surveys_completed = surveys_completed;
+        profileData.polls_completed = polls_completed;
+        profileData.questions_completed = questions_completed;
+      } catch (updateError) {
+        console.error('Error updating profile completion counts:', updateError);
+        // Don't fail if update fails, just log it
+      }
     }
 
-    // Serialize dates
+    // Serialize dates - handle both Date objects and strings
+    const serializeDate = (date: any): string | null => {
+      if (!date) return null;
+      if (date instanceof Date) {
+        return date.toISOString();
+      }
+      if (typeof date === 'string') {
+        return date;
+      }
+      try {
+        return new Date(date).toISOString();
+      } catch {
+        return null;
+      }
+    };
+
     const response = {
-      ...profile,
-      last_activity_date: profile.last_activity_date ? profile.last_activity_date.toISOString() : null,
-      created_at: profile.created_at.toISOString(),
-      updated_at: profile.updated_at.toISOString(),
+      id: profileData.id,
+      user_id: profileData.user_id,
+      total_points: profileData.total_points,
+      monthly_points: profileData.monthly_points,
+      level: profileData.level,
+      sessions_completed: profileData.sessions_completed,
+      surveys_completed: profileData.surveys_completed,
+      polls_completed: profileData.polls_completed,
+      questions_completed: profileData.questions_completed,
+      last_activity_date: serializeDate(profileData.last_activity_date),
+      created_at: serializeDate(profileData.created_at) || new Date().toISOString(),
+      updated_at: serializeDate(profileData.updated_at) || new Date().toISOString(),
     };
 
     return res.status(200).json(response);
