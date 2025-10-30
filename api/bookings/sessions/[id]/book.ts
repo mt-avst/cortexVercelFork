@@ -114,12 +114,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client.release();
     }
 
-  } catch (error: any) {
-    console.error('Error booking session:', error);
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-    });
+  } catch (error: unknown) {
+    // Handle auth errors
+    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+      return res.status(401).json(createErrorResponse(
+        typeof error === 'object' && 'error' in error 
+          ? String(error.error) 
+          : 'Not authenticated'
+      ));
+    }
+
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Failed to book session', errorMessage)
+    );
   }
 }
 

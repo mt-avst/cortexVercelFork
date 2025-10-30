@@ -29,24 +29,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   
   const route = slug.join('/');
   
-  // Debug logging
-  console.log('Calendar route handler called:', {
-    url: req.url,
-    path: req.url?.split('?')[0],
-    slug,
-    route,
-    method: req.method,
-    querySlug: req.query.slug,
-    queryKeys: Object.keys(req.query)
-  });
-  
   // Route to availability endpoint
   if (route === 'availability') {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
-    
-    console.log('Calendar availability endpoint called', req.url);
     
     const durationMinutes = parseInt(req.query.duration_minutes as string) || 30;
     const startTime = req.query.start_time as string;
@@ -118,8 +105,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'GET') {
       return res.status(405).json({ error: 'Method not allowed' });
     }
-    
-    console.log('Calendar events endpoint called', req.url);
     
     // Return empty array for calendar events (no bookings yet)
     return res.status(200).json([]);

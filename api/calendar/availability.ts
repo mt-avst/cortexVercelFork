@@ -9,7 +9,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
   
-  console.log('Calendar availability endpoint called', req.url);
   
   const durationMinutes = parseInt(req.query.duration_minutes as string) || 30;
   const startTime = req.query.start_time as string;
