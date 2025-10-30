@@ -73,16 +73,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get completion counts by opportunity type
-    const completionCounts = await pool.query(`
-      SELECT 
-        o.type,
-        COUNT(*) as count
-      FROM bookings b
-      JOIN sessions s ON b.session_id = s.id
-      JOIN opportunities o ON s.opportunity_id = o.id
-      WHERE b.user_id = $1 AND b.status = 'completed'
-      GROUP BY o.type
-    `, [userId]);
+    // Only count approved completions (these are the ones that award AdaptaBits)
+    let completionCounts;
+    try {
+      completionCounts = await pool.query(`
+        SELECT 
+          o.type,
+          COUNT(*) as count
+        FROM bookings b
+        JOIN sessions s ON b.session_id = s.id
+        JOIN opportunities o ON s.opportunity_id = o.id
+        WHERE b.user_id = $1 AND b.completion_status = 'approved'
+        GROUP BY o.type
+      `, [userId]);
+    } catch (queryError: any) {
+      // If completion_status column doesn't exist yet, fall back to empty counts
+      console.warn('Error querying completion counts (completion_status column may not exist):', queryError.message);
+      completionCounts = { rows: [] };
+    }
 
     // Initialize counts
     let sessions_completed = 0;
@@ -187,9 +195,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('Error fetching user profile:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({
       error: 'Failed to fetch profile',
-      details: error.message,
+      details: error.message || 'Unknown error',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 }
