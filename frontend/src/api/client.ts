@@ -5,12 +5,16 @@ import { ApiClient, AppError, mapAxiosError } from '../utils/errorHandler';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse } from './types';
 
+// Import the getter functions to ensure dynamic evaluation
+import { getApiBaseUrl } from '../config/api';
+
 // Create enhanced API client with error handling
-const apiClient = new ApiClient(API_CONFIG.BASE_URL + '/api');
+// Use getApiBaseUrl() directly for runtime evaluation instead of frozen API_CONFIG
+const apiClient = new ApiClient(getApiBaseUrl() + '/api');
 
 // Legacy axios instance for backward compatibility
 const api = axios.create({
-  baseURL: API_CONFIG.BASE_URL + '/api',
+  baseURL: getApiBaseUrl() + '/api',
   withCredentials: true,
   timeout: API_CONFIG.TIMEOUT,
   headers: {
@@ -44,7 +48,7 @@ api.interceptors.response.use(
                           window.location.pathname.includes('/opportunities') ||
                           window.location.pathname.includes('/sessions');
       
-      const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
+      const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
       
       console.log('🔐 401 error detected, redirecting to:', loginRoute);
       window.location.href = getAuthUrl(loginRoute);
@@ -68,8 +72,8 @@ export const getMe = async (): Promise<User> => {
 };
 
 export const logout = async (): Promise<void> => {
-  // Use API endpoint for logout
-  await axios.post('/api/auth/logout', {}, {
+  // Use auth endpoint for logout
+  await axios.post(getAuthUrl('/auth/logout'), {}, {
     withCredentials: true,
     timeout: API_CONFIG.TIMEOUT,
   });
@@ -79,13 +83,13 @@ export const logout = async (): Promise<void> => {
 export const demoLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/demo-login');
+  window.location.href = getAuthUrl('/auth/demo-login');
 };
 
 export const demoAdminLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/admin-login');
+  window.location.href = getAuthUrl('/auth/admin-login');
 };
 
 /**
@@ -110,9 +114,19 @@ export const getOpportunities = async (params?: {
 };
 
 export const getOpportunity = async (id: string, params?: { _t?: number }): Promise<Opportunity> => {
-  // Use query parameter for ID since Vercel serverless doesn't support dynamic paths
-  const response = await api.get(`/opportunities?id=${id}`, { params });
-  return response.data;
+  // Use path parameter for ID - backend supports /api/opportunities/:id
+  const response = await api.get(`/opportunities/${id}`, { params });
+  // Ensure we return a single object, not an array
+  const data = response.data;
+  if (Array.isArray(data)) {
+    // If API returns array, take the first item (or find by ID)
+    const opportunity = data.find((opp: Opportunity) => opp.id === id) || data[0];
+    if (!opportunity) {
+      throw new Error('Opportunity not found');
+    }
+    return opportunity;
+  }
+  return data;
 };
 
 export const createOpportunity = async (data: CreateOpportunityRequest): Promise<Opportunity> => {
@@ -278,6 +292,49 @@ export const checkConflicts = async (
     calendar_id: calendarId
   });
   return response.data;
+};
+
+// User Calendar API functions
+/**
+ * Get Google OAuth URL for calendar connection
+ */
+export const getCalendarConnectUrl = async (): Promise<{ authUrl: string }> => {
+  const response = await api.get('/calendar/auth/connect');
+  return response.data;
+};
+
+/**
+ * Get user's calendar events for a date range
+ */
+export const getMyCalendarEvents = async (
+  startTime: string,
+  endTime: string
+): Promise<CalendarEvent[]> => {
+  const params = new URLSearchParams({
+    start_time: startTime,
+    end_time: endTime,
+  });
+  
+  const response = await api.get(`/calendar/my-events?${params}`);
+  return response.data;
+};
+
+/**
+ * Check calendar connection status
+ */
+export const getCalendarConnectionStatus = async (): Promise<{
+  connected: boolean;
+  connectedAt: string | null;
+}> => {
+  const response = await api.get('/calendar/connection-status');
+  return response.data;
+};
+
+/**
+ * Disconnect user's calendar
+ */
+export const disconnectCalendar = async (): Promise<void> => {
+  await api.delete('/calendar/disconnect');
 };
 
 export default api;

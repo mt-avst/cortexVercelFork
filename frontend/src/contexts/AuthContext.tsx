@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 import { getMe, logout } from '../api/client';
-import { getAuthUrl, API_CONFIG } from '../config/api';
+import { getAuthUrl, API_CONFIG, getApiBaseUrl } from '../config/api';
 import { logger } from '../utils/logger';
 
 import { User } from '../api/types';
@@ -71,7 +71,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Debug: Check cookies before making request
       logger.log('AuthProvider: Current cookies:', document.cookie);
-      logger.log('AuthProvider: Making API call to:', `${API_CONFIG.BASE_URL}/api/me`);
+      logger.log('AuthProvider: Making API call to:', `${getApiBaseUrl()}/api/me`);
       
       const userData = await getMe();
       logger.log('AuthProvider: User data received:', userData);
@@ -210,9 +210,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       clearSessionCookies();
       
       // Clear HttpOnly cookies via logout API calls (silent)
+      const baseUrl = getApiBaseUrl();
       const logoutUrls = [
-        API_CONFIG.BASE_URL ? `${API_CONFIG.BASE_URL}/api/auth/logout` : '/api/auth/logout',
-        API_CONFIG.BASE_URL ? `${API_CONFIG.BASE_URL}/auth/logout` : '/auth/logout'
+        baseUrl ? `${baseUrl}/api/auth/logout` : '/api/auth/logout',
+        baseUrl ? `${baseUrl}/auth/logout` : '/auth/logout'
       ];
       
       Promise.allSettled(

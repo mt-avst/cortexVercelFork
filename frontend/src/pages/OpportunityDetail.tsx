@@ -4,6 +4,7 @@ import { getOpportunity, bookSession, getMyBookingsDebug } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
+import CalendarConnection from '../components/CalendarConnection';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 
 const OpportunityDetail: React.FC = () => {
@@ -16,6 +17,7 @@ const OpportunityDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
+  const [calendarConnected, setCalendarConnected] = useState(false);
 
   const loadOpportunity = async (forceRefresh = false) => {
     if (!id) return;
@@ -282,8 +284,8 @@ const OpportunityDetail: React.FC = () => {
               <div className="d-flex justify-content-between align-items-start">
                 <div>
                   <div className="d-flex align-items-center gap-2 mb-2">
-                    <span className={getTypeBadgeClass(opportunity.type)}>
-                      {formatOpportunityType(opportunity.type)}
+                    <span className={getTypeBadgeClass(opportunity?.type)}>
+                      {formatOpportunityType(opportunity?.type)}
                     </span>
                     {user?.role === 'researcher_admin' && (
                       <span className={getStatusBadgeClass(opportunity.status)}>
@@ -389,6 +391,19 @@ const OpportunityDetail: React.FC = () => {
                     <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
                       <i className="bi bi-info-circle me-2"></i>
                       Click on a timeslot to book yourself in
+                    </div>
+                  )}
+
+                  {/* Calendar Integration */}
+                  {user && (
+                    <div className="card mb-4">
+                      <div className="card-body">
+                        <h6 className="card-title mb-3">
+                          <i className="bi bi-calendar-check me-2"></i>
+                          Calendar Integration
+                        </h6>
+                        <CalendarConnection onStatusChange={setCalendarConnected} />
+                      </div>
                     </div>
                   )}
                   

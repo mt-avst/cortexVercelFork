@@ -79,6 +79,28 @@ export async function runMigrations() {
       )
     `);
 
+    // Create user_calendar_tokens table for Google Calendar integration
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_calendar_tokens (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE CASCADE UNIQUE NOT NULL,
+        access_token TEXT NOT NULL,
+        refresh_token TEXT,
+        expires_at TIMESTAMPTZ,
+        token_type VARCHAR(50) DEFAULT 'Bearer',
+        scope TEXT,
+        calendar_id VARCHAR(255) DEFAULT 'primary',
+        connected_at TIMESTAMPTZ DEFAULT NOW(),
+        last_refreshed_at TIMESTAMPTZ
+      )
+    `);
+
+    // Create index for user_calendar_tokens
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_calendar_tokens_user_id 
+      ON user_calendar_tokens(user_id)
+    `);
+
     // Note: points_transactions table is created AFTER opportunities and sessions tables
     // because it has foreign key references to both
 

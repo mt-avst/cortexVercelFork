@@ -3,10 +3,14 @@
 /**
  * Formats opportunity type for display
  * Handles cases where type might be concatenated with status (e.g., 'testpublished' -> 'TEST')
- * @param type - The opportunity type string
+ * @param type - The opportunity type string (can be undefined/null)
  * @returns Formatted type string in uppercase
  */
-export const formatOpportunityType = (type: string): string => {
+export const formatOpportunityType = (type: string | null | undefined): string => {
+  if (!type) {
+    return 'UNKNOWN';
+  }
+  
   // Handle concatenated type+status values by removing common status suffixes
   const statusSuffixes = ['published', 'draft', 'closed'];
   
@@ -36,10 +40,14 @@ export const formatOpportunityType = (type: string): string => {
 
 /**
  * Gets the appropriate CSS class for opportunity type badges
- * @param type - The opportunity type string
+ * @param type - The opportunity type string (can be undefined/null)
  * @returns CSS class string
  */
-export const getTypeBadgeClass = (type: string): string => {
+export const getTypeBadgeClass = (type: string | null | undefined): string => {
+  if (!type) {
+    return 'badge bg-secondary';
+  }
+  
   // Extract base type if it's concatenated with status
   const statusSuffixes = ['published', 'draft', 'closed'];
   let baseType = type;

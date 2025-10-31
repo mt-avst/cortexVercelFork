@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Session } from '../api/types';
+import { Session, CalendarEvent } from '../api/types';
+import { getMyCalendarEvents } from '../api/client';
 
 interface CalendarGridProps {
   sessions: Session[];
@@ -24,6 +25,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   const navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
+  const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarConnected, setCalendarConnected] = useState(false);
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
   
   // Debug logging to help identify data freshness issues
   console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
@@ -32,6 +36,65 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   useEffect(() => {
     setBookedSlots(new Set());
   }, [sessions]);
+
+  // Fetch user calendar events when component mounts and sessions are available
+  useEffect(() => {
+    const fetchUserCalendar = async () => {
+      if (!sessions || sessions.length === 0) return;
+
+      try {
+        setLoadingCalendar(true);
+        
+        // Get date range from sessions
+        const dates = sessions
+          .map(s => new Date(s.start_time))
+          .sort((a, b) => a.getTime() - b.getTime());
+        
+        if (dates.length === 0) return;
+
+        const startTime = new Date(dates[0]);
+        startTime.setHours(0, 0, 0, 0);
+        
+        const endTime = new Date(dates[dates.length - 1]);
+        endTime.setHours(23, 59, 59, 999);
+
+        const events = await getMyCalendarEvents(
+          startTime.toISOString(),
+          endTime.toISOString()
+        );
+        
+        setUserCalendarEvents(events);
+        setCalendarConnected(true);
+      } catch (error: any) {
+        if (error.response?.status === 404) {
+          // Calendar not connected - this is fine
+          setCalendarConnected(false);
+        } else {
+          console.error('Error fetching user calendar:', error);
+          setCalendarConnected(false);
+        }
+      } finally {
+        setLoadingCalendar(false);
+      }
+    };
+
+    fetchUserCalendar();
+  }, [sessions]);
+
+  // Check if a session conflicts with user's calendar
+  const hasCalendarConflict = useCallback((session: Session): boolean => {
+    if (!calendarConnected || userCalendarEvents.length === 0) return false;
+
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+
+    return userCalendarEvents.some(event => {
+      const eventStart = new Date(event.start);
+      const eventEnd = new Date(event.end);
+      // Check for time overlap
+      return (sessionStart < eventEnd && sessionEnd > eventStart);
+    });
+  }, [calendarConnected, userCalendarEvents]);
   // Group sessions by date and create time slots
   const createCalendarSlots = (): CalendarSlot[] => {
     const sessionsByDate = new Map<string, Session[]>();
@@ -165,31 +228,55 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     if (slot.session.id.startsWith('empty-')) return 'bg-light border';
     if (bookedSlots.has(slot.session.id)) return 'bg-secondary'; // Grey for booked slots
     if (!slot.isAvailable) {
-      console.log('🔴 Slot showing as red/unavailable:', {
-        sessionId: slot.session.id,
-        isAvailable: slot.isAvailable,
-        remaining: slot.session.remaining,
-        bookedCount: slot.session.booked_count,
-        capacity: slot.session.capacity,
-        endTime: slot.session.end_time,
-        isBooked: bookedSlots.has(slot.session.id)
-      });
       return 'bg-danger'; // Red for unavailable slots (full)
     }
-    console.log('🟢 Slot showing as green/available:', {
-      sessionId: slot.session.id,
-      isAvailable: slot.isAvailable,
-      remaining: slot.session.remaining,
-      bookedCount: slot.session.booked_count,
-      capacity: slot.session.capacity
-    });
+    
+    // Check for calendar conflict
+    const hasConflict = hasCalendarConflict(slot.session);
+    if (hasConflict) {
+      return 'bg-warning text-dark'; // Yellow/warning for calendar conflict
+    }
+    
     return 'calendar-slot-available'; // Custom green for available slots
   };
 
   const getSlotTextColor = (slot: TimeSlot) => {
     // Check if this is an empty slot
     if (slot.session.id.startsWith('empty-')) return 'text-muted';
-    return 'text-white'; // White text for all colored slots
+    
+    // Check for calendar conflict - use dark text for warning background
+    const hasConflict = hasCalendarConflict(slot.session);
+    if (hasConflict && slot.isAvailable) {
+      return 'text-dark';
+    }
+    
+    return 'text-white'; // White text for all other colored slots
+  };
+
+  // Get tooltip text for slot
+  const getSlotTitle = (slot: TimeSlot): string => {
+    if (slot.session.id.startsWith('empty-')) {
+      return "No session available";
+    }
+    
+    if (bookedSlots.has(slot.session.id)) {
+      return "You have booked this session";
+    }
+    
+    if (!slot.isAvailable) {
+      return "Session is full";
+    }
+    
+    const hasConflict = hasCalendarConflict(slot.session);
+    if (hasConflict) {
+      return "⚠️ You have a calendar conflict at this time";
+    }
+    
+    if (bookingLoading === slot.session.id) {
+      return "Booking in progress...";
+    }
+    
+    return "Click to book this session";
   };
 
   if (calendarSlots.length === 0) {
@@ -257,22 +344,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                               className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
                               onClick={() => handleSlotClick(slot)}
                               disabled={!slot.isAvailable || bookingLoading === slot.session.id || bookedSlots.has(slot.session.id)}
-                              title={
-                                slot.session.id.startsWith('empty-')
-                                  ? "No session available"
-                                  : bookedSlots.has(slot.session.id)
-                                    ? "You have booked this session"
-                                    : !slot.isAvailable
-                                      ? "Session is full"
-                                      : bookingLoading === slot.session.id
-                                        ? "Booking in progress..."
-                                        : "Click to book this session"
-                              }
+                              title={getSlotTitle(slot)}
                               style={{ 
                                 fontSize: '0.9rem'
                               }}
                             >
-                              <div className="fw-bold" style={{ fontSize: '0.85rem' }}>
+                              <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
+                                {hasCalendarConflict(slot.session) && slot.isAvailable && (
+                                  <i className="bi bi-exclamation-triangle-fill"></i>
+                                )}
                                 {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
                               </div>
                               
