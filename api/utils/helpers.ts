@@ -1,7 +1,7 @@
 /**
  * Parse integer with default fallback
  */
-export function parseIntSafe(value: any, defaultValue: number = 0): number {
+export function parseIntSafe(value: unknown, defaultValue: number = 0): number {
   if (typeof value === 'number') {
     return isNaN(value) ? defaultValue : value;
   }
@@ -15,7 +15,7 @@ export function parseIntSafe(value: any, defaultValue: number = 0): number {
 /**
  * Serialize date for API response - handles Date objects, strings, and null
  */
-export function serializeDate(date: any): string | null {
+export function serializeDate(date: unknown): string | null {
   if (!date) return null;
   if (date instanceof Date) {
     return date.toISOString();

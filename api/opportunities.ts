@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
+import { createErrorResponse, getErrorMessage } from './utils/errors';
 
 /**
  * GET /api/opportunities
@@ -10,8 +11,6 @@ import { query } from './db';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
-      console.log('Opportunities endpoint called - GET', req.query);
-      
       const { id, type, q, status } = req.query;
       
       // If an ID is specified, return just that opportunity
@@ -25,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         );
         
         if (result.rows.length === 0) {
-          return res.status(404).json({ error: 'Opportunity not found' });
+          return res.status(404).json(createErrorResponse('Opportunity not found'));
         }
         
         const opportunity = result.rows[0];
@@ -113,8 +112,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 remaining: s.capacity - s.booked_count, // Add remaining field
               })),
             };
-          } catch (sessionError: any) {
-            console.error('Error loading sessions for opportunity', opp.id, ':', sessionError.message);
+          } catch (sessionError: unknown) {
+            console.error('Error loading sessions for opportunity', opp.id, ':', getErrorMessage(sessionError));
             // Return opportunity without sessions if session query fails
             return {
               ...opp,
@@ -132,8 +131,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (req.method === 'POST') {
-      console.log('Opportunities endpoint called - POST', req.body);
-      
       const {
         type,
         title,
@@ -150,7 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // Validate required fields
       if (!type || !title || !purpose_one_liner) {
-        return res.status(400).json({ error: 'Type, title, and purpose are required' });
+        return res.status(400).json(createErrorResponse('Type, title, and purpose are required'));
       }
       
       // For demo purposes, use a default owner if not provided
@@ -197,24 +194,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at: opportunity.updated_at.toISOString(),
       };
       
-      console.log('Created opportunity:', opportunityWithOwner.id);
       return res.status(201).json(opportunityWithOwner);
     }
     
-    return res.status(405).json({ error: 'Method not allowed' });
-  } catch (error: any) {
+    return res.status(405).json(createErrorResponse('Method not allowed'));
+  } catch (error: unknown) {
     console.error('Error in opportunities handler:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      detail: error.detail,
-    });
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-      code: error.code,
-    });
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
   }
 }
 

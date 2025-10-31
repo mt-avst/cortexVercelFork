@@ -1,16 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 
 /**
  * GET /api/bookings/pending-approvals
  * Get pending approval bookings for admin
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  try {
+    if (req.method !== 'GET') {
+      return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+    
+    // Return empty array for now (no bookings yet)
+    return res.status(200).json([]);
+  } catch (error: unknown) {
+    console.error('Error in pending approvals handler:', error);
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
   }
-  
-  
-  // Return empty array for now (no bookings yet)
-  return res.status(200).json([]);
 }
 

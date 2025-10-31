@@ -94,3 +94,6 @@ if [ "$1" == "--migrate" ]; then
     echo "  cd backend && DATABASE_URL=\"\$DATABASE_URL\" npm run seed"
 fi
 
+
+
+

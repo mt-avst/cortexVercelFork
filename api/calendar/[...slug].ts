@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
+import { createErrorResponse, getErrorMessage } from '../utils/errors';
 
 /**
  * Catch-all calendar endpoint - handles multiple calendar routes
@@ -32,7 +33,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Route to availability endpoint
   if (route === 'availability') {
     if (req.method !== 'GET') {
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json(createErrorResponse('Method not allowed'));
     }
     
     const durationMinutes = parseInt(req.query.duration_minutes as string) || 30;
@@ -103,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Route to events endpoint
   if (route === 'events') {
     if (req.method !== 'GET') {
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json(createErrorResponse('Method not allowed'));
     }
     
     // Return empty array for calendar events (no bookings yet)
@@ -113,21 +114,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Route to check-conflicts endpoint
   if (route === 'check-conflicts') {
     if (req.method !== 'POST') {
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json(createErrorResponse('Method not allowed'));
     }
 
     try {
       const { time_slots, calendar_id } = req.body;
 
       if (!Array.isArray(time_slots) || time_slots.length === 0) {
-        return res.status(400).json({ 
-          error: 'time_slots array is required and must not be empty' 
-        });
+        return res.status(400).json(createErrorResponse('time_slots array is required and must not be empty'));
       }
 
       // Check conflicts against existing sessions in the database
       let conflictingCount = 0;
-      const conflicts: any[] = [];
+      const conflicts: Array<{ slot: { start_time: string; end_time: string }; conflicting_session: unknown }> = [];
 
       for (const slot of time_slots) {
         if (!slot.start_time || !slot.end_time) {
@@ -161,17 +160,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         conflicting_slots: conflictingCount,
         conflicts: conflicts.length > 0 ? conflicts : undefined
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error checking conflicts:', error);
-      return res.status(500).json({
-        error: 'Internal server error',
-        details: error.message,
-      });
+      const errorMessage = getErrorMessage(error);
+      return res.status(500).json(
+        createErrorResponse('Internal server error', errorMessage)
+      );
     }
   }
   
   // Unknown route
-  return res.status(404).json({ error: 'Calendar endpoint not found' });
+  return res.status(404).json(createErrorResponse('Calendar endpoint not found'));
 }
 
 

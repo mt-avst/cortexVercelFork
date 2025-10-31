@@ -54,8 +54,9 @@ export async function query(text: string, params?: any[]) {
     client = await pool.connect();
     const result = await client.query(text, params);
     return result;
-  } catch (error: any) {
-    console.error('Database query error:', error.message);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error('Database query error:', errorMessage);
     console.error('Query:', text.substring(0, 100));
     if (params) {
       console.error('Params:', params);

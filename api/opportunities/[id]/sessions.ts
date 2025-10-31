@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
+import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 
 /**
  * GET /api/opportunities/[id]/sessions
@@ -20,24 +21,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
     
-    console.log('Sessions endpoint called:', {
-      method: req.method,
-      url: req.url,
-      path: (req as any).path,
-      query: req.query,
-      opportunityId,
-      body: req.body ? (Array.isArray(req.body) ? `${req.body.length} items` : 'single item') : 'no body',
-      headers: { host: req.headers.host }
-    });
-    
     if (!opportunityId) {
       console.error('Opportunity ID not found in query or URL');
-      return res.status(400).json({ error: 'Opportunity ID is required' });
+      return res.status(400).json(createErrorResponse('Opportunity ID is required'));
     }
 
     if (req.method === 'GET') {
-      console.log('Getting sessions for opportunity:', opportunityId);
-      
       // Check if opportunity exists
       const oppCheck = await query(
         `SELECT id FROM opportunities WHERE id = $1`,
@@ -45,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
       
       if (oppCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
       
       // Get sessions from database
@@ -76,13 +65,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         remaining: s.capacity - s.booked_count,
       }));
       
-      console.log(`Found ${sessions.length} sessions for opportunity ${opportunityId}`);
       return res.status(200).json(sessions);
     }
     
     if (req.method === 'POST') {
-      console.log('Creating sessions for opportunity:', opportunityId);
-      
       // Check if opportunity exists
       const oppCheck = await query(
         `SELECT id FROM opportunities WHERE id = $1`,
@@ -90,19 +76,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
       
       if (oppCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
       
       const sessionData = Array.isArray(req.body) ? req.body : [req.body];
       
       if (sessionData.length === 0) {
-        return res.status(400).json({ error: 'At least one session is required' });
+        return res.status(400).json(createErrorResponse('At least one session is required'));
       }
       
       // Validate session data
       for (const session of sessionData) {
         if (!session.start_time || !session.end_time) {
-          return res.status(400).json({ error: 'start_time and end_time are required for each session' });
+          return res.status(400).json(createErrorResponse('start_time and end_time are required for each session'));
         }
       }
       
@@ -140,19 +126,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
       
-      console.log(`Created ${createdSessions.length} sessions for opportunity ${opportunityId}`);
       return res.status(201).json(createdSessions);
     }
     
-    return res.status(405).json({ error: 'Method not allowed' });
-  } catch (error: any) {
+    return res.status(405).json(createErrorResponse('Method not allowed'));
+  } catch (error: unknown) {
     console.error('Error in sessions handler:', error);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-      code: error.code,
-    });
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
   }
 }
 

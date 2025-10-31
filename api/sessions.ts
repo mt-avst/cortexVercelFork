@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
+import { createErrorResponse, getErrorMessage } from './utils/errors';
 
 /**
  * POST /api/sessions
@@ -18,26 +19,20 @@ import { query } from './db';
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json(createErrorResponse('Method not allowed'));
   }
 
   try {
-    console.log('Sessions creation endpoint called:', {
-      method: req.method,
-      url: req.url,
-      body: req.body ? (Array.isArray(req.body.sessions) ? `${req.body.sessions.length} sessions` : 'no sessions array') : 'no body'
-    });
-
     const { opportunity_id, sessions } = req.body;
     
     if (!opportunity_id) {
       console.error('Missing opportunity_id in request body');
-      return res.status(400).json({ error: 'opportunity_id is required' });
+      return res.status(400).json(createErrorResponse('opportunity_id is required'));
     }
     
     if (!Array.isArray(sessions) || sessions.length === 0) {
       console.error('Invalid sessions array:', sessions);
-      return res.status(400).json({ error: 'sessions array is required and must not be empty' });
+      return res.status(400).json(createErrorResponse('sessions array is required and must not be empty'));
     }
 
     // Validate opportunity exists
@@ -48,15 +43,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     if (oppCheck.rows.length === 0) {
       console.error('Opportunity not found:', opportunity_id);
-      return res.status(404).json({ error: 'Opportunity not found' });
+      return res.status(404).json(createErrorResponse('Opportunity not found'));
     }
     
     // Validate session data
     for (const session of sessions) {
       if (!session.start_time || !session.end_time) {
-        return res.status(400).json({ 
-          error: 'start_time and end_time are required for each session' 
-        });
+        return res.status(400).json(createErrorResponse('start_time and end_time are required for each session'));
       }
     }
     
@@ -93,22 +86,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updated_at: created.updated_at.toISOString(),
           remaining: created.capacity - created.booked_count,
         });
-      } catch (dbError: any) {
+      } catch (dbError: unknown) {
         console.error('Database error inserting session:', dbError);
         throw dbError;
       }
     }
     
-    console.log(`Successfully created ${createdSessions.length} sessions for opportunity ${opportunity_id}`);
     return res.status(201).json(createdSessions);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error creating sessions:', error);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-      code: error.code,
-    });
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
   }
 }
+
 

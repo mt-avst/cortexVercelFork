@@ -113,3 +113,6 @@ echo "  - Deploy to Vercel: git push"
 echo "  - Optional: Seed demo data: cd backend && DATABASE_URL=\"\$DATABASE_URL\" npm run seed"
 echo ""
 
+
+
+

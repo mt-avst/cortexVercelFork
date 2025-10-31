@@ -100,13 +100,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         cancelled_at: booking.cancelled_at ? booking.cancelled_at.toISOString() : null,
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       await client.query('ROLLBACK');
       
       // Handle specific PostgreSQL errors
-      if (error.code === '55P03') {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '55P03') {
         // Lock timeout - session is being booked by another user
-        return res.status(409).json({ error: 'Session is being booked by another user. Please try again.' });
+        return res.status(409).json(createErrorResponse('Session is being booked by another user. Please try again.'));
       }
       
       throw error;

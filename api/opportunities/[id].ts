@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
+import { createErrorResponse, getErrorMessage } from '../utils/errors';
 
 /**
  * PATCH /api/opportunities/[id]
@@ -21,14 +22,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (!opportunityId) {
-      return res.status(400).json({ error: 'Opportunity ID is required' });
+      return res.status(400).json(createErrorResponse('Opportunity ID is required'));
     }
-
-    console.log('Opportunities [id] endpoint called:', {
-      method: req.method,
-      id: opportunityId,
-      url: req.url
-    });
 
     if (req.method === 'PATCH') {
       // Update opportunity
@@ -52,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
       
       if (checkResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
 
       // Build dynamic update query based on provided fields
@@ -102,7 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (updates.length === 0) {
-        return res.status(400).json({ error: 'No fields to update' });
+        return res.status(400).json(createErrorResponse('No fields to update'));
       }
 
       // Add updated_at and opportunity ID
@@ -147,7 +142,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updated_at: opportunity.updated_at.toISOString(),
       };
 
-      console.log('Updated opportunity:', opportunityWithOwner.id);
       return res.status(200).json(opportunityWithOwner);
     }
 
@@ -159,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
       
       if (checkResult.rows.length === 0) {
-        return res.status(404).json({ error: 'Opportunity not found' });
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
 
       // Delete opportunity (cascading will delete related sessions and bookings)
@@ -168,19 +162,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [opportunityId]
       );
 
-      console.log('Deleted opportunity:', opportunityId);
       return res.status(200).json({ message: 'Opportunity deleted successfully' });
     }
 
-    return res.status(405).json({ error: 'Method not allowed' });
-  } catch (error: any) {
+    return res.status(405).json(createErrorResponse('Method not allowed'));
+  } catch (error: unknown) {
     console.error('Error in opportunities [id] handler:', error);
-    console.error('Error stack:', error.stack);
-    return res.status(500).json({
-      error: 'Internal server error',
-      details: error.message,
-      code: error.code,
-    });
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
   }
 }
+
 

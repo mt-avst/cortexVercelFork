@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createErrorResponse, getErrorMessage } from '../utils/errors';
 
 /**
  * GET /api/calendar/availability
  * Get calendar availability - generates time slots automatically
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  try {
+    if (req.method !== 'GET') {
+      return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
   
   
   const durationMinutes = parseInt(req.query.duration_minutes as string) || 30;
@@ -73,5 +75,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   };
   
   return res.status(200).json(response);
+  } catch (error: unknown) {
+    console.error('Error in calendar availability handler:', error);
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(
+      createErrorResponse('Internal server error', errorMessage)
+    );
+  }
 }
 

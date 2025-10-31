@@ -1,13 +1,15 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createErrorResponse } from '../utils/errors';
 
 /**
  * GET /api/auth/admin-login
  * Admin login
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  try {
+    if (req.method !== 'GET') {
+      return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
 
   const demoAdmin = {
     id: '633608bc-4b0e-4d60-a498-e680ee97c252',
@@ -36,8 +38,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
   res.setHeader('Set-Cookie', cookieArray);
   
-  // Redirect to admin dashboard
-  const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
-  res.redirect(`${frontendUrl}/admin`);
+    // Redirect to admin dashboard
+    const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
+    res.redirect(`${frontendUrl}/admin`);
+  } catch (error: unknown) {
+    console.error('Error in admin login handler:', error);
+    return res.status(500).json(createErrorResponse('Internal server error'));
+  }
 }
 
