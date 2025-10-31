@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-backend",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "Adaptalabs recruitment app backend",
   "main": "dist/index.js",
   "scripts": {
@@ -10,7 +10,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts"
+    "seed": "tsx src/db/seed.ts",
+    "reset-calendar": "tsx src/db/reset-calendar-bookings.ts",
+    "reset-calendar-full": "tsx src/db/reset-calendar-bookings.ts --cancel-all"
   },
   "dependencies": {
     "cors": "^2.8.5",

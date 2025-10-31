@@ -1,8 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { parseSessionCookie } from '../utils/auth';
 
 /**
+ * GET /api/opportunities/[id]
+ * Get opportunity detail
  * PATCH /api/opportunities/[id]
  * Updates an existing opportunity
  * DELETE /api/opportunities/[id]
@@ -23,6 +26,87 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     if (!opportunityId) {
       return res.status(400).json(createErrorResponse('Opportunity ID is required'));
+    }
+
+    if (req.method === 'GET') {
+      // Get opportunity detail
+      const user = parseSessionCookie(req);
+      const isAdmin = user?.role === 'researcher_admin';
+
+      // Get opportunity
+      const opportunityResult = await query(
+        `SELECT * FROM opportunities WHERE id = $1`,
+        [opportunityId]
+      );
+
+      if (opportunityResult.rows.length === 0) {
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
+      }
+
+      const opportunity = opportunityResult.rows[0];
+
+      // Only show published opportunities to non-admins
+      // Admins can access all opportunities (including drafts) for editing
+      if (!isAdmin && opportunity.status !== 'published') {
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
+      }
+
+      // For admins editing their own opportunities, verify ownership (optional security check)
+      // For now, allow any admin to edit any opportunity
+
+      // Get owner info
+      const ownerResult = await query(
+        `SELECT name, email FROM users WHERE id = $1`,
+        [opportunity.owner_user_id]
+      );
+
+      // Load sessions with dynamic booked_count calculation (matches actual bookings)
+      const sessionsResult = await query(
+        `SELECT s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                s.location_or_meet_link_optional, s.created_at, s.updated_at,
+                s.booked_count as stored_booked_count,
+                COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as booked_count,
+                (s.capacity - COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0))::int as remaining
+         FROM sessions s
+         LEFT JOIN bookings b ON s.id = b.session_id 
+         WHERE s.opportunity_id = $1
+         GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                  s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+         ORDER BY s.start_time ASC`,
+        [opportunityId]
+      );
+
+      // Get click count for polls/surveys (admin only)
+      let clicks_total = null;
+      if (isAdmin && (opportunity.type === 'poll' || opportunity.type === 'survey')) {
+        const clicksResult = await query(
+          `SELECT COUNT(*)::int as count FROM opportunity_clicks WHERE opportunity_id = $1`,
+          [opportunityId]
+        );
+        clicks_total = clicksResult.rows[0]?.count || 0;
+      }
+
+      const opportunityWithDetails = {
+        ...opportunity,
+        owner_name: ownerResult.rows[0]?.name || 'Unknown',
+        owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
+        sessions: sessionsResult.rows.map(s => {
+          // Remove stored_booked_count from response, keep calculated booked_count
+          const { stored_booked_count, ...session } = s;
+          return {
+            ...session,
+            start_time: s.start_time.toISOString(),
+            end_time: s.end_time.toISOString(),
+            created_at: s.created_at.toISOString(),
+            updated_at: s.updated_at.toISOString(),
+          };
+        }),
+        clicks_total,
+        created_at: opportunity.created_at.toISOString(),
+        updated_at: opportunity.updated_at.toISOString(),
+      };
+
+      return res.status(200).json(opportunityWithDetails);
     }
 
     if (req.method === 'PATCH') {
