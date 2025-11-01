@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse, getErrorMessage } from '../../utils/errors';
+import { createErrorResponse, getErrorMessage } from '../utils/errors';
 
 /**
  * GET /api/bookings/pending-approvals

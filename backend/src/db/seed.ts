@@ -42,6 +42,25 @@ export async function seedDatabase() {
     ]);
     console.log('✅ Demo user inserted/updated');
     
+    // Insert second demo user for multi-user testing
+    await client.query(`
+      INSERT INTO users (id, email, name, business_unit, role_title, role) 
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (email) DO UPDATE SET
+        name = EXCLUDED.name,
+        business_unit = EXCLUDED.business_unit,
+        role_title = EXCLUDED.role_title,
+        role = EXCLUDED.role
+    `, [
+      'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+      'demo2@example.com',
+      'Demo User 2',
+      'Product',
+      'Product Manager',
+      'employee'
+    ]);
+    console.log('✅ Demo user 2 inserted/updated');
+    
     // Mark admin emails as researcher admins
     for (const email of config.ADMIN_EMAILS) {
       if (email.trim()) {

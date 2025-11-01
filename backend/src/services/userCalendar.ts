@@ -144,6 +144,9 @@ export class UserCalendarService {
     const maxEvents = 20; // Limit mock events
 
     // Generate events on weekdays only
+    // Use a mix of random times and common meeting times (10am, 2pm, 3pm) to increase chance of conflicts
+    const commonTimes = [10, 14, 15]; // 10am, 2pm, 3pm
+    
     while (currentDate <= end && eventCount < maxEvents) {
       const dayOfWeek = currentDate.getDay();
       
@@ -151,10 +154,19 @@ export class UserCalendarService {
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         const template = mockEventTemplates[eventCount % mockEventTemplates.length];
         
-        // Random time between 9 AM and 5 PM
-        const eventStart = new Date(currentDate);
-        eventStart.setHours(9 + Math.floor(Math.random() * 8), 
-                           Math.floor(Math.random() * 4) * 15, 0);
+        // Mix of common meeting times and random times to increase conflict visibility
+        let eventStart: Date;
+        if (eventCount < 6 && eventCount < commonTimes.length * 2) {
+          // First few events use common meeting times
+          const hour = commonTimes[eventCount % commonTimes.length];
+          eventStart = new Date(currentDate);
+          eventStart.setHours(hour, Math.floor(Math.random() * 4) * 15, 0);
+        } else {
+          // Random time between 9 AM and 5 PM
+          eventStart = new Date(currentDate);
+          eventStart.setHours(9 + Math.floor(Math.random() * 8), 
+                             Math.floor(Math.random() * 4) * 15, 0);
+        }
         
         const eventEnd = new Date(eventStart);
         eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
@@ -166,6 +178,8 @@ export class UserCalendarService {
             title: template.title,
             start: eventStart.toISOString(),
             end: eventEnd.toISOString(),
+            startTime: eventStart,
+            endTime: eventEnd,
             status: 'confirmed',
             location: Math.random() > 0.5 ? 'Meeting Room A' : undefined,
             description: `Demo ${template.title} event for testing`,
@@ -178,6 +192,8 @@ export class UserCalendarService {
       // Move to next day
       currentDate.setDate(currentDate.getDate() + 1);
     }
+    
+    console.log(`📅 Generated ${events.length} mock calendar events for testing conflicts`);
 
     return events;
   }

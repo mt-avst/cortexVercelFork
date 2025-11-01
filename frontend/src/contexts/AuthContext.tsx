@@ -119,7 +119,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         window.location.pathname.includes('/opportunities') ||
                         window.location.pathname.includes('/sessions');
     
-    const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
+    const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
     
     console.log('🔐 Redirecting to login:', loginRoute);
     window.location.href = getAuthUrl(loginRoute);
@@ -212,8 +212,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Clear HttpOnly cookies via logout API calls (silent)
       const baseUrl = getApiBaseUrl();
       const logoutUrls = [
-        baseUrl ? `${baseUrl}/api/auth/logout` : '/api/auth/logout',
-        baseUrl ? `${baseUrl}/auth/logout` : '/auth/logout'
+        baseUrl ? `${baseUrl}/api/auth/logout` : '/api/auth/logout'
       ];
       
       Promise.allSettled(

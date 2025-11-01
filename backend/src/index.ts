@@ -13,13 +13,58 @@ import { TIME_INTERVALS, RATE_LIMITS, SECURITY_CONFIG } from '../../shared/const
 
 const app: express.Application = express();
 
+// Trust proxy for accurate IP addresses (required for IP tracking and when behind reverse proxy)
+if (process.env.TRUST_PROXY !== 'false') {
+  app.set('trust proxy', true);
+}
+
+// Chrome DevTools discovery endpoint (for development)
+// Define BEFORE helmet to avoid CSP issues
+if (config.NODE_ENV === 'development') {
+  app.get('/.well-known/appspecific/com.chrome.devtools.json', (req, res) => {
+    // Return proper workspace configuration for Chrome DevTools
+    const path = require('path');
+    const projectRoot = path.resolve(__dirname, '../..');
+    
+    res.json({
+      workspace: {
+        root: projectRoot,
+        uuid: 'adaptalabs-workspace-dev'
+      }
+    });
+  });
+}
+
 // Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable for development
-  crossOriginEmbedderPolicy: false,
-  crossOriginOpenerPolicy: false,
-  crossOriginResourcePolicy: false,
-}));
+if (config.NODE_ENV === 'production') {
+  // Production: Use helmet with standard security headers
+  app.use(helmet({
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+    crossOriginResourcePolicy: false,
+  }));
+} else {
+  // Development: Don't use helmet at all to avoid CSP issues
+  // This allows Chrome DevTools and other dev tools to work properly
+  console.log('Development mode: Helmet disabled to allow DevTools');
+  
+  // Middleware to prevent CSP headers from being set
+  app.use((req, res, next) => {
+    // Override setHeader to block CSP headers
+    const originalSetHeader = res.setHeader.bind(res);
+    res.setHeader = function(name: string, value: string | number | string[]) {
+      const headerName = name.toLowerCase();
+      if (headerName !== 'content-security-policy' && 
+          headerName !== 'x-content-security-policy' && 
+          headerName !== 'x-webkit-csp') {
+        return originalSetHeader(name, value);
+      }
+      // Silently ignore CSP headers
+      return res;
+    };
+    next();
+  });
+}
 
 // CORS configuration
 app.use(cors({
@@ -100,6 +145,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/auth', authLimiter, authRoutes);
+// Also mount auth routes under /api/auth for frontend compatibility
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api', apiRoutes);
 
 // Health check endpoint

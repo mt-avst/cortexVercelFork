@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
-import { getMyCalendarEvents } from '../api/client';
+import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
 
 interface CalendarGridProps {
   sessions: Session[];
@@ -32,19 +32,66 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   // Debug logging to help identify data freshness issues
   console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
   
-  // Reset bookedSlots when sessions change to ensure fresh state
+  // Load user bookings and populate bookedSlots when sessions change
   useEffect(() => {
-    setBookedSlots(new Set());
+    const loadUserBookings = async () => {
+      if (!sessions || sessions.length === 0) {
+        setBookedSlots(new Set());
+        return;
+      }
+
+      try {
+        const bookings = await getMyBookings();
+        const allBookings = [...bookings.upcoming, ...bookings.past];
+        const sessionIds = new Set(sessions.map(s => s.id));
+        
+        // Find session IDs that user has booked
+        const bookedSessionIds = allBookings
+          .filter(booking => booking.status === 'booked' && sessionIds.has(booking.session_id))
+          .map(booking => booking.session_id);
+        
+        console.log('📅 CalendarGrid: Found booked sessions:', {
+          totalBookings: allBookings.length,
+          bookedSessionIds: bookedSessionIds,
+          sessionsCount: sessions.length
+        });
+        
+        setBookedSlots(new Set(bookedSessionIds));
+      } catch (error) {
+        console.error('Error loading user bookings:', error);
+        // If booking fetch fails, just clear bookedSlots
+        setBookedSlots(new Set());
+      }
+    };
+
+    loadUserBookings();
   }, [sessions]);
 
-  // Fetch user calendar events when component mounts and sessions are available
+  // Auto-detect calendar connection and fetch events when component mounts
   useEffect(() => {
-    const fetchUserCalendar = async () => {
+    const checkAndFetchCalendar = async () => {
       if (!sessions || sessions.length === 0) return;
 
       try {
         setLoadingCalendar(true);
         
+        // First check if calendar is connected
+        let calendarConnectedStatus = false;
+        try {
+          const status = await getCalendarConnectionStatus();
+          calendarConnectedStatus = status.connected;
+          setCalendarConnected(status.connected);
+          
+          if (!status.connected) {
+            // Calendar not connected - exit early
+            return;
+          }
+        } catch (error: any) {
+          // Connection check failed - assume not connected
+          setCalendarConnected(false);
+          return;
+        }
+
         // Get date range from sessions
         const dates = sessions
           .map(s => new Date(s.start_time))
@@ -58,16 +105,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
         const endTime = new Date(dates[dates.length - 1]);
         endTime.setHours(23, 59, 59, 999);
 
+        // Fetch calendar events
         const events = await getMyCalendarEvents(
           startTime.toISOString(),
           endTime.toISOString()
         );
         
+        console.log('📅 CalendarGrid: Fetched calendar events:', events.length, 'events');
+        console.log('📅 CalendarGrid: Calendar connected:', calendarConnectedStatus);
         setUserCalendarEvents(events);
-        setCalendarConnected(true);
       } catch (error: any) {
         if (error.response?.status === 404) {
-          // Calendar not connected - this is fine
+          // Calendar not connected or events endpoint failed
           setCalendarConnected(false);
         } else {
           console.error('Error fetching user calendar:', error);
@@ -78,22 +127,35 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       }
     };
 
-    fetchUserCalendar();
+    checkAndFetchCalendar();
   }, [sessions]);
 
   // Check if a session conflicts with user's calendar
   const hasCalendarConflict = useCallback((session: Session): boolean => {
-    if (!calendarConnected || userCalendarEvents.length === 0) return false;
+    if (!calendarConnected || userCalendarEvents.length === 0) {
+      return false;
+    }
 
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
 
-    return userCalendarEvents.some(event => {
+    const hasConflict = userCalendarEvents.some(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
       // Check for time overlap
-      return (sessionStart < eventEnd && sessionEnd > eventStart);
+      const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
+      
+      if (overlaps) {
+        console.log('📅 Calendar conflict detected:', {
+          session: `${sessionStart.toISOString()} - ${sessionEnd.toISOString()}`,
+          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`
+        });
+      }
+      
+      return overlaps;
     });
+    
+    return hasConflict;
   }, [calendarConnected, userCalendarEvents]);
   // Group sessions by date and create time slots
   const createCalendarSlots = (): CalendarSlot[] => {
@@ -184,17 +246,28 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
 
   const handleConfirmBooking = async (sessionId: string) => {
     try {
-      await onBookSession(sessionId);
+      // Add to bookedSlots immediately for instant visual feedback
       setBookedSlots(prev => {
         const newSet = new Set(prev);
         newSet.add(sessionId);
         return newSet;
       });
+      
+      await onBookSession(sessionId);
       setConfirmingSlot(null);
+      
+      // The parent component will reload sessions, which will trigger the useEffect
+      // to fetch bookings and populate bookedSlots again, ensuring consistency
       
       // Don't navigate away - let user stay on the page to see the updated calendar
       // The parent component will handle showing success message and updating the calendar
     } catch (error) {
+      // Remove from bookedSlots if booking failed
+      setBookedSlots(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sessionId);
+        return newSet;
+      });
       setConfirmingSlot(null);
     }
   };
@@ -226,14 +299,14 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   const getSlotColor = (slot: TimeSlot) => {
     // Check if this is an empty slot
     if (slot.session.id.startsWith('empty-')) return 'bg-light border';
-    if (bookedSlots.has(slot.session.id)) return 'bg-secondary'; // Grey for booked slots
+    if (bookedSlots.has(slot.session.id)) return ''; // Orange for user's booked slots (custom color applied via style)
     if (!slot.isAvailable) {
       return 'bg-danger'; // Red for unavailable slots (full)
     }
     
-    // Check for calendar conflict
+    // Check for calendar conflict (only for available slots)
     const hasConflict = hasCalendarConflict(slot.session);
-    if (hasConflict) {
+    if (hasConflict && slot.isAvailable) {
       return 'bg-warning text-dark'; // Yellow/warning for calendar conflict
     }
     
@@ -269,7 +342,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     
     const hasConflict = hasCalendarConflict(slot.session);
     if (hasConflict) {
-      return "⚠️ You have a calendar conflict at this time";
+      return "You have a booking at this time";
     }
     
     if (bookingLoading === slot.session.id) {
@@ -293,6 +366,26 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
 
   return (
     <div className="calendar-grid">
+      {/* Color-coded legend */}
+      <div className="d-flex flex-wrap gap-3 mb-3">
+        <div className="d-flex align-items-center gap-2">
+          <div className="calendar-slot-available" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
+          <small>Available</small>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <div className="bg-warning" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
+          <small>Calendar Clash</small>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <div className="bg-danger" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
+          <small>Booked</small>
+        </div>
+        <div className="d-flex align-items-center gap-2">
+          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ffaa50' }}></div>
+          <small>Your booking</small>
+        </div>
+      </div>
+      
       <div className="table-responsive">
         <table className="table table-bordered mb-0">
           <thead className="table-light">
@@ -340,65 +433,99 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                           </div>
                         ) : slot ? (
                           <div className="calendar-slot-container">
-                            <button
-                              className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
-                              onClick={() => handleSlotClick(slot)}
-                              disabled={!slot.isAvailable || bookingLoading === slot.session.id || bookedSlots.has(slot.session.id)}
-                              title={getSlotTitle(slot)}
-                              style={{ 
-                                fontSize: '0.9rem'
-                              }}
-                            >
-                              <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
-                                {hasCalendarConflict(slot.session) && slot.isAvailable && (
-                                  <i className="bi bi-exclamation-triangle-fill"></i>
-                                )}
-                                {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
+                            {/* Check if slot has calendar conflict - render non-interactive div */}
+                            {/* Priority: If booked, show orange; otherwise if conflict, show yellow */}
+                            {hasCalendarConflict(slot.session) && !bookedSlots.has(slot.session.id) ? (
+                              <div
+                                className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
+                                title={getSlotTitle(slot)}
+                                style={{ 
+                                  fontSize: '0.9rem',
+                                  cursor: 'not-allowed',
+                                  pointerEvents: 'none'
+                                }}
+                              >
+                                {/* Yellow slots (conflicts) show no text, only colored background */}
                               </div>
-                              
-                              {bookingLoading === slot.session.id && (
-                                <div className="position-absolute top-50 start-50 translate-middle">
-                                  <div className="spinner-border spinner-border-sm" role="status">
-                                    <span className="visually-hidden">Booking...</span>
-                                  </div>
+                            ) : bookedSlots.has(slot.session.id) ? (
+                              <div
+                                className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
+                                title={getSlotTitle(slot)}
+                                style={{ 
+                                  fontSize: '0.9rem',
+                                  cursor: 'not-allowed',
+                                  pointerEvents: 'none',
+                                  backgroundColor: '#ffaa50',
+                                  borderColor: '#ffaa50',
+                                  color: '#000000'
+                                }}
+                              >
+                                {/* Orange for booked slots */}
+                                <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
+                                  {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
                                 </div>
-                              )}
-                            </button>
-                            
-                            {/* Confirmation buttons */}
-                            {confirmingSlot === slot.session.id && (
-                              <div className="confirmation-buttons">
-                                <button
-                                  className="btn btn-success btn-sm confirmation-btn confirm-btn"
-                                  onClick={() => handleConfirmBooking(slot.session.id)}
-                                  title="Confirm booking"
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1.1)';
-                                    e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = '';
-                                    e.currentTarget.style.boxShadow = '';
-                                  }}
-                                >
-                                  <i className="bi bi-check"></i>
-                                </button>
-                                <button
-                                  className="btn btn-danger btn-sm confirmation-btn cancel-btn"
-                                  onClick={handleCancelBooking}
-                                  title="Cancel"
-                                  onMouseEnter={(e) => {
-                                    e.currentTarget.style.transform = 'scale(1.1)';
-                                    e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
-                                  }}
-                                  onMouseLeave={(e) => {
-                                    e.currentTarget.style.transform = '';
-                                    e.currentTarget.style.boxShadow = '';
-                                  }}
-                                >
-                                  <i className="bi bi-x"></i>
-                                </button>
                               </div>
+                            ) : (
+                              <>
+                                <button
+                                  className={`btn w-100 calendar-slot-btn ${bookedSlots.has(slot.session.id) ? '' : getSlotColor(slot)} ${bookedSlots.has(slot.session.id) ? '' : getSlotTextColor(slot)}`}
+                                  onClick={() => handleSlotClick(slot)}
+                                  disabled={!slot.isAvailable || bookingLoading === slot.session.id || bookedSlots.has(slot.session.id)}
+                                  title={getSlotTitle(slot)}
+                                  style={{ 
+                                    fontSize: '0.9rem',
+                                    ...(bookedSlots.has(slot.session.id) ? { backgroundColor: '#ffaa50', borderColor: '#ffaa50', color: '#000000' } : {})
+                                  }}
+                                >
+                                  <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
+                                    {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
+                                  </div>
+                                  
+                                  {bookingLoading === slot.session.id && (
+                                    <div className="position-absolute top-50 start-50 translate-middle">
+                                      <div className="spinner-border spinner-border-sm" role="status">
+                                        <span className="visually-hidden">Booking...</span>
+                                      </div>
+                                    </div>
+                                  )}
+                                </button>
+                                
+                                {/* Confirmation buttons */}
+                                {confirmingSlot === slot.session.id && (
+                                  <div className="confirmation-buttons">
+                                    <button
+                                      className="btn btn-success btn-sm confirmation-btn confirm-btn"
+                                      onClick={() => handleConfirmBooking(slot.session.id)}
+                                      title="Confirm booking"
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = '';
+                                        e.currentTarget.style.boxShadow = '';
+                                      }}
+                                    >
+                                      <i className="bi bi-check"></i>
+                                    </button>
+                                    <button
+                                      className="btn btn-danger btn-sm confirmation-btn cancel-btn"
+                                      onClick={handleCancelBooking}
+                                      title="Cancel"
+                                      onMouseEnter={(e) => {
+                                        e.currentTarget.style.transform = 'scale(1.1)';
+                                        e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
+                                      }}
+                                      onMouseLeave={(e) => {
+                                        e.currentTarget.style.transform = '';
+                                        e.currentTarget.style.boxShadow = '';
+                                      }}
+                                    >
+                                      <i className="bi bi-x"></i>
+                                    </button>
+                                  </div>
+                                )}
+                              </>
                             )}
                             
                           </div>

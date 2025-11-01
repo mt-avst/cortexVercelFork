@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 
 import { pool } from '../config';
 import { requireAdmin, optionalAuth } from '../middleware/authenticate';
@@ -180,7 +181,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     
     const result = await pool.query(query, params);
     
-    // Load sessions for each opportunity
+    // Load sessions and click counts for each opportunity
     const opportunities = await Promise.all(result.rows.map(async (opportunity) => {
       const sessionsResult = await pool.query(`
         SELECT *, (capacity - booked_count) as remaining
@@ -188,6 +189,16 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
         WHERE opportunity_id = $1
         ORDER BY start_time ASC
       `, [opportunity.id]);
+      
+      // Get click count for polls and surveys (M6)
+      let clicks_total = 0;
+      if ((opportunity.type === 'poll' || opportunity.type === 'survey') && isAdmin) {
+        const clicksResult = await pool.query(
+          'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
+          [opportunity.id]
+        );
+        clicks_total = parseInt(clicksResult.rows[0]?.count || '0', 10);
+      }
       
       return {
         ...opportunity,
@@ -199,7 +210,8 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
           end_time: session.end_time.toISOString(),
           created_at: session.created_at.toISOString(),
           updated_at: session.updated_at.toISOString(),
-        }))
+        })),
+        clicks_total: (opportunity.type === 'poll' || opportunity.type === 'survey') ? clicks_total : undefined
       };
     }));
     
@@ -337,10 +349,10 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     throw new ValidationError('Validation failed', errors);
   }
   
-  // Additional validation for published polls/surveys/questions
-  if (data.status === 'published' && ['poll', 'survey', 'question'].includes(data.type)) {
+  // Additional validation for published polls/surveys (M6 requirement)
+  if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
     if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
-      throw new ValidationError('External link is required for published polls, surveys, and questions');
+      throw new ValidationError('External link is required for published polls and surveys');
     }
   }
   
@@ -441,9 +453,18 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     throw new ForbiddenError('Only the owner can edit this opportunity');
   }
   
-  // Additional validation for published polls/surveys
-  if (data.status === 'published' && data.type && ['poll', 'survey'].includes(data.type)) {
-    if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
+  // Get existing opportunity to check type when status is being changed
+  const existingOpp = await pool.query(
+    'SELECT type, external_link_optional FROM opportunities WHERE id = $1',
+    [id]
+  );
+  const existingType = data.type || existingOpp.rows[0].type;
+  const existingLink = existingOpp.rows[0].external_link_optional;
+  const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
+  
+  // Additional validation for published polls/surveys (M6 requirement)
+  if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
+    if (!newLink || !validateUrl(newLink)) {
       throw new ValidationError('External link is required for published polls and surveys');
     }
   }
@@ -871,6 +892,146 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
   } catch (error) {
     console.error('Error deleting sessions:', error);
     res.status(500).json({ error: 'Failed to delete sessions' });
+  }
+}));
+
+// POST /api/opportunities/:id/click - Track click for poll/survey
+router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { id: opportunityId } = req.params;
+  
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    // In demo mode, just return success
+    return res.json({ ok: true });
+  }
+
+  try {
+    // Load opportunity to check type and status
+    const opportunityResult = await pool.query(
+      'SELECT id, type, status FROM opportunities WHERE id = $1',
+      [opportunityId]
+    );
+
+    if (opportunityResult.rows.length === 0) {
+      throw new NotFoundError('Opportunity');
+    }
+
+    const opportunity = opportunityResult.rows[0];
+
+    // Only allow click tracking for poll or survey types
+    if (opportunity.type !== 'poll' && opportunity.type !== 'survey') {
+      throw new ValidationError('Click tracking is only available for polls and surveys');
+    }
+
+    // Only allow tracking for published opportunities
+    if (opportunity.status !== 'published') {
+      throw new NotFoundError('Opportunity not published');
+    }
+
+    // Get user ID if authenticated, otherwise null
+    const userId = req.user?.id || null;
+
+    // Get user agent and IP for tracking (privacy-aware)
+    const userAgent = req.headers['user-agent'] || null;
+    const clientIp = req.ip || req.socket.remoteAddress || null;
+    
+    // Hash IP address for privacy
+    let ipHash = null;
+    if (clientIp && process.env.SESSION_SECRET) {
+      ipHash = crypto
+        .createHash('sha256')
+        .update(clientIp + process.env.SESSION_SECRET)
+        .digest('hex')
+        .substring(0, 32); // Store only first 32 chars
+    }
+
+    // Record the click
+    await pool.query(
+      `INSERT INTO opportunity_clicks (opportunity_id, user_id, user_agent, ip_hash)
+       VALUES ($1, $2, $3, $4)`,
+      [opportunityId, userId, userAgent, ipHash]
+    );
+
+    res.json({ ok: true });
+  } catch (error) {
+    throw error;
+  }
+}));
+
+// GET /api/opportunities/:id/analytics - Get click analytics for admin
+router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { id: opportunityId } = req.params;
+  const userId = req.user!.id;
+
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    return res.json({
+      clicks_total: 0,
+      clicks_24h: 0,
+      clicks_by_day: []
+    });
+  }
+
+  try {
+    // Check opportunity ownership
+    const opportunityResult = await pool.query(
+      'SELECT owner_user_id FROM opportunities WHERE id = $1',
+      [opportunityId]
+    );
+
+    if (opportunityResult.rows.length === 0) {
+      throw new NotFoundError('Opportunity');
+    }
+
+    const opportunity = opportunityResult.rows[0];
+
+    // Only owner can view analytics
+    if (opportunity.owner_user_id !== userId) {
+      throw new ForbiddenError('Only the opportunity owner can view analytics');
+    }
+
+    // Get total clicks
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
+      [opportunityId]
+    );
+    const clicks_total = parseInt(totalResult.rows[0].count, 10);
+
+    // Get clicks in last 24 hours
+    const hours24Result = await pool.query(
+      `SELECT COUNT(*) as count FROM opportunity_clicks 
+       WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '24 hours'`,
+      [opportunityId]
+    );
+    const clicks_24h = parseInt(hours24Result.rows[0].count, 10);
+
+    // Get clicks by day for last 30 days
+    const dailyResult = await pool.query(
+      `SELECT 
+        DATE(clicked_at) as date,
+        COUNT(*)::int as count
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1 
+         AND clicked_at >= NOW() - INTERVAL '30 days'
+       GROUP BY DATE(clicked_at)
+       ORDER BY date ASC`,
+      [opportunityId]
+    );
+
+    const clicks_by_day = dailyResult.rows.map(row => ({
+      date: row.date.toISOString().split('T')[0], // Format as YYYY-MM-DD
+      count: parseInt(row.count, 10)
+    }));
+
+    res.json({
+      clicks_total,
+      clicks_24h,
+      clicks_by_day
+    });
+  } catch (error) {
+    throw error;
   }
 }));
 

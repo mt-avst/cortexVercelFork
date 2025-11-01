@@ -2,7 +2,8 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../config';
 import { requireAuth, optionalAuth } from '../middleware/authenticate';
 import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types';
-// import calendarService from '../services/calendar';
+import calendarService from '../services/calendar';
+import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
@@ -56,7 +57,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     // Lock session row for update to prevent race conditions
     const sessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
-             o.owner_user_id
+             o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE s.id = $1
@@ -143,12 +144,61 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     const booking = bookingResult.rows[0];
 
     // Calendar integration (after transaction commit)
-    let calendarResult = { success: true, eventId: 'demo-event-' + Date.now() };
+    let calendarResult: { success: boolean; eventId?: string; error?: string } = { success: false };
     try {
-      // Mock calendar integration - in production this would call calendarService.createEvent
+      const appBaseUrl = process.env.FRONTEND_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+      const opportunityUrl = `${appBaseUrl}/opportunities/${session.opportunity_id}`;
+      
+      // Build calendar event description
+      const description = `Research session: ${session.opportunity_title}\n\n` +
+        `Purpose: ${session.purpose_one_liner || 'Research participation'}\n\n` +
+        `Participant: ${req.user!.name} (${req.user!.email})\n\n` +
+        `Manage booking: ${appBaseUrl}/my-bookings\n\n` +
+        `View opportunity: ${opportunityUrl}`;
+
+      // Create calendar event
+      const calendarEvent: CalendarEvent = {
+        id: '', // Will be set by calendar service
+        title: `${session.opportunity_title} with ${req.user!.name}`,
+        start: session.start_time,
+        end: session.end_time,
+        startTime: new Date(session.start_time),
+        endTime: new Date(session.end_time),
+        description: description,
+        status: 'confirmed',
+        location: session.location_or_meet_link_optional || undefined,
+        meetLink: !session.location_or_meet_link_optional ? '' : undefined, // Add Meet link if no location provided
+        attendees: [
+          {
+            email: req.user!.email,
+            name: req.user!.name,
+            responseStatus: 'needsAction'
+          },
+          {
+            email: ownerEmail,
+            name: ownerName,
+            responseStatus: 'needsAction'
+          }
+        ]
+      };
+
+      const createResult = await calendarService.createEvent(calendarEvent);
+      calendarResult = createResult;
+      
+      // If calendar event was created successfully, update booking with event ID
+      if (calendarResult.success && calendarResult.eventId) {
+        await pool.query(
+          'UPDATE bookings SET gcal_event_id = $1 WHERE id = $2',
+          [calendarResult.eventId, booking.id]
+        );
+        console.log(`✅ Calendar event created and saved: ${calendarResult.eventId} for booking ${booking.id}`);
+      } else {
+        console.warn(`⚠️ Calendar event creation failed: ${createResult.error || 'Unknown error'}`);
+      }
     } catch (calendarError) {
       console.error('Calendar integration failed:', calendarError);
-      calendarResult = { success: false, eventId: undefined as any };
+      calendarResult = { success: false, eventId: undefined };
+      // Don't fail the booking if calendar fails - booking is already committed
     }
 
     // Email notifications (after transaction commit)
@@ -169,21 +219,50 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
         confirmationTemplate
       );
 
-      // Send notification to researcher (if enabled)
-      // Note: Researcher notification preferences will be implemented in a future release
-      const adminTemplate = EmailService.getAdminNotificationTemplate(
-        session.opportunity_title,
-        req.user!.name,
-        req.user!.email,
-        new Date(session.start_time),
-        new Date(session.end_time),
-        'booked'
-      );
+      // Send notification to researcher (if enabled in preferences)
+      try {
+        const prefsResult = await pool.query(
+          `SELECT on_book_email FROM notification_preferences WHERE user_id = $1`,
+          [session.owner_user_id]
+        );
+        
+        const shouldNotify = prefsResult.rows.length === 0 || prefsResult.rows[0].on_book_email === true;
+        
+        if (shouldNotify) {
+          const adminTemplate = EmailService.getAdminNotificationTemplate(
+            session.opportunity_title,
+            req.user!.name,
+            req.user!.email,
+            new Date(session.start_time),
+            new Date(session.end_time),
+            'booked'
+          );
 
-      await emailService.sendEmail(
-        { email: ownerEmail, name: ownerName },
-        adminTemplate
-      );
+          await emailService.sendEmail(
+            { email: ownerEmail, name: ownerName },
+            adminTemplate
+          );
+        }
+      } catch (prefError) {
+        console.error('Error checking notification preferences:', prefError);
+        // Default to sending notification if preference check fails
+        try {
+          const adminTemplate = EmailService.getAdminNotificationTemplate(
+            session.opportunity_title,
+            req.user!.name,
+            req.user!.email,
+            new Date(session.start_time),
+            new Date(session.end_time),
+            'booked'
+          );
+          await emailService.sendEmail(
+            { email: ownerEmail, name: ownerName },
+            adminTemplate
+          );
+        } catch (emailError) {
+          console.error('Fallback email notification failed:', emailError);
+        }
+      }
     } catch (emailError) {
       console.error('Email notification failed:', emailError);
       // Don't fail the booking if email fails
@@ -292,10 +371,21 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
     // Calendar cancellation (after transaction commit)
     if (booking.gcal_event_id) {
       try {
-        // Mock calendar integration - in production this would call calendarService.deleteEvent
+        const deleteResult = await calendarService.deleteEvent(booking.gcal_event_id);
+        
+        if (deleteResult.success) {
+          console.log(`✅ Calendar event deleted: ${booking.gcal_event_id} for booking ${bookingId}`);
+        } else {
+          // Handle 404 as success (event might already be deleted)
+          if (deleteResult.error?.includes('404') || deleteResult.error?.includes('Not Found')) {
+            console.log(`ℹ️ Calendar event not found (already deleted): ${booking.gcal_event_id}`);
+          } else {
+            console.warn(`⚠️ Calendar event deletion failed: ${deleteResult.error || 'Unknown error'}`);
+          }
+        }
       } catch (calendarError) {
         console.error('Calendar cancellation failed:', calendarError);
-        // Don't fail the cancellation if calendar fails
+        // Don't fail the cancellation if calendar fails - booking is already cancelled
       }
     }
 
@@ -315,20 +405,50 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
         cancellationTemplate
       );
 
-      // Send notification to researcher (if enabled)
-      const adminTemplate = EmailService.getAdminNotificationTemplate(
-        booking.opportunity_title,
-        req.user!.name,
-        req.user!.email,
-        new Date(booking.end_time),
-        new Date(booking.end_time),
-        'cancelled'
-      );
+      // Send notification to researcher (if enabled in preferences)
+      try {
+        const prefsResult = await pool.query(
+          `SELECT on_cancel_email FROM notification_preferences WHERE user_id = $1`,
+          [booking.owner_user_id]
+        );
+        
+        const shouldNotify = prefsResult.rows.length === 0 || prefsResult.rows[0].on_cancel_email === true;
+        
+        if (shouldNotify) {
+          const adminTemplate = EmailService.getAdminNotificationTemplate(
+            booking.opportunity_title,
+            req.user!.name,
+            req.user!.email,
+            new Date(booking.end_time),
+            new Date(booking.end_time),
+            'cancelled'
+          );
 
-      await emailService.sendEmail(
-        { email: booking.owner_email, name: booking.owner_name },
-        adminTemplate
-      );
+          await emailService.sendEmail(
+            { email: booking.owner_email, name: booking.owner_name },
+            adminTemplate
+          );
+        }
+      } catch (prefError) {
+        console.error('Error checking notification preferences:', prefError);
+        // Default to sending notification if preference check fails
+        try {
+          const adminTemplate = EmailService.getAdminNotificationTemplate(
+            booking.opportunity_title,
+            req.user!.name,
+            req.user!.email,
+            new Date(booking.end_time),
+            new Date(booking.end_time),
+            'cancelled'
+          );
+          await emailService.sendEmail(
+            { email: booking.owner_email, name: booking.owner_name },
+            adminTemplate
+          );
+        } catch (emailError) {
+          console.error('Fallback email notification failed:', emailError);
+        }
+      }
     } catch (emailError) {
       console.error('Email notification failed:', emailError);
       // Don't fail the cancellation if email fails
@@ -382,7 +502,8 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 
     // Load target session with opportunity details
     const targetSessionResult = await client.query(`
-      SELECT s.*, o.status as opportunity_status
+      SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
+             o.purpose_one_liner, o.id as opportunity_id, o.owner_user_id
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE s.id = $1
@@ -444,26 +565,91 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 
     await client.query('COMMIT');
 
+    // Get owner user details for the target session
+    let targetOwnerName = 'Unknown User';
+    let targetOwnerEmail = 'unknown@example.com';
+    if (targetSession.owner_user_id) {
+      const ownerResult = await pool.query(
+        'SELECT name, email FROM users WHERE id = $1',
+        [targetSession.owner_user_id]
+      );
+      if (ownerResult.rows.length > 0) {
+        targetOwnerName = ownerResult.rows[0].name;
+        targetOwnerEmail = ownerResult.rows[0].email;
+      }
+    }
+
     // Calendar update (after transaction commit)
     if (booking.gcal_event_id) {
       try {
-        const updatedEvent = {
+        const appBaseUrl = process.env.FRONTEND_URL || process.env.APP_BASE_URL || 'http://localhost:3000';
+        const opportunityUrl = `${appBaseUrl}/opportunities/${targetSession.opportunity_id}`;
+        
+        // Build calendar event description
+        const description = `Research session: ${targetSession.opportunity_title}\n\n` +
+          `Purpose: ${targetSession.purpose_one_liner || 'Research participation'}\n\n` +
+          `Participant: ${req.user!.name} (${req.user!.email})\n\n` +
+          `Manage booking: ${appBaseUrl}/my-bookings\n\n` +
+          `View opportunity: ${opportunityUrl}`;
+
+        // Build calendar event for update
+        const calendarEvent: CalendarEvent = {
+          id: booking.gcal_event_id,
           title: `${targetSession.opportunity_title} with ${req.user!.name}`,
-          description: `Research session: ${targetSession.opportunity_title}\n\nPurpose: ${targetSession.opportunity_title}\n\nParticipant: ${req.user!.name} (${req.user!.email})\n\nManage booking: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings`,
+          start: targetSession.start_time,
+          end: targetSession.end_time,
           startTime: new Date(targetSession.start_time),
           endTime: new Date(targetSession.end_time),
+          description: description,
+          status: 'confirmed',
+          location: targetSession.location_or_meet_link_optional || undefined,
+          meetLink: !targetSession.location_or_meet_link_optional ? '' : undefined, // Add Meet link if no location provided
           attendees: [
-            { email: req.user!.email, name: req.user!.name },
-            { email: targetSession.owner_email, name: targetSession.owner_name }
-          ],
-          location: targetSession.location_or_meet_link_optional,
-          meetLink: true
+            {
+              email: req.user!.email,
+              name: req.user!.name,
+              responseStatus: 'needsAction'
+            },
+            {
+              email: targetOwnerEmail,
+              name: targetOwnerName,
+              responseStatus: 'needsAction'
+            }
+          ]
         };
 
-        // Mock calendar integration - in production this would call calendarService.updateEvent
+        // Try to update the existing event
+        const updateResult = await calendarService.updateEvent(booking.gcal_event_id, calendarEvent);
+        
+        if (updateResult.success) {
+          console.log(`✅ Calendar event updated: ${booking.gcal_event_id} for booking ${bookingId}`);
+        } else {
+          // If update fails, delete old event and create new one
+          console.warn(`⚠️ Calendar event update failed, attempting delete+create: ${updateResult.error || 'Unknown error'}`);
+          
+          // Delete old event (ignore 404 errors)
+          const deleteResult = await calendarService.deleteEvent(booking.gcal_event_id);
+          if (!deleteResult.success && !deleteResult.error?.includes('404') && !deleteResult.error?.includes('Not Found')) {
+            console.warn(`⚠️ Could not delete old calendar event: ${deleteResult.error}`);
+          }
+          
+          // Create new event
+          const createResult = await calendarService.createEvent(calendarEvent);
+          
+          if (createResult.success && createResult.eventId) {
+            // Update booking with new event ID
+            await pool.query(
+              'UPDATE bookings SET gcal_event_id = $1 WHERE id = $2',
+              [createResult.eventId, bookingId]
+            );
+            console.log(`✅ Calendar event recreated: ${createResult.eventId} for booking ${bookingId}`);
+          } else {
+            console.warn(`⚠️ Calendar event recreation failed: ${createResult.error || 'Unknown error'}`);
+          }
+        }
       } catch (calendarError) {
         console.error('Calendar update failed:', calendarError);
-        // Don't fail the reschedule if calendar fails
+        // Don't fail the reschedule if calendar fails - booking is already rescheduled
       }
     }
 

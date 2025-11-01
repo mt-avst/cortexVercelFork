@@ -1,11 +1,15 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import './Header.css';
 
 const Header: React.FC = () => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
+  const location = useLocation();
+  
+  // Check if we're on an admin page
+  const isOnAdminPage = location.pathname.startsWith('/admin');
 
   // Determine logo link based on user role
   // Use useMemo to ensure it updates when user changes
@@ -40,7 +44,7 @@ const Header: React.FC = () => {
                     </Link>
                   </>
                 )}
-                {user.role === 'researcher_admin' && (
+                {user.role === 'researcher_admin' && !isOnAdminPage && (
                   <Link to="/admin" className="btn btn-secondary">
                     Admin
                   </Link>

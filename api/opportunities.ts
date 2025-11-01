@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
 import { createErrorResponse, getErrorMessage } from './utils/errors';
+import { parseSessionCookie } from './utils/auth';
 
 /**
  * GET /api/opportunities
@@ -29,18 +30,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         const opportunity = result.rows[0];
         
-        // Load sessions for this opportunity
+        // Load sessions with dynamic booked_count calculation
         const sessionsResult = await query(
-          `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
+          `SELECT s.*, 
+                  COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count
+           FROM sessions s
+           LEFT JOIN bookings b ON s.id = b.session_id
+           WHERE s.opportunity_id = $1
+           GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                    s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+           ORDER BY s.start_time ASC`,
           [id]
         );
         opportunity.sessions = sessionsResult.rows.map(s => ({
           ...s,
+          booked_count: s.actual_booked_count, // Use calculated value
           start_time: s.start_time.toISOString(),
           end_time: s.end_time.toISOString(),
           created_at: s.created_at.toISOString(),
           updated_at: s.updated_at.toISOString(),
-          remaining: s.capacity - s.booked_count, // Add remaining field
+          remaining: s.capacity - (s.actual_booked_count || 0), // Calculate from actual bookings
         }));
         
         // Convert timestamps to ISO strings
@@ -79,6 +88,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         paramIndex++;
       }
       
+      // Check if user is admin - non-admins should only see published opportunities
+      const user = parseSessionCookie(req);
+      const isAdmin = user?.role === 'researcher_admin';
+      
+      // Filter out drafts for non-admin users (unless they specifically requested draft status)
+      if (!isAdmin && (!status || status !== 'draft')) {
+        sql += ` AND o.status = 'published'`;
+      }
+      
       sql += ` ORDER BY o.created_at DESC`;
       
       const result = await query(sql, params);
@@ -87,15 +105,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (result.rows.length === 0) {
         return res.status(200).json([]);
       }
-      
-      // Load sessions for each opportunity
+
+      // Load sessions and click counts for each opportunity
       const opportunities = await Promise.all(
         result.rows.map(async (opp) => {
           try {
+            // Load sessions with dynamic booked_count calculation
             const sessionsResult = await query(
-              `SELECT * FROM sessions WHERE opportunity_id = $1 ORDER BY start_time ASC`,
+              `SELECT s.*, 
+                      COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count
+               FROM sessions s
+               LEFT JOIN bookings b ON s.id = b.session_id
+               WHERE s.opportunity_id = $1
+               GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                        s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+               ORDER BY s.start_time ASC`,
               [opp.id]
             );
+            
+            // Get click count for polls and surveys (M6)
+            let clicks_total: number | undefined = undefined;
+            if ((opp.type === 'poll' || opp.type === 'survey') && isAdmin) {
+              try {
+                const clicksResult = await query(
+                  'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
+                  [opp.id]
+                );
+                clicks_total = parseInt(clicksResult.rows[0]?.count || '0', 10);
+              } catch (clickError) {
+                // Don't fail entire request if click count query fails
+                console.error('Error loading click count for opportunity', opp.id, ':', getErrorMessage(clickError));
+                clicks_total = 0;
+              }
+            }
             
             return {
               ...opp,
@@ -105,12 +147,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               owner_email: opp.owner_email || 'unknown@example.com',
               sessions: sessionsResult.rows.map(s => ({
                 ...s,
+                booked_count: s.actual_booked_count, // Use calculated value
                 start_time: s.start_time.toISOString(),
                 end_time: s.end_time.toISOString(),
                 created_at: s.created_at.toISOString(),
                 updated_at: s.updated_at.toISOString(),
-                remaining: s.capacity - s.booked_count, // Add remaining field
+                remaining: s.capacity - (s.actual_booked_count || 0), // Calculate from actual bookings
               })),
+              clicks_total: (opp.type === 'poll' || opp.type === 'survey') ? clicks_total : undefined,
             };
           } catch (sessionError: unknown) {
             console.error('Error loading sessions for opportunity', opp.id, ':', getErrorMessage(sessionError));
@@ -122,6 +166,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               owner_name: opp.owner_name || 'Unknown',
               owner_email: opp.owner_email || 'unknown@example.com',
               sessions: [],
+              clicks_total: ((opp.type === 'poll' || opp.type === 'survey') && isAdmin) ? 0 : undefined,
             };
           }
         })

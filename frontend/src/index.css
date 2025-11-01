@@ -107,20 +107,31 @@ small, .small {
 }
 
 .btn-primary {
-  background-color: #007bff !important;
-  color: white !important;
+  background-color: #ffaa50 !important;
+  color: #000000 !important;
 }
 
 .btn-primary:hover {
-  background-color: #0056b3 !important;
+  background-color: #ff9632 !important;
+  color: #000000 !important;
 }
 
-/* Ensure btn-primary text is always white */
+/* Ensure btn-primary text is always black */
 .btn-primary,
 .btn-primary *,
 .card .btn-primary,
 .card .btn-primary * {
-  color: white !important;
+  color: #000000 !important;
+}
+
+/* Override Bootstrap primary text color to orange */
+.text-primary {
+  color: #ffaa50 !important;
+}
+
+/* Override Bootstrap primary border color to orange */
+.border-primary {
+  border-color: #ffaa50 !important;
 }
 
 /* Compact button style for Participate button */
@@ -136,6 +147,23 @@ small, .small {
 
 .btn-secondary:hover {
   background-color: #545b62;
+}
+
+.btn-outline-primary {
+  color: #ffaa50 !important;
+  border-color: #ffaa50 !important;
+  background-color: transparent !important;
+}
+
+.btn-outline-primary:hover {
+  color: #000000 !important;
+  background-color: #ffaa50 !important;
+  border-color: #ffaa50 !important;
+}
+
+.btn-outline-primary:focus,
+.btn-outline-primary.focus {
+  box-shadow: 0 0 0 0.2rem rgba(255, 170, 80, 0.25) !important;
 }
 
 .header {
@@ -205,11 +233,11 @@ small, .small {
 }
 
 .card a {
-  color: #007bff !important;
+  color: #ffaa50 !important;
 }
 
 .card a:hover {
-  color: #0056b3 !important;
+  color: #ff9632 !important;
 }
 
 /* Individual impact lab activity cards */
@@ -235,11 +263,11 @@ small, .small {
 }
 
 .opportunity-card a {
-  color: #007bff !important;
+  color: #ffaa50 !important;
 }
 
 .opportunity-card a:hover {
-  color: #0056b3 !important;
+  color: #ff9632 !important;
 }
 
 /* Filter form styling */
@@ -265,11 +293,11 @@ small, .small {
 }
 
 .filter-section a {
-  color: #007bff !important;
+  color: #ffaa50 !important;
 }
 
 .filter-section a:hover {
-  color: #0056b3 !important;
+  color: #ff9632 !important;
 }
 
 .filter-section .row {
@@ -308,8 +336,8 @@ small, .small {
 
 .filter-section .form-select:focus,
 .filter-section .form-control:focus {
-  border-color: #007bff;
-  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  border-color: #ffaa50;
+  box-shadow: 0 0 0 0.2rem rgba(255, 170, 80, 0.25);
   outline: 0;
 }
 
@@ -529,7 +557,7 @@ small, .small {
 
 /* Add focus states for keyboard navigation */
 .calendar-slot-btn:focus {
-  outline: 2px solid var(--bs-primary);
+  outline: 2px solid #ffaa50;
   outline-offset: 2px;
 }
 
@@ -651,8 +679,8 @@ small, .small {
 }
 
 .badge.type-question {
-  background-color: #fd7e14 !important; /* Orange */
-  color: white !important;
+  background-color: #ffaa50 !important; /* Orange */
+  color: #000000 !important;
 }
 
 /* ============================================================

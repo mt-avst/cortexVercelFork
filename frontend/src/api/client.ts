@@ -48,7 +48,7 @@ api.interceptors.response.use(
                           window.location.pathname.includes('/opportunities') ||
                           window.location.pathname.includes('/sessions');
       
-      const loginRoute = isAdminRoute ? '/auth/admin-login' : '/auth/demo-login';
+      const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
       
       console.log('🔐 401 error detected, redirecting to:', loginRoute);
       window.location.href = getAuthUrl(loginRoute);
@@ -73,7 +73,7 @@ export const getMe = async (): Promise<User> => {
 
 export const logout = async (): Promise<void> => {
   // Use auth endpoint for logout
-  await axios.post(getAuthUrl('/auth/logout'), {}, {
+  await axios.post(getAuthUrl('/api/auth/logout'), {}, {
     withCredentials: true,
     timeout: API_CONFIG.TIMEOUT,
   });
@@ -83,13 +83,28 @@ export const logout = async (): Promise<void> => {
 export const demoLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/auth/demo-login');
+  window.location.href = getAuthUrl('/api/auth/demo-login');
+};
+
+export const demoUser2Login = async (): Promise<void> => {
+  // Set a flag to detect when we return from login
+  sessionStorage.setItem('loginRedirect', 'true');
+  window.location.href = getAuthUrl('/api/auth/demo-user-2-login');
 };
 
 export const demoAdminLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/auth/admin-login');
+  window.location.href = getAuthUrl('/api/auth/admin-login');
+};
+
+/**
+ * Google OAuth login - redirects to Google OAuth flow
+ */
+export const googleLogin = async (): Promise<void> => {
+  // Set a flag to detect when we return from login
+  sessionStorage.setItem('loginRedirect', 'true');
+  window.location.href = getAuthUrl('/auth/google-login');
 };
 
 /**
@@ -296,14 +311,6 @@ export const checkConflicts = async (
 
 // User Calendar API functions
 /**
- * Get Google OAuth URL for calendar connection
- */
-export const getCalendarConnectUrl = async (): Promise<{ authUrl: string }> => {
-  const response = await api.get('/calendar/auth/connect');
-  return response.data;
-};
-
-/**
  * Get user's calendar events for a date range
  */
 export const getMyCalendarEvents = async (
@@ -335,6 +342,86 @@ export const getCalendarConnectionStatus = async (): Promise<{
  */
 export const disconnectCalendar = async (): Promise<void> => {
   await api.delete('/calendar/disconnect');
+};
+
+// Click tracking API functions (M6)
+/**
+ * Track a click on a poll or survey opportunity
+ */
+export const trackOpportunityClick = async (opportunityId: string): Promise<{ ok: boolean }> => {
+  try {
+    const response = await api.post(`/opportunities/${opportunityId}/click`);
+    return response.data;
+  } catch (error) {
+    // Don't fail the navigation if tracking fails - just log it
+    console.warn('Click tracking failed:', error);
+    return { ok: false };
+  }
+};
+
+export interface OpportunityAnalytics {
+  clicks_total: number;
+  clicks_24h: number;
+  clicks_by_day: Array<{ date: string; count: number }>;
+}
+
+/**
+ * Get click analytics for an opportunity (admin only)
+ */
+export const getOpportunityAnalytics = async (opportunityId: string): Promise<OpportunityAnalytics> => {
+  const response = await api.get(`/opportunities/${opportunityId}/analytics`);
+  return response.data;
+};
+
+// M7: Dashboard and Settings
+
+export interface DashboardStats {
+  total_opportunities: number;
+  published_opportunities: number;
+  draft_opportunities: number;
+  closed_opportunities: number;
+  total_bookings: number;
+  upcoming_bookings: number;
+  past_bookings: number;
+  total_participants: number;
+  total_sessions: number;
+  total_slots: number;
+  booked_slots: number;
+  available_slots: number;
+}
+
+/**
+ * Get dashboard statistics (admin only)
+ */
+export const getDashboardStats = async (): Promise<DashboardStats> => {
+  const response = await api.get('/admin/dashboard');
+  return response.data.data;
+};
+
+export interface NotificationPreference {
+  id: string | null;
+  user_id: string;
+  on_book_email: boolean;
+  on_cancel_email: boolean;
+}
+
+/**
+ * Get user's notification preferences
+ */
+export const getNotificationPreferences = async (): Promise<NotificationPreference> => {
+  const response = await api.get('/notification-preferences');
+  return response.data.data;
+};
+
+/**
+ * Update user's notification preferences
+ */
+export const updateNotificationPreferences = async (preferences: {
+  on_book_email: boolean;
+  on_cancel_email: boolean;
+}): Promise<NotificationPreference> => {
+  const response = await api.patch('/notification-preferences', preferences);
+  return response.data.data;
 };
 
 export default api;

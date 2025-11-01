@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { getOpportunities, deleteOpportunity, duplicateOpportunity } from '../api/client';
+import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats } from '../api/client';
 import { Opportunity } from '../api/types';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 import PendingApprovals from '../components/PendingApprovals';
@@ -25,6 +25,8 @@ const Admin: React.FC = () => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
   
   // Keyboard shortcuts
   useKeyboardShortcuts([
@@ -112,9 +114,23 @@ const Admin: React.FC = () => {
     }
   };
 
+  const loadDashboardStats = async () => {
+    try {
+      setLoadingStats(true);
+      const stats = await getDashboardStats();
+      setDashboardStats(stats);
+    } catch (err) {
+      console.error('Error loading dashboard stats:', err);
+      // Don't show error to user, just log it
+    } finally {
+      setLoadingStats(false);
+    }
+  };
+
   useEffect(() => {
     if (user?.role === 'researcher_admin') {
       loadOpportunities();
+      loadDashboardStats();
     }
   }, [user, statusFilter, typeFilter]);
 
@@ -219,7 +235,7 @@ const Admin: React.FC = () => {
         {`
           .custom-tab-button {
             color: #ffffff !important;
-            background-color: #343a40 !important;
+            background-color: #6e6e6e !important;
             border: none !important;
             padding: 0.5rem 1rem !important;
             cursor: pointer !important;
@@ -228,13 +244,17 @@ const Admin: React.FC = () => {
             font-weight: 500 !important;
           }
           .custom-tab-button.active {
-            background-color: #007bff !important;
+            background-color: #ffaa50 !important;
           }
           .custom-tab-button:hover {
-            background-color: #495057 !important;
+            background-color: #787878 !important;
           }
           .custom-tab-button.active:hover {
-            background-color: #0056b3 !important;
+            background-color: #ff9632 !important;
+          }
+          .custom-tab-button.active i,
+          .custom-tab-button.active span {
+            color: #000000 !important;
           }
           .custom-tab-button i,
           .custom-tab-button span {
@@ -247,14 +267,100 @@ const Admin: React.FC = () => {
           <div className="card" style={{ minHeight: 'calc(100vh - 4rem)' }}>
             <div className="card-header d-flex justify-content-between align-items-center border-0 bg-transparent" style={{ marginBottom: '2rem' }}>
               <h1 className="h3 mb-0">Admin Dashboard</h1>
-              <button 
-                className="btn btn-primary"
-                onClick={() => navigate('/admin/opportunities/new')}
-                aria-label="Create new research study"
-              >
-                Create Research Study
-              </button>
+              <div className="d-flex gap-2">
+                <button 
+                  className="btn btn-outline-secondary"
+                  onClick={() => navigate('/admin/settings')}
+                  aria-label="Settings"
+                >
+                  <i className="bi bi-gear me-2"></i>
+                  Settings
+                </button>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => navigate('/admin/opportunities/new')}
+                  aria-label="Create new research study"
+                >
+                  Create Research Study
+                </button>
+              </div>
             </div>
+
+            {/* Dashboard Statistics Cards */}
+            {dashboardStats && (
+              <div className="row mb-4">
+                <div className="col-md-3 col-sm-6 mb-3">
+                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                    <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
+                      <div className="d-flex">
+                        <div className="text-primary me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                          <i className="bi bi-clipboard-data"></i>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Total Opportunities</h6>
+                          <h3 className="mb-0">{dashboardStats.total_opportunities}</h3>
+                          <small className="text-muted">
+                            {dashboardStats.published_opportunities} published, {dashboardStats.draft_opportunities} draft
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3 col-sm-6 mb-3">
+                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                    <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
+                      <div className="d-flex">
+                        <div className="text-success me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                          <i className="bi bi-calendar-check"></i>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Total Bookings</h6>
+                          <h3 className="mb-0">{dashboardStats.total_bookings}</h3>
+                          <small className="text-muted">
+                            {dashboardStats.upcoming_bookings} upcoming, {dashboardStats.past_bookings} past
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3 col-sm-6 mb-3">
+                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                    <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
+                      <div className="d-flex">
+                        <div className="text-info me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                          <i className="bi bi-people"></i>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Participants</h6>
+                          <h3 className="mb-0">{dashboardStats.total_participants}</h3>
+                          <small className="text-muted">Unique participants</small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3 col-sm-6 mb-3">
+                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                    <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
+                      <div className="d-flex">
+                        <div className="text-warning me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                          <i className="bi bi-clock"></i>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Available Slots</h6>
+                          <h3 className="mb-0">{dashboardStats.available_slots}</h3>
+                          <small className="text-muted">
+                            {dashboardStats.booked_slots} of {dashboardStats.total_slots} booked
+                          </small>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Navigation Tabs */}
             <div className="card-header border-0 bg-transparent" style={{ paddingBottom: '0.5rem' }}>
@@ -426,6 +532,7 @@ const Admin: React.FC = () => {
                             >
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
+                            <th>Clicks</th>
                             <th>Sessions</th>
                             <th>Total Slots</th>
                             <th>Remaining</th>
@@ -477,6 +584,15 @@ const Admin: React.FC = () => {
                                 </span>
                                 {opportunity.status === 'closed' && (
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
+                                )}
+                              </td>
+                              <td>
+                                {(opportunity.type === 'poll' || opportunity.type === 'survey') ? (
+                                  <span className="badge bg-info text-white">
+                                    {opportunity.clicks_total ?? 0}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted">-</span>
                                 )}
                               </td>
                               <td>

@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getOpportunity, bookSession, getMyBookingsDebug } from '../api/client';
+import { getOpportunity, bookSession, getMyBookingsDebug, trackOpportunityClick } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
-import CalendarConnection from '../components/CalendarConnection';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 
 const OpportunityDetail: React.FC = () => {
@@ -17,7 +16,6 @@ const OpportunityDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
-  const [calendarConnected, setCalendarConnected] = useState(false);
 
   const loadOpportunity = async (forceRefresh = false) => {
     if (!id) return;
@@ -34,9 +32,21 @@ const OpportunityDetail: React.FC = () => {
       console.log('Loaded opportunity data:', data);
       console.log('Sessions data:', data.sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
       setOpportunity(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading opportunity:', err);
-      setError('Failed to load opportunity');
+      
+      // Provide more specific error messages
+      if (err.response?.status === 404) {
+        // Could be: opportunity doesn't exist, or it's a draft and user is not admin
+        setError('Opportunity not found. It may have been deleted or you may not have permission to view it.');
+      } else if (err.response?.status === 401) {
+        setError('Please log in to view this opportunity.');
+      } else if (err.response?.status === 403) {
+        setError('You do not have permission to view this opportunity.');
+      } else {
+        const errorMessage = err.response?.data?.error || err.message || 'Failed to load opportunity';
+        setError(`Failed to load opportunity: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -180,6 +190,10 @@ const OpportunityDetail: React.FC = () => {
   }
 
   if (error) {
+    // If error is 404 and user is not admin, offer helpful guidance
+    const is404Error = error.includes('not found') || error.includes('404');
+    const isNotAdmin = !user || user.role !== 'researcher_admin';
+    
     return (
       <div className="container mt-4">
         <div className="alert alert-danger" role="alert">
@@ -395,18 +409,6 @@ const OpportunityDetail: React.FC = () => {
                   )}
 
                   {/* Calendar Integration */}
-                  {user && (
-                    <div className="card mb-4">
-                      <div className="card-body">
-                        <h6 className="card-title mb-3">
-                          <i className="bi bi-calendar-check me-2"></i>
-                          Calendar Integration
-                        </h6>
-                        <CalendarConnection onStatusChange={setCalendarConnected} />
-                      </div>
-                    </div>
-                  )}
-                  
                   <div className="mb-4">
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <h5>Available Sessions</h5>
@@ -522,12 +524,20 @@ const OpportunityDetail: React.FC = () => {
                 <div className="mb-4">
                   <div className="row">
                     <div className="col-md-4">
-                      {opportunity.type === 'poll' ? (
+                      {opportunity.type === 'poll' || opportunity.type === 'survey' ? (
                         <button 
                           className="btn btn-primary w-100"
-                          onClick={() => navigate(`/poll/${opportunity.id}`)}
+                          onClick={async () => {
+                            // Track click before opening
+                            if (opportunity.external_link_optional) {
+                              await trackOpportunityClick(opportunity.id);
+                              window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
+                            }
+                          }}
+                          disabled={!opportunity.external_link_optional}
+                          title={!opportunity.external_link_optional ? 'Link not available' : 'Opens in a new tab'}
                         >
-                          Open Poll
+                          {opportunity.type === 'poll' ? 'Open Poll' : 'Open Survey'}
                         </button>
                       ) : (
                         <a 
@@ -535,12 +545,25 @@ const OpportunityDetail: React.FC = () => {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-primary w-100"
+                          onClick={async () => {
+                            // Track click for questions too if desired (though M6 spec only mentions poll/survey)
+                          }}
                         >
                           {opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
                         </a>
                       )}
                     </div>
                   </div>
+                  {(opportunity.type === 'poll' || opportunity.type === 'survey') && (
+                    <div className="row mt-2">
+                      <div className="col-md-4">
+                        <small className="text-muted">
+                          <i className="bi bi-box-arrow-up-right me-1"></i>
+                          Opens in a new tab
+                        </small>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

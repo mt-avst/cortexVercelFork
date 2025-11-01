@@ -6,26 +6,8 @@ import { CalendarEvent } from '../../../shared/types';
 
 const router = Router();
 
-/**
- * GET /api/calendar/auth/connect
- * Initiate Google OAuth flow for user calendar connection
- * Returns the OAuth authorization URL
- */
-router.get('/auth/connect', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.session.user!.id;
-    const state = `${userId}-${Date.now()}`;
-    
-    // Store state in session for verification
-    (req.session as any).googleOAuthState = state;
-    
-    const authUrl = userCalendarService.getAuthUrl(state);
-    res.json({ authUrl });
-  } catch (error: any) {
-    console.error('Error initiating OAuth flow:', error);
-    res.status(500).json({ error: 'Failed to initiate calendar connection' });
-  }
-});
+// NOTE: /auth/connect route removed - calendar is now automatically connected during login
+// If manual connection is needed in the future, this route can be restored
 
 /**
  * GET /api/calendar/auth/callback

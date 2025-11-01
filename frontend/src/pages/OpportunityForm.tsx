@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
-import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
+import { createOpportunity, updateOpportunity, getOpportunity, getSessions, getOpportunityAnalytics, OpportunityAnalytics } from '../api/client';
 import AdminSessionManager from '../components/AdminSessionManager';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
@@ -34,6 +34,9 @@ const OpportunityForm: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<number>(1);
+  const [analytics, setAnalytics] = useState<OpportunityAnalytics | null>(null);
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
+  const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
 
   // Define tabs based on opportunity type
   const getTabs = () => {
@@ -110,40 +113,75 @@ const OpportunityForm: React.FC = () => {
       
       setOpportunityId(opportunity.id);
       
-      // Load sessions - try to use sessions from opportunity first, then fallback to separate API call
-      if (opportunity.sessions && opportunity.sessions.length > 0) {
-        console.log('🔍 Using sessions from opportunity object:', {
+      // Store original form data for change detection
+      const originalData = {
+        type: opportunity.type,
+        title: opportunity.title,
+        purpose_one_liner: opportunity.purpose_one_liner,
+        description_optional: opportunity.description_optional || '',
+        product_optional: opportunity.product_optional || '',
+        default_duration_minutes: opportunity.default_duration_minutes,
+        external_link_optional: opportunity.external_link_optional || '',
+        participant_type_required: opportunity.participant_type_required || 'any' as const,
+        participant_type_specific_details: opportunity.participant_type_specific_details || '',
+        status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published'
+      };
+      setOriginalFormData(originalData);
+      
+      // Load sessions - always try to load fresh sessions from API when editing
+      // The opportunity object might have stale session data
+      try {
+        console.log('🔍 Loading sessions for opportunity:', opportunity.id);
+        const sessions = await getSessions(opportunity.id);
+        
+        console.log('🔍 Loaded opportunity sessions:', {
           opportunityId: opportunity.id,
-          sessionsCount: opportunity.sessions.length
+          sessionsCount: sessions.length,
+          sessions: sessions.map(s => ({
+            id: s.id,
+            start_time: s.start_time,
+            end_time: s.end_time,
+            capacity: s.capacity,
+            booked_count: s.booked_count
+          }))
         });
-        setSessions(opportunity.sessions);
-      } else {
-        // Load sessions separately from the sessions API
-        try {
-          console.log('🔍 Loading sessions separately for opportunity:', opportunity.id);
-          const sessions = await getSessions(opportunity.id);
+        
+        if (sessions.length > 0) {
           setSessions(sessions);
-          
-          console.log('🔍 Loaded opportunity sessions:', {
+        } else if (opportunity.sessions && opportunity.sessions.length > 0) {
+          // Fallback to sessions from opportunity object if API returns empty but opportunity has sessions
+          console.log('⚠️ API returned no sessions, using sessions from opportunity object:', {
             opportunityId: opportunity.id,
-            sessionsCount: sessions.length,
-            sessions: sessions.map(s => ({
-              id: s.id,
-              start_time: s.start_time,
-              end_time: s.end_time,
-              capacity: s.capacity,
-              booked_count: s.booked_count
-            }))
+            sessionsCount: opportunity.sessions.length
           });
-        } catch (sessionError: any) {
-          console.error('Error loading sessions:', sessionError);
-          console.error('Session error details:', {
-            message: sessionError.message,
-            response: sessionError.response?.data,
-            status: sessionError.response?.status
-          });
+          setSessions(opportunity.sessions);
+        } else {
+          console.log('⚠️ No sessions found for opportunity:', opportunity.id);
           setSessions([]);
         }
+      } catch (sessionError: any) {
+        console.error('Error loading sessions:', sessionError);
+        console.error('Session error details:', {
+          message: sessionError.message,
+          response: sessionError.response?.data,
+          status: sessionError.response?.status
+        });
+        
+        // Fallback to sessions from opportunity object if API fails
+        if (opportunity.sessions && opportunity.sessions.length > 0) {
+          console.log('⚠️ Using sessions from opportunity object as fallback:', {
+            opportunityId: opportunity.id,
+            sessionsCount: opportunity.sessions.length
+          });
+          setSessions(opportunity.sessions);
+        } else {
+          setSessions([]);
+        }
+      }
+      
+      // Load analytics for polls/surveys (M6)
+      if (opportunity.type === 'poll' || opportunity.type === 'survey') {
+        loadAnalytics(opportunity.id);
       }
     } catch (err: any) {
       console.error('Error loading opportunity:', err);
@@ -154,6 +192,20 @@ const OpportunityForm: React.FC = () => {
       }
     } finally {
       setLoadingOpportunity(false);
+    }
+  };
+  
+  // Load analytics for polls/surveys
+  const loadAnalytics = async (oppId: string) => {
+    try {
+      setLoadingAnalytics(true);
+      const data = await getOpportunityAnalytics(oppId);
+      setAnalytics(data);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+      setAnalytics(null);
+    } finally {
+      setLoadingAnalytics(false);
     }
   };
 
@@ -283,6 +335,25 @@ const OpportunityForm: React.FC = () => {
     setValidationErrors(fieldErrors);
   };
 
+  // Check if form has been modified
+  const hasChanges = (): boolean => {
+    if (!isEdit || !originalFormData) return false;
+    
+    return (
+      formData.type !== originalFormData.type ||
+      formData.title.trim() !== originalFormData.title.trim() ||
+      formData.purpose_one_liner.trim() !== originalFormData.purpose_one_liner.trim() ||
+      formData.description_optional.trim() !== originalFormData.description_optional.trim() ||
+      formData.product_optional.trim() !== originalFormData.product_optional.trim() ||
+      formData.default_duration_minutes !== originalFormData.default_duration_minutes ||
+      formData.external_link_optional.trim() !== originalFormData.external_link_optional.trim() ||
+      formData.participant_type_required !== originalFormData.participant_type_required ||
+      formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
+      formData.status !== originalFormData.status ||
+      sessions.some(session => session.id.startsWith('temp-session-'))
+    );
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     console.log('🚀 handleSubmit called', { isEdit, opportunityId, formData });
     
@@ -396,6 +467,11 @@ const OpportunityForm: React.FC = () => {
             console.log('⚠️ CREATE MODE - No temporary sessions to save');
           }
         }
+      }
+      
+      // Update original form data after successful save
+      if (isEdit) {
+        setOriginalFormData({ ...formData });
       }
       
       // Navigate to admin page after successful save
@@ -523,7 +599,7 @@ const OpportunityForm: React.FC = () => {
                         style={{
                           fontSize: activeTab === tab.id ? '1.1rem' : '0.95rem',
                           backgroundColor: activeTab === tab.id ? 'white' : 'transparent',
-                          borderBottom: activeTab === tab.id ? '2px solid #0d6efd' : '2px solid transparent',
+                          borderBottom: activeTab === tab.id ? '2px solid #ffaa50' : '2px solid transparent',
                           flex: '1',
                           width: '100%'
                         }}
@@ -564,7 +640,29 @@ const OpportunityForm: React.FC = () => {
                       />
                       {/* Navigation Buttons for Tab 1 */}
                       <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-end gap-2">
+                        <div className="d-flex justify-content-between align-items-center gap-2">
+                          <div style={{ flex: 1 }}></div>
+                          {isEdit && hasChanges() && (
+                            <button
+                              type="button"
+                              className="btn btn-success px-5 py-2 fw-semibold"
+                              onClick={() => handleSubmit()}
+                              disabled={saving}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              {saving ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-save me-2"></i>
+                                  Save Changes
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-primary px-5 py-2 fw-semibold"
@@ -597,7 +695,7 @@ const OpportunityForm: React.FC = () => {
                       />
                       {/* Navigation Buttons for Tab 2 */}
                       <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between gap-2">
+                        <div className="d-flex justify-content-between align-items-center gap-2">
                           <button
                             type="button"
                             className="btn btn-outline-secondary px-5 py-2 fw-semibold"
@@ -607,6 +705,27 @@ const OpportunityForm: React.FC = () => {
                             <i className="bi bi-arrow-left me-2"></i>
                             Back
                           </button>
+                          {isEdit && hasChanges() && (
+                            <button
+                              type="button"
+                              className="btn btn-success px-5 py-2 fw-semibold"
+                              onClick={() => handleSubmit()}
+                              disabled={saving}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              {saving ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-save me-2"></i>
+                                  Save Changes
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-primary px-5 py-2 fw-semibold"
@@ -640,7 +759,7 @@ const OpportunityForm: React.FC = () => {
                       />
                       {/* Navigation Buttons for External Link Tab */}
                       <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between gap-2">
+                        <div className="d-flex justify-content-between align-items-center gap-2">
                           <button
                             type="button"
                             className="btn btn-outline-secondary px-5 py-2 fw-semibold"
@@ -650,6 +769,27 @@ const OpportunityForm: React.FC = () => {
                             <i className="bi bi-arrow-left me-2"></i>
                             Back
                           </button>
+                          {isEdit && hasChanges() && (
+                            <button
+                              type="button"
+                              className="btn btn-success px-5 py-2 fw-semibold"
+                              onClick={() => handleSubmit()}
+                              disabled={saving}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              {saving ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-save me-2"></i>
+                                  Save Changes
+                                </>
+                              )}
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn btn-success px-5 py-2 fw-semibold"
@@ -706,6 +846,88 @@ const OpportunityForm: React.FC = () => {
                         )}
                       </div>
                     </>
+                  )}
+                  
+                  {/* Analytics - Only for Polls and Surveys (M6) */}
+                  {isEdit && (formData.type === 'poll' || formData.type === 'survey') && (
+                    <div className="form-section mb-5 mt-4">
+                      <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: '2px solid #e9ecef' }}>
+                        <div>
+                          <h2 className="h4 mb-1 text-dark" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 'bold' }}>
+                            <i className="bi bi-graph-up me-2"></i>
+                            Click Analytics
+                          </h2>
+                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                            Track how many times this poll/survey has been opened
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {loadingAnalytics ? (
+                        <div className="text-center py-4">
+                          <div className="spinner-border text-primary" role="status">
+                            <span className="visually-hidden">Loading analytics...</span>
+                          </div>
+                        </div>
+                      ) : analytics ? (
+                        <div className="row g-3">
+                          <div className="col-md-4">
+                            <div className="card border-0 shadow-sm">
+                              <div className="card-body text-center">
+                                <h5 className="card-title text-muted mb-2" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                                  Total Clicks
+                                </h5>
+                                <h2 className="mb-0" style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ffaa50' }}>
+                                  {analytics.clicks_total}
+                                </h2>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="col-md-4">
+                            <div className="card border-0 shadow-sm">
+                              <div className="card-body text-center">
+                                <h5 className="card-title text-muted mb-2" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                                  Last 24 Hours
+                                </h5>
+                                <h2 className="mb-0" style={{ fontSize: '2rem', fontWeight: 'bold', color: '#198754' }}>
+                                  {analytics.clicks_24h}
+                                </h2>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="col-md-4">
+                            <div className="card border-0 shadow-sm">
+                              <div className="card-body">
+                                <h5 className="card-title text-muted mb-3" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
+                                  30-Day Trend
+                                </h5>
+                                {analytics.clicks_by_day.length > 0 ? (
+                                  <div className="text-center">
+                                    <small className="text-muted">
+                                      {analytics.clicks_by_day.length} days with activity
+                                    </small>
+                                    <div className="mt-2">
+                                      <small className="text-success">
+                                        Peak: {Math.max(...analytics.clicks_by_day.map(d => d.count))} clicks
+                                      </small>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="text-center text-muted">
+                                    <small>No clicks yet</small>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="alert alert-info">
+                          <i className="bi bi-info-circle me-2"></i>
+                          No clicks recorded yet
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </form>

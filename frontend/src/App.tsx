@@ -8,6 +8,7 @@ import OpportunityDetail from './pages/OpportunityDetail';
 import OpportunityForm from './pages/OpportunityForm';
 import MyBookings from './pages/MyBookings';
 import Admin from './pages/Admin';
+import Settings from './pages/Settings';
 import Poll from './pages/Poll';
 import GamificationPage from './pages/Gamification';
 
@@ -25,6 +26,7 @@ function App() {
                   <Route path="/opportunities/:id" element={<OpportunityDetail />} />
                   <Route path="/poll/:id" element={<Poll />} />
                   <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin/settings" element={<Settings />} />
                   <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
                   <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
                   <Route path="/my-bookings" element={<MyBookings />} />

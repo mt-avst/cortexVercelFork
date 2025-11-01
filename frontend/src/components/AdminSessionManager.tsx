@@ -773,9 +773,25 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   // Sync confirmed slots with existing sessions
   useEffect(() => {
     if (!sessions || sessions.length === 0) {
-      // Clear confirmed slots if no sessions
-      if (confirmedSlots.size > 0) {
-        console.log('🔄 Clearing confirmed slots (no sessions)');
+      // Only clear confirmed slots if we're in edit mode with a real opportunityId
+      // For temporary/new opportunities, keep confirmed slots from sessionStorage
+      if (isTemporary || !opportunityId) {
+        // For new/temporary opportunities, try to restore from sessionStorage
+        const stored = getStoredConfirmedSlots();
+        if (stored.size > 0) {
+          console.log('🔄 Restoring confirmed slots from storage for temporary opportunity:', {
+            storedCount: stored.size,
+            stored: Array.from(stored).slice(0, 3)
+          });
+          setConfirmedSlots(stored);
+        } else if (confirmedSlots.size > 0) {
+          console.log('🔄 Clearing confirmed slots (no sessions and no stored slots)');
+          setConfirmedSlots(new Set());
+          persistConfirmedSlots(new Set());
+        }
+      } else if (confirmedSlots.size > 0) {
+        // For saved opportunities with no sessions, clear confirmed slots
+        console.log('🔄 Clearing confirmed slots (no sessions in saved opportunity)');
         setConfirmedSlots(new Set());
         persistConfirmedSlots(new Set());
       }

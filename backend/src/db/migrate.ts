@@ -517,6 +517,24 @@ export async function runMigrations() {
       console.log('ℹ️  Could not migrate unique constraint (may already be migrated):', error.message);
     }
 
+    // Create opportunity_clicks table for click tracking (M6)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_clicks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        clicked_at TIMESTAMPTZ DEFAULT NOW(),
+        user_agent TEXT,
+        ip_hash TEXT
+      )
+    `);
+
+    // Create index for efficient analytics queries
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_clicks_opportunity 
+      ON opportunity_clicks(opportunity_id, clicked_at)
+    `);
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

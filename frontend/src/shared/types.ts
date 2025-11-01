@@ -62,6 +62,7 @@ export interface Opportunity {
   owner_name?: string;
   owner_email?: string;
   sessions?: Session[];
+  clicks_total?: number; // Click count for polls/surveys (M6)
 }
 
 export interface CreateOpportunityRequest {

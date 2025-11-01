@@ -6,6 +6,8 @@ import bookingsRouter from './bookings';
 import calendarRouter from './calendar';
 import userCalendarRouter from './userCalendar';
 import gamificationRouter from './gamification';
+import adminRouter from './admin';
+import notificationPreferencesRouter from './notificationPreferences';
 
 const router: Router = Router();
 
@@ -31,5 +33,11 @@ router.use('/calendar', userCalendarRouter);
 
 // Mount AdaptaBits routes
 router.use('/gamification', gamificationRouter);
+
+// Mount admin routes
+router.use('/admin', adminRouter);
+
+// Mount notification preferences routes
+router.use('/notification-preferences', notificationPreferencesRouter);
 
 export default router;
