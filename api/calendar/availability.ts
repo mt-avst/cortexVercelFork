@@ -26,41 +26,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Generate slots for each day
     const currentDate = new Date(start);
-    currentDate.setHours(9, 0, 0, 0); // Start at 9 AM
+    currentDate.setUTCHours(0, 0, 0, 0); // Start at midnight UTC for each day
     
     while (currentDate <= end) {
-      const dayOfWeek = currentDate.getDay();
+      const dayOfWeek = currentDate.getUTCDay(); // Use UTC
       
       // Skip weekends if exclude_weekends is true
       if (excludeWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        currentDate.setHours(9, 0, 0, 0);
+        currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+        currentDate.setUTCHours(0, 0, 0, 0);
         continue;
       }
       
-      // Generate slots for this day (9 AM to 5 PM)
+      // Generate slots for this day (7 AM to 11 PM UTC to match backend)
+      const workingDayStartHour = 7; // 7 AM UTC
+      const workingDayEndHour = 23; // 11 PM UTC
       const dayEnd = new Date(currentDate);
-      dayEnd.setHours(17, 0, 0, 0);
+      dayEnd.setUTCHours(workingDayEndHour, 0, 0, 0);
       
-      while (currentDate < dayEnd) {
-        const slotEnd = new Date(currentDate);
-        slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes);
+      // Special handling for 45-minute slots: always start on the hour
+      if (durationMinutes === 45) {
+        // Generate slots starting every hour from 7 AM
+        for (let hour = workingDayStartHour; hour < workingDayEndHour; hour++) {
+          const slotStart = new Date(currentDate);
+          slotStart.setUTCHours(hour, 0, 0, 0); // Always start on the hour (minute 0)
+          
+          const slotEnd = new Date(slotStart);
+          slotEnd.setUTCMinutes(slotEnd.getUTCMinutes() + durationMinutes); // 45 minutes later
+          
+          // Only add slot if it ends before 11 PM
+          if (slotEnd <= dayEnd && slotEnd.getUTCHours() <= workingDayEndHour) {
+            available_slots.push({
+              start: slotStart.toISOString(),
+              end: slotEnd.toISOString(),
+              available: true
+            });
+          }
+        }
+      } else {
+        // Standard slot generation for other durations (15, 30, 60 minutes)
+        // Calculate how many slots fit in the working day (7 AM to 11 PM = 16 hours)
+        const slotDurationMs = durationMinutes * 60 * 1000;
+        const workingDayDurationMs = (workingDayEndHour - workingDayStartHour) * 60 * 60 * 1000;
+        const slotsPerDay = Math.floor(workingDayDurationMs / slotDurationMs);
         
-        // Only add slot if it ends before 5 PM
-        if (slotEnd <= dayEnd) {
+        // Generate slots starting from 7 AM UTC, with consistent intervals
+        for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
+          const slotStart = new Date(currentDate);
+          const slotStartTimeMs = workingDayStartHour * 60 * 60 * 1000 + (slotIndex * slotDurationMs);
+          slotStart.setUTCHours(0, 0, 0, 0); // Reset to midnight
+          slotStart.setTime(slotStart.getTime() + slotStartTimeMs); // Add the calculated time
+          
+          const slotEnd = new Date(slotStart.getTime() + slotDurationMs);
+          
+          // Skip if slot would go beyond the requested end time or working day
+          if (slotStart >= end) break;
+          if (slotEnd > end) break;
+          if (slotStart.getUTCHours() >= workingDayEndHour) break;
+          
           available_slots.push({
-            start: currentDate.toISOString(),
+            start: slotStart.toISOString(),
             end: slotEnd.toISOString(),
             available: true
           });
         }
-        
-        currentDate.setMinutes(currentDate.getMinutes() + durationMinutes);
       }
       
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
-      currentDate.setHours(9, 0, 0, 0);
+      // Move to next day (UTC)
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      currentDate.setUTCHours(0, 0, 0, 0);
     }
   }
   

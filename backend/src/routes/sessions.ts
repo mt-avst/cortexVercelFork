@@ -120,6 +120,140 @@ const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promise<void
   }
 };
 
+// Helper function to format time for error messages
+const formatTime = (dateString: string): string => {
+  return new Date(dateString).toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  });
+};
+
+// POST /api/sessions - Create sessions for an opportunity
+router.post('/', requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { opportunity_id, sessions } = req.body;
+    
+    if (!opportunity_id) {
+      return res.status(400).json({ error: 'opportunity_id is required' });
+    }
+    
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({ error: 'sessions array is required and must not be empty' });
+    }
+    
+    // Check if database is available
+    const dbAvailable = await isDatabaseAvailable();
+    if (!dbAvailable) {
+      // Use mock data for development
+      const opportunity = getMockOpportunity(opportunity_id);
+      if (!opportunity) {
+        return res.status(404).json({ error: 'Opportunity not found' });
+      }
+      
+      // Check ownership
+      if (opportunity.owner_user_id !== req.user!.id) {
+        return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+      }
+      
+      // Validate all sessions
+      const validationErrors: string[] = [];
+      sessions.forEach((session: CreateSessionRequest, index: number) => {
+        const errors = validateSessionData(session);
+        errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
+      });
+      
+      if (validationErrors.length > 0) {
+        return res.status(400).json({ error: 'Validation failed', details: validationErrors });
+      }
+      
+      // Create mock sessions
+      const createdSessions = addMockSessions(opportunity_id, sessions);
+      
+      return res.status(201).json(createdSessions);
+    }
+    
+    // Check opportunity ownership
+    const opportunityCheck = await pool.query(
+      'SELECT owner_user_id FROM opportunities WHERE id = $1',
+      [opportunity_id]
+    );
+    
+    if (opportunityCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Opportunity not found' });
+    }
+    
+    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+    if (!isOwner) {
+      return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
+    }
+    
+    // Validate all sessions
+    const validationErrors: string[] = [];
+    sessions.forEach((session: CreateSessionRequest, index: number) => {
+      const errors = validateSessionData(session);
+      errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
+    });
+    
+    if (validationErrors.length > 0) {
+      return res.status(400).json({ error: 'Validation failed', details: validationErrors });
+    }
+    
+    // Check for overlapping sessions
+    for (const session of sessions) {
+      const startTime = new Date(session.start_time);
+      const endTime = new Date(session.end_time);
+      const hasOverlap = await checkSessionOverlaps(opportunity_id, startTime, endTime);
+      if (hasOverlap) {
+        return res.status(409).json({ 
+          error: `Session overlaps with existing sessions: ${formatTime(session.start_time)} - ${formatTime(session.end_time)}` 
+        });
+      }
+    }
+    
+    // Insert sessions into database
+    const createdSessions = [];
+    for (const session of sessions) {
+      const result = await pool.query(
+        `INSERT INTO sessions (
+          opportunity_id,
+          start_time,
+          end_time,
+          capacity,
+          booked_count,
+          location_or_meet_link_optional
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *, (capacity - booked_count) as remaining`,
+        [
+          opportunity_id,
+          session.start_time,
+          session.end_time,
+          session.capacity || 1,
+          0, // booked_count starts at 0
+          session.location_or_meet_link_optional || null,
+        ]
+      );
+      
+      const created = result.rows[0];
+      createdSessions.push({
+        ...created,
+        start_time: created.start_time.toISOString(),
+        end_time: created.end_time.toISOString(),
+        created_at: created.created_at.toISOString(),
+        updated_at: created.updated_at.toISOString(),
+      });
+    }
+    
+    // Auto-close opportunity if needed
+    await autoCloseOpportunityIfNeeded(opportunity_id);
+    
+    return res.status(201).json(createdSessions);
+  } catch (error) {
+    console.error('Error creating sessions:', error);
+    res.status(500).json({ error: 'Failed to create sessions' });
+  }
+});
+
 // PATCH /api/sessions/:id - Update a session
 router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
   try {

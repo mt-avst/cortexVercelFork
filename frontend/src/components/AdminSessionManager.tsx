@@ -11,8 +11,9 @@ interface AdminSessionManagerProps {
   defaultDurationMinutes: number;
   disabled?: boolean;
   isTemporary?: boolean;
-  onOpportunitySave?: () => Promise<void>; // New prop for saving opportunity
+  onOpportunitySave?: () => Promise<string | undefined>; // New prop for saving opportunity, returns opportunity ID
   onBack?: () => void; // Prop for back navigation
+  onNavigate?: (path: string) => void; // Prop for navigation (avoids full page reload)
 }
 
 interface CalendarViewProps {
@@ -22,7 +23,7 @@ interface CalendarViewProps {
   confirmedSlots: Set<string>;
   onSlotSelect: (slot: AvailableSlot) => void;
   onSlotDeselect: (slot: AvailableSlot) => void;
-  durationMinutes: number;
+  durationMinutes: number | undefined;
   currentPage: number;
   onPageChange: (page: number) => void;
   daysPerPage: number;
@@ -132,8 +133,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const session = sessions.find(session => {
       const sessionStart = new Date(session.start_time);
       const sessionEnd = new Date(session.end_time);
-      // Find exact matches (existing sessions)
-      return (slotStart.getTime() === sessionStart.getTime() && slotEnd.getTime() === sessionEnd.getTime());
+      // Find exact matches (existing sessions) - allow small tolerance for milliseconds
+      const startDiff = Math.abs(slotStart.getTime() - sessionStart.getTime());
+      const endDiff = Math.abs(slotEnd.getTime() - sessionEnd.getTime());
+      // Allow up to 1 second tolerance for timezone/rounding differences
+      const tolerance = 1000; // 1 second in milliseconds
+      return startDiff <= tolerance && endDiff <= tolerance;
     });
     
     return session;
@@ -177,9 +182,100 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Use consistent column count for both rows (always 5 columns max for visual consistency)
   const maxColumnsPerRow = 5;
   
+  // Helper function to remove overlapping slots - keeps only non-overlapping slots
+  // This function aggressively removes any slots that share any time overlap
+  const removeOverlappingSlots = (slots: AvailableSlot[]): AvailableSlot[] => {
+    if (slots.length === 0) return slots;
+    
+    // Convert all slots to timestamp format first for accurate comparison
+    const slotRanges = slots.map(slot => {
+      const start = new Date(slot.start).getTime();
+      const end = new Date(slot.end).getTime();
+      return {
+        slot,
+        start,
+        end,
+        // Create a unique key for exact duplicate detection
+        key: `${start}|${end}`
+      };
+    });
+    
+    // First, remove exact duplicates by time (not string) - use Map to ensure uniqueness
+    const uniqueByTime = new Map<string, typeof slotRanges[0]>();
+    slotRanges.forEach(range => {
+      if (!uniqueByTime.has(range.key)) {
+        uniqueByTime.set(range.key, range);
+      }
+    });
+    const uniqueSlots = Array.from(uniqueByTime.values());
+    
+    // Sort by start time, then by end time (shorter slots first if same start)
+    uniqueSlots.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start;
+      return a.end - b.end;
+    });
+    
+    const nonOverlapping: AvailableSlot[] = [];
+    
+    uniqueSlots.forEach(current => {
+      // Check if this slot overlaps with any already added slot
+      // Two slots overlap if they share ANY time (even a millisecond)
+      // Adjacent slots (one ends exactly when another starts) do NOT overlap
+      const hasOverlap = nonOverlapping.some(added => {
+        const addedStart = new Date(added.start).getTime();
+        const addedEnd = new Date(added.end).getTime();
+        
+        // Overlap occurs when they share time, but NOT when one ends exactly when another starts
+        // Use exact millisecond comparison for precision
+        const isAdjacent = (current.start === addedEnd) || (current.end === addedStart);
+        const hasTimeOverlap = (current.start < addedEnd && current.end > addedStart);
+        
+        return hasTimeOverlap && !isAdjacent;
+      });
+      
+      // Only add if no overlap found
+      if (!hasOverlap) {
+        nonOverlapping.push(current.slot);
+      }
+    });
+    
+    return nonOverlapping;
+  };
 
+  // Filter slots to only include those that match the selected duration (if duration is selected)
+  const durationFilteredSlots = durationMinutes 
+    ? (availableSlots || []).filter(slot => {
+        const slotStart = new Date(slot.start).getTime();
+        const slotEnd = new Date(slot.end).getTime();
+        const slotDurationMs = slotEnd - slotStart;
+        const slotDurationMinutes = slotDurationMs / (1000 * 60);
+        
+        // Strictly match the duration - allow only very small tolerance for rounding (within 30 seconds)
+        const toleranceMinutes = 0.5; // 30 seconds tolerance
+        const matchesDuration = Math.abs(slotDurationMinutes - durationMinutes) <= toleranceMinutes;
+        
+        if (!matchesDuration) {
+          console.log(`🔍 Filtered out slot with duration ${slotDurationMinutes.toFixed(2)}min (expected ${durationMinutes}min):`, {
+            start: slot.start,
+            end: slot.end,
+            duration: slotDurationMinutes
+          });
+        }
+        
+        return matchesDuration;
+      })
+    : (availableSlots || []);
+  
+  // Remove overlapping slots first, before grouping by date
+  const cleanedSlots = removeOverlappingSlots(durationFilteredSlots);
+  
+  // Log filtered results for debugging
+  if (durationMinutes && cleanedSlots.length !== durationFilteredSlots.length) {
+    console.log(`🔍 Overlap removal: ${durationFilteredSlots.length} slots → ${cleanedSlots.length} slots (removed ${durationFilteredSlots.length - cleanedSlots.length} overlapping)`);
+  }
+  
   // Group all slots by date first (UTC)
-  const allSlotsByDate = (availableSlots || []).reduce((acc, slot) => {
+  const allSlotsByDate = cleanedSlots.reduce((acc, slot) => {
     const date = new Date(slot.start).toDateString(); // slot.start is already UTC from backend
     if (!acc[date]) {
       acc[date] = [];
@@ -206,7 +302,83 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Get slots for second row days (if needed)
   const secondRowSlots = getSlotsForDays(secondRowDays);
 
-  // Helper function to render day columns
+  // Helper function to get hour from slot time
+  const getHourFromSlot = (slotStart: string): number => {
+    const date = new Date(slotStart);
+    return date.getUTCHours() + (date.getUTCMinutes() / 60); // Returns hour as decimal (e.g., 9.5 for 9:30)
+  };
+
+  // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
+  const getTimePosition = (hour: number): number => {
+    const startHour = 7; // 7 AM
+    const endHour = 23; // 11 PM
+    const totalHours = endHour - startHour; // 16 hours
+    const adjustedHour = hour - startHour;
+    return Math.max(0, Math.min(100, (adjustedHour / totalHours) * 100));
+  };
+
+  // Generate time markers for left column (7am to 11pm)
+  // Returns hour markers and subdivision markers based on durationMinutes
+  const generateTimeMarkers = (durationMinutes?: number): Array<{ time: number; isHour: boolean }> => {
+    const markers: Array<{ time: number; isHour: boolean }> = [];
+    
+    // Determine subdivision interval based on duration
+    let subdivisionInterval: number = 0.5; // Default to 30 minutes
+    if (durationMinutes === 15) {
+      subdivisionInterval = 0.25; // 15-minute marks (15, 30, 45)
+    } else if (durationMinutes === 30) {
+      subdivisionInterval = 0.5; // 30-minute marks
+    } else if (durationMinutes === 45) {
+      subdivisionInterval = 0.75; // 45-minute marks
+    } else if (durationMinutes === 60) {
+      subdivisionInterval = 0.5; // Show 30-minute marks for 60-min slots (for reference)
+    }
+    // If no duration selected, default to 30-minute marks
+    
+    for (let hour = 7; hour <= 23; hour++) {
+      // Always add hour marker (full hour)
+      markers.push({ time: hour, isHour: true });
+      
+      // Add subdivision markers based on interval
+      if (subdivisionInterval === 0.25) {
+        // 15-minute slots: show 15, 30, 45 minute marks
+        if (hour < 23) {
+          markers.push({ time: hour + 0.25, isHour: false }); // 15 min
+          markers.push({ time: hour + 0.5, isHour: false });  // 30 min
+          markers.push({ time: hour + 0.75, isHour: false }); // 45 min
+        }
+      } else if (subdivisionInterval === 0.5) {
+        // 30-minute slots or 60-minute slots: show 30-minute marks
+        if (hour < 23) {
+          markers.push({ time: hour + 0.5, isHour: false });
+        }
+      } else if (subdivisionInterval === 0.75) {
+        // 45-minute slots: show 45-minute marks
+        if (hour < 23) {
+          markers.push({ time: hour + 0.75, isHour: false });
+        }
+      }
+    }
+    
+    return markers;
+  };
+
+  // Format time for display (12-hour format with AM/PM)
+  const formatTimeLabel = (time: number): string => {
+    const hour = Math.floor(time);
+    const decimal = time % 1;
+    let minutes = 0;
+    if (decimal === 0.25) minutes = 15;
+    else if (decimal === 0.5) minutes = 30;
+    else if (decimal === 0.75) minutes = 45;
+    
+    const isPM = hour >= 12;
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    const ampm = isPM ? 'PM' : 'AM';
+    return `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Helper function to render day columns with timeline layout
   const renderDayColumns = (slotsByDate: Record<string, AvailableSlot[]>, days: Date[], maxColumns: number = 5) => {
     // Define the type for column objects
     interface ColumnData {
@@ -221,125 +393,354 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       const day = days[i];
       if (day) {
         const dateString = day.toDateString();
-        allColumns.push({ date: dateString, slots: slotsByDate[dateString] || [], isEmpty: false });
+        const rawSlots = slotsByDate[dateString] || [];
+        
+        // Remove overlapping slots and sort by start time
+        let nonOverlappingSlots = removeOverlappingSlots(rawSlots);
+        
+        // Final deduplication pass using a Set to ensure absolute uniqueness by time
+        // Use the same key format as isSlotSelected for consistency
+        const seen = new Set<string>();
+        const duplicateKeys = new Set<string>();
+        nonOverlappingSlots = nonOverlappingSlots.filter(slot => {
+          // Use the same key format as selection tracking for consistency
+          const slotKey = `${slot.start}|${slot.end}`;
+          
+          // Also check by time for extra safety
+          const startTime = new Date(slot.start).getTime();
+          const endTime = new Date(slot.end).getTime();
+          const timeKey = `${startTime}|${endTime}`;
+          
+          // Check both keys to catch any inconsistencies
+          if (seen.has(slotKey) || seen.has(timeKey)) {
+            duplicateKeys.add(slotKey);
+            console.warn(`🔍 DUPLICATE SLOT REMOVED:`, { 
+              slotKey, 
+              timeKey,
+              start: slot.start, 
+              end: slot.end,
+              startTime,
+              endTime
+            });
+            return false;
+          }
+          seen.add(slotKey);
+          seen.add(timeKey); // Track by both for safety
+          return true;
+        });
+        
+        // Log if duplicates were found
+        if (duplicateKeys.size > 0) {
+          console.warn(`⚠️ Found ${duplicateKeys.size} duplicate slot(s) for ${dateString}:`, Array.from(duplicateKeys));
+        }
+        
+        // Sort by start time to ensure chronological order
+        nonOverlappingSlots.sort((a, b) => {
+          return new Date(a.start).getTime() - new Date(b.start).getTime();
+        });
+        
+        allColumns.push({ date: dateString, slots: nonOverlappingSlots, isEmpty: false });
       } else {
         allColumns.push({ date: '', slots: [], isEmpty: true });
       }
     }
 
+    const timeMarkers = generateTimeMarkers(durationMinutes);
+    // Calculate timeline height: 16 hours displayed (7am-11pm)
+    // Use fixed height that fits the full day without scrollbars
+    // Approximately 50-55px per hour for comfortable spacing = 800-880px for 16 hours
+    // Using 900px to ensure all slots fit comfortably with padding/borders
+    const minTimelineHeight = 900; // Fixed height for 16 hours - no scrollbars needed
+    const timelineHeight = '900px'; // Fixed height ensures consistent display
+
     return (
       <div style={{ 
-        display: 'grid',
-        gridTemplateColumns: `repeat(${maxColumns}, 1fr)`,
-        gap: '16px',
-        minHeight: '400px'
+        display: 'flex',
+        gap: '8px',
+        width: '100%',
+        overflowX: 'auto'
       }}>
-        {allColumns.map((column, index) => (
-          <div key={column.isEmpty ? `empty-${index}` : column.date} className="calendar-day-column">
-            {!column.isEmpty ? (
-              <>
-                {/* Day Header */}
-                <div className="text-center mb-3 p-2" style={{ 
-                  backgroundColor: '#f8f9fa', 
-                  borderRadius: '8px',
-                  border: '1px solid #dee2e6'
-                }}>
-                  <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem' }}>
-                    {formatDate(column.date)}
-                  </h6>
-                  <small className="text-muted">
-                    {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
-                  </small>
+          {/* Time Column (Left) */}
+          <div style={{
+            minWidth: '90px',
+            width: '90px',
+            position: 'sticky',
+            left: 0,
+            zIndex: 10,
+            backgroundColor: '#f8f9fa'
+          }}>
+          {/* Time Header */}
+          <div style={{
+            height: '60px',
+            borderBottom: '2px solid #dee2e6',
+            backgroundColor: '#f8f9fa'
+          }}></div>
+          {/* Time Markers */}
+          <div style={{
+            position: 'relative',
+            height: timelineHeight,
+            minHeight: `${minTimelineHeight}px`,
+            overflow: 'hidden',
+            backgroundColor: '#f8f9fa',
+            borderRight: '2px solid #dee2e6'
+          }}>
+            {timeMarkers.map((marker, index) => {
+              const isHour = marker.isHour;
+              
+              // Only render hour markers - skip 30-minute marks (no dotted lines)
+              if (!isHour) {
+                return null;
+              }
+              
+              // For hour markers, use the exact time position
+              const position = getTimePosition(marker.time);
+              
+              return (
+                <div
+                  key={`${marker.time}-${index}`}
+                  style={{
+                    position: 'absolute',
+                    top: `${position}%`,
+                    left: 0,
+                    right: 0,
+                    borderTop: '1.5px solid #495057',  // Thicker, darker line for hours - border at exact time position
+                    paddingLeft: '8px',
+                    paddingTop: '2px', // Small padding to push text below border line
+                    fontSize: '0.9rem',
+                    fontWeight: '700',
+                    color: '#000000',
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                    // Remove translateY(-50%) so border line aligns exactly with time position
+                    pointerEvents: 'none',
+                    lineHeight: '1.3',
+                    backgroundColor: 'transparent'
+                  }}
+                >
+                  {formatTimeLabel(marker.time)}
                 </div>
-            
-                {/* Vertical Time Slots */}
-                <div style={{ 
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '6px',
-                  maxHeight: '350px',
-                  overflowY: 'auto',
-                  paddingRight: '4px',
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: '#ccc transparent'
-                }}>
-                  {column.slots.length === 0 ? (
-                    <div className="text-center text-muted py-3" style={{ fontSize: '0.8rem' }}>
-                      <i className="bi bi-calendar-x me-1"></i>
-                      No available slots
-                    </div>
-                  ) : (
-                    column.slots.map((slot, slotIndex) => {
-                    const slotKey = `${slot.start}|${slot.end}`;
-                    const isSelected = isSlotSelected(slot);
-                    const isConfirmed = isSlotConfirmed(slot);
-                    const isBusy = isSlotBusy(slot);
-                    const isAllocated = isSlotAllocated(slot);
-                    const session = getSessionForSlot(slot);
-                    
-                    // Determine slot styling based on session status
-                    let slotClass = '';
-                    let slotStyle = {};
-                    
-                    if (isConfirmed) {
-                      // Confirmed state takes priority - show green for created sessions
-                      slotClass = 'calendar-slot-available'; // Use the same class as user calendar
-                      slotStyle = { 
-                        backgroundColor: '#28a745 !important', 
-                        color: 'white !important',
-                        borderColor: '#28a745 !important'
-                      };
-                    } else if (isSelected) {
-                      // Selected state - show light green for pending creation
-                      slotClass = 'text-dark';
-                      slotStyle = { backgroundColor: 'rgba(25, 135, 84, 0.3)', borderColor: '#198754' };
-                    } else if (session) {
-                      // Session exists - show like user calendar
-                      if (session.remaining > 0) {
-                        slotClass = 'calendar-slot-available'; // Available session - same as user calendar
-                      } else {
-                        slotClass = 'bg-danger text-white'; // Full session
-                      }
-                    } else if (isAllocated) {
-                      // Allocated slot - show yellow warning
-                      slotClass = 'text-dark';
-                      slotStyle = { backgroundColor: 'rgba(255, 193, 7, 0.2)', borderColor: '#ffc107' };
-                    } else if (isBusy) {
-                      slotClass = 'bg-secondary text-white'; // Calendar busy
-                    } else {
-                      slotClass = 'bg-light border-secondary'; // Free slot
-                    }
-                    
-                    // Debug confirmed slot matching
-                    if (isConfirmed || session) {
-                      console.log('🎨 SLOT STYLING DEBUG:', {
-                        slotKey: `${slot.start}|${slot.end}`,
-                        isConfirmed,
-                        isSelected,
-                        hasSession: !!session,
-                        sessionId: session?.id,
-                        sessionRemaining: session?.remaining,
-                        confirmedSlotsSize: confirmedSlots.size,
-                        confirmedSlotsArray: Array.from(confirmedSlots),
-                        slotClass,
-                        slotStyle,
-                        finalClassName: `calendar-slot calendar-slot-btn p-2 border rounded cursor-pointer position-relative ${slotClass}`
-                      });
-                    }
+              );
+            })}
+          </div>
+        </div>
 
-                    return (
-                      <div
-                        key={slotIndex}
-                        className={`calendar-slot calendar-slot-btn p-2 border rounded cursor-pointer position-relative ${slotClass}`}
-                        style={{ 
-                          ...slotStyle,
-                          cursor: isBusy || (session && session.remaining <= 0) || isAllocated ? 'not-allowed' : 'pointer',
-                          opacity: isBusy || (session && session.remaining <= 0) || isAllocated ? 0.8 : 1,
-                          transition: 'all 0.2s ease',
-                          borderWidth: isSelected ? '2px' : '1px',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem'
-                        }}
+        {/* Day Columns Container */}
+        <div style={{ 
+          position: 'relative',
+          flex: 1,
+          minWidth: `${maxColumns * 120}px`
+        }}>
+          {/* Day Columns Grid */}
+          <div style={{ 
+            display: 'grid',
+            gridTemplateColumns: `repeat(${maxColumns}, 1fr)`,
+            gap: '8px',
+            position: 'relative',
+            zIndex: 3
+          }}>
+            {allColumns.map((column, index) => (
+            <div key={column.isEmpty ? `empty-${index}` : column.date} className="calendar-day-column" style={{ position: 'relative' }}>
+              {!column.isEmpty ? (
+                <>
+                  {/* Day Header */}
+                  <div className="text-center p-2" style={{ 
+                    backgroundColor: '#f8f9fa', 
+                    borderRadius: '8px 8px 0 0',
+                    border: 'none',
+                    borderBottom: '1px solid #dee2e6',
+                    height: '60px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center'
+                  }}>
+                    <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem', margin: 0 }}>
+                      {formatDate(column.date)}
+                    </h6>
+                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                      {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
+                    </small>
+                  </div>
+            
+                  {/* Timeline Container */}
+                  <div style={{ 
+                    position: 'relative',
+                    height: timelineHeight,
+                    border: 'none',
+                    backgroundColor: '#ffffff',
+                    overflow: 'hidden',
+                    zIndex: 1
+                  }}>
+                    {/* Positioned Slots */}
+                    {column.slots.length === 0 ? (
+                      <div className="text-center text-muted" style={{ 
+                        fontSize: '0.8rem',
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)'
+                      }}>
+                        <i className="bi bi-calendar-x me-1"></i>
+                        No available slots
+                      </div>
+                    ) : (
+                      (() => {
+                        // Final safety check: filter out any remaining duplicates before rendering
+                        const renderedKeys = new Set<string>();
+                        const slotsToRender = column.slots.filter((slot, idx) => {
+                          const slotKey = `${slot.start}|${slot.end}`;
+                          if (renderedKeys.has(slotKey)) {
+                            console.error(`🚨 CRITICAL: Filtering duplicate slot at render (index ${idx}):`, {
+                              slotKey,
+                              start: slot.start,
+                              end: slot.end,
+                              totalSlots: column.slots.length
+                            });
+                            return false;
+                          }
+                          renderedKeys.add(slotKey);
+                          return true;
+                        });
+                        
+                        return slotsToRender.map((slot, slotIndex) => {
+                          // Create a truly unique key based on time (not index) to prevent duplicate rendering
+                          // Use the exact same key format as selection tracking
+                          const slotKey = `${slot.start}|${slot.end}`;
+                          const uniqueKey = slotKey; // Use consistent key format
+                          
+                          const isSelected = isSlotSelected(slot);
+                        const isConfirmed = isSlotConfirmed(slot);
+                        const isBusy = isSlotBusy(slot);
+                        const isAllocated = isSlotAllocated(slot);
+                        const session = getSessionForSlot(slot);
+                        
+                        // Debug: Log when sessions exist but aren't matched
+                        if (sessions.length > 0 && !session && slotIndex === 0) {
+                          // Only log for first slot to avoid spam
+                          const slotStart = new Date(slot.start);
+                          const slotEnd = new Date(slot.end);
+                          const closeMatches = sessions.filter(s => {
+                            const sStart = new Date(s.start_time);
+                            const sEnd = new Date(s.end_time);
+                            const startDiff = Math.abs(slotStart.getTime() - sStart.getTime());
+                            const endDiff = Math.abs(slotEnd.getTime() - sEnd.getTime());
+                            return startDiff < 60000 && endDiff < 60000; // Within 1 minute
+                          });
+                          if (closeMatches.length > 0) {
+                            console.warn('⚠️ Found sessions close to slot but not matched:', {
+                              slot: { start: slot.start, end: slot.end },
+                              closeMatches: closeMatches.map(s => ({
+                                id: s.id,
+                                start_time: s.start_time,
+                                end_time: s.end_time,
+                                opportunity_id: s.opportunity_id
+                              }))
+                            });
+                          }
+                        }
+                        
+                        // Calculate position based on time with high precision
+                        const slotStartHour = getHourFromSlot(slot.start);
+                        const slotEndHour = getHourFromSlot(slot.end);
+                        
+                        // Use precise position calculations
+                        const topPosition = Math.max(0, Math.min(100, getTimePosition(slotStartHour)));
+                        const bottomPosition = Math.max(0, Math.min(100, getTimePosition(slotEndHour)));
+                        
+                        // Calculate height as the exact difference - this prevents overlap
+                        // Round to 4 decimal places to avoid floating point precision issues
+                        const rawHeight = bottomPosition - topPosition;
+                        const height = Math.round((Math.max(0.01, rawHeight)) * 10000) / 10000;
+                        
+                        // Ensure height doesn't exceed container bounds
+                        const maxAllowedHeight = 100 - topPosition;
+                        const finalHeight = Math.min(height, maxAllowedHeight);
+                        
+                        // Round position values to avoid sub-pixel rendering issues
+                        // CRITICAL: Use exact percentage values to prevent overlap
+                        const roundedTop = Math.round(topPosition * 10000) / 10000;
+                        const roundedHeight = Math.round(finalHeight * 10000) / 10000;
+                        
+                        // DEBUG: Log if height seems incorrect (should be ~3.125% for 30-min slots)
+                        if (roundedHeight > 5) {
+                          console.warn(`⚠️ UNUSUALLY LARGE SLOT HEIGHT: ${roundedHeight}% for slot ${slot.start} to ${slot.end}`, {
+                            slotStartHour,
+                            slotEndHour,
+                            topPosition,
+                            bottomPosition,
+                            rawHeight,
+                            height,
+                            finalHeight,
+                            roundedHeight
+                          });
+                        }
+                        
+                        // Ensure slots don't overlap by using exact percentage positioning
+                        // The height should match exactly the time difference, not be fixed
+                        
+                        // Determine slot styling based on session status
+                        let slotClass = '';
+                        let slotStyle: React.CSSProperties = {};
+                        
+                        if (isConfirmed) {
+                          slotClass = 'calendar-slot-available';
+                          slotStyle = { 
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            borderColor: '#28a745'
+                          };
+                        } else if (isSelected) {
+                          slotClass = 'text-dark';
+                          slotStyle = { backgroundColor: 'rgba(25, 135, 84, 0.3)', borderColor: '#198754' };
+                        } else if (session) {
+                          if (session.remaining > 0) {
+                            slotClass = 'calendar-slot-available';
+                            slotStyle = { backgroundColor: '#28a745', color: 'white', borderColor: '#28a745' };
+                          } else {
+                            slotClass = 'bg-danger text-white';
+                            slotStyle = { backgroundColor: '#dc3545', color: 'white', borderColor: '#dc3545' };
+                          }
+                        } else if (isAllocated) {
+                          slotClass = 'text-dark';
+                          slotStyle = { backgroundColor: 'rgba(255, 193, 7, 0.2)', borderColor: '#ffc107' };
+                        } else if (isBusy) {
+                          slotClass = 'bg-secondary text-white';
+                          slotStyle = { backgroundColor: '#6c757d', color: 'white', borderColor: '#6c757d' };
+                        } else {
+                          // Available slot - make it clearly visible with solid border
+                          slotClass = 'border-success';
+                          slotStyle = { 
+                            backgroundColor: 'rgba(40, 167, 69, 0.15)', // Light green background
+                            borderColor: '#28a745', // Green border
+                            borderStyle: 'solid', // Solid border for distinct cells
+                            borderWidth: '2px'
+                          };
+                        }
+
+                        return (
+                          <div
+                            key={uniqueKey}
+                            className={`calendar-slot calendar-slot-btn border rounded cursor-pointer position-absolute ${slotClass}`}
+                            style={{ 
+                              ...slotStyle,
+                              left: '2px',
+                              right: '2px',
+                              top: `${roundedTop}%`,
+                              height: `${roundedHeight}%`,
+                              maxHeight: `${roundedHeight}%`, // Strict max height - no overflow
+                              minHeight: '0', // No minimum to prevent forced overlap
+                              boxSizing: 'border-box', // Include border in height calculation
+                              position: 'absolute', // Ensure absolute positioning
+                              cursor: isBusy || (session && session.remaining <= 0) || isAllocated ? 'not-allowed' : 'pointer',
+                              opacity: isBusy || (session && session.remaining <= 0) || isAllocated ? 0.8 : 1,
+                              transition: 'all 0.2s ease',
+                              borderWidth: isSelected ? '2px' : '1px',
+                              borderRadius: '4px',
+                              fontSize: '0.7rem',
+                              padding: '2px 4px',
+                              overflow: 'hidden',
+                              zIndex: isSelected || isConfirmed ? 5 : 1,
+                              marginTop: '0px',
+                              marginBottom: '0px'
+                            }}
                         title={(() => {
                           const session = getSessionForSlot(slot);
                           if (session) {
@@ -378,15 +779,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           if (isSelected) {
                             console.log('Deselecting slot');
                             onSlotDeselect(slot);
-                          } else if (isConfirmed) {
-                            console.log('Unassigning confirmed slot');
-                            // Confirmed slot - allow unassigning by deselecting
+                          } else if (isConfirmed || session) {
+                            // Existing session or confirmed slot - deselect immediately in one click
+                            console.log(session ? 'Deselecting existing session slot' : 'Unassigning confirmed slot');
                             onSlotDeselect(slot);
-                          } else if (session) {
-                            console.log('Selecting existing session slot');
-                            // Existing session - could add edit/delete functionality here
-                            // For now, just allow selection (this might need to be changed based on requirements)
-                            onSlotSelect(slot);
                           } else {
                             console.log('Selecting free slot');
                             onSlotSelect(slot);
@@ -411,16 +807,20 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             e.currentTarget.style.borderColor = '#198754';
                             e.currentTarget.style.transform = 'scale(1.02)';
                             e.currentTarget.style.boxShadow = '0 4px 8px rgba(25, 135, 84, 0.3)';
-                          } else if (session) {
-                            e.currentTarget.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(40, 167, 69, 0.3)';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                          } else if (isConfirmed || session) {
+                            // Existing session or confirmed slot hover - make it look toggleable like selected slots
+                            e.currentTarget.style.backgroundColor = 'rgba(25, 135, 84, 0.4)';
+                            e.currentTarget.style.borderColor = '#198754';
+                            e.currentTarget.style.transform = 'scale(1.02)';
+                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(25, 135, 84, 0.3)';
+                            e.currentTarget.style.cursor = 'pointer';
                           } else {
-                            e.currentTarget.style.backgroundColor = 'rgba(76, 175, 80, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(76, 175, 80, 0.3)';
+                            // Available slot hover - brighten it
+                            e.currentTarget.style.backgroundColor = 'rgba(40, 167, 69, 0.3)';
+                            e.currentTarget.style.borderColor = '#28a745';
+                            e.currentTarget.style.borderStyle = 'solid'; // Keep solid border
                             e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(40, 167, 69, 0.3)';
                           }
                         }}
                         onMouseLeave={(e) => {
@@ -429,99 +829,79 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             // Restore selected state styling
                             e.currentTarget.style.backgroundColor = 'rgba(25, 135, 84, 0.3)';
                             e.currentTarget.style.borderColor = '#198754';
-                          } else if (isConfirmed) {
-                            // Restore confirmed state styling
-                            e.currentTarget.style.backgroundColor = '';
-                            e.currentTarget.style.borderColor = '';
+                          } else if (isConfirmed || session) {
+                            // Restore existing session/confirmed state styling (green background)
+                            e.currentTarget.style.backgroundColor = '#28a745';
+                            e.currentTarget.style.borderColor = '#28a745';
+                            e.currentTarget.style.color = 'white';
                           } else if (isAllocated) {
                             // Restore allocated state styling (yellow background)
                             e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.2)';
                             e.currentTarget.style.borderColor = '#ffc107';
                           } else {
-                            // Reset to default
-                            e.currentTarget.style.backgroundColor = '';
-                            e.currentTarget.style.borderColor = '';
+                            // Reset available slot to default
+                            e.currentTarget.style.backgroundColor = 'rgba(40, 167, 69, 0.15)';
+                            e.currentTarget.style.borderColor = '#28a745';
+                            e.currentTarget.style.borderStyle = 'solid'; // Keep solid border
                           }
                           e.currentTarget.style.transform = '';
                           e.currentTarget.style.boxShadow = '';
                           e.currentTarget.style.cursor = '';
                         }}
-                      >
-                        <div className="text-center">
-                          <div className="fw-semibold" style={{ fontSize: '0.75rem' }}>
-                            {formatTime(slot.start)}
+                          >
+                            {/* Show lock icon for unavailable slots */}
+                            {(isBusy || (session && session.remaining <= 0) || isAllocated) && (
+                              <div style={{ position: 'absolute', top: '2px', right: '2px' }}>
+                                <i className="bi bi-lock-fill" style={{ fontSize: '0.5rem' }}></i>
+                              </div>
+                            )}
+                            {/* Show checkbox icon ONLY when slot is selected (after user clicks) */}
+                            {!isBusy && !isAllocated && isSelected && (
+                              <div style={{ 
+                                position: 'absolute', 
+                                top: '2px', 
+                                right: '2px',
+                                color: '#198754',
+                                pointerEvents: 'none'
+                              }}>
+                                <i className="bi bi-check-square-fill" style={{ fontSize: '0.75rem' }}></i>
+                              </div>
+                            )}
                           </div>
-                          <div style={{ fontSize: '0.7rem', opacity: 0.8 }}>
-                            {formatTime(slot.end)}
-                          </div>
-                          {(() => {
-                            const session = getSessionForSlot(slot);
-                            if (session) {
-                              return (
-                                <div className="mt-1" style={{ fontSize: '0.65rem' }}>
-                                  {session.remaining > 0 ? (
-                                    <div className="text-success">
-                                      Available
-                                    </div>
-                                  ) : (
-                                    <div className="text-danger">
-                                      Booked
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            } else if (isBusy) {
-                              return (
-                                <div className="mt-1" style={{ fontSize: '0.65rem' }}>
-                                  <i className="bi bi-x-circle me-1"></i>
-                                  Busy
-                                </div>
-                              );
-                            } else if (isSelected) {
-                              return (
-                                <div className="mt-1" style={{ fontSize: '0.65rem' }}>
-                                  Selected
-                                </div>
-                              );
-                            } else if (isAllocated) {
-                              return (
-                                <div className="mt-1" style={{ fontSize: '0.65rem' }}>
-                                  <i className="bi bi-exclamation-triangle me-1"></i>
-                                  Overlap
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="mt-1" style={{ fontSize: '0.65rem' }}>
-                                  Available
-                                </div>
-                              );
-                            }
-                          })()}
-                        </div>
-                        {(isBusy || (session && session.remaining <= 0) || isAllocated) && (
-                          <div className="position-absolute top-0 end-0 p-1">
-                            <i className="bi bi-lock-fill text-white" style={{ fontSize: '0.6rem' }}></i>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })
-                  )}
-                </div>
-              </>
-            ) : (
-              /* Empty column placeholder for alignment */
-              <div style={{ minHeight: '400px' }}></div>
-            )}
+                        );
+                      });
+                      })()
+                    )}
+                  </div>
+                </>
+              ) : (
+                /* Empty column placeholder */
+                <>
+                  <div className="text-center p-2" style={{ 
+                    backgroundColor: '#f8f9fa', 
+                    borderRadius: '8px 8px 0 0',
+                    border: '1px solid #dee2e6',
+                    borderBottom: '2px solid #dee2e6',
+                    height: '60px'
+                  }}></div>
+                  <div style={{ 
+                    height: timelineHeight,
+                    border: '1px solid #dee2e6',
+                    borderTop: 'none',
+                    backgroundColor: '#ffffff'
+                  }}></div>
+                </>
+              )}
+            </div>
+          ))}
           </div>
-        ))}
+        </div>
       </div>
     );
   };
 
   return (
-    <div className="calendar-view">
+    <div className="calendar-view" style={{ overflow: 'hidden' }}>
       <div className="row">
         <div className="col-12">
           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -536,7 +916,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Multi-Row Day Layout */}
-          <div className="calendar-timeline">
+          <div className="calendar-timeline" style={{ overflow: 'hidden', maxHeight: 'calc(100vh - 300px)' }}>
             
             {/* First Row - Up to 5 days */}
             {renderDayColumns(firstRowSlots, firstRowDays, maxColumnsPerRow)}
@@ -658,7 +1038,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   disabled = false,
   isTemporary = false,
   onOpportunitySave,
-  onBack
+  onBack,
+  onNavigate
 }) => {
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -763,7 +1144,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     console.log('🗓️ Calendar endDate initialized:', date.toISOString());
     return date;
   });
-  const [durationMinutes, setDurationMinutes] = useState(defaultDurationMinutes || 30); // Use prop or default to 30 minutes
+  const [durationMinutes, setDurationMinutes] = useState<number | undefined>(
+    defaultDurationMinutes && [15, 30, 45, 60].includes(defaultDurationMinutes) 
+      ? defaultDurationMinutes 
+      : 30 // Default to 30 minutes if no valid defaultDurationMinutes provided
+  ); // Only allow 15, 30, 45, or 60 minutes
   const [excludeWeekends, setExcludeWeekends] = useState(true); // Exclude weekends by default
   
   // Pagination controls - now based on days instead of slots
@@ -898,26 +1283,49 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       }
       
       // Load calendar events and availability in parallel
+      // Only fetch availability if durationMinutes is selected
+      const availabilityPromise = durationMinutes 
+        ? getAvailability(startTime, actualEndTime, durationMinutes, undefined, excludeWeekends)
+        : Promise.resolve({ available_slots: [], total_slots: 0, duration_minutes: 0, time_range: { start: '', end: '' } });
+      
       const [eventsResult, availabilityResult] = await Promise.all([
         getCalendarEvents(startTime, actualEndTime),
-        getAvailability(startTime, actualEndTime, durationMinutes, undefined, excludeWeekends)
+        availabilityPromise
       ]);
       
       setCalendarEvents(eventsResult);
       setAvailableSlots(availabilityResult.available_slots);
       
-      // Debug: Log available slots and sessions to see if they match (only when sessions change)
-      if (sessions.length > 0) {
-        console.log('📅 Calendar data loaded:', {
-          eventsCount: eventsResult.length,
-          availableSlotsCount: availabilityResult.available_slots.length,
-          sessionsCount: sessions.length,
-          sessions: sessions.map(session => ({
-            id: session.id,
-            start_time: session.start_time,
-            end_time: session.end_time,
-            slotKey: `${session.start_time}|${session.end_time}`
-          }))
+      // Debug: Log available slots and sessions to see if they match
+      console.log('📅 Calendar data loaded:', {
+        eventsCount: eventsResult.length,
+        availableSlotsCount: availabilityResult.available_slots.length,
+        sessionsCount: sessions.length,
+        sessions: sessions.map(session => ({
+          id: session.id,
+          start_time: session.start_time,
+          end_time: session.end_time,
+          opportunity_id: session.opportunity_id,
+          slotKey: `${session.start_time}|${session.end_time}`
+        })),
+        sampleAvailableSlots: availabilityResult.available_slots.slice(0, 3).map(slot => ({
+          start: slot.start,
+          end: slot.end,
+          slotKey: `${slot.start}|${slot.end}`
+        }))
+      });
+      
+      // Check if any sessions match available slots
+      if (sessions.length > 0 && availabilityResult.available_slots.length > 0) {
+        const sessionKeys = new Set(sessions.map(s => `${s.start_time}|${s.end_time}`));
+        const slotKeys = new Set(availabilityResult.available_slots.map(s => `${s.start}|${s.end}`));
+        const matchedKeys = Array.from(sessionKeys).filter(key => slotKeys.has(key));
+        console.log('🔍 Session/Slot matching:', {
+          sessionKeysCount: sessionKeys.size,
+          slotKeysCount: slotKeys.size,
+          matchedCount: matchedKeys.length,
+          matchedKeys: matchedKeys.slice(0, 5),
+          unmatchedSessions: Array.from(sessionKeys).filter(key => !slotKeys.has(key)).slice(0, 5)
         });
       }
       
@@ -1004,7 +1412,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     });
   }, [selectedSlots, opportunityId, urlId, isTemporary]);
 
-  const handleSlotDeselect = useCallback((slot: AvailableSlot) => {
+  const handleSlotDeselect = useCallback(async (slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
     console.log('handleSlotDeselect called:', { 
       slotKey, 
@@ -1013,6 +1421,35 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       isInSelected: selectedSlots.has(slotKey),
       isInConfirmed: confirmedSlots.has(slotKey)
     });
+    
+    // Find the session for this slot (if it exists)
+    const slotStart = new Date(slot.start);
+    const slotEnd = new Date(slot.end);
+    const session = sessions.find(s => {
+      const sStart = new Date(s.start_time);
+      const sEnd = new Date(s.end_time);
+      const startDiff = Math.abs(slotStart.getTime() - sStart.getTime());
+      const endDiff = Math.abs(slotEnd.getTime() - sEnd.getTime());
+      const tolerance = 1000; // 1 second
+      return startDiff <= tolerance && endDiff <= tolerance;
+    });
+    
+    // If slot has an actual session (not a temp one), delete it from database
+    if (session && session.id && !session.id.startsWith('temp-session-')) {
+      try {
+        console.log('🗑️ Deleting session from database:', session.id);
+        const { deleteSession } = await import('../api/client');
+        await deleteSession(session.id);
+        
+        // Remove session from the sessions array
+        const updatedSessions = sessions.filter(s => s.id !== session.id);
+        onSessionsChange(updatedSessions);
+        console.log('✅ Session deleted successfully');
+      } catch (error) {
+        console.error('❌ Error deleting session:', error);
+        setError('Failed to delete session. Please try again.');
+      }
+    }
     
     // Remove from both selected and confirmed slots
     setSelectedSlots(prev => {
@@ -1030,7 +1467,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       persistConfirmedSlots(newSet);
       return newSet;
     });
-  }, [selectedSlots, confirmedSlots, opportunityId]);
+  }, [selectedSlots, confirmedSlots, opportunityId, sessions, onSessionsChange]);
 
   const handleCreateSessionsFromSelected = async () => {
     if (selectedSlots.size === 0) {
@@ -1091,18 +1528,88 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           // Small delay to ensure state has propagated to parent component
           await new Promise(resolve => setTimeout(resolve, 100));
           try {
-            await onOpportunitySave();
-            console.log('✅ onOpportunitySave completed successfully for temporary opportunity');
+            // Get the opportunity ID before saving (it should be set by parent)
+            const opportunityIdBeforeSave = opportunityId;
+            const savedOpportunityId = await onOpportunitySave();
+            console.log('✅ onOpportunitySave completed successfully for temporary opportunity:', {
+              returnedOpportunityId: savedOpportunityId,
+              previousOpportunityId: opportunityIdBeforeSave
+            });
+            
+            // Use the opportunity ID returned from the callback, or fall back to prop/URL
+            const opportunityIdToUse = savedOpportunityId || opportunityId || (urlId && urlId !== 'new' ? urlId : null);
+            
+            if (opportunityIdToUse && opportunityIdToUse !== opportunityIdBeforeSave) {
+              console.log('🔄 Creating sessions for saved opportunity:', {
+                oldId: opportunityIdBeforeSave,
+                newId: opportunityIdToUse,
+                sessionCount: sessionData.length
+              });
+              
+              try {
+                const { createSessions } = await import('../api/client');
+                const createdSessions = await createSessions(opportunityIdToUse, sessionData);
+                console.log('✅ CREATE MODE - Sessions created directly:', {
+                  createdCount: createdSessions.length,
+                  createdSessions: createdSessions.map(s => ({
+                    id: s.id,
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    opportunity_id: s.opportunity_id
+                  }))
+                });
+                
+                // Update sessions state with real sessions
+                onSessionsChange(createdSessions);
+                
+                // After sessions are created, navigate to admin dashboard
+                console.log('✅ All sessions created, navigating to admin dashboard');
+                // Use callback navigation to avoid full page reload (which clears session)
+                if (onNavigate) {
+                  onNavigate('/admin');
+                } else {
+                  // Fallback to window.location if callback not provided
+                  window.location.href = '/admin';
+                }
+              } catch (sessionError) {
+                console.error('❌ Error creating sessions after opportunity save:', sessionError);
+                setError('Opportunity saved but failed to create sessions. Please add them manually.');
+                // Navigate anyway so user can manually add sessions
+                if (onNavigate) {
+                  onNavigate('/admin');
+                } else {
+                  window.location.href = '/admin';
+                }
+              }
+            } else if (!opportunityIdToUse) {
+              console.log('⚠️ Cannot create sessions: Opportunity ID not returned from save callback. Navigating to admin.');
+              if (onNavigate) {
+                onNavigate('/admin');
+              } else {
+                window.location.href = '/admin';
+              }
+            } else {
+              console.log('⚠️ Opportunity ID unchanged, sessions may have been created by parent component. Navigating to admin.');
+              if (onNavigate) {
+                onNavigate('/admin');
+              } else {
+                window.location.href = '/admin';
+              }
+            }
           } catch (saveError) {
             console.error('❌ Error saving temporary opportunity:', saveError);
-            // Don't fail the entire operation if opportunity save fails
-            // Sessions were already created successfully
+            // Navigate to admin even on error
+            if (onNavigate) {
+              onNavigate('/admin');
+            } else {
+              window.location.href = '/admin';
+            }
           }
         } else {
           console.log('⚠️ onOpportunitySave callback not provided for temporary opportunity');
         }
         
-        // Refresh calendar to show updated state immediately
+        // Refresh calendar to show updated state immediately (before navigation)
         await loadCalendarData();
         return;
       }
@@ -1395,20 +1902,25 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   disabled={disabled}
                 />
               </div>
-              <div style={{ minWidth: '80px' }}>
+              <div style={{ minWidth: '120px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
                   Timeslot (mins)
                 </label>
-                <input
-                  type="number"
+                <select
                   className="form-control form-control-sm"
-                  value={durationMinutes}
-                  onChange={(e) => setDurationMinutes(parseInt(e.target.value) || 120)}
-                  min="15"
-                  max="480"
+                  value={durationMinutes || ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? undefined : parseInt(e.target.value);
+                    setDurationMinutes(value);
+                  }}
                   disabled={disabled}
-                  placeholder="min"
-                />
+                >
+                  <option value="">Please select</option>
+                  <option value="15">15 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="45">45 minutes</option>
+                  <option value="60">60 minutes</option>
+                </select>
               </div>
               <div style={{ minWidth: '80px' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
@@ -1534,7 +2046,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </div>
               ) : viewMode === 'grid' ? (
                 <div>
-                  {/* Removed warning - calendar view shows empty state naturally */}
+                  {!durationMinutes && (
+                    <div className="alert alert-info mb-3" role="alert">
+                      <i className="bi bi-info-circle me-2"></i>
+                      Please select a timeslot duration (15, 30, 45, or 60 minutes) to view available slots.
+                    </div>
+                  )}
                   <CalendarView
                     key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
                     events={calendarEvents}

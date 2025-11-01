@@ -131,10 +131,16 @@ const OpportunityForm: React.FC = () => {
       // Load sessions - always try to load fresh sessions from API when editing
       // The opportunity object might have stale session data
       try {
-        console.log('🔍 Loading sessions for opportunity:', opportunity.id);
-        const sessions = await getSessions(opportunity.id);
+        console.log('🔍 EDIT MODE - Loading sessions for opportunity:', {
+          opportunityId: opportunity.id,
+          opportunitySessionsCount: opportunity.sessions?.length || 0,
+          willCallAPI: true
+        });
         
-        console.log('🔍 Loaded opportunity sessions:', {
+        // IMPORTANT: Always request ALL sessions including past ones when editing
+        const sessions = await getSessions(opportunity.id, { include_past: true });
+        
+        console.log('🔍 EDIT MODE - Loaded opportunity sessions from API:', {
           opportunityId: opportunity.id,
           sessionsCount: sessions.length,
           sessions: sessions.map(s => ({
@@ -142,8 +148,10 @@ const OpportunityForm: React.FC = () => {
             start_time: s.start_time,
             end_time: s.end_time,
             capacity: s.capacity,
-            booked_count: s.booked_count
-          }))
+            booked_count: s.booked_count,
+            opportunity_id: s.opportunity_id
+          })),
+          opportunitySessionsCount: opportunity.sessions?.length || 0
         });
         
         if (sessions.length > 0) {
@@ -354,8 +362,8 @@ const OpportunityForm: React.FC = () => {
     );
   };
 
-  const handleSubmit = async (e?: React.FormEvent) => {
-    console.log('🚀 handleSubmit called', { isEdit, opportunityId, formData });
+  const handleSubmit = async (e?: React.FormEvent, skipNavigation = false): Promise<string | undefined> => {
+    console.log('🚀 handleSubmit called', { isEdit, opportunityId, formData, skipNavigation });
     
     if (e) {
       e.preventDefault();
@@ -363,7 +371,7 @@ const OpportunityForm: React.FC = () => {
     
     if (!validateForm()) {
       console.error('Validation errors:', validationErrors);
-      return;
+      return undefined;
     }
     
     try {
@@ -431,42 +439,12 @@ const OpportunityForm: React.FC = () => {
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
         
-        // Save any temporary sessions that were created (only for test and interview types)
-        if (formData.type === 'test' || formData.type === 'interview') {
-          const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
-          console.log('🔍 CREATE MODE - Checking for temporary sessions:', {
-            totalSessions: sessions.length,
-            tempSessions: tempSessions.length,
-            tempSessionIds: tempSessions.map(s => s.id),
-            opportunityId: savedOpportunity.id
-          });
-          
-          if (tempSessions.length > 0) {
-            try {
-              const sessionData = tempSessions.map(session => ({
-                start_time: session.start_time,
-                end_time: session.end_time,
-                capacity: session.capacity,
-                location_or_meet_link_optional: session.location_or_meet_link_optional || ''
-              }));
-              
-              console.log('🔍 CREATE MODE - Creating sessions:', sessionData);
-              const { createSessions } = await import('../api/client');
-              await createSessions(savedOpportunity.id, sessionData);
-              console.log('✅ CREATE MODE - Sessions created successfully');
-              
-              // Reload sessions to get the real IDs
-              const updatedOpportunity = await getOpportunity(savedOpportunity.id);
-              setSessions(updatedOpportunity.sessions || []);
-              console.log('✅ CREATE MODE - Updated opportunity sessions:', updatedOpportunity.sessions?.length || 0);
-            } catch (sessionError) {
-              console.error('❌ Error saving sessions:', sessionError);
-              setError('Opportunity created but failed to save sessions. Please add them manually.');
-            }
-          } else {
-            console.log('⚠️ CREATE MODE - No temporary sessions to save');
-          }
-        }
+        // Note: Session creation is now handled by AdminSessionManager after opportunity is saved
+        // This keeps the session creation logic in one place and ensures proper timing
+        console.log('✅ CREATE MODE - Opportunity created, AdminSessionManager will handle session creation');
+        
+        // Return the opportunity ID so AdminSessionManager can create sessions
+        return savedOpportunity.id;
       }
       
       // Update original form data after successful save
@@ -474,10 +452,20 @@ const OpportunityForm: React.FC = () => {
         setOriginalFormData({ ...formData });
       }
       
-      // Navigate to admin page after successful save
-      // Force a fresh load by using a timestamp to bypass any potential caching
-      console.log('✅ Opportunity saved successfully, navigating to admin dashboard');
-      navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
+      // For edit mode, return the existing opportunity ID
+      if (isEdit && savedOpportunity) {
+        return savedOpportunity.id;
+      }
+      
+      // Navigate to admin page after successful save (unless navigation is skipped for session creation)
+      if (!skipNavigation) {
+        console.log('✅ Opportunity saved successfully, navigating to admin dashboard');
+        navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
+      } else {
+        console.log('✅ Opportunity saved successfully, navigation skipped (handled by AdminSessionManager)');
+      }
+      
+      return savedOpportunity?.id;
       
     } catch (err: any) {
       console.error('Error saving opportunity:', err);
@@ -840,8 +828,9 @@ const OpportunityForm: React.FC = () => {
                             defaultDurationMinutes={formData.default_duration_minutes}
                             disabled={saving || (isEdit && loadingOpportunity)}
                             isTemporary={!isEdit || !opportunityId}
-                            onOpportunitySave={handleSubmit}
+                            onOpportunitySave={() => handleSubmit(undefined, true)}
                             onBack={() => setActiveTab(2)}
+                            onNavigate={(path) => navigate(path, { state: { refresh: true, timestamp: Date.now() } })}
                           />
                         )}
                       </div>

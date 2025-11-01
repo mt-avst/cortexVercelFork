@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-frontend",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "Adaptalabs recruitment app frontend",
   "private": true,
   "dependencies": {

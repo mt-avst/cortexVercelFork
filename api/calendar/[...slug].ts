@@ -66,20 +66,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const dayEnd = new Date(currentDate);
         dayEnd.setHours(17, 0, 0, 0);
         
-        while (currentDate < dayEnd) {
-          const slotEnd = new Date(currentDate);
-          slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes);
-          
-          // Only add slot if it ends before 5 PM
-          if (slotEnd <= dayEnd) {
-            available_slots.push({
-              start: currentDate.toISOString(),
-              end: slotEnd.toISOString(),
-              available: true
-            });
+        // Special handling for 45-minute slots: always start on the hour
+        if (durationMinutes === 45) {
+          // Generate slots starting every hour from 9 AM
+          for (let hour = 9; hour < 17; hour++) {
+            const slotStart = new Date(currentDate);
+            slotStart.setHours(hour, 0, 0, 0); // Always start on the hour (minute 0)
+            
+            const slotEnd = new Date(slotStart);
+            slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes); // 45 minutes later
+            
+            // Only add slot if it ends before 5 PM
+            if (slotEnd <= dayEnd) {
+              available_slots.push({
+                start: slotStart.toISOString(),
+                end: slotEnd.toISOString(),
+                available: true
+              });
+            }
           }
-          
-          currentDate.setMinutes(currentDate.getMinutes() + durationMinutes);
+        } else {
+          // Standard slot generation for other durations (15, 30, 60 minutes)
+          while (currentDate < dayEnd) {
+            const slotEnd = new Date(currentDate);
+            slotEnd.setMinutes(slotEnd.getMinutes() + durationMinutes);
+            
+            // Only add slot if it ends before 5 PM
+            if (slotEnd <= dayEnd) {
+              available_slots.push({
+                start: currentDate.toISOString(),
+                end: slotEnd.toISOString(),
+                available: true
+              });
+            }
+            
+            currentDate.setMinutes(currentDate.getMinutes() + durationMinutes);
+          }
         }
         
         // Move to next day

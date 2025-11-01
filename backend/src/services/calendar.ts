@@ -232,38 +232,69 @@ export class CalendarService {
           }
         }
         
-        // Generate consistent time slots for this day (9 AM to 11 PM) in UTC
-        // Calculate how many slots fit in the working day (9 AM to 11 PM = 14 hours)
-        const workingDayStartHour = 9; // 9 AM UTC
+        // Generate consistent time slots for this day (7 AM to 11 PM) in UTC
+        // Calculate how many slots fit in the working day (7 AM to 11 PM = 16 hours)
+        const workingDayStartHour = 7; // 7 AM UTC
         const workingDayEndHour = 23; // 11 PM UTC
-        const workingDayDurationMs = (workingDayEndHour - workingDayStartHour) * 60 * 60 * 1000; // 14 hours in ms
-        const slotsPerDay = Math.floor(workingDayDurationMs / slotDurationMs);
+        const workingDayDurationMs = (workingDayEndHour - workingDayStartHour) * 60 * 60 * 1000; // 16 hours in ms
         
-        // Generate slots starting from 9 AM UTC, with consistent intervals
-        for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
-          const slotStart = new Date(currentDate);
-          const slotStartTimeMs = workingDayStartHour * 60 * 60 * 1000 + (slotIndex * slotDurationMs);
-          slotStart.setUTCHours(0, 0, 0, 0); // Reset to midnight
-          slotStart.setTime(slotStart.getTime() + slotStartTimeMs); // Add the calculated time
-          
-          const slotEnd = new Date(slotStart.getTime() + slotDurationMs);
-          
-          // Skip if slot would go beyond the requested end time or working day
-          if (slotStart >= endTime) break;
-          if (slotEnd > endTime) break;
-          if (slotStart.getUTCHours() >= workingDayEndHour) break;
-          
-          // Check if this slot conflicts with any busy events
-          const hasConflict = busyEvents.some(event => {
-            const eventStart = new Date(event.start.dateTime || event.start.date);
-            const eventEnd = new Date(event.end.dateTime || event.end.date);
+        // Special handling for 45-minute slots: always start on the hour
+        if (durationMinutes === 45) {
+          // Generate slots starting every hour from 7 AM
+          for (let hour = workingDayStartHour; hour < workingDayEndHour; hour++) {
+            const slotStart = new Date(currentDate);
+            slotStart.setUTCHours(hour, 0, 0, 0); // Always start on the hour (minute 0)
             
-            // Check for overlap
-            return (slotStart < eventEnd && slotEnd > eventStart);
-          });
+            const slotEnd = new Date(slotStart.getTime() + slotDurationMs); // 45 minutes later
+            
+            // Skip if slot would go beyond the requested end time or working day
+            if (slotStart >= endTime) break;
+            if (slotEnd > endTime) break;
+            if (slotEnd.getUTCHours() > workingDayEndHour || (slotEnd.getUTCHours() === workingDayEndHour && slotEnd.getUTCMinutes() > 0)) continue;
+            
+            // Check if this slot conflicts with any busy events
+            const hasConflict = busyEvents.some(event => {
+              const eventStart = new Date(event.start.dateTime || event.start.date);
+              const eventEnd = new Date(event.end.dateTime || event.end.date);
+              
+              // Check for overlap
+              return (slotStart < eventEnd && slotEnd > eventStart);
+            });
+            
+            if (!hasConflict) {
+              availableSlots.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+            }
+          }
+        } else {
+          // Standard slot generation for other durations (15, 30, 60 minutes)
+          const slotsPerDay = Math.floor(workingDayDurationMs / slotDurationMs);
           
-          if (!hasConflict) {
-            availableSlots.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+          // Generate slots starting from 7 AM UTC, with consistent intervals
+          for (let slotIndex = 0; slotIndex < slotsPerDay; slotIndex++) {
+            const slotStart = new Date(currentDate);
+            const slotStartTimeMs = workingDayStartHour * 60 * 60 * 1000 + (slotIndex * slotDurationMs);
+            slotStart.setUTCHours(0, 0, 0, 0); // Reset to midnight
+            slotStart.setTime(slotStart.getTime() + slotStartTimeMs); // Add the calculated time
+            
+            const slotEnd = new Date(slotStart.getTime() + slotDurationMs);
+            
+            // Skip if slot would go beyond the requested end time or working day
+            if (slotStart >= endTime) break;
+            if (slotEnd > endTime) break;
+            if (slotStart.getUTCHours() >= workingDayEndHour) break;
+            
+            // Check if this slot conflicts with any busy events
+            const hasConflict = busyEvents.some(event => {
+              const eventStart = new Date(event.start.dateTime || event.start.date);
+              const eventEnd = new Date(event.end.dateTime || event.end.date);
+              
+              // Check for overlap
+              return (slotStart < eventEnd && slotEnd > eventStart);
+            });
+            
+            if (!hasConflict) {
+              availableSlots.push({ start: new Date(slotStart), end: new Date(slotEnd) });
+            }
           }
         }
         
