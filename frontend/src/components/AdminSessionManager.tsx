@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
-import { getCalendarEvents, getAvailability, checkConflicts } from '../api/client';
+import { getCalendarEvents, getAvailability } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
 
 interface AdminSessionManagerProps {
