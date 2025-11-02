@@ -739,26 +739,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               overflow: 'hidden',
                               zIndex: isSelected || isConfirmed ? 5 : 1,
                               marginTop: '0px',
-                              marginBottom: '0px'
+                              marginBottom: '0px',
+                              pointerEvents: 'auto' // Ensure tooltip can be triggered
                             }}
                         title={(() => {
-                          const session = getSessionForSlot(slot);
-                          const startTime = formatTime(slot.start);
-                          const endTime = formatTime(slot.end);
-                          const timeSpan = `${startTime} to ${endTime}`;
-                          
-                          if (session) {
-                            return `${timeSpan} - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
-                          } else if (isBusy) {
-                            return `${timeSpan} - This time slot conflicts with existing calendar events`;
-                          } else if (isAllocated) {
-                            return `${timeSpan} - This slot is allocated to another opportunity`;
-                          } else if (isSelected) {
-                            return `${timeSpan} - Selected for session creation`;
-                          } else if (isConfirmed) {
-                            return `${timeSpan} - Session confirmed`;
-                          } else {
-                            return `${timeSpan} - Available time slot`;
+                          try {
+                            const session = getSessionForSlot(slot);
+                            const startTime = formatTime(slot.start);
+                            const endTime = formatTime(slot.end);
+                            const timeSpan = `${startTime} to ${endTime}`;
+                            
+                            let tooltipText = timeSpan;
+                            if (session) {
+                              tooltipText += ` - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
+                            } else if (isBusy) {
+                              tooltipText += ` - This time slot conflicts with existing calendar events`;
+                            } else if (isAllocated) {
+                              tooltipText += ` - This slot is allocated to another opportunity`;
+                            } else if (isSelected) {
+                              tooltipText += ` - Selected for session creation`;
+                            } else if (isConfirmed) {
+                              tooltipText += ` - Session confirmed`;
+                            } else {
+                              tooltipText += ` - Available time slot`;
+                            }
+                            return tooltipText;
+                          } catch (error) {
+                            console.error('Error formatting tooltip:', error, slot);
+                            return `${slot.start} to ${slot.end}`;
                           }
                         })()}
                         onClick={() => {
