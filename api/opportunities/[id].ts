@@ -14,18 +14,33 @@ import { parseSessionCookie } from '../utils/auth';
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Get ID from query params (Vercel dynamic routes)
-    let opportunityId = req.query.id as string;
+    let opportunityId: string | undefined;
     
-    // If not in query, try to parse from URL path
+    // First try query.id (Vercel dynamic route parameter)
+    if (req.query.id) {
+      if (Array.isArray(req.query.id)) {
+        opportunityId = req.query.id[0];
+      } else {
+        opportunityId = req.query.id as string;
+      }
+    }
+    
+    // Fallback: try to parse from URL path
     if (!opportunityId && req.url) {
-      const urlMatch = req.url.match(/\/opportunities\/([^\/]+)/);
-      if (urlMatch) {
+      const urlMatch = req.url.match(/\/opportunities\/([^\/\?]+)/);
+      if (urlMatch && urlMatch[1]) {
         opportunityId = urlMatch[1];
       }
     }
     
-    if (!opportunityId) {
-      return res.status(400).json(createErrorResponse('Opportunity ID is required'));
+    // Validate ID format (UUID should be 36 chars with hyphens)
+    if (!opportunityId || opportunityId.length < 10) {
+      console.error('Invalid opportunity ID:', { 
+        id: opportunityId, 
+        query: req.query,
+        url: req.url 
+      });
+      return res.status(400).json(createErrorResponse('Valid opportunity ID is required'));
     }
 
     if (req.method === 'GET') {
@@ -34,10 +49,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const isAdmin = user?.role === 'researcher_admin';
 
       // Get opportunity
-      const opportunityResult = await query(
-        `SELECT * FROM opportunities WHERE id = $1`,
-        [opportunityId]
-      );
+      let opportunityResult;
+      try {
+        opportunityResult = await query(
+          `SELECT * FROM opportunities WHERE id = $1`,
+          [opportunityId]
+        );
+      } catch (queryError: any) {
+        console.error('Error querying opportunity:', {
+          error: queryError,
+          errorCode: queryError?.code,
+          errorMessage: queryError?.message,
+          opportunityId
+        });
+        return res.status(500).json(
+          createErrorResponse('Failed to load opportunity', queryError?.message || 'Database error')
+        );
+      }
 
       if (opportunityResult.rows.length === 0) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
@@ -55,39 +83,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // For now, allow any admin to edit any opportunity
 
       // Get owner info
-      const ownerResult = await query(
-        `SELECT name, email FROM users WHERE id = $1`,
-        [opportunity.owner_user_id]
-      );
+      let ownerResult;
+      try {
+        ownerResult = await query(
+          `SELECT name, email FROM users WHERE id = $1`,
+          [opportunity.owner_user_id]
+        );
+      } catch (ownerError: any) {
+        console.error('Error fetching owner info:', ownerError);
+        ownerResult = { rows: [{ name: 'Unknown', email: 'unknown@example.com' }] };
+      }
 
       // Load sessions with dynamic booked_count calculation (matches actual bookings)
-      const sessionsResult = await query(
-        `SELECT s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
-                s.location_or_meet_link_optional, s.created_at, s.updated_at,
-                s.booked_count as stored_booked_count,
-                COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as booked_count,
-                (s.capacity - COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0))::int as remaining
-         FROM sessions s
-         LEFT JOIN bookings b ON s.id = b.session_id 
-         WHERE s.opportunity_id = $1
-         GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
-                  s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
-         ORDER BY s.start_time ASC`,
-        [opportunityId]
-      );
+      let sessionsResult;
+      try {
+        sessionsResult = await query(
+          `SELECT s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                  s.location_or_meet_link_optional, s.created_at, s.updated_at,
+                  s.booked_count as stored_booked_count,
+                  COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as booked_count,
+                  (s.capacity - COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0))::int as remaining
+           FROM sessions s
+           LEFT JOIN bookings b ON s.id = b.session_id 
+           WHERE s.opportunity_id = $1
+           GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                    s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+           ORDER BY s.start_time ASC`,
+          [opportunityId]
+        );
+      } catch (sessionsError: any) {
+        console.error('Error fetching sessions:', sessionsError);
+        sessionsResult = { rows: [] };
+      }
 
       // Get click count for polls/surveys (admin only)
       let clicks_total = null;
       if (isAdmin && (opportunity.type === 'poll' || opportunity.type === 'survey')) {
-        const clicksResult = await query(
-          `SELECT COUNT(*)::int as count FROM opportunity_clicks WHERE opportunity_id = $1`,
-          [opportunityId]
-        );
-        clicks_total = clicksResult.rows[0]?.count || 0;
+        try {
+          const clicksResult = await query(
+            `SELECT COUNT(*)::int as count FROM opportunity_clicks WHERE opportunity_id = $1`,
+            [opportunityId]
+          );
+          clicks_total = clicksResult.rows[0]?.count || 0;
+        } catch (clicksError: any) {
+          console.error('Error fetching clicks:', clicksError);
+          clicks_total = 0;
+        }
       }
 
+      // Safely serialize opportunity data
       const opportunityWithDetails = {
-        ...opportunity,
+        id: opportunity.id,
+        type: opportunity.type,
+        title: opportunity.title,
+        purpose_one_liner: opportunity.purpose_one_liner,
+        description_optional: opportunity.description_optional || null,
+        product_optional: opportunity.product_optional || null,
+        meeting_location_optional: opportunity.meeting_location_optional || null,
+        default_duration_minutes: opportunity.default_duration_minutes,
+        status: opportunity.status,
+        owner_user_id: opportunity.owner_user_id,
+        external_link_optional: opportunity.external_link_optional || null,
+        participant_type_required: opportunity.participant_type_required || 'any',
+        participant_type_specific_details: opportunity.participant_type_specific_details || null,
         owner_name: ownerResult.rows[0]?.name || 'Unknown',
         owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
         sessions: sessionsResult.rows.map(s => {
@@ -95,15 +153,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { stored_booked_count, ...session } = s;
           return {
             ...session,
-            start_time: s.start_time.toISOString(),
-            end_time: s.end_time.toISOString(),
-            created_at: s.created_at.toISOString(),
-            updated_at: s.updated_at.toISOString(),
+            start_time: s.start_time ? new Date(s.start_time).toISOString() : null,
+            end_time: s.end_time ? new Date(s.end_time).toISOString() : null,
+            created_at: s.created_at ? new Date(s.created_at).toISOString() : null,
+            updated_at: s.updated_at ? new Date(s.updated_at).toISOString() : null,
           };
         }),
         clicks_total,
-        created_at: opportunity.created_at.toISOString(),
-        updated_at: opportunity.updated_at.toISOString(),
+        created_at: opportunity.created_at ? new Date(opportunity.created_at).toISOString() : null,
+        updated_at: opportunity.updated_at ? new Date(opportunity.updated_at).toISOString() : null,
       };
 
       return res.status(200).json(opportunityWithDetails);
@@ -256,7 +314,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(405).json(createErrorResponse('Method not allowed'));
   } catch (error: unknown) {
-    console.error('Error in opportunities [id] handler:', error);
+    // Enhanced error logging
+    console.error('Error in opportunities [id] handler:', {
+      error,
+      errorType: typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      query: req.query,
+      url: req.url,
+      method: req.method,
+      opportunityId: req.query.id
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(
       createErrorResponse('Internal server error', errorMessage)

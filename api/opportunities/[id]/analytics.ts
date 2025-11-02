@@ -22,19 +22,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json(createErrorResponse('Admin access required'));
     }
 
-    // Get opportunity ID from query params
-    let opportunityId = req.query.id as string;
+    // Get opportunity ID from Vercel dynamic route
+    // For nested routes like /api/opportunities/[id]/analytics.ts, 
+    // Vercel puts the [id] parameter in req.query.id
+    let opportunityId: string | undefined;
     
-    // If not in query, try to parse from URL path
+    // First try query.id (Vercel dynamic route parameter)
+    if (req.query.id) {
+      if (Array.isArray(req.query.id)) {
+        opportunityId = req.query.id[0];
+      } else {
+        opportunityId = req.query.id as string;
+      }
+    }
+    
+    // Fallback: try to parse from URL path
     if (!opportunityId && req.url) {
-      const urlMatch = req.url.match(/\/opportunities\/([^\/]+)\/analytics/);
-      if (urlMatch) {
+      const urlMatch = req.url.match(/\/opportunities\/([^\/\?]+)\/analytics/);
+      if (urlMatch && urlMatch[1]) {
         opportunityId = urlMatch[1];
       }
     }
     
-    if (!opportunityId) {
-      return res.status(400).json(createErrorResponse('Opportunity ID is required'));
+    // Validate ID format (UUID should be 36 chars with hyphens)
+    if (!opportunityId || opportunityId.length < 10) {
+      console.error('Analytics: Invalid opportunity ID', { 
+        id: opportunityId, 
+        query: req.query,
+        url: req.url 
+      });
+      return res.status(400).json(createErrorResponse('Valid opportunity ID is required'));
     }
 
     // Check opportunity ownership
@@ -54,38 +71,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json(createErrorResponse('Only the opportunity owner can view analytics'));
     }
 
-    // Get total clicks
-    const totalResult = await query(
-      'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
-      [opportunityId]
-    );
-    const clicks_total = parseInt(totalResult.rows[0]?.count || '0', 10);
+    // Get total clicks (handle case where table might not exist)
+    let clicks_total = 0;
+    try {
+      const totalResult = await query(
+        'SELECT COUNT(*)::text as count FROM opportunity_clicks WHERE opportunity_id = $1',
+        [opportunityId]
+      );
+      clicks_total = parseInt(String(totalResult.rows[0]?.count || '0'), 10);
+    } catch (queryError: any) {
+      console.error('Error querying total clicks:', queryError);
+      // If table doesn't exist, return 0
+      if (queryError?.code === '42P01') { // Table doesn't exist
+        clicks_total = 0;
+      } else {
+        throw queryError;
+      }
+    }
 
     // Get clicks in last 24 hours
-    const hours24Result = await query(
-      `SELECT COUNT(*) as count FROM opportunity_clicks 
-       WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '24 hours'`,
-      [opportunityId]
-    );
-    const clicks_24h = parseInt(hours24Result.rows[0]?.count || '0', 10);
+    let clicks_24h = 0;
+    try {
+      const hours24Result = await query(
+        `SELECT COUNT(*)::text as count FROM opportunity_clicks 
+         WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '24 hours'`,
+        [opportunityId]
+      );
+      clicks_24h = parseInt(String(hours24Result.rows[0]?.count || '0'), 10);
+    } catch (queryError: any) {
+      console.error('Error querying 24h clicks:', queryError);
+      if (queryError?.code === '42P01') { // Table doesn't exist
+        clicks_24h = 0;
+      } else {
+        throw queryError;
+      }
+    }
 
     // Get clicks by day for last 30 days
-    const dailyResult = await query(
-      `SELECT 
-        DATE(clicked_at) as date,
-        COUNT(*)::int as count
-       FROM opportunity_clicks
-       WHERE opportunity_id = $1 
-         AND clicked_at >= NOW() - INTERVAL '30 days'
-       GROUP BY DATE(clicked_at)
-       ORDER BY date ASC`,
-      [opportunityId]
-    );
+    let clicks_by_day: Array<{ date: string; count: number }> = [];
+    try {
+      const dailyResult = await query(
+        `SELECT 
+          DATE(clicked_at) as date,
+          COUNT(*)::int as count
+         FROM opportunity_clicks
+         WHERE opportunity_id = $1 
+           AND clicked_at >= NOW() - INTERVAL '30 days'
+         GROUP BY DATE(clicked_at)
+         ORDER BY date ASC`,
+        [opportunityId]
+      );
 
-    const clicks_by_day = dailyResult.rows.map(row => ({
-      date: row.date.toISOString().split('T')[0], // Format as YYYY-MM-DD
-      count: parseInt(row.count, 10)
-    }));
+      clicks_by_day = dailyResult.rows.map(row => {
+        let dateStr: string;
+        if (row.date instanceof Date) {
+          dateStr = row.date.toISOString().split('T')[0];
+        } else if (row.date) {
+          // If it's already a string, use it directly
+          dateStr = String(row.date).split('T')[0];
+        } else {
+          // Skip invalid dates
+          return null;
+        }
+        
+        return {
+          date: dateStr,
+          count: parseInt(String(row.count || '0'), 10)
+        };
+      }).filter(Boolean) as Array<{ date: string; count: number }>;
+    } catch (queryError: any) {
+      console.error('Error querying daily clicks:', queryError);
+      if (queryError?.code === '42P01') { // Table doesn't exist
+        clicks_by_day = [];
+      } else {
+        throw queryError;
+      }
+    }
 
     return res.status(200).json({
       clicks_total,
@@ -102,8 +163,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ));
     }
     
-    console.error('Error in analytics handler:', error);
-    return res.status(500).json(createErrorResponse(getErrorMessage(error)));
+    // Log full error details for debugging
+    console.error('Error in analytics handler:', {
+      error,
+      errorType: typeof error,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorStack: error instanceof Error ? error.stack : undefined,
+      query: req.query,
+      url: req.url,
+      method: req.method
+    });
+    
+    const errorMessage = getErrorMessage(error);
+    return res.status(500).json(createErrorResponse(
+      errorMessage || 'An error occurred while loading analytics'
+    ));
   }
 }
 
