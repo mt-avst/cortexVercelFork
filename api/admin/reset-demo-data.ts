@@ -69,7 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Ignore error if bookings table is already empty
     });
 
-    // Delete all sessions (after bookings are deleted)
+    // Delete ALL sessions first (to ensure foreign key constraints are satisfied)
+    // This must happen before deleting opportunities
     await query('DELETE FROM sessions');
     console.log('✅ Deleted all sessions');
 
@@ -77,19 +78,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await query('DELETE FROM opportunities');
     console.log('✅ Deleted all opportunities');
     
+    // DOUBLE-CHECK: Ensure NO sessions remain (in case of any race conditions or partial deletes)
+    const remainingSessionsCheck = await query('SELECT COUNT(*)::int as count FROM sessions');
+    if ((remainingSessionsCheck.rows[0]?.count || 0) > 0) {
+      console.warn(`⚠️  WARNING: ${remainingSessionsCheck.rows[0]?.count} sessions still exist after delete! Force deleting...`);
+      await query('DELETE FROM sessions'); // Force delete again
+      console.log('✅ Force deleted remaining sessions');
+    }
+    
     // Ensure all sessions have booked_count = 0 (double-check - should be empty but just in case)
     // This is a no-op if sessions table is already empty, but safe to run
     await query('UPDATE sessions SET booked_count = 0').catch(() => {
       // Ignore error if sessions table is already empty
     });
 
-    // Verify cleanup completed
+    // Verify cleanup completed - CRITICAL: Must be zero before creating new opportunities
     const afterBookings = await query('SELECT COUNT(*)::int as count FROM bookings');
     const afterSessions = await query('SELECT COUNT(*)::int as count FROM sessions');
     const afterOpportunities = await query('SELECT COUNT(*)::int as count FROM opportunities');
     console.log(`📊 After cleanup: ${afterBookings.rows[0]?.count || 0} bookings, ${afterSessions.rows[0]?.count || 0} sessions, ${afterOpportunities.rows[0]?.count || 0} opportunities`);
     
-    if ((afterBookings.rows[0]?.count || 0) > 0 || (afterSessions.rows[0]?.count || 0) > 0 || (afterOpportunities.rows[0]?.count || 0) > 0) {
+    // ENFORCE: Do not proceed if any data remains
+    if ((afterSessions.rows[0]?.count || 0) > 0) {
+      const errorMsg = `FATAL: ${afterSessions.rows[0]?.count} sessions still exist after cleanup! Cannot proceed.`;
+      console.error(errorMsg);
+      return res.status(500).json(createErrorResponse(errorMsg));
+    }
+    
+    if ((afterBookings.rows[0]?.count || 0) > 0 || (afterOpportunities.rows[0]?.count || 0) > 0) {
       console.warn('⚠️  WARNING: Some data still exists after cleanup! This may indicate a database constraint issue.');
     }
 
