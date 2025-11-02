@@ -530,26 +530,132 @@ const OpportunityForm: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid py-4">
-      <div className="row justify-content-center">
+    <div className="container-fluid py-4" style={{ backgroundColor: '#0A091A', minHeight: '100vh' }}>
+      <style>
+        {`
+          /* Opportunity Form dark theme styling */
+          .opportunity-form .card {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 16px !important;
+          }
+          .opportunity-form .card-header {
+            background-color: transparent !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+          .opportunity-form .card-body {
+            background-color: transparent !important;
+          }
+          .opportunity-form h1,
+          .opportunity-form h2,
+          .opportunity-form h3,
+          .opportunity-form h4 {
+            color: #E0E0E0 !important;
+          }
+          .opportunity-form .text-muted {
+            color: rgba(224, 224, 224, 0.7) !important;
+          }
+          .opportunity-form .form-label,
+          .opportunity-form label {
+            color: #E0E0E0 !important;
+          }
+          .opportunity-form .form-control,
+          .opportunity-form .form-select {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #E0E0E0 !important;
+          }
+          .opportunity-form .form-control:focus,
+          .opportunity-form .form-select:focus {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-color: #FF4E50 !important;
+            color: #E0E0E0 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+          }
+          .opportunity-form .form-control::placeholder {
+            color: rgba(224, 224, 224, 0.5) !important;
+          }
+          .opportunity-form .form-select option {
+            background-color: #0A091A !important;
+            color: #E0E0E0 !important;
+          }
+          .opportunity-form .nav-tabs .nav-link {
+            color: #E0E0E0 !important;
+            background-color: transparent !important;
+            border-bottom-color: transparent !important;
+          }
+          .opportunity-form .nav-tabs .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border-bottom-color: #FF4E50 !important;
+            color: #FF4E50 !important;
+          }
+          .opportunity-form .border-top,
+          .opportunity-form .border-bottom {
+            border-color: rgba(255, 255, 255, 0.1) !important;
+          }
+          .opportunity-form .btn-primary {
+            background-color: #FF4E50 !important;
+            border-color: #FF4E50 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-form .btn-primary:hover {
+            background-color: #ff5e60 !important;
+            border-color: #ff5e60 !important;
+          }
+          .opportunity-form .btn-success {
+            background-color: #28a745 !important;
+            border-color: #28a745 !important;
+          }
+          .opportunity-form .btn-outline-secondary {
+            border-color: rgba(255, 255, 255, 0.2) !important;
+            color: #E0E0E0 !important;
+          }
+          .opportunity-form .btn-outline-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-form .btn-outline-primary {
+            border-color: #FF4E50 !important;
+            color: #FF4E50 !important;
+          }
+          .opportunity-form .btn-outline-primary:hover {
+            background-color: #FF4E50 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-form .alert {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+            color: #E0E0E0 !important;
+          }
+        `}
+      </style>
+      <div className="row justify-content-center opportunity-form">
         <div className="col-12 col-xl-10">
           {/* Back button */}
           <button 
             className="btn btn-outline-secondary mb-3"
             onClick={() => navigate('/admin')}
+            style={{
+              backgroundColor: 'transparent',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+              color: '#E0E0E0'
+            }}
           >
             <i className="bi bi-arrow-left me-1"></i>
             Back to Admin Dashboard
           </button>
           
-          <div className="card shadow-sm border-0" style={{ borderRadius: '12px' }}>
-            <div className="card-header bg-white border-0 py-4" style={{ borderRadius: '12px 12px 0 0' }}>
+          <div className="card shadow-sm border-0">
+            <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h1 className="h3 mb-1 text-dark" style={{ fontSize: '1.75rem', fontWeight: 'bold' }}>
+                  <h1 className="h3 mb-1" style={{ fontSize: '1.75rem', fontWeight: '600', color: '#E0E0E0' }}>
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
-                  <p className="text-muted mb-0" style={{ fontSize: '1rem' }}>
+                  <p className="mb-0" style={{ fontSize: '1rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                     {isEdit ? 'Update opportunity details and sessions' : 'Set up a new AdaptaLabs activity'}
                   </p>
                 </div>
@@ -565,7 +671,7 @@ const OpportunityForm: React.FC = () => {
                       Analytics
                     </button>
                   )}
-                  <div className="text-muted" style={{ fontSize: '0.9rem' }}>
+                  <div style={{ fontSize: '0.9rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                     <i className="bi bi-person-circle me-1"></i>
                     {user.name}
                   </div>
@@ -590,29 +696,31 @@ const OpportunityForm: React.FC = () => {
                         key={tab.id}
                         type="button"
                         className={`nav-link border-0 py-3 px-4 ${
-                          activeTab === tab.id ? 'active text-primary fw-bold' : 'text-muted fw-semibold'
+                          activeTab === tab.id ? 'active fw-bold' : 'fw-semibold'
                         }`}
                         style={{
                           fontSize: activeTab === tab.id ? '1.1rem' : '0.95rem',
-                          backgroundColor: activeTab === tab.id ? 'white' : 'transparent',
-                          borderBottom: activeTab === tab.id ? '2px solid #ffaa50' : '2px solid transparent',
+                          backgroundColor: activeTab === tab.id ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
+                          borderBottom: activeTab === tab.id ? '2px solid #FF4E50' : '2px solid transparent',
                           flex: '1',
-                          width: '100%'
+                          width: '100%',
+                          color: activeTab === tab.id ? '#FF4E50' : '#E0E0E0',
+                          transition: 'all 0.2s ease-in-out'
                         }}
                         onClick={() => setActiveTab(tab.id)}
                       >
                         <div className="text-center">
                           <div style={{ 
                             fontSize: activeTab === tab.id ? '1.1rem' : 'inherit',
-                            fontWeight: activeTab === tab.id ? 'bold' : 'normal'
+                            fontWeight: activeTab === tab.id ? '600' : '500'
                           }}>
                             {tab.title}
                           </div>
                           <small 
-                            className={activeTab === tab.id ? 'text-primary' : 'text-muted'} 
                             style={{ 
                               fontSize: activeTab === tab.id ? '0.9rem' : '0.8rem',
-                              fontWeight: '400'
+                              fontWeight: '400',
+                              color: activeTab === tab.id ? 'rgba(255, 78, 80, 0.8)' : 'rgba(224, 224, 224, 0.7)'
                             }}
                           >
                             {tab.description}
@@ -817,8 +925,8 @@ const OpportunityForm: React.FC = () => {
                       <div className="form-section mb-5">
                         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
                           <div>
-                            <h2 className="h4 mb-1 text-dark" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 'bold' }}>Session Management</h2>
-                            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+                            <h2 className="h4 mb-1" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600', color: '#E0E0E0' }}>Session Management</h2>
+                            <p className="mb-0" style={{ fontSize: '0.95rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                               Create time slots for participants to book
                             </p>
                           </div>

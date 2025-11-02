@@ -975,7 +975,85 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   font-size: 1.1rem;
 }
 
-/* Admin table zebra stripes */
+/* Admin Dashboard Table - Momentum Design System (Dark Theme) */
+.admin-dashboard table,
+.admin-dashboard .table,
+.admin-dashboard table.table,
+.admin-dashboard table.table-hover,
+.admin-dashboard table.table-striped {
+  background-color: transparent !important;
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.admin-dashboard .table-responsive {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+.admin-dashboard table thead,
+.admin-dashboard table.table-hover thead,
+.admin-dashboard table.table-striped thead {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.admin-dashboard table thead th,
+.admin-dashboard table.table-hover thead th,
+.admin-dashboard table.table-striped thead th {
+  color: var(--text-primary) !important;
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-top: none !important;
+  padding: 16px 12px !important;
+  vertical-align: middle !important;
+}
+
+.admin-dashboard table tbody,
+.admin-dashboard table.table-hover tbody,
+.admin-dashboard table.table-striped tbody {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+.admin-dashboard table tbody tr,
+.admin-dashboard table.table-hover tbody tr,
+.admin-dashboard table.table-striped tbody tr,
+.admin-dashboard table.table-striped tbody tr:nth-of-type(odd),
+.admin-dashboard table.table-striped tbody tr:nth-of-type(even) {
+  background-color: transparent !important;
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+  height: auto !important;
+}
+
+.admin-dashboard table tbody tr:hover,
+.admin-dashboard table.table-hover tbody tr:hover,
+.admin-dashboard table.table-striped tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.admin-dashboard table tbody td,
+.admin-dashboard table.table-hover tbody td,
+.admin-dashboard table.table-striped tbody td {
+  color: var(--text-primary) !important;
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 16px 12px !important;
+  vertical-align: middle !important;
+}
+
+/* Override Bootstrap table defaults for admin dashboard */
+.admin-dashboard table td,
+.admin-dashboard table th {
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+/* Legacy admin table styles - keeping for backward compatibility but overridden above */
 .table-striped tbody tr:nth-of-type(odd) {
   background-color: rgba(0, 0, 0, 0.05) !important;
 }
@@ -986,21 +1064,6 @@ div.card-body p.card-text:not(.text-muted):not(.small),
 
 .table-striped tbody tr:hover {
   background-color: rgba(0, 123, 255, 0.1) !important;
-}
-
-/* Admin table row spacing */
-.table-striped tbody tr {
-  height: 60px !important;
-}
-
-.table-striped tbody td {
-  padding: 16px 12px !important;
-  vertical-align: middle !important;
-}
-
-.table-striped thead th {
-  padding: 16px 12px !important;
-  vertical-align: middle !important;
 }
 
 /* Alert messages styling for dark backgrounds */
@@ -1142,8 +1205,20 @@ div.card-body p.card-text:not(.text-muted):not(.small),
 }
 
 /* Calendar time labels - red text */
-.calendar-timeline div[style*="paddingLeft"] {
+.calendar-timeline div[style*="paddingLeft"],
+.calendar-timeline div[style*="textAlign"] {
   color: #FF4E50 !important; /* Electric Coral red text */
+}
+
+/* Admin calendar time labels - red text (target by structure - this selector works!) */
+.calendar-view div[style*="position: sticky"] div[style*="position: relative"] div[style*="position: absolute"] {
+  color: #FF4E50 !important; /* Electric Coral red text */
+}
+
+/* Ensure admin calendar time column background is black */
+.calendar-view div[style*="backgroundColor: #0A091A"],
+.calendar-view div[style*="backgroundColor: '#0A091A'"] {
+  background-color: #0A091A !important;
 }
 
 /* ============================================================

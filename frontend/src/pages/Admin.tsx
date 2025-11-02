@@ -205,10 +205,10 @@ const Admin: React.FC = () => {
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'published': return 'badge bg-success text-white';
-      case 'draft': return 'badge bg-warning text-white';
-      case 'closed': return 'badge bg-secondary text-white';
-      default: return 'badge bg-secondary text-white';
+      case 'published': return 'badge status-published text-white';
+      case 'draft': return 'badge status-draft'; // Draft uses black text, no text-white class
+      case 'closed': return 'badge status-closed text-white';
+      default: return 'badge status-closed text-white';
     }
   };
 
@@ -230,48 +230,212 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem' }}>
+    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
       <style>
         {`
           .custom-tab-button {
-            color: #ffffff !important;
-            background-color: #6e6e6e !important;
-            border: none !important;
+            color: #E0E0E0 !important;
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
             padding: 0.5rem 1rem !important;
             cursor: pointer !important;
             width: 100% !important;
             text-align: center !important;
             font-weight: 500 !important;
+            transition: all 0.2s ease-in-out !important;
           }
           .custom-tab-button.active {
-            background-color: #ffaa50 !important;
+            background-color: #FF4E50 !important;
+            border-color: #FF4E50 !important;
           }
           .custom-tab-button:hover {
-            background-color: #787878 !important;
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            border-color: #FF4E50 !important;
           }
           .custom-tab-button.active:hover {
-            background-color: #ff9632 !important;
+            background-color: #FF4E50 !important;
+            border-color: #FF4E50 !important;
+          }
+          .custom-tab-button.active {
+            color: #FFFFFF !important;
           }
           .custom-tab-button.active i,
           .custom-tab-button.active span {
-            color: #000000 !important;
+            color: #FFFFFF !important;
           }
           .custom-tab-button i,
           .custom-tab-button span {
-            color: #ffffff !important;
+            color: #E0E0E0 !important;
+          }
+          
+          /* Admin dashboard dark theme form controls */
+          .admin-dashboard .form-control,
+          .admin-dashboard .form-select {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #E0E0E0 !important;
+          }
+          .admin-dashboard .form-control:focus,
+          .admin-dashboard .form-select:focus {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-color: #FF4E50 !important;
+            color: #E0E0E0 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+          }
+          .admin-dashboard .form-control::placeholder {
+            color: rgba(224, 224, 224, 0.5) !important;
+          }
+          .admin-dashboard .form-label {
+            color: #E0E0E0 !important;
+          }
+          .admin-dashboard .form-select option {
+            background-color: #0A091A !important;
+            color: #E0E0E0 !important;
+          }
+          
+          /* Admin dashboard table styling - Dark theme with glassmorphism */
+          /* OVERRIDE ALL BOOTSTRAP TABLE STYLES - FORCE DARK THEME */
+          .admin-dashboard table,
+          .admin-dashboard .table,
+          .admin-dashboard table.table,
+          .admin-dashboard table.table-hover,
+          .admin-dashboard table.table-striped {
+            background-color: transparent !important;
+            background: transparent !important;
+            color: var(--text-primary) !important;
+          }
+          .admin-dashboard .table-responsive {
+            background-color: transparent !important;
+            background: transparent !important;
+            border-radius: var(--card-radius);
+          }
+          /* Table header - glassmorphism */
+          .admin-dashboard table.table-hover thead,
+          .admin-dashboard table thead,
+          .admin-dashboard table.table-striped thead {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+          }
+          .admin-dashboard table.table-hover thead th,
+          .admin-dashboard table thead th,
+          .admin-dashboard table.table-striped thead th {
+            color: var(--text-primary) !important;
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-top: none !important;
+            border-left: none !important;
+            border-right: none !important;
+          }
+          /* Table body - transparent */
+          .admin-dashboard table.table-hover tbody,
+          .admin-dashboard table tbody,
+          .admin-dashboard table.table-striped tbody {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
+          /* Table rows - transparent by default */
+          .admin-dashboard table.table-hover tbody tr,
+          .admin-dashboard table tbody tr,
+          .admin-dashboard table.table-striped tbody tr,
+          .admin-dashboard table.table-striped tbody tr:nth-of-type(odd),
+          .admin-dashboard table.table-striped tbody tr:nth-of-type(even) {
+            background-color: transparent !important;
+            background: transparent !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+          }
+          /* Table rows - glassmorphism on hover */
+          .admin-dashboard table.table-hover tbody tr:hover,
+          .admin-dashboard table tbody tr:hover,
+          .admin-dashboard table.table-striped tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+          }
+          /* Table cells - transparent */
+          .admin-dashboard table.table-hover tbody td,
+          .admin-dashboard table tbody td,
+          .admin-dashboard table.table-striped tbody td,
+          .admin-dashboard table.table-hover thead th,
+          .admin-dashboard table thead th {
+            color: var(--text-primary) !important;
+            background-color: transparent !important;
+            background: transparent !important;
+            border: none !important;
+            border-bottom: none !important;
+          }
+          /* Override any Bootstrap table cell backgrounds */
+          .admin-dashboard table td,
+          .admin-dashboard table th {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
+          /* Ensure header cells maintain glassmorphism */
+          .admin-dashboard table thead th {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            background: rgba(255, 255, 255, 0.05) !important;
+          }
+          
+          /* Status badges - Momentum Design System */
+          .admin-dashboard .badge.status-published,
+          .admin-dashboard .badge.status-draft,
+          .admin-dashboard .badge.status-closed {
+            border-radius: var(--tag-radius);
+            padding: var(--tag-padding);
+            font-size: var(--tag-font-size);
+            font-weight: var(--tag-font-weight);
+            display: inline-flex;
+            align-items: center;
+            transition: filter var(--transition-card);
+          }
+          .admin-dashboard .badge.status-published {
+            background-color: #28a745 !important;
+          }
+          .admin-dashboard .badge.status-draft {
+            background-color: #ffc107 !important;
+            color: #000000 !important;
+          }
+          .admin-dashboard .badge.status-closed {
+            background-color: #6c757d !important;
+          }
+          .admin-dashboard .badge.status-published:hover,
+          .admin-dashboard .badge.status-draft:hover,
+          .admin-dashboard .badge.status-closed:hover {
+            filter: brightness(103%);
+          }
+          
+          /* Admin dashboard card body - transparent to match design system */
+          .admin-dashboard .card-body {
+            background-color: transparent !important;
+          }
+          
+          /* Tab content area styling */
+          .admin-dashboard .tab-content {
+            background-color: transparent !important;
           }
         `}
       </style>
-      <div className="row">
+      <div className="row admin-dashboard">
         <div className="col-12">
-          <div className="card" style={{ minHeight: 'calc(100vh - 4rem)' }}>
+          <div className="card" style={{ 
+            minHeight: 'calc(100vh - 4rem)',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px'
+          }}>
             <div className="card-header d-flex justify-content-between align-items-center border-0 bg-transparent" style={{ marginBottom: '2rem' }}>
-              <h1 className="h3 mb-0">Admin Dashboard</h1>
+              <h1 className="h3 mb-0" style={{ color: '#E0E0E0' }}>Admin Dashboard</h1>
               <div className="d-flex gap-2">
                 <button 
                   className="btn btn-outline-secondary"
                   onClick={() => navigate('/admin/settings')}
                   aria-label="Settings"
+                  style={{
+                    backgroundColor: 'transparent',
+                    borderColor: 'rgba(255, 255, 255, 0.2)',
+                    color: '#E0E0E0'
+                  }}
                 >
                   <i className="bi bi-gear me-2"></i>
                   Settings
@@ -280,8 +444,13 @@ const Admin: React.FC = () => {
                   className="btn btn-primary"
                   onClick={() => navigate('/admin/opportunities/new')}
                   aria-label="Create new research study"
+                  style={{
+                    backgroundColor: '#FF4E50',
+                    borderColor: '#FF4E50',
+                    color: '#FFFFFF'
+                  }}
                 >
-                  Create Research Study
+                  Create Research Study →
                 </button>
               </div>
             </div>
@@ -290,16 +459,22 @@ const Admin: React.FC = () => {
             {dashboardStats && (
               <div className="row mb-4">
                 <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                  <div className="card border-0 shadow-sm h-100" style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '16px'
+                  }}>
                     <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
                       <div className="d-flex">
-                        <div className="text-primary me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                        <div className="me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start', color: '#FF4E50' }}>
                           <i className="bi bi-clipboard-data"></i>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Total Opportunities</h6>
-                          <h3 className="mb-0">{dashboardStats.total_opportunities}</h3>
-                          <small className="text-muted">
+                          <h6 className="text-uppercase mb-1" style={{ fontSize: '0.75rem', color: '#E0E0E0', opacity: 0.7 }}>Total Opportunities</h6>
+                          <h3 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '600' }}>{dashboardStats.total_opportunities}</h3>
+                          <small style={{ color: '#E0E0E0', opacity: 0.7, fontSize: '14px' }}>
                             {dashboardStats.published_opportunities} published, {dashboardStats.draft_opportunities} draft
                           </small>
                         </div>
@@ -308,16 +483,22 @@ const Admin: React.FC = () => {
                   </div>
                 </div>
                 <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                  <div className="card border-0 shadow-sm h-100" style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '16px'
+                  }}>
                     <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
                       <div className="d-flex">
-                        <div className="text-success me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                        <div className="me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start', color: '#FF4E50' }}>
                           <i className="bi bi-calendar-check"></i>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Total Bookings</h6>
-                          <h3 className="mb-0">{dashboardStats.total_bookings}</h3>
-                          <small className="text-muted">
+                          <h6 className="text-uppercase mb-1" style={{ fontSize: '0.75rem', color: '#E0E0E0', opacity: 0.7 }}>Total Bookings</h6>
+                          <h3 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '600' }}>{dashboardStats.total_bookings}</h3>
+                          <small style={{ color: '#E0E0E0', opacity: 0.7, fontSize: '14px' }}>
                             {dashboardStats.upcoming_bookings} upcoming, {dashboardStats.past_bookings} past
                           </small>
                         </div>
@@ -326,32 +507,44 @@ const Admin: React.FC = () => {
                   </div>
                 </div>
                 <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                  <div className="card border-0 shadow-sm h-100" style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '16px'
+                  }}>
                     <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
                       <div className="d-flex">
-                        <div className="text-info me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                        <div className="me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start', color: '#FF4E50' }}>
                           <i className="bi bi-people"></i>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Participants</h6>
-                          <h3 className="mb-0">{dashboardStats.total_participants}</h3>
-                          <small className="text-muted">Unique participants</small>
+                          <h6 className="text-uppercase mb-1" style={{ fontSize: '0.75rem', color: '#E0E0E0', opacity: 0.7 }}>Participants</h6>
+                          <h3 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '600' }}>{dashboardStats.total_participants}</h3>
+                          <small style={{ color: '#E0E0E0', opacity: 0.7, fontSize: '14px' }}>Unique participants</small>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
                 <div className="col-md-3 col-sm-6 mb-3">
-                  <div className="card border-0 shadow-sm h-100" style={{ backgroundColor: '#f8f9fa' }}>
+                  <div className="card border-0 shadow-sm h-100" style={{ 
+                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: '16px'
+                  }}>
                     <div className="card-body d-flex flex-column" style={{ padding: '1rem' }}>
                       <div className="d-flex">
-                        <div className="text-warning me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start' }}>
+                        <div className="me-3" style={{ fontSize: '2.5rem', lineHeight: '1', alignSelf: 'flex-start', color: '#FF4E50' }}>
                           <i className="bi bi-clock"></i>
                         </div>
                         <div style={{ flex: 1 }}>
-                          <h6 className="text-muted text-uppercase mb-1" style={{ fontSize: '0.75rem' }}>Available Slots</h6>
-                          <h3 className="mb-0">{dashboardStats.available_slots}</h3>
-                          <small className="text-muted">
+                          <h6 className="text-uppercase mb-1" style={{ fontSize: '0.75rem', color: '#E0E0E0', opacity: 0.7 }}>Available Slots</h6>
+                          <h3 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '600' }}>{dashboardStats.available_slots}</h3>
+                          <small style={{ color: '#E0E0E0', opacity: 0.7, fontSize: '14px' }}>
                             {dashboardStats.booked_slots} of {dashboardStats.total_slots} booked
                           </small>
                         </div>
@@ -394,9 +587,9 @@ const Admin: React.FC = () => {
               </ul>
             </div>
             
-            <div className="card-body">
+            <div className="card-body" style={{ backgroundColor: 'transparent', padding: '0' }}>
               {/* Tab Content */}
-              <div className="tab-content">
+              <div className="tab-content" style={{ padding: '1.5rem' }}>
                 {/* Research Studies Tab */}
                 <div 
                   className={`tab-pane fade ${activeTab === 'opportunities' ? 'show active' : ''}`}
@@ -487,15 +680,15 @@ const Admin: React.FC = () => {
                       <div className="spinner-border" role="status">
                         <span className="visually-hidden">Loading...</span>
                       </div>
-                      <p className="mt-2">Loading research studies...</p>
+                      <p className="mt-2" style={{ color: '#E0E0E0' }}>Loading research studies...</p>
                     </div>
                   )}
 
                   {/* Empty State */}
                   {!loadingOpportunities && !error && sortedOpportunities.length === 0 && (
                     <div className="text-center py-5">
-                      <h4>No research studies found</h4>
-                      <p className="text-muted">
+                      <h4 style={{ color: '#E0E0E0' }}>No research studies found</h4>
+                                  <p style={{ color: '#E0E0E0', opacity: 0.7 }}>
                         {searchQuery || statusFilter || typeFilter ? 'No research studies match your search or filters.' : 'Create your first research study to get started.'}
                       </p>
                       <button 
@@ -510,40 +703,40 @@ const Admin: React.FC = () => {
                   {/* Research Studies Table */}
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
                     <div className="table-responsive" style={{ minHeight: '400px', overflow: 'visible' }}>
-                      <table className="table table-hover table-striped">
-                        <thead className="table-light">
+                      <table className="table table-hover">
+                        <thead>
                           <tr>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
                               onClick={() => handleSort('title')}
                             >
                               Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
                               onClick={() => handleSort('type')}
                             >
                               Type {sortField === 'type' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th>Participants</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Participants</th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
                               onClick={() => handleSort('status')}
                             >
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th>Clicks</th>
-                            <th>Sessions</th>
-                            <th>Total Slots</th>
-                            <th>Remaining</th>
-                            <th>Duration</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Clicks</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Sessions</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Total Slots</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Remaining</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Duration</th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
                               onClick={() => handleSort('created_at')}
                             >
                               Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th>Actions</th>
+                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -553,20 +746,29 @@ const Admin: React.FC = () => {
                               style={{ cursor: 'pointer' }}
                               onClick={() => navigate(`/admin/opportunities/${opportunity.id}/edit`)}
                             >
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 <div>
-                                  <strong>{opportunity.title}</strong>
+                                  <strong style={{ fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{opportunity.title}</strong>
                                   <br />
-                                  <small style={{ color: '#000000', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</small>
+                                  <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 <span className={getTypeBadgeClass(opportunity.type)}>
                                   {formatOpportunityType(opportunity.type)}
                                 </span>
                               </td>
-                              <td>
-                                <span className="badge bg-secondary text-white">
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                                <span className="badge" style={{ 
+                                  backgroundColor: 'var(--tag-test)', 
+                                  color: 'var(--tag-text)',
+                                  borderRadius: 'var(--tag-radius)', 
+                                  padding: 'var(--tag-padding)', 
+                                  fontSize: 'var(--tag-font-size)', 
+                                  fontWeight: 'var(--tag-font-weight)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center'
+                                }}>
                                   {(() => {
                                     switch (opportunity.participant_type_required) {
                                       case 'any': return '👥 Any';
@@ -578,7 +780,7 @@ const Admin: React.FC = () => {
                                   })()}
                                 </span>
                               </td>
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 <span className={getStatusBadgeClass(opportunity.status)}>
                                   {opportunity.status}
                                 </span>
@@ -586,45 +788,55 @@ const Admin: React.FC = () => {
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
                                 )}
                               </td>
-                              <td>
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>
                                 {(opportunity.type === 'poll' || opportunity.type === 'survey') ? (
-                                  <span className="badge bg-info text-white">
-                                    {opportunity.clicks_total ?? 0}
-                                  </span>
+                                  opportunity.clicks_total ?? 0
                                 ) : (
-                                  <span className="text-muted">-</span>
+                                  ''
                                 )}
                               </td>
-                              <td>
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
                                   opportunity.sessions?.length || 0
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
-                                  opportunity.sessions?.reduce((sum, s) => sum + s.capacity, 0) || 0
+                                  opportunity.sessions && opportunity.sessions.length > 0 ? (
+                                    <span className="badge bg-success text-white" style={{ 
+                                      borderRadius: 'var(--tag-radius)', 
+                                      padding: 'var(--tag-padding)', 
+                                      fontSize: 'var(--tag-font-size)', 
+                                      fontWeight: 'var(--tag-font-weight)',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      transition: 'filter var(--transition-card)'
+                                    }}>
+                                      {opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0)}
+                                    </span>
+                                  ) : (
+                                    ''
+                                  )
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
-                                  <span className={`badge ${(opportunity.sessions?.reduce((sum, s) => sum + s.remaining, 0) || 0) > 0 ? 'bg-success' : 'bg-danger'}`}>
-                                    {opportunity.sessions?.reduce((sum, s) => sum + s.remaining, 0) || 0}
-                                  </span>
+                                  ''
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td>{opportunity.default_duration_minutes} min</td>
-                              <td>
-                                <small className="text-muted">
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>{opportunity.default_duration_minutes} min</td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                                <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                                   {new Date(opportunity.created_at).toLocaleDateString()}
                                 </small>
                               </td>
-                              <td>
+                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
                                 <div className="dropdown" style={{ position: 'relative' }}>
                                   <button
                                     className="btn btn-outline-secondary btn-sm"
@@ -635,7 +847,7 @@ const Admin: React.FC = () => {
                                     }}
                                     aria-expanded={openDropdownId === opportunity.id}
                                     title="Actions"
-                                    style={{ fontSize: '16px', fontWeight: 'bold', padding: '4px 8px' }}
+                                    style={{ fontSize: '16px', fontWeight: 'bold', padding: '4px 8px', color: 'var(--text-muted)' }}
                                   >
                                     ⋮
                                   </button>

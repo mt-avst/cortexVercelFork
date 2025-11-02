@@ -20,10 +20,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
       <div className="form-section mb-5">
         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
           <div>
-            <h2 className="h4 mb-1 text-dark" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 'bold' }}>
+            <h2 className="h4 mb-1" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600', color: '#E0E0E0' }}>
               Basic Information
             </h2>
-            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+            <p className="mb-0" style={{ fontSize: '0.95rem', color: 'rgba(224, 224, 224, 0.7)' }}>
               Configure the opportunity type and basic details
             </p>
           </div>
@@ -32,10 +32,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
           <div className="col-md-6">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="type" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>
+              <label htmlFor="type" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Research Study Type *
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
                 {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
@@ -57,16 +57,16 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
                 <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
               </select>
-              {validationErrors.type && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.type}</div>
+                {validationErrors.type && (
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.type}</div>
               )}
             </div>
           </div>
           
           <div className="col-md-6">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="status" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+              <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>Status</label>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Draft opportunities are only visible to admins
               </div>
               <select
@@ -80,7 +80,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
               </select>
               {validationErrors.status && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.status}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.status}</div>
               )}
             </div>
           </div>
@@ -89,10 +89,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
           <div className="col-md-6">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="title" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>
+              <label htmlFor="title" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Title *
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Clear, concise title that describes the opportunity (4-140 characters)
               </div>
               <input
@@ -106,17 +106,17 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.title && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.title}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.title}</div>
               )}
             </div>
           </div>
           
           <div className="col-md-6">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="meeting_location_optional" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>
+              <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Meeting Location *
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Zoom, Google Meet, or other meeting link
               </div>
               <input
@@ -130,7 +130,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.meeting_location_optional && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.meeting_location_optional}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.meeting_location_optional}</div>
               )}
             </div>
           </div>
@@ -139,10 +139,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
           <div className="col-md-6">
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="purpose_one_liner" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>
+              <label htmlFor="purpose_one_liner" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Purpose *
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Description of what participants will do (10-180 characters)
               </div>
               <textarea
@@ -156,7 +156,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.purpose_one_liner && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.purpose_one_liner}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.purpose_one_liner}</div>
               )}
             </div>
           </div>
@@ -165,10 +165,10 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           {(formData.type === 'test' || formData.type === 'interview') && (
             <div className="col-md-6">
               <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="default_duration_minutes" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                <label htmlFor="default_duration_minutes" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                   Default Duration (minutes) *
                 </label>
-                <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                   Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
                 </div>
                 <input
@@ -183,7 +183,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   required
                 />
                 {validationErrors.default_duration_minutes && (
-                  <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.default_duration_minutes}</div>
+                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.default_duration_minutes}</div>
                 )}
               </div>
             </div>

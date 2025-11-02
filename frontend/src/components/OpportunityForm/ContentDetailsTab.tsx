@@ -18,10 +18,10 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
       <div className="form-section mb-5">
         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
           <div>
-            <h2 className="h4 mb-1 text-dark" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 'bold' }}>
+            <h2 className="h4 mb-1" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600', color: '#E0E0E0' }}>
               Content & Details
             </h2>
-            <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+            <p className="mb-0" style={{ fontSize: '0.95rem', color: 'rgba(224, 224, 224, 0.7)' }}>
               Provide additional context and participant requirements
             </p>
           </div>
@@ -30,10 +30,10 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
         <div className="row">
           <div className="col-md-6 col-12">
             <div className="form-group mb-3">
-              <label htmlFor="description_optional" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+              <label htmlFor="description_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
                 Description (Optional)
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Detailed description of what participants will do and what to expect
               </div>
               <textarea
@@ -45,7 +45,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 placeholder="Provide detailed information about the opportunity, what participants will be doing, what they need to prepare, etc."
               />
               {validationErrors.description_optional && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.description_optional}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.description_optional}</div>
               )}
             </div>
           </div>
@@ -54,10 +54,10 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
         <div className="row">
           <div className="col-md-6 col-12">
             <div className="form-group mb-3">
-              <label htmlFor="product_optional" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+              <label htmlFor="product_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
                 Product/Feature (Optional)
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Specific product, feature, or area this opportunity relates to
               </div>
               <input
@@ -70,7 +70,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 placeholder="e.g., Mobile App, Dashboard, API, etc."
               />
               {validationErrors.product_optional && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.product_optional}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.product_optional}</div>
               )}
             </div>
           </div>
@@ -79,10 +79,10 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
         <div className="row">
           <div className="col-6">
             <div className="form-group mb-3">
-              <label htmlFor="participant_type_required" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+              <label htmlFor="participant_type_required" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
                 Participant Type
               </label>
-              <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
+              <div className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Who can participate in this opportunity
               </div>
               <select
@@ -98,7 +98,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 <option value="specific" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Specific criteria</option>
               </select>
               {validationErrors.participant_type_required && (
-                <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.participant_type_required}</div>
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.participant_type_required}</div>
               )}
             </div>
           </div>
@@ -106,10 +106,10 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
           <div className="col-6">
             {formData.participant_type_required === 'specific' && (
               <div className="form-group mb-3">
-                <label htmlFor="participant_type_specific_details" className="form-label text-dark mb-2" style={{ fontSize: '1rem', fontWeight: 'bold' }}>
+                <label htmlFor="participant_type_specific_details" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
                   Specific Criteria *
                 </label>
-                <div className="form-text text-muted mb-2" style={{ fontSize: '0.875rem' }}>
+                <div className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                   Describe the specific participant requirements
                 </div>
                 <input
@@ -123,7 +123,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                   required={formData.participant_type_required === 'specific'}
                 />
                 {validationErrors.participant_type_specific_details && (
-                  <div className="text-danger fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#dc3545' }}>{validationErrors.participant_type_specific_details}</div>
+                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.participant_type_specific_details}</div>
                 )}
               </div>
             )}

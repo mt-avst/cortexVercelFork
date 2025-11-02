@@ -458,7 +458,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         display: 'flex',
         gap: '8px',
         width: '100%',
-        overflowX: 'auto'
+        overflowX: 'hidden', /* Removed scrollbar */
+        overflowY: 'hidden' /* Removed scrollbar */
       }}>
           {/* Time Column (Left) */}
           <div style={{
@@ -467,13 +468,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             position: 'sticky',
             left: 0,
             zIndex: 10,
-            backgroundColor: '#f8f9fa'
+            backgroundColor: '#0A091A' /* Black/near-black background */
           }}>
           {/* Time Header */}
           <div style={{
             height: '60px',
-            borderBottom: '2px solid #dee2e6',
-            backgroundColor: '#f8f9fa'
+            borderBottom: '2px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
+            backgroundColor: '#0A091A' /* Black/near-black background */
           }}></div>
           {/* Time Markers */}
           <div style={{
@@ -481,8 +482,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             height: timelineHeight,
             minHeight: `${minTimelineHeight}px`,
             overflow: 'hidden',
-            backgroundColor: '#f8f9fa',
-            borderRight: '2px solid #dee2e6'
+            backgroundColor: '#0A091A', /* Black/near-black background */
+            borderLeft: '2px solid rgba(255, 78, 80, 0.3)', /* Left keyline - starts at 7:00 AM */
+            borderRight: '2px solid rgba(255, 78, 80, 0.3)' /* Right keyline - starts at 7:00 AM */
           }}>
             {timeMarkers.map((marker, index) => {
               const isHour = marker.isHour;
@@ -503,12 +505,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     top: `${position}%`,
                     left: 0,
                     right: 0,
-                    borderTop: '1.5px solid #495057',  // Thicker, darker line for hours - border at exact time position
-                    paddingLeft: '8px',
+                    borderTop: '1.5px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     paddingTop: '2px', // Small padding to push text below border line
                     fontSize: '0.9rem',
                     fontWeight: '700',
-                    color: '#000000',
+                    color: '#FF4E50', /* Electric Coral red text */
+                    textAlign: 'center', /* Center time labels within their cells */
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                     // Remove translateY(-50%) so border line aligns exactly with time position
                     pointerEvents: 'none',
@@ -527,7 +529,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         <div style={{ 
           position: 'relative',
           flex: 1,
-          minWidth: `${maxColumns * 120}px`
+          minWidth: `${maxColumns * 120}px`,
+          backgroundColor: '#0A091A' /* Black/near-black background */
         }}>
           {/* Day Columns Grid */}
           <div style={{ 
@@ -543,19 +546,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <>
                   {/* Day Header */}
                   <div className="text-center p-2" style={{ 
-                    backgroundColor: '#f8f9fa', 
+                    backgroundColor: '#0A091A', /* Black/near-black background */
                     borderRadius: '8px 8px 0 0',
                     border: 'none',
-                    borderBottom: '1px solid #dee2e6',
+                    borderBottom: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     height: '60px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center'
                   }}>
-                    <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem', margin: 0 }}>
+                    <h6 className="mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, color: '#FF4E50' }}>
                       {formatDate(column.date)}
                     </h6>
-                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                    <small style={{ fontSize: '0.7rem', color: '#FF4E50', fontWeight: '500' }}>
                       {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
                     </small>
                   </div>
@@ -565,18 +568,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     position: 'relative',
                     height: timelineHeight,
                     border: 'none',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: '#0A091A', /* Black/near-black background */
                     overflow: 'hidden',
                     zIndex: 1
                   }}>
                     {/* Positioned Slots */}
                     {column.slots.length === 0 ? (
-                      <div className="text-center text-muted" style={{ 
+                      <div className="text-center" style={{ 
                         fontSize: '0.8rem',
                         position: 'absolute',
                         top: '50%',
                         left: '50%',
-                        transform: 'translate(-50%, -50%)'
+                        transform: 'translate(-50%, -50%)',
+                        color: '#FF4E50' /* Electric Coral red text */
                       }}>
                         <i className="bi bi-calendar-x me-1"></i>
                         No available slots
@@ -935,17 +939,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 /* Empty column placeholder */
                 <>
                   <div className="text-center p-2" style={{ 
-                    backgroundColor: '#f8f9fa', 
+                    backgroundColor: '#0A091A', /* Black/near-black background */
                     borderRadius: '8px 8px 0 0',
-                    border: '1px solid #dee2e6',
-                    borderBottom: '2px solid #dee2e6',
+                    border: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
+                    borderBottom: '2px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     height: '60px'
                   }}></div>
                   <div style={{ 
                     height: timelineHeight,
-                    border: '1px solid #dee2e6',
+                    border: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     borderTop: 'none',
-                    backgroundColor: '#ffffff'
+                    backgroundColor: '#0A091A' /* Black/near-black background */
                   }}></div>
                 </>
               )}
@@ -958,11 +962,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="calendar-view" style={{ overflow: 'hidden' }}>
+    <div className="calendar-view" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden' }}>
       <div className="row">
         <div className="col-12">
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <h6 className="mb-0">
+            <h6 className="mb-0" style={{ color: '#FF4E50' }}>
               Available Time Slots
               {needsMultiRow && (
                 <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
@@ -973,7 +977,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Multi-Row Day Layout */}
-          <div className="calendar-timeline" style={{ overflow: 'hidden', maxHeight: 'calc(100vh - 300px)' }}>
+          <div className="calendar-timeline" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden', maxHeight: 'calc(100vh - 300px)' }}>
             
             {/* First Row - Up to 5 days */}
             {renderDayColumns(firstRowSlots, firstRowDays, maxColumnsPerRow)}
@@ -982,7 +986,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             {needsMultiRow && secondRowDays.length > 0 && (
               <div className="mt-4">
                 <div className="mb-2">
-                  <small className="text-muted">
+                  <small style={{ color: '#FF4E50' }}>
                     <i className="bi bi-calendar-week me-1"></i>
                     Additional Days ({secondRowDays.length} more)
                   </small>
