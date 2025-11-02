@@ -108,11 +108,12 @@ export class UserCalendarService {
   async getUserCalendarEvents(
     accessToken: string,
     startTime: string,
-    endTime: string
+    endTime: string,
+    userId?: string
   ): Promise<CalendarEvent[]> {
     if (this.isDemoMode) {
       console.log('📅 Demo mode: Returning mock calendar events');
-      return this.generateMockEvents(startTime, endTime);
+      return this.generateMockEvents(startTime, endTime, userId);
     }
 
     // Production mode implementation
@@ -121,79 +122,153 @@ export class UserCalendarService {
 
   /**
    * Generate realistic mock calendar events for testing
+   * Creates specific conflicts for Demo User 1 (demo@example.com) at common session times
    */
-  private generateMockEvents(startTime: string, endTime: string): CalendarEvent[] {
+  private generateMockEvents(startTime: string, endTime: string, userId?: string): CalendarEvent[] {
     const start = new Date(startTime);
     const end = new Date(endTime);
     const events: CalendarEvent[] = [];
 
-    // Event templates for realistic variety
-    const mockEventTemplates = [
-      { title: 'Team Standup', duration: 30 },
-      { title: 'Client Meeting', duration: 60 },
-      { title: 'Lunch Break', duration: 60 },
-      { title: 'Project Review', duration: 45 },
-      { title: 'Code Review', duration: 30 },
-      { title: 'Sprint Planning', duration: 90 },
-      { title: 'One-on-One', duration: 30 },
-      { title: 'Training Session', duration: 60 },
-    ];
+    // Check if this is Demo User 1 - create specific conflicts for them
+    const isDemoUser1 = userId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' || 
+                       !userId; // Default to Demo User 1 if no userId provided
 
-    let currentDate = new Date(start);
-    let eventCount = 0;
-    const maxEvents = 20; // Limit mock events
+    if (isDemoUser1) {
+      // Create specific conflicts aligned with demo session times (10am, 2pm, 3pm)
+      // These will overlap with the sessions created by reset-demo-data.ts
+      const conflictTimes = [
+        { hour: 10, minute: 0, duration: 60, title: 'Team Standup' },
+        { hour: 10, minute: 30, duration: 45, title: 'Client Call' },
+        { hour: 14, minute: 0, duration: 60, title: 'Project Review Meeting' },
+        { hour: 14, minute: 30, duration: 30, title: 'Sprint Planning' },
+        { hour: 15, minute: 0, duration: 45, title: 'Code Review Session' },
+        { hour: 15, minute: 15, duration: 30, title: 'One-on-One with Manager' },
+      ];
 
-    // Generate events on weekdays only
-    // Use a mix of random times and common meeting times (10am, 2pm, 3pm) to increase chance of conflicts
-    const commonTimes = [10, 14, 15]; // 10am, 2pm, 3pm
-    
-    while (currentDate <= end && eventCount < maxEvents) {
-      const dayOfWeek = currentDate.getDay();
-      
-      // Only add events on weekdays (Monday-Friday)
-      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const template = mockEventTemplates[eventCount % mockEventTemplates.length];
+      let currentDate = new Date(start);
+      let eventCount = 0;
+
+      // Generate events for the next 7 days to ensure good coverage
+      while (currentDate <= end && eventCount < 15) {
+        const dayOfWeek = currentDate.getDay();
         
-        // Mix of common meeting times and random times to increase conflict visibility
-        let eventStart: Date;
-        if (eventCount < 6 && eventCount < commonTimes.length * 2) {
-          // First few events use common meeting times
-          const hour = commonTimes[eventCount % commonTimes.length];
-          eventStart = new Date(currentDate);
-          eventStart.setHours(hour, Math.floor(Math.random() * 4) * 15, 0);
-        } else {
-          // Random time between 9 AM and 5 PM
-          eventStart = new Date(currentDate);
-          eventStart.setHours(9 + Math.floor(Math.random() * 8), 
-                             Math.floor(Math.random() * 4) * 15, 0);
-        }
-        
-        const eventEnd = new Date(eventStart);
-        eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
+        // Only add events on weekdays (Monday-Friday)
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          // Create 1-2 conflicts per day at the specific times
+          const conflictsForDay = eventCount % 3 === 0 ? 2 : 1;
+          
+          for (let i = 0; i < conflictsForDay && eventCount < conflictTimes.length * 2; i++) {
+            const conflict = conflictTimes[eventCount % conflictTimes.length];
+            const eventStart = new Date(currentDate);
+            eventStart.setHours(conflict.hour, conflict.minute, 0, 0);
+            
+            const eventEnd = new Date(eventStart);
+            eventEnd.setMinutes(eventEnd.getMinutes() + conflict.duration);
 
-        // Only add if event is within the requested range
-        if (eventStart >= start && eventEnd <= end) {
-          events.push({
-            id: `demo-event-${eventCount}`,
-            title: template.title,
-            start: eventStart.toISOString(),
-            end: eventEnd.toISOString(),
-            startTime: eventStart,
-            endTime: eventEnd,
-            status: 'confirmed',
-            location: Math.random() > 0.5 ? 'Meeting Room A' : undefined,
-            description: `Demo ${template.title} event for testing`,
-            attendees: [],
-          });
-          eventCount++;
+            // Only add if event is within the requested range
+            if (eventStart >= start && eventEnd <= end) {
+              events.push({
+                id: `demo-conflict-${eventCount}-${eventStart.toISOString()}`,
+                title: conflict.title,
+                start: eventStart.toISOString(),
+                end: eventEnd.toISOString(),
+                startTime: eventStart,
+                endTime: eventEnd,
+                status: 'confirmed',
+                location: i === 0 ? 'Meeting Room B' : undefined,
+                description: `Existing calendar commitment for Demo User 1`,
+                attendees: [],
+              });
+              eventCount++;
+            }
+          }
         }
+
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
       }
 
-      // Move to next day
-      currentDate.setDate(currentDate.getDate() + 1);
+      // Also add a few random events for variety
+      const randomTemplates = [
+        { title: 'Lunch Break', duration: 60 },
+        { title: 'Training Session', duration: 90 },
+        { title: 'Department Meeting', duration: 45 },
+      ];
+
+      currentDate = new Date(start);
+      let randomCount = 0;
+      while (currentDate <= end && randomCount < 5) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          const template = randomTemplates[randomCount % randomTemplates.length];
+          const eventStart = new Date(currentDate);
+          eventStart.setHours(11 + Math.floor(Math.random() * 2), Math.floor(Math.random() * 4) * 15, 0);
+          
+          const eventEnd = new Date(eventStart);
+          eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
+
+          if (eventStart >= start && eventEnd <= end) {
+            events.push({
+              id: `demo-random-${randomCount}`,
+              title: template.title,
+              start: eventStart.toISOString(),
+              end: eventEnd.toISOString(),
+              startTime: eventStart,
+              endTime: eventEnd,
+              status: 'confirmed',
+              location: undefined,
+              description: `Demo ${template.title} event`,
+              attendees: [],
+            });
+            randomCount++;
+          }
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+    } else {
+      // For other users, generate fewer/random events
+      const mockEventTemplates = [
+        { title: 'Team Standup', duration: 30 },
+        { title: 'Client Meeting', duration: 60 },
+        { title: 'Lunch Break', duration: 60 },
+      ];
+
+      let currentDate = new Date(start);
+      let eventCount = 0;
+      const maxEvents = 5;
+
+      while (currentDate <= end && eventCount < maxEvents) {
+        const dayOfWeek = currentDate.getDay();
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+          const template = mockEventTemplates[eventCount % mockEventTemplates.length];
+          const eventStart = new Date(currentDate);
+          eventStart.setHours(9 + Math.floor(Math.random() * 8), 
+                             Math.floor(Math.random() * 4) * 15, 0);
+          
+          const eventEnd = new Date(eventStart);
+          eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
+
+          if (eventStart >= start && eventEnd <= end) {
+            events.push({
+              id: `demo-event-${eventCount}`,
+              title: template.title,
+              start: eventStart.toISOString(),
+              end: eventEnd.toISOString(),
+              startTime: eventStart,
+              endTime: eventEnd,
+              status: 'confirmed',
+              location: Math.random() > 0.5 ? 'Meeting Room A' : undefined,
+              description: `Demo ${template.title} event for testing`,
+              attendees: [],
+            });
+            eventCount++;
+          }
+        }
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
     }
     
-    console.log(`📅 Generated ${events.length} mock calendar events for testing conflicts`);
+    console.log(`📅 Generated ${events.length} mock calendar events${isDemoUser1 ? ' with specific conflicts for Demo User 1' : ''}`);
 
     return events;
   }

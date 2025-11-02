@@ -160,10 +160,12 @@ router.get('/my-events', requireAuth, async (req: Request, res: Response) => {
     }
 
     // Fetch calendar events (returns mock in demo mode, real in production)
+    // Pass userId to generate user-specific conflicts (Demo User 1 gets specific conflicts)
     const events = await userCalendarService.getUserCalendarEvents(
       accessToken,
       startTime,
-      endTime
+      endTime,
+      userId
     );
 
     res.json(events);
