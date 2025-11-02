@@ -1671,39 +1671,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         return;
       }
 
-      // Check for conflicts before creating (only for saved opportunities)
-      // Exclude conflicts with sessions from the current opportunity
-      const conflictsResult = await checkConflicts(sessionData, undefined, opportunityId);
-      if (conflictsResult.has_conflicts) {
-        // Build detailed error message with conflicting slots
-        let errorMessage = `Cannot create sessions: ${conflictsResult.conflicting_slots} slot${conflictsResult.conflicting_slots > 1 ? 's' : ''} have conflicts with existing sessions from other opportunities.`;
-        
-        // Add details about which slots conflict if available
-        if (conflictsResult.conflicts && conflictsResult.conflicts.length > 0) {
-          errorMessage += '\n\nConflicting slots:';
-          const formatConflictTime = (dateString: string) => {
-            const date = new Date(dateString);
-            return date.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-              timeZone: 'UTC'
-            });
-          };
-          
-          conflictsResult.conflicts.forEach((conflict: any, index: number) => {
-            const slot = conflict.slot || conflict;
-            const conflictingSession = conflict.conflicting_session || conflict.conflicting_events?.[0];
-            const startTime = formatConflictTime(slot.start_time);
-            const endTime = formatConflictTime(slot.end_time);
-            const oppTitle = conflictingSession?.opportunity_title || 'another opportunity';
-            errorMessage += `\n${index + 1}. ${startTime} - ${endTime} conflicts with "${oppTitle}"`;
-          });
-        }
-        
-        setError(errorMessage);
-        return;
-      }
+      // Note: We allow sessions from different opportunities to run simultaneously
+      // Conflict checking for overlapping sessions within the same opportunity is handled by the backend
+      // Different opportunities can have sessions at the same time (different admins, different studies)
 
       // Create sessions via API
       const createdSessions = await createSessions(opportunityId, sessionData);
