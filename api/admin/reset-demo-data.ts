@@ -83,8 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const test1Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'test',
@@ -95,7 +95,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         45,
         'published',
         userId,
-        'any'
+        'any',
+        'https://zoom.us/j/1234567890'
       ]
     );
     const test1Id = test1Result.rows[0].id;
@@ -105,8 +106,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const test2Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'test',
@@ -117,7 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         30,
         'published',
         userId,
-        'internal'
+        'internal',
+        'https://meet.google.com/abc-defg-hij'
       ]
     );
     const test2Id = test2Result.rows[0].id;
@@ -127,8 +129,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const poll1Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'poll',
@@ -139,7 +141,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'published',
         userId,
         'https://forms.google.com/work-life-balance-poll',
-        'internal'
+        'internal',
+        'https://zoom.us/j/2345678901'
       ]
     );
     const poll1Id = poll1Result.rows[0].id;
@@ -149,8 +152,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const poll2Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'poll',
@@ -161,7 +164,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'published',
         userId,
         'https://forms.google.com/remote-work-poll',
-        'any'
+        'any',
+        'https://meet.google.com/bcd-efgh-ijk'
       ]
     );
     const poll2Id = poll2Result.rows[0].id;
@@ -171,8 +175,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const survey1Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'survey',
@@ -183,7 +187,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'published',
         userId,
         'https://surveys.google.com/engagement-2024',
-        'internal'
+        'internal',
+        'https://zoom.us/j/3456789012'
       ]
     );
     const survey1Id = survey1Result.rows[0].id;
@@ -193,8 +198,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const survey2Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING id`,
       [
         'survey',
@@ -206,7 +211,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'published',
         userId,
         'https://surveys.google.com/product-feedback-2024',
-        'any'
+        'any',
+        'https://meet.google.com/cde-fghi-jkl'
       ]
     );
     const survey2Id = survey2Result.rows[0].id;
