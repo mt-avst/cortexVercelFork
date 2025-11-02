@@ -172,6 +172,19 @@ docker-compose exec frontend npm test
 ### API
 - `GET /api/me` - Get current user information (requires auth)
 
+### Admin Utilities
+- `POST /api/admin/reset-demo-data` - **Reset Demo Data Script** (Admin only)
+  - Clears all bookings, sessions, and opportunities
+  - Creates 6 new demo opportunities (2 test, 2 poll, 2 survey) **WITHOUT sessions**
+  - Useful for clearing all timeslot availability and starting fresh
+  - Usage: Call via `POST` request as an authenticated admin user
+  - Example (from browser console when logged in as admin):
+    ```javascript
+    fetch('/api/admin/reset-demo-data', { method: 'POST', credentials: 'include' })
+      .then(res => res.json())
+      .then(data => console.log(data));
+    ```
+
 ## Security Features
 
 - ✅ Helmet.js security headers
