@@ -1675,7 +1675,23 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // Exclude conflicts with sessions from the current opportunity
       const conflictsResult = await checkConflicts(sessionData, undefined, opportunityId);
       if (conflictsResult.has_conflicts) {
-        setError(`Cannot create sessions: ${conflictsResult.conflicting_slots} slots have conflicts with existing sessions from other opportunities`);
+        // Build detailed error message with conflicting slots
+        let errorMessage = `Cannot create sessions: ${conflictsResult.conflicting_slots} slot${conflictsResult.conflicting_slots > 1 ? 's' : ''} have conflicts with existing sessions from other opportunities.`;
+        
+        // Add details about which slots conflict if available
+        if (conflictsResult.conflicts && conflictsResult.conflicts.length > 0) {
+          errorMessage += '\n\nConflicting slots:';
+          conflictsResult.conflicts.forEach((conflict: any, index: number) => {
+            const slot = conflict.slot || conflict;
+            const conflictingSession = conflict.conflicting_session || conflict.conflicting_events?.[0];
+            const startTime = formatTime(slot.start_time);
+            const endTime = formatTime(slot.end_time);
+            const oppTitle = conflictingSession?.opportunity_title || 'another opportunity';
+            errorMessage += `\n${index + 1}. ${startTime} - ${endTime} conflicts with "${oppTitle}"`;
+          });
+        }
+        
+        setError(errorMessage);
         return;
       }
 
