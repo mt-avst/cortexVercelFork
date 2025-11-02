@@ -6,7 +6,7 @@ import { parseSessionCookie } from '../utils/auth';
 /**
  * POST /api/admin/reset-demo-data
  * Reset database with fresh demo opportunities (Admin only)
- * Clears all bookings, sessions, and opportunities, then creates 6 new demo opportunities
+ * Clears all bookings, sessions, and opportunities, then creates 6 new demo opportunities WITHOUT sessions
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -51,44 +51,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       hasMeetingLocationColumn = false;
     }
 
-    // Helper function to create sessions
-    const createSessions = async (opportunityId: string, defaultDuration: number, days: number[]) => {
-      const today = new Date();
-      const nextMonday = new Date(today);
-      nextMonday.setDate(today.getDate() + (8 - today.getDay()) % 7 || 7);
-      nextMonday.setHours(0, 0, 0, 0);
-
-      const sessions = [];
-      for (const dayOffset of days) {
-        const sessionDate = new Date(nextMonday);
-        sessionDate.setDate(nextMonday.getDate() + dayOffset);
-        
-        // Create 3 sessions per day: 10am, 2pm, 3pm
-        const times = [10, 14, 15];
-        for (const hour of times) {
-          const startTime = new Date(sessionDate);
-          startTime.setHours(hour, 0, 0, 0);
-          
-          const endTime = new Date(startTime);
-          endTime.setMinutes(endTime.getMinutes() + defaultDuration);
-          
-          const result = await query(
-            `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional, booked_count)
-             VALUES ($1, $2, $3, $4, $5, 0)
-             RETURNING id`,
-            [
-              opportunityId,
-              startTime.toISOString(),
-              endTime.toISOString(),
-              5, // Capacity of 5
-              `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
-            ]
-          );
-          sessions.push(result.rows[0].id);
-        }
-      }
-      return sessions;
-    };
+    // NOTE: Session creation function removed - we are NOT creating any sessions
+    // All opportunities will be created without sessions to clear all timeslot availability
 
     // Verify current state before reset
     const beforeBookings = await query('SELECT COUNT(*)::int as count FROM bookings');
