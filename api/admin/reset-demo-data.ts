@@ -73,8 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           endTime.setMinutes(endTime.getMinutes() + defaultDuration);
           
           const result = await query(
-            `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional)
-             VALUES ($1, $2, $3, $4, $5)
+            `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional, booked_count)
+             VALUES ($1, $2, $3, $4, $5, 0)
              RETURNING id`,
             [
               opportunityId,
@@ -90,11 +90,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sessions;
     };
 
+    // Verify current state before reset
+    const beforeBookings = await query('SELECT COUNT(*)::int as count FROM bookings');
+    const beforeSessions = await query('SELECT COUNT(*)::int as count FROM sessions');
+    const beforeOpportunities = await query('SELECT COUNT(*)::int as count FROM opportunities');
+    console.log(`📊 Before reset: ${beforeBookings.rows[0]?.count || 0} bookings, ${beforeSessions.rows[0]?.count || 0} sessions, ${beforeOpportunities.rows[0]?.count || 0} opportunities`);
+
     // Delete all bookings first (to ensure foreign key constraints are satisfied)
     await query('DELETE FROM bookings');
     console.log('✅ Deleted all bookings');
 
-    // Clear any Google Calendar event IDs from bookings (cleanup)
+    // Clear any Google Calendar event IDs from bookings (cleanup - should be empty but safe)
     await query('UPDATE bookings SET gcal_event_id = NULL WHERE gcal_event_id IS NOT NULL').catch(() => {
       // Ignore error if bookings table is already empty
     });
@@ -107,10 +113,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await query('DELETE FROM opportunities');
     console.log('✅ Deleted all opportunities');
     
-    // Reset booked_count on any remaining sessions (safety check)
-    await query('UPDATE sessions SET booked_count = 0 WHERE booked_count > 0').catch(() => {
+    // Ensure all sessions have booked_count = 0 (double-check - should be empty but just in case)
+    // This is a no-op if sessions table is already empty, but safe to run
+    await query('UPDATE sessions SET booked_count = 0').catch(() => {
       // Ignore error if sessions table is already empty
     });
+
+    // Verify cleanup completed
+    const afterBookings = await query('SELECT COUNT(*)::int as count FROM bookings');
+    const afterSessions = await query('SELECT COUNT(*)::int as count FROM sessions');
+    const afterOpportunities = await query('SELECT COUNT(*)::int as count FROM opportunities');
+    console.log(`📊 After cleanup: ${afterBookings.rows[0]?.count || 0} bookings, ${afterSessions.rows[0]?.count || 0} sessions, ${afterOpportunities.rows[0]?.count || 0} opportunities`);
+    
+    if ((afterBookings.rows[0]?.count || 0) > 0 || (afterSessions.rows[0]?.count || 0) > 0 || (afterOpportunities.rows[0]?.count || 0) > 0) {
+      console.warn('⚠️  WARNING: Some data still exists after cleanup! This may indicate a database constraint issue.');
+    }
 
     const userId = user.id;
 
