@@ -718,7 +718,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         return (
                           <div
                             key={uniqueKey}
-                            className={`calendar-slot calendar-slot-btn border rounded cursor-pointer position-absolute ${slotClass}`}
+                            className={`calendar-slot calendar-slot-btn border cursor-pointer position-absolute ${slotClass}`}
                             style={{ 
                               ...slotStyle,
                               left: '2px',
@@ -733,7 +733,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               opacity: isBusy || (session && session.remaining <= 0) || isAllocated ? 0.8 : 1,
                               transition: 'all 0.2s ease',
                               borderWidth: isSelected ? '2px' : '1px',
-                              borderRadius: '4px',
+                              borderRadius: '0',
                               fontSize: '0.7rem',
                               padding: '2px 4px',
                               overflow: 'hidden',
