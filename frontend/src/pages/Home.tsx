@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
+import { Users, Lock, Globe } from 'lucide-react';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -157,20 +158,20 @@ const Home: React.FC = () => {
         </div>
       )}
       
-      {/* Impact Lab Section */}
+      {/* AdaptaLabs Section */}
       {user && (
         <div className="container mt-4">
-          <div className="row">
+          <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
             <div className="col-12">
-              <h2 className="mb-3">Impact Lab</h2>
+              <h1 className="mb-3" style={{ marginBottom: '24px' }}>AdaptaLabs</h1>
               
               {/* Welcome text - half page width before wrapping */}
               <div className="row mb-4">
                 <div className="col-md-6">
-                  <p className="text-muted" style={{ lineHeight: '1.6', fontSize: '1rem' }}>
-                    Welcome to the Impact Lab - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
+                  <p className="lead" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', marginBottom: '16px' }}>
+                    Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                   </p>
-                  <p style={{ lineHeight: '1.6', fontSize: '1.3rem', fontWeight: 'bold', marginTop: '1rem', color: '#ffffff' }}>
+                  <p className="tagline" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', fontWeight: '600', marginTop: '1rem' }}>
                     Together we turn <span style={{ fontStyle: 'italic' }}>participation into progress</span>
                   </p>
                 </div>
@@ -192,7 +193,7 @@ const Home: React.FC = () => {
                 <div className="text-center text-muted py-5">
                   <i className="bi bi-inbox" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', opacity: 0.3 }}></i>
                   <h4 className="mb-3">No studies available</h4>
-                  <p className="mb-2">No impact lab activities available at the moment.</p>
+                  <p className="mb-2">No AdaptaLabs activities available at the moment.</p>
                   <p style={{ fontSize: '0.9rem' }}>Check back later for new opportunities to participate!</p>
                 </div>
               )}
@@ -231,77 +232,110 @@ const Home: React.FC = () => {
               )}
               
               {!loading && !error && opportunities.length > 0 && (
-                <div className="row">
-                  {paginatedOpportunities.map((opportunity) => (
-                    <div key={opportunity.id} className="col-md-6 col-lg-4 mb-4">
-                      <div className="card h-100">
-                        <div className="card-body d-flex flex-column">
-                          <div className="mb-2">
-                            <span className={getTypeBadgeClass(opportunity.type)}>
-                              {formatOpportunityType(opportunity.type)}
-                            </span>
-                          </div>
-                          
-                          <h5 className="card-title">{opportunity.title}</h5>
-                          <p className="card-text text-muted">{opportunity.purpose_one_liner}</p>
-                          
-                          {opportunity.description_optional && (
-                            <p className="card-text small">{opportunity.description_optional}</p>
-                          )}
-                          
-                          <div className="mt-auto">
-                            {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                              <>
+                <div className="bento-grid">
+                  {paginatedOpportunities.map((opportunity) => {
+                    // Make "New Feature Validation" and "User Interface Testing" wide
+                    const isWide = opportunity.title === 'New Feature Validation' || opportunity.title === 'User Interface Testing';
+                    
+                    return (
+                      <div 
+                        key={opportunity.id} 
+                        className={isWide ? 'bento-grid-item-wide' : 'bento-grid-item'}
+                      >
+                        <div className="card h-100">
+                          <div className="card-body d-flex flex-column">
+                            <div className="mb-2">
+                              <span className={getTypeBadgeClass(opportunity.type)}>
+                                {formatOpportunityType(opportunity.type)}
+                              </span>
+                            </div>
+                            
+                            <h5 className="card-title">{opportunity.title}</h5>
+                            <p className="card-text" style={{ fontSize: 'var(--font-size-body)', lineHeight: '1.25', fontWeight: '400' }}>{opportunity.purpose_one_liner}</p>
+                            
+                            {opportunity.description_optional && (
+                              <p className="card-text small">{opportunity.description_optional}</p>
+                            )}
+                            
+                            <div className="mt-auto">
+                              {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                                <>
+                                  <div className="mb-2">
+                                    <small className="text-muted">
+                                      <i className="bi bi-clock me-1"></i>
+                                      {opportunity.default_duration_minutes} min
+                                    </small>
+                                  </div>
+                                  {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 && (
+                                    <div className="mb-2">
+                                      <small className="text-muted d-flex align-items-center">
+                                        <Users size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                        {opportunity.sessions.reduce((total, session) => total + (session.remaining || 0), 0)} slots available
+                                      </small>
+                                    </div>
+                                  )}
+                                  {opportunity.participant_type_required !== 'specific' && (
+                                    <div className="mb-2">
+                                      <small className="text-muted d-flex align-items-center">
+                                        {(() => {
+                                          switch (opportunity.participant_type_required) {
+                                            case 'any': 
+                                              return (
+                                                <>
+                                                  <Globe size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                                  Open To All
+                                                </>
+                                              );
+                                            case 'internal': 
+                                              return (
+                                                <>
+                                                  <Lock size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                                  Internal
+                                                </>
+                                              );
+                                            case 'external': 
+                                              return (
+                                                <>
+                                                  <Globe size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                                  External
+                                                </>
+                                              );
+                                            default: 
+                                              return (
+                                                <>
+                                                  <Globe size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                                  Open To All
+                                                </>
+                                              );
+                                          }
+                                        })()}
+                                      </small>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                              
+                              {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
                                 <div className="mb-2">
-                                  <small className="text-muted">
-                                    <i className="bi bi-clock me-1"></i>
-                                    {opportunity.default_duration_minutes} min
-                                  </small>
+                                  <small className="text-muted">🎯 {opportunity.participant_type_specific_details}</small>
                                 </div>
-                                {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 && (
-                                  <div className="mb-2">
-                                    <small className="text-muted">
-                                      {opportunity.sessions.reduce((total, session) => total + (session.remaining || 0), 0)} slots available
-                                    </small>
-                                  </div>
-                                )}
-                                {opportunity.participant_type_required !== 'specific' && (
-                                  <div className="mb-2">
-                                    <small className="text-muted">
-                                      {(() => {
-                                        switch (opportunity.participant_type_required) {
-                                          case 'any': return '👥 Open To All';
-                                          case 'internal': return '🏢 Internal';
-                                          case 'external': return '🌐 External';
-                                          default: return '👥 Open To All';
-                                        }
-                                      })()}
-                                    </small>
-                                  </div>
-                                )}
-                              </>
-                            )}
-                            
-                            {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
-                              <div className="mb-2">
-                                <small className="text-muted">🎯 {opportunity.participant_type_specific_details}</small>
+                              )}
+                              
+                              <div className="d-grid">
+                                <button 
+                                  className="btn btn-primary"
+                                  onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                                  aria-label={`View details for ${opportunity.title}`}
+                                >
+                                  View Details
+                                </button>
                               </div>
-                            )}
-                            
-                            <div className="d-grid">
-                              <button 
-                                className="btn btn-primary"
-                                onClick={() => navigate(`/opportunities/${opportunity.id}`)}
-                                aria-label={`View details for ${opportunity.title}`}
-                              >
-                                View Details
-                              </button>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
 

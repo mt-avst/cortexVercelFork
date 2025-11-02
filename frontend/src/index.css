@@ -1,12 +1,14 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: var(--font-family-base);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #000000;
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  background-attachment: fixed;
+  color: var(--text-on-dark);
 }
 
 code {
@@ -21,8 +23,10 @@ code {
 html, body {
   margin: 0;
   padding: 0;
-  background-color: #000000;
-  color: #ffffff;
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  background-attachment: fixed;
+  color: var(--text-on-dark);
+  min-height: 100vh;
 }
 
 /* CRITICAL: Force all error text to be red with MAXIMUM specificity to override body color */
@@ -34,14 +38,91 @@ div.fw-semibold.text-danger {
   color: #dc3545 !important;
 }
 
-/* Global text color for black backgrounds - excluding div to allow text-danger to work */
-h1, h2, h3, h4, h5, h6, a, label, small, .text-muted, .lead {
-  color: #ffffff !important;
+/* Global heading colors are defined in Typography section below - this rule removed to avoid conflicts */
+
+/* Typography - Refined System */
+h1, .h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-h1);
+  line-height: var(--line-height-heading);
+  color: var(--brand-headline) !important; /* Hero title colour */
 }
 
-/* Ensure paragraphs are white, but not if they have text-danger class */
-p:not(.text-danger) {
-  color: #ffffff !important;
+h2, .h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-h2);
+  line-height: var(--line-height-heading);
+}
+
+h3, .h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-h3);
+  line-height: var(--line-height-heading);
+}
+
+/* Headings on dark backgrounds */
+.main h1, .main .h1 {
+  color: var(--brand-headline) !important;
+}
+
+.main h2, .main .h2, .main h3, .main .h3 {
+  color: var(--text-on-dark) !important;
+}
+
+/* Headings inside cards */
+.card h1, .card .h1 {
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-h2);
+  color: var(--text-primary) !important;
+}
+
+.card h2, .card .h2, .card h3, .card .h3, .card h4, .card .h4 {
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-h2);
+  color: var(--text-primary) !important;
+}
+
+/* Body text */
+body, p {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-body);
+  color: var(--text-body);
+}
+
+/* Intro paragraph on dark */
+.main > .container p:first-of-type,
+.main > .container .lead {
+  color: #E0E0E0 !important;
+}
+
+/* Tagline bold */
+.main .tagline,
+.main p strong {
+  font-weight: 600;
+  color: #F5F5F5 !important;
+}
+
+a, label {
+  color: var(--text-on-dark) !important;
+}
+
+small, .small {
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
+}
+
+.lead {
+  color: #E0E0E0 !important;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+}
+
+/* Paragraphs on dark backgrounds use on-dark color */
+.main p:not(.text-danger):not(.card p):not(.lead) {
+  color: var(--text-on-dark) !important;
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
 }
 
 /* Don't apply white color to badges - let them use their own colors */
@@ -54,9 +135,17 @@ span.badge {
   color: white !important;
 }
 
-/* Override Bootstrap text-muted for black backgrounds */
+/* Override Bootstrap text-muted - Refined System */
 .text-muted {
-  color: rgba(255, 255, 255, 0.7) !important;
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
+  color: var(--text-muted) !important;
+}
+
+/* On dark backgrounds, use lighter muted text */
+.main .text-muted:not(.card .text-muted),
+:not(.card) > .text-muted {
+  color: rgba(244, 244, 244, 0.7) !important;
 }
 
 /* Duplicate rule removed - error text color is already defined above */
@@ -64,29 +153,47 @@ span.badge {
 /* Don't apply white color to generic divs - let them inherit */
 /* This allows error messages with inline styles to show properly */
 
-/* Ensure links are visible on black background */
+/* Links - Refined System */
 a {
-  color: #ffffff !important;
+  color: var(--link) !important;
+  text-decoration: none;
 }
 
 a:hover {
-  color: rgba(255, 255, 255, 0.8) !important;
+  color: var(--link-hover) !important;
+  text-decoration: underline;
 }
 
-/* Ensure form labels are white */
+/* Focus states for all interactive elements */
+a:focus,
+button:focus,
+input:focus,
+select:focus,
+textarea:focus {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* Ensure form labels are visible */
 label, .form-label {
-  color: #ffffff !important;
+  color: var(--text-on-dark) !important;
+  font-weight: 600;
+  font-size: var(--font-size-body);
 }
 
-/* Ensure small text is visible */
-small, .small {
-  color: rgba(255, 255, 255, 0.8) !important;
+/* Ensure small text is visible on dark backgrounds */
+.main small:not(.card small),
+.main .small:not(.card .small) {
+  color: rgba(244, 244, 244, 0.8) !important;
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
 }
 
 .App {
-  background-color: #000000;
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  background-attachment: fixed;
   min-height: 100vh;
-  color: #ffffff;
+  color: var(--text-on-dark);
 }
 
 .container {
@@ -107,31 +214,61 @@ small, .small {
 }
 
 .btn-primary {
-  background-color: #ffaa50 !important;
-  color: #000000 !important;
+  background: var(--cta-bg) !important;
+  color: var(--cta-text) !important;
+  border-radius: var(--button-radius);
+  border: 1px solid var(--cta-border) !important;
+  font-weight: 600;
+  box-shadow: var(--shadow-button);
+  transition: all 0.2s ease-in-out;
+  min-height: var(--min-hit-area);
+  padding: 10px 20px;
+  position: relative;
+}
+
+/* Add trailing chevron icon for rhythm */
+.btn-primary::after {
+  content: '→';
+  margin-left: 8px;
+  font-weight: 700;
 }
 
 .btn-primary:hover {
-  background-color: #ff9632 !important;
-  color: #000000 !important;
+  background: var(--cta-bg-hover) !important;
+  color: var(--cta-text-hover) !important;
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-button-hover);
 }
 
-/* Ensure btn-primary text is always black */
+.btn-primary:focus {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25);
+}
+
+/* Ensure btn-primary text uses correct colors */
 .btn-primary,
 .btn-primary *,
 .card .btn-primary,
 .card .btn-primary * {
-  color: #000000 !important;
+  color: var(--cta-text) !important;
+}
+
+.btn-primary:hover,
+.btn-primary:hover *,
+.card .btn-primary:hover,
+.card .btn-primary:hover * {
+  color: var(--cta-text-hover) !important;
 }
 
 /* Override Bootstrap primary text color to orange */
 .text-primary {
-  color: #ffaa50 !important;
+  color: var(--link) !important;
 }
 
 /* Override Bootstrap primary border color to orange */
 .border-primary {
-  border-color: #ffaa50 !important;
+  border-color: var(--link) !important;
 }
 
 /* Compact button style for Participate button */
@@ -150,27 +287,58 @@ small, .small {
 }
 
 .btn-outline-primary {
-  color: #ffaa50 !important;
-  border-color: #ffaa50 !important;
+  color: var(--link) !important;
+  border-color: var(--link) !important;
   background-color: transparent !important;
+  border-radius: var(--button-radius);
+  min-height: var(--min-hit-area);
 }
 
 .btn-outline-primary:hover {
-  color: #000000 !important;
-  background-color: #ffaa50 !important;
-  border-color: #ffaa50 !important;
+  color: var(--cta-text) !important;
+  background: linear-gradient(90deg, var(--cta-bg) 0%, var(--cta-bg-hover) 100%) !important;
+  border-color: var(--link) !important;
 }
 
 .btn-outline-primary:focus,
 .btn-outline-primary.focus {
-  box-shadow: 0 0 0 0.2rem rgba(255, 170, 80, 0.25) !important;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  box-shadow: 0 0 0 0.2rem rgba(255, 122, 51, 0.25) !important;
 }
 
 .header {
-  background-color: #000000;
+  background-color: var(--bg-app);
   border-bottom: none;
   padding: 1rem 0;
-  color: #ffffff;
+  color: var(--text-on-dark);
+}
+
+/* Header logo area */
+.header .logo {
+  color: var(--brand-headline);
+}
+
+/* Header navigation links */
+.header a, .header .nav-items a {
+  color: var(--text-on-dark);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.header a:hover, .header .nav-items a:hover {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: var(--link);
+}
+
+/* Active nav item */
+.header .nav-link.active,
+.header a.active {
+  font-weight: var(--font-weight-h1);
+  color: var(--text-on-dark);
+  border-bottom: 2px solid var(--brand-headline);
+  padding-bottom: 2px;
 }
 
 .header-content {
@@ -186,15 +354,20 @@ small, .small {
 }
 
 .user-greeting {
-  color: #ffffff;
+  color: var(--text-on-dark);
   margin: 0;
   padding: 0;
 }
 
 .logo {
   font-size: 1.5rem;
-  font-weight: bold;
-  color: #ffffff;
+  font-weight: var(--font-weight-h1);
+  color: var(--brand-headline);
+  text-decoration: none;
+}
+
+.logo:hover {
+  color: var(--link-hover);
   text-decoration: none;
 }
 
@@ -206,48 +379,139 @@ small, .small {
 
 .main {
   padding: 2rem 0;
-  background-color: #000000;
+  background: transparent;
   min-height: calc(100vh - 80px);
-  color: #ffffff;
+  color: var(--text-on-dark);
+}
+
+/* Hero container spacing */
+.main > .container > .row:first-child {
+  margin-bottom: var(--spacing-section);
 }
 
 .card {
-  background: white;
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  margin-bottom: var(--spacing-vertical-rhythm);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
+  transition: border-color 0.2s ease-in-out, transform var(--transition-card), box-shadow var(--transition-card);
 }
 
-/* White cards should have dark text */
+/* Card hover - Adapta-Glow effect */
+.card:hover {
+  border-color: var(--brand-headline);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Cards - Refined System */
 .card, .card-header, .card-body, .card-footer {
-  color: #000000 !important;
+  color: var(--text-primary) !important;
 }
 
-.card h1, .card h2, .card h3, .card h4, .card h5, .card h6,
-.card p, .card span, .card div, .card label, .card small {
-  color: #000000 !important;
+.card h1, .card h2, .card h3, .card h4, .card h5, .card h6 {
+  font-size: var(--font-size-card-title);
+  font-weight: var(--font-weight-card-title);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary) !important;
+}
+
+.card p, .card span, .card div, .card label {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-body);
+  color: var(--text-body) !important;
+}
+
+/* Exception: card-text paragraphs should use light grey for Momentum design */
+/* Higher specificity to override .card p rule */
+div.card-body p.card-text:not(.text-muted):not(.small),
+.card-body p.card-text:not(.text-muted):not(.small),
+.card .card-body p.card-text:not(.text-muted):not(.small) {
+  color: var(--text-body) !important;
+  font-size: var(--font-size-body) !important;
+  line-height: 1.25 !important;
+  font-weight: 400 !important;
+}
+
+.card small, .card .small {
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
+  opacity: 0.7; /* De-emphasize metadata */
+}
+
+/* Bento Grid Layout - Momentum Design System */
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-grid-gutter);
+  margin-bottom: var(--spacing-section);
+}
+
+.bento-grid-item {
+  grid-column: span 1; /* Default: 1 column */
+}
+
+.bento-grid-item-wide {
+  grid-column: span 2; /* Wide items span 2 columns */
+}
+
+/* Responsive Bento Grid */
+@media (max-width: 992px) {
+  .bento-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .bento-grid-item-wide {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .bento-grid-item-wide {
+    grid-column: span 1;
+  }
 }
 
 .card .text-muted {
-  color: rgba(0, 0, 0, 0.6) !important;
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
+  color: var(--text-muted) !important;
 }
 
+
 .card a {
-  color: #ffaa50 !important;
+  color: var(--link) !important;
+  text-decoration: none;
 }
 
 .card a:hover {
-  color: #ff9632 !important;
+  color: var(--link-hover) !important;
+  text-decoration: underline;
 }
 
-/* Individual impact lab activity cards */
+/* Individual AdaptaLabs activity cards */
 .opportunity-card {
-  background-color: #f8f9fa;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
-  border: none;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background-color: var(--bg-card);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  margin-bottom: var(--spacing-vertical-rhythm);
+  border: var(--card-border);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--transition-card), box-shadow var(--transition-card);
+}
+
+.opportunity-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
 }
 
 /* Light background cards should have dark text */
@@ -255,29 +519,36 @@ small, .small {
 .opportunity-card h4, .opportunity-card h5, .opportunity-card h6,
 .opportunity-card p, .opportunity-card span, .opportunity-card div, 
 .opportunity-card label, .opportunity-card small {
-  color: #000000 !important;
+  color: var(--text-primary) !important;
+}
+
+.opportunity-card h1, .opportunity-card h2, .opportunity-card h3,
+.opportunity-card h4, .opportunity-card h5, .opportunity-card h6 {
+  font-weight: var(--font-weight-h2);
 }
 
 .opportunity-card .text-muted {
-  color: rgba(0, 0, 0, 0.6) !important;
+  color: var(--text-muted) !important;
 }
 
 .opportunity-card a {
-  color: #ffaa50 !important;
+  color: var(--link) !important;
+  text-decoration: none;
 }
 
 .opportunity-card a:hover {
-  color: #ff9632 !important;
+  color: var(--link-hover) !important;
+  text-decoration: underline;
 }
 
 /* Filter form styling */
 .filter-section {
-  background-color: #f8f9fa;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  border: 1px solid #e9ecef;
+  background-color: var(--bg-card);
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
+  margin-bottom: var(--spacing-vertical-rhythm);
+  box-shadow: var(--shadow-card);
+  border: var(--card-border);
 }
 
 /* Light background filter sections should have dark text */
@@ -285,19 +556,27 @@ small, .small {
 .filter-section h4, .filter-section h5, .filter-section h6,
 .filter-section p, .filter-section span, .filter-section div, 
 .filter-section label, .filter-section small {
-  color: #000000 !important;
+  color: var(--text-primary) !important;
+}
+
+.filter-section h1, .filter-section h2, .filter-section h3,
+.filter-section h4, .filter-section h5, .filter-section h6 {
+  font-weight: var(--font-weight-h2);
+  color: var(--text-primary) !important;
 }
 
 .filter-section .text-muted {
-  color: rgba(0, 0, 0, 0.6) !important;
+  color: var(--text-muted) !important;
 }
 
 .filter-section a {
-  color: #ffaa50 !important;
+  color: var(--link) !important;
+  text-decoration: none;
 }
 
 .filter-section a:hover {
-  color: #ff9632 !important;
+  color: var(--link-hover) !important;
+  text-decoration: underline;
 }
 
 .filter-section .row {
@@ -336,9 +615,10 @@ small, .small {
 
 .filter-section .form-select:focus,
 .filter-section .form-control:focus {
-  border-color: #ffaa50;
-  box-shadow: 0 0 0 0.2rem rgba(255, 170, 80, 0.25);
-  outline: 0;
+  border-color: var(--link);
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  box-shadow: 0 0 0 0.2rem rgba(255, 122, 51, 0.25);
 }
 
 .text-center {
@@ -366,13 +646,107 @@ small, .small {
   100% { transform: rotate(360deg); }
 }
 
-/* CSS Custom Properties for Calendar Hover Effects */
+/* ============================================================
+   ADAPTALABS THEME - WARM RESEARCH MODERN (Refined)
+   CSS Variable Map & Theme Tokens
+   ============================================================ */
 :root {
+  /* Background Colors - Momentum Design System */
+  --bg-app: #0A091A;                    /* Midnight Blue void */
+  --bg-app-gradient-top: #0A091A;
+  --bg-app-gradient-bottom: #0A091A;
+  --bg-card: rgba(255, 255, 255, 0.05); /* Glassmorphism base */
+  --border-card: rgba(255, 255, 255, 0.1); /* Light-catching border */
+  --shadow-card: 0 2px 12px rgba(0,0,0,0.12);
+  
+  /* Text Colors - Momentum Design System */
+  --text-primary: #E0E0E0;               /* Light grey for card titles */
+  --text-body: #E0E0E0;                  /* Body text light grey */
+  --text-muted: rgba(224, 224, 224, 0.7); /* Metadata with opacity */
+  --text-on-dark: #E0E0E0;              /* Text on dark backgrounds */
+  
+  /* Brand Colors - Momentum Design System */
+  --brand-headline: #FF4E50;            /* Electric Coral */
+  --cta-bg: transparent;                /* Transparent default */
+  --cta-bg-hover: #FF4E50;               /* Electric Coral fill on hover */
+  --cta-text: #FF4E50;                   /* Electric Coral text */
+  --cta-text-hover: #FFFFFF;            /* White text on hover */
+  --cta-border: #FF4E50;                 /* Electric Coral border */
+  --focus-ring: #FF4E50;
+  
+  /* Tag Colors - Momentum Design System */
+  --tag-survey: #222222;                /* Dark grey pills */
+  --tag-poll: #222222;
+  --tag-test: #222222;
+  --tag-text: #FFFFFF;
+  
+  /* Link Colors */
+  --link: #FF7A33;
+  --link-hover: #FF974F;
+  
+  /* Divider */
+  --divider: #EAEAEA;
+  
+  /* Typography - Momentum Design System */
+  --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-weight-h1: 700;
+  --font-weight-h2: 600;
+  --font-weight-h3: 600;
+  --font-weight-body: 400;
+  --font-weight-card-title: 600;         /* Semi-bold for card titles */
+  --font-weight-metadata: 400;
+  --font-weight-overline: 600;
+  
+  /* Typography Sizes - Momentum Design System */
+  --font-size-h1: 36px;
+  --font-size-h2: 24px;
+  --font-size-h3: 20px;
+  --font-size-card-title: 18px;
+  --font-size-body: 15px;
+  --font-size-metadata: 14px;           /* 14px for metadata */
+  
+  /* Typography Line Heights */
+  --line-height-heading: 1.25;
+  --line-height-body: 1.6;
+  --line-height-metadata: 1.4;
+  
+  /* Component Styling - Momentum Design System */
+  --card-radius: 16px;                  /* Modern border radius */
+  --card-padding: 24px;
+  --card-border: 1px solid var(--border-card);
+  --button-radius: 6px;
+  --tag-radius: 99px;                   /* Pill shape */
+  --tag-padding: 4px 10px;               /* Momentum tag padding */
+  --tag-font-size: 12px;
+  --tag-font-weight: 500;
+  
+  /* Spacing */
+  --spacing-section: 40px;               /* Section spacing above first card row */
+  --spacing-grid-gutter: 32px;          /* Grid gutters */
+  --spacing-vertical-rhythm: 16px;
+  
+  /* Shadows */
+  --shadow-button: 0 2px 4px rgba(0,0,0,0.2);
+  --shadow-button-hover: 0 4px 10px rgba(0,0,0,0.22);
+  --shadow-card-hover: 0 6px 16px rgba(0,0,0,0.16);
+  
+  /* Transitions */
+  --transition-card: 180ms;
+  --transition-button: 180ms;
+  
+  /* Accessibility */
+  --min-hit-area: 40px;                  /* Minimum hit area for CTAs and tags */
+  
+  /* Focus & Accessibility */
+  --focus-outline: 2px solid var(--focus-ring);
+  --focus-outline-offset: 2px;
+  
+  /* Calendar Hover Effects (legacy) */
   --calendar-hover-transition: all 0.2s ease;
   --calendar-hover-shadow: 0 2px 4px rgba(0,0,0,0.1);
   --calendar-hover-transform: translateY(-1px);
   --calendar-hover-scale: scale(1.02);
-  --calendar-hover-shadow-selected: 0 4px 8px rgba(0, 123, 255, 0.3);
+  --calendar-hover-shadow-selected: 0 4px 8px rgba(255, 122, 51, 0.3);
 }
 
 /* Custom calendar slot colors */
@@ -412,7 +786,7 @@ small, .small {
 .calendar-slot-container {
   position: relative;
   overflow: hidden;
-  border-radius: 0;
+  border-radius: var(--button-radius);
   height: 80px;
   width: 100%;
   min-height: 80px;
@@ -558,8 +932,8 @@ small, .small {
 
 /* Add focus states for keyboard navigation */
 .calendar-slot-btn:focus {
-  outline: 2px solid #ffaa50;
-  outline-offset: 2px;
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }
 
 .calendar-slot-btn:focus:not(:focus-visible) {
@@ -637,7 +1011,14 @@ small, .small {
 .alert-info {
   background-color: #d1ecf1 !important;
   border-color: #bee5eb !important;
-  color: #0c5460 !important;
+  color: #033d47 !important; /* Darkened text for better contrast */
+}
+
+/* Override card text color for alert-info (higher specificity) */
+.card .alert-info,
+.main .alert-info,
+.card-body .alert-info {
+  color: #033d47 !important; /* Ensure dark text on light blue background */
 }
 
 .alert-danger {
@@ -658,30 +1039,111 @@ small, .small {
   color: #856404 !important;
 }
 
-/* Custom type badge colors */
+/* Tags - Momentum Design System */
 .badge.type-test {
-  background-color: #0dcaf0 !important; /* Teal/Cyan */
-  color: white !important;
+  background-color: var(--tag-test) !important; /* Dark grey pill */
+  color: var(--tag-text) !important;
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.badge.type-test:hover {
+  filter: brightness(103%);
 }
 
 .badge.type-interview {
-  background-color: #198754 !important; /* Green (unique for interviews) */
-  color: white !important;
+  background-color: var(--tag-test) !important; /* Dark grey pill */
+  color: var(--tag-text) !important;
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.badge.type-interview:hover {
+  filter: brightness(103%);
 }
 
 .badge.type-poll {
-  background-color: #e91e63 !important; /* Pink/Magenta */
-  color: white !important;
+  background-color: var(--tag-poll) !important; /* Dark grey pill */
+  color: var(--tag-text) !important;
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.badge.type-poll:hover {
+  filter: brightness(103%);
 }
 
 .badge.type-survey {
-  background-color: #6f42c1 !important; /* Purple */
-  color: white !important;
+  background-color: var(--tag-survey) !important; /* Dark grey pill */
+  color: var(--tag-text) !important;
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.badge.type-survey:hover {
+  filter: brightness(103%);
 }
 
 .badge.type-question {
-  background-color: #ffaa50 !important; /* Orange */
-  color: #000000 !important;
+  background-color: var(--tag-test) !important; /* Dark grey pill */
+  color: var(--tag-text) !important;
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.badge.type-question:hover {
+  filter: brightness(103%);
+}
+
+/* Calendar text contrast - red text on black background */
+.calendar-view .calendar-day-column h6,
+.calendar-view .calendar-day-column h6 * {
+  color: #FF4E50 !important; /* Electric Coral red text on black background */
+}
+
+.calendar-view .calendar-day-column small,
+.calendar-view .calendar-day-column small * {
+  color: #FF4E50 !important; /* Electric Coral red text on black background */
+}
+
+/* Calendar legend text - red on dark background */
+.calendar-view small {
+  color: #FF4E50 !important; /* Electric Coral red text */
+}
+
+/* Calendar time labels - red text */
+.calendar-timeline div[style*="paddingLeft"] {
+  color: #FF4E50 !important; /* Electric Coral red text */
 }
 
 /* ============================================================

@@ -557,7 +557,7 @@ const Admin: React.FC = () => {
                                 <div>
                                   <strong>{opportunity.title}</strong>
                                   <br />
-                                  <small className="text-muted">{opportunity.purpose_one_liner}</small>
+                                  <small style={{ color: '#000000', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>
                               <td>

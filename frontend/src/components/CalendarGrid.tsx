@@ -288,24 +288,24 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   }
 
   return (
-    <div className="calendar-view" style={{ overflow: 'hidden' }}>
+    <div className="calendar-view" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden' }}>
       {/* Color-coded legend */}
       <div className="d-flex flex-wrap gap-3 mb-3">
         <div className="d-flex align-items-center gap-2">
           <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#28a745' }}></div>
-          <small>Available</small>
+          <small style={{ color: '#FF4E50', fontWeight: '500' }}>Available</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div className="bg-warning" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small>Calendar Conflict</small>
+          <small style={{ color: '#FF4E50', fontWeight: '500' }}>Calendar Conflict</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div className="bg-danger" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small>Full</small>
+          <small style={{ color: '#FF4E50', fontWeight: '500' }}>Full</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ff7700' }}></div>
-          <small>Your Booking</small>
+          <small style={{ color: '#FF4E50', fontWeight: '500' }}>Your Booking</small>
         </div>
       </div>
 
@@ -315,7 +315,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           display: 'flex',
           gap: '8px',
           width: '100%',
-          overflowX: 'auto'
+          overflowX: 'hidden', /* Removed horizontal scrollbar */
+          overflowY: 'hidden' /* Removed vertical scrollbar */
         }}>
           {/* Time Column (Left) */}
           <div style={{
@@ -324,19 +325,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
             position: 'sticky',
             left: 0,
             zIndex: 10,
-            backgroundColor: '#f8f9fa'
+            backgroundColor: '#0A091A' /* Black/near-black background */
           }}>
             {/* Time Header */}
             <div style={{
               height: '60px',
-              borderBottom: '2px solid #dee2e6',
-              backgroundColor: '#f8f9fa'
+              borderBottom: '2px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
+              backgroundColor: '#0A091A' /* Black/near-black background */
             }}></div>
             {/* Time Markers */}
             <div style={{
               position: 'relative',
               height: timelineHeight,
-              borderRight: '2px solid #dee2e6'
+              borderLeft: '2px solid rgba(255, 78, 80, 0.3)', /* Left keyline - starts at 7:00 AM */
+              borderRight: '2px solid rgba(255, 78, 80, 0.3)' /* Right keyline - starts at 7:00 AM, both stop above header */
             }}>
               {timeMarkers.map((marker, index) => {
                 if (!marker.isHour) return null; // Only show hour markers
@@ -351,16 +353,16 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                       top: `${position}%`,
                       left: 0,
                       right: 0,
-                      borderTop: '1.5px solid #495057',
-                      paddingLeft: '8px',
+                      borderTop: '1.5px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                       paddingTop: '2px',
                       fontSize: '0.9rem',
                       fontWeight: '700',
-                      color: '#000000',
+                      color: '#FF4E50', /* Electric Coral red text */
                       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                       pointerEvents: 'none',
                       lineHeight: '1.3',
-                      backgroundColor: 'transparent'
+                      backgroundColor: 'transparent',
+                      textAlign: 'center' /* Center time labels within their cells */
                     }}
                   >
                     {formatTimeLabel(marker.time)}
@@ -374,7 +376,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           <div style={{ 
             position: 'relative',
             flex: 1,
-            minWidth: `${Math.min(sessionsByDate.length, 5) * 120}px`
+            minWidth: `${Math.min(sessionsByDate.length, 5) * 120}px`,
+            backgroundColor: '#0A091A' /* Black/near-black background */
           }}>
             {/* Day Columns Grid */}
             <div style={{ 
@@ -388,19 +391,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                 <div key={date} className="calendar-day-column" style={{ position: 'relative' }}>
                   {/* Day Header */}
                   <div className="text-center p-2" style={{ 
-                    backgroundColor: '#f8f9fa', 
+                    backgroundColor: '#0A091A', /* Black/near-black background */
                     borderRadius: '8px 8px 0 0',
                     border: 'none',
-                    borderBottom: '1px solid #dee2e6',
+                    borderBottom: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     height: '60px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center'
                   }}>
-                    <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem', margin: 0 }}>
+                    <h6 className="mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, color: '#FF4E50', fontWeight: '700' }}>
                       {formatDate(date)}
                     </h6>
-                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                    <small style={{ fontSize: '0.7rem', color: '#FF4E50', fontWeight: '500' }}>
                       {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
                     </small>
                   </div>
@@ -410,17 +413,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                     position: 'relative',
                     height: timelineHeight,
                     border: 'none',
-                    backgroundColor: '#ffffff',
+                    backgroundColor: '#0A091A', /* Black/near-black background */
                     overflow: 'hidden',
                     zIndex: 1
                   }}>
                     {dateSessions.length === 0 ? (
-                      <div className="text-center text-muted" style={{ 
+                      <div className="text-center" style={{ 
                         fontSize: '0.8rem',
                         position: 'absolute',
                         top: '50%',
                         left: '50%',
-                        transform: 'translate(-50%, -50%)'
+                        transform: 'translate(-50%, -50%)',
+                        color: '#FF4E50' /* Electric Coral red text */
                       }}>
                         <i className="bi bi-calendar-x me-1"></i>
                         No sessions

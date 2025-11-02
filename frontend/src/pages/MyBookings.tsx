@@ -185,13 +185,13 @@ const MyBookings: React.FC = () => {
               <button
                 className="btn btn-outline-secondary mb-3"
                 onClick={() => navigate('/')}
-                title="Back to Impact Lab"
+                title="Back to AdaptaLabs"
               >
                 <i className="bi bi-arrow-left me-1"></i>
-                Back to Impact Lab
+                Back to AdaptaLabs
               </button>
               <h2>My Bookings</h2>
-              <p className="text-muted">Manage your impact lab activity bookings</p>
+              <p className="text-muted">Manage your AdaptaLabs activity bookings</p>
             </div>
             <button
               className="btn btn-outline-primary"

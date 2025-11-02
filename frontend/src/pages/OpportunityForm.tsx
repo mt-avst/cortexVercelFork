@@ -550,7 +550,7 @@ const OpportunityForm: React.FC = () => {
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
                   <p className="text-muted mb-0" style={{ fontSize: '1rem' }}>
-                    {isEdit ? 'Update opportunity details and sessions' : 'Set up a new impact lab activity'}
+                    {isEdit ? 'Update opportunity details and sessions' : 'Set up a new AdaptaLabs activity'}
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">

@@ -229,7 +229,7 @@ const OpportunityDetail: React.FC = () => {
             onClick={() => navigate('/')}
             style={{ color: '#ffffff' }}
           >
-            ← Back to Impact Lab
+            ← Back to AdaptaLabs
           </button>
 
 
@@ -321,7 +321,7 @@ const OpportunityDetail: React.FC = () => {
                   {opportunity.type !== 'question' && (
                     <div className="mb-3">
                       <h6 className="fw-bold">Purpose</h6>
-                      <p className="text-muted mb-0">{opportunity.purpose_one_liner}</p>
+                      <p className="mb-0" style={{ color: '#000000', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</p>
                     </div>
                   )}
 

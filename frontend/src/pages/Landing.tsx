@@ -21,7 +21,7 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className="container py-5" style={{ backgroundColor: '#000000', minHeight: '100vh', color: '#ffffff' }}>
+    <div className="container py-5" style={{ backgroundColor: 'var(--bg-app)', minHeight: '100vh', color: 'var(--text-on-dark)' }}>
       <div className="row align-items-center">
         {/* Left side - Large Image */}
         <div className="col-12 col-lg-6 mb-4 mb-lg-0">
