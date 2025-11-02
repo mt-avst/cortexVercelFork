@@ -9,18 +9,6 @@ interface CalendarGridProps {
   bookingLoading: string | null;
 }
 
-interface CalendarSlot {
-  date: string;
-  timeSlots: TimeSlot[];
-}
-
-interface TimeSlot {
-  session: Session;
-  startHour: number;
-  endHour: number;
-  isAvailable: boolean;
-}
-
 const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bookingLoading }) => {
   const navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
@@ -29,7 +17,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   
-  // Debug logging to help identify data freshness issues
+  // Debug logging
   console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
   
   // Load user bookings and populate bookedSlots when sessions change
@@ -59,7 +47,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
         setBookedSlots(new Set(bookedSessionIds));
       } catch (error) {
         console.error('Error loading user bookings:', error);
-        // If booking fetch fails, just clear bookedSlots
         setBookedSlots(new Set());
       }
     };
@@ -83,11 +70,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           setCalendarConnected(status.connected);
           
           if (!status.connected) {
-            // Calendar not connected - exit early
             return;
           }
         } catch (error: any) {
-          // Connection check failed - assume not connected
           setCalendarConnected(false);
           return;
         }
@@ -112,11 +97,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
         );
         
         console.log('📅 CalendarGrid: Fetched calendar events:', events.length, 'events');
-        console.log('📅 CalendarGrid: Calendar connected:', calendarConnectedStatus);
         setUserCalendarEvents(events);
       } catch (error: any) {
         if (error.response?.status === 404) {
-          // Calendar not connected or events endpoint failed
           setCalendarConnected(false);
         } else {
           console.error('Error fetching user calendar:', error);
@@ -139,31 +122,77 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
 
-    const hasConflict = userCalendarEvents.some(event => {
+    return userCalendarEvents.some(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      // Check for time overlap
-      const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
-      
-      if (overlaps) {
-        console.log('📅 Calendar conflict detected:', {
-          session: `${sessionStart.toISOString()} - ${sessionEnd.toISOString()}`,
-          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`
-        });
-      }
-      
-      return overlaps;
+      return (sessionStart < eventEnd && sessionEnd > eventStart);
     });
-    
-    return hasConflict;
   }, [calendarConnected, userCalendarEvents]);
-  // Group sessions by date and create time slots
-  const createCalendarSlots = (): CalendarSlot[] => {
+
+  // Format time for display (12-hour format with AM/PM)
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'UTC'
+    });
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric'
+    });
+  };
+
+  // Helper function to get hour from time string
+  const getHourFromSlot = (timeString: string): number => {
+    const date = new Date(timeString);
+    return date.getUTCHours() + (date.getUTCMinutes() / 60);
+  };
+
+  // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
+  const getTimePosition = (hour: number): number => {
+    const startHour = 7; // 7 AM
+    const endHour = 23; // 11 PM
+    const totalHours = endHour - startHour; // 16 hours
+    const adjustedHour = hour - startHour;
+    return Math.max(0, Math.min(100, (adjustedHour / totalHours) * 100));
+  };
+
+  // Generate time markers for left column (7am to 11pm)
+  const generateTimeMarkers = (): Array<{ time: number; isHour: boolean }> => {
+    const markers: Array<{ time: number; isHour: boolean }> = [];
+    for (let hour = 7; hour <= 23; hour++) {
+      markers.push({ time: hour, isHour: true });
+      if (hour < 23) {
+        markers.push({ time: hour + 0.5, isHour: false }); // 30-minute marks
+      }
+    }
+    return markers;
+  };
+
+  // Format time label for display
+  const formatTimeLabel = (time: number): string => {
+    const hour = Math.floor(time);
+    const decimal = time % 1;
+    let minutes = 0;
+    if (decimal === 0.5) minutes = 30;
+    
+    const isPM = hour >= 12;
+    const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+    const ampm = isPM ? 'PM' : 'AM';
+    return `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
+  };
+
+  // Group sessions by date
+  const groupSessionsByDate = () => {
     const sessionsByDate = new Map<string, Session[]>();
     
-    // Group sessions by date using UTC to match admin calendar
     sessions.forEach(session => {
-      // session.start_time is already UTC from backend, parse it correctly
       const date = new Date(session.start_time).toDateString();
       if (!sessionsByDate.has(date)) {
         sessionsByDate.set(date, []);
@@ -171,74 +200,36 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       sessionsByDate.get(date)!.push(session);
     });
 
-    // Convert to calendar slots - show ALL sessions for each day
-    return Array.from(sessionsByDate.entries()).map(([date, dateSessions]) => {
-      const timeSlots: TimeSlot[] = [];
-      
-      // Process all sessions for this day (no limit)
-      for (const session of dateSessions) {
-        const startDate = new Date(session.start_time);
-        const endDate = new Date(session.end_time);
-        const now = new Date();
-        const isAvailable = session.remaining > 0 && endDate >= now;
-        
-        // Debug logging
-        console.log('🔍 CalendarGrid session processing:', {
-          sessionId: session.id,
-          startTime: session.start_time,
-          endTime: session.end_time,
-          capacity: session.capacity,
-          bookedCount: session.booked_count,
-          remaining: session.remaining,
-          endDate: endDate.toISOString(),
-          now: now.toISOString(),
-          endDateAfterNow: endDate >= now,
-          remainingGreaterThanZero: session.remaining > 0,
-          isAvailable: isAvailable
-        });
-        
-        timeSlots.push({
-          session,
-          startHour: startDate.getUTCHours(), // Use UTC to match admin calendar
-          endHour: endDate.getUTCHours(), // Use UTC to match admin calendar
-          isAvailable: isAvailable
-        });
-      }
+    // Sort sessions within each date by start time
+    sessionsByDate.forEach((sessions, date) => {
+      sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
+    });
 
-      return {
-        date,
-        timeSlots
-      };
-    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return Array.from(sessionsByDate.entries()).sort((a, b) => 
+      new Date(a[0]).getTime() - new Date(b[0]).getTime()
+    );
   };
 
-  const calendarSlots = createCalendarSlots();
+  const sessionsByDate = groupSessionsByDate();
+  const timeMarkers = generateTimeMarkers();
+  const timelineHeight = '900px'; // Fixed height for 16 hours
 
-  const handleSlotClick = (slot: TimeSlot) => {
-    if (slot.isAvailable && !bookingLoading && !bookedSlots.has(slot.session.id)) {
-      setConfirmingSlot(slot.session.id);
+  const handleSlotClick = (session: Session) => {
+    const isBooked = bookedSlots.has(session.id);
+    const hasConflict = hasCalendarConflict(session);
+    const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
+    
+    if (!isBooked && !hasConflict && isAvailable && !bookingLoading) {
+      setConfirmingSlot(session.id);
     }
   };
 
   const handleConfirmBooking = async (sessionId: string) => {
     try {
-      // Add to bookedSlots immediately for instant visual feedback
-      setBookedSlots(prev => {
-        const newSet = new Set(prev);
-        newSet.add(sessionId);
-        return newSet;
-      });
-      
+      setBookedSlots(prev => new Set([...prev, sessionId]));
       await onBookSession(sessionId);
       setConfirmingSlot(null);
-      
-      // The parent component will reload sessions, which will trigger the useEffect
-      // to fetch bookings and populate bookedSlots again, ensuring consistency
-      
-      // Don't navigate away - let user stay on the page to see the updated calendar
-      // The parent component will handle showing success message and updating the calendar
     } catch (error) {
-      // Remove from bookedSlots if booking failed
       setBookedSlots(prev => {
         const newSet = new Set(prev);
         newSet.delete(sessionId);
@@ -252,279 +243,338 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     setConfirmingSlot(null);
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    // Ensure consistent UTC time formatting to match admin calendar
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'UTC' // Force UTC to ensure consistency with admin calendar
-    });
-  };
-
-  const getSlotColor = (slot: TimeSlot) => {
-    // Check if this is an empty slot
-    if (slot.session.id.startsWith('empty-')) return 'bg-light border';
-    if (bookedSlots.has(slot.session.id)) return ''; // Orange for user's booked slots (custom color applied via style)
-    if (!slot.isAvailable) {
-      return 'bg-danger'; // Red for unavailable slots (full)
-    }
-    
-    // Check for calendar conflict (only for available slots)
-    const hasConflict = hasCalendarConflict(slot.session);
-    if (hasConflict && slot.isAvailable) {
-      return 'bg-warning text-dark'; // Yellow/warning for calendar conflict
-    }
-    
-    return 'calendar-slot-available'; // Custom green for available slots
-  };
-
-  const getSlotTextColor = (slot: TimeSlot) => {
-    // Check if this is an empty slot
-    if (slot.session.id.startsWith('empty-')) return 'text-muted';
-    
-    // Check for calendar conflict - use dark text for warning background
-    const hasConflict = hasCalendarConflict(slot.session);
-    if (hasConflict && slot.isAvailable) {
-      return 'text-dark';
-    }
-    
-    return 'text-white'; // White text for all other colored slots
-  };
-
-  // Get tooltip text for slot
-  const getSlotTitle = (slot: TimeSlot): string => {
-    if (slot.session.id.startsWith('empty-')) {
-      return "No session available";
-    }
-    
-    if (bookedSlots.has(slot.session.id)) {
-      return "You have booked this session";
-    }
-    
-    if (!slot.isAvailable) {
-      return "Session is full";
-    }
-    
-    const hasConflict = hasCalendarConflict(slot.session);
-    if (hasConflict) {
-      return "You have a booking at this time";
-    }
-    
-    if (bookingLoading === slot.session.id) {
-      return "Booking in progress...";
-    }
-    
-    return "Click to book this session";
-  };
-
-  if (calendarSlots.length === 0) {
+  if (sessions.length === 0) {
     return (
       <div className="alert alert-info">
         <i className="bi bi-info-circle me-2"></i>
         No sessions available
-        <div className="mt-2">
-          <small>Debug: Sessions count: {sessions?.length || 0}</small>
-        </div>
+      </div>
+    );
+  }
+
+  if (sessionsByDate.length === 0) {
+    return (
+      <div className="alert alert-info">
+        <i className="bi bi-info-circle me-2"></i>
+        No sessions available
       </div>
     );
   }
 
   return (
-    <div className="calendar-grid">
+    <div className="calendar-view" style={{ overflow: 'hidden' }}>
       {/* Color-coded legend */}
       <div className="d-flex flex-wrap gap-3 mb-3">
         <div className="d-flex align-items-center gap-2">
-          <div className="calendar-slot-available" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
+          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#28a745' }}></div>
           <small>Available</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div className="bg-warning" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small>Calendar Clash</small>
+          <small>Calendar Conflict</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div className="bg-danger" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small>Booked</small>
+          <small>Full</small>
         </div>
         <div className="d-flex align-items-center gap-2">
           <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ffaa50' }}></div>
-          <small>Your booking</small>
+          <small>Your Booking</small>
         </div>
       </div>
-      
-      <div className="table-responsive">
-        <table className="table table-bordered mb-0">
-          <thead className="table-light">
-            <tr>
-              <th className="text-center" style={{ width: '120px' }}>
-                <i className="bi bi-calendar-date me-1"></i>
-                Slot
-              </th>
-              {calendarSlots.map((calendarSlot) => (
-                <th key={calendarSlot.date} className="text-center" style={{ minWidth: '200px' }}>
-                  <div className="fw-bold">
-                    <i className="bi bi-calendar-date me-1"></i>
-                    {formatDate(calendarSlot.date)}
+
+      {/* Calendar Timeline */}
+      <div className="calendar-timeline" style={{ overflow: 'hidden' }}>
+        <div style={{ 
+          display: 'flex',
+          gap: '8px',
+          width: '100%',
+          overflowX: 'auto'
+        }}>
+          {/* Time Column (Left) */}
+          <div style={{
+            minWidth: '90px',
+            width: '90px',
+            position: 'sticky',
+            left: 0,
+            zIndex: 10,
+            backgroundColor: '#f8f9fa'
+          }}>
+            {/* Time Header */}
+            <div style={{
+              height: '60px',
+              borderBottom: '2px solid #dee2e6',
+              backgroundColor: '#f8f9fa'
+            }}></div>
+            {/* Time Markers */}
+            <div style={{
+              position: 'relative',
+              height: timelineHeight,
+              borderRight: '2px solid #dee2e6'
+            }}>
+              {timeMarkers.map((marker, index) => {
+                if (!marker.isHour) return null; // Only show hour markers
+                
+                const position = getTimePosition(marker.time);
+                
+                return (
+                  <div
+                    key={`${marker.time}-${index}`}
+                    style={{
+                      position: 'absolute',
+                      top: `${position}%`,
+                      left: 0,
+                      right: 0,
+                      borderTop: '1.5px solid #495057',
+                      paddingLeft: '8px',
+                      paddingTop: '2px',
+                      fontSize: '0.9rem',
+                      fontWeight: '700',
+                      color: '#000000',
+                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                      pointerEvents: 'none',
+                      lineHeight: '1.3',
+                      backgroundColor: 'transparent'
+                    }}
+                  >
+                    {formatTimeLabel(marker.time)}
                   </div>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 5 }, (_, slotIndex) => (
-              <tr key={slotIndex}>
-                <td className="text-center fw-bold bg-light">
-                  <div className="py-2">
-                    <i className="bi bi-clock me-1"></i>
-                    Slot {slotIndex + 1}
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Day Columns Container */}
+          <div style={{ 
+            position: 'relative',
+            flex: 1,
+            minWidth: `${Math.min(sessionsByDate.length, 5) * 120}px`
+          }}>
+            {/* Day Columns Grid */}
+            <div style={{ 
+              display: 'grid',
+              gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
+              gap: '8px',
+              position: 'relative',
+              zIndex: 3
+            }}>
+              {sessionsByDate.slice(0, 5).map(([date, dateSessions]) => (
+                <div key={date} className="calendar-day-column" style={{ position: 'relative' }}>
+                  {/* Day Header */}
+                  <div className="text-center p-2" style={{ 
+                    backgroundColor: '#f8f9fa', 
+                    borderRadius: '8px 8px 0 0',
+                    border: 'none',
+                    borderBottom: '1px solid #dee2e6',
+                    height: '60px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center'
+                  }}>
+                    <h6 className="mb-1 text-dark fw-bold" style={{ fontSize: '0.9rem', margin: 0 }}>
+                      {formatDate(date)}
+                    </h6>
+                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                      {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
+                    </small>
                   </div>
-                </td>
-                {calendarSlots.map((calendarSlot) => {
-                  const slot = calendarSlot.timeSlots[slotIndex];
-                  return (
-                    <td key={`${calendarSlot.date}-${slotIndex}`} className="p-2">
-                      <div className="position-relative h-100">
-                        {slot && slot.session.id.startsWith('empty-') ? (
+
+                  {/* Timeline Container */}
+                  <div style={{ 
+                    position: 'relative',
+                    height: timelineHeight,
+                    border: 'none',
+                    backgroundColor: '#ffffff',
+                    overflow: 'hidden',
+                    zIndex: 1
+                  }}>
+                    {dateSessions.length === 0 ? (
+                      <div className="text-center text-muted" style={{ 
+                        fontSize: '0.8rem',
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)'
+                      }}>
+                        <i className="bi bi-calendar-x me-1"></i>
+                        No sessions
+                      </div>
+                    ) : (
+                      dateSessions.map((session) => {
+                        const isBooked = bookedSlots.has(session.id);
+                        const hasConflict = hasCalendarConflict(session);
+                        const isFull = session.remaining <= 0;
+                        const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
+                        
+                        // Calculate position
+                        const slotStartHour = getHourFromSlot(session.start_time);
+                        const slotEndHour = getHourFromSlot(session.end_time);
+                        
+                        const topPosition = Math.max(0, Math.min(100, getTimePosition(slotStartHour)));
+                        const bottomPosition = Math.max(0, Math.min(100, getTimePosition(slotEndHour)));
+                        
+                        const rawHeight = bottomPosition - topPosition;
+                        const height = Math.max(0.01, rawHeight);
+                        
+                        const roundedTop = Math.round(topPosition * 10000) / 10000;
+                        const roundedHeight = Math.round(height * 10000) / 10000;
+
+                        // Determine styling
+                        let slotStyle: React.CSSProperties = {};
+                        
+                        if (isBooked) {
+                          slotStyle = { 
+                            backgroundColor: '#ffaa50',
+                            color: '#000000',
+                            borderColor: '#ffaa50'
+                          };
+                        } else if (isFull) {
+                          slotStyle = { 
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            borderColor: '#dc3545'
+                          };
+                        } else if (hasConflict) {
+                          slotStyle = { 
+                            backgroundColor: '#ffc107',
+                            color: '#000000',
+                            borderColor: '#ffc107'
+                          };
+                        } else {
+                          slotStyle = { 
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            borderColor: '#28a745'
+                          };
+                        }
+
+                        const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading;
+                        const isConfirming = confirmingSlot === session.id;
+
+                        return (
                           <div
-                            className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
+                            key={session.id}
+                            className={`calendar-slot calendar-slot-btn border cursor-pointer position-absolute`}
                             style={{ 
-                              fontSize: '0.9rem',
-                              cursor: 'default'
+                              ...slotStyle,
+                              left: '2px',
+                              right: '2px',
+                              top: `${roundedTop}%`,
+                              height: `${roundedHeight}%`,
+                              maxHeight: `${roundedHeight}%`,
+                              minHeight: '0',
+                              boxSizing: 'border-box',
+                              position: 'absolute',
+                              cursor: canClick ? 'pointer' : 'not-allowed',
+                              opacity: (!canClick && !isBooked) ? 0.8 : 1,
+                              transition: 'all 0.2s ease',
+                              borderWidth: '1px',
+                              borderRadius: '0',
+                              fontSize: '0.7rem',
+                              padding: '2px 4px',
+                              overflow: 'hidden',
+                              zIndex: isBooked ? 5 : 1,
+                              pointerEvents: canClick || isBooked ? 'auto' : 'none'
+                            }}
+                            title={(() => {
+                              const startTime = formatTime(session.start_time);
+                              const endTime = formatTime(session.end_time);
+                              if (isBooked) return `Your booking: ${startTime} - ${endTime}`;
+                              if (isFull) return `Full: ${startTime} - ${endTime}`;
+                              if (hasConflict) return `Calendar conflict: ${startTime} - ${endTime}`;
+                              return `Available: ${startTime} - ${endTime} (${session.remaining} remaining)`;
+                            })()}
+                            onClick={() => canClick && handleSlotClick(session)}
+                            onMouseEnter={(e) => {
+                              if (canClick) {
+                                e.currentTarget.style.transform = 'scale(1.02)';
+                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(40, 167, 69, 0.3)';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = '';
+                              e.currentTarget.style.boxShadow = '';
                             }}
                           >
-                            <div className="small">
-                              <i className="bi bi-dash-circle me-1"></i>
-                              Not available
+                            {/* Time label */}
+                            <div 
+                              className="timeslot-label"
+                              style={{
+                                position: 'absolute',
+                                top: '2px',
+                                left: '4px',
+                                fontSize: '0.65rem',
+                                fontWeight: '600',
+                                color: (isFull || isBooked || hasConflict) ? (isBooked || hasConflict ? '#000000' : 'white') : 'white',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: 'calc(100% - 24px)',
+                                pointerEvents: 'none',
+                                lineHeight: '1.2',
+                                opacity: 1
+                              }}>
+                              {formatTime(session.start_time)} - {formatTime(session.end_time)}
                             </div>
-                          </div>
-                        ) : slot ? (
-                          <div className="calendar-slot-container">
-                            {/* Check if slot has calendar conflict - render non-interactive div */}
-                            {/* Priority: If booked, show orange; otherwise if conflict, show yellow */}
-                            {hasCalendarConflict(slot.session) && !bookedSlots.has(slot.session.id) ? (
-                              <div
-                                className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
-                                title={getSlotTitle(slot)}
-                                style={{ 
-                                  fontSize: '0.9rem',
-                                  cursor: 'not-allowed',
-                                  pointerEvents: 'none'
-                                }}
-                              >
-                                {/* Yellow slots (conflicts) show no text, only colored background */}
+
+                            {/* Confirmation buttons */}
+                            {isConfirming && (
+                              <div className="confirmation-buttons" style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                display: 'flex',
+                                gap: '8px',
+                                zIndex: 10
+                              }}>
+                                <button
+                                  className="btn btn-success btn-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleConfirmBooking(session.id);
+                                  }}
+                                  title="Confirm booking"
+                                >
+                                  <i className="bi bi-check"></i>
+                                </button>
+                                <button
+                                  className="btn btn-danger btn-sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelBooking();
+                                  }}
+                                  title="Cancel"
+                                >
+                                  <i className="bi bi-x"></i>
+                                </button>
                               </div>
-                            ) : bookedSlots.has(slot.session.id) ? (
-                              <div
-                                className={`btn w-100 calendar-slot-btn ${getSlotColor(slot)} ${getSlotTextColor(slot)}`}
-                                title={getSlotTitle(slot)}
-                                style={{ 
-                                  fontSize: '0.9rem',
-                                  cursor: 'not-allowed',
-                                  pointerEvents: 'none',
-                                  backgroundColor: '#ffaa50',
-                                  borderColor: '#ffaa50',
-                                  color: '#000000'
-                                }}
-                              >
-                                {/* Orange for booked slots */}
-                                <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
-                                  {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
+                            )}
+
+                            {/* Loading indicator */}
+                            {bookingLoading === session.id && (
+                              <div style={{ 
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)',
+                                zIndex: 10
+                              }}>
+                                <div className="spinner-border spinner-border-sm" role="status">
+                                  <span className="visually-hidden">Booking...</span>
                                 </div>
                               </div>
-                            ) : (
-                              <>
-                                <button
-                                  className={`btn w-100 calendar-slot-btn ${bookedSlots.has(slot.session.id) ? '' : getSlotColor(slot)} ${bookedSlots.has(slot.session.id) ? '' : getSlotTextColor(slot)}`}
-                                  onClick={() => handleSlotClick(slot)}
-                                  disabled={!slot.isAvailable || bookingLoading === slot.session.id || bookedSlots.has(slot.session.id)}
-                                  title={getSlotTitle(slot)}
-                                  style={{ 
-                                    fontSize: '0.9rem',
-                                    ...(bookedSlots.has(slot.session.id) ? { backgroundColor: '#ffaa50', borderColor: '#ffaa50', color: '#000000' } : {})
-                                  }}
-                                >
-                                  <div className="fw-bold d-flex align-items-center justify-content-center gap-1" style={{ fontSize: '0.85rem' }}>
-                                    {formatTime(slot.session.start_time)} - {formatTime(slot.session.end_time)}
-                                  </div>
-                                  
-                                  {bookingLoading === slot.session.id && (
-                                    <div className="position-absolute top-50 start-50 translate-middle">
-                                      <div className="spinner-border spinner-border-sm" role="status">
-                                        <span className="visually-hidden">Booking...</span>
-                                      </div>
-                                    </div>
-                                  )}
-                                </button>
-                                
-                                {/* Confirmation buttons */}
-                                {confirmingSlot === slot.session.id && (
-                                  <div className="confirmation-buttons">
-                                    <button
-                                      className="btn btn-success btn-sm confirmation-btn confirm-btn"
-                                      onClick={() => handleConfirmBooking(slot.session.id)}
-                                      title="Confirm booking"
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.transform = 'scale(1.1)';
-                                        e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.transform = '';
-                                        e.currentTarget.style.boxShadow = '';
-                                      }}
-                                    >
-                                      <i className="bi bi-check"></i>
-                                    </button>
-                                    <button
-                                      className="btn btn-danger btn-sm confirmation-btn cancel-btn"
-                                      onClick={handleCancelBooking}
-                                      title="Cancel"
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.transform = 'scale(1.1)';
-                                        e.currentTarget.style.boxShadow = '0 3px 6px rgba(0, 0, 0, 0.3)';
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.transform = '';
-                                        e.currentTarget.style.boxShadow = '';
-                                      }}
-                                    >
-                                      <i className="bi bi-x"></i>
-                                    </button>
-                                  </div>
-                                )}
-                              </>
                             )}
-                            
                           </div>
-                        ) : (
-                          <div 
-                            className="btn w-100 calendar-slot-btn bg-light border text-muted" 
-                            style={{ fontSize: '0.9rem', cursor: 'default' }}
-                            title="No session available at this time"
-                          >
-                            <div className="small">
-                              <i className="bi bi-dash-circle me-1"></i>
-                              No session
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
