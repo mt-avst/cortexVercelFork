@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Session, CreateSessionRequest, UpdateSessionRequest } from '../api/types';
-import { SessionFormData } from '../shared/types';
+import { Session, CreateSessionRequest, UpdateSessionRequest, SessionFormData } from '../api/types';
 import { createSessions, updateSession, deleteSession } from '../api/client';
 import ConfirmationModal from './ConfirmationModal';
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { SESSION_DURATION } from '../../shared/constants';
-import { OpportunityFormData } from '../../shared/types';
+import { OpportunityFormData } from '../../api/types';
 
 interface BasicInfoTabProps {
   formData: OpportunityFormData;

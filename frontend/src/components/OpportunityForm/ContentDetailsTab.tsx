@@ -1,5 +1,5 @@
 import React from 'react';
-import { OpportunityFormData } from '../../shared/types';
+import { OpportunityFormData } from '../../api/types';
 
 interface ContentDetailsTabProps {
   formData: OpportunityFormData;

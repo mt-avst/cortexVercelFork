@@ -1808,6 +1808,41 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   return (
     <div className="admin-session-manager" style={{ border: 'none' }}>
+      <style>
+        {`
+          .admin-session-manager .form-control,
+          .admin-session-manager .form-select,
+          .admin-session-manager .form-control-sm {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: #E0E0E0 !important;
+          }
+          .admin-session-manager .form-control:focus,
+          .admin-session-manager .form-select:focus {
+            background-color: rgba(255, 255, 255, 0.08) !important;
+            border-color: #FF4E50 !important;
+            color: #E0E0E0 !important;
+            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+          }
+          .admin-session-manager .form-control::placeholder {
+            color: rgba(224, 224, 224, 0.5) !important;
+          }
+          .admin-session-manager .form-select option {
+            background-color: #0A091A !important;
+            color: #E0E0E0 !important;
+          }
+          .admin-session-manager .text-muted {
+            color: rgba(224, 224, 224, 0.7) !important;
+          }
+          .admin-session-manager .card {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+          .admin-session-manager .card-body {
+            background-color: transparent !important;
+          }
+        `}
+      </style>
 
       {error && (
         <div className="alert alert-danger" role="alert">
@@ -1902,9 +1937,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
           {/* Calendar Controls */}
           <div style={{
-            backgroundColor: '#f8f9fa',
-            borderTop: '1px solid #dee2e6',
-            borderBottom: '1px solid #dee2e6',
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px',
             padding: '15px 0',
             marginBottom: '20px',
             width: '100%'
@@ -1917,7 +1955,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               padding: '0 15px'
             }}>
               <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
                   Start Date
                 </label>
                 <input
@@ -1939,7 +1977,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
                   End Date
                 </label>
                 <input
@@ -1961,7 +1999,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div style={{ minWidth: '120px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
                   Timeslot (mins)
                 </label>
                 <select
@@ -1981,7 +2019,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </select>
               </div>
               <div style={{ minWidth: '80px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6c757d', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
                   Days/Page
                 </label>
                 <select
@@ -2013,13 +2051,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     onChange={(e) => setExcludeWeekends(!e.target.checked)}
                     disabled={disabled}
                   />
-                  <label className="form-check-label" style={{ fontSize: '0.875rem' }} htmlFor="includeWeekends">
+                  <label className="form-check-label" style={{ fontSize: '0.875rem', color: '#E0E0E0' }} htmlFor="includeWeekends">
                     Include weekends
                   </label>
                 </div>
               </div>
               <div style={{ marginLeft: 'auto', paddingTop: '20px' }}>
-                <small className="text-muted">
+                <small style={{ color: 'rgba(224, 224, 224, 0.7)' }}>
                   {(availableSlots || []).length} slots available
                 </small>
               </div>
@@ -2027,11 +2065,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           </div>
 
           {/* View Switcher */}
-          <div className="card mb-3">
-            <div className="card-body py-2">
+          <div className="card mb-3" style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px'
+          }}>
+            <div className="card-body py-2" style={{ backgroundColor: 'transparent' }}>
               <div className="row align-items-center">
                 <div className="col-auto">
-                  <small className="text-muted me-3">View:</small>
+                  <small style={{ color: 'rgba(224, 224, 224, 0.7)' }} className="me-3">View:</small>
                 </div>
                 <div className="col-auto">
                   <div className="btn-group" role="group">
@@ -2093,14 +2137,20 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           </div>
 
           {/* Calendar View */}
-          <div className="card mb-3">
-            <div className="card-body">
+          <div className="card mb-3" style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '16px'
+          }}>
+            <div className="card-body" style={{ backgroundColor: 'transparent' }}>
               {loading || isUpdating ? (
                 <div className="text-center py-4">
                   <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading calendar...</span>
                   </div>
-                  <div className="mt-2 text-muted">Fetching calendar data...</div>
+                  <div className="mt-2" style={{ color: 'rgba(224, 224, 224, 0.7)' }}>Fetching calendar data...</div>
                 </div>
               ) : viewMode === 'grid' ? (
                 <div>
@@ -2152,7 +2202,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   textAlign: 'center'
                 }}>
                   {/* Slots selected indicator */}
-                  <div style={{ fontSize: '1rem', color: '#495057' }}>
+                  <div style={{ fontSize: '1rem', color: '#E0E0E0' }}>
                     <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
                   </div>
                   

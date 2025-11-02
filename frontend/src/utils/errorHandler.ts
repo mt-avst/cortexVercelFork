@@ -10,7 +10,7 @@ import {
   TimeoutError,
   NetworkError,
   ErrorResponse 
-} from '../shared/types';
+} from '../api/types';
 import { API_CONFIG } from '../shared/constants';
 
 // Re-export error types for convenience

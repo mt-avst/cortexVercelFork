@@ -1,7 +1,6 @@
-// Shared Type Definitions for Adaptalabs Application
-// This file contains all common interfaces used by both frontend and backend
-
-import { Request } from 'express';
+// Shared Type Definitions for Adaptalabs Application (Frontend)
+// This file contains all common interfaces used by the frontend
+// Note: Backend-specific types (like AuthRequest) are excluded
 
 // ============================================================================
 // USER TYPES
@@ -213,14 +212,6 @@ export interface ConflictCheckResponse {
 }
 
 // ============================================================================
-// AUTH TYPES
-// ============================================================================
-
-export interface AuthRequest extends Request {
-  user?: SessionUser;
-}
-
-// ============================================================================
 // ERROR HANDLING TYPES
 // ============================================================================
 
@@ -256,7 +247,9 @@ export class AppError extends Error {
     this.details = details;
     this.requestId = requestId;
 
-    Error.captureStackTrace(this, this.constructor);
+    if (Error.captureStackTrace) {
+      Error.captureStackTrace(this, this.constructor);
+    }
   }
 }
 
@@ -393,3 +386,4 @@ export type OpportunityStatus = 'draft' | 'published' | 'closed';
 export type ParticipantType = 'any' | 'internal' | 'external' | 'specific';
 export type UserRole = 'employee' | 'researcher_admin';
 export type BookingStatus = 'booked' | 'cancelled';
+
