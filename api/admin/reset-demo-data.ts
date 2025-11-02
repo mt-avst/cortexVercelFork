@@ -90,17 +90,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sessions;
     };
 
-    // Delete all bookings
+    // Delete all bookings first (to ensure foreign key constraints are satisfied)
     await query('DELETE FROM bookings');
     console.log('✅ Deleted all bookings');
 
-    // Delete all sessions
+    // Clear any Google Calendar event IDs from bookings (cleanup)
+    await query('UPDATE bookings SET gcal_event_id = NULL WHERE gcal_event_id IS NOT NULL').catch(() => {
+      // Ignore error if bookings table is already empty
+    });
+
+    // Delete all sessions (after bookings are deleted)
     await query('DELETE FROM sessions');
     console.log('✅ Deleted all sessions');
 
-    // Delete all opportunities
+    // Delete all opportunities (after sessions are deleted)
     await query('DELETE FROM opportunities');
     console.log('✅ Deleted all opportunities');
+    
+    // Reset booked_count on any remaining sessions (safety check)
+    await query('UPDATE sessions SET booked_count = 0 WHERE booked_count > 0').catch(() => {
+      // Ignore error if sessions table is already empty
+    });
 
     const userId = user.id;
 
