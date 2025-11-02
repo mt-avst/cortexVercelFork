@@ -1681,11 +1681,21 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         // Add details about which slots conflict if available
         if (conflictsResult.conflicts && conflictsResult.conflicts.length > 0) {
           errorMessage += '\n\nConflicting slots:';
+          const formatConflictTime = (dateString: string) => {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: 'UTC'
+            });
+          };
+          
           conflictsResult.conflicts.forEach((conflict: any, index: number) => {
             const slot = conflict.slot || conflict;
             const conflictingSession = conflict.conflicting_session || conflict.conflicting_events?.[0];
-            const startTime = formatTime(slot.start_time);
-            const endTime = formatTime(slot.end_time);
+            const startTime = formatConflictTime(slot.start_time);
+            const endTime = formatConflictTime(slot.end_time);
             const oppTitle = conflictingSession?.opportunity_title || 'another opportunity';
             errorMessage += `\n${index + 1}. ${startTime} - ${endTime} conflicts with "${oppTitle}"`;
           });
