@@ -25,7 +25,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await query(
       'SELECT connected_at FROM user_calendar_tokens WHERE user_id = $1',
       [userId]
-    );
+    ).catch((error) => {
+      console.error('Database query error in connection-status:', error);
+      // Return empty result on error - don't fail the request
+      return { rows: [] };
+    });
 
     return res.status(200).json({
       connected: result.rows.length > 0,
@@ -33,7 +37,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: unknown) {
     console.error('Error checking connection status:', error);
-    return res.status(500).json(createErrorResponse('Failed to check connection status', getErrorMessage(error)));
+    // Return a safe default instead of 500 to allow frontend to continue
+    return res.status(200).json({
+      connected: false,
+      connectedAt: null,
+    });
   }
 }
 
