@@ -121,14 +121,6 @@ const Home: React.FC = () => {
     }
   };
 
-  // Helper function to check if opportunity was recently updated (within last 3 days)
-  const isRecentlyUpdated = (updatedAt: string): boolean => {
-    const now = new Date();
-    const updated = new Date(updatedAt);
-    const daysSinceUpdate = (now.getTime() - updated.getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceUpdate <= 3;
-  };
-
   // Pagination logic - ensure opportunities is always an array
   const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
   const totalPages = Math.ceil(safeOpportunities.length / itemsPerPage);
@@ -244,15 +236,10 @@ const Home: React.FC = () => {
                     <div key={opportunity.id} className="col-md-6 col-lg-4 mb-4">
                       <div className="card h-100">
                         <div className="card-body d-flex flex-column">
-                          <div className="mb-2 d-flex justify-content-between align-items-center">
+                          <div className="mb-2">
                             <span className={getTypeBadgeClass(opportunity.type)}>
                               {formatOpportunityType(opportunity.type)}
                             </span>
-                            {isRecentlyUpdated(opportunity.updated_at) && (
-                              <span className="badge bg-primary text-white" title="Recently updated">
-                                ✨ New
-                              </span>
-                            )}
                           </div>
                           
                           <h5 className="card-title">{opportunity.title}</h5>
