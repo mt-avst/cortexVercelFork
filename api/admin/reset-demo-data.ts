@@ -26,6 +26,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('🧹 Starting database reset by admin:', user.email);
 
+    // Ensure meeting_location_optional column exists (for backward compatibility)
+    try {
+      await query(`
+        ALTER TABLE opportunities 
+        ADD COLUMN IF NOT EXISTS meeting_location_optional TEXT
+      `);
+      console.log('✅ Verified meeting_location_optional column exists');
+    } catch (migrationError: any) {
+      console.warn('⚠️ Could not add meeting_location_optional column (may already exist):', migrationError.message);
+      // Continue anyway - column might already exist
+    }
+
     // Helper function to create sessions
     const createSessions = async (opportunityId: string, defaultDuration: number, days: number[]) => {
       const today = new Date();
