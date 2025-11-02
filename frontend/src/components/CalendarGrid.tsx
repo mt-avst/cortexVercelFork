@@ -69,12 +69,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
           
+          console.log('📅 CalendarGrid: Connection status:', status);
+          
           if (!status.connected) {
-            return;
+            console.log('📅 CalendarGrid: Calendar not connected, but will try to fetch events anyway (demo mode)');
+            // In demo mode, we still want to fetch mock events even if "not connected"
+            // So we continue rather than returning early
           }
         } catch (error: any) {
+          console.error('📅 CalendarGrid: Error checking connection status:', error);
           setCalendarConnected(false);
-          return;
+          // Still try to fetch events in demo mode even if connection check fails
+          console.log('📅 CalendarGrid: Will attempt to fetch events anyway (demo mode)');
         }
 
         // Get date range from sessions
@@ -91,12 +97,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
         endTime.setHours(23, 59, 59, 999);
 
         // Fetch calendar events
+        console.log('📅 CalendarGrid: Fetching calendar events from', startTime.toISOString(), 'to', endTime.toISOString());
         const events = await getMyCalendarEvents(
           startTime.toISOString(),
           endTime.toISOString()
         );
         
         console.log('📅 CalendarGrid: Fetched calendar events:', events.length, 'events');
+        if (events.length > 0) {
+          console.log('📅 CalendarGrid: Sample event:', {
+            title: events[0].title,
+            start: events[0].start,
+            end: events[0].end
+          });
+        }
         setUserCalendarEvents(events);
       } catch (error: any) {
         if (error.response?.status === 404) {
@@ -115,18 +129,30 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
 
   // Check if a session conflicts with user's calendar
   const hasCalendarConflict = useCallback((session: Session): boolean => {
-    if (!calendarConnected || userCalendarEvents.length === 0) {
+    // Even if calendarConnected is false, check conflicts if we have events (demo mode)
+    if (userCalendarEvents.length === 0) {
       return false;
     }
 
     const sessionStart = new Date(session.start_time);
     const sessionEnd = new Date(session.end_time);
 
-    return userCalendarEvents.some(event => {
+    const hasConflict = userCalendarEvents.some(event => {
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      return (sessionStart < eventEnd && sessionEnd > eventStart);
+      const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
+      
+      if (overlaps) {
+        console.log('📅 Calendar conflict detected:', {
+          session: `${sessionStart.toISOString()} - ${sessionEnd.toISOString()}`,
+          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`
+        });
+      }
+      
+      return overlaps;
     });
+    
+    return hasConflict;
   }, [calendarConnected, userCalendarEvents]);
 
   // Format time for display (12-hour format with AM/PM)
