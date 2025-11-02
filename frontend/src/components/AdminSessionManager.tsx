@@ -861,6 +861,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           e.currentTarget.style.cursor = '';
                         }}
                           >
+                            {/* Display time span label on the cell */}
+                            {(() => {
+                              try {
+                                const startTime = formatTime(slot.start);
+                                const endTime = formatTime(slot.end);
+                                const timeLabel = `${startTime} - ${endTime}`;
+                                return (
+                                  <div style={{
+                                    position: 'absolute',
+                                    top: '2px',
+                                    left: '4px',
+                                    fontSize: '0.65rem',
+                                    fontWeight: '600',
+                                    color: (isConfirmed || session) ? 'white' : (isSelected ? '#198754' : '#495057'),
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    maxWidth: 'calc(100% - 24px)',
+                                    pointerEvents: 'none',
+                                    lineHeight: '1.2'
+                                  }}>
+                                    {timeLabel}
+                                  </div>
+                                );
+                              } catch (error) {
+                                return null;
+                              }
+                            })()}
                             {/* Show lock icon for unavailable slots */}
                             {(isBusy || (session && session.remaining <= 0) || isAllocated) && (
                               <div style={{ position: 'absolute', top: '2px', right: '2px' }}>
