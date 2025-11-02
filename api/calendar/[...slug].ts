@@ -233,14 +233,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json(createErrorResponse('start_time must be before end_time'));
       }
 
-      // Check if user has calendar tokens (connected)
-      const tokenResult = await query(
-        'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
-        [userId]
-      );
-
       // In demo mode, always return mock events for Demo User 1 even without tokens
       const isDemoUser1 = userId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      
+      // Check if user has calendar tokens (connected) - but don't require it for Demo User 1
+      let tokenResult;
+      try {
+        tokenResult = await query(
+          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
+          [userId]
+        );
+      } catch (dbError: any) {
+        console.error('📅 my-events: Database query error (will still generate events for Demo User 1):', dbError);
+        // For Demo User 1, continue even if query fails
+        if (!isDemoUser1) {
+          return res.status(500).json(createErrorResponse('Database error', getErrorMessage(dbError)));
+        }
+        tokenResult = { rows: [] };
+      }
       
       if (tokenResult.rows.length === 0 && !isDemoUser1) {
         return res.status(404).json({
