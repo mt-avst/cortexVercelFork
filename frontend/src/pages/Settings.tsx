@@ -62,8 +62,8 @@ const Settings: React.FC = () => {
   };
 
   if (loading || !initialAuthCheck) {
-    return <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem' }}>
-      <div className="card text-center">Loading...</div>
+    return <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+      <div className="card text-center" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>Loading...</div>
     </div>;
   }
 
@@ -72,8 +72,102 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem' }}>
-      <div className="row">
+    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+      <style>
+        {`
+          .settings-page .card {
+            background: var(--bg-card) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: var(--card-border) !important;
+            border-radius: var(--card-radius) !important;
+            box-shadow: var(--shadow-card) !important;
+          }
+          .settings-page .card-header {
+            background-color: transparent !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+          .settings-page .card-body {
+            background-color: transparent !important;
+          }
+          .settings-page h1,
+          .settings-page h2,
+          .settings-page h5,
+          .settings-page h6 {
+            color: var(--text-primary) !important;
+          }
+          .settings-page p,
+          .settings-page .text-muted {
+            color: var(--text-muted) !important;
+          }
+          .settings-page .btn-link {
+            color: var(--text-muted) !important;
+          }
+          .settings-page .btn-link:hover {
+            color: var(--brand-headline) !important;
+          }
+          .settings-page .list-group-item {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: var(--card-radius) !important;
+            margin-bottom: 1rem;
+            padding: var(--card-padding) !important;
+          }
+          .settings-page .list-group-item h6 {
+            color: var(--text-primary) !important;
+          }
+          .settings-page .list-group-item small {
+            color: var(--text-muted) !important;
+          }
+          /* Custom toggle switches - Momentum Design System (Red) */
+          .settings-page .form-check-input {
+            background-color: rgba(255, 255, 255, 0.2) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            width: 3rem !important;
+            height: 1.5rem !important;
+          }
+          .settings-page .form-check-input:checked {
+            background-color: var(--brand-headline) !important;
+            border-color: var(--brand-headline) !important;
+          }
+          .settings-page .form-check-input:focus {
+            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+          }
+          .settings-page .bi-envelope-check,
+          .settings-page .bi-envelope-x {
+            color: var(--brand-headline) !important;
+          }
+          .settings-page .spinner-border {
+            border-color: var(--brand-headline) !important;
+            border-right-color: transparent !important;
+          }
+          /* Alerts - Momentum Design System */
+          .settings-page .alert {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: var(--card-radius) !important;
+            color: var(--text-primary) !important;
+          }
+          .settings-page .alert-success {
+            border-color: rgba(76, 175, 80, 0.3) !important;
+          }
+          .settings-page .alert-danger {
+            border-color: rgba(244, 67, 54, 0.3) !important;
+          }
+          .settings-page .alert .btn-close {
+            filter: invert(1);
+          }
+          .settings-page .btn-outline-danger {
+            border-color: rgba(244, 67, 54, 0.5) !important;
+            color: var(--text-primary) !important;
+          }
+          .settings-page .btn-outline-danger:hover {
+            background-color: rgba(244, 67, 54, 0.2) !important;
+            border-color: rgba(244, 67, 54, 0.7) !important;
+          }
+        `}
+      </style>
+      <div className="row settings-page">
         <div className="col-12 col-lg-8 col-xl-6 mx-auto">
           <div className="card">
             <div className="card-header d-flex justify-content-between align-items-center">
@@ -81,7 +175,6 @@ const Settings: React.FC = () => {
                 <button 
                   className="btn btn-link text-decoration-none p-0 mb-2"
                   onClick={() => navigate('/admin')}
-                  style={{ color: '#6c757d' }}
                 >
                   <i className="bi bi-arrow-left me-2"></i>
                   Back to Dashboard
@@ -93,7 +186,7 @@ const Settings: React.FC = () => {
             <div className="card-body">
               {loadingPrefs ? (
                 <div className="text-center py-4">
-                  <div className="spinner-border text-primary" role="status">
+                  <div className="spinner-border" role="status" style={{ borderColor: 'var(--brand-headline)', borderRightColor: 'transparent' }}>
                     <span className="visually-hidden">Loading...</span>
                   </div>
                 </div>
@@ -143,15 +236,15 @@ const Settings: React.FC = () => {
                     </p>
 
                     {preferences && (
-                      <div className="list-group">
+                      <div className="list-group" style={{ backgroundColor: 'transparent' }}>
                         <div className="list-group-item">
                           <div className="d-flex justify-content-between align-items-center">
                             <div className="flex-grow-1">
-                              <h6 className="mb-1">
-                                <i className="bi bi-envelope-check me-2 text-primary"></i>
+                              <h6 className="mb-1" style={{ color: 'var(--text-primary)' }}>
+                                <i className="bi bi-envelope-check me-2"></i>
                                 Email on Booking
                               </h6>
-                              <small className="text-muted">
+                              <small style={{ color: 'var(--text-muted)' }}>
                                 Receive an email notification when someone books a session in your research studies.
                               </small>
                             </div>
@@ -163,7 +256,7 @@ const Settings: React.FC = () => {
                                 checked={preferences.on_book_email}
                                 onChange={() => handleToggle('on_book_email')}
                                 disabled={saving}
-                                style={{ width: '3rem', height: '1.5rem', cursor: saving ? 'not-allowed' : 'pointer' }}
+                                style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
                               />
                             </div>
                           </div>
@@ -172,11 +265,11 @@ const Settings: React.FC = () => {
                         <div className="list-group-item">
                           <div className="d-flex justify-content-between align-items-center">
                             <div className="flex-grow-1">
-                              <h6 className="mb-1">
-                                <i className="bi bi-envelope-x me-2 text-danger"></i>
+                              <h6 className="mb-1" style={{ color: 'var(--text-primary)' }}>
+                                <i className="bi bi-envelope-x me-2"></i>
                                 Email on Cancellation
                               </h6>
-                              <small className="text-muted">
+                              <small style={{ color: 'var(--text-muted)' }}>
                                 Receive an email notification when someone cancels a booking in your research studies.
                               </small>
                             </div>
@@ -188,7 +281,7 @@ const Settings: React.FC = () => {
                                 checked={preferences.on_cancel_email}
                                 onChange={() => handleToggle('on_cancel_email')}
                                 disabled={saving}
-                                style={{ width: '3rem', height: '1.5rem', cursor: saving ? 'not-allowed' : 'pointer' }}
+                                style={{ cursor: saving ? 'not-allowed' : 'pointer' }}
                               />
                             </div>
                           </div>
@@ -198,10 +291,10 @@ const Settings: React.FC = () => {
 
                     {saving && (
                       <div className="mt-3 text-center">
-                        <div className="spinner-border spinner-border-sm text-primary me-2" role="status">
+                        <div className="spinner-border spinner-border-sm me-2" role="status" style={{ borderColor: 'var(--brand-headline)', borderRightColor: 'transparent' }}>
                           <span className="visually-hidden">Saving...</span>
                         </div>
-                        <small className="text-muted">Saving...</small>
+                        <small style={{ color: 'var(--text-muted)' }}>Saving...</small>
                       </div>
                     )}
                   </div>
