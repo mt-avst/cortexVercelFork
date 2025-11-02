@@ -71,6 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Delete ALL sessions first (to ensure foreign key constraints are satisfied)
     // This must happen before deleting opportunities
+    // Use CASCADE or explicit delete of all related data
     await query('DELETE FROM sessions');
     console.log('✅ Deleted all sessions');
 
@@ -78,12 +79,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     await query('DELETE FROM opportunities');
     console.log('✅ Deleted all opportunities');
     
-    // DOUBLE-CHECK: Ensure NO sessions remain (in case of any race conditions or partial deletes)
-    const remainingSessionsCheck = await query('SELECT COUNT(*)::int as count FROM sessions');
-    if ((remainingSessionsCheck.rows[0]?.count || 0) > 0) {
-      console.warn(`⚠️  WARNING: ${remainingSessionsCheck.rows[0]?.count} sessions still exist after delete! Force deleting...`);
+    // TRIPLE-CHECK: Ensure NO sessions remain (in case of any race conditions, foreign key issues, or orphaned sessions)
+    let remainingSessionsCheck = await query('SELECT COUNT(*)::int as count FROM sessions');
+    let retryCount = 0;
+    while ((remainingSessionsCheck.rows[0]?.count || 0) > 0 && retryCount < 3) {
+      console.warn(`⚠️  WARNING: ${remainingSessionsCheck.rows[0]?.count} sessions still exist after delete! Force deleting (attempt ${retryCount + 1})...`);
       await query('DELETE FROM sessions'); // Force delete again
-      console.log('✅ Force deleted remaining sessions');
+      // Small delay to allow database to process
+      await new Promise(resolve => setTimeout(resolve, 100));
+      remainingSessionsCheck = await query('SELECT COUNT(*)::int as count FROM sessions');
+      retryCount++;
+    }
+    if ((remainingSessionsCheck.rows[0]?.count || 0) > 0) {
+      console.error(`❌ ERROR: ${remainingSessionsCheck.rows[0]?.count} sessions STILL exist after ${retryCount} retry attempts!`);
+    } else {
+      console.log('✅ Confirmed: All sessions deleted');
     }
     
     // Ensure all sessions have booked_count = 0 (double-check - should be empty but just in case)
