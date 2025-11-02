@@ -801,6 +801,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           }
                         }}
                         onMouseEnter={(e) => {
+                          // Show time label on hover
+                          const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
+                          if (labelElement) {
+                            labelElement.style.opacity = '1';
+                          }
+                          
                           if (isBusy) {
                             e.currentTarget.style.backgroundColor = 'rgba(108, 117, 125, 0.1)';
                             e.currentTarget.style.borderColor = 'rgba(108, 117, 125, 0.3)';
@@ -836,6 +842,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           }
                         }}
                         onMouseLeave={(e) => {
+                          // Hide time label on mouse leave (unless selected/confirmed/has session)
+                          const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
+                          if (labelElement && !isSelected && !isConfirmed && !session) {
+                            labelElement.style.opacity = '0';
+                          }
+                          
                           // Reset styles but preserve selected state
                           if (isSelected) {
                             // Restore selected state styling
@@ -861,27 +873,32 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           e.currentTarget.style.cursor = '';
                         }}
                           >
-                            {/* Display time span label on the cell */}
+                            {/* Display time span label on the cell - show on hover or when selected */}
                             {(() => {
                               try {
                                 const startTime = formatTime(slot.start);
                                 const endTime = formatTime(slot.end);
                                 const timeLabel = `${startTime} - ${endTime}`;
+                                const shouldShowLabel = isSelected || isConfirmed || !!session;
                                 return (
-                                  <div style={{
-                                    position: 'absolute',
-                                    top: '2px',
-                                    left: '4px',
-                                    fontSize: '0.65rem',
-                                    fontWeight: '600',
-                                    color: (isConfirmed || session) ? 'white' : (isSelected ? '#198754' : '#495057'),
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    maxWidth: 'calc(100% - 24px)',
-                                    pointerEvents: 'none',
-                                    lineHeight: '1.2'
-                                  }}>
+                                  <div 
+                                    className="timeslot-label"
+                                    style={{
+                                      position: 'absolute',
+                                      top: '2px',
+                                      left: '4px',
+                                      fontSize: '0.65rem',
+                                      fontWeight: '600',
+                                      color: (isConfirmed || session) ? 'white' : (isSelected ? '#198754' : '#495057'),
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      maxWidth: 'calc(100% - 24px)',
+                                      pointerEvents: 'none',
+                                      lineHeight: '1.2',
+                                      opacity: shouldShowLabel ? 1 : 0,
+                                      transition: 'opacity 0.2s ease'
+                                    }}>
                                     {timeLabel}
                                   </div>
                                 );
