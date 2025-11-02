@@ -300,11 +300,13 @@ export const getAvailability = async (
 
 export const checkConflicts = async (
   timeSlots: Array<{ start_time: string; end_time: string }>,
-  calendarId?: string
+  calendarId?: string,
+  opportunityId?: string
 ): Promise<ConflictCheckResponse> => {
   const response = await api.post('/calendar/check-conflicts', {
     time_slots: timeSlots,
-    calendar_id: calendarId
+    calendar_id: calendarId,
+    opportunity_id: opportunityId
   });
   return response.data;
 };

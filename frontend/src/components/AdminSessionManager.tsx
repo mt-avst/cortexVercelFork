@@ -1615,9 +1615,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       }
 
       // Check for conflicts before creating (only for saved opportunities)
-      const conflictsResult = await checkConflicts(sessionData);
+      // Exclude conflicts with sessions from the current opportunity
+      const conflictsResult = await checkConflicts(sessionData, undefined, opportunityId);
       if (conflictsResult.has_conflicts) {
-        setError(`Cannot create sessions: ${conflictsResult.conflicting_slots} slots have conflicts with existing calendar events`);
+        setError(`Cannot create sessions: ${conflictsResult.conflicting_slots} slots have conflicts with existing sessions from other opportunities`);
         return;
       }
 

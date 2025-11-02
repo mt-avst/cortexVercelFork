@@ -140,13 +140,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const { time_slots, calendar_id } = req.body;
+      const { time_slots, calendar_id, opportunity_id } = req.body;
 
       if (!Array.isArray(time_slots) || time_slots.length === 0) {
         return res.status(400).json(createErrorResponse('time_slots array is required and must not be empty'));
       }
 
       // Check conflicts against existing sessions in the database
+      // Exclude sessions from the current opportunity (if provided) to allow re-creating sessions
       let conflictingCount = 0;
       const conflicts: Array<{ slot: { start_time: string; end_time: string }; conflicting_session: unknown }> = [];
 
@@ -156,14 +157,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Check if this time slot overlaps with any existing session
-        const result = await query(
-          `SELECT s.id, s.opportunity_id, s.start_time, s.end_time, o.title as opportunity_title
-           FROM sessions s
-           JOIN opportunities o ON s.opportunity_id = o.id
-           WHERE s.start_time < $1 AND s.end_time > $2
-           LIMIT 1`,
-          [slot.end_time, slot.start_time]
-        );
+        // If opportunity_id is provided, exclude conflicts from that opportunity
+        const queryParams: any[] = [slot.end_time, slot.start_time];
+        let conflictQuery = `
+          SELECT s.id, s.opportunity_id, s.start_time, s.end_time, o.title as opportunity_title
+          FROM sessions s
+          JOIN opportunities o ON s.opportunity_id = o.id
+          WHERE s.start_time < $1 AND s.end_time > $2
+        `;
+        
+        if (opportunity_id) {
+          conflictQuery += ` AND s.opportunity_id != $3`;
+          queryParams.push(opportunity_id);
+        }
+        
+        conflictQuery += ` LIMIT 1`;
+        
+        const result = await query(conflictQuery, queryParams);
 
         if (result.rows.length > 0) {
           conflictingCount++;
