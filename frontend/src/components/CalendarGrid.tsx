@@ -171,62 +171,38 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       sessionsByDate.get(date)!.push(session);
     });
 
-    // Convert to calendar slots with exactly 5 slots per day
+    // Convert to calendar slots - show ALL sessions for each day
     return Array.from(sessionsByDate.entries()).map(([date, dateSessions]) => {
       const timeSlots: TimeSlot[] = [];
       
-      // Create exactly 5 slots for this day
-      for (let i = 0; i < 5; i++) {
-        const session = dateSessions[i]; // Get session for this slot index
+      // Process all sessions for this day (no limit)
+      for (const session of dateSessions) {
+        const startDate = new Date(session.start_time);
+        const endDate = new Date(session.end_time);
+        const now = new Date();
+        const isAvailable = session.remaining > 0 && endDate >= now;
         
-        if (session) {
-          // Real session exists for this slot
-          const startDate = new Date(session.start_time);
-          const endDate = new Date(session.end_time);
-          const now = new Date();
-          const isAvailable = session.remaining > 0 && endDate >= now;
-          
-          // Debug logging
-          console.log('🔍 CalendarGrid session processing:', {
-            sessionId: session.id,
-            startTime: session.start_time,
-            endTime: session.end_time,
-            capacity: session.capacity,
-            bookedCount: session.booked_count,
-            remaining: session.remaining,
-            endDate: endDate.toISOString(),
-            now: now.toISOString(),
-            endDateAfterNow: endDate >= now,
-            remainingGreaterThanZero: session.remaining > 0,
-            isAvailable: isAvailable
-          });
-          
-          timeSlots.push({
-            session,
-            startHour: startDate.getUTCHours(), // Use UTC to match admin calendar
-            endHour: endDate.getUTCHours(), // Use UTC to match admin calendar
-            isAvailable: isAvailable
-          });
-        } else {
-          // No session for this slot - create empty slot with consistent time structure
-          timeSlots.push({
-            session: {
-              id: `empty-${date}-${i}`,
-              opportunity_id: '',
-              start_time: '',
-              end_time: '',
-              capacity: 0,
-              booked_count: 0,
-              location_or_meet_link_optional: '',
-              created_at: '',
-              updated_at: '',
-              remaining: 0
-            },
-            startHour: 0,
-            endHour: 0,
-            isAvailable: false
-          });
-        }
+        // Debug logging
+        console.log('🔍 CalendarGrid session processing:', {
+          sessionId: session.id,
+          startTime: session.start_time,
+          endTime: session.end_time,
+          capacity: session.capacity,
+          bookedCount: session.booked_count,
+          remaining: session.remaining,
+          endDate: endDate.toISOString(),
+          now: now.toISOString(),
+          endDateAfterNow: endDate >= now,
+          remainingGreaterThanZero: session.remaining > 0,
+          isAvailable: isAvailable
+        });
+        
+        timeSlots.push({
+          session,
+          startHour: startDate.getUTCHours(), // Use UTC to match admin calendar
+          endHour: endDate.getUTCHours(), // Use UTC to match admin calendar
+          isAvailable: isAvailable
+        });
       }
 
       return {
