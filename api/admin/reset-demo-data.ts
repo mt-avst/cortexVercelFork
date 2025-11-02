@@ -27,15 +27,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('🧹 Starting database reset by admin:', user.email);
 
     // Ensure meeting_location_optional column exists (for backward compatibility)
+    let hasMeetingLocationColumn = false;
     try {
-      await query(`
-        ALTER TABLE opportunities 
-        ADD COLUMN IF NOT EXISTS meeting_location_optional TEXT
+      const columnCheck = await query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'opportunities' 
+        AND column_name = 'meeting_location_optional'
       `);
-      console.log('✅ Verified meeting_location_optional column exists');
+      hasMeetingLocationColumn = columnCheck.rows.length > 0;
+      
+      if (!hasMeetingLocationColumn) {
+        await query(`
+          ALTER TABLE opportunities ADD COLUMN meeting_location_optional TEXT
+        `);
+        console.log('✅ Added meeting_location_optional column to opportunities table');
+        hasMeetingLocationColumn = true;
+      } else {
+        console.log('✅ meeting_location_optional column already exists');
+      }
     } catch (migrationError: any) {
-      console.warn('⚠️ Could not add meeting_location_optional column (may already exist):', migrationError.message);
-      // Continue anyway - column might already exist
+      console.warn('⚠️ Could not add meeting_location_optional column:', migrationError.message);
+      // Continue anyway - will try to use column in inserts
+      hasMeetingLocationColumn = false;
     }
 
     // Helper function to create sessions
@@ -91,142 +104,78 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = user.id;
 
+    // Helper to build INSERT statement with optional meeting_location_optional
+    const buildOpportunityInsert = (baseFields: string[], baseValues: any[], meetingLocation?: string) => {
+      const fields = hasMeetingLocationColumn && meetingLocation
+        ? [...baseFields, 'meeting_location_optional']
+        : baseFields;
+      const values = hasMeetingLocationColumn && meetingLocation
+        ? [...baseValues, meetingLocation]
+        : baseValues;
+      const params = values.map((_, i) => `$${i + 1}`).join(', ');
+      return {
+        sql: `INSERT INTO opportunities (${fields.join(', ')}) VALUES (${params}) RETURNING id`,
+        values
+      };
+    };
+
     // 1. Test Opportunity 1: User Interface Testing
-    const test1Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [
-        'test',
-        'User Interface Testing',
-        'Help us improve our mobile app interface through usability testing',
-        'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions and gather feedback on the design and usability.',
-        'Mobile Banking App',
-        45,
-        'published',
-        userId,
-        'any',
-        'https://zoom.us/j/1234567890'
-      ]
+    const test1Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'product_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'participant_type_required'],
+      ['test', 'User Interface Testing', 'Help us improve our mobile app interface through usability testing', 'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions and gather feedback on the design and usability.', 'Mobile Banking App', 45, 'published', userId, 'any'],
+      'https://zoom.us/j/1234567890'
     );
+    const test1Result = await query(test1Insert.sql, test1Insert.values);
     const test1Id = test1Result.rows[0].id;
     await createSessions(test1Id, 45, [0, 1, 2, 3, 4]); // Mon-Fri
 
     // 2. Test Opportunity 2: New Feature Validation
-    const test2Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [
-        'test',
-        'New Feature Validation',
-        'Test our latest dashboard features and provide feedback',
-        'We\'ve built some exciting new features for our analytics dashboard and need your help to validate them. Share your thoughts on functionality, design, and overall experience.',
-        'Analytics Dashboard',
-        30,
-        'published',
-        userId,
-        'internal',
-        'https://meet.google.com/abc-defg-hij'
-      ]
+    const test2Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'product_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'participant_type_required'],
+      ['test', 'New Feature Validation', 'Test our latest dashboard features and provide feedback', 'We\'ve built some exciting new features for our analytics dashboard and need your help to validate them. Share your thoughts on functionality, design, and overall experience.', 'Analytics Dashboard', 30, 'published', userId, 'internal'],
+      'https://meet.google.com/abc-defg-hij'
     );
+    const test2Result = await query(test2Insert.sql, test2Insert.values);
     const test2Id = test2Result.rows[0].id;
     await createSessions(test2Id, 30, [0, 2, 4]); // Mon, Wed, Fri
 
     // 3. Poll Opportunity 1: Work-Life Balance
-    const poll1Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [
-        'poll',
-        'Work-Life Balance Survey',
-        'Share your thoughts on work-life balance at AdaptaLabs',
-        'We want to understand how our team members are managing work-life balance. Your anonymous input will help us improve our workplace policies and support programs.',
-        5,
-        'published',
-        userId,
-        'https://forms.google.com/work-life-balance-poll',
-        'internal',
-        'https://zoom.us/j/2345678901'
-      ]
+    const poll1Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'external_link_optional', 'participant_type_required'],
+      ['poll', 'Work-Life Balance Survey', 'Share your thoughts on work-life balance at AdaptaLabs', 'We want to understand how our team members are managing work-life balance. Your anonymous input will help us improve our workplace policies and support programs.', 5, 'published', userId, 'https://forms.google.com/work-life-balance-poll', 'internal'],
+      'https://zoom.us/j/2345678901'
     );
+    const poll1Result = await query(poll1Insert.sql, poll1Insert.values);
     const poll1Id = poll1Result.rows[0].id;
     await createSessions(poll1Id, 5, [0, 1, 2, 3, 4]);
 
     // 4. Poll Opportunity 2: Remote Work Preferences
-    const poll2Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [
-        'poll',
-        'Remote Work Preferences',
-        'Tell us about your remote work preferences and experiences',
-        'Help us understand your preferences for remote, hybrid, and in-office work arrangements. This quick poll will inform our future office and remote work policies.',
-        5,
-        'published',
-        userId,
-        'https://forms.google.com/remote-work-poll',
-        'any',
-        'https://meet.google.com/bcd-efgh-ijk'
-      ]
+    const poll2Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'external_link_optional', 'participant_type_required'],
+      ['poll', 'Remote Work Preferences', 'Tell us about your remote work preferences and experiences', 'Help us understand your preferences for remote, hybrid, and in-office work arrangements. This quick poll will inform our future office and remote work policies.', 5, 'published', userId, 'https://forms.google.com/remote-work-poll', 'any'],
+      'https://meet.google.com/bcd-efgh-ijk'
     );
+    const poll2Result = await query(poll2Insert.sql, poll2Insert.values);
     const poll2Id = poll2Result.rows[0].id;
     await createSessions(poll2Id, 5, [1, 3]); // Tue, Thu
 
     // 5. Survey Opportunity 1: Employee Engagement
-    const survey1Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id`,
-      [
-        'survey',
-        'Employee Engagement Survey',
-        'Help us understand engagement levels across the organization',
-        'Your feedback is crucial in helping us create a better workplace. This comprehensive survey covers topics like job satisfaction, team collaboration, career development, and company culture. All responses are confidential.',
-        15,
-        'published',
-        userId,
-        'https://surveys.google.com/engagement-2024',
-        'internal',
-        'https://zoom.us/j/3456789012'
-      ]
+    const survey1Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'external_link_optional', 'participant_type_required'],
+      ['survey', 'Employee Engagement Survey', 'Help us understand engagement levels across the organization', 'Your feedback is crucial in helping us create a better workplace. This comprehensive survey covers topics like job satisfaction, team collaboration, career development, and company culture. All responses are confidential.', 15, 'published', userId, 'https://surveys.google.com/engagement-2024', 'internal'],
+      'https://zoom.us/j/3456789012'
     );
+    const survey1Result = await query(survey1Insert.sql, survey1Insert.values);
     const survey1Id = survey1Result.rows[0].id;
     await createSessions(survey1Id, 15, [0, 2, 4]); // Mon, Wed, Fri
 
     // 6. Survey Opportunity 2: Product Feedback
-    const survey2Result = await query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required, meeting_location_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING id`,
-      [
-        'survey',
-        'Product Feedback Survey',
-        'Share your experience using our latest product features',
-        'We\'re continuously improving our products based on user feedback. This survey focuses on recent feature releases and your overall product experience. Your insights help shape our roadmap.',
-        'Customer Portal',
-        20,
-        'published',
-        userId,
-        'https://surveys.google.com/product-feedback-2024',
-        'any',
-        'https://meet.google.com/cde-fghi-jkl'
-      ]
+    const survey2Insert = buildOpportunityInsert(
+      ['type', 'title', 'purpose_one_liner', 'description_optional', 'product_optional', 'default_duration_minutes', 'status', 'owner_user_id', 'external_link_optional', 'participant_type_required'],
+      ['survey', 'Product Feedback Survey', 'Share your experience using our latest product features', 'We\'re continuously improving our products based on user feedback. This survey focuses on recent feature releases and your overall product experience. Your insights help shape our roadmap.', 'Customer Portal', 20, 'published', userId, 'https://surveys.google.com/product-feedback-2024', 'any'],
+      'https://meet.google.com/cde-fghi-jkl'
     );
+    const survey2Result = await query(survey2Insert.sql, survey2Insert.values);
     const survey2Id = survey2Result.rows[0].id;
     await createSessions(survey2Id, 20, [1, 3]); // Tue, Thu
 
