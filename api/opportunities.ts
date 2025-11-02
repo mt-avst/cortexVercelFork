@@ -182,6 +182,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         purpose_one_liner,
         description_optional,
         product_optional,
+        meeting_location_optional,
         default_duration_minutes = 30,
         status = 'draft',
         owner_user_id,
@@ -202,10 +203,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const result = await query(
         `INSERT INTO opportunities (
           type, title, purpose_one_liner, description_optional,
-          product_optional, default_duration_minutes, status,
+          product_optional, meeting_location_optional, default_duration_minutes, status,
           owner_user_id, external_link_optional, participant_type_required,
           participant_type_specific_details
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *`,
         [
           type,
@@ -213,6 +214,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           purpose_one_liner.trim(),
           description_optional?.trim() || null,
           product_optional?.trim() || null,
+          meeting_location_optional?.trim() || null,
           default_duration_minutes,
           status,
           finalOwnerId,

@@ -685,6 +685,23 @@ const Admin: React.FC = () => {
                                       >
                                         Copy
                                       </button>
+                                      {/* Analytics - Only for polls and surveys */}
+                                      {(opportunity.type === 'poll' || opportunity.type === 'survey') && (
+                                        <>
+                                          <div className="dropdown-divider"></div>
+                                          <button
+                                            className="dropdown-item"
+                                            onClick={() => {
+                                              navigate(`/admin/opportunities/${opportunity.id}/analytics`);
+                                              closeDropdown();
+                                            }}
+                                            style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
+                                          >
+                                            <i className="bi bi-graph-up me-2"></i>
+                                            Analytics
+                                          </button>
+                                        </>
+                                      )}
                                       <div className="dropdown-divider"></div>
                                       <button
                                         className="dropdown-item text-danger"

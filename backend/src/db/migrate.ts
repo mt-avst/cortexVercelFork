@@ -182,6 +182,7 @@ export async function runMigrations() {
         status opportunity_status NOT NULL DEFAULT 'draft',
         owner_user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
         external_link_optional TEXT,
+        meeting_location_optional TEXT,
         participant_type_required participant_type DEFAULT 'any',
         participant_type_specific_details TEXT,
         created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -533,6 +534,12 @@ export async function runMigrations() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_clicks_opportunity 
       ON opportunity_clicks(opportunity_id, clicked_at)
+    `);
+
+    // Add meeting_location_optional column to opportunities table if it doesn't exist
+    await client.query(`
+      ALTER TABLE opportunities 
+      ADD COLUMN IF NOT EXISTS meeting_location_optional TEXT
     `);
 
     console.log('✅ Database migrations completed successfully');

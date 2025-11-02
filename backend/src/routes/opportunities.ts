@@ -359,9 +359,9 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional, 
-      product_optional, default_duration_minutes, status, 
+      product_optional, meeting_location_optional, default_duration_minutes, status, 
       owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
     RETURNING *
   `;
   
@@ -371,6 +371,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.purpose_one_liner.trim(),
     data.description_optional?.trim() || null,
     data.product_optional?.trim() || null,
+    data.meeting_location_optional?.trim() || null,
     data.default_duration_minutes || 30,
     data.status || 'draft',
     req.user!.id,

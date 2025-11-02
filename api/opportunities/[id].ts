@@ -117,6 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         purpose_one_liner,
         description_optional,
         product_optional,
+        meeting_location_optional,
         default_duration_minutes,
         status,
         external_link_optional,
@@ -158,6 +159,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (product_optional !== undefined) {
         updates.push(`product_optional = $${paramIndex++}`);
         params.push(product_optional?.trim() || null);
+      }
+      if (meeting_location_optional !== undefined) {
+        updates.push(`meeting_location_optional = $${paramIndex++}`);
+        params.push(meeting_location_optional?.trim() || null);
       }
       if (default_duration_minutes !== undefined) {
         updates.push(`default_duration_minutes = $${paramIndex++}`);

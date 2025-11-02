@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
-import { createOpportunity, updateOpportunity, getOpportunity, getSessions, getOpportunityAnalytics, OpportunityAnalytics } from '../api/client';
+import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
 import AdminSessionManager from '../components/AdminSessionManager';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
@@ -20,6 +20,7 @@ const OpportunityForm: React.FC = () => {
     purpose_one_liner: '',
     description_optional: '',
     product_optional: '',
+    meeting_location_optional: '',
     default_duration_minutes: 30,
     external_link_optional: '',
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
@@ -34,8 +35,6 @@ const OpportunityForm: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<number>(1);
-  const [analytics, setAnalytics] = useState<OpportunityAnalytics | null>(null);
-  const [loadingAnalytics, setLoadingAnalytics] = useState(false);
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
 
   // Define tabs based on opportunity type
@@ -104,6 +103,7 @@ const OpportunityForm: React.FC = () => {
         purpose_one_liner: opportunity.purpose_one_liner,
         description_optional: opportunity.description_optional || '',
         product_optional: opportunity.product_optional || '',
+        meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
         participant_type_required: opportunity.participant_type_required || 'any',
@@ -120,6 +120,7 @@ const OpportunityForm: React.FC = () => {
         purpose_one_liner: opportunity.purpose_one_liner,
         description_optional: opportunity.description_optional || '',
         product_optional: opportunity.product_optional || '',
+        meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
@@ -186,11 +187,6 @@ const OpportunityForm: React.FC = () => {
           setSessions([]);
         }
       }
-      
-      // Load analytics for polls/surveys (M6)
-      if (opportunity.type === 'poll' || opportunity.type === 'survey') {
-        loadAnalytics(opportunity.id);
-      }
     } catch (err: any) {
       console.error('Error loading opportunity:', err);
       if (err.response?.status === 404) {
@@ -203,19 +199,6 @@ const OpportunityForm: React.FC = () => {
     }
   };
   
-  // Load analytics for polls/surveys
-  const loadAnalytics = async (oppId: string) => {
-    try {
-      setLoadingAnalytics(true);
-      const data = await getOpportunityAnalytics(oppId);
-      setAnalytics(data);
-    } catch (error) {
-      console.error('Error loading analytics:', error);
-      setAnalytics(null);
-    } finally {
-      setLoadingAnalytics(false);
-    }
-  };
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -239,6 +222,11 @@ const OpportunityForm: React.FC = () => {
       errors.purpose_one_liner = 'Purpose must be at least 10 characters';
     } else if (formData.purpose_one_liner.trim().length > 180) {
       errors.purpose_one_liner = 'Purpose must be no more than 180 characters';
+    }
+    
+    // Validate meeting location (required)
+    if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
+      errors.meeting_location_optional = 'Meeting location is required';
     }
     
     // Only validate duration for test and interview type opportunities
@@ -300,6 +288,13 @@ const OpportunityForm: React.FC = () => {
           delete fieldErrors.purpose_one_liner;
         }
         break;
+      case 'meeting_location_optional':
+        if (!value || !value.trim()) {
+          fieldErrors.meeting_location_optional = 'Meeting location is required';
+        } else {
+          delete fieldErrors.meeting_location_optional;
+        }
+        break;
       case 'default_duration_minutes':
         if (formData.type === 'test' || formData.type === 'interview') {
           if (value < 5 || value > 240) {
@@ -353,6 +348,7 @@ const OpportunityForm: React.FC = () => {
       formData.purpose_one_liner.trim() !== originalFormData.purpose_one_liner.trim() ||
       formData.description_optional.trim() !== originalFormData.description_optional.trim() ||
       formData.product_optional.trim() !== originalFormData.product_optional.trim() ||
+      formData.meeting_location_optional.trim() !== originalFormData.meeting_location_optional.trim() ||
       formData.default_duration_minutes !== originalFormData.default_duration_minutes ||
       formData.external_link_optional.trim() !== originalFormData.external_link_optional.trim() ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
@@ -384,6 +380,7 @@ const OpportunityForm: React.FC = () => {
         purpose_one_liner: formData.purpose_one_liner.trim(),
         description_optional: formData.description_optional.trim() || undefined,
         product_optional: formData.product_optional.trim() || undefined,
+        meeting_location_optional: formData.meeting_location_optional.trim(),
         external_link_optional: formData.external_link_optional.trim() || undefined,
         participant_type_required: formData.participant_type_required,
         participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
@@ -557,6 +554,17 @@ const OpportunityForm: React.FC = () => {
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
+                  {/* Analytics button - only for polls and surveys in edit mode */}
+                  {isEdit && id && (formData.type === 'poll' || formData.type === 'survey') && (
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      <i className="bi bi-graph-up me-1"></i>
+                      Analytics
+                    </button>
+                  )}
                   <div className="text-muted" style={{ fontSize: '0.9rem' }}>
                     <i className="bi bi-person-circle me-1"></i>
                     {user.name}
@@ -745,6 +753,7 @@ const OpportunityForm: React.FC = () => {
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                       />
+                      
                       {/* Navigation Buttons for External Link Tab */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">
@@ -835,88 +844,6 @@ const OpportunityForm: React.FC = () => {
                         )}
                       </div>
                     </>
-                  )}
-                  
-                  {/* Analytics - Only for Polls and Surveys (M6) */}
-                  {isEdit && (formData.type === 'poll' || formData.type === 'survey') && (
-                    <div className="form-section mb-5 mt-4">
-                      <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: '2px solid #e9ecef' }}>
-                        <div>
-                          <h2 className="h4 mb-1 text-dark" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 'bold' }}>
-                            <i className="bi bi-graph-up me-2"></i>
-                            Click Analytics
-                          </h2>
-                          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
-                            Track how many times this poll/survey has been opened
-                          </p>
-                        </div>
-                      </div>
-                      
-                      {loadingAnalytics ? (
-                        <div className="text-center py-4">
-                          <div className="spinner-border text-primary" role="status">
-                            <span className="visually-hidden">Loading analytics...</span>
-                          </div>
-                        </div>
-                      ) : analytics ? (
-                        <div className="row g-3">
-                          <div className="col-md-4">
-                            <div className="card border-0 shadow-sm">
-                              <div className="card-body text-center">
-                                <h5 className="card-title text-muted mb-2" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
-                                  Total Clicks
-                                </h5>
-                                <h2 className="mb-0" style={{ fontSize: '2rem', fontWeight: 'bold', color: '#ffaa50' }}>
-                                  {analytics.clicks_total}
-                                </h2>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="col-md-4">
-                            <div className="card border-0 shadow-sm">
-                              <div className="card-body text-center">
-                                <h5 className="card-title text-muted mb-2" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
-                                  Last 24 Hours
-                                </h5>
-                                <h2 className="mb-0" style={{ fontSize: '2rem', fontWeight: 'bold', color: '#198754' }}>
-                                  {analytics.clicks_24h}
-                                </h2>
-                              </div>
-                            </div>
-                          </div>
-                          <div className="col-md-4">
-                            <div className="card border-0 shadow-sm">
-                              <div className="card-body">
-                                <h5 className="card-title text-muted mb-3" style={{ fontSize: '0.875rem', fontWeight: '600' }}>
-                                  30-Day Trend
-                                </h5>
-                                {analytics.clicks_by_day.length > 0 ? (
-                                  <div className="text-center">
-                                    <small className="text-muted">
-                                      {analytics.clicks_by_day.length} days with activity
-                                    </small>
-                                    <div className="mt-2">
-                                      <small className="text-success">
-                                        Peak: {Math.max(...analytics.clicks_by_day.map(d => d.count))} clicks
-                                      </small>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="text-center text-muted">
-                                    <small>No clicks yet</small>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="alert alert-info">
-                          <i className="bi bi-info-circle me-2"></i>
-                          No clicks recorded yet
-                        </div>
-                      )}
-                    </div>
                   )}
                 </div>
               </form>

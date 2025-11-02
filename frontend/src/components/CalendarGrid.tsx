@@ -304,7 +304,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           <small>Full</small>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ffaa50' }}></div>
+          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ff7700' }}></div>
           <small>Your Booking</small>
         </div>
       </div>
@@ -450,9 +450,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                         
                         if (isBooked) {
                           slotStyle = { 
-                            backgroundColor: '#ffaa50',
+                            backgroundColor: '#ff7700',
                             color: '#000000',
-                            borderColor: '#ffaa50'
+                            borderColor: '#ff7700'
                           };
                         } else if (isFull) {
                           slotStyle = { 
@@ -531,7 +531,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                                 left: '4px',
                                 fontSize: '0.65rem',
                                 fontWeight: '600',
-                                color: (isFull || isBooked || hasConflict) ? (isBooked || hasConflict ? '#000000' : 'white') : 'white',
+                                color: (isFull || isBooked || hasConflict) ? (isBooked ? '#000000' : hasConflict ? '#000000' : 'white') : 'white',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',

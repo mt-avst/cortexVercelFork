@@ -11,6 +11,7 @@ import Admin from './pages/Admin';
 import Settings from './pages/Settings';
 import Poll from './pages/Poll';
 import GamificationPage from './pages/Gamification';
+import OpportunityAnalyticsPage from './pages/OpportunityAnalytics';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
                   <Route path="/admin/settings" element={<Settings />} />
                   <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
                   <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+                  <Route path="/admin/opportunities/:id/analytics" element={<OpportunityAnalyticsPage />} />
                   <Route path="/my-bookings" element={<MyBookings />} />
                   <Route path="/gamification" element={<GamificationPage />} />
                 </Routes>

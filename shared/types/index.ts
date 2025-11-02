@@ -54,6 +54,7 @@ export interface Opportunity {
   status: 'draft' | 'published' | 'closed';
   owner_user_id: string;
   external_link_optional?: string;
+  meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
   created_at: string;
@@ -73,6 +74,7 @@ export interface CreateOpportunityRequest {
   product_optional?: string;
   default_duration_minutes?: number;
   external_link_optional?: string;
+  meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
   status?: 'draft' | 'published';
@@ -87,6 +89,7 @@ export interface UpdateOpportunityRequest {
   default_duration_minutes?: number;
   status?: 'draft' | 'published' | 'closed';
   external_link_optional?: string;
+  meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
 }
@@ -348,6 +351,7 @@ export interface OpportunityFormData {
   // Content Details Tab
   description_optional?: string;
   product_optional?: string;
+  meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
   
