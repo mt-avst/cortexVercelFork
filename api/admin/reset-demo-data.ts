@@ -118,7 +118,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const test1Result = await query(test1Insert.sql, test1Insert.values);
     const test1Id = test1Result.rows[0].id;
-    await createSessions(test1Id, 45, [0, 1, 2, 3, 4]); // Mon-Fri
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Test Opportunity 1: User Interface Testing (no sessions)');
 
     // 2. Test Opportunity 2: New Feature Validation
     const test2Insert = buildOpportunityInsert(
@@ -128,7 +129,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const test2Result = await query(test2Insert.sql, test2Insert.values);
     const test2Id = test2Result.rows[0].id;
-    await createSessions(test2Id, 30, [0, 2, 4]); // Mon, Wed, Fri
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Test Opportunity 2: New Feature Validation (no sessions)');
 
     // 3. Poll Opportunity 1: Work-Life Balance
     const poll1Insert = buildOpportunityInsert(
@@ -138,7 +140,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const poll1Result = await query(poll1Insert.sql, poll1Insert.values);
     const poll1Id = poll1Result.rows[0].id;
-    await createSessions(poll1Id, 5, [0, 1, 2, 3, 4]);
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Poll Opportunity 1: Work-Life Balance Survey (no sessions)');
 
     // 4. Poll Opportunity 2: Remote Work Preferences
     const poll2Insert = buildOpportunityInsert(
@@ -148,7 +151,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const poll2Result = await query(poll2Insert.sql, poll2Insert.values);
     const poll2Id = poll2Result.rows[0].id;
-    await createSessions(poll2Id, 5, [1, 3]); // Tue, Thu
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Poll Opportunity 2: Remote Work Preferences (no sessions)');
 
     // 5. Survey Opportunity 1: Employee Engagement
     const survey1Insert = buildOpportunityInsert(
@@ -158,7 +162,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const survey1Result = await query(survey1Insert.sql, survey1Insert.values);
     const survey1Id = survey1Result.rows[0].id;
-    await createSessions(survey1Id, 15, [0, 2, 4]); // Mon, Wed, Fri
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Survey Opportunity 1: Employee Engagement Survey (no sessions)');
 
     // 6. Survey Opportunity 2: Product Feedback
     const survey2Insert = buildOpportunityInsert(
@@ -168,7 +173,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     const survey2Result = await query(survey2Insert.sql, survey2Insert.values);
     const survey2Id = survey2Result.rows[0].id;
-    await createSessions(survey2Id, 20, [1, 3]); // Tue, Thu
+    // NO SESSIONS CREATED - all slots cleared
+    console.log('✅ Created Survey Opportunity 2: Product Feedback Survey (no sessions)');
 
     return res.status(200).json({
       success: true,
