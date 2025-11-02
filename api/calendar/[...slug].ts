@@ -239,12 +239,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [userId]
       );
 
-      if (tokenResult.rows.length === 0) {
+      // In demo mode, always return mock events for Demo User 1 even without tokens
+      const isDemoUser1 = userId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+      
+      if (tokenResult.rows.length === 0 && !isDemoUser1) {
         return res.status(404).json({
           error: 'Calendar not connected',
           connected: false
         });
       }
+
+      console.log(`📅 my-events: User ${userId}${isDemoUser1 ? ' (Demo User 1 - will generate mock conflicts)' : ''}${tokenResult.rows.length > 0 ? ' (calendar connected)' : ' (no tokens, demo mode)'}`);
 
       // Generate mock calendar events for demo mode
       // Demo User 1 ID: a1b2c3d4-e5f6-7890-abcd-ef1234567890
