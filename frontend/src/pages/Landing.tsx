@@ -21,7 +21,19 @@ const Landing: React.FC = () => {
   };
 
   return (
-    <div className="container py-5" style={{ backgroundColor: 'var(--bg-app)', minHeight: '100vh', color: 'var(--text-on-dark)' }}>
+    <>
+      <style>
+        {`
+          .demo-admin-btn {
+            border: 2px solid var(--brand-headline) !important;
+            border-color: var(--brand-headline) !important;
+          }
+          .demo-admin-btn:hover {
+            border-color: var(--brand-headline) !important;
+          }
+        `}
+      </style>
+      <div className="container py-5" style={{ backgroundColor: 'var(--bg-app)', minHeight: '100vh', color: 'var(--text-on-dark)' }}>
       <div className="row align-items-center">
         {/* Left side - Large Image */}
         <div className="col-12 col-lg-6 mb-4 mb-lg-0">
@@ -100,7 +112,7 @@ const Landing: React.FC = () => {
                     setLoginLoading(true);
                     demoUser2Login();
                   }} 
-                  className="btn btn-info btn-lg px-4 py-2"
+                  className="btn btn-primary btn-lg px-4 py-2"
                   disabled={loginLoading || googleLoading}
                   style={{ fontSize: '1rem', fontWeight: '500' }}
                 >
@@ -108,7 +120,7 @@ const Landing: React.FC = () => {
                 </button>
                 <button 
                   onClick={handleDemoAdminLogin} 
-                  className="btn btn-outline-light btn-lg px-4 py-2"
+                  className="btn btn-outline-light btn-lg px-4 py-2 demo-admin-btn"
                   disabled={loginLoading || googleLoading}
                   style={{ fontSize: '1rem', fontWeight: '500' }}
                 >
@@ -120,6 +132,7 @@ const Landing: React.FC = () => {
         </div>
       </div>
     </div>
+    </>
   );
 };
 
