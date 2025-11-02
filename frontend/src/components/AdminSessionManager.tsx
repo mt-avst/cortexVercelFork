@@ -743,18 +743,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             }}
                         title={(() => {
                           const session = getSessionForSlot(slot);
+                          const startTime = formatTime(slot.start);
+                          const endTime = formatTime(slot.end);
+                          const timeSpan = `${startTime} to ${endTime}`;
+                          
                           if (session) {
-                            return `Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
+                            return `${timeSpan} - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
                           } else if (isBusy) {
-                            return 'This time slot conflicts with existing calendar events';
+                            return `${timeSpan} - This time slot conflicts with existing calendar events`;
                           } else if (isAllocated) {
-                            return 'This slot is allocated to another opportunity';
+                            return `${timeSpan} - This slot is allocated to another opportunity`;
                           } else if (isSelected) {
-                            return 'Selected for session creation';
+                            return `${timeSpan} - Selected for session creation`;
                           } else if (isConfirmed) {
-                            return 'Session confirmed';
+                            return `${timeSpan} - Session confirmed`;
                           } else {
-                            return 'Available time slot';
+                            return `${timeSpan} - Available time slot`;
                           }
                         })()}
                         onClick={() => {
