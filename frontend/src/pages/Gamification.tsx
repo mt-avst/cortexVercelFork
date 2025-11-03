@@ -96,89 +96,18 @@ const GamificationPage: React.FC = () => {
       const meshRect = meshBackground.getBoundingClientRect();
       const overlayRect = overlay.getBoundingClientRect();
       
-      // Get page content elements to exclude from spawning
-      const pageContent = document.querySelector('.gamification-content');
-      
-      // Collect all exclusion zones (with larger padding for safety)
-      const exclusionZones: Array<{ left: number; top: number; right: number; bottom: number }> = [];
-      const padding = 40; // Larger padding to ensure squares don't touch content
-      
-      // Add page content as exclusion zone if it exists
-      if (pageContent) {
-        const rect = pageContent.getBoundingClientRect();
-        if (rect.width > 0 && rect.height > 0) {
-          exclusionZones.push({
-            left: rect.left - padding,
-            top: rect.top - padding,
-            right: rect.right + padding,
-            bottom: rect.bottom + padding
-          });
-        }
-      }
-      
       // Grid starts at meshRect.left, meshRect.top (the background-position: 0 0)
       // Calculate available grid cells in viewport
       const viewportCols = Math.ceil(viewportWidth / 80) + 2;
       const viewportRows = Math.ceil(viewportHeight / 80) + 2;
       
-      // Try to find a valid grid cell that doesn't overlap with content
-      let attempts = 0;
-      let randomCol = Math.floor(Math.random() * viewportCols);
-      let randomRow = Math.floor(Math.random() * viewportRows);
-      let targetScreenX = meshRect.left + (randomCol * 80);
-      let targetScreenY = meshRect.top + (randomRow * 80);
-      let overlaps = true;
+      // Randomly select a grid cell anywhere on the screen
+      const randomCol = Math.floor(Math.random() * viewportCols);
+      const randomRow = Math.floor(Math.random() * viewportRows);
       
-      // Try up to 300 times to find a non-overlapping position
-      // Always recalculate exclusion zones to ensure they're current
-      while (overlaps && attempts < 300) {
-        // Always get fresh exclusion zones to account for any layout changes
-        exclusionZones.length = 0;
-        const currentPageContent = document.querySelector('.gamification-content');
-        
-        if (currentPageContent) {
-          const rect = currentPageContent.getBoundingClientRect();
-          // Only add if element is actually visible and has dimensions
-          if (rect.width > 0 && rect.height > 0) {
-            exclusionZones.push({
-              left: rect.left - padding,
-              top: rect.top - padding,
-              right: rect.right + padding,
-              bottom: rect.bottom + padding
-            });
-          }
-        }
-        
-        // Skip overlap check if no exclusion zones found
-        if (exclusionZones.length === 0) {
-          overlaps = false;
-          break;
-        }
-        
-        randomCol = Math.floor(Math.random() * viewportCols);
-        randomRow = Math.floor(Math.random() * viewportRows);
-        
-        // Calculate the absolute screen position where the grid cell would be
-        targetScreenX = meshRect.left + (randomCol * 80);
-        targetScreenY = meshRect.top + (randomRow * 80);
-        
-        // Check if this grid cell overlaps with any exclusion zone
-        // Square is 80x80px
-        const squareLeft = targetScreenX;
-        const squareTop = targetScreenY;
-        const squareRight = squareLeft + 80;
-        const squareBottom = squareTop + 80;
-        
-        // Strict overlap detection: square must be completely outside all zones
-        overlaps = exclusionZones.some(zone => {
-          // Square overlaps if it's not completely outside the zone
-          const isOutside = (squareRight < zone.left || squareLeft > zone.right || 
-                            squareBottom < zone.top || squareTop > zone.bottom);
-          return !isOutside;
-        });
-        
-        attempts++;
-      }
+      // Calculate the absolute screen position where the grid cell would be
+      const targetScreenX = meshRect.left + (randomCol * 80);
+      const targetScreenY = meshRect.top + (randomRow * 80);
       
       // Convert to overlay-relative coordinates
       const left = targetScreenX - overlayRect.left;

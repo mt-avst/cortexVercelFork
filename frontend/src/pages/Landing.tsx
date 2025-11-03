@@ -7,8 +7,10 @@ const Landing: React.FC = () => {
   const [googleLoading, setGoogleLoading] = useState(false);
   const squaresRef = useRef<(HTMLDivElement | null)[]>([]);
   const fullGridSquareRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const coralDotsRef = useRef<(HTMLDivElement | null)[]>([]);
   const { animationsEnabled } = useAnimation();
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+  const glassGlowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -112,130 +114,18 @@ const Landing: React.FC = () => {
       const meshRect = meshBackground.getBoundingClientRect();
       const overlayRect = overlay.getBoundingClientRect();
       
-      // Get hero content elements to exclude from spawning
-      // Use hero-content wrapper to get all content at once, or individual elements
-      const heroContent = document.querySelector('.hero-content');
-      const heroImage = document.querySelector('.hero-image');
-      const heroHeadline = document.querySelector('.hero-headline');
-      const heroSubtext = document.querySelector('.hero-subtext');
-      const ctaPrimary = document.querySelector('.cta-primary');
-      const demoButtonsContainer = document.querySelector('.demo-buttons-container');
-      
-      // Collect all exclusion zones (with larger padding for safety)
-      const exclusionZones: Array<{ left: number; top: number; right: number; bottom: number }> = [];
-      const padding = 40; // Larger padding to ensure squares don't touch content
-      
-      // Add hero-content as a single large exclusion zone if it exists
-      if (heroContent) {
-        const rect = heroContent.getBoundingClientRect();
-        exclusionZones.push({
-          left: rect.left - padding,
-          top: rect.top - padding,
-          right: rect.right + padding,
-          bottom: rect.bottom + padding
-        });
-      } else {
-        // Fallback: use individual elements
-        [heroImage, heroHeadline, heroSubtext, ctaPrimary, demoButtonsContainer].forEach((element) => {
-          if (element) {
-            const rect = element.getBoundingClientRect();
-            exclusionZones.push({
-              left: rect.left - padding,
-              top: rect.top - padding,
-              right: rect.right + padding,
-              bottom: rect.bottom + padding
-            });
-          }
-        });
-      }
-      
       // Grid starts at meshRect.left, meshRect.top (the background-position: 0 0)
       // Calculate available grid cells in viewport
       const viewportCols = Math.ceil(viewportWidth / 80) + 2;
       const viewportRows = Math.ceil(viewportHeight / 80) + 2;
       
-      // Try to find a valid grid cell that doesn't overlap with content
-      let attempts = 0;
-      let randomCol = Math.floor(Math.random() * viewportCols);
-      let randomRow = Math.floor(Math.random() * viewportRows);
-      let targetScreenX = meshRect.left + (randomCol * 80);
-      let targetScreenY = meshRect.top + (randomRow * 80);
-      let overlaps = true;
+      // Randomly select a grid cell anywhere on the screen
+      const randomCol = Math.floor(Math.random() * viewportCols);
+      const randomRow = Math.floor(Math.random() * viewportRows);
       
-      // Try up to 300 times to find a non-overlapping position
-      // Always recalculate exclusion zones to ensure they're current
-      while (overlaps && attempts < 300) {
-        // Always get fresh exclusion zones to account for any layout changes
-        exclusionZones.length = 0;
-        const currentHeroContent = document.querySelector('.hero-content');
-        
-        if (currentHeroContent) {
-          const rect = currentHeroContent.getBoundingClientRect();
-          // Only add if element is actually visible and has dimensions
-          if (rect.width > 0 && rect.height > 0) {
-            exclusionZones.push({
-              left: rect.left - padding,
-              top: rect.top - padding,
-              right: rect.right + padding,
-              bottom: rect.bottom + padding
-            });
-          }
-        } else {
-          // Fallback: use individual elements with fresh lookups
-          const currentHeroImage = document.querySelector('.hero-image');
-          const currentHeroHeadline = document.querySelector('.hero-headline');
-          const currentHeroSubtext = document.querySelector('.hero-subtext');
-          const currentCtaPrimary = document.querySelector('.cta-primary');
-          const currentDemoButtonsContainer = document.querySelector('.demo-buttons-container');
-          
-          [currentHeroImage, currentHeroHeadline, currentHeroSubtext, currentCtaPrimary, currentDemoButtonsContainer].forEach((element) => {
-            if (element) {
-              const rect = element.getBoundingClientRect();
-              if (rect.width > 0 && rect.height > 0) {
-                exclusionZones.push({
-                  left: rect.left - padding,
-                  top: rect.top - padding,
-                  right: rect.right + padding,
-                  bottom: rect.bottom + padding
-                });
-              }
-            }
-          });
-        }
-        
-        // Skip overlap check if no exclusion zones found
-        if (exclusionZones.length === 0) {
-          overlaps = false;
-          break;
-        }
-        
-        randomCol = Math.floor(Math.random() * viewportCols);
-        randomRow = Math.floor(Math.random() * viewportRows);
-        
-        // Calculate the absolute screen position where the grid cell would be
-        targetScreenX = meshRect.left + (randomCol * 80);
-        targetScreenY = meshRect.top + (randomRow * 80);
-        
-        // Check if this grid cell overlaps with any exclusion zone
-        // Square is 80x80px
-        const squareLeft = targetScreenX;
-        const squareTop = targetScreenY;
-        const squareRight = squareLeft + 80;
-        const squareBottom = squareTop + 80;
-        
-        // Strict overlap detection: square must be completely outside all zones
-        overlaps = exclusionZones.some(zone => {
-          // Square overlaps if it's not completely outside the zone
-          const isOutside = (squareRight < zone.left || squareLeft > zone.right || 
-                            squareBottom < zone.top || squareTop > zone.bottom);
-          return !isOutside;
-        });
-        
-        attempts++;
-      }
-      
-      // If we couldn't find a non-overlapping position after 100 attempts,
-      // use the last tried position (should rarely happen)
+      // Calculate the absolute screen position where the grid cell would be
+      const targetScreenX = meshRect.left + (randomCol * 80);
+      const targetScreenY = meshRect.top + (randomRow * 80);
       
       // Convert to overlay-relative coordinates
       const left = targetScreenX - overlayRect.left;
@@ -291,6 +181,145 @@ const Landing: React.FC = () => {
     };
   }, [animationsEnabled]);
 
+  // Randomize coral dot positions and directions
+  useEffect(() => {
+    if (!animationsEnabled) {
+      // Hide dots when animations are disabled
+      coralDotsRef.current.forEach((dot) => {
+        if (dot) {
+          dot.style.opacity = '0';
+        }
+      });
+      return;
+    }
+
+    const dots = coralDotsRef.current.filter(dot => dot !== null);
+    if (dots.length === 0) return;
+
+    // Randomize positions at grid intersections (multiples of 80px)
+    const randomizeDotPositions = () => {
+      dots.forEach((dot) => {
+        if (!dot) return;
+
+        const isHorizontal = dot.classList.contains('coral-dot-horizontal');
+        const isVertical = dot.classList.contains('coral-dot-vertical');
+
+        if (isHorizontal) {
+          // Horizontal dots: random Y at grid intersection, start from left
+          const viewportHeight = window.innerHeight;
+          const maxGridRows = Math.ceil(viewportHeight / 80) + 4;
+          const randomRow = Math.floor(Math.random() * maxGridRows);
+          const topPosition = randomRow * 80;
+          
+          dot.style.top = `${topPosition}px`;
+          dot.style.left = '0px';
+        } else if (isVertical) {
+          // Vertical dots: random X at grid intersection, start from top
+          const viewportWidth = window.innerWidth;
+          const maxGridCols = Math.ceil(viewportWidth / 80) + 4;
+          const randomCol = Math.floor(Math.random() * maxGridCols);
+          const leftPosition = randomCol * 80;
+          
+          dot.style.top = '0px';
+          dot.style.left = `${leftPosition}px`;
+        }
+
+        // Randomize animation duration (12-20 seconds)
+        const duration = 12 + Math.random() * 8;
+        dot.style.animationDuration = `${duration}s`;
+        
+        // Randomize animation delay (0-6 seconds)
+        const delay = Math.random() * 6;
+        dot.style.animationDelay = `${delay}s`;
+      });
+    };
+
+    // Randomize initially
+    randomizeDotPositions();
+
+    // Re-randomize positions periodically (every 30-60 seconds)
+    const reRandomizeInterval = setInterval(() => {
+      randomizeDotPositions();
+    }, 30000 + Math.random() * 30000);
+
+    return () => {
+      clearInterval(reRandomizeInterval);
+    };
+  }, [animationsEnabled]);
+
+  // Coral dots traveling along grid lines with glass intersection detection
+  useEffect(() => {
+    if (!animationsEnabled) {
+      return;
+    }
+
+    const dots = coralDotsRef.current.filter(dot => dot !== null);
+    if (dots.length === 0) return;
+
+    const heroContent = document.querySelector('.hero-content');
+    if (!heroContent) return;
+
+    // Detect when a dot intersects with glass border and trigger glow
+    const checkGlassIntersection = (dot: HTMLDivElement) => {
+      const dotRect = dot.getBoundingClientRect();
+      const glassRect = heroContent.getBoundingClientRect();
+      
+      // Expand glass rect to include border area (0.5rem + border width)
+      const borderWidth = 1;
+      const padding = 8; // Account for the -0.5rem offset
+      const glassLeft = glassRect.left - padding;
+      const glassTop = glassRect.top - padding;
+      const glassRight = glassRect.right + padding;
+      const glassBottom = glassRect.bottom + padding;
+      
+      const dotCenterX = dotRect.left + dotRect.width / 2;
+      const dotCenterY = dotRect.top + dotRect.height / 2;
+      
+      // Check if dot is near any edge of the glass (within 10px)
+      const threshold = 10;
+      const nearTop = dotCenterY >= glassTop - threshold && dotCenterY <= glassTop + threshold && 
+                     dotCenterX >= glassLeft && dotCenterX <= glassRight;
+      const nearBottom = dotCenterY >= glassBottom - threshold && dotCenterY <= glassBottom + threshold && 
+                        dotCenterX >= glassLeft && dotCenterX <= glassRight;
+      const nearLeft = dotCenterX >= glassLeft - threshold && dotCenterX <= glassLeft + threshold && 
+                      dotCenterY >= glassTop && dotCenterY <= glassBottom;
+      const nearRight = dotCenterX >= glassRight - threshold && dotCenterX <= glassRight + threshold && 
+                       dotCenterY >= glassTop && dotCenterY <= glassBottom;
+      
+      if (nearTop || nearBottom || nearLeft || nearRight) {
+        // Trigger glass glow
+        heroContent.classList.add('glass-glow');
+        
+        // Clear existing timeout if any
+        if (glassGlowTimeoutRef.current) {
+          clearTimeout(glassGlowTimeoutRef.current);
+        }
+        
+        // Remove glow after 0.5 seconds
+        glassGlowTimeoutRef.current = setTimeout(() => {
+          heroContent.classList.remove('glass-glow');
+        }, 500);
+      }
+    };
+
+    // Set up intersection checking for each dot
+    const intervalId = setInterval(() => {
+      dots.forEach((dot) => {
+        if (dot) {
+          checkGlassIntersection(dot);
+        }
+      });
+    }, 50); // Check every 50ms for responsive detection
+
+    return () => {
+      clearInterval(intervalId);
+      if (glassGlowTimeoutRef.current) {
+        clearTimeout(glassGlowTimeoutRef.current);
+      }
+      heroContent.classList.remove('glass-glow');
+    };
+  }, [animationsEnabled]);
+
   return (
     <>
       <style>
@@ -321,14 +350,67 @@ const Landing: React.FC = () => {
             width: 140%;
             height: 140%;
             z-index: 0;
+            pointer-events: none;
+            overflow: visible;
+          }
+
+          /* Base grid layer */
+          .mesh-gradient-background::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
             background-image: 
               linear-gradient(rgba(255, 78, 80, 0.3) 1px, transparent 1px),
               linear-gradient(90deg, rgba(255, 78, 80, 0.3) 1px, transparent 1px);
             background-size: 80px 80px;
             background-position: 0 0;
-            pointer-events: none;
-            overflow: visible;
             opacity: 0.5;
+          }
+
+          /* Glowing overlay that cycles through red variations */
+          .mesh-gradient-background::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: 80px 80px;
+            background-position: 0 0;
+            animation: gentleGridGlow 8s ease-in-out infinite;
+            opacity: 0.6;
+            mix-blend-mode: screen;
+          }
+
+          @keyframes gentleGridGlow {
+            0% {
+              background-image: 
+                linear-gradient(rgba(255, 78, 80, 0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 78, 80, 0.25) 1px, transparent 1px);
+            }
+            25% {
+              background-image: 
+                linear-gradient(rgba(255, 100, 90, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 100, 90, 0.3) 1px, transparent 1px);
+            }
+            50% {
+              background-image: 
+                linear-gradient(rgba(255, 65, 75, 0.35) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 65, 75, 0.35) 1px, transparent 1px);
+            }
+            75% {
+              background-image: 
+                linear-gradient(rgba(255, 90, 85, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 90, 85, 0.3) 1px, transparent 1px);
+            }
+            100% {
+              background-image: 
+                linear-gradient(rgba(255, 78, 80, 0.25) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 78, 80, 0.25) 1px, transparent 1px);
+            }
           }
 
           /* Retro Computing Grid Squares Overlay */
@@ -341,6 +423,42 @@ const Landing: React.FC = () => {
             z-index: 1;
             pointer-events: none;
             overflow: visible;
+          }
+
+          /* Coral dots container - matches grid background position */
+          .coral-dots-container {
+            position: fixed;
+            top: -20%;
+            left: -20%;
+            width: 140%;
+            height: 140%;
+            z-index: 3;
+            pointer-events: none;
+            overflow: visible;
+          }
+
+          /* Horizontal travel animation - dots move left to right along grid lines */
+          /* The animation distance ensures dots move across the full container width */
+          /* Since container is 140vw, we move from 0 to 140vw to travel full width */
+          @keyframes travelHorizontal {
+            0% {
+              transform: translateX(-4px);
+            }
+            100% {
+              transform: translateX(calc(1.4 * 100vw - 4px));
+            }
+          }
+
+          /* Vertical travel animation - dots move top to bottom along grid lines */
+          /* The animation distance ensures dots move across the full container height */
+          /* Since container is 140vh, we move from 0 to 140vh to travel full height */
+          @keyframes travelVertical {
+            0% {
+              transform: translateY(-4px);
+            }
+            100% {
+              transform: translateY(calc(1.4 * 100vh - 4px));
+            }
           }
 
           /* Full Grid Square - Lights up at random positions */
@@ -592,6 +710,66 @@ const Landing: React.FC = () => {
             z-index: 10;
             max-width: 900px;
             width: 100%;
+            padding: 0.75rem;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+          }
+
+          /* Glass effect behind hero content */
+          .hero-content::before {
+            content: '';
+            position: absolute;
+            top: -0.5rem;
+            left: -0.5rem;
+            right: -0.5rem;
+            bottom: -0.5rem;
+            z-index: -1;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 78, 80, 0.3);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+          }
+
+          /* Glass border glow effect when dot reaches it */
+          .hero-content.glass-glow::before {
+            border-color: rgba(255, 78, 80, 0.5);
+            box-shadow: 0 0 20px rgba(255, 78, 80, 0.3), 0 0 40px rgba(255, 78, 80, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);
+          }
+
+          /* Coral dots that travel along grid lines */
+          .coral-dot {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #FF4E50;
+            border-radius: 50%;
+            box-shadow: 0 0 12px #FF4E50, 0 0 20px rgba(255, 78, 80, 0.8);
+            z-index: 3;
+            pointer-events: none;
+            opacity: 0.9;
+          }
+
+          /* Horizontal dots - positioned at exact grid Y intersections, centered on grid line */
+          /* They move horizontally, staying on their Y grid line */
+          .coral-dot-horizontal {
+            /* Center dot on grid line (half width = 4px) */
+            margin-top: -4px;
+            margin-left: -4px;
+          }
+
+          /* Vertical dots - positioned at exact grid X intersections, centered on grid line */
+          /* They move vertically, staying on their X grid line */
+          .coral-dot-vertical {
+            /* Center dot on grid line (half width = 4px) */
+            margin-top: -4px;
+            margin-left: -4px;
           }
 
           /* Hero Image - Above Title */
@@ -602,6 +780,7 @@ const Landing: React.FC = () => {
             margin: 0 auto 2rem;
             display: block;
             opacity: 1;
+            align-self: center;
           }
 
           .landing-hero-wrapper .hero-headline {
@@ -610,6 +789,8 @@ const Landing: React.FC = () => {
             font-weight: 700;
             margin-bottom: 1rem;
             line-height: 1.1;
+            text-align: center;
+            width: 100%;
           }
 
           @media (max-width: 768px) {
@@ -626,6 +807,7 @@ const Landing: React.FC = () => {
             margin-right: auto;
             line-height: 1.6;
             margin-bottom: 2.5rem;
+            text-align: center;
           }
 
           @media (max-width: 768px) {
@@ -671,6 +853,7 @@ const Landing: React.FC = () => {
             justify-content: center;
             gap: 0.75rem;
             margin: 0 auto 3rem;
+            align-self: center;
           }
 
           .cta-primary:hover:not(:disabled) {
@@ -707,6 +890,8 @@ const Landing: React.FC = () => {
             gap: 1rem;
             flex-wrap: wrap;
             margin-bottom: 3rem;
+            width: 100%;
+            align-self: center;
           }
 
           @media (max-width: 640px) {
@@ -788,6 +973,25 @@ const Landing: React.FC = () => {
           <div ref={(el) => squaresRef.current[17] = el} className="grid-square"></div>
           <div ref={(el) => squaresRef.current[18] = el} className="grid-square"></div>
           <div ref={(el) => squaresRef.current[19] = el} className="grid-square"></div>
+        </div>
+        
+        {/* Coral dots traveling along grid lines - 20 dots randomly positioned */}
+        <div className="coral-dots-container">
+          {/* Generate 20 dots - 10 horizontal, 10 vertical, randomly positioned */}
+          {Array.from({ length: 20 }).map((_, index) => {
+            const isHorizontal = index < 10;
+            return (
+              <div
+                key={index}
+                ref={(el) => coralDotsRef.current[index] = el}
+                className={`coral-dot ${isHorizontal ? 'coral-dot-horizontal' : 'coral-dot-vertical'}`}
+                style={{
+                  animation: isHorizontal ? 'travelHorizontal 15s linear infinite' : 'travelVertical 15s linear infinite',
+                  animationDelay: '0s'
+                }}
+              ></div>
+            );
+          })}
         </div>
         
         {/* Hero Content */}
