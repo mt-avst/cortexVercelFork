@@ -146,46 +146,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json(createErrorResponse('time_slots array is required and must not be empty'));
       }
 
-      // Check conflicts against existing sessions in the database
-      // Exclude sessions from the current opportunity (if provided) to allow re-creating sessions
-      let conflictingCount = 0;
-      const conflicts: Array<{ slot: { start_time: string; end_time: string }; conflicting_session: unknown }> = [];
-
-      for (const slot of time_slots) {
-        if (!slot.start_time || !slot.end_time) {
-          continue; // Skip invalid slots
-        }
-
-        // Check if this time slot overlaps with any existing session
-        // If opportunity_id is provided, exclude conflicts from that opportunity
-        const queryParams: any[] = [slot.end_time, slot.start_time];
-        let conflictQuery = `
-          SELECT s.id, s.opportunity_id, s.start_time, s.end_time, o.title as opportunity_title
-          FROM sessions s
-          JOIN opportunities o ON s.opportunity_id = o.id
-          WHERE s.start_time < $1 AND s.end_time > $2
-        `;
-        
-        if (opportunity_id) {
-          conflictQuery += ` AND s.opportunity_id != $3`;
-          queryParams.push(opportunity_id);
-        }
-        
-        conflictQuery += ` LIMIT 1`;
-        
-        const result = await query(conflictQuery, queryParams);
-
-        if (result.rows.length > 0) {
-          conflictingCount++;
-          conflicts.push({
-            slot: {
-              start_time: slot.start_time,
-              end_time: slot.end_time
-            },
-            conflicting_session: result.rows[0]
-          });
-        }
+      // Performance optimization: Check all slots in a single batch query instead of loop
+      // Filter out invalid slots first
+      const validSlots = time_slots.filter(slot => slot.start_time && slot.end_time);
+      
+      if (validSlots.length === 0) {
+        return res.status(400).json(createErrorResponse('No valid time slots provided'));
       }
+
+      // Batch query to check all slot conflicts at once using array unnest
+      // This is much more efficient than querying in a loop
+      const queryParams: any[] = [];
+      const startTimes = validSlots.map(s => s.start_time);
+      const endTimes = validSlots.map(s => s.end_time);
+      
+      queryParams.push(startTimes, endTimes);
+      
+      let conflictQuery = `
+        SELECT 
+          slot.start_time as slot_start_time,
+          slot.end_time as slot_end_time,
+          s.id, s.opportunity_id, s.start_time, s.end_time, 
+          o.title as opportunity_title
+        FROM unnest($1::timestamptz[], $2::timestamptz[]) AS slot(start_time, end_time)
+        CROSS JOIN LATERAL (
+          SELECT s.id, s.opportunity_id, s.start_time, s.end_time
+          FROM sessions s
+          WHERE s.start_time < slot.end_time AND s.end_time > slot.start_time
+      `;
+      
+      if (opportunity_id) {
+        conflictQuery += ` AND s.opportunity_id != $3`;
+        queryParams.push(opportunity_id);
+      }
+      
+      conflictQuery += `
+          LIMIT 1
+        ) s
+        JOIN opportunities o ON s.opportunity_id = o.id
+      `;
+
+      const result = await query(conflictQuery, queryParams);
+      
+      const conflictingCount = result.rows.length;
+      const conflicts = result.rows.map(row => ({
+        slot: {
+          start_time: row.slot_start_time,
+          end_time: row.slot_end_time
+        },
+        conflicting_session: {
+          id: row.id,
+          opportunity_id: row.opportunity_id,
+          start_time: row.start_time,
+          end_time: row.end_time,
+          opportunity_title: row.opportunity_title
+        }
+      }));
 
       return res.status(200).json({
         has_conflicts: conflictingCount > 0,

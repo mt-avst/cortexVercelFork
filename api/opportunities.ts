@@ -106,71 +106,92 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json([]);
       }
 
-      // Load sessions and click counts for each opportunity
-      const opportunities = await Promise.all(
-        result.rows.map(async (opp) => {
-          try {
-            // Load sessions with dynamic booked_count calculation
-            const sessionsResult = await query(
-              `SELECT s.*, 
-                      COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count
-               FROM sessions s
-               LEFT JOIN bookings b ON s.id = b.session_id
-               WHERE s.opportunity_id = $1
-               GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
-                        s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
-               ORDER BY s.start_time ASC`,
-              [opp.id]
+      // Performance optimization: Batch load all sessions and click counts in single queries
+      // instead of N+1 queries per opportunity
+      const opportunityIds = result.rows.map(opp => opp.id);
+      
+      // Get all sessions for all opportunities in one query
+      let allSessionsMap: Map<string, any[]> = new Map();
+      try {
+        const sessionsResult = await query(
+          `SELECT s.*, 
+                  COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count,
+                  s.opportunity_id
+           FROM sessions s
+           LEFT JOIN bookings b ON s.id = b.session_id
+           WHERE s.opportunity_id = ANY($1::uuid[])
+           GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity, 
+                    s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+           ORDER BY s.opportunity_id, s.start_time ASC`,
+          [opportunityIds]
+        );
+        
+        // Group sessions by opportunity_id
+        for (const session of sessionsResult.rows) {
+          const oppId = session.opportunity_id;
+          if (!allSessionsMap.has(oppId)) {
+            allSessionsMap.set(oppId, []);
+          }
+          allSessionsMap.get(oppId)!.push({
+            ...session,
+            booked_count: session.actual_booked_count,
+            start_time: session.start_time.toISOString(),
+            end_time: session.end_time.toISOString(),
+            created_at: session.created_at.toISOString(),
+            updated_at: session.updated_at.toISOString(),
+            remaining: session.capacity - (session.actual_booked_count || 0),
+          });
+        }
+      } catch (sessionError: unknown) {
+        console.error('Error loading sessions batch:', getErrorMessage(sessionError));
+        // Continue with empty sessions map - opportunities will have empty sessions array
+      }
+
+      // Get all click counts for poll/survey opportunities in one query (only if admin)
+      let clicksMap: Map<string, number> = new Map();
+      if (isAdmin) {
+        try {
+          const pollSurveyOppIds = result.rows
+            .filter(opp => opp.type === 'poll' || opp.type === 'survey')
+            .map(opp => opp.id);
+          
+          if (pollSurveyOppIds.length > 0) {
+            const clicksResult = await query(
+              `SELECT opportunity_id, COUNT(*)::int as count 
+               FROM opportunity_clicks 
+               WHERE opportunity_id = ANY($1::uuid[])
+               GROUP BY opportunity_id`,
+              [pollSurveyOppIds]
             );
             
-            // Get click count for polls and surveys (M6)
-            let clicks_total: number | undefined = undefined;
-            if ((opp.type === 'poll' || opp.type === 'survey') && isAdmin) {
-              try {
-                const clicksResult = await query(
-                  'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
-                  [opp.id]
-                );
-                clicks_total = parseInt(clicksResult.rows[0]?.count || '0', 10);
-              } catch (clickError) {
-                // Don't fail entire request if click count query fails
-                console.error('Error loading click count for opportunity', opp.id, ':', getErrorMessage(clickError));
-                clicks_total = 0;
-              }
+            // Map click counts by opportunity_id
+            for (const row of clicksResult.rows) {
+              clicksMap.set(row.opportunity_id, parseInt(row.count || '0', 10));
             }
-            
-            return {
-              ...opp,
-              created_at: opp.created_at.toISOString(),
-              updated_at: opp.updated_at.toISOString(),
-              owner_name: opp.owner_name || 'Unknown',
-              owner_email: opp.owner_email || 'unknown@example.com',
-              sessions: sessionsResult.rows.map(s => ({
-                ...s,
-                booked_count: s.actual_booked_count, // Use calculated value
-                start_time: s.start_time.toISOString(),
-                end_time: s.end_time.toISOString(),
-                created_at: s.created_at.toISOString(),
-                updated_at: s.updated_at.toISOString(),
-                remaining: s.capacity - (s.actual_booked_count || 0), // Calculate from actual bookings
-              })),
-              clicks_total: (opp.type === 'poll' || opp.type === 'survey') ? clicks_total : undefined,
-            };
-          } catch (sessionError: unknown) {
-            console.error('Error loading sessions for opportunity', opp.id, ':', getErrorMessage(sessionError));
-            // Return opportunity without sessions if session query fails
-            return {
-              ...opp,
-              created_at: opp.created_at.toISOString(),
-              updated_at: opp.updated_at.toISOString(),
-              owner_name: opp.owner_name || 'Unknown',
-              owner_email: opp.owner_email || 'unknown@example.com',
-              sessions: [],
-              clicks_total: ((opp.type === 'poll' || opp.type === 'survey') && isAdmin) ? 0 : undefined,
-            };
           }
-        })
-      );
+        } catch (clickError: unknown) {
+          console.error('Error loading click counts batch:', getErrorMessage(clickError));
+          // Continue with empty clicks map
+        }
+      }
+
+      // Combine results
+      const opportunities = result.rows.map(opp => {
+        const sessions = allSessionsMap.get(opp.id) || [];
+        const clicks_total = ((opp.type === 'poll' || opp.type === 'survey') && isAdmin)
+          ? (clicksMap.get(opp.id) ?? 0)
+          : undefined;
+
+        return {
+          ...opp,
+          created_at: opp.created_at.toISOString(),
+          updated_at: opp.updated_at.toISOString(),
+          owner_name: opp.owner_name || 'Unknown',
+          owner_email: opp.owner_email || 'unknown@example.com',
+          sessions,
+          clicks_total,
+        };
+      });
       
       return res.status(200).json(opportunities);
     }

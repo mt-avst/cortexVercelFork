@@ -88,7 +88,7 @@ router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res:
   } finally {
     dbClient.release();
   }
-});
+}));
 
 /**
  * GET /api/calendar/my-events
@@ -190,7 +190,7 @@ router.get('/my-events', requireAuth, asyncHandler(async (req: Request, res: Res
   } finally {
     dbClient.release();
   }
-});
+}));
 
 /**
  * GET /api/calendar/connection-status
@@ -216,7 +216,7 @@ router.get('/connection-status', requireAuth, asyncHandler(async (req: Request, 
   } finally {
     dbClient.release();
   }
-});
+}));
 
 /**
  * DELETE /api/calendar/disconnect
@@ -239,7 +239,7 @@ router.delete('/disconnect', requireAuth, asyncHandler(async (req: Request, res:
   } finally {
     dbClient.release();
   }
-});
+}));
 
 export default router;
 

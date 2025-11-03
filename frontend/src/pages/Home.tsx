@@ -59,39 +59,24 @@ const Home: React.FC = () => {
     }
   };
 
-  // Initial load (filters removed)
+  // Consolidated effect to load opportunities - prevents duplicate API calls
   useEffect(() => {
-    loadOpportunities();
-  }, []);
+    // Only load if we're on the home page
+    if (location.pathname !== '/') {
+      return;
+    }
 
-  // Force refresh on component mount to ensure fresh data
-  useEffect(() => {
-    // Small delay to ensure component is fully mounted
+    // Use a small delay to ensure component is fully mounted and navigation is complete
+    // Also check if returning from admin to ensure fresh data
+    const isReturningFromAdmin = document.referrer.includes('/admin');
+    const delay = isReturningFromAdmin ? 150 : 50;
+
     const timer = setTimeout(() => {
       loadOpportunities();
-    }, 50);
+    }, delay);
+
     return () => clearTimeout(timer);
-  }, []); // Empty dependency array means this runs only on mount
-
-  // Refresh opportunities when navigating to home page
-  useEffect(() => {
-    if (location.pathname === '/') {
-      // Force refresh with a small delay to ensure navigation is complete
-      setTimeout(() => {
-        loadOpportunities();
-      }, 100);
-    }
-  }, [location.pathname]);
-
-  // Refresh opportunities when returning from admin (check for admin referrer)
-  useEffect(() => {
-    if (location.pathname === '/' && document.referrer.includes('/admin')) {
-      // Force refresh when returning from admin
-      setTimeout(() => {
-        loadOpportunities();
-      }, 200);
-    }
-  }, [location.pathname]);
+  }, [location.pathname]); // Only re-run when pathname changes
 
 
   // Check for booking success parameter and show banner

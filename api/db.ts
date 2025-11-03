@@ -32,9 +32,10 @@ export function getPool(): Pool {
       ssl: {
         rejectUnauthorized: false
       },
-      max: 1, // Limit connections for serverless (each function instance needs minimal connections)
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000, // Increase timeout for serverless
+      max: 10, // Allow more concurrent connections for better performance under load
+      min: 0,  // Don't maintain idle connections in serverless (cold starts don't need connections)
+      idleTimeoutMillis: 10000, // Shorter timeout for serverless (connections close faster when idle)
+      connectionTimeoutMillis: 5000,
     });
 
     // Handle pool errors

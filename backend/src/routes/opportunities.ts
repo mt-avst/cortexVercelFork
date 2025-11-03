@@ -142,39 +142,83 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     
     const result = await pool.query(query, params);
     
-    // Load sessions and click counts for each opportunity
-    const opportunities = await Promise.all(result.rows.map(async (opportunity) => {
-      const sessionsResult = await pool.query(`
-        SELECT *, (capacity - booked_count) as remaining
-        FROM sessions 
-        WHERE opportunity_id = $1
-        ORDER BY start_time ASC
-      `, [opportunity.id]);
+    // Performance optimization: Batch load all sessions and click counts in single queries
+    // instead of N+1 queries per opportunity
+    const opportunityIds = result.rows.map(opp => opp.id);
+    
+    // Get all sessions for all opportunities in one query
+    let allSessionsMap: Map<string, any[]> = new Map();
+    try {
+      const sessionsResult = await pool.query(
+        `SELECT *, (capacity - booked_count) as remaining, opportunity_id
+         FROM sessions 
+         WHERE opportunity_id = ANY($1::uuid[])
+         ORDER BY opportunity_id, start_time ASC`,
+        [opportunityIds]
+      );
       
-      // Get click count for polls and surveys (M6)
-      let clicks_total = 0;
-      if ((opportunity.type === 'poll' || opportunity.type === 'survey') && isAdmin) {
-        const clicksResult = await pool.query(
-          'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
-          [opportunity.id]
-        );
-        clicks_total = parseInt(clicksResult.rows[0]?.count || '0', 10);
-      }
-      
-      return {
-        ...opportunity,
-        created_at: opportunity.created_at.toISOString(),
-        updated_at: opportunity.updated_at.toISOString(),
-        sessions: sessionsResult.rows.map(session => ({
+      // Group sessions by opportunity_id
+      for (const session of sessionsResult.rows) {
+        const oppId = session.opportunity_id;
+        if (!allSessionsMap.has(oppId)) {
+          allSessionsMap.set(oppId, []);
+        }
+        allSessionsMap.get(oppId)!.push({
           ...session,
           start_time: session.start_time.toISOString(),
           end_time: session.end_time.toISOString(),
           created_at: session.created_at.toISOString(),
           updated_at: session.updated_at.toISOString(),
-        })),
-        clicks_total: (opportunity.type === 'poll' || opportunity.type === 'survey') ? clicks_total : undefined
+        });
+      }
+    } catch (sessionError: any) {
+      logger.error('Error loading sessions batch:', { error: sessionError });
+      // Continue with empty sessions map - opportunities will have empty sessions array
+    }
+
+    // Get all click counts for poll/survey opportunities in one query (only if admin)
+    let clicksMap: Map<string, number> = new Map();
+    if (isAdmin) {
+      try {
+        const pollSurveyOppIds = result.rows
+          .filter(opp => opp.type === 'poll' || opp.type === 'survey')
+          .map(opp => opp.id);
+        
+        if (pollSurveyOppIds.length > 0) {
+          const clicksResult = await pool.query(
+            `SELECT opportunity_id, COUNT(*)::int as count 
+             FROM opportunity_clicks 
+             WHERE opportunity_id = ANY($1::uuid[])
+             GROUP BY opportunity_id`,
+            [pollSurveyOppIds]
+          );
+          
+          // Map click counts by opportunity_id
+          for (const row of clicksResult.rows) {
+            clicksMap.set(row.opportunity_id, parseInt(row.count || '0', 10));
+          }
+        }
+      } catch (clickError: any) {
+        logger.error('Error loading click counts batch:', { error: clickError });
+        // Continue with empty clicks map
+      }
+    }
+
+    // Combine results
+    const opportunities = result.rows.map(opportunity => {
+      const sessions = allSessionsMap.get(opportunity.id) || [];
+      const clicks_total = ((opportunity.type === 'poll' || opportunity.type === 'survey') && isAdmin)
+        ? (clicksMap.get(opportunity.id) ?? 0)
+        : undefined;
+
+      return {
+        ...opportunity,
+        created_at: opportunity.created_at.toISOString(),
+        updated_at: opportunity.updated_at.toISOString(),
+        sessions,
+        clicks_total,
       };
-    }));
+    });
     
     res.json(opportunities);
   } catch (error) {

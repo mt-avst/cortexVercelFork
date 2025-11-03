@@ -254,7 +254,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
     logger.error('Error creating sessions', { error });
     res.status(500).json({ error: 'Failed to create sessions' });
   }
-});
+}));
 
 // PATCH /api/sessions/:id - Update a session
 router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -385,7 +385,7 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     logger.error('Error updating session', { error });
     res.status(500).json({ error: 'Failed to update session' });
   }
-});
+}));
 
 // DELETE /api/sessions/:id - Delete a session
 router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -443,7 +443,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     logger.error('Error deleting session', { error });
     res.status(500).json({ error: 'Failed to delete session' });
   }
-});
+}));
 
 // POST /api/opportunities/:id/duplicate - Duplicate opportunity
 router.post('/opportunities/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -550,7 +550,7 @@ router.post('/opportunities/:id/duplicate', requireAdmin, asyncHandler(async (re
     logger.error('Error duplicating opportunity', { error });
     res.status(500).json({ error: 'Failed to duplicate opportunity' });
   }
-});
+}));
 
 // POST /api/opportunities/:id/close-if-past - Utility to close opportunity if all sessions are past
 router.post('/opportunities/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -579,7 +579,7 @@ router.post('/opportunities/:id/close-if-past', requireAdmin, asyncHandler(async
     logger.error('Error checking opportunity auto-close', { error });
     res.status(500).json({ error: 'Failed to check opportunity auto-close' });
   }
-});
+}));
 
 // POST /api/sessions/sync-booked-counts - Sync booked_count with actual bookings (admin only)
 router.post('/sync-booked-counts', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
@@ -618,6 +618,6 @@ router.post('/sync-booked-counts', requireAdmin, asyncHandler(async (req: Reques
     logger.error('Error syncing booked_count', { error });
     res.status(500).json({ error: 'Failed to sync booked_count' });
   }
-});
+}));
 
 export default router;

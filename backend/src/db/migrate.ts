@@ -536,6 +536,32 @@ export async function runMigrations() {
       ON opportunity_clicks(opportunity_id, clicked_at)
     `);
 
+    // Performance optimization: Add indexes for frequently queried columns
+    // Index for sessions by opportunity_id (used in batch queries for opportunities list)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_sessions_opportunity_time 
+      ON sessions(opportunity_id, start_time ASC)
+    `);
+
+    // Index for conflict checking (time range queries)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_sessions_time_range 
+      ON sessions(start_time, end_time)
+    `);
+
+    // Index for bookings by session_id (used in booked_count calculations)
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_bookings_session_status 
+      ON bookings(session_id, status) 
+      WHERE status = 'booked'
+    `);
+
+    // Composite index for opportunities filtering and sorting
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_opportunities_status_type_created 
+      ON opportunities(status, type, created_at DESC)
+    `);
+
     // Add meeting_location_optional column to opportunities table if it doesn't exist
     await client.query(`
       ALTER TABLE opportunities 
