@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/authenticate';
+import { asyncHandler } from '../utils/errorHandler';
 import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
@@ -14,17 +15,20 @@ const router = Router();
  * Handle Google OAuth callback
  * Stores encrypted tokens in database and redirects to frontend
  */
-router.get('/auth/callback', requireAuth, async (req: Request, res: Response) => {
+router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
     const code = req.query.code as string;
     const state = req.query.state as string;
-    const sessionState = (req.session as any).googleOAuthState;
+    interface SessionWithGoogleState {
+      googleOAuthState?: string;
+    }
+    const sessionState = (req.session as SessionWithGoogleState).googleOAuthState;
     
     // In demo mode, code might not be present - handle gracefully
     if (!code && userCalendarService.isInDemoMode()) {
-      console.log('📅 Demo mode: Handling callback without code');
+      logger.debug('Demo mode: Handling callback without code');
       // For demo mode, we'll just mark as connected with mock tokens
     } else if (!code) {
       return res.status(400).json({ error: 'Authorization code missing' });
@@ -76,10 +80,11 @@ router.get('/auth/callback', requireAuth, async (req: Request, res: Response) =>
     // Redirect to frontend success page
     const frontendUrl = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/opportunities?calendar=connected`);
-  } catch (error: any) {
-    console.error('Error handling OAuth callback:', error);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Error handling OAuth callback', { error });
     const frontendUrl = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000';
-    res.redirect(`${frontendUrl}/opportunities?calendar=error&message=${encodeURIComponent(error.message)}`);
+    res.redirect(`${frontendUrl}/opportunities?calendar=error&message=${encodeURIComponent(errorMessage)}`);
   } finally {
     dbClient.release();
   }
@@ -90,7 +95,7 @@ router.get('/auth/callback', requireAuth, async (req: Request, res: Response) =>
  * Get user's calendar events for a date range
  * Returns events that might conflict with session bookings
  */
-router.get('/my-events', requireAuth, async (req: Request, res: Response) => {
+router.get('/my-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
@@ -154,7 +159,7 @@ router.get('/my-events', requireAuth, async (req: Request, res: Response) => {
           [encryptedAccessToken, expiryDate, userId]
         );
       } catch (refreshError: any) {
-        console.error('Error refreshing token:', refreshError);
+        logger.error('Error refreshing token', { error: refreshError });
         // Continue with old token - might still work
       }
     }
@@ -169,10 +174,11 @@ router.get('/my-events', requireAuth, async (req: Request, res: Response) => {
     );
 
     res.json(events);
-  } catch (error: any) {
-    console.error('Error fetching user calendar events:', error);
+  } catch (error: unknown) {
+    logger.error('Error fetching user calendar events', { error });
     
-    if (error.message?.includes('401') || error.message?.includes('unauthorized')) {
+    const errorMessage = error instanceof Error ? error.message : '';
+    if (errorMessage.includes('401') || errorMessage.includes('unauthorized')) {
       // Token invalid, user needs to reconnect
       return res.status(401).json({ 
         error: 'Calendar connection expired. Please reconnect.',
@@ -190,7 +196,7 @@ router.get('/my-events', requireAuth, async (req: Request, res: Response) => {
  * GET /api/calendar/connection-status
  * Check if user's calendar is connected
  */
-router.get('/connection-status', requireAuth, async (req: Request, res: Response) => {
+router.get('/connection-status', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
@@ -204,8 +210,8 @@ router.get('/connection-status', requireAuth, async (req: Request, res: Response
       connected: result.rows.length > 0,
       connectedAt: result.rows[0]?.connected_at || null,
     });
-  } catch (error: any) {
-    console.error('Error checking connection status:', error);
+  } catch (error: unknown) {
+    logger.error('Error checking connection status', { error });
     res.status(500).json({ error: 'Failed to check connection status' });
   } finally {
     dbClient.release();
@@ -216,7 +222,7 @@ router.get('/connection-status', requireAuth, async (req: Request, res: Response
  * DELETE /api/calendar/disconnect
  * Disconnect user's calendar and remove tokens
  */
-router.delete('/disconnect', requireAuth, async (req: Request, res: Response) => {
+router.delete('/disconnect', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
@@ -227,8 +233,8 @@ router.delete('/disconnect', requireAuth, async (req: Request, res: Response) =>
     );
 
     res.json({ success: true });
-  } catch (error: any) {
-    console.error('Error disconnecting calendar:', error);
+  } catch (error: unknown) {
+    logger.error('Error disconnecting calendar', { error });
     res.status(500).json({ error: 'Failed to disconnect calendar' });
   } finally {
     dbClient.release();

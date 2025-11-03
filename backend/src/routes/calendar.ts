@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAdmin } from '../middleware/authenticate';
 import calendarService from '../services/calendar';
+import { logger } from '../utils/logger';
 
 const router: Router = Router();
 
@@ -57,7 +58,7 @@ router.get('/events', requireAdmin, async (req: Request, res: Response) => {
     
     res.json(formattedEvents);
   } catch (error) {
-    console.error('Error fetching calendar events:', error);
+    logger.error('Error fetching calendar events', { error });
     res.status(500).json({ error: 'Failed to fetch calendar events' });
   }
 });
@@ -125,7 +126,7 @@ router.get('/availability', requireAdmin, async (req: Request, res: Response) =>
       }
     });
   } catch (error) {
-    console.error('Error checking availability:', error);
+    logger.error('Error checking availability', { error });
     res.status(500).json({ error: 'Failed to check availability' });
   }
 });
@@ -220,7 +221,7 @@ router.post('/check-conflicts', requireAdmin, async (req: Request, res: Response
       conflicting_slots: conflicts.length
     });
   } catch (error) {
-    console.error('Error checking conflicts:', error);
+    logger.error('Error checking conflicts', { error });
     res.status(500).json({ error: 'Failed to check conflicts' });
   }
 });

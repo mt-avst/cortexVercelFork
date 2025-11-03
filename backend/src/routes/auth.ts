@@ -4,10 +4,11 @@ import crypto from 'crypto';
 
 import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
+import { logger } from '../utils/logger';
 
 import { SessionUser } from '../types';
 
-console.log('🔍 Auth module loaded, OIDC_ISSUER:', process.env.OIDC_ISSUER);
+logger.debug('Auth module loaded', { oidcIssuer: process.env.OIDC_ISSUER });
 
 const router: Router = Router();
 let client: Client;
@@ -28,11 +29,11 @@ setInterval(() => {
 // Initialize OIDC client
 async function initializeClient() {
   try {
-    console.log('🔍 OIDC Debug:', {
+    logger.debug('OIDC Debug', {
       NODE_ENV: process.env.NODE_ENV,
       OIDC_ISSUER: process.env.OIDC_ISSUER,
       OIDC_CLIENT_ID: process.env.OIDC_CLIENT_ID,
-      OIDC_CLIENT_SECRET: process.env.OIDC_CLIENT_SECRET,
+      hasClientSecret: !!process.env.OIDC_CLIENT_SECRET,
       OIDC_REDIRECT_URL: process.env.OIDC_REDIRECT_URL
     });
     
@@ -42,7 +43,7 @@ async function initializeClient() {
          process.env.OIDC_ISSUER.includes('your-oidc-provider.com') ||
          process.env.OIDC_ISSUER.includes('demo-idp.com') ||
          process.env.OIDC_ISSUER.includes('your-idp.com'))) {
-      console.log('Skipping OIDC initialization in development mode - using placeholder issuer');
+      logger.info('Skipping OIDC initialization in development mode - using placeholder issuer');
       return;
     }
     
@@ -53,9 +54,9 @@ async function initializeClient() {
       redirect_uris: [process.env.OIDC_REDIRECT_URL!],
       response_types: ['code'],
     });
-    console.log('OIDC client initialized successfully');
+    logger.info('OIDC client initialized successfully');
   } catch (error) {
-    console.error('Failed to initialize OIDC client:', error);
+    logger.error('Failed to initialize OIDC client', { error });
     // In development, we can continue without OIDC
     if (process.env.NODE_ENV !== 'development') {
       throw error;
@@ -66,9 +67,9 @@ async function initializeClient() {
 // Initialize client on startup
 initializeClient().catch((error) => {
   if (process.env.NODE_ENV === 'development') {
-    console.log('OIDC initialization failed, continuing in development mode');
+    logger.warn('OIDC initialization failed, continuing in development mode', { error });
   } else {
-    console.error('OIDC initialization failed:', error);
+    logger.error('OIDC initialization failed', { error });
   }
 });
 
@@ -108,7 +109,7 @@ router.get('/login', async (req, res) => {
     
     res.redirect(authUrl);
   } catch (error) {
-    console.error('Login initiation failed:', error);
+    logger.error('Login initiation failed', { error });
     res.status(500).json({ error: 'Login initiation failed' });
   }
 });
@@ -142,13 +143,13 @@ router.get('/callback', async (req, res) => {
     
     // Validate state parameter
     if (!state || !stateStore.has(state)) {
-      console.error('Invalid or missing state parameter');
+      logger.error('Invalid or missing state parameter');
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
     
     const stateData = stateStore.get(state);
     if (!stateData || stateData.used) {
-      console.error('State parameter already used or expired');
+      logger.error('State parameter already used or expired');
       return res.status(400).json({ error: 'State parameter already used' });
     }
     
@@ -212,14 +213,14 @@ router.get('/callback', async (req, res) => {
       // Regenerate session to prevent fixation
       req.session.regenerate((err) => {
         if (err) {
-          console.error('Session regeneration failed:', err);
+          logger.error('Session regeneration failed', { error: err });
           return res.status(500).json({ error: 'Session creation failed' });
         }
         
         req.session.user = sessionUser;
         req.session.save((err) => {
           if (err) {
-            console.error('Session save failed:', err);
+            logger.error('Session save failed', { error: err });
             return res.status(500).json({ error: 'Session creation failed' });
           }
           
@@ -232,7 +233,7 @@ router.get('/callback', async (req, res) => {
     }
 
   } catch (error) {
-    console.error('Callback handling failed:', error);
+    logger.error('Callback handling failed', { error });
     res.status(500).json({ error: 'Authentication failed' });
   }
 });
@@ -241,7 +242,7 @@ router.get('/callback', async (req, res) => {
 router.post('/logout', (req, res) => {
   req.session.destroy((err) => {
     if (err) {
-      console.error('Logout failed:', err);
+      logger.error('Logout failed', { error: err });
       return res.status(500).json({ error: 'Logout failed' });
     }
     
@@ -262,7 +263,7 @@ router.get('/google-login', async (req, res) => {
     
     if (isDemoMode) {
       // Demo mode: Simulate OAuth flow by redirecting to backend callback with demo code
-      console.log('📅 Google login: Demo mode - simulating OAuth flow');
+      logger.debug('Google login: Demo mode - simulating OAuth flow');
       const state = crypto.randomBytes(32).toString('hex');
       // Use relative URL since we're already on the backend server
       return res.redirect(`/auth/google-callback?code=demo-code&state=${state}`);
@@ -295,7 +296,7 @@ router.get('/google-login', async (req, res) => {
 
     res.redirect(authUrl);
   } catch (error) {
-    console.error('Google login initiation failed:', error);
+    logger.error('Google login initiation failed', { error });
     res.status(500).json({ error: 'Google login initiation failed' });
   }
 });
@@ -328,7 +329,7 @@ router.get('/google-callback', async (req, res) => {
 
     if (isDemoMode || code === 'demo-code') {
       // Demo mode: Create mock user from demo code
-      console.log('📅 Google callback: Demo mode - creating mock user');
+      logger.debug('Google callback: Demo mode - creating mock user');
       
       // Use the existing demo user email to match existing demo user record
       userInfo = {
@@ -470,7 +471,7 @@ router.get('/google-callback', async (req, res) => {
         'https://www.googleapis.com/auth/calendar.readonly openid profile email'
       ]);
 
-      console.log('📅 Auto-connected calendar for Google user:', userInfo.email);
+      logger.info('Auto-connected calendar for Google user', { email: userInfo.email });
 
       // Create session user object
       const sessionUser: SessionUser = {
@@ -485,14 +486,14 @@ router.get('/google-callback', async (req, res) => {
       // Regenerate session to prevent fixation (same as OIDC callback)
       req.session.regenerate((err) => {
         if (err) {
-          console.error('Session regeneration failed:', err);
+          logger.error('Session regeneration failed', { error: err });
           return res.status(500).json({ error: 'Session creation failed' });
         }
         
         req.session.user = sessionUser;
         req.session.save((err) => {
           if (err) {
-            console.error('Session save error:', err);
+            logger.error('Session save error', { error: err });
             return res.status(500).json({ error: 'Session creation failed' });
           }
           
@@ -507,16 +508,18 @@ router.get('/google-callback', async (req, res) => {
     } finally {
       dbClient.release();
     }
-  } catch (error: any) {
-    console.error('Google OAuth callback error:', error);
-    console.error('Error stack:', error?.stack);
-    console.error('Error details:', {
-      message: error?.message,
-      name: error?.name,
-      code: error?.code
+  } catch (error: unknown) {
+    const err = error instanceof Error ? error : new Error(String(error));
+    logger.error('Google OAuth callback error', {
+      error,
+      stack: err.stack,
+      details: {
+        message: err.message,
+        name: err.name
+      }
     });
     const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-    res.redirect(`${corsOrigin}?error=google_auth_failed&details=${encodeURIComponent(error?.message || 'Unknown error')}`);
+    res.redirect(`${corsOrigin}?error=google_auth_failed&details=${encodeURIComponent(err.message || 'Unknown error')}`);
   }
 });
 
@@ -576,19 +579,19 @@ if (process.env.NODE_ENV === 'development') {
             'https://www.googleapis.com/auth/calendar.readonly'
           ]);
 
-          console.log('📅 Auto-connected calendar for demo user');
+          logger.info('Auto-connected calendar for demo user');
         }
       } finally {
         dbClient.release();
       }
     } catch (error) {
       // Don't fail login if calendar connection fails
-      console.error('Failed to auto-connect calendar for demo user (non-blocking):', error);
+      logger.warn('Failed to auto-connect calendar for demo user (non-blocking)', { error });
     }
     
     req.session.save((err) => {
       if (err) {
-        console.error('Session save error:', err);
+        logger.error('Session save error', { error: err });
         return res.status(500).json({ error: 'Session creation failed' });
       }
       res.redirect(process.env.CORS_ORIGIN || 'http://localhost:3000');
@@ -649,19 +652,19 @@ if (process.env.NODE_ENV === 'development') {
             'https://www.googleapis.com/auth/calendar.readonly'
           ]);
 
-          console.log('📅 Auto-connected calendar for demo admin');
+          logger.info('Auto-connected calendar for demo admin');
         }
       } finally {
         dbClient.release();
       }
     } catch (error) {
       // Don't fail login if calendar connection fails
-      console.error('Failed to auto-connect calendar for demo admin (non-blocking):', error);
+      logger.warn('Failed to auto-connect calendar for demo admin (non-blocking)', { error });
     }
     
     req.session.save((err) => {
       if (err) {
-        console.error('Session save error:', err);
+        logger.error('Session save error', { error: err });
         return res.status(500).json({ error: 'Session creation failed' });
       }
       // Redirect admin users to admin dashboard
@@ -724,19 +727,19 @@ if (process.env.NODE_ENV === 'development') {
             'https://www.googleapis.com/auth/calendar.readonly'
           ]);
 
-          console.log('📅 Auto-connected calendar for demo user 2');
+          logger.info('Auto-connected calendar for demo user 2');
         }
       } finally {
         dbClient.release();
       }
     } catch (error) {
       // Don't fail login if calendar connection fails
-      console.error('Failed to auto-connect calendar for demo user 2 (non-blocking):', error);
+      logger.warn('Failed to auto-connect calendar for demo user 2 (non-blocking)', { error });
     }
     
     req.session.save((err) => {
       if (err) {
-        console.error('Session save error:', err);
+        logger.error('Session save error', { error: err });
         return res.status(500).json({ error: 'Session creation failed' });
       }
       res.redirect(process.env.CORS_ORIGIN || 'http://localhost:3000');

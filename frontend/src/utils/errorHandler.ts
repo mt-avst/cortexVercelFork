@@ -75,15 +75,25 @@ export class ApiClient {
     // Request interceptor
     this.axiosInstance.interceptors.request.use(
       (config) => {
-        logger.log('API Request', {
-          method: config.method?.toUpperCase(),
-          url: config.url,
-          baseURL: config.baseURL
+        // Generate request ID if not present
+        const requestId = config.headers['X-Request-ID'] as string || 
+                         `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        config.headers['X-Request-ID'] = requestId;
+        
+        const startTime = Date.now();
+        (config as any).__startTime = startTime;
+        
+        logger.apiRequest(config.method || 'GET', config.url || '', {
+          requestId,
+          baseURL: config.baseURL,
         });
+        
         return config;
       },
       (error) => {
-        logger.error('API Request Error', error);
+        logger.apiError('REQUEST', error.config?.url || '', 0, error, {
+          requestId: error.config?.headers?.['X-Request-ID'] as string,
+        });
         return Promise.reject(error);
       }
     );
@@ -91,24 +101,50 @@ export class ApiClient {
     // Response interceptor
     this.axiosInstance.interceptors.response.use(
       (response: AxiosResponse) => {
-        logger.log('API Response', {
-          status: response.status,
-          url: response.config.url,
-          method: response.config.method?.toUpperCase()
-        });
+        // Extract request ID from response headers
+        const requestId = response.headers['x-request-id'] as string || 
+                         response.config.headers?.['X-Request-ID'] as string;
+        if (requestId) {
+          logger.setRequestId(requestId);
+        }
+        
+        const startTime = (response.config as any).__startTime;
+        const responseTime = startTime ? Date.now() - startTime : undefined;
+        
+        logger.apiResponse(
+          response.config.method || 'GET',
+          response.config.url || '',
+          response.status,
+          responseTime,
+          { requestId }
+        );
+        
         return response;
       },
       (error: AxiosError) => {
         const apiError = mapAxiosError(error);
+        const requestId = error.response?.headers?.['x-request-id'] as string ||
+                         error.config?.headers?.['X-Request-ID'] as string ||
+                         apiError.requestId;
         
-        logger.error('API Error', {
-          status: apiError.statusCode,
-          code: apiError.code,
-          message: apiError.message,
-          url: error.config?.url,
-          method: error.config?.method?.toUpperCase(),
-          requestId: apiError.requestId
-        });
+        if (requestId) {
+          logger.setRequestId(requestId);
+        }
+        
+        const startTime = (error.config as any)?.__startTime;
+        const responseTime = startTime ? Date.now() - startTime : undefined;
+        
+        logger.apiError(
+          error.config?.method?.toUpperCase() || 'UNKNOWN',
+          error.config?.url || '',
+          apiError.statusCode,
+          apiError,
+          {
+            requestId,
+            responseTime,
+            code: apiError.code,
+          }
+        );
 
         // Handle authentication errors
         if (apiError.statusCode === 401) {
@@ -124,7 +160,10 @@ export class ApiClient {
     // Only redirect if not already on login page
     if (window.location.pathname !== '/' && 
         !window.location.pathname.includes('/auth/')) {
-      logger.log('Redirecting to login due to 401 error');
+      logger.info('Redirecting to login due to 401 error', {
+        requestId: logger.getRequestId() || undefined,
+        url: window.location.pathname,
+      });
       window.location.href = '/auth/login';
     }
   }
@@ -172,7 +211,9 @@ export const useErrorHandler = () => {
     logger.error(`Error in ${context || 'component'}`, {
       name: error.name,
       message: error.message,
-      stack: error.stack
+      stack: error.stack,
+      requestId: logger.getRequestId() || undefined,
+      component: context,
     });
 
     // In production, you would send this to an error reporting service
@@ -187,7 +228,8 @@ export const useErrorHandler = () => {
       code: error.code,
       message: error.message,
       details: error.details,
-      requestId: error.requestId
+      requestId: error.requestId || logger.getRequestId() || undefined,
+      component: context,
     });
 
     // Handle specific error types
@@ -219,7 +261,15 @@ export const withErrorHandling = <T extends any[]>(
     try {
       return await fn(...args);
     } catch (error) {
-      logger.error(`Error in ${context || 'async operation'}`, error);
+      logger.error(`Error in ${context || 'async operation'}`, {
+        error: error instanceof Error ? error : undefined,
+        errorDetails: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : { message: String(error) },
+        requestId: logger.getRequestId() || undefined,
+      });
       throw error;
     }
   };
@@ -280,8 +330,14 @@ export const withRetry = async <T>(
         }
       }
 
-      logger.log(`Retry attempt ${attempt}/${maxRetries}`, {
-        error: error instanceof Error ? error.message : 'Unknown error'
+      logger.warn(`Retry attempt ${attempt}/${maxRetries}`, {
+        error: error instanceof Error ? error : undefined,
+        errorDetails: error instanceof Error ? {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        } : { message: error instanceof Error ? error.message : 'Unknown error' },
+        requestId: logger.getRequestId() || undefined,
       });
 
       await new Promise(resolve => setTimeout(resolve, delay * attempt));

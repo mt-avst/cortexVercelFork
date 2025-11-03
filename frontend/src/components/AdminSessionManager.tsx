@@ -81,21 +81,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const slotKey = `${slotStart}|${slotEnd}`;
     const isConfirmed = confirmedSlots.has(slotKey);
     
-    // Debug logging for first few checks to identify matching issues
-    if (confirmedSlots.size > 0 && !isConfirmed) {
-      // Only log occasionally to avoid spam
-      const shouldLog = Math.random() < 0.01; // Log 1% of the time
-      if (shouldLog) {
-        console.log('🔍 Slot confirmation check:', {
-          slotKey,
-          slotStart,
-          slotEnd,
-          confirmedSlotsCount: confirmedSlots.size,
-          sampleConfirmedSlot: Array.from(confirmedSlots)[0],
-          matches: Array.from(confirmedSlots).some(ck => ck === slotKey)
-        });
-      }
-    }
+    // Check if slot is confirmed
+    // (Debug logging removed for production)
     
     return isConfirmed;
   };
@@ -269,10 +256,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Remove overlapping slots first, before grouping by date
   const cleanedSlots = removeOverlappingSlots(durationFilteredSlots);
   
-  // Log filtered results for debugging
-  if (durationMinutes && cleanedSlots.length !== durationFilteredSlots.length) {
-    console.log(`🔍 Overlap removal: ${durationFilteredSlots.length} slots → ${cleanedSlots.length} slots (removed ${durationFilteredSlots.length - cleanedSlots.length} overlapping)`);
-  }
+  // Filtered slots ready (debug logging removed for production)
   
   // Group all slots by date first (UTC)
   const allSlotsByDate = cleanedSlots.reduce((acc, slot) => {
@@ -616,7 +600,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         const isAllocated = isSlotAllocated(slot);
                         const session = getSessionForSlot(slot);
                         
-                        // Debug: Log when sessions exist but aren't matched
+                        // Session matching logic
                         if (sessions.length > 0 && !session && slotIndex === 0) {
                           // Only log for first slot to avoid spam
                           const slotStart = new Date(slot.start);
@@ -663,7 +647,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(finalHeight * 10000) / 10000;
                         
-                        // DEBUG: Log if height seems incorrect (should be ~3.125% for 30-min slots)
+                        // Slot height calculation
                         if (roundedHeight > 5) {
                           console.warn(`⚠️ UNUSUALLY LARGE SLOT HEIGHT: ${roundedHeight}% for slot ${slot.start} to ${slot.end}`, {
                             slotStartHour,
@@ -1280,7 +1264,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return prevConfirmedSlots;
     });
     
-    // Debug: Log all sessions being processed and sample available slots for comparison
+    // Process sessions and available slots
     console.log('🔄 Syncing confirmed slots with sessions:', {
       sessionsCount: sessions.length,
             sessions: sessions.map(s => {
@@ -1357,7 +1341,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       setCalendarEvents(eventsResult);
       setAvailableSlots(availabilityResult.available_slots);
       
-      // Debug: Log available slots and sessions to see if they match
+      // Match available slots with sessions
       console.log('📅 Calendar data loaded:', {
         eventsCount: eventsResult.length,
         availableSlotsCount: availabilityResult.available_slots.length,

@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config';
 import { requireAdmin, optionalAuth } from '../middleware/authenticate';
+import { asyncHandler } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
 
@@ -11,13 +13,13 @@ const isDatabaseAvailable = async (): Promise<boolean> => {
   try {
     // Check if DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
-      console.log('DATABASE_URL not set, using mock data');
+      logger.info('DATABASE_URL not set, using mock data');
       return false;
     }
     await pool.query('SELECT 1');
     return true;
   } catch (error) {
-    console.log('Database not available, using mock data:', (error as any).message);
+    logger.warn('Database not available, using mock data', { error: (error as Error).message });
     return false;
   }
 };
@@ -76,7 +78,7 @@ const checkSessionOverlaps = async (
   startTime: Date, 
   endTime: Date, 
   excludeSessionId?: string,
-  client?: any
+  client?: { query: (text: string, params?: unknown[]) => Promise<{ rows: unknown[] }> }
 ): Promise<boolean> => {
   let query = `
     SELECT COUNT(*) as overlap_count
@@ -86,7 +88,7 @@ const checkSessionOverlaps = async (
       (start_time < $3 AND end_time > $2)
     )
   `;
-  const params: any[] = [opportunityId, startTime, endTime];
+  const params: (string | Date)[] = [opportunityId, startTime, endTime];
   
   if (excludeSessionId) {
     query += ` AND id != $4`;
@@ -130,7 +132,7 @@ const formatTime = (dateString: string): string => {
 };
 
 // POST /api/sessions - Create sessions for an opportunity
-router.post('/', requireAdmin, async (req: Request, res: Response) => {
+router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { opportunity_id, sessions } = req.body;
     
@@ -249,13 +251,13 @@ router.post('/', requireAdmin, async (req: Request, res: Response) => {
     
     return res.status(201).json(createdSessions);
   } catch (error) {
-    console.error('Error creating sessions:', error);
+    logger.error('Error creating sessions', { error });
     res.status(500).json({ error: 'Failed to create sessions' });
   }
 });
 
 // PATCH /api/sessions/:id - Update a session
-router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
+router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: sessionId } = req.params;
     const data: UpdateSessionRequest = req.body;
@@ -334,7 +336,7 @@ router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
       
       // Build dynamic update query
     const updateFields: string[] = [];
-    const values: any[] = [];
+    const values: (string | number | Date | null)[] = [];
     let paramCount = 0;
     
     Object.entries(data).forEach(([key, value]) => {
@@ -380,13 +382,13 @@ router.patch('/:id', requireAdmin, async (req: Request, res: Response) => {
       client.release();
     }
   } catch (error) {
-    console.error('Error updating session:', error);
+    logger.error('Error updating session', { error });
     res.status(500).json({ error: 'Failed to update session' });
   }
 });
 
 // DELETE /api/sessions/:id - Delete a session
-router.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
+router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: sessionId } = req.params;
     
@@ -438,13 +440,13 @@ router.delete('/:id', requireAdmin, async (req: Request, res: Response) => {
     
     res.status(204).send();
   } catch (error) {
-    console.error('Error deleting session:', error);
+    logger.error('Error deleting session', { error });
     res.status(500).json({ error: 'Failed to delete session' });
   }
 });
 
 // POST /api/opportunities/:id/duplicate - Duplicate opportunity
-router.post('/opportunities/:id/duplicate', requireAdmin, async (req: Request, res: Response) => {
+router.post('/opportunities/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
@@ -545,13 +547,13 @@ router.post('/opportunities/:id/duplicate', requireAdmin, async (req: Request, r
     res.status(201).json(duplicatedOpportunity);
     
   } catch (error) {
-    console.error('Error duplicating opportunity:', error);
+    logger.error('Error duplicating opportunity', { error });
     res.status(500).json({ error: 'Failed to duplicate opportunity' });
   }
 });
 
 // POST /api/opportunities/:id/close-if-past - Utility to close opportunity if all sessions are past
-router.post('/opportunities/:id/close-if-past', requireAdmin, async (req: Request, res: Response) => {
+router.post('/opportunities/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: opportunityId } = req.params;
     
@@ -574,15 +576,15 @@ router.post('/opportunities/:id/close-if-past', requireAdmin, async (req: Reques
     
     res.json({ message: 'Opportunity auto-close check completed' });
   } catch (error) {
-    console.error('Error checking opportunity auto-close:', error);
+    logger.error('Error checking opportunity auto-close', { error });
     res.status(500).json({ error: 'Failed to check opportunity auto-close' });
   }
 });
 
 // POST /api/sessions/sync-booked-counts - Sync booked_count with actual bookings (admin only)
-router.post('/sync-booked-counts', requireAdmin, async (req: Request, res: Response) => {
+router.post('/sync-booked-counts', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
-    console.log('Starting booked_count sync...');
+    logger.info('Starting booked_count sync');
     
     // Get all sessions
     const sessionsResult = await pool.query('SELECT id FROM sessions');
@@ -607,13 +609,13 @@ router.post('/sync-booked-counts', requireAdmin, async (req: Request, res: Respo
       syncedCount++;
     }
     
-    console.log(`Sync complete: ${syncedCount} sessions updated`);
+    logger.info(`Sync complete: ${syncedCount} sessions updated`);
     res.json({ 
       message: `Successfully synced booked_count for ${syncedCount} sessions`,
       synced_count: syncedCount
     });
   } catch (error) {
-    console.error('Error syncing booked_count:', error);
+    logger.error('Error syncing booked_count', { error });
     res.status(500).json({ error: 'Failed to sync booked_count' });
   }
 });

@@ -23,14 +23,14 @@ const isDatabaseAvailable = async (): Promise<boolean> => {
   try {
     // Check if DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
-      console.log('DATABASE_URL not set, using mock data');
+      logger.info('DATABASE_URL not set, using mock data');
       return false;
     }
     // Test both connection and that the opportunities table exists
     await pool.query('SELECT 1 FROM opportunities LIMIT 1');
     return true;
   } catch (error) {
-    console.log('Database not available, using mock data:', (error as any).message);
+    logger.warn('Database not available, using mock data', { error: (error as Error).message });
     return false;
   }
 };
@@ -43,50 +43,6 @@ const validateUrl = (url: string): boolean => {
   } catch {
     return false;
   }
-};
-
-const validateOpportunityData = (data: CreateOpportunityRequest | UpdateOpportunityRequest): string[] => {
-  const errors: string[] = [];
-  
-  if ('title' in data && data.title !== undefined) {
-    const title = data.title.trim();
-    if (title.length < 4 || title.length > 140) {
-      errors.push('Title must be between 4 and 140 characters');
-    }
-  }
-  
-  if ('purpose_one_liner' in data && data.purpose_one_liner !== undefined) {
-    const purpose = data.purpose_one_liner.trim();
-    if (purpose.length < 10 || purpose.length > 180) {
-      errors.push('Purpose must be between 10 and 180 characters');
-    }
-  }
-  
-  if ('default_duration_minutes' in data && data.default_duration_minutes !== undefined) {
-    if (data.default_duration_minutes < 5 || data.default_duration_minutes > 240) {
-      errors.push('Duration must be between 5 and 240 minutes');
-    }
-  }
-  
-  if ('type' in data && data.type !== undefined) {
-    if (!['test', 'poll', 'survey', 'question', 'interview'].includes(data.type)) {
-      errors.push('Type must be test, poll, survey, question, or interview');
-    }
-  }
-  
-  if ('status' in data && data.status !== undefined) {
-    if (!['draft', 'published', 'closed'].includes(data.status)) {
-      errors.push('Status must be draft, published, or closed');
-    }
-  }
-  
-  if ('external_link_optional' in data && data.external_link_optional !== undefined) {
-    if (data.external_link_optional && !validateUrl(data.external_link_optional)) {
-      errors.push('External link must be a valid URL');
-    }
-  }
-  
-  return errors;
 };
 
 // Helper function to validate session data
@@ -135,7 +91,12 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     
     if (!dbAvailable) {
       // Use mock data
-      const filters: any = {};
+      interface OpportunityFilters {
+        type?: string;
+        q?: string;
+        status?: string;
+      }
+      const filters: OpportunityFilters = {};
       if (type) filters.type = type as string;
       if (q) filters.q = q as string;
       if (status) filters.status = status as string;
@@ -152,7 +113,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
       FROM opportunities o
       JOIN users u ON o.owner_user_id = u.id
     `;
-    const params: any[] = [];
+    const params: (string | number)[] = [];
     const conditions: string[] = [];
     
     // Add filters
@@ -217,7 +178,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     
     res.json(opportunities);
   } catch (error) {
-    console.error('Error in opportunities route:', error);
+    logger.error('Error in opportunities route', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
 }));
@@ -296,18 +257,8 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
     // Use mock data for development
+    // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
     const data: CreateOpportunityRequest = req.body;
-    
-    // Validate required fields
-    if (!data.type || !data.title || !data.purpose_one_liner) {
-      throw new ValidationError('Type, title, and purpose are required');
-    }
-    
-    // Validate data
-    const errors = validateOpportunityData(data);
-    if (errors.length > 0) {
-      throw new ValidationError('Validation failed', errors);
-    }
     
     // Create mock opportunity
     const mockOpportunity = {
@@ -337,17 +288,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   }
   
   const data: CreateOpportunityRequest = req.body;
-  
-  // Validate required fields
-  if (!data.type || !data.title || !data.purpose_one_liner) {
-    throw new ValidationError('Type, title, and purpose are required');
-  }
-  
-  // Validate data
-  const errors = validateOpportunityData(data);
-  if (errors.length > 0) {
-    throw new ValidationError('Validation failed', errors);
-  }
+  // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
   
   // Additional validation for published polls/surveys (M6 requirement)
   if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
@@ -397,14 +338,9 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
     // Use mock data for development
+    // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
     const { id } = req.params;
     const data: UpdateOpportunityRequest = req.body;
-    
-    // Validate data
-    const errors = validateOpportunityData(data);
-    if (errors.length > 0) {
-      throw new ValidationError('Validation failed', errors);
-    }
     
     // Check if opportunity exists
     const existingOpportunity = getMockOpportunity(id);
@@ -432,12 +368,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   
   const { id } = req.params;
   const data: UpdateOpportunityRequest = req.body;
-  
-  // Validate data
-  const errors = validateOpportunityData(data);
-  if (errors.length > 0) {
-    throw new ValidationError('Validation failed', errors);
-  }
+  // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
   
   // Check ownership (only owner or global admin can edit)
   const ownershipCheck = await pool.query(
@@ -472,7 +403,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   
   // Build dynamic update query
   const updateFields: string[] = [];
-  const values: any[] = [];
+  const values: (string | number | Date | null)[] = [];
   let paramCount = 0;
   
   Object.entries(data).forEach(([key, value]) => {
@@ -636,7 +567,7 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
       FROM sessions 
       WHERE opportunity_id = $1
     `;
-    const params: any[] = [opportunityId];
+    const params: string[] = [opportunityId];
     let paramCount = 1;
     
     // Filter by start time if provided
@@ -666,7 +597,7 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
     
     res.json(sessions);
   } catch (error) {
-    console.error('Error fetching sessions:', error);
+    logger.error('Error fetching sessions', { error });
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }
 }));
@@ -804,7 +735,7 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       client.release();
     }
   } catch (error) {
-    console.error('Error creating sessions:', error);
+    logger.error('Error creating sessions', { error });
     res.status(500).json({ error: 'Failed to create sessions' });
   }
 }));
@@ -891,7 +822,7 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
       deleted_count: deleteResult.rowCount 
     });
   } catch (error) {
-    console.error('Error deleting sessions:', error);
+    logger.error('Error deleting sessions', { error });
     res.status(500).json({ error: 'Failed to delete sessions' });
   }
 }));

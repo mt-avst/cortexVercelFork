@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/authenticate';
+import { logger } from '../utils/logger';
 import { 
   getUserProfile, 
   getUserAchievements, 
@@ -26,7 +27,7 @@ router.get('/profile', requireAuth, async (req: Request, res: Response) => {
 
     res.json(profile);
   } catch (error) {
-    console.error('Error fetching user profile:', error);
+    logger.error('Error fetching user profile', { error });
     res.status(500).json({ error: 'Failed to fetch profile' });
   }
 });
@@ -39,7 +40,7 @@ router.get('/achievements', requireAuth, async (req: Request, res: Response) => 
     
     res.json(achievements);
   } catch (error) {
-    console.error('Error fetching user achievements:', error);
+    logger.error('Error fetching user achievements', { error });
     res.status(500).json({ error: 'Failed to fetch achievements' });
   }
 });
@@ -52,7 +53,7 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
     
     res.json(leaderboard);
   } catch (error) {
-    console.error('Error fetching leaderboard:', error);
+    logger.error('Error fetching leaderboard', { error });
     res.status(500).json({ error: 'Failed to fetch leaderboard' });
   }
 });
@@ -65,7 +66,7 @@ router.get('/leaderboard/monthly', async (req: Request, res: Response) => {
     
     res.json(leaderboard);
   } catch (error) {
-    console.error('Error fetching monthly leaderboard:', error);
+    logger.error('Error fetching monthly leaderboard', { error });
     res.status(500).json({ error: 'Failed to fetch monthly leaderboard' });
   }
 });
@@ -79,7 +80,7 @@ router.get('/points-history', requireAuth, async (req: Request, res: Response) =
     
     res.json(history);
   } catch (error) {
-    console.error('Error fetching points history:', error);
+    logger.error('Error fetching points history', { error });
     res.status(500).json({ error: 'Failed to fetch points history' });
   }
 });

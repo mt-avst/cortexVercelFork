@@ -1,15 +1,5 @@
 import type { VercelRequest } from '@vercel/node';
-
-/**
- * User interface from session cookie
- */
-export interface SessionUser {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  [key: string]: any;
-}
+import { SessionUser } from '../../shared/types';
 
 /**
  * Parse and validate session cookie from request
@@ -55,7 +45,20 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
       return null;
     }
 
+    if (!user.name || typeof user.name !== 'string') {
+      return null;
+    }
+
+    if (!user.email || typeof user.email !== 'string') {
+      return null;
+    }
+
+    // Validate role matches expected values
     if (!user.role || typeof user.role !== 'string') {
+      return null;
+    }
+    
+    if (user.role !== 'employee' && user.role !== 'researcher_admin') {
       return null;
     }
 

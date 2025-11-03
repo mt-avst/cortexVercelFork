@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
@@ -6,12 +6,15 @@ import opportunitiesRouter from '../opportunities';
 import { pool } from '../../config';
 
 // Mock the database pool for testing
+const mockQuery = jest.fn() as jest.MockedFunction<any>;
+const mockConnect = jest.fn() as jest.MockedFunction<any>;
+
 jest.mock('../../config', () => ({
   pool: {
-    query: jest.fn() as any,
-    connect: jest.fn() as any
+    query: mockQuery,
+    connect: mockConnect
   }
-})) as any;
+}));
 
 const app = express();
 app.use(express.json());
@@ -22,25 +25,30 @@ app.use(session({
 }));
 
 // Mock authentication middleware
-app.use((req, res, next) => {
-  req.user = {
-    id: 'test-user-id',
-    name: 'Test User',
-    email: 'test@example.com',
-    business_unit: 'Engineering',
-    role_title: 'Developer',
-    role: 'researcher_admin'
+app.use((req: any, res, next) => {
+  // Mock session with user for requireAdmin
+  req.session = {
+    user: {
+      id: 'test-user-id',
+      name: 'Test User',
+      email: 'test@example.com',
+      business_unit: 'Engineering',
+      role_title: 'Developer',
+      role: 'researcher_admin'
+    }
   };
+  req.user = req.session.user;
   next();
 });
 
 app.use('/api/opportunities', opportunitiesRouter);
 
 describe('Opportunities API', () => {
-  const mockQuery = pool.query as jest.MockedFunction<any>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mock to return empty arrays by default
+    mockQuery.mockResolvedValue({ rows: [] });
   });
 
   describe('GET /api/opportunities', () => {

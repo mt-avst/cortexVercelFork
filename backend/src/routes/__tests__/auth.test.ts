@@ -16,21 +16,30 @@ jest.mock('../../config', () => ({
 // Mock openid-client
 jest.mock('openid-client', () => ({
   Issuer: {
-    discover: jest.fn().mockResolvedValue({
-      Client: jest.fn().mockImplementation(() => ({
-        authorizationUrl: jest.fn().mockReturnValue('https://oidc-provider.com/auth'),
-        callbackParams: jest.fn().mockReturnValue({ state: 'test-state', code: 'test-code' }),
-        callback: jest.fn().mockResolvedValue({ access_token: 'test-token' }),
-        userinfo: jest.fn().mockResolvedValue({
-          name: 'Test User',
-          email: 'test@example.com',
-          department: 'Engineering',
-          job_title: 'Developer'
-        })
-      })) as any
-    }) as any
+    discover: jest.fn() as jest.MockedFunction<any>
   }
 }));
+
+// Setup mock client after module import
+const createMockClient = () => {
+  const mockCallback = jest.fn();
+  (mockCallback as any).mockResolvedValue({ access_token: 'test-token' });
+  
+  const mockUserinfo = jest.fn();
+  (mockUserinfo as any).mockResolvedValue({
+    name: 'Test User',
+    email: 'test@example.com',
+    department: 'Engineering',
+    job_title: 'Developer'
+  });
+  
+  return {
+    authorizationUrl: jest.fn().mockReturnValue('https://oidc-provider.com/auth'),
+    callbackParams: jest.fn().mockReturnValue({ state: 'test-state', code: 'test-code' }),
+    callback: mockCallback as any,
+    userinfo: mockUserinfo as any
+  };
+};
 
 const app = express();
 app.use(express.json());
@@ -44,8 +53,8 @@ app.use(session({
 app.use('/auth', authRouter);
 
 describe('Authentication Routes', () => {
-  const mockQuery = pool.query as jest.MockedFunction<typeof pool.query>;
-  const mockConnect = pool.connect as jest.MockedFunction<typeof pool.connect>;
+  const mockQuery = pool.query as jest.MockedFunction<any>;
+  const mockConnect = pool.connect as jest.MockedFunction<any>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -54,6 +63,12 @@ describe('Authentication Routes', () => {
     process.env.OIDC_CLIENT_SECRET = 'test-client-secret';
     process.env.OIDC_REDIRECT_URL = 'http://localhost:3001/auth/callback';
     process.env.CORS_ORIGIN = 'http://localhost:3000';
+    
+    // Setup default OIDC mock
+    const { Issuer } = require('openid-client');
+    Issuer.discover.mockResolvedValue({
+      Client: jest.fn().mockImplementation(() => createMockClient())
+    });
   });
 
   afterEach(() => {
@@ -138,8 +153,10 @@ describe('Authentication Routes', () => {
 
     it('should handle OIDC callback errors', async () => {
       const { Issuer } = require('openid-client');
+      const mockCallback = jest.fn();
+      (mockCallback as any).mockRejectedValue(new Error('OIDC callback failed'));
       const mockClient = {
-        callback: jest.fn().mockRejectedValue(new Error('OIDC callback failed'))
+        callback: mockCallback
       };
       Issuer.discover.mockResolvedValueOnce({
         Client: jest.fn().mockReturnValue(mockClient)
@@ -171,9 +188,9 @@ describe('Authentication Routes', () => {
     it('should handle session destruction errors', async () => {
       // Mock session.destroy to fail
       const mockSession = {
-        destroy: jest.fn().mockImplementation((callback) => {
+        destroy: jest.fn().mockImplementation((callback: any) => {
           callback(new Error('Session destruction failed'));
-        })
+        }) as any
       };
 
       const appWithMockSession = express();
@@ -218,9 +235,9 @@ describe('Authentication Routes', () => {
     it('should handle session save errors in demo login', async () => {
       const mockSession = {
         user: null,
-        save: jest.fn().mockImplementation((callback) => {
+        save: jest.fn().mockImplementation((callback: any) => {
           callback(new Error('Session save failed'));
-        })
+        }) as any
       };
 
       const appWithMockSession = express();

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getOpportunity, bookSession, getMyBookingsDebug, trackOpportunityClick } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
@@ -250,30 +250,7 @@ const OpportunityDetail: React.FC = () => {
                   className="btn btn-sm btn-danger me-2"
                   onClick={async () => {
                     setError('');
-                    
-                    // First, debug the booking situation
-                    try {
-                      const debugData = await getMyBookingsDebug();
-                      console.log('=== DEBUG BOOKINGS DATA ===');
-                      console.log('User ID:', debugData.user_id);
-                      console.log('Total bookings:', debugData.total_bookings);
-                      console.log('All bookings:', debugData.bookings);
-                      
-                      // Check for bookings for this specific opportunity
-                      const sessionBookings = debugData.bookings.filter((b: any) => 
-                        opportunity?.sessions?.some(s => s.id === b.session_id)
-                      );
-                      console.log('Bookings for this opportunity:', sessionBookings);
-                      
-                      if (sessionBookings.length > 0) {
-                        alert(`Found ${sessionBookings.length} booking(s) for this opportunity. Check console for details.`);
-                        return;
-                      }
-                    } catch (err) {
-                      console.error('Error fetching debug data:', err);
-                    }
-                    
-                    // If no bookings found, try to book
+                    // Try to book a session
                     const sessionToRetry = opportunity?.sessions?.find(s => s.remaining > 0);
                     if (sessionToRetry) {
                       handleBookSession(sessionToRetry.id);

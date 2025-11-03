@@ -6,6 +6,7 @@ import calendarService from '../services/calendar';
 import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
 
 const router: Router = Router();
@@ -15,13 +16,13 @@ const isDatabaseAvailable = async (): Promise<boolean> => {
   try {
     // Check if DATABASE_URL is set
     if (!process.env.DATABASE_URL) {
-      console.log('DATABASE_URL not set, using mock data');
+      logger.info('DATABASE_URL not set, using mock data');
       return false;
     }
     await pool.query('SELECT 1');
     return true;
   } catch (error) {
-    console.log('Database not available, using mock data:', (error as any).message);
+    logger.warn('Database not available, using mock data', { error: (error as Error).message });
     return false;
   }
 };
@@ -102,16 +103,21 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       [userId, sessionId, 'booked']
     );
 
-    console.log(`Checking existing booking for user ${userId}, session ${sessionId}:`, existingBooking.rows.length > 0);
-    console.log(`Session capacity: ${session.capacity}, booked_count: ${session.booked_count}`);
+    logger.debug('Checking existing booking', {
+      userId,
+      sessionId,
+      hasExistingBooking: existingBooking.rows.length > 0,
+      sessionCapacity: session.capacity,
+      bookedCount: session.booked_count
+    });
     
-    // Also check for any cancelled bookings for debugging
+    // Also check for any cancelled bookings
     const cancelledBooking = await client.query(
       'SELECT id, status, cancelled_at FROM bookings WHERE user_id = $1 AND session_id = $2 AND status = $3',
       [userId, sessionId, 'cancelled']
     );
     if (cancelledBooking.rows.length > 0) {
-      console.log(`Found cancelled booking:`, cancelledBooking.rows[0]);
+      logger.debug('Found cancelled booking', { bookingId: cancelledBooking.rows[0].id });
     }
 
     if (existingBooking.rows.length > 0) {
@@ -191,12 +197,18 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
           'UPDATE bookings SET gcal_event_id = $1 WHERE id = $2',
           [calendarResult.eventId, booking.id]
         );
-        console.log(`✅ Calendar event created and saved: ${calendarResult.eventId} for booking ${booking.id}`);
+        logger.info('Calendar event created and saved', {
+          eventId: calendarResult.eventId,
+          bookingId: booking.id
+        });
       } else {
-        console.warn(`⚠️ Calendar event creation failed: ${createResult.error || 'Unknown error'}`);
+        logger.warn('Calendar event creation failed', {
+          bookingId: booking.id,
+          error: createResult.error || 'Unknown error'
+        });
       }
     } catch (calendarError) {
-      console.error('Calendar integration failed:', calendarError);
+      logger.error('Calendar integration failed', { error: calendarError });
       calendarResult = { success: false, eventId: undefined };
       // Don't fail the booking if calendar fails - booking is already committed
     }
@@ -244,7 +256,7 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
           );
         }
       } catch (prefError) {
-        console.error('Error checking notification preferences:', prefError);
+        logger.error('Error checking notification preferences', { error: prefError });
         // Default to sending notification if preference check fails
         try {
           const adminTemplate = EmailService.getAdminNotificationTemplate(
@@ -260,11 +272,11 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
             adminTemplate
           );
         } catch (emailError) {
-          console.error('Fallback email notification failed:', emailError);
+          logger.error('Fallback email notification failed', { error: emailError });
         }
       }
     } catch (emailError) {
-      console.error('Email notification failed:', emailError);
+      logger.error('Email notification failed', { error: emailError });
       // Don't fail the booking if email fails
     }
 
@@ -280,12 +292,18 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     await client.query('ROLLBACK');
     
     // Log the specific error for debugging
-    console.error('Booking error details:', {
-      error: error,
-      message: (error as any).message,
-      code: (error as any).code,
-      constraint: (error as any).constraint,
-      detail: (error as any).detail,
+    interface DatabaseError extends Error {
+      code?: string;
+      constraint?: string;
+      detail?: string;
+    }
+    const dbError = error as DatabaseError;
+    logger.error('Booking error details', {
+      error,
+      message: dbError.message,
+      code: dbError.code,
+      constraint: dbError.constraint,
+      detail: dbError.detail,
       sessionId,
       userId
     });
@@ -374,17 +392,17 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
         const deleteResult = await calendarService.deleteEvent(booking.gcal_event_id);
         
         if (deleteResult.success) {
-          console.log(`✅ Calendar event deleted: ${booking.gcal_event_id} for booking ${bookingId}`);
+          logger.info('Calendar event deleted', { eventId: booking.gcal_event_id, bookingId });
         } else {
           // Handle 404 as success (event might already be deleted)
           if (deleteResult.error?.includes('404') || deleteResult.error?.includes('Not Found')) {
-            console.log(`ℹ️ Calendar event not found (already deleted): ${booking.gcal_event_id}`);
+            logger.info('Calendar event not found (already deleted)', { eventId: booking.gcal_event_id });
           } else {
-            console.warn(`⚠️ Calendar event deletion failed: ${deleteResult.error || 'Unknown error'}`);
+            logger.warn('Calendar event deletion failed', { eventId: booking.gcal_event_id, error: deleteResult.error || 'Unknown error' });
           }
         }
       } catch (calendarError) {
-        console.error('Calendar cancellation failed:', calendarError);
+        logger.error('Calendar cancellation failed', { bookingId, error: calendarError });
         // Don't fail the cancellation if calendar fails - booking is already cancelled
       }
     }
@@ -430,7 +448,7 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
           );
         }
       } catch (prefError) {
-        console.error('Error checking notification preferences:', prefError);
+        logger.error('Error checking notification preferences', { error: prefError });
         // Default to sending notification if preference check fails
         try {
           const adminTemplate = EmailService.getAdminNotificationTemplate(
@@ -446,11 +464,11 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
             adminTemplate
           );
         } catch (emailError) {
-          console.error('Fallback email notification failed:', emailError);
+          logger.error('Fallback email notification failed', { error: emailError });
         }
       }
     } catch (emailError) {
-      console.error('Email notification failed:', emailError);
+      logger.error('Email notification failed', { error: emailError });
       // Don't fail the cancellation if email fails
     }
 
@@ -622,15 +640,19 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
         const updateResult = await calendarService.updateEvent(booking.gcal_event_id, calendarEvent);
         
         if (updateResult.success) {
-          console.log(`✅ Calendar event updated: ${booking.gcal_event_id} for booking ${bookingId}`);
+          logger.info('Calendar event updated', { eventId: booking.gcal_event_id, bookingId });
         } else {
           // If update fails, delete old event and create new one
-          console.warn(`⚠️ Calendar event update failed, attempting delete+create: ${updateResult.error || 'Unknown error'}`);
+          logger.warn('Calendar event update failed, attempting delete+create', {
+            eventId: booking.gcal_event_id,
+            bookingId,
+            error: updateResult.error || 'Unknown error'
+          });
           
           // Delete old event (ignore 404 errors)
           const deleteResult = await calendarService.deleteEvent(booking.gcal_event_id);
           if (!deleteResult.success && !deleteResult.error?.includes('404') && !deleteResult.error?.includes('Not Found')) {
-            console.warn(`⚠️ Could not delete old calendar event: ${deleteResult.error}`);
+            logger.warn('Could not delete old calendar event', { eventId: booking.gcal_event_id, error: deleteResult.error });
           }
           
           // Create new event
@@ -642,13 +664,13 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
               'UPDATE bookings SET gcal_event_id = $1 WHERE id = $2',
               [createResult.eventId, bookingId]
             );
-            console.log(`✅ Calendar event recreated: ${createResult.eventId} for booking ${bookingId}`);
+            logger.info('Calendar event recreated', { newEventId: createResult.eventId, bookingId });
           } else {
-            console.warn(`⚠️ Calendar event recreation failed: ${createResult.error || 'Unknown error'}`);
+            logger.warn('Calendar event recreation failed', { bookingId, error: createResult.error || 'Unknown error' });
           }
         }
       } catch (calendarError) {
-        console.error('Calendar update failed:', calendarError);
+        logger.error('Calendar update failed', { bookingId, error: calendarError });
         // Don't fail the reschedule if calendar fails - booking is already rescheduled
       }
     }
@@ -671,7 +693,7 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
         confirmationTemplate
       );
     } catch (emailError) {
-      console.error('Email notification failed:', emailError);
+      logger.error('Email notification failed', { error: emailError });
       // Don't fail the reschedule if email fails
     }
 
@@ -705,7 +727,7 @@ router.post('/cleanup-cancelled', requireAuth, async (req: Request, res: Respons
       WHERE b.user_id = $1 AND b.status = 'cancelled'
     `, [userId]);
     
-    console.log(`Found ${cancelledBookings.rows.length} cancelled bookings for user ${userId}`);
+    logger.info('Found cancelled bookings', { count: cancelledBookings.rows.length, userId });
     
     // Optionally delete cancelled bookings (uncomment if needed)
     // await pool.query('DELETE FROM bookings WHERE user_id = $1 AND status = $2', [userId, 'cancelled']);
@@ -721,7 +743,7 @@ router.post('/cleanup-cancelled', requireAuth, async (req: Request, res: Respons
       }))
     });
   } catch (error) {
-    console.error('Error cleaning up cancelled bookings:', error);
+    logger.error('Error cleaning up cancelled bookings', { error });
     res.status(500).json({ error: 'Failed to clean up cancelled bookings' });
   }
 });
@@ -758,7 +780,7 @@ router.get('/my/bookings/debug', requireAuth, async (req: Request, res: Response
       }))
     });
   } catch (error) {
-    console.error('Error fetching debug bookings:', error);
+    logger.error('Error fetching debug bookings', { error });
     res.status(500).json({ error: 'Failed to fetch debug bookings' });
   }
 });
@@ -768,16 +790,14 @@ router.get('/my/bookings', requireAuth, async (req: Request, res: Response) => {
   try {
     // Check if DATABASE_URL is set - if not, return empty bookings
     if (!process.env.DATABASE_URL) {
-      console.log('DATABASE_URL not set, returning empty bookings');
+      logger.info('DATABASE_URL not set, returning empty bookings');
       return res.json({ upcoming: [], past: [] });
     }
 
     // Check if database is available
-    console.log('Checking database availability...');
     const dbAvailable = await isDatabaseAvailable();
-    console.log('Database available:', dbAvailable);
     if (!dbAvailable) {
-      console.log('Database not available, returning empty bookings');
+      logger.warn('Database not available, returning empty bookings');
       return res.json({ upcoming: [], past: [] });
     }
 
@@ -815,7 +835,15 @@ router.get('/my/bookings', requireAuth, async (req: Request, res: Response) => {
     `, [userId, now]);
 
     // Serialize dates for API response
-    const serializeBooking = (booking: any) => ({
+    interface BookingRow {
+      session_start_time: Date;
+      session_end_time: Date;
+      cancelled_at?: Date | null;
+      created_at: Date;
+      updated_at: Date;
+      [key: string]: unknown;
+    }
+    const serializeBooking = (booking: BookingRow) => ({
       ...booking,
       session_start_time: booking.session_start_time.toISOString(),
       session_end_time: booking.session_end_time.toISOString(),
@@ -830,7 +858,7 @@ router.get('/my/bookings', requireAuth, async (req: Request, res: Response) => {
     });
 
   } catch (error) {
-    console.error('Error fetching user bookings:', error);
+    logger.error('Error fetching user bookings', { error });
     res.status(500).json({ error: 'Failed to fetch bookings' });
   }
 });
@@ -892,7 +920,7 @@ router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res:
     res.json(bookings);
 
   } catch (error) {
-    console.error('Error fetching opportunity bookings:', error);
+    logger.error('Error fetching opportunity bookings', { error });
     res.status(500).json({ error: 'Failed to fetch opportunity bookings' });
   }
 });

@@ -83,11 +83,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const axiosError = err as { response?: { status?: number } };
         logger.log('AuthProvider: Axios error status:', axiosError.response?.status);
         if (axiosError.response?.status !== 401) {
-          logger.error('AuthProvider: Auth error:', err);
+          logger.error('AuthProvider: Auth error', {
+            error: err instanceof Error ? err : undefined,
+            errorDetails: err instanceof Error ? {
+              name: err.name,
+              message: err.message,
+              stack: err.stack,
+            } : { message: String(err) },
+            requestId: logger.getRequestId() || undefined,
+          });
           setError('Failed to fetch user data');
         }
       } else {
-        logger.error('AuthProvider: Auth error:', err);
+        logger.error('AuthProvider: Auth error', {
+          error: err instanceof Error ? err : undefined,
+          errorDetails: err instanceof Error ? {
+            name: err.name,
+            message: err.message,
+            stack: err.stack,
+          } : { message: String(err) },
+          requestId: logger.getRequestId() || undefined,
+        });
         setError('Failed to fetch user data');
       }
       logger.log('AuthProvider: Setting user to null');
@@ -134,7 +150,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Redirect to homepage after logout
       window.location.href = '/';
     } catch (err) {
-      logger.error('Logout failed:', err);
+      logger.error('Logout failed', {
+        error: err instanceof Error ? err : undefined,
+        errorDetails: err instanceof Error ? {
+          name: err.name,
+          message: err.message,
+          stack: err.stack,
+        } : { message: String(err) },
+        requestId: logger.getRequestId() || undefined,
+      });
       // Still redirect even if logout fails
       window.location.href = '/';
     }

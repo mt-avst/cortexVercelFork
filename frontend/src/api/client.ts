@@ -218,11 +218,6 @@ export const getMyBookings = async (): Promise<UserBookings> => {
   return response.data;
 };
 
-export const getMyBookingsDebug = async (): Promise<any> => {
-  const response = await api.get('/bookings/my/bookings/debug');
-  return response.data;
-};
-
 export const cleanupCancelledBookings = async (): Promise<any> => {
   const response = await api.post('/bookings/cleanup-cancelled');
   return response.data;
