@@ -32,8 +32,9 @@ export function serializeDate(date: unknown): string | null {
       return null;
     }
   }
+  // Handle number (timestamp) or other types
   try {
-    return new Date(date).toISOString();
+    return new Date(date as string | number | Date).toISOString();
   } catch {
     return null;
   }
