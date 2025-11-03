@@ -228,8 +228,8 @@ const Home: React.FC = () => {
                         className={isWide ? 'bento-grid-item-wide' : 'bento-grid-item'}
                       >
                         <div className="card h-100">
-                          <div className="card-body d-flex flex-column">
-                            <div className="mb-2">
+                          <div className="card-body d-flex flex-column opportunity-card-body">
+                            <div className="mb-4">
                               <span className={getTypeBadgeClass(opportunity.type)}>
                                 {formatOpportunityType(opportunity.type)}
                               </span>

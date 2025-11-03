@@ -715,7 +715,7 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   --card-padding: 24px;
   --card-border: 1px solid var(--border-card);
   --button-radius: 6px;
-  --tag-radius: 99px;                   /* Pill shape */
+  --tag-radius: 0px;                    /* Square corners */
   --tag-padding: 4px 10px;               /* Momentum tag padding */
   --tag-font-size: 12px;
   --tag-font-weight: 500;
@@ -1102,11 +1102,68 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   color: #856404 !important;
 }
 
-/* Tags - Momentum Design System */
+/* Opportunity card body - reduced top padding for lozenge */
+.opportunity-card-body {
+  padding-top: 12px !important;
+}
+
+/* Lozenge - Tonal Design System */
+.lozenge {
+  border-radius: var(--tag-radius);
+  padding: var(--tag-padding);
+  font-size: var(--tag-font-size);
+  font-weight: var(--tag-font-weight);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  transition: filter var(--transition-card);
+}
+
+.lozenge:hover {
+  filter: brightness(103%);
+}
+
+/* Survey - Text: #6FBBC1, Background: #263942 */
+span.lozenge-survey,
+.lozenge-survey {
+  color: #6FBBC1 !important;
+  background-color: #263942 !important;
+}
+
+/* Poll - Text: #76BFA4, Background: #273D3B */
+span.lozenge-poll,
+.lozenge-poll {
+  color: #76BFA4 !important;
+  background-color: #273D3B !important;
+}
+
+/* Interview - Text: #7B99CB, Background: #2A3B4D */
+span.lozenge-interview,
+.lozenge-interview {
+  color: #7B99CB !important;
+  background-color: #2A3B4D !important;
+}
+
+/* User Test - Text: #8F9FBA, Background: #2F343D */
+span.lozenge-usertest,
+.lozenge-usertest {
+  color: #8F9FBA !important;
+  background-color: #2F343D !important;
+}
+
+/* Question - Text: #A38ED0, Background: #322E42 */
+span.lozenge-question,
+.lozenge-question {
+  color: #A38ED0 !important;
+  background-color: #322E42 !important;
+}
+
+/* Legacy badge support - deprecated, use .lozenge classes instead */
 .badge.type-test {
   background-color: var(--tag-test) !important; /* Dark grey pill */
   color: var(--tag-text) !important;
   border-radius: var(--tag-radius);
+  border: 1px solid #DC3545 !important; /* Red keyline */
   padding: var(--tag-padding);
   font-size: var(--tag-font-size);
   font-weight: var(--tag-font-weight);
@@ -1124,6 +1181,7 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   background-color: var(--tag-test) !important; /* Dark grey pill */
   color: var(--tag-text) !important;
   border-radius: var(--tag-radius);
+  border: 1px solid #DC3545 !important; /* Red keyline */
   padding: var(--tag-padding);
   font-size: var(--tag-font-size);
   font-weight: var(--tag-font-weight);
@@ -1141,6 +1199,7 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   background-color: var(--tag-poll) !important; /* Dark grey pill */
   color: var(--tag-text) !important;
   border-radius: var(--tag-radius);
+  border: 1px solid #DC3545 !important; /* Red keyline */
   padding: var(--tag-padding);
   font-size: var(--tag-font-size);
   font-weight: var(--tag-font-weight);
@@ -1158,6 +1217,7 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   background-color: var(--tag-survey) !important; /* Dark grey pill */
   color: var(--tag-text) !important;
   border-radius: var(--tag-radius);
+  border: 1px solid #DC3545 !important; /* Red keyline */
   padding: var(--tag-padding);
   font-size: var(--tag-font-size);
   font-weight: var(--tag-font-weight);
@@ -1175,6 +1235,7 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   background-color: var(--tag-test) !important; /* Dark grey pill */
   color: var(--tag-text) !important;
   border-radius: var(--tag-radius);
+  border: 1px solid #DC3545 !important; /* Red keyline */
   padding: var(--tag-padding);
   font-size: var(--tag-font-size);
   font-weight: var(--tag-font-weight);

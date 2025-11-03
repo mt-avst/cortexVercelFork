@@ -274,7 +274,7 @@ const OpportunityDetail: React.FC = () => {
             <div className="card-header">
               <div className="d-flex justify-content-between align-items-start">
                 <div>
-                  <div className="d-flex align-items-center gap-2 mb-2">
+                  <div className="d-flex align-items-center gap-2 mb-4">
                     <span className={getTypeBadgeClass(opportunity?.type)}>
                       {formatOpportunityType(opportunity?.type)}
                     </span>

@@ -2,7 +2,7 @@
 
 /**
  * Formats opportunity type for display
- * Handles cases where type might be concatenated with status (e.g., 'testpublished' -> 'TEST')
+ * Handles cases where type might be concatenated with status (e.g., 'testpublished' -> 'APP TESTING')
  * @param type - The opportunity type string (can be undefined/null)
  * @returns Formatted type string in uppercase
  */
@@ -17,6 +17,10 @@ export const formatOpportunityType = (type: string | null | undefined): string =
   for (const suffix of statusSuffixes) {
     if (type.toLowerCase().endsWith(suffix)) {
       const baseType = type.slice(0, -suffix.length);
+      // Check if base type is 'test' and return 'APP TESTING'
+      if (baseType.toLowerCase() === 'test') {
+        return 'APP TESTING';
+      }
       return baseType.toUpperCase();
     }
   }
@@ -24,7 +28,7 @@ export const formatOpportunityType = (type: string | null | undefined): string =
   // Handle normal type values
   switch (type.toLowerCase()) {
     case 'test':
-      return 'TEST';
+      return 'APP TESTING';
     case 'interview':
       return 'INTERVIEW';
     case 'poll':
@@ -61,15 +65,15 @@ export const getTypeBadgeClass = (type: string | null | undefined): string => {
   
   switch (baseType.toLowerCase()) {
     case 'test':
-      return 'badge type-test text-white'; // Teal/cyan
+      return 'lozenge lozenge-usertest';
     case 'interview':
-      return 'badge type-interview text-white'; // Green (unique color)
+      return 'lozenge lozenge-interview';
     case 'poll':
-      return 'badge type-poll text-white'; // Pink/magenta
+      return 'lozenge lozenge-poll';
     case 'survey':
-      return 'badge type-survey'; // Purple (has white text in CSS)
+      return 'lozenge lozenge-survey';
     case 'question':
-      return 'badge type-question'; // Orange (has white text in CSS)
+      return 'lozenge lozenge-question';
     default:
       return 'badge bg-secondary';
   }
