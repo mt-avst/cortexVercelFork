@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { demoLogin, demoUser2Login, demoAdminLogin, googleLogin } from '../api/client';
 import { useAnimation } from '../contexts/AnimationContext';
 
@@ -11,6 +11,11 @@ const Landing: React.FC = () => {
   const { animationsEnabled } = useAnimation();
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const glassGlowTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Generate stable opacity values for each dot (persists across renders)
+  const dotOpacities = useMemo(() => {
+    return Array.from({ length: 20 }, () => 0.2 + Math.random() * 0.8);
+  }, []);
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -198,7 +203,7 @@ const Landing: React.FC = () => {
 
     // Randomize positions at grid intersections (multiples of 80px)
     const randomizeDotPositions = () => {
-      dots.forEach((dot) => {
+      coralDotsRef.current.forEach((dot, originalIndex) => {
         if (!dot) return;
 
         const isHorizontal = dot.classList.contains('coral-dot-horizontal');
@@ -231,6 +236,14 @@ const Landing: React.FC = () => {
         // Randomize animation delay (0-6 seconds)
         const delay = Math.random() * 6;
         dot.style.animationDelay = `${delay}s`;
+        
+        // Use stable opacity from dotOpacities array (preserves depth effect)
+        const opacity = dotOpacities[originalIndex];
+        dot.style.setProperty('opacity', opacity.toString(), 'important');
+        
+        // Adjust box-shadow intensity based on opacity for more realistic depth
+        const shadowIntensity = opacity;
+        dot.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`, 'important');
       });
     };
 
@@ -750,10 +763,10 @@ const Landing: React.FC = () => {
             height: 8px;
             background-color: #FF4E50;
             border-radius: 50%;
-            box-shadow: 0 0 12px #FF4E50, 0 0 20px rgba(255, 78, 80, 0.8);
+            /* Box-shadow will be set dynamically based on opacity */
             z-index: 3;
             pointer-events: none;
-            opacity: 0.9;
+            /* Opacity will be set dynamically for depth effect - default removed */
           }
 
           /* Horizontal dots - positioned at exact grid Y intersections, centered on grid line */
@@ -980,14 +993,26 @@ const Landing: React.FC = () => {
           {/* Generate 20 dots - 10 horizontal, 10 vertical, randomly positioned */}
           {Array.from({ length: 20 }).map((_, index) => {
             const isHorizontal = index < 10;
+            // Use stable opacity value from useMemo
+            const dotOpacity = dotOpacities[index];
+            const shadowIntensity = dotOpacity;
             return (
               <div
                 key={index}
-                ref={(el) => coralDotsRef.current[index] = el}
+                ref={(el) => {
+                  coralDotsRef.current[index] = el;
+                  // Set opacity immediately when ref is assigned
+                  if (el) {
+                    el.style.setProperty('opacity', dotOpacity.toString(), 'important');
+                    el.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`, 'important');
+                  }
+                }}
                 className={`coral-dot ${isHorizontal ? 'coral-dot-horizontal' : 'coral-dot-vertical'}`}
                 style={{
                   animation: isHorizontal ? 'travelHorizontal 15s linear infinite' : 'travelVertical 15s linear infinite',
-                  animationDelay: '0s'
+                  animationDelay: '0s',
+                  opacity: dotOpacity,
+                  boxShadow: `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`
                 }}
               ></div>
             );
