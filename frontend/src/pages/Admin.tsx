@@ -8,6 +8,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import ErrorState from '../components/ErrorState';
 import useKeyboardShortcuts from '../hooks/useKeyboardShortcuts';
 import ConfirmationModal from '../components/ConfirmationModal';
+import '../components/Header.css';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -857,13 +858,13 @@ const Admin: React.FC = () => {
                                       style={{ 
                                         position: 'absolute', 
                                         zIndex: 1000,
-                                        minWidth: '120px',
+                                        minWidth: '140px',
                                         display: 'flex',
                                         flexDirection: 'column',
                                         width: 'auto',
                                         top: '100%',
                                         left: '0',
-                                        marginTop: '2px'
+                                        marginTop: '4px'
                                       }}
                                       onClick={(e) => e.stopPropagation()}
                                     >
@@ -873,7 +874,6 @@ const Admin: React.FC = () => {
                                           navigate(`/opportunities/${opportunity.id}`);
                                           closeDropdown();
                                         }}
-                                        style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
                                       >
                                         View
                                       </button>
@@ -883,7 +883,6 @@ const Admin: React.FC = () => {
                                           navigate(`/admin/opportunities/${opportunity.id}/edit`);
                                           closeDropdown();
                                         }}
-                                        style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
                                       >
                                         Edit
                                       </button>
@@ -893,7 +892,6 @@ const Admin: React.FC = () => {
                                           handleDuplicate(opportunity.id);
                                           closeDropdown();
                                         }}
-                                        style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
                                       >
                                         Copy
                                       </button>
@@ -907,7 +905,6 @@ const Admin: React.FC = () => {
                                               navigate(`/admin/opportunities/${opportunity.id}/analytics`);
                                               closeDropdown();
                                             }}
-                                            style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
                                           >
                                             <i className="bi bi-graph-up me-2"></i>
                                             Analytics
@@ -921,7 +918,6 @@ const Admin: React.FC = () => {
                                           handleDelete(opportunity.id, opportunity.title);
                                           closeDropdown();
                                         }}
-                                        style={{ width: '100%', textAlign: 'left', padding: '8px 16px' }}
                                       >
                                         Delete
                                       </button>

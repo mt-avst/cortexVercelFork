@@ -61,31 +61,31 @@ const Header: React.FC = () => {
                       <i className="bi bi-person-circle me-1"></i>
                       Your Profile
                     </button>
-                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown" style={{ minWidth: '200px', backgroundColor: '#ffffff', color: '#000000' }}>
+                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
                       <li>
-                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
-                          <i className="bi bi-person me-2" style={{ color: '#666666' }}></i>
-                          <span style={{ color: '#000000', fontWeight: 'bold', fontSize: '16px' }}>Hello, {user.name || 'Unknown User'}</span>
+                        <div className="px-3 py-2">
+                          <i className="bi bi-person me-2"></i>
+                          <span>Hello, {user.name || 'Unknown User'}</span>
                         </div>
                       </li>
                       <li><hr className="dropdown-divider" /></li>
                       <li>
-                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
-                          <i className="bi bi-shield-check me-2" style={{ color: '#666666' }}></i>
-                          <span style={{ color: '#000000', fontSize: '16px' }}>Role: {user.role === 'researcher_admin' ? 'admin' : 'user'}</span>
+                        <div className="px-3 py-2">
+                          <i className="bi bi-shield-check me-2"></i>
+                          <span>Role: {user.role === 'researcher_admin' ? 'admin' : 'user'}</span>
                         </div>
                       </li>
                       <li>
-                        <div className="px-3 py-2" style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}>
-                          <i className="bi bi-gear me-2" style={{ color: '#666666' }}></i>
-                          <span style={{ color: '#000000', fontSize: '16px' }}>Settings</span>
+                        <div className="px-3 py-2">
+                          <i className="bi bi-gear me-2"></i>
+                          <span>Settings</span>
                         </div>
                       </li>
                       {user.role !== 'researcher_admin' && (
                         <li>
-                          <Link to="/gamification" className="px-3 py-2 d-block" style={{ color: '#000000', backgroundColor: '#ffffff', textDecoration: 'none', fontSize: '16px' }}>
-                            <i className="bi bi-trophy me-2" style={{ color: '#666666' }}></i>
-                            <span style={{ color: '#000000', fontSize: '16px' }}>AdaptaBits</span>
+                          <Link to="/gamification" className="px-3 py-2 d-block">
+                            <i className="bi bi-trophy me-2"></i>
+                            <span>AdaptaBits</span>
                           </Link>
                         </li>
                       )}
@@ -97,10 +97,9 @@ const Header: React.FC = () => {
                             logout();
                           }} 
                           className="px-3 py-2 w-100 text-start border-0"
-                          style={{ color: '#000000', backgroundColor: '#ffffff', fontSize: '16px' }}
                         >
-                          <i className="bi bi-box-arrow-right me-2" style={{ color: '#666666' }}></i>
-                          <span style={{ color: '#000000', fontSize: '16px' }}>Logout</span>
+                          <i className="bi bi-box-arrow-right me-2"></i>
+                          <span>Logout</span>
                         </button>
                       </li>
                     </ul>

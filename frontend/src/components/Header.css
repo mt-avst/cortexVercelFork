@@ -1,48 +1,153 @@
-/* Custom styles for Header dropdown to ensure text visibility */
+/* Momentum Design System - Context Menu Styling */
 .dropdown-menu {
-  background-color: #ffffff !important;
-  color: #000000 !important;
+  background-color: rgba(26, 24, 43, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 78, 80, 0.2) !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+  padding: 0.5rem 0 !important;
+  min-width: 220px !important;
+  color: #E0E0E0 !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+/* Admin dropdown items - ensure consistent styling */
+.dropdown-menu .dropdown-item {
+  width: 100% !important;
+  text-align: left !important;
+  padding: 0.5rem 1rem !important;
+  color: #E0E0E0 !important;
+  background-color: transparent !important;
+  border: none !important;
+  transition: all 0.2s ease-in-out !important;
+  font-size: 15px !important;
+  font-family: 'Inter', sans-serif !important;
+}
+
+.dropdown-menu .dropdown-item:hover {
+  background-color: rgba(255, 78, 80, 0.1) !important;
+  color: #FFFFFF !important;
+}
+
+.dropdown-menu .dropdown-item i {
+  color: #FF4E50 !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.dropdown-menu .dropdown-item:hover i {
+  color: #FFFFFF !important;
 }
 
 .dropdown-menu li {
-  background-color: #ffffff !important;
-  color: #000000 !important;
+  background-color: transparent !important;
+  color: #E0E0E0 !important;
 }
 
 .dropdown-menu li div {
-  background-color: #ffffff !important;
-  color: #000000 !important;
+  background-color: transparent !important;
+  color: #E0E0E0 !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.dropdown-menu li:hover div {
+  background-color: rgba(255, 78, 80, 0.1) !important;
 }
 
 .dropdown-menu li span {
-  color: #000000 !important;
-  font-size: 16px !important;
+  color: #E0E0E0 !important;
+  font-size: 15px !important;
 }
 
 /* Keep Hello User greeting bold */
 .dropdown-menu li:first-child span {
-  font-weight: bold !important;
+  font-weight: 600 !important;
+  color: #FFFFFF !important;
+}
+
+.dropdown-menu li:first-child i {
+  color: #FF4E50 !important;
 }
 
 .dropdown-menu li a {
-  color: #000000 !important;
-  background-color: #ffffff !important;
+  color: #E0E0E0 !important;
+  background-color: transparent !important;
+  transition: all 0.2s ease-in-out;
+  text-decoration: none !important;
+}
+
+.dropdown-menu li:hover a {
+  background-color: rgba(255, 78, 80, 0.1) !important;
+  color: #FFFFFF !important;
+}
+
+.dropdown-menu li a i {
+  color: #FF4E50 !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.dropdown-menu li:hover a i {
+  color: #FFFFFF !important;
 }
 
 .dropdown-menu li button {
-  color: #000000 !important;
-  background-color: #ffffff !important;
+  color: #E0E0E0 !important;
+  background-color: transparent !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.dropdown-menu li:hover button {
+  background-color: rgba(255, 78, 80, 0.1) !important;
+  color: #FFFFFF !important;
+}
+
+.dropdown-menu li button i {
+  color: #FF4E50 !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.dropdown-menu li:hover button i {
+  color: #FFFFFF !important;
+}
+
+.dropdown-menu li i {
+  color: #FF4E50 !important;
+  transition: all 0.2s ease-in-out;
+}
+
+.dropdown-menu li:hover i:not(:first-child) {
+  color: #FFFFFF !important;
+}
+
+/* Divider styling */
+.dropdown-menu .dropdown-divider {
+  background-color: rgba(255, 78, 80, 0.2) !important;
+  margin: 0.5rem 0 !important;
+}
+
+.dropdown-menu hr.dropdown-divider {
+  background-color: rgba(255, 78, 80, 0.2) !important;
+  margin: 0.5rem 0 !important;
+  opacity: 1 !important;
 }
 
 /* Override any Bootstrap text color classes only within dropdown */
 .dropdown-menu .text-white {
-  color: #000000 !important;
+  color: #FFFFFF !important;
 }
 
 .dropdown-menu .text-muted {
-  color: #000000 !important;
+  color: #D1D5DB !important;
 }
 
 .dropdown-menu .text-dark {
-  color: #000000 !important;
+  color: #E0E0E0 !important;
+}
+
+.dropdown-menu .text-danger {
+  color: #FF4E50 !important;
+}
+
+.dropdown-menu li:hover .text-danger {
+  color: #FF6B6D !important;
 }
