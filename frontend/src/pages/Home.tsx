@@ -16,6 +16,7 @@ const Home: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedType, setSelectedType] = useState<string>('all');
   const itemsPerPage = 6; // 6 studies per page (2 rows of 3 cards)
   
   const { user, loading: authLoading, initialAuthCheck } = useAuth();
@@ -107,12 +108,27 @@ const Home: React.FC = () => {
     }
   };
 
-  // Pagination logic - ensure opportunities is always an array
+  // Filter and pagination logic
   const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
-  const totalPages = Math.ceil(safeOpportunities.length / itemsPerPage);
+  
+  // Filter opportunities by type
+  const filteredOpportunities = selectedType === 'all' 
+    ? safeOpportunities 
+    : safeOpportunities.filter(opp => {
+        // Handle concatenated type+status values (e.g., 'testpublished')
+        const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+        return baseType === selectedType.toLowerCase();
+      });
+  
+  const totalPages = Math.ceil(filteredOpportunities.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedOpportunities = safeOpportunities.slice(startIndex, endIndex);
+  const paginatedOpportunities = filteredOpportunities.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedType]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -151,15 +167,40 @@ const Home: React.FC = () => {
               <h1 className="mb-3" style={{ marginBottom: '24px' }}>AdaptaLabs</h1>
               
               {/* Welcome text - half page width before wrapping */}
-              <div className="row mb-4">
+              <div className="row mb-4 align-items-end">
                 <div className="col-md-6">
                   <p className="lead" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', marginBottom: '16px' }}>
                     Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                   </p>
-                  <p className="tagline" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', fontWeight: '600', marginTop: '1rem' }}>
+                  <p className="tagline" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', fontWeight: '600', marginTop: '1rem', marginBottom: '0' }}>
                     Together we turn <span style={{ fontStyle: 'italic' }}>participation into progress</span>
                   </p>
                 </div>
+                {/* Type filter dropdown */}
+                {!loading && !error && opportunities.length > 0 && (
+                  <div className="col-md-6 d-flex justify-content-end">
+                    <select 
+                      id="opportunity-type-filter"
+                      className="form-select" 
+                      value={selectedType} 
+                      onChange={(e) => setSelectedType(e.target.value)}
+                    style={{
+                      width: '352px',
+                      backgroundColor: 'var(--bg-card)',
+                      borderColor: 'var(--border-card)',
+                      color: 'var(--text-primary)',
+                      fontSize: 'var(--font-size-body)'
+                    }}
+                    >
+                      <option value="all">Filter by study type</option>
+                      <option value="survey">Survey</option>
+                      <option value="poll">Poll</option>
+                      <option value="interview">Interview</option>
+                      <option value="test">App Testing</option>
+                      <option value="question">Question</option>
+                    </select>
+                  </div>
+                )}
               </div>
               
               {error && (
@@ -180,6 +221,21 @@ const Home: React.FC = () => {
                   <h4 className="mb-3">No studies available</h4>
                   <p className="mb-2">No AdaptaLabs activities available at the moment.</p>
                   <p style={{ fontSize: '0.9rem' }}>Check back later for new opportunities to participate!</p>
+                </div>
+              )}
+              
+              {!loading && !error && opportunities.length > 0 && filteredOpportunities.length === 0 && (
+                <div className="text-center text-muted py-5">
+                  <i className="bi bi-funnel" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', opacity: 0.3 }}></i>
+                  <h4 className="mb-3">No opportunities found</h4>
+                  <p className="mb-2">No opportunities match the selected filter.</p>
+                  <button 
+                    className="btn btn-outline-primary" 
+                    onClick={() => setSelectedType('all')}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    Show All Types
+                  </button>
                 </div>
               )}
               
@@ -216,7 +272,7 @@ const Home: React.FC = () => {
                 </div>
               )}
               
-              {!loading && !error && opportunities.length > 0 && (
+              {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
                 <div className="bento-grid">
                   {paginatedOpportunities.map((opportunity) => {
                     // Make "New Feature Validation" and "User Interface Testing" wide
@@ -325,7 +381,7 @@ const Home: React.FC = () => {
               )}
 
               {/* Pagination Controls */}
-              {!loading && !error && opportunities.length > itemsPerPage && (
+              {!loading && !error && filteredOpportunities.length > itemsPerPage && (
                 <div className="row mt-4">
                   <div className="col-12 d-flex justify-content-center align-items-center">
                     <nav aria-label="Page navigation">
