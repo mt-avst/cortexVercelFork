@@ -1,7 +1,8 @@
 // Shared Type Definitions for Adaptalabs Application
 // This file contains all common interfaces used by both frontend and backend
 
-import { Request } from 'express';
+// Conditional import for Express types (only in backend context)
+type ExpressRequest = typeof import('express') extends { Request: infer T } ? T : never;
 
 // ============================================================================
 // USER TYPES
@@ -216,9 +217,9 @@ export interface ConflictCheckResponse {
 // AUTH TYPES
 // ============================================================================
 
-export interface AuthRequest extends Request {
-  user?: SessionUser;
-}
+// AuthRequest is Express-specific and should be imported separately in backend
+// For frontend compatibility, we don't export it from shared types
+// Backend should import it like: import { Request } from 'express'; interface AuthRequest extends Request { user?: SessionUser; }
 
 // ============================================================================
 // ERROR HANDLING TYPES

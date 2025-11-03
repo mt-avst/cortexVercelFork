@@ -16,7 +16,7 @@ import {
   ConflictError,
   TimeoutError,
   NetworkError 
-} from '../../../../shared/types';
+} from '../../shared/types';
 import { API_CONFIG } from '../../shared/constants';
 import { 
   createMockApiResponse, 

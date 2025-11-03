@@ -28,6 +28,7 @@
     "typescript": "^5.3.3"
   },
   "scripts": {
+    "prebuild": "node copy-shared-types.js",
     "start": "DISABLE_ESLINT_PLUGIN=true react-scripts start",
     "build": "DISABLE_ESLINT_PLUGIN=true react-scripts build",
     "test": "react-scripts test",
