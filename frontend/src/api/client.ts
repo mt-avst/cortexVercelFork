@@ -1,7 +1,8 @@
-import axios from 'axios';
+import axios, { AxiosResponse, AxiosError } from 'axios';
 
 import { API_CONFIG, getAuthUrl } from '../config/api';
 import { ApiClient, AppError, mapAxiosError } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse } from './types';
 
@@ -32,10 +33,72 @@ const setInitialAuthCheck = (value: boolean) => {
 // Export so AuthContext can set this flag
 (window as any).__setInitialAuthCheck = setInitialAuthCheck;
 
-// Add response interceptor to handle 401s
-api.interceptors.response.use(
-  (response) => response,
+// Add request interceptor to generate request IDs (for consistency with apiClient)
+api.interceptors.request.use(
+  (config) => {
+    // Generate request ID if not present
+    if (!config.headers['X-Request-ID']) {
+      const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      config.headers['X-Request-ID'] = requestId;
+    }
+    
+    const startTime = Date.now();
+    (config as any).__startTime = startTime;
+    
+    return config;
+  },
   (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Add response interceptor to extract request IDs and handle 401s
+api.interceptors.response.use(
+  (response: AxiosResponse) => {
+    // Extract request ID from response headers and store in logger
+    const requestId = response.headers['x-request-id'] as string || 
+                     response.config.headers?.['X-Request-ID'] as string;
+    if (requestId) {
+      logger.setRequestId(requestId);
+    }
+    
+    const startTime = (response.config as any).__startTime;
+    if (startTime) {
+      const responseTime = Date.now() - startTime;
+      logger.apiResponse(
+        response.config.method || 'GET',
+        response.config.url || '',
+        response.status,
+        responseTime,
+        { requestId }
+      );
+    }
+    
+    return response;
+  },
+  (error: AxiosError) => {
+    // Extract request ID from error response headers
+    const requestId = error.response?.headers?.['x-request-id'] as string ||
+                     error.config?.headers?.['X-Request-ID'] as string;
+    if (requestId) {
+      logger.setRequestId(requestId);
+    }
+    
+    const startTime = (error.config as any)?.__startTime;
+    if (startTime) {
+      const responseTime = Date.now() - startTime;
+      logger.apiError(
+        error.config?.method?.toUpperCase() || 'UNKNOWN',
+        error.config?.url || '',
+        error.response?.status || 0,
+        error,
+        {
+          requestId,
+          responseTime,
+        }
+      );
+    }
+    
     // Only redirect to login for actual 401s, not during initial load or after login
     // IMPORTANT: Don't auto-redirect during initial auth check to prevent automatic admin login
     if (error.response?.status === 401 && 
@@ -50,7 +113,11 @@ api.interceptors.response.use(
       
       const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
       
-      console.log('🔐 401 error detected, redirecting to:', loginRoute);
+      logger.info('Redirecting to login due to 401 error', {
+        requestId: requestId || undefined,
+        url: window.location.pathname,
+        loginRoute,
+      });
       window.location.href = getAuthUrl(loginRoute);
     }
     return Promise.reject(error);

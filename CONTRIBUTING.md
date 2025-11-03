@@ -336,7 +336,7 @@ interface SessionUser { ... } // WRONG!
 
 ### Structured Logging
 
-Use structured logging with context:
+Use structured logging with context for consistent, searchable logs:
 
 ```typescript
 import { logger } from '../utils/logger';
@@ -359,26 +359,85 @@ logger.error('Database error', {
   userId: user.id,
 });
 
+logger.dbOperation('SELECT', 'opportunities', {
+  requestId: 'req-123',
+  userId: user.id,
+});
+
+logger.businessEvent('opportunity_created', {
+  requestId: 'req-123',
+  opportunityId: opportunity.id,
+  userId: user.id,
+});
+
 // ✅ Frontend logging
 logger.info('User action', {
-  requestId: logger.getRequestId(),
+  requestId: logger.getRequestId(),  // Automatically set from API responses
   action: 'book_session',
   sessionId: 'session-123',
+});
+
+logger.apiRequest('GET', '/api/opportunities', {
+  requestId: logger.getRequestId(),
+});
+
+logger.apiResponse('GET', '/api/opportunities', 200, 150, {
+  requestId: logger.getRequestId(),
 });
 
 logger.apiError('GET', '/api/sessions/123', 404, error, {
   requestId: logger.getRequestId(),
 });
+
+logger.userEvent('session_booked', {
+  requestId: logger.getRequestId(),
+  sessionId: 'session-123',
+});
+
+logger.componentEvent('OpportunityDetail', 'mounted', {
+  requestId: logger.getRequestId(),
+  opportunityId: opportunity.id,
+});
 ```
 
 ### Request ID Propagation
 
-Request IDs are automatically propagated:
+Request IDs enable correlating logs across frontend and backend for the same request:
 
-1. **Backend**: Generated in middleware, included in response headers
-2. **Frontend**: Extracted from response headers, stored in logger, included in all logs
+**Backend Flow:**
+1. Request middleware generates or extracts `X-Request-ID` header
+2. Request ID is added to response headers (`X-Request-ID`)
+3. All backend logs include the request ID in context
 
-This allows correlating frontend and backend logs for the same request.
+**Frontend Flow:**
+1. API client (`ApiClient` or legacy `api` instance) generates request ID if not present
+2. Request ID is sent in `X-Request-ID` header with each request
+3. Response interceptor extracts `x-request-id` from response headers
+4. Request ID is stored in logger via `logger.setRequestId()`
+5. All subsequent frontend logs automatically include the request ID via `logger.getRequestId()`
+
+**Implementation:**
+
+```typescript
+// Backend: middleware/requestLogger.ts
+const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random()...}`;
+res.setHeader('X-Request-ID', requestId);
+
+// Frontend: api/client.ts or utils/errorHandler.ts
+api.interceptors.response.use((response) => {
+  const requestId = response.headers['x-request-id'];
+  if (requestId) {
+    logger.setRequestId(requestId);  // Store for all subsequent logs
+  }
+  return response;
+});
+```
+
+**Best Practices:**
+- Always include `requestId` in log context when available
+- Use `logger.getRequestId()` in frontend to get the current request ID
+- Request IDs are automatically generated if not provided
+- Both `apiClient` and legacy `api` instance handle request ID extraction
 
 ---
 
@@ -479,5 +538,5 @@ If you're unsure about which pattern to use, ask in code review or check existin
 
 ---
 
-*Last updated: 2025-01-27*
+*Last updated: 2025-01-27 - Enhanced with complete logging patterns and request ID propagation details*
 
