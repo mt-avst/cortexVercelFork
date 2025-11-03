@@ -69,23 +69,29 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
 
   const renderLeaderboardEntry = (entry: LeaderboardEntry, index: number) => {
     const points = activeTab === 'total' ? entry.total_points : entry.monthly_points;
+    const isTopThree = entry.rank <= 3;
 
     return (
       <div 
         key={entry.user_id} 
-        className={`d-flex align-items-center p-3 border rounded mb-2 ${
-          entry.rank <= 3 ? 'border-warning' : ''
-        }`}
+        className="d-flex align-items-center p-3 border rounded mb-2"
         style={{ 
-          backgroundColor: entry.rank <= 3 ? '#fff3cd' : 'white',
-          borderWidth: entry.rank <= 3 ? '2px' : '1px'
+          backgroundColor: isTopThree ? 'rgba(255, 78, 80, 0.1)' : 'transparent',
+          borderColor: isTopThree ? 'var(--brand-headline)' : 'var(--border-card)',
+          borderWidth: isTopThree ? '2px' : '1px',
+          borderRadius: 'var(--card-radius)',
+          transition: 'all var(--transition-card)'
         }}
       >
         {/* Rank */}
         <div className="me-3 text-center" style={{ minWidth: '50px' }}>
           <div 
             className="fw-bold fs-5"
-            style={{ color: getRankColor(entry.rank) }}
+            style={{ 
+              color: isTopThree ? 'var(--brand-headline)' : 'var(--text-primary)',
+              fontSize: 'var(--font-size-h3)',
+              fontWeight: 'var(--font-weight-h3)'
+            }}
           >
             {getRankIcon(entry.rank)}
           </div>
@@ -95,15 +101,26 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
         <div className="flex-grow-1">
           <div className="d-flex justify-content-between align-items-center">
             <div>
-              <h6 className="mb-1 fw-bold">{entry.name}</h6>
+              <h6 className="mb-1 fw-bold" style={{ 
+                color: 'var(--text-primary)', 
+                fontSize: 'var(--font-size-body)',
+                fontWeight: 'var(--font-weight-card-title)'
+              }}>{entry.name}</h6>
               <div className="d-flex align-items-center">
               </div>
             </div>
             <div className="text-end">
-              <div className="fw-bold fs-5 text-primary">
+              <div className="fw-bold fs-5" style={{ 
+                color: 'var(--brand-headline)', 
+                fontSize: 'var(--font-size-h3)',
+                fontWeight: 'var(--font-weight-h3)'
+              }}>
                 {gamificationUtils.formatPoints(points)}
               </div>
-              <small className="text-muted">
+              <small style={{ 
+                color: 'var(--text-muted)', 
+                fontSize: 'var(--font-size-metadata)'
+              }}>
                 {activeTab === 'total' ? 'Total AdaptaBits' : 'Monthly AdaptaBits'}
               </small>
             </div>
@@ -123,7 +140,13 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
 
   if (error) {
     return (
-      <div className="alert alert-danger" role="alert">
+      <div className="alert alert-danger" role="alert" style={{ 
+        background: 'rgba(220, 53, 69, 0.1)', 
+        border: '1px solid rgba(220, 53, 69, 0.3)', 
+        borderRadius: 'var(--card-radius)',
+        color: '#dc3545',
+        padding: 'var(--card-padding)'
+      }}>
         <i className="bi bi-exclamation-triangle me-2"></i>
         {error}
       </div>
@@ -162,10 +185,10 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
       </div>
       <div className="card-body">
         {currentLeaderboard.length === 0 ? (
-          <div className="text-center text-muted py-4">
-            <i className="bi bi-trophy fs-1 mb-3 d-block"></i>
-            <p>No participants yet!</p>
-            <small>Be the first to complete a session and appear on the leaderboard.</small>
+          <div className="text-center py-4" style={{ color: 'var(--text-muted)' }}>
+            <i className="bi bi-trophy fs-1 mb-3 d-block" style={{ color: 'var(--text-muted)' }}></i>
+            <p style={{ color: 'var(--text-body)', fontSize: 'var(--font-size-body)' }}>No participants yet!</p>
+            <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Be the first to complete a session and appear on the leaderboard.</small>
           </div>
         ) : (
           <div>
@@ -175,8 +198,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
                 <div className="col-4 text-center">
                   <div className="podium-place" style={{ height: '80px', paddingBottom: '20px' }}>
                     <div className="fs-1">🥇</div>
-                    <div className="fw-bold">{currentLeaderboard[0]?.name}</div>
-                    <div className="text-muted small">
+                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[0]?.name}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                       {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[0]?.total_points : currentLeaderboard[0]?.monthly_points)}
                     </div>
                   </div>
@@ -184,8 +207,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
                 <div className="col-4 text-center">
                   <div className="podium-place" style={{ height: '60px', paddingBottom: '20px' }}>
                     <div className="fs-1">🥈</div>
-                    <div className="fw-bold">{currentLeaderboard[1]?.name}</div>
-                    <div className="text-muted small">
+                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[1]?.name}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                       {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[1]?.total_points : currentLeaderboard[1]?.monthly_points)}
                     </div>
                   </div>
@@ -193,8 +216,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
                 <div className="col-4 text-center">
                   <div className="podium-place" style={{ height: '40px', paddingBottom: '20px' }}>
                     <div className="fs-1">🥉</div>
-                    <div className="fw-bold">{currentLeaderboard[2]?.name}</div>
-                    <div className="text-muted small">
+                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[2]?.name}</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                       {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[2]?.total_points : currentLeaderboard[2]?.monthly_points)}
                     </div>
                   </div>

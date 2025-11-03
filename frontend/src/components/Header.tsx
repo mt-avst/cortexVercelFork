@@ -1,11 +1,13 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useAnimation } from '../contexts/AnimationContext';
 import LoadingSpinner from './LoadingSpinner';
 import './Header.css';
 
 const Header: React.FC = () => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
+  const { animationsEnabled, toggleAnimations } = useAnimation();
   const location = useLocation();
   
   // Check if we're on an admin page
@@ -33,6 +35,19 @@ const Header: React.FC = () => {
           </Link>
           
           <nav className="nav">
+            {/* Animation Toggle Button - Always visible */}
+            <button
+              onClick={toggleAnimations}
+              className="btn btn-outline-secondary"
+              title={animationsEnabled ? 'Disable animations' : 'Enable animations'}
+              style={{ marginRight: '0.5rem' }}
+            >
+              <i className={animationsEnabled ? 'bi bi-pause-fill' : 'bi bi-play-fill'}></i>
+              <span className="d-none d-md-inline ms-1">
+                {animationsEnabled ? 'Animations On' : 'Animations Off'}
+              </span>
+            </button>
+
             {loading && initialAuthCheck ? (
               <LoadingSpinner size="small" text="Loading..." />
             ) : user ? (

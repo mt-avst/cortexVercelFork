@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { demoLogin, demoUser2Login, demoAdminLogin, googleLogin } from '../api/client';
+import { useAnimation } from '../contexts/AnimationContext';
 
 const Landing: React.FC = () => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const squaresRef = useRef<(HTMLDivElement | null)[]>([]);
   const fullGridSquareRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const { animationsEnabled } = useAnimation();
+  const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -24,6 +27,17 @@ const Landing: React.FC = () => {
 
   // Randomize square positions on each animation cycle
   useEffect(() => {
+    if (!animationsEnabled) {
+      // Hide animated squares when animations are disabled
+      squaresRef.current.forEach((square) => {
+        if (square) {
+          square.style.opacity = '0';
+          square.style.animationPlayState = 'paused';
+        }
+      });
+      return;
+    }
+
     const randomizePositions = () => {
       squaresRef.current.forEach((square) => {
         if (square) {
@@ -59,12 +73,26 @@ const Landing: React.FC = () => {
     return () => {
       intervals.forEach(interval => clearInterval(interval));
     };
-  }, []);
+  }, [animationsEnabled]);
 
   // Randomize full grid squares position and lighting (21 squares total)
   useEffect(() => {
+    // Clear all existing timeouts when toggling
+    timeoutRefs.current.forEach(timeout => clearTimeout(timeout));
+    timeoutRefs.current = [];
+
     const squares = fullGridSquareRefs.current.filter(sq => sq !== null);
     if (squares.length === 0) return;
+
+    if (!animationsEnabled) {
+      // Hide grid squares when animations are disabled
+      squares.forEach((square) => {
+        if (square) {
+          square.style.opacity = '0';
+        }
+      });
+      return;
+    }
 
     const meshBackground = document.querySelector('.mesh-gradient-background');
     const overlay = squares[0]?.parentElement;
@@ -72,6 +100,7 @@ const Landing: React.FC = () => {
     if (!meshBackground || !overlay) return;
 
     const randomizePosition = (gridSquare: HTMLDivElement) => {
+      if (!animationsEnabled) return; // Stop if animations were disabled
       // Grid is 80px x 80px, perfectly align to grid intersections
       // Need to align relative to the actual grid background position on screen
       // Both mesh background and overlay use: top: -20%, left: -20%, width: 140%, height: 140%
@@ -221,30 +250,46 @@ const Landing: React.FC = () => {
       
       // Fade out after random duration
       const fadeDuration = 1500 + Math.random() * 2000; // 1.5-3.5 seconds
-      setTimeout(() => {
-        gridSquare.style.opacity = '0';
+      const fadeTimeout = setTimeout(() => {
+        if (animationsEnabled) {
+          gridSquare.style.opacity = '0';
+        }
       }, fadeDuration);
+      timeoutRefs.current.push(fadeTimeout);
     };
 
     // Initialize all squares with staggered start times
     squares.forEach((square, index) => {
       const initialDelay = (index * 200) + Math.random() * 500; // Stagger starts
-      setTimeout(() => {
-        randomizePosition(square);
+      const initialTimeout = setTimeout(() => {
+        if (animationsEnabled) {
+          randomizePosition(square);
+        }
       }, initialDelay);
+      timeoutRefs.current.push(initialTimeout);
 
       // Each square gets its own randomization schedule
       const scheduleNext = () => {
+        if (!animationsEnabled) return; // Stop scheduling if disabled
         const delay = 1000 + Math.random() * 2500; // 1-3.5 seconds
-        setTimeout(() => {
-          randomizePosition(square);
-          scheduleNext();
+        const nextTimeout = setTimeout(() => {
+          if (animationsEnabled) {
+            randomizePosition(square);
+            scheduleNext();
+          }
         }, delay);
+        timeoutRefs.current.push(nextTimeout);
       };
 
       scheduleNext();
     });
-  }, []);
+
+    return () => {
+      // Cleanup: clear all timeouts when component unmounts or animations change
+      timeoutRefs.current.forEach(timeout => clearTimeout(timeout));
+      timeoutRefs.current = [];
+    };
+  }, [animationsEnabled]);
 
   return (
     <>
@@ -322,6 +367,15 @@ const Landing: React.FC = () => {
             box-shadow: 0 0 8px #FF4E50, 0 0 12px #FF4E50, 0 0 16px rgba(255, 78, 80, 0.6);
             opacity: 0;
             animation: retroSquareFlicker linear infinite;
+          }
+
+          .animations-disabled .grid-square {
+            animation: none !important;
+            opacity: 0 !important;
+          }
+
+          .animations-disabled .full-grid-square {
+            opacity: 0 !important;
           }
 
           @keyframes retroSquareFlicker {
@@ -685,12 +739,12 @@ const Landing: React.FC = () => {
           }
         `}
       </style>
-      <div className="landing-hero-wrapper">
+      <div className={`landing-hero-wrapper ${!animationsEnabled ? 'animations-disabled' : ''}`}>
         {/* Static Grid Background */}
         <div className="mesh-gradient-background"></div>
         
         {/* Retro Computing Grid Squares Overlay */}
-        <div className="grid-squares-overlay">
+        <div className={`grid-squares-overlay ${!animationsEnabled ? 'animations-disabled' : ''}`}>
           {/* Full Grid Squares - Randomly light up (21 total) */}
           <div ref={(el) => fullGridSquareRefs.current[0] = el} className="full-grid-square"></div>
           <div ref={(el) => fullGridSquareRefs.current[1] = el} className="full-grid-square"></div>

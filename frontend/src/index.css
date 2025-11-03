@@ -69,6 +69,13 @@ h3, .h3 {
   color: var(--text-on-dark) !important;
 }
 
+/* AdaptaBits page title - override to use brand headline color (H1 size to match home page) */
+.gamification-content .adaptabits-page-title {
+  color: var(--brand-headline) !important;
+  font-size: var(--font-size-h1) !important;
+  font-weight: var(--font-weight-h1) !important;
+}
+
 /* Headings inside cards */
 .card h1, .card .h1 {
   font-size: var(--font-size-card-title);

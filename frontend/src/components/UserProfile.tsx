@@ -50,7 +50,13 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
 
   if (error) {
     return (
-      <div className="alert alert-danger" role="alert">
+      <div className="alert alert-danger" role="alert" style={{ 
+        background: 'rgba(220, 53, 69, 0.1)', 
+        border: '1px solid rgba(220, 53, 69, 0.3)', 
+        borderRadius: 'var(--card-radius)',
+        color: '#dc3545',
+        padding: 'var(--card-padding)'
+      }}>
         <i className="bi bi-exclamation-triangle me-2"></i>
         {error}
       </div>
@@ -59,7 +65,13 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
 
   if (!profile) {
     return (
-      <div className="alert alert-info" role="alert">
+      <div className="alert alert-info" role="alert" style={{ 
+        background: 'var(--bg-card)', 
+        border: 'var(--card-border)', 
+        borderRadius: 'var(--card-radius)',
+        color: 'var(--text-primary)',
+        padding: 'var(--card-padding)'
+      }}>
         <i className="bi bi-info-circle me-2"></i>
         No profile data available
       </div>
@@ -83,19 +95,27 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
               {/* AdaptaBits Overview */}
               <div className="row mb-4">
                 <div className="col-md-6">
-                  <div className="text-center p-3 border rounded">
-                    <h2 className="text-primary mb-1">
+                  <div className="text-center p-3 border rounded" style={{ 
+                    borderColor: 'var(--border-card)', 
+                    borderRadius: 'var(--card-radius)',
+                    background: 'rgba(255, 255, 255, 0.02)'
+                  }}>
+                    <h2 className="mb-1" style={{ color: 'var(--brand-headline)', fontSize: 'var(--font-size-h2)', fontWeight: 'var(--font-weight-h2)' }}>
                       {gamificationUtils.formatPoints(profile.total_points)}
                     </h2>
-                    <p className="text-muted mb-0">Total AdaptaBits</p>
+                    <p className="mb-0" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Total AdaptaBits</p>
                   </div>
                 </div>
                 <div className="col-md-6">
-                  <div className="text-center p-3 border rounded">
-                    <h2 className="text-success mb-1">
+                  <div className="text-center p-3 border rounded" style={{ 
+                    borderColor: 'var(--border-card)', 
+                    borderRadius: 'var(--card-radius)',
+                    background: 'rgba(255, 255, 255, 0.02)'
+                  }}>
+                    <h2 className="mb-1" style={{ color: 'var(--brand-headline)', fontSize: 'var(--font-size-h2)', fontWeight: 'var(--font-weight-h2)' }}>
                       {gamificationUtils.formatPoints(profile.monthly_points)}
                     </h2>
-                    <p className="text-muted mb-0">This Month</p>
+                    <p className="mb-0" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>This Month</p>
                   </div>
                 </div>
               </div>
@@ -104,34 +124,34 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
               <div className="row">
                 <div className="col-md-3 col-6 mb-3">
                   <div className="text-center">
-                    <div className="fs-3 text-primary">{profile.sessions_completed}</div>
-                    <small className="text-muted">Tests</small>
+                    <div className="fs-3" style={{ color: 'var(--brand-headline)', fontSize: 'var(--font-size-h3)', fontWeight: 'var(--font-weight-h3)' }}>{profile.sessions_completed}</div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Tests</small>
                   </div>
                 </div>
                 <div className="col-md-3 col-6 mb-3">
                   <div className="text-center">
-                    <div className="fs-3 text-info">{profile.surveys_completed}</div>
-                    <small className="text-muted">Surveys</small>
+                    <div className="fs-3" style={{ color: 'var(--link)', fontSize: 'var(--font-size-h3)', fontWeight: 'var(--font-weight-h3)' }}>{profile.surveys_completed}</div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Surveys</small>
                   </div>
                 </div>
                 <div className="col-md-3 col-6 mb-3">
                   <div className="text-center">
-                    <div className="fs-3 text-warning">{profile.polls_completed}</div>
-                    <small className="text-muted">Polls</small>
+                    <div className="fs-3" style={{ color: 'var(--link-hover)', fontSize: 'var(--font-size-h3)', fontWeight: 'var(--font-weight-h3)' }}>{profile.polls_completed}</div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Polls</small>
                   </div>
                 </div>
                 <div className="col-md-3 col-6 mb-3">
                   <div className="text-center">
-                    <div className="fs-3 text-success">{profile.questions_completed}</div>
-                    <small className="text-muted">Questions</small>
+                    <div className="fs-3" style={{ color: 'var(--brand-headline)', fontSize: 'var(--font-size-h3)', fontWeight: 'var(--font-weight-h3)' }}>{profile.questions_completed}</div>
+                    <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Questions</small>
                   </div>
                 </div>
               </div>
 
               {/* Last Activity */}
               {profile.last_activity_date && (
-                <div className="mt-3 pt-3 border-top">
-                  <small className="text-muted">
+                <div className="mt-3 pt-3 border-top" style={{ borderColor: 'var(--border-card)' }}>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                     <i className="bi bi-clock me-1"></i>
                     Last activity: {new Date(profile.last_activity_date).toLocaleDateString()}
                   </small>
@@ -152,19 +172,25 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
             </div>
             <div className="card-body">
               <div className="text-center">
-                <p className="text-muted mb-3">{getCurrentMonth()}</p>
+                <p className="mb-3" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>{getCurrentMonth()}</p>
                 
                 {/* Placeholder for image */}
-                <div className="bg-light border rounded d-flex align-items-center justify-content-center mb-3" style={{ height: '150px', minHeight: '150px' }}>
-                  <i className="bi bi-image fs-1 text-secondary"></i>
+                <div className="border rounded d-flex align-items-center justify-content-center mb-3" style={{ 
+                  height: '150px', 
+                  minHeight: '150px',
+                  background: 'rgba(255, 255, 255, 0.02)',
+                  borderColor: 'var(--border-card)',
+                  borderRadius: 'var(--card-radius)'
+                }}>
+                  <i className="bi bi-image fs-1" style={{ color: 'var(--text-muted)' }}></i>
                 </div>
                 
                 {/* Two lines of placeholder text */}
                 <div className="text-center">
-                  <p className="mb-1 text-muted" style={{ minHeight: '20px' }}>
+                  <p className="mb-1" style={{ minHeight: '20px', color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                     {/* Placeholder line 1 */}
                   </p>
-                  <p className="text-muted mb-0" style={{ minHeight: '20px' }}>
+                  <p className="mb-0" style={{ minHeight: '20px', color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                     {/* Placeholder line 2 */}
                   </p>
                 </div>
