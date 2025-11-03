@@ -8,13 +8,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const sharedTypesPath = path.join(__dirname, '..', '..', 'shared', 'types', 'index.ts');
-const sharedConstantsPath = path.join(__dirname, '..', '..', 'shared', 'constants', 'index.ts');
-const destTypesPath = path.join(__dirname, 'src', 'shared', 'types.ts');
-const destConstantsPath = path.join(__dirname, 'src', 'shared', 'constants.ts');
+// Resolve paths relative to this script's location
+const frontendDir = __dirname;
+const rootDir = path.resolve(frontendDir, '..');
+const sharedTypesPath = path.resolve(rootDir, 'shared', 'types', 'index.ts');
+const sharedConstantsPath = path.resolve(rootDir, 'shared', 'constants', 'index.ts');
+const destTypesPath = path.resolve(frontendDir, 'src', 'shared', 'types.ts');
+const destConstantsPath = path.resolve(frontendDir, 'src', 'shared', 'constants.ts');
 
 // Ensure shared directory exists
-const sharedDir = path.join(__dirname, 'src', 'shared');
+const sharedDir = path.resolve(frontendDir, 'src', 'shared');
 if (!fs.existsSync(sharedDir)) {
   fs.mkdirSync(sharedDir, { recursive: true });
 }
@@ -25,6 +28,8 @@ if (fs.existsSync(sharedTypesPath)) {
   console.log('✓ Copied shared/types/index.ts to src/shared/types.ts');
 } else {
   console.error('✗ Error: shared/types/index.ts not found at', sharedTypesPath);
+  console.error('  Resolved from:', frontendDir);
+  console.error('  Root dir:', rootDir);
   process.exit(1);
 }
 
@@ -37,4 +42,3 @@ if (fs.existsSync(sharedConstantsPath)) {
 }
 
 console.log('✓ Shared types copied successfully');
-
