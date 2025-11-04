@@ -14,8 +14,43 @@ const Landing: React.FC = () => {
   
   // Generate stable opacity values for each dot (persists across renders)
   const dotOpacities = useMemo(() => {
-    return Array.from({ length: 20 }, () => 0.2 + Math.random() * 0.8);
+    return Array.from({ length: 30 }, () => 0.2 + Math.random() * 0.8);
   }, []);
+
+  // Generate stable color values for each dot (persists across renders)
+  // Varying hue (red/pink/coral: 340-360°), saturation (70-100%), and lightness (25-40%)
+  const dotColors = useMemo(() => {
+    return Array.from({ length: 30 }, () => {
+      const hue = 340 + Math.random() * 20; // 340-360 degrees (red to pink-coral range)
+      const saturation = 70 + Math.random() * 30; // 70-100%
+      const lightness = 25 + Math.random() * 15; // 25-40% (darker range)
+      return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    });
+  }, []);
+
+  // Helper function to convert HSL to RGB
+  const hslToRgb = (hslColor: string): [number, number, number] => {
+    const hslMatch = hslColor.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    let r = 255, g = 78, b = 80; // fallback to original coral
+    if (hslMatch) {
+      const h = parseInt(hslMatch[1]) / 360;
+      const s = parseInt(hslMatch[2]) / 100;
+      const l = parseInt(hslMatch[3]) / 100;
+      const c = (1 - Math.abs(2 * l - 1)) * s;
+      const x = c * (1 - Math.abs((h * 6) % 2 - 1));
+      const m = l - c / 2;
+      if (h < 1/6) { r = c; g = x; b = 0; }
+      else if (h < 2/6) { r = x; g = c; b = 0; }
+      else if (h < 3/6) { r = 0; g = c; b = x; }
+      else if (h < 4/6) { r = 0; g = x; b = c; }
+      else if (h < 5/6) { r = x; g = 0; b = c; }
+      else { r = c; g = 0; b = x; }
+      r = Math.round((r + m) * 255);
+      g = Math.round((g + m) * 255);
+      b = Math.round((b + m) * 255);
+    }
+    return [r, g, b];
+  };
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -241,9 +276,16 @@ const Landing: React.FC = () => {
         const opacity = dotOpacities[originalIndex];
         dot.style.setProperty('opacity', opacity.toString(), 'important');
         
+        // Use stable color from dotColors array
+        const color = dotColors[originalIndex];
+        dot.style.setProperty('background-color', color, 'important');
+        
+        // Convert HSL to RGB for box-shadow rgba
+        const [r, g, b] = hslToRgb(color);
+        
         // Adjust box-shadow intensity based on opacity for more realistic depth
         const shadowIntensity = opacity;
-        dot.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`, 'important');
+        dot.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px ${color}, 0 0 ${20 * shadowIntensity}px rgba(${r}, ${g}, ${b}, ${0.8 * shadowIntensity})`, 'important');
       });
     };
 
@@ -258,7 +300,7 @@ const Landing: React.FC = () => {
     return () => {
       clearInterval(reRandomizeInterval);
     };
-  }, [animationsEnabled]);
+  }, [animationsEnabled, dotOpacities, dotColors]);
 
   // Coral dots traveling along grid lines with glass intersection detection
   useEffect(() => {
@@ -752,8 +794,8 @@ const Landing: React.FC = () => {
 
           /* Glass border glow effect when dot reaches it */
           .hero-content.glass-glow::before {
-            border-color: rgba(255, 78, 80, 0.5);
-            box-shadow: 0 0 20px rgba(255, 78, 80, 0.3), 0 0 40px rgba(255, 78, 80, 0.2), 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 78, 80, 0.3);
+            box-shadow: 0 0 12px rgba(255, 78, 80, 0.15), 0 0 24px rgba(255, 78, 80, 0.1), 0 8px 32px rgba(0, 0, 0, 0.3);
           }
 
           /* Coral dots that travel along grid lines */
@@ -988,23 +1030,29 @@ const Landing: React.FC = () => {
           <div ref={(el) => squaresRef.current[19] = el} className="grid-square"></div>
         </div>
         
-        {/* Coral dots traveling along grid lines - 20 dots randomly positioned */}
+        {/* Coral dots traveling along grid lines - 30 dots randomly positioned */}
         <div className="coral-dots-container">
-          {/* Generate 20 dots - 10 horizontal, 10 vertical, randomly positioned */}
-          {Array.from({ length: 20 }).map((_, index) => {
-            const isHorizontal = index < 10;
-            // Use stable opacity value from useMemo
+          {/* Generate 30 dots - 15 horizontal, 15 vertical, randomly positioned */}
+          {Array.from({ length: 30 }).map((_, index) => {
+            const isHorizontal = index < 15;
+            // Use stable opacity and color values from useMemo
             const dotOpacity = dotOpacities[index];
+            const dotColor = dotColors[index];
             const shadowIntensity = dotOpacity;
+            
+            // Convert HSL to RGB for box-shadow rgba
+            const [r, g, b] = hslToRgb(dotColor);
+            
             return (
               <div
                 key={index}
                 ref={(el) => {
                   coralDotsRef.current[index] = el;
-                  // Set opacity immediately when ref is assigned
+                  // Set opacity and color immediately when ref is assigned
                   if (el) {
                     el.style.setProperty('opacity', dotOpacity.toString(), 'important');
-                    el.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`, 'important');
+                    el.style.setProperty('background-color', dotColor, 'important');
+                    el.style.setProperty('box-shadow', `0 0 ${12 * shadowIntensity}px ${dotColor}, 0 0 ${20 * shadowIntensity}px rgba(${r}, ${g}, ${b}, ${0.8 * shadowIntensity})`, 'important');
                   }
                 }}
                 className={`coral-dot ${isHorizontal ? 'coral-dot-horizontal' : 'coral-dot-vertical'}`}
@@ -1012,7 +1060,8 @@ const Landing: React.FC = () => {
                   animation: isHorizontal ? 'travelHorizontal 15s linear infinite' : 'travelVertical 15s linear infinite',
                   animationDelay: '0s',
                   opacity: dotOpacity,
-                  boxShadow: `0 0 ${12 * shadowIntensity}px #FF4E50, 0 0 ${20 * shadowIntensity}px rgba(255, 78, 80, ${0.8 * shadowIntensity})`
+                  backgroundColor: dotColor,
+                  boxShadow: `0 0 ${12 * shadowIntensity}px ${dotColor}, 0 0 ${20 * shadowIntensity}px rgba(${r}, ${g}, ${b}, ${0.8 * shadowIntensity})`
                 }}
               ></div>
             );
