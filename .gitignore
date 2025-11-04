@@ -67,3 +67,6 @@ jspm_packages/
 # Google OAuth credentials
 client_secret_*.json
 *.json.encrypted
+
+# OAuth credential files
+backend/.env.google-oauth
