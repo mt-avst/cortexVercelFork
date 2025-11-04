@@ -21,6 +21,12 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
   }
 
   if (!sessionData) {
+    // Debug logging (remove in production)
+    console.log('No session cookie found', {
+      hasCookies: !!cookies,
+      cookieCount: cookiePairs.length,
+      cookieNames: cookiePairs.map(p => p.split('=')[0]).filter(Boolean)
+    });
     return null;
   }
 

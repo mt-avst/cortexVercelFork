@@ -171,7 +171,7 @@ export const demoAdminLogin = async (): Promise<void> => {
 export const googleLogin = async (): Promise<void> => {
   // Set a flag to detect when we return from login
   sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/auth/google-login');
+  window.location.href = getAuthUrl('/api/auth/google-login');
 };
 
 /**
