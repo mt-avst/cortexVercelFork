@@ -13,9 +13,22 @@ import { TIME_INTERVALS, RATE_LIMITS, SECURITY_CONFIG } from '../../shared/const
 
 const app: express.Application = express();
 
-// Trust proxy for accurate IP addresses (required for IP tracking and when behind reverse proxy)
-if (process.env.TRUST_PROXY !== 'false') {
-  app.set('trust proxy', true);
+// Trust proxy configuration for accurate IP addresses
+// This is needed when behind a reverse proxy (e.g., Vercel, nginx)
+// For production: Set to number of proxies (e.g., '1' for single reverse proxy)
+// For development: Set to 'false' or '0' to disable (safer for local dev)
+if (process.env.TRUST_PROXY === 'false' || process.env.TRUST_PROXY === '0') {
+  // Disable trust proxy for local development
+  app.set('trust proxy', false);
+} else if (process.env.TRUST_PROXY && !isNaN(Number(process.env.TRUST_PROXY))) {
+  // Use specific number of proxies (e.g., '1' for single reverse proxy)
+  app.set('trust proxy', Number(process.env.TRUST_PROXY));
+} else if (config.NODE_ENV === 'production') {
+  // Production: Default to 1 proxy (common for Vercel, etc.)
+  app.set('trust proxy', 1);
+} else {
+  // Development: Don't trust proxies by default (safer)
+  app.set('trust proxy', false);
 }
 
 // Chrome DevTools discovery endpoint (for development)
