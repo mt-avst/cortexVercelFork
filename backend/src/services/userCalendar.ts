@@ -74,9 +74,44 @@ export class UserCalendarService {
       };
     }
 
-    // Production mode implementation
-    // This will use googleapis when credentials are available
-    throw new Error('Production OAuth token exchange not yet implemented');
+    // Production mode: Exchange code for tokens with Google
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID!;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET!;
+    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || 
+                        `${process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3001'}/api/calendar/auth/callback`;
+
+    // Exchange authorization code for tokens
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        code: code,
+        client_id: clientId,
+        client_secret: clientSecret,
+        redirect_uri: redirectUri,
+        grant_type: 'authorization_code',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.text();
+      console.error('Google OAuth token exchange failed:', errorData);
+      throw new Error(`Failed to exchange code for tokens: ${tokenResponse.status} ${tokenResponse.statusText}`);
+    }
+
+    const tokenData = await tokenResponse.json() as {
+      access_token: string;
+      refresh_token?: string;
+      expires_in?: number;
+    };
+
+    return {
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token || null,
+      expiryDate: tokenData.expires_in 
+        ? new Date(Date.now() + tokenData.expires_in * 1000)
+        : null,
+    };
   }
 
   /**
@@ -96,8 +131,38 @@ export class UserCalendarService {
       };
     }
 
-    // Production mode implementation
-    throw new Error('Production token refresh not yet implemented');
+    // Production mode: Refresh token with Google
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID!;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET!;
+
+    const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        refresh_token: refreshToken,
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    if (!tokenResponse.ok) {
+      const errorData = await tokenResponse.text();
+      console.error('Google OAuth token refresh failed:', errorData);
+      throw new Error(`Failed to refresh token: ${tokenResponse.status} ${tokenResponse.statusText}`);
+    }
+
+    const tokenData = await tokenResponse.json() as {
+      access_token: string;
+      expires_in?: number;
+    };
+
+    return {
+      accessToken: tokenData.access_token,
+      expiryDate: tokenData.expires_in 
+        ? new Date(Date.now() + tokenData.expires_in * 1000)
+        : null,
+    };
   }
 
   /**
@@ -116,8 +181,88 @@ export class UserCalendarService {
       return this.generateMockEvents(startTime, endTime, userId);
     }
 
-    // Production mode implementation
-    throw new Error('Production calendar event fetching not yet implemented');
+    // Production mode: Fetch real events from Google Calendar API
+    try {
+      const startTimeParam = encodeURIComponent(startTime);
+      const endTimeParam = encodeURIComponent(endTime);
+      
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${startTimeParam}&timeMax=${endTimeParam}&singleEvents=true&orderBy=startTime`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please reconnect.');
+        }
+        const errorData = await response.text();
+        console.error('Google Calendar API error:', errorData);
+        throw new Error(`Failed to fetch calendar events: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as {
+        items?: Array<{
+          id: string;
+          summary?: string;
+          start: { dateTime?: string; date?: string };
+          end: { dateTime?: string; date?: string };
+          status?: string;
+          location?: string;
+          description?: string;
+          attendees?: Array<{ email?: string; displayName?: string }>;
+        }>;
+      };
+
+      const events: CalendarEvent[] = (data.items || [])
+        .filter(event => {
+          // Filter out all-day events (they use 'date' instead of 'dateTime')
+          // All-day events shouldn't block booking since they don't occupy specific times
+          if (!event.start.dateTime || !event.end.dateTime) {
+            return false;
+          }
+          
+          // Filter out declined and cancelled events
+          if (event.status === 'cancelled' || event.status === 'declined') {
+            return false;
+          }
+          
+          return true;
+        })
+        .map(event => {
+          const start = event.start.dateTime!;
+          const end = event.end.dateTime!;
+          
+          return {
+            id: event.id,
+            title: event.summary || 'Untitled Event',
+            start: start,
+            end: end,
+            startTime: new Date(start),
+            endTime: new Date(end),
+            status: event.status || 'confirmed',
+            location: event.location,
+            description: event.description,
+            attendees: (event.attendees || []).map(attendee => ({
+              email: attendee.email || '',
+              name: attendee.displayName || attendee.email || '',
+              responseStatus: 'accepted', // Default to accepted for fetched events
+            })),
+          };
+        });
+
+      console.log(`📅 Fetched ${events.length} calendar events from Google Calendar`);
+      return events;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error fetching calendar events:', errorMessage);
+      throw error;
+    }
   }
 
   /**

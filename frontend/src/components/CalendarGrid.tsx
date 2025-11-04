@@ -138,14 +138,28 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     const sessionEnd = new Date(session.end_time);
 
     const hasConflict = userCalendarEvents.some(event => {
+      // Skip cancelled or declined events
+      if (event.status === 'cancelled' || event.status === 'declined') {
+        return false;
+      }
+      
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
+      
+      // Skip if event times are invalid
+      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+        return false;
+      }
+      
+      // Check for actual overlap (not just touching)
+      // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
       const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
       
       if (overlaps) {
         console.log('📅 Calendar conflict detected:', {
           session: `${sessionStart.toISOString()} - ${sessionEnd.toISOString()}`,
-          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`
+          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`,
+          status: event.status
         });
       }
       

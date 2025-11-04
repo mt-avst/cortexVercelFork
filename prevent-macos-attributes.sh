@@ -35,3 +35,5 @@ echo "Extended attributes have been removed and prevented for future files."
 
 
 
+
+

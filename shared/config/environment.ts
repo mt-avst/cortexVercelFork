@@ -51,6 +51,11 @@ export const backendEnvSchema = z.object({
   GOOGLE_PRIVATE_KEY: z.string().optional(),
   GOOGLE_CALENDAR_ID: z.string().optional(),
   
+  // Google OAuth Configuration (Optional - for user calendar integration)
+  GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
+  GOOGLE_OAUTH_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().url('OAuth redirect URI must be a valid URL').optional(),
+  
   // Frontend URL
   FRONTEND_URL: z.string().url('Frontend URL must be a valid URL').default('http://localhost:3000'),
 });
@@ -221,6 +226,9 @@ export const ENVIRONMENT_DOCS = {
     GOOGLE_SERVICE_ACCOUNT_EMAIL: 'Google service account email',
     GOOGLE_PRIVATE_KEY: 'Google service account private key',
     GOOGLE_CALENDAR_ID: 'Google Calendar ID',
+    GOOGLE_OAUTH_CLIENT_ID: 'Google OAuth client ID for user calendar integration',
+    GOOGLE_OAUTH_CLIENT_SECRET: 'Google OAuth client secret for user calendar integration',
+    GOOGLE_OAUTH_REDIRECT_URI: 'Google OAuth redirect URI for calendar callback',
     FRONTEND_URL: 'Frontend application URL',
   },
   frontend: {
@@ -275,6 +283,9 @@ EMAIL_SMTP_PASS=your_smtp_password
 GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@project.iam.gserviceaccount.com
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour private key here\\n-----END PRIVATE KEY-----"
 GOOGLE_CALENDAR_ID=primary
+GOOGLE_OAUTH_CLIENT_ID=your_oauth_client_id
+GOOGLE_OAUTH_CLIENT_SECRET=your_oauth_client_secret
+GOOGLE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/api/calendar/auth/callback
 FRONTEND_URL=https://yourdomain.com`,
   },
   
