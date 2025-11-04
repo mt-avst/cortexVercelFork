@@ -63,3 +63,7 @@ jspm_packages/
 *.db
 *.sqlite
 .vercel
+
+# Google OAuth credentials
+client_secret_*.json
+*.json.encrypted
