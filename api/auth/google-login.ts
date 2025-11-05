@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse } from '../utils/errors';
+import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
+import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import crypto from 'crypto';
 
 /**
@@ -12,27 +14,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
 
-    const isDemoMode = !process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const isDemoMode = isGoogleOAuthDemoMode();
     
     if (isDemoMode) {
       // Demo mode: Simulate OAuth flow by redirecting to callback with demo code
-      console.log('Google login: Demo mode - simulating OAuth flow');
       const state = crypto.randomBytes(32).toString('hex');
-      const callbackUrl = `${process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback?code=demo-code&state=${state}`;
+      const config = getApiConfig();
+      const callbackUrl = `${config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback?code=demo-code&state=${state}`;
       return res.redirect(callbackUrl);
     }
 
     // Production mode: Use real Google OAuth
-    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID!;
-    const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || 
-                        `${process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback`;
+    const oauthConfig = getGoogleOAuthConfig();
+    if (!oauthConfig.clientId) {
+      throw new Error('GOOGLE_OAUTH_CLIENT_ID is required in production mode');
+    }
     
-    // Request both authentication and calendar scopes
+    // Trim whitespace/newlines from client ID (common issue with env vars)
+    const clientId = oauthConfig.clientId.trim();
+    const config = getApiConfig();
+    const redirectUri = (oauthConfig.redirectUri || 
+                        `${config.CORS_ORIGIN || config.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback`).trim();
+    
+    // Request authentication and readonly calendar scope (for conflict checking only)
+    // Users add events to their calendars via email links, not programmatically
     const scopes = [
       'openid',
       'profile',
       'email',
-      'https://www.googleapis.com/auth/calendar',
+      'https://www.googleapis.com/auth/calendar.readonly',
     ].join(' ');
 
     const state = crypto.randomBytes(32).toString('hex');

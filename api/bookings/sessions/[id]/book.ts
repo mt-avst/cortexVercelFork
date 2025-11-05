@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../../db';
 import { requireAuth } from '../../../utils/auth';
 import { createErrorResponse, getErrorMessage } from '../../../utils/errors';
+import emailService, { EmailService } from '../../../services/email';
 
 /**
  * POST /api/bookings/sessions/[id]/book
@@ -45,6 +46,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const session = sessionResult.rows[0];
+
+      // Get owner user details if they exist
+      let ownerName = 'Unknown User';
+      let ownerEmail = 'unknown@example.com';
+      if (session.owner_user_id) {
+        const ownerResult = await client.query(
+          'SELECT name, email FROM users WHERE id = $1',
+          [session.owner_user_id]
+        );
+        if (ownerResult.rows.length > 0) {
+          ownerName = ownerResult.rows[0].name;
+          ownerEmail = ownerResult.rows[0].email;
+        }
+      }
 
       // Guardrails
       if (session.opportunity_status !== 'published') {
@@ -91,6 +106,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await client.query('COMMIT');
 
       const booking = bookingResult.rows[0];
+
+      // Email notifications (after transaction commit)
+      try {
+        // Use singleton email service instance
+        // Note: Password trimming is handled in EmailService constructor
+        
+        // Send confirmation email to participant
+        const confirmationTemplate = EmailService.getBookingConfirmationTemplate(
+          session.opportunity_title,
+          user.name,
+          new Date(session.start_time),
+          new Date(session.end_time),
+          session.location_or_meet_link_optional,
+          ownerName,
+          ownerEmail
+        );
+
+        const emailResult = await emailService.sendEmail(
+          { email: user.email, name: user.name },
+          confirmationTemplate
+        );
+        
+        // Log only if email sending failed (errors are logged in email service)
+        if (!emailResult.success) {
+          console.error('Failed to send booking confirmation email', {
+            error: emailResult.error,
+            participantEmail: user.email,
+          });
+        }
+
+        // Send notification to researcher (if enabled in preferences)
+        try {
+          const prefsResult = await getPool().query(
+            `SELECT on_book_email FROM notification_preferences WHERE user_id = $1`,
+            [session.owner_user_id]
+          );
+          
+          const shouldNotify = prefsResult.rows.length === 0 || prefsResult.rows[0].on_book_email === true;
+          
+          if (shouldNotify && session.owner_user_id) {
+            const adminTemplate = EmailService.getAdminNotificationTemplate(
+              session.opportunity_title,
+              user.name,
+              user.email,
+              new Date(session.start_time),
+              new Date(session.end_time),
+              'booked'
+            );
+
+            await emailService.sendEmail(
+              { email: ownerEmail, name: ownerName },
+              adminTemplate
+            );
+          }
+        } catch (prefError) {
+          console.error('Failed to send admin notification email', prefError);
+          // Don't fail the booking if admin notification fails
+        }
+      } catch (emailError) {
+        console.error('Failed to send booking confirmation email', emailError);
+        // Don't fail the booking if email fails
+      }
 
       // Return booking with serialized dates
       return res.status(201).json({

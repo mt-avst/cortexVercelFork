@@ -54,7 +54,69 @@ const Header: React.FC = () => {
               <>
                 {user.role !== 'researcher_admin' && (
                   <>
-                    <Link to="/my-bookings" className="btn btn-secondary">
+                    <Link 
+                      to="/submit-research-request" 
+                      className="momentum-btn-secondary"
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: '#E0E0E0',
+                        borderRadius: '6px',
+                        padding: '10px 20px',
+                        fontWeight: 600,
+                        fontSize: '15px',
+                        minHeight: '40px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textDecoration: 'none',
+                        transition: 'all 0.2s ease-in-out',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                        marginRight: '0.5rem'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.22)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                      }}
+                    >
+                      Submit Research Request
+                    </Link>
+                    <Link 
+                      to="/my-bookings" 
+                      className="momentum-btn-secondary"
+                      style={{
+                        backgroundColor: 'transparent',
+                        border: '1px solid rgba(255, 255, 255, 0.2)',
+                        color: '#E0E0E0',
+                        borderRadius: '6px',
+                        padding: '10px 20px',
+                        fontWeight: 600,
+                        fontSize: '15px',
+                        minHeight: '40px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        textDecoration: 'none',
+                        transition: 'all 0.2s ease-in-out',
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.22)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'transparent';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+                      }}
+                    >
                       My Bookings
                     </Link>
                   </>

@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { logger } from '../utils/logger';
+import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
 
 import { SessionUser } from '../types';
 
@@ -259,7 +260,7 @@ router.post('/logout', (req, res) => {
  */
 router.get('/google-login', async (req, res) => {
   try {
-    const isDemoMode = !process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const isDemoMode = isGoogleOAuthDemoMode();
     
     if (isDemoMode) {
       // Demo mode: Simulate OAuth flow by redirecting to backend callback with demo code
@@ -274,7 +275,8 @@ router.get('/google-login', async (req, res) => {
     const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || 
                         `${process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3001'}/auth/google-callback`;
     
-    // Request both authentication and calendar scopes
+    // Request authentication and readonly calendar scope (for conflict checking only)
+    // Users add events to their calendars via email links, not programmatically
     const scopes = [
       'openid',
       'profile',
@@ -315,7 +317,7 @@ router.get('/google-callback', async (req, res) => {
       return res.status(400).json({ error: 'Authorization code missing' });
     }
 
-    const isDemoMode = !process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const isDemoMode = isGoogleOAuthDemoMode();
 
     let userInfo: {
       id: string;

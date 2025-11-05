@@ -2,13 +2,15 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { SessionUser } from '../../shared/types';
 import { createErrorResponse } from '../utils/errors';
+import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
+import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 
 /**
  * Encrypt sensitive token data
  * Uses the same encryption method as backend userCalendar service
  */
 function encryptToken(text: string): string {
-  const isDemoMode = !process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const isDemoMode = isGoogleOAuthDemoMode();
   
   // If no encryption key set and in demo mode, use simple encoding
   if (isDemoMode && !process.env.ENCRYPTION_KEY) {
@@ -61,7 +63,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Handle OAuth errors
     if (error) {
       console.error('Google OAuth error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
+      const config = getApiConfig();
+      const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
       return res.redirect(`${frontendUrl}?error=google_auth_failed&details=${encodeURIComponent(String(error))}`);
     }
 
@@ -69,7 +72,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json(createErrorResponse('Authorization code missing'));
     }
 
-    const isDemoMode = !process.env.GOOGLE_OAUTH_CLIENT_ID || !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const isDemoMode = isGoogleOAuthDemoMode();
 
     let userInfo: {
       id: string;
@@ -83,7 +86,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (isDemoMode || code === 'demo-code') {
       // Demo mode: Create mock user
-      console.log('Google callback: Demo mode - creating mock user');
       
       userInfo = {
         id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -98,10 +100,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tokenExpiry = tokens.expiryDate;
     } else {
       // Production mode: Exchange code for tokens with Google
-      const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID!;
-      const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET!;
-      const redirectUri = process.env.GOOGLE_OAUTH_REDIRECT_URI || 
-                          `${process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback`;
+      const oauthConfig = getGoogleOAuthConfig();
+      if (!oauthConfig.clientId || !oauthConfig.clientSecret) {
+        throw new Error('Google OAuth credentials are required in production mode');
+      }
+      
+      // Trim whitespace/newlines from credentials (common issue with env vars)
+      const clientId = oauthConfig.clientId.trim();
+      const clientSecret = oauthConfig.clientSecret.trim();
+      const config = getApiConfig();
+      const redirectUri = (oauthConfig.redirectUri || 
+                          `${config.CORS_ORIGIN || config.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app'}/api/auth/google-callback`).trim();
 
       // Exchange authorization code for tokens
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -224,10 +233,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         encryptedRefreshToken,
         tokenExpiry,
         'Bearer',
-        'https://www.googleapis.com/auth/calendar openid profile email'
+        'https://www.googleapis.com/auth/calendar.readonly openid profile email'
       ]);
-
-      console.log('Auto-connected calendar for Google user', { email: userInfo.email });
 
       // Create session user object
       const sessionUser: SessionUser = {
@@ -258,18 +265,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Max-Age=86400 = 24 hours (same as session max age)
       cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
       
-      // Log cookie setting for debugging (remove in production)
-      console.log('Setting session cookie:', {
-        cookieLength: sessionCookie.length,
-        userId: sessionUser.id,
-        email: sessionUser.email,
-        cookieCount: cookieArray.length
-      });
-      
       res.setHeader('Set-Cookie', cookieArray);
 
       // Redirect to frontend
-      const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
+      const config = getApiConfig();
+      const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
       if (sessionUser.role === 'researcher_admin') {
         res.redirect(`${frontendUrl}/admin`);
       } else {
@@ -285,7 +285,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stack: err.stack,
     });
     
-    const frontendUrl = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
+    const config = getApiConfig();
+    const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
     res.redirect(`${frontendUrl}?error=google_auth_failed&details=${encodeURIComponent(err.message || 'Unknown error')}`);
   }
 }

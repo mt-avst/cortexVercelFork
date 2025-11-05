@@ -8,7 +8,7 @@ import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 
-const OpportunityForm: React.FC = () => {
+const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
@@ -25,7 +25,7 @@ const OpportunityForm: React.FC = () => {
     external_link_optional: '',
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
-    status: 'draft' as 'draft' | 'published'
+    status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published'
   });
   
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -384,7 +384,7 @@ const OpportunityForm: React.FC = () => {
         external_link_optional: formData.external_link_optional.trim() || undefined,
         participant_type_required: formData.participant_type_required,
         participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
-        status: formData.status
+        status: allowUserSubmission ? 'draft' : formData.status
       };
       
       // Only include default_duration_minutes for test and interview types
@@ -454,12 +454,15 @@ const OpportunityForm: React.FC = () => {
         return savedOpportunity.id;
       }
       
-      // Navigate to admin page after successful save (unless navigation is skipped for session creation)
+      // Navigate after successful save
       if (!skipNavigation) {
-        console.log('✅ Opportunity saved successfully, navigating to admin dashboard');
-        navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
-      } else {
-        console.log('✅ Opportunity saved successfully, navigation skipped (handled by AdminSessionManager)');
+        if (allowUserSubmission) {
+          // For user submissions, navigate to home with success message
+          navigate('/', { state: { message: 'Research request submitted successfully! It will be reviewed by an admin.' } });
+        } else {
+          // For admin, navigate to admin dashboard
+          navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
+        }
       }
       
       return savedOpportunity?.id;
@@ -509,12 +512,12 @@ const OpportunityForm: React.FC = () => {
   }
 
   // Redirect to login if not authenticated
-  if (!user) {
+  if (!loading && !user) {
     return <Navigate to="/auth/login" replace />;
   }
 
-  // Redirect to home if not admin
-  if (user.role !== 'researcher_admin') {
+  // Redirect to home if not admin (unless allowUserSubmission is true)
+  if (!loading && user && user.role !== 'researcher_admin' && !allowUserSubmission) {
     return <Navigate to="/" replace />;
   }
 
@@ -637,7 +640,7 @@ const OpportunityForm: React.FC = () => {
           {/* Back button */}
           <button 
             className="btn btn-outline-secondary mb-3"
-            onClick={() => navigate('/admin')}
+            onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
             style={{
               backgroundColor: 'transparent',
               borderColor: 'rgba(255, 255, 255, 0.2)',
@@ -645,7 +648,7 @@ const OpportunityForm: React.FC = () => {
             }}
           >
             <i className="bi bi-arrow-left me-1"></i>
-            Back to Admin Dashboard
+            {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
           </button>
           
           <div className="card shadow-sm border-0">
@@ -673,7 +676,7 @@ const OpportunityForm: React.FC = () => {
                   )}
                   <div style={{ fontSize: '0.9rem', color: 'rgba(224, 224, 224, 0.7)' }}>
                     <i className="bi bi-person-circle me-1"></i>
-                    {user.name}
+                    {user?.name || 'Unknown User'}
                   </div>
                 </div>
               </div>
@@ -741,6 +744,7 @@ const OpportunityForm: React.FC = () => {
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
+                        allowUserSubmission={allowUserSubmission}
                       />
                       {/* Navigation Buttons for Tab 1 */}
                       <div className="border-top mt-4 pt-4">

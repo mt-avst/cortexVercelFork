@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { logger } from '../utils/logger';
+import { getEmailConfig } from '../utils/env';
 
 export interface EmailTemplate {
   subject: string;
@@ -32,7 +32,7 @@ export class EmailService {
     
     this.config = {
       fromEmail: config.fromEmail || 'noreply@adaptalabs.com',
-      fromName: config.fromName || 'Adaptalabs Impact Lab',
+      fromName: config.fromName || 'AdaptaLabs',
       ...config,
       smtpPass: smtpPass, // Use trimmed password
     };
@@ -48,23 +48,18 @@ export class EmailService {
       // Check if SMTP is configured
       const hasSmtpConfig = this.config.smtpHost && this.config.smtpUser && this.config.smtpPass;
       
-      // Debug logging using logger (visible in Vercel logs)
-      logger.info('📧 Email Service Debug:', {
-        hasSmtpConfig,
-        smtpHost: this.config.smtpHost ? 'SET' : 'MISSING',
-        smtpUser: this.config.smtpUser ? 'SET' : 'MISSING',
-        smtpPass: this.config.smtpPass ? 'SET' : 'MISSING',
-        smtpPort: this.config.smtpPort,
-        fromEmail: this.config.fromEmail,
-        fromName: this.config.fromName,
-      });
-      
       if (hasSmtpConfig) {
         // Send real email using Nodemailer
+        // For Gmail, ensure FROM address matches SMTP_USER
+        const fromEmail = this.config.smtpHost?.includes('gmail') 
+          ? (this.config.smtpUser || this.config.fromEmail)
+          : this.config.fromEmail;
+        
         const transporter = nodemailer.createTransport({
           host: this.config.smtpHost,
           port: this.config.smtpPort || 587,
           secure: this.config.smtpPort === 465, // true for 465, false for other ports
+          requireTLS: this.config.smtpPort === 587, // Require TLS for port 587
           auth: {
             user: this.config.smtpUser,
             pass: this.config.smtpPass,
@@ -74,18 +69,17 @@ export class EmailService {
         // Send email to all recipients
         const results = await Promise.all(
           recipients.map(async (recipient) => {
+            // Use fromEmail that matches SMTP_USER for Gmail
+            const fromEmail = this.config.smtpHost?.includes('gmail') 
+              ? (this.config.smtpUser || this.config.fromEmail)
+              : this.config.fromEmail;
+            
             const info = await transporter.sendMail({
-              from: `"${this.config.fromName}" <${this.config.fromEmail}>`,
+              from: `"${this.config.fromName}" <${fromEmail}>`,
               to: `${recipient.name} <${recipient.email}>`,
               subject: template.subject,
               text: template.text,
               html: template.html,
-            });
-            
-            logger.info('📧 EMAIL SENT:', {
-              to: recipient.email,
-              messageId: info.messageId,
-              response: info.response,
             });
             
             return info.messageId;
@@ -94,25 +88,13 @@ export class EmailService {
         
         return { success: true, messageId: results[0] };
       } else {
-        // Demo mode: Log the email instead of sending
-        logger.warn('📧 EMAIL NOTIFICATION (Demo Mode - not sent)', {
-          from: `${this.config.fromName} <${this.config.fromEmail}>`,
-          to: recipients.map(r => `${r.name} <${r.email}>`).join(', '),
-          subject: template.subject,
-          missingConfig: {
-            EMAIL_SMTP_HOST: this.config.smtpHost || 'MISSING',
-            EMAIL_SMTP_PORT: this.config.smtpPort || 'MISSING',
-            EMAIL_SMTP_USER: this.config.smtpUser || 'MISSING',
-            EMAIL_SMTP_PASS: this.config.smtpPass ? 'SET' : 'MISSING',
-          },
-        });
-        
+        // Demo mode: Return success without sending (logging happens in error handler if needed)
         const mockMessageId = `email-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         
         return { success: true, messageId: mockMessageId };
       }
     } catch (error: any) {
-      logger.error('❌ Email sending failed:', {
+      console.error('❌ Email sending failed:', {
         error: error.message,
         stack: error.stack,
         code: error.code,
@@ -212,6 +194,24 @@ export class EmailService {
     const endTime = sessionEndTime.toLocaleString();
     const duration = Math.round((sessionEndTime.getTime() - sessionStartTime.getTime()) / (1000 * 60));
     
+    // Format date and time separately for cleaner display
+    const dateStr = sessionStartTime.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+    const startTimeStr = sessionStartTime.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    const endTimeStr = sessionEndTime.toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+    
     // Generate calendar links
     const description = `Research session: ${opportunityTitle}${ownerName ? `\n\nResearcher: ${ownerName}` : ''}`;
     const googleCalendarLink = this.generateGoogleCalendarLink(
@@ -247,7 +247,8 @@ export class EmailService {
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
           <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
+          <p><strong>Date:</strong> ${dateStr}</p>
+          <p><strong>Time:</strong> ${startTimeStr} - ${endTimeStr}</p>
           <p><strong>Duration:</strong> ${duration} minutes</p>
           ${sessionLocation ? `<p><strong>Location:</strong> ${sessionLocation}</p>` : ''}
           ${ownerName ? `<p><strong>Researcher:</strong> ${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''}</p>` : ''}
@@ -266,19 +267,11 @@ export class EmailService {
           </a>
         </div>
         
-        <p>Please make sure to:</p>
-        <ul>
-          <li>Add this to your calendar using the links above</li>
-          <li>Prepare any materials requested by the researcher</li>
-          <li>Arrive on time for the session</li>
-        </ul>
-        
-        <p>If you need to reschedule or cancel, you can manage your booking at:</p>
-        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings" style="color: #007bff;">My Bookings</a></p>
+        <p>If you need to reschedule or cancel, you can manage your booking at: <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings" style="color: #007bff;">My Bookings</a></p>
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated message from the Adaptalabs Impact Lab.
+          This is an automated message from AdaptaLabs.
         </p>
       </div>
     `;
@@ -291,7 +284,8 @@ Hello ${participantName},
 Your booking has been confirmed for the following research session:
 
 ${opportunityTitle}
-Date & Time: ${startTime} - ${endTime}
+Date: ${dateStr}
+Time: ${startTimeStr} - ${endTimeStr}
 Duration: ${duration} minutes
 ${sessionLocation ? `Location: ${sessionLocation}` : ''}
 ${ownerName ? `Researcher: ${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''}` : ''}
@@ -299,15 +293,9 @@ ${ownerName ? `Researcher: ${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''}` 
 Add to your calendar:
 Google Calendar: ${googleCalendarLink}
 
-Please make sure to:
-- Add this to your calendar
-- Prepare any materials requested by the researcher
-- Arrive on time for the session
+If you need to reschedule or cancel, you can manage your booking at: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings
 
-If you need to reschedule or cancel, you can manage your booking at:
-${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings
-
-This is an automated message from the Adaptalabs Impact Lab.
+This is an automated message from AdaptaLabs.
     `;
     
     return { subject, html, text };
@@ -346,7 +334,7 @@ This is an automated message from the Adaptalabs Impact Lab.
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated message from the Adaptalabs Impact Lab.
+          This is an automated message from AdaptaLabs.
         </p>
       </div>
     `;
@@ -367,7 +355,7 @@ If you have any questions about this cancellation, please contact the researcher
 You can view other available opportunities at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}
 
-This is an automated message from the Adaptalabs Impact Lab.
+This is an automated message from AdaptaLabs.
     `;
     
     return { subject, html, text };
@@ -410,7 +398,7 @@ This is an automated message from the Adaptalabs Impact Lab.
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated reminder from the Adaptalabs Impact Lab.
+          This is an automated reminder from AdaptaLabs.
         </p>
       </div>
     `;
@@ -433,7 +421,7 @@ Please make sure you're prepared and ready for the session.
 If you need to reschedule or cancel, you can manage your booking at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/my-bookings
 
-This is an automated reminder from the Adaptalabs Impact Lab.
+This is an automated reminder from AdaptaLabs.
     `;
     
     return { subject, html, text };
@@ -470,7 +458,7 @@ This is an automated reminder from the Adaptalabs Impact Lab.
         
         <hr style="margin: 30px 0; border: none; border-top: 1px solid #dee2e6;">
         <p style="color: #6c757d; font-size: 14px;">
-          This is an automated notification from the Adaptalabs Impact Lab.
+          This is an automated notification from AdaptaLabs.
         </p>
       </div>
     `;
@@ -488,7 +476,7 @@ Action: ${action === 'booked' ? 'Booked' : 'Cancelled'}
 You can manage your opportunities at:
 ${process.env.FRONTEND_URL || 'http://localhost:3000'}/admin
 
-This is an automated notification from the Adaptalabs Impact Lab.
+This is an automated notification from AdaptaLabs.
     `;
     
     return { subject, html, text };
@@ -497,13 +485,9 @@ This is an automated notification from the Adaptalabs Impact Lab.
 
 // Create a singleton instance
 // Note: Password trimming is handled in EmailService constructor
-const emailService = new EmailService({
-  fromEmail: process.env.EMAIL_FROM || 'noreply@adaptalabs.com',
-  fromName: process.env.EMAIL_FROM_NAME || 'Adaptalabs Impact Lab',
-  smtpHost: process.env.EMAIL_SMTP_HOST,
-  smtpPort: process.env.EMAIL_SMTP_PORT ? parseInt(process.env.EMAIL_SMTP_PORT, 10) : undefined,
-  smtpUser: process.env.EMAIL_SMTP_USER,
-  smtpPass: process.env.EMAIL_SMTP_PASS, // Will be trimmed in constructor
-});
+// Uses validated environment configuration
+const emailConfig = getEmailConfig();
+const emailService = new EmailService(emailConfig);
 
 export default emailService;
+

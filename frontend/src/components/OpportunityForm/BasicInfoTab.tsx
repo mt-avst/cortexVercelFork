@@ -7,13 +7,15 @@ interface BasicInfoTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: any) => void;
   handleBlur?: (field: string, value: any) => void;
+  allowUserSubmission?: boolean;
 }
 
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
-  handleBlur
+  handleBlur,
+  allowUserSubmission = false
 }) => {
   return (
     <div className="tab-pane active">
@@ -63,27 +65,29 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
             </div>
           </div>
           
-          <div className="col-md-6">
-            <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>Status</label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
-                Draft opportunities are only visible to admins
+          {!allowUserSubmission && (
+            <div className="col-md-6">
+              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>Status</label>
+                <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+                  Draft opportunities are only visible to admins
+                </div>
+                <select
+                  id="status"
+                  className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
+                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
+                  value={formData.status}
+                  onChange={(e) => handleInputChange('status', e.target.value)}
+                >
+                  <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
+                  <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
+                </select>
+                {validationErrors.status && (
+                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.status}</div>
+                )}
               </div>
-              <select
-                id="status"
-                className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
-                value={formData.status}
-                onChange={(e) => handleInputChange('status', e.target.value)}
-              >
-                <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
-                <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
-              </select>
-              {validationErrors.status && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.status}</div>
-              )}
             </div>
-          </div>
+          )}
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>

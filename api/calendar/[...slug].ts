@@ -275,8 +275,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      console.log(`📅 my-events: User ${userId}${isDemoUser1 ? ' (Demo User 1 - will generate mock conflicts)' : ''}${tokenResult.rows.length > 0 ? ' (calendar connected)' : ' (no tokens, demo mode)'}`);
-
       // Generate mock calendar events for demo mode
       
       const events: Array<{
@@ -427,8 +425,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           currentDate.setUTCDate(currentDate.getUTCDate() + 1);
         }
       }
-
-      console.log(`📅 Generated ${events.length} mock calendar events${isDemoUser1 ? ' with specific conflicts for Demo User 1' : ''}`);
 
       return res.status(200).json(events);
     } catch (error: unknown) {
