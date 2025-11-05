@@ -228,26 +228,61 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     return `${displayHour}:${minutes.toString().padStart(2, '0')} ${ampm}`;
   };
 
-  // Group sessions by date
+  // Group sessions by date and generate all days in the date range
   const groupSessionsByDate = () => {
-    const sessionsByDate = new Map<string, Session[]>();
+    if (sessions.length === 0) {
+      return [];
+    }
+
+    // Find the date range from sessions
+    const dates = sessions
+      .map(s => new Date(s.start_time))
+      .sort((a, b) => a.getTime() - b.getTime());
+    
+    const startDate = new Date(dates[0]);
+    startDate.setUTCHours(0, 0, 0, 0);
+    
+    const endDate = new Date(dates[dates.length - 1]);
+    endDate.setUTCHours(23, 59, 59, 999);
+
+    // Group sessions by date
+    const sessionsByDateMap = new Map<string, Session[]>();
     
     sessions.forEach(session => {
-      const date = new Date(session.start_time).toDateString();
-      if (!sessionsByDate.has(date)) {
-        sessionsByDate.set(date, []);
+      const date = new Date(session.start_time);
+      date.setUTCHours(0, 0, 0, 0);
+      const dateKey = date.toDateString();
+      
+      if (!sessionsByDateMap.has(dateKey)) {
+        sessionsByDateMap.set(dateKey, []);
       }
-      sessionsByDate.get(date)!.push(session);
+      sessionsByDateMap.get(dateKey)!.push(session);
     });
 
     // Sort sessions within each date by start time
-    sessionsByDate.forEach((sessions, date) => {
+    sessionsByDateMap.forEach((sessions, date) => {
       sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
     });
 
-    return Array.from(sessionsByDate.entries()).sort((a, b) => 
-      new Date(a[0]).getTime() - new Date(b[0]).getTime()
-    );
+    // Generate all days in the range (excluding weekends)
+    const allDays: Array<[string, Session[]]> = [];
+    const currentDate = new Date(startDate);
+    
+    while (currentDate <= endDate) {
+      const dayOfWeek = currentDate.getUTCDay(); // 0 = Sunday, 6 = Saturday
+      
+      // Only include weekdays (Monday-Friday)
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        const dateKey = currentDate.toDateString();
+        const dateSessions = sessionsByDateMap.get(dateKey) || [];
+        allDays.push([dateKey, dateSessions]);
+      }
+      
+      // Move to next day
+      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+    }
+
+    return allDays;
   };
 
   const sessionsByDate = groupSessionsByDate();
@@ -431,20 +466,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                     overflow: 'hidden',
                     zIndex: 1
                   }}>
-                    {dateSessions.length === 0 ? (
-                      <div className="text-center" style={{ 
-                        fontSize: '0.8rem',
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        color: '#FF4E50' /* Electric Coral red text */
-                      }}>
-                        <i className="bi bi-calendar-x me-1"></i>
-                        No sessions
-                      </div>
-                    ) : (
-                      dateSessions.map((session) => {
+                    {dateSessions.map((session) => {
                         const isBooked = bookedSlots.has(session.id);
                         const hasConflict = hasCalendarConflict(session);
                         const isFull = session.remaining <= 0;
@@ -565,15 +587,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                             {isConfirming && (
                               <div className="confirmation-buttons" style={{
                                 position: 'absolute',
-                                top: '50%',
+                                bottom: '2px',
                                 left: '50%',
-                                transform: 'translate(-50%, -50%)',
+                                transform: 'translateX(-50%)',
                                 display: 'flex',
-                                gap: '8px',
-                                zIndex: 10
+                                gap: '4px',
+                                zIndex: 10,
+                                maxHeight: 'calc(100% - 4px)',
+                                alignItems: 'flex-end'
                               }}>
                                 <button
-                                  className="btn btn-success btn-sm"
+                                  className="btn btn-success btn-sm confirmation-btn confirm-btn"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleConfirmBooking(session.id);
@@ -583,7 +607,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                                   <i className="bi bi-check"></i>
                                 </button>
                                 <button
-                                  className="btn btn-danger btn-sm"
+                                  className="btn btn-danger btn-sm confirmation-btn cancel-btn"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleCancelBooking();
@@ -611,8 +635,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                             )}
                           </div>
                         );
-                      })
-                    )}
+                      })}
                   </div>
                 </div>
               ))}

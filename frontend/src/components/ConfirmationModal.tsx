@@ -36,7 +36,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     <div 
       className="modal show d-block" 
       tabIndex={-1}
-      style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+      style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onCancel();
@@ -44,20 +44,20 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       }}
     >
       <div className="modal-dialog modal-dialog-centered">
-        <div className="modal-content">
-          <div className="modal-header border-0" style={{ backgroundColor: 'white' }}>
-            <h5 className="modal-title" style={{ color: '#000000' }}>{title}</h5>
+        <div className="modal-content confirmation-modal-content">
+          <div className="modal-header border-0 confirmation-modal-header">
+            <h5 className="modal-title confirmation-modal-title">{title}</h5>
             <button 
               type="button" 
-              className="btn-close" 
+              className="btn-close btn-close-white" 
               onClick={onCancel}
               aria-label="Close"
             ></button>
           </div>
-          <div className="modal-body" style={{ backgroundColor: 'white' }}>
-            <p className="mb-0" style={{ color: '#000000' }}>{message}</p>
+          <div className="modal-body confirmation-modal-body">
+            <p className="mb-0 confirmation-modal-message">{message}</p>
           </div>
-          <div className="modal-footer border-0">
+          <div className="modal-footer border-0 confirmation-modal-footer">
             <button 
               type="button" 
               className="btn btn-secondary" 
