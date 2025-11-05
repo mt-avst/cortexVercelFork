@@ -3,6 +3,7 @@ import { getPool } from '../../../db';
 import { requireAuth } from '../../../utils/auth';
 import { createErrorResponse, getErrorMessage } from '../../../utils/errors';
 import emailService, { EmailService } from '../../../services/email';
+import { logger } from '../../../utils/logger';
 
 /**
  * POST /api/bookings/sessions/[id]/book
@@ -130,7 +131,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         
         // Log only if email sending failed (errors are logged in email service)
         if (!emailResult.success) {
-          console.error('Failed to send booking confirmation email', {
+          logger.error('Failed to send booking confirmation email', {
             error: emailResult.error,
             participantEmail: user.email,
           });
@@ -161,11 +162,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             );
           }
         } catch (prefError) {
-          console.error('Failed to send admin notification email', prefError);
+          logger.error('Failed to send admin notification email', {
+            errorMessage: prefError instanceof Error ? prefError.message : String(prefError),
+          });
           // Don't fail the booking if admin notification fails
         }
       } catch (emailError) {
-        console.error('Failed to send booking confirmation email', emailError);
+        logger.error('Failed to send booking confirmation email', {
+          errorMessage: emailError instanceof Error ? emailError.message : String(emailError),
+        });
         // Don't fail the booking if email fails
       }
 

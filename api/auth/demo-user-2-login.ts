@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse } from '../utils/errors';
 import { getApiConfig } from '../utils/env';
+import { logger } from '../utils/logger';
 
 /**
  * GET /api/auth/demo-user-2-login
@@ -37,7 +38,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     frontendUrl = frontendUrl.replace(/\/$/, '');
     res.redirect(frontendUrl);
   } catch (error: unknown) {
-    console.error('Error in demo user 2 login handler:', error);
+    logger.error('Error in demo user 2 login handler', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return res.status(500).json(createErrorResponse('Internal server error'));
   }
 }

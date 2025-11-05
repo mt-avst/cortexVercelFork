@@ -4,6 +4,7 @@ import { SessionUser } from '../../shared/types';
 import { createErrorResponse } from '../utils/errors';
 import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
 import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
+import { logger } from '../utils/logger';
 
 /**
  * Encrypt sensitive token data
@@ -20,7 +21,7 @@ function encryptToken(text: string): string {
   // Production mode: Full encryption
   const encryptionKey = process.env.ENCRYPTION_KEY || 'demo-key';
   if (encryptionKey.length < 32) {
-    console.warn('⚠️ ENCRYPTION_KEY should be at least 32 characters for production');
+    logger.warn('ENCRYPTION_KEY should be at least 32 characters for production');
   }
   
   // Simple XOR encryption (same as backend)
@@ -62,10 +63,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Handle OAuth errors
     if (error) {
-      console.error('Google OAuth error:', error);
+      logger.error('Google OAuth error', {
+        errorMessage: String(error),
+      });
       const config = getApiConfig();
-      const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
-      return res.redirect(`${frontendUrl}?error=google_auth_failed&details=${encodeURIComponent(String(error))}`);
+      // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)
+      let frontendUrl = (config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app').trim();
+      frontendUrl = frontendUrl.replace(/\/$/, '').replace(/[\r\n\t]/g, '');
+      
+      const errorMessage = encodeURIComponent(String(error));
+      const redirectUrl = `${frontendUrl}?error=google_auth_failed&details=${errorMessage}`;
+      
+      try {
+        new URL(redirectUrl);
+        return res.redirect(redirectUrl);
+      } catch (urlError) {
+        logger.error('Invalid redirect URL', {
+          redirectUrl,
+          errorMessage: urlError instanceof Error ? urlError.message : String(urlError),
+        });
+        return res.status(500).json({
+          error: 'Authentication failed',
+          message: 'Invalid redirect URL configuration',
+          code: 'GOOGLE_AUTH_ERROR'
+        });
+      }
     }
 
     if (!code) {
@@ -127,7 +149,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text();
-        console.error('Failed to exchange code for tokens:', errorText);
+        logger.error('Failed to exchange code for tokens', {
+          errorMessage: errorText,
+          status: tokenResponse.status,
+        });
         throw new Error('Failed to exchange code for tokens');
       }
 
@@ -149,7 +174,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!userInfoResponse.ok) {
         const errorText = await userInfoResponse.text();
-        console.error('Failed to fetch user info:', errorText);
+        logger.error('Failed to fetch user info', {
+          errorMessage: errorText,
+          status: userInfoResponse.status,
+        });
         throw new Error('Failed to fetch user info');
       }
 
@@ -168,6 +196,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Create or update user in database
+    // Check if database is configured before attempting connection
+    if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+      logger.error('DATABASE_URL or POSTGRES_URL environment variable is not set');
+      throw new Error('Database connection not configured. Please set DATABASE_URL environment variable.');
+    }
+    
     const pool = getPool();
     const client = await pool.connect();
     
@@ -246,30 +280,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: userRole as 'employee' | 'researcher_admin',
       };
 
-      // Clear any existing session cookies first (including admin cookies)
-      // This ensures no stale cookies interfere
-      const cookieArray: string[] = [];
-      // Clear cookie with domain (try multiple variations to ensure cleanup)
-      cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-      cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-      // Clear cookie without domain
-      cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-      cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-
-      // Set new session cookie with proper encoding
+      // Set session cookie with proper encoding
       // CRITICAL: JSON must be URL encoded for cookie value
       const sessionCookie = encodeURIComponent(JSON.stringify(sessionUser));
       // Set cookie WITHOUT domain attribute - works for the exact domain
       // Using SameSite=None with Secure is required for cross-origin redirects from Google
-      // Set without domain to ensure it works for the exact domain
       // Max-Age=86400 = 24 hours (same as session max age)
-      cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
-      
-      res.setHeader('Set-Cookie', cookieArray);
+      res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
 
       // Redirect to frontend
       const config = getApiConfig();
-      const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
+      // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)
+      let frontendUrl = (config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app').trim();
+      // Remove trailing slash if present
+      frontendUrl = frontendUrl.replace(/\/$/, '');
+      
       if (sessionUser.role === 'researcher_admin') {
         res.redirect(`${frontendUrl}/admin`);
       } else {
@@ -280,14 +305,82 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.error('Google OAuth callback error:', {
-      error: err.message,
+    logger.error('Google OAuth callback error', {
+      errorMessage: err.message,
       stack: err.stack,
+      name: err.name,
     });
     
-    const config = getApiConfig();
-    const frontendUrl = config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app';
-    res.redirect(`${frontendUrl}?error=google_auth_failed&details=${encodeURIComponent(err.message || 'Unknown error')}`);
+    // Log additional context for debugging
+    logger.debug('Environment check', {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasPostgresUrl: !!process.env.POSTGRES_URL,
+      hasGoogleOAuthClientId: !!process.env.GOOGLE_OAUTH_CLIENT_ID,
+      hasGoogleOAuthClientSecret: !!process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      query: req.query,
+      url: req.url,
+    });
+    
+    try {
+      const config = getApiConfig();
+      // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)
+      let frontendUrl = (config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app').trim();
+      // Remove trailing slash if present
+      frontendUrl = frontendUrl.replace(/\/$/, '');
+      // Remove any control characters (newlines, tabs, etc.)
+      frontendUrl = frontendUrl.replace(/[\r\n\t]/g, '');
+      
+      // Sanitize error message - remove any characters that might break URL encoding
+      const sanitizedErrorMessage = (err.message || 'Unknown error')
+        .replace(/[\r\n\t]/g, ' ')
+        .replace(/"/g, "'")
+        .replace(/\[/g, '(')
+        .replace(/\]/g, ')')
+        .trim();
+      
+      const errorMessage = encodeURIComponent(sanitizedErrorMessage);
+      const redirectUrl = `${frontendUrl}?error=google_auth_failed&details=${errorMessage}`;
+      
+      // Validate URL before redirecting
+      try {
+        const url = new URL(redirectUrl);
+        // Ensure URL is valid and doesn't contain problematic characters
+        if (!res.headersSent) {
+          res.redirect(url.toString());
+        } else {
+          logger.error('Cannot redirect: headers already sent');
+          res.status(500).json({
+            error: 'Authentication failed',
+            message: sanitizedErrorMessage,
+            code: 'GOOGLE_AUTH_ERROR'
+          });
+        }
+      } catch (urlError) {
+        logger.error('Invalid redirect URL', {
+          redirectUrl,
+          errorMessage: urlError instanceof Error ? urlError.message : String(urlError),
+        });
+        if (!res.headersSent) {
+          res.status(500).json({
+            error: 'Authentication failed',
+            message: 'Invalid redirect URL configuration',
+            code: 'GOOGLE_AUTH_ERROR'
+          });
+        }
+      }
+    } catch (redirectError) {
+      // If redirect fails, send error response instead
+      logger.error('Failed to redirect after error', {
+        errorMessage: redirectError instanceof Error ? redirectError.message : String(redirectError),
+      });
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: 'Authentication failed',
+          message: err.message || 'Unknown error',
+          code: 'GOOGLE_AUTH_ERROR'
+        });
+      }
+    }
   }
 }
 

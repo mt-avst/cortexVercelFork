@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 /**
  * Catch-all calendar endpoint - handles multiple calendar routes
@@ -156,7 +157,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Batch query to check all slot conflicts at once using array unnest
       // This is much more efficient than querying in a loop
-      const queryParams: any[] = [];
+      const queryParams: unknown[] = [];
       const startTimes = validSlots.map(s => s.start_time);
       const endTimes = validSlots.map(s => s.end_time);
       
@@ -189,19 +190,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const result = await query(conflictQuery, queryParams);
       
       const conflictingCount = result.rows.length;
-      const conflicts = result.rows.map(row => ({
-        slot: {
-          start_time: row.slot_start_time,
-          end_time: row.slot_end_time
-        },
-        conflicting_session: {
-          id: row.id,
-          opportunity_id: row.opportunity_id,
-          start_time: row.start_time,
-          end_time: row.end_time,
-          opportunity_title: row.opportunity_title
-        }
-      }));
+      const conflicts = result.rows.map((row) => {
+        const r = row as Record<string, unknown>;
+        return {
+          slot: {
+            start_time: r.slot_start_time,
+            end_time: r.slot_end_time
+          },
+          conflicting_session: {
+            id: r.id,
+            opportunity_id: r.opportunity_id,
+            start_time: r.start_time,
+            end_time: r.end_time,
+            opportunity_title: r.opportunity_title
+          }
+        };
+      });
 
       return res.status(200).json({
         has_conflicts: conflictingCount > 0,
@@ -209,7 +213,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         conflicts: conflicts.length > 0 ? conflicts : undefined
       });
     } catch (error: unknown) {
-      console.error('Error checking conflicts:', error);
+      logger.error('Error checking conflicts', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       const errorMessage = getErrorMessage(error);
       return res.status(500).json(
         createErrorResponse('Internal server error', errorMessage)
@@ -259,8 +266,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
           [userId]
         );
-      } catch (dbError: any) {
-        console.error('📅 my-events: Database query error (will still generate events for Demo User 1):', dbError);
+      } catch (dbError: unknown) {
+        logger.error('Database query error in my-events (will still generate events for Demo User 1)', {
+          errorMessage: dbError instanceof Error ? dbError.message : String(dbError),
+          userId,
+          isDemoUser1,
+        });
         // For Demo User 1, continue even if query fails
         if (!isDemoUser1) {
           return res.status(500).json(createErrorResponse('Database error', getErrorMessage(dbError)));
@@ -428,7 +439,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json(events);
     } catch (error: unknown) {
-      console.error('Error fetching user calendar events:', error);
+      logger.error('Error fetching user calendar events', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       const errorMessage = getErrorMessage(error);
       return res.status(500).json(
         createErrorResponse('Failed to fetch calendar events', errorMessage)

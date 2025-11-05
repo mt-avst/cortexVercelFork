@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
 import { createErrorResponse, getErrorMessage } from './utils/errors';
 import { parseSessionCookie } from './utils/auth';
+import { logger } from './utils/logger';
 
 /**
  * GET /api/opportunities
@@ -67,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         LEFT JOIN users u ON o.owner_user_id = u.id
         WHERE 1=1
       `;
-      const params: any[] = [];
+      const params: unknown[] = [];
       let paramIndex = 1;
       
       if (type) {
@@ -143,7 +144,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
       } catch (sessionError: unknown) {
-        console.error('Error loading sessions batch:', getErrorMessage(sessionError));
+        logger.error('Error loading sessions batch', {
+          error: getErrorMessage(sessionError),
+        });
         // Continue with empty sessions map - opportunities will have empty sessions array
       }
 
@@ -170,7 +173,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
         } catch (clickError: unknown) {
-          console.error('Error loading click counts batch:', getErrorMessage(clickError));
+          logger.error('Error loading click counts batch', {
+            error: getErrorMessage(clickError),
+          });
           // Continue with empty clicks map
         }
       }
@@ -267,7 +272,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     return res.status(405).json(createErrorResponse('Method not allowed'));
   } catch (error: unknown) {
-    console.error('Error in opportunities handler:', error);
+    logger.error('Error in opportunities handler', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(
       createErrorResponse('Internal server error', errorMessage)

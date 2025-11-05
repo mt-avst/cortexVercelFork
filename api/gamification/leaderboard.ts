@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
 import { generateDummyLeaderboard } from './utils';
+import { logger } from '../utils/logger';
 
 /**
  * GET /api/gamification/leaderboard
@@ -34,7 +35,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       `, [limit]);
     } catch (queryError: unknown) {
       // If query fails (e.g., no tables yet), return dummy data
-      console.warn('Error querying real leaderboard, returning dummy data:', getErrorMessage(queryError));
+      logger.warn('Error querying real leaderboard, returning dummy data', {
+        error: getErrorMessage(queryError),
+      });
       const dummyData = generateDummyLeaderboard(limit, 'total');
       return res.status(200).json(dummyData);
     }
@@ -79,7 +82,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(realLeaderboard);
 
   } catch (error: unknown) {
-    console.error('Error fetching leaderboard:', error);
+    logger.error('Error fetching leaderboard', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     // If everything fails, return dummy data
     const limit = parseInt(req.query?.limit as string) || 20;
     const dummyData = generateDummyLeaderboard(limit, 'total');

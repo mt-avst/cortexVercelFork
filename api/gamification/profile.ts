@@ -3,6 +3,7 @@ import { getPool } from '../db';
 import { requireAuth } from '../utils/auth';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
 import { parseIntSafe, serializeDate, serializeRow } from '../utils/helpers';
+import { logger } from '../utils/logger';
 
 /**
  * GET /api/gamification/profile
@@ -24,7 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       SELECT * FROM user_profiles WHERE user_id = $1
     `, [userId]);
 
-    let profile: any;
+    let profile: Record<string, unknown>;
     if (profileResult.rows.length === 0) {
       // Create new profile
       const createResult = await pool.query(`
@@ -32,9 +33,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         VALUES ($1) 
         RETURNING *
       `, [userId]);
-      profile = createResult.rows[0];
+      profile = createResult.rows[0] as Record<string, unknown>;
     } else {
-      profile = profileResult.rows[0];
+      profile = profileResult.rows[0] as Record<string, unknown>;
     }
 
     // Get completion counts by opportunity type
@@ -51,9 +52,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         WHERE b.user_id = $1 AND b.completion_status = 'approved'
         GROUP BY o.type
       `, [userId]);
-    } catch (queryError: any) {
+    } catch (queryError: unknown) {
       // If completion_status column doesn't exist yet, fall back to empty counts
-      console.warn('Error querying completion counts (completion_status column may not exist):', queryError.message);
+      const error = queryError as { message?: string; code?: string };
+      logger.warn('Error querying completion counts (completion_status column may not exist)', {
+        error: error.message || String(queryError),
+        code: error.code,
+      });
       completionCounts = { rows: [] };
     }
 
@@ -64,9 +69,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let questions_completed = 0;
 
     // Map counts by type
-    completionCounts.rows.forEach((row: any) => {
-      const count = parseInt(row.count);
-      switch (row.type) {
+    completionCounts.rows.forEach((row: Record<string, unknown>) => {
+      const count = parseInt(String(row.count || '0'), 10);
+      const type = String(row.type || '');
+      switch (type) {
         case 'test':
         case 'interview':
           sessions_completed += count;

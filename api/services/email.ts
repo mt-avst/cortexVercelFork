@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getEmailConfig } from '../utils/env';
+import { logger } from '../utils/logger';
 
 export interface EmailTemplate {
   subject: string;
@@ -93,17 +94,17 @@ export class EmailService {
         
         return { success: true, messageId: mockMessageId };
       }
-    } catch (error: any) {
-      console.error('❌ Email sending failed:', {
-        error: error.message,
-        stack: error.stack,
-        code: error.code,
-        command: error.command,
-        response: error.response,
-        responseCode: error.responseCode,
-        fullError: error,
+    } catch (error: unknown) {
+      const errorObj = error as { message?: string; stack?: string; code?: string; command?: string; response?: string; responseCode?: number };
+      logger.error('Email sending failed', {
+        error: errorObj.message || String(error),
+        stack: errorObj.stack,
+        code: errorObj.code,
+        command: errorObj.command,
+        response: errorObj.response,
+        responseCode: errorObj.responseCode,
       });
-      return { success: false, error: error.message };
+      return { success: false, error: errorObj.message || 'Failed to send email' };
     }
   }
 

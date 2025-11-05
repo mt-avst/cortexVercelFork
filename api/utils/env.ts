@@ -9,6 +9,7 @@
  */
 
 import { getBackendConfig, BackendEnvironment } from '../../shared/config/environment';
+import { logger } from './logger';
 
 // Cache validated config (lazy initialization)
 let cachedConfig: BackendEnvironment | null = null;
@@ -26,9 +27,11 @@ export function getApiConfig(): BackendEnvironment {
     } catch (error) {
       // In serverless, env vars might not be set at module load time
       // Return a partial config with defaults to avoid startup failures
-      console.warn('⚠️ Environment validation failed, using defaults:', error);
+      logger.warn('Environment validation failed, using defaults', {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       cachedConfig = {
-        NODE_ENV: (process.env.NODE_ENV as any) || 'development',
+        NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
         PORT: 3001,
         DATABASE_URL: process.env.DATABASE_URL || process.env.POSTGRES_URL,
         SESSION_SECRET: process.env.SESSION_SECRET || 'default-secret-for-development-only',
@@ -84,5 +87,7 @@ export function getGoogleOAuthConfig() {
 export function clearConfigCache() {
   cachedConfig = null;
 }
+
+
 
 

@@ -3,6 +3,7 @@ import { createErrorResponse } from '../utils/errors';
 import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
 import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import crypto from 'crypto';
+import { logger } from '../utils/logger';
 
 /**
  * GET /api/auth/google-login
@@ -61,7 +62,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.redirect(authUrl);
   } catch (error: unknown) {
     const err = error instanceof Error ? error : new Error(String(error));
-    console.error('Google login initiation failed:', err);
+    logger.error('Google login initiation failed', {
+      error: err.message,
+      stack: err.stack,
+    });
     res.status(500).json(createErrorResponse('Google login initiation failed'));
   }
 }

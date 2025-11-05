@@ -1,5 +1,6 @@
 import type { VercelRequest } from '@vercel/node';
 import { SessionUser } from '../../shared/types';
+import { logger } from './logger';
 
 /**
  * Parse and validate session cookie from request
@@ -21,8 +22,8 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
   }
 
   if (!sessionData) {
-    // Debug logging (remove in production)
-    console.log('No session cookie found', {
+    // Debug logging - only in development
+    logger.debug('No session cookie found', {
       hasCookies: !!cookies,
       cookieCount: cookiePairs.length,
       cookieNames: cookiePairs.map(p => p.split('=')[0]).filter(Boolean)

@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { logger } from './utils/logger';
 
 // Create a singleton database pool for Vercel serverless functions
 let pool: Pool | null = null;
@@ -9,8 +10,9 @@ export function getPool(): Pool {
     
     if (!databaseUrl) {
       const errorMsg = 'DATABASE_URL or POSTGRES_URL environment variable is not set';
-      console.error(errorMsg);
-      console.error('Available env vars:', Object.keys(process.env).filter(k => k.includes('DB') || k.includes('POST') || k.includes('DATABASE')));
+      logger.error(errorMsg, {
+        availableEnvVars: Object.keys(process.env).filter(k => k.includes('DB') || k.includes('POST') || k.includes('DATABASE')),
+      });
       throw new Error(errorMsg);
     }
 
@@ -25,7 +27,9 @@ export function getPool(): Pool {
       cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
     }
 
-    console.log('Connecting to database...', cleanUrl.substring(0, 20) + '...');
+    logger.info('Connecting to database', {
+      urlPrefix: cleanUrl.substring(0, 20) + '...',
+    });
 
     pool = new Pool({
       connectionString: cleanUrl,
@@ -40,7 +44,10 @@ export function getPool(): Pool {
 
     // Handle pool errors
     pool.on('error', (err) => {
-      console.error('Unexpected error on idle client', err);
+      logger.error('Unexpected error on idle client', {
+        errorMessage: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
     });
   }
 
@@ -48,7 +55,7 @@ export function getPool(): Pool {
 }
 
 // Helper function to execute queries with automatic error handling
-export async function query(text: string, params?: any[]) {
+export async function query(text: string, params?: unknown[]): Promise<{ rows: unknown[] }> {
   const pool = getPool();
   let client;
   try {
@@ -57,11 +64,12 @@ export async function query(text: string, params?: any[]) {
     return result;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Database query error:', errorMessage);
-    console.error('Query:', text.substring(0, 100));
-    if (params) {
-      console.error('Params:', params);
-    }
+    logger.error('Database query error', {
+      error: errorMessage,
+      query: text.substring(0, 100),
+      params: params || undefined,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw error;
   } finally {
     if (client) {

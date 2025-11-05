@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 /**
  * POST /api/auth/logout
@@ -18,8 +19,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Set-Cookie', 'adaptalabs_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax; Secure');
 
     return res.status(200).json({ success: true });
-  } catch (error: any) {
-    console.error('Logout error:', error);
+  } catch (error: unknown) {
+    logger.error('Logout error', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return res.status(500).json(createErrorResponse('Logout failed'));
   }
 }
