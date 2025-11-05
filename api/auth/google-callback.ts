@@ -82,11 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           redirectUrl,
           errorMessage: urlError instanceof Error ? urlError.message : String(urlError),
         });
-        return res.status(500).json({
-          error: 'Authentication failed',
-          message: 'Invalid redirect URL configuration',
-          code: 'GOOGLE_AUTH_ERROR'
-        });
+        return res.status(500).json(
+          createErrorResponse(
+            'Authentication failed',
+            'Invalid redirect URL configuration',
+            'GOOGLE_AUTH_ERROR'
+          )
+        );
       }
     }
 
