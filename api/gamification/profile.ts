@@ -18,6 +18,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get authenticated user from cookie
     const user = requireAuth(req);
     const userId = user.id;
+    
+    // Check if database is configured before attempting connection
+    if (!process.env.DATABASE_URL && !process.env.POSTGRES_URL) {
+      logger.error('DATABASE_URL or POSTGRES_URL environment variable is not set');
+      return res.status(503).json(createErrorResponse(
+        'Database connection not configured. Please set DATABASE_URL environment variable.'
+      ));
+    }
+    
     const pool = getPool();
 
     // Get or create user profile
@@ -157,9 +166,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ));
     }
 
+    // Log the full error for debugging
+    logger.error('Error fetching user profile', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      userId: req.headers.cookie ? 'present' : 'missing',
+    });
+
     const errorMessage = getErrorMessage(error);
+    
+    // Provide more specific error messages
+    let userFriendlyMessage = 'Failed to fetch profile';
+    if (errorMessage.includes('DATABASE_URL') || errorMessage.includes('POSTGRES_URL')) {
+      userFriendlyMessage = 'Database connection not configured';
+    } else if (errorMessage.includes('connection') || errorMessage.includes('connect')) {
+      userFriendlyMessage = 'Unable to connect to the database';
+    } else if (errorMessage) {
+      userFriendlyMessage = errorMessage;
+    }
+    
     return res.status(500).json(
-      createErrorResponse('Failed to fetch profile', errorMessage)
+      createErrorResponse(userFriendlyMessage, errorMessage)
     );
   }
 }

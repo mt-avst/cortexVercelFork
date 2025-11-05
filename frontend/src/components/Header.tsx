@@ -54,8 +54,10 @@ const Header: React.FC = () => {
               <>
                 {user.role !== 'researcher_admin' && (
                   <>
-                    <Link 
-                      to="/submit-research-request" 
+                    <a 
+                      href="https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="momentum-btn-secondary"
                       style={{
                         backgroundColor: 'transparent',
@@ -86,7 +88,7 @@ const Header: React.FC = () => {
                       }}
                     >
                       Submit Research Request
-                    </Link>
+                    </a>
                     <Link 
                       to="/my-bookings" 
                       className="momentum-btn-secondary"

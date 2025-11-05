@@ -24,10 +24,34 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
       setProfile(profileData);
     } catch (err: any) {
       console.error('Error loading profile data:', err);
-      const errorMessage = err?.response?.data?.error || 
-                           err?.response?.statusText || 
-                           err?.message || 
-                           'Failed to load profile data';
+      
+      // Extract error message from various possible locations
+      let errorMessage = 'Failed to load profile data';
+      
+      if (err?.response?.data) {
+        // Check for error message in response data
+        if (typeof err.response.data === 'string') {
+          errorMessage = err.response.data;
+        } else if (err.response.data.error) {
+          errorMessage = typeof err.response.data.error === 'string' 
+            ? err.response.data.error 
+            : err.response.data.error?.message || errorMessage;
+        } else if (err.response.data.message) {
+          errorMessage = err.response.data.message;
+        }
+      } else if (err?.response?.statusText) {
+        errorMessage = err.response.statusText;
+      } else if (err?.message) {
+        errorMessage = err.message;
+      }
+      
+      // If it's a network error or database unavailable, provide a more helpful message
+      if (err?.code === 'ECONNREFUSED' || err?.code === 'ERR_NETWORK' || 
+          errorMessage.toLowerCase().includes('database') || 
+          errorMessage.toLowerCase().includes('connection')) {
+        errorMessage = 'Unable to connect to the server. Please check your connection and try again.';
+      }
+      
       setError(errorMessage);
     } finally {
       setLoading(false);
