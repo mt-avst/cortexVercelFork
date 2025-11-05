@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse } from '../utils/errors';
+import { getApiConfig } from '../utils/env';
 
 /**
  * GET /api/auth/demo-user-2-login
@@ -20,28 +21,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     role: 'employee', // CRITICAL: Must be 'employee', NOT 'researcher_admin'
   };
 
-  // Clear any existing session cookies first (including admin cookies)
-  // This ensures no stale cookies interfere
-  const cookieArray: string[] = [];
-  // Clear cookie with domain (try multiple variations to ensure cleanup)
-  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; Domain=.vercel.app; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-  // Clear cookie without domain
-  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=Lax; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-  cookieArray.push(`adaptalabs_session=; HttpOnly; Secure; SameSite=None; Path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`);
-
-  // Set new session cookie with proper encoding
+  // Set session cookie with proper encoding
   // CRITICAL: JSON must be URL encoded for cookie value
+  // Vercel serverless functions require a single Set-Cookie header string, not an array
+  // Setting a new cookie with the same name will replace any existing cookie
   const sessionCookie = encodeURIComponent(JSON.stringify(demoUser2));
-  // Set cookie WITHOUT domain attribute - works for the exact domain
-  // Using SameSite=None with Secure is required for cross-origin in some cases
-  // But SameSite=Lax should work for same-site redirects
-  // Set without domain to ensure it works for the exact domain
-  cookieArray.push(`adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/`);
-  res.setHeader('Set-Cookie', cookieArray);
+  // Max-Age=86400 = 24 hours (same as session max age in google-callback)
+  // Using SameSite=None with Secure is required for cross-origin redirects
+  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
   
     // Redirect to frontend
-    const frontendUrl = process.env.FRONTEND_URL || 'https://adapta-labs-p62q.vercel.app';
+    // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)
+    const config = getApiConfig();
+    let frontendUrl = (config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app').trim();
+    frontendUrl = frontendUrl.replace(/\/$/, '');
     res.redirect(frontendUrl);
   } catch (error: unknown) {
     console.error('Error in demo user 2 login handler:', error);
