@@ -154,12 +154,14 @@ const Header: React.FC = () => {
                           <span>Role: {user.role === 'researcher_admin' ? 'admin' : 'user'}</span>
                         </div>
                       </li>
-                      <li>
-                        <div className="px-3 py-2">
-                          <i className="bi bi-gear me-2"></i>
-                          <span>Settings</span>
-                        </div>
-                      </li>
+                      {user.role === 'researcher_admin' && (
+                        <li>
+                          <Link to="/admin/settings" className="px-3 py-2 d-block">
+                            <i className="bi bi-gear me-2"></i>
+                            <span>Settings</span>
+                          </Link>
+                        </li>
+                      )}
                       {user.role !== 'researcher_admin' && (
                         <li>
                           <Link to="/gamification" className="px-3 py-2 d-block">
