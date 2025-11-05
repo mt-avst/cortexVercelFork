@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import OpportunityDetail from './pages/OpportunityDetail';
 import OpportunityForm from './pages/OpportunityForm';
 import ResearchRequestForm from './pages/ResearchRequestForm';
+import UnderDevelopment from './pages/UnderDevelopment';
 import MyBookings from './pages/MyBookings';
 import Admin from './pages/Admin';
 import Settings from './pages/Settings';
@@ -29,7 +30,7 @@ function App() {
                     <Route path="/" element={<Home />} />
                     <Route path="/opportunities/:id" element={<OpportunityDetail />} />
                     <Route path="/poll/:id" element={<Poll />} />
-                    <Route path="/submit-research-request" element={<ResearchRequestForm />} />
+                    <Route path="/submit-research-request" element={<UnderDevelopment />} />
                     <Route path="/admin" element={<Admin />} />
                     <Route path="/admin/settings" element={<Settings />} />
                     <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
