@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick } from '../api/client';
-import { Opportunity } from '../api/types';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents } from '../api/client';
+import { Opportunity, CalendarEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
@@ -16,6 +16,8 @@ const OpportunityDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
+  const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [loadingCalendar, setLoadingCalendar] = useState(false);
 
   const loadOpportunity = async (forceRefresh = false) => {
     if (!id) return;
@@ -56,6 +58,80 @@ const OpportunityDetail: React.FC = () => {
     // Always force refresh when component mounts to ensure fresh data
     loadOpportunity(true);
   }, [id]);
+
+  // Fetch calendar events when sessions are available
+  useEffect(() => {
+    const loadCalendarEvents = async () => {
+      if (!opportunity?.sessions || opportunity.sessions.length === 0) {
+        setUserCalendarEvents([]);
+        return;
+      }
+
+      try {
+        setLoadingCalendar(true);
+        
+        // Get date range from sessions
+        const dates = opportunity.sessions
+          .map(s => new Date(s.start_time))
+          .sort((a, b) => a.getTime() - b.getTime());
+        
+        if (dates.length === 0) return;
+
+        const startTime = new Date(dates[0]);
+        startTime.setHours(0, 0, 0, 0);
+        
+        const endTime = new Date(dates[dates.length - 1]);
+        endTime.setHours(23, 59, 59, 999);
+
+        // Fetch calendar events
+        const events = await getMyCalendarEvents(
+          startTime.toISOString(),
+          endTime.toISOString()
+        );
+        
+        setUserCalendarEvents(events);
+      } catch (error: any) {
+        console.error('Error fetching calendar events:', error);
+        // Don't show error to user, just log it
+        setUserCalendarEvents([]);
+      } finally {
+        setLoadingCalendar(false);
+      }
+    };
+
+    loadCalendarEvents();
+  }, [opportunity?.sessions]);
+
+  // Check if a session conflicts with user's calendar
+  const hasCalendarConflict = useCallback((session: { start_time: string; end_time: string }): boolean => {
+    if (userCalendarEvents.length === 0) {
+      return false;
+    }
+
+    const sessionStart = new Date(session.start_time);
+    const sessionEnd = new Date(session.end_time);
+
+    const hasConflict = userCalendarEvents.some(event => {
+      // Skip cancelled or declined events
+      if (event.status === 'cancelled' || event.status === 'declined') {
+        return false;
+      }
+      
+      const eventStart = new Date(event.start);
+      const eventEnd = new Date(event.end);
+      
+      // Skip if event times are invalid
+      if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
+        return false;
+      }
+      
+      // Check for actual overlap (not just touching)
+      // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
+      return (sessionStart < eventEnd && sessionEnd > eventStart);
+    });
+    
+    return hasConflict;
+  }, [userCalendarEvents]);
 
   // Refresh data when user returns to the page (handles browser back/forward)
   useEffect(() => {
@@ -178,10 +254,11 @@ const OpportunityDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="container mt-4">
+      <div className="container mt-4" aria-busy="true" aria-live="polite">
+        <h1>Loading Opportunity</h1>
         <div className="text-center py-5">
-          <div className="spinner-border" role="status">
-            <span className="visually-hidden">Loading...</span>
+          <div className="spinner-border" role="status" aria-label="Loading opportunity">
+            <span className="visually-hidden">Loading opportunity...</span>
           </div>
           <p className="mt-2">Loading opportunity...</p>
         </div>
@@ -196,11 +273,13 @@ const OpportunityDetail: React.FC = () => {
     
     return (
       <div className="container mt-4">
+        <h1>Opportunity Details</h1>
         <div className="alert alert-danger" role="alert">
           {error}
           <button 
             className="btn btn-sm btn-outline-danger ms-2"
             onClick={() => window.location.reload()}
+            style={{ color: '#c82333', borderColor: '#c82333' }}
           >
             Retry
           </button>
@@ -212,6 +291,7 @@ const OpportunityDetail: React.FC = () => {
   if (!opportunity) {
     return (
       <div className="container mt-4">
+        <h1>Opportunity Details</h1>
         <div className="alert alert-warning" role="alert">
           Opportunity not found
         </div>
@@ -220,14 +300,186 @@ const OpportunityDetail: React.FC = () => {
   }
 
   return (
-    <div className="container mt-4">
-      <div className="row">
-        <div className="col-12">
+    <div className="container-fluid py-4" style={{ backgroundColor: '#0A091A', minHeight: '100vh' }}>
+      <style>
+        {`
+          .opportunity-detail-page {
+            background-color: #0A091A;
+            min-height: 100vh;
+          }
+          .opportunity-detail-page .card {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 16px !important;
+          }
+          .opportunity-detail-page .card-header {
+            background-color: transparent !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+          }
+          .opportunity-detail-page .card-body {
+            background-color: transparent !important;
+          }
+          .opportunity-detail-page h1,
+          .opportunity-detail-page h2,
+          .opportunity-detail-page h3,
+          .opportunity-detail-page h4,
+          .opportunity-detail-page h5,
+          .opportunity-detail-page h6 {
+            color: var(--text-primary) !important;
+          }
+          .opportunity-detail-page .text-muted {
+            color: var(--text-muted) !important;
+          }
+          .opportunity-detail-page p {
+            color: var(--text-primary) !important;
+          }
+          .opportunity-detail-page .alert {
+            background-color: rgba(255, 255, 255, 0.05) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+            color: var(--text-primary) !important;
+          }
+          .opportunity-detail-page .alert-info {
+            background-color: rgba(33, 150, 243, 0.1) !important;
+            border-color: rgba(33, 150, 243, 0.3) !important;
+            color: #81d4fa !important;
+          }
+          .opportunity-detail-page .alert-success {
+            background-color: rgba(40, 167, 69, 0.1) !important;
+            border-color: rgba(40, 167, 69, 0.3) !important;
+            color: #a5d6a7 !important;
+          }
+          .opportunity-detail-page .alert-danger {
+            background-color: rgba(220, 53, 69, 0.1) !important;
+            border-color: rgba(220, 53, 69, 0.3) !important;
+            color: #ffcdd2 !important;
+          }
+          .opportunity-detail-page .alert-danger .btn-outline-danger {
+            color: #c82333 !important;
+            border-color: #c82333 !important;
+          }
+          .opportunity-detail-page .alert-danger .btn-outline-danger:hover {
+            background-color: #c82333 !important;
+            border-color: #c82333 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .alert-warning {
+            background-color: rgba(255, 193, 7, 0.1) !important;
+            border-color: rgba(255, 193, 7, 0.3) !important;
+            color: #ffe082 !important;
+          }
+          .opportunity-detail-page .btn-outline-secondary {
+            border-color: rgba(255, 255, 255, 0.2) !important;
+            color: var(--text-primary) !important;
+          }
+          .opportunity-detail-page .btn-outline-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.1) !important;
+            border-color: rgba(255, 255, 255, 0.3) !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-primary {
+            background-color: #FF4E50 !important;
+            border-color: #FF4E50 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-primary:hover {
+            background-color: #ff5e60 !important;
+            border-color: #ff5e60 !important;
+          }
+          .opportunity-detail-page .btn-outline-primary {
+            border-color: #FF4E50 !important;
+            color: #FF4E50 !important;
+            background-color: transparent !important;
+          }
+          .opportunity-detail-page .btn-outline-primary:hover {
+            background-color: #FF4E50 !important;
+            border-color: #FF4E50 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-outline-success {
+            border-color: #28a745 !important;
+            color: #28a745 !important;
+            background-color: transparent !important;
+          }
+          .opportunity-detail-page .btn-outline-success:hover {
+            background-color: #28a745 !important;
+            border-color: #28a745 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-outline-danger {
+            border-color: #dc3545 !important;
+            color: #dc3545 !important;
+            background-color: transparent !important;
+          }
+          .opportunity-detail-page .btn-outline-danger:hover {
+            background-color: #dc3545 !important;
+            border-color: #dc3545 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-danger {
+            background-color: #dc3545 !important;
+            border-color: #dc3545 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-danger:hover {
+            background-color: #c82333 !important;
+            border-color: #c82333 !important;
+          }
+          .opportunity-detail-page .btn-success {
+            background-color: #28a745 !important;
+            border-color: #28a745 !important;
+            color: #FFFFFF !important;
+          }
+          .opportunity-detail-page .btn-success:hover {
+            background-color: #218838 !important;
+            border-color: #218838 !important;
+          }
+          /* Override Bootstrap table defaults */
+          .opportunity-detail-page .table,
+          .opportunity-detail-page table.table {
+            background-color: transparent !important;
+            background: transparent !important;
+            color: var(--text-primary) !important;
+          }
+          .opportunity-detail-page .table-responsive {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
+          .opportunity-detail-page table thead {
+            background-color: var(--bg-card) !important;
+            background: var(--bg-card) !important;
+          }
+          .opportunity-detail-page table thead th {
+            background-color: var(--bg-card) !important;
+            background: var(--bg-card) !important;
+            color: var(--text-primary) !important;
+            border-color: var(--border-card) !important;
+          }
+          .opportunity-detail-page table tbody {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
+          .opportunity-detail-page table tbody tr {
+            background-color: transparent !important;
+            background: transparent !important;
+          }
+          .opportunity-detail-page table tbody td {
+            background-color: transparent !important;
+            background: transparent !important;
+            color: var(--text-primary) !important;
+          }
+        `}
+      </style>
+      <section className="container mt-4 opportunity-detail-page" aria-label="Opportunity details">
+        <div className="row">
+          <div className="col-12">
           {/* Back button */}
           <button 
             className="btn btn-outline-secondary mb-3"
             onClick={() => navigate('/')}
             style={{ color: '#ffffff' }}
+            aria-label="Navigate back to AdaptaLabs home"
           >
             ← Back to AdaptaLabs
           </button>
@@ -235,15 +487,16 @@ const OpportunityDetail: React.FC = () => {
 
           {/* Error message */}
           {error && (
-            <div className="alert alert-danger alert-dismissible fade show" role="alert">
+            <div className="alert alert-danger alert-dismissible fade show" role="alert" aria-live="assertive">
               {error}
               <div className="mt-2">
                 <button 
                   className="btn btn-sm btn-outline-danger me-2"
                   onClick={() => loadOpportunity(true)}
                   disabled={loading}
+                  aria-label="Refresh opportunity data"
                 >
-                  <i className="bi bi-arrow-clockwise me-1"></i>
+                  <i className="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>
                   Refresh Data
                 </button>
                 <button 
@@ -257,8 +510,9 @@ const OpportunityDetail: React.FC = () => {
                     }
                   }}
                   disabled={loading}
+                  aria-label="Retry booking a session"
                 >
-                  <i className="bi bi-arrow-repeat me-1"></i>
+                  <i className="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
                   Retry Booking
                 </button>
               </div>
@@ -266,6 +520,7 @@ const OpportunityDetail: React.FC = () => {
                 type="button" 
                 className="btn-close" 
                 onClick={() => setError('')}
+                aria-label="Close error message"
               ></button>
             </div>
           )}
@@ -284,7 +539,7 @@ const OpportunityDetail: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h1 className="h3 mb-0">{opportunity.title}</h1>
+                  <h1 className="mb-0">{opportunity.title}</h1>
                 </div>
               </div>
             </div>
@@ -298,7 +553,7 @@ const OpportunityDetail: React.FC = () => {
                   {opportunity.type !== 'question' && (
                     <div className="mb-3">
                       <h6 className="fw-bold">Purpose</h6>
-                      <p className="mb-0" style={{ color: '#000000', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</p>
+                      <p className="mb-0" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</p>
                     </div>
                   )}
 
@@ -359,15 +614,16 @@ const OpportunityDetail: React.FC = () => {
                 <>
                   {/* Help bar for test opportunities */}
                   {bookingSuccess ? (
-                    <div className="alert alert-success d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }}>
+                    <div className="alert alert-success d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }} role="alert" aria-live="polite">
                       <div>
-                        <i className="bi bi-check-circle me-2"></i>
+                        <i className="bi bi-check-circle me-2" aria-hidden="true"></i>
                         {bookingSuccess}
                         <button 
                           className="btn btn-sm btn-outline-success ms-3"
                           onClick={() => navigate('/my-bookings')}
+                          aria-label="Navigate to My Bookings page"
                         >
-                          <i className="bi bi-calendar-check me-1"></i>
+                          <i className="bi bi-calendar-check me-1" aria-hidden="true"></i>
                           View My Bookings
                         </button>
                       </div>
@@ -375,12 +631,12 @@ const OpportunityDetail: React.FC = () => {
                         type="button" 
                         className="btn-close" 
                         onClick={() => setBookingSuccess(null)}
-                        aria-label="Close"
+                        aria-label="Close success message"
                       ></button>
                     </div>
                   ) : (
-                    <div className="alert alert-info" style={{ marginBottom: '1.5rem' }}>
-                      <i className="bi bi-info-circle me-2"></i>
+                    <div className="alert alert-info" style={{ marginBottom: '1.5rem' }} role="status">
+                      <i className="bi bi-info-circle me-2" aria-hidden="true"></i>
                       Click on a timeslot to book yourself in
                     </div>
                   )}
@@ -395,26 +651,32 @@ const OpportunityDetail: React.FC = () => {
                         className="btn btn-sm btn-outline-secondary"
                         onClick={() => loadOpportunity(true)}
                         disabled={loading}
+                        aria-label="Refresh sessions data"
                         title="Refresh sessions data"
                       >
-                        <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`}></i>
+                        <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`} aria-hidden="true"></i>
+                        <span className="visually-hidden">{loading ? 'Refreshing' : 'Refresh'}</span>
                         Refresh
                       </button>
-                      <div className="btn-group" role="group">
+                      <div className="btn-group" role="group" aria-label="View mode selection">
                         <button
                           type="button"
                           className={`btn btn-sm ${viewMode === 'calendar' ? 'btn-primary' : 'btn-outline-primary'}`}
                           onClick={() => setViewMode('calendar')}
+                          aria-pressed={viewMode === 'calendar'}
+                          aria-label="Switch to calendar view"
                         >
-                          <i className="bi bi-calendar-grid me-1"></i>
+                          <i className="bi bi-calendar-grid me-1" aria-hidden="true"></i>
                           Calendar
                         </button>
                         <button
                           type="button"
                           className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-outline-primary'}`}
                           onClick={() => setViewMode('table')}
+                          aria-pressed={viewMode === 'table'}
+                          aria-label="Switch to table view"
                         >
-                          <i className="bi bi-table me-1"></i>
+                          <i className="bi bi-table me-1" aria-hidden="true"></i>
                           Table
                         </button>
                       </div>
@@ -431,59 +693,174 @@ const OpportunityDetail: React.FC = () => {
                           bookingLoading={bookingLoading}
                         />
                       ) : (
-                        <div className="table-responsive">
-                          <table className="table table-striped">
-                            <thead>
-                              <tr>
-                                <th>Start Time</th>
-                                <th>End Time</th>
-                                <th>Capacity</th>
-                                <th>Remaining</th>
-                                <th>Location/Link</th>
-                                <th>Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {opportunity.sessions
-                                .filter(session => new Date(session.end_time) >= new Date()) // Only show future sessions
-                                .map((session) => (
-                                <tr key={session.id}>
-                                  <td>{new Date(session.start_time).toLocaleString()}</td>
-                                  <td>{new Date(session.end_time).toLocaleString()}</td>
-                                  <td>{session.capacity}</td>
-                                  <td>
-                                    <span className={`badge ${session.remaining > 0 ? 'bg-success' : 'bg-danger'}`}>
-                                      {session.remaining}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    {session.location_or_meet_link_optional && (
-                                      <small className="text-muted">
-                                        {session.location_or_meet_link_optional.length > 30 
-                                          ? `${session.location_or_meet_link_optional.substring(0, 30)}...`
-                                          : session.location_or_meet_link_optional
-                                        }
-                                      </small>
-                                    )}
-                                  </td>
-                                  <td>
-                                    {session.remaining > 0 ? (
-                                      <button 
-                                        className="btn btn-primary btn-sm"
-                                        onClick={() => handleBookSession(session.id)}
-                                        disabled={bookingLoading === session.id}
-                                      >
-                                        {bookingLoading === session.id ? 'Booking...' : 'Book'}
-                                      </button>
-                                    ) : (
-                                      <span className="badge bg-danger">Full</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <>
+                          <style>
+                            {`
+                              .momentum-table-container {
+                                background: transparent !important;
+                                border-radius: var(--card-radius);
+                                overflow: hidden;
+                              }
+                              .momentum-table-container table,
+                              .momentum-table-container table.table {
+                                width: 100%;
+                                border-collapse: separate;
+                                border-spacing: 0;
+                                background: transparent !important;
+                                background-color: transparent !important;
+                              }
+                              .momentum-table-container thead {
+                                background: var(--bg-card) !important;
+                                background-color: var(--bg-card) !important;
+                                backdrop-filter: blur(16px);
+                                -webkit-backdrop-filter: blur(16px);
+                              }
+                              .momentum-table-container thead th {
+                                background: var(--bg-card) !important;
+                                background-color: var(--bg-card) !important;
+                                color: var(--text-primary) !important;
+                                border-bottom: 1px solid var(--border-card) !important;
+                                border-top: none !important;
+                                border-left: none !important;
+                                border-right: none !important;
+                                font-weight: 600;
+                                padding: 16px 12px;
+                                font-size: var(--font-size-body);
+                                vertical-align: middle;
+                              }
+                              .momentum-table-container tbody {
+                                background: transparent !important;
+                                background-color: transparent !important;
+                              }
+                              .momentum-table-container tbody tr {
+                                background: transparent !important;
+                                background-color: transparent !important;
+                                border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+                                transition: background-color var(--transition-card);
+                              }
+                              .momentum-table-container tbody tr:hover {
+                                background: var(--bg-card) !important;
+                                background-color: var(--bg-card) !important;
+                              }
+                              .momentum-table-container tbody td {
+                                background: transparent !important;
+                                background-color: transparent !important;
+                                color: var(--text-primary) !important;
+                                border: none !important;
+                                padding: 16px 12px;
+                                vertical-align: middle;
+                                font-size: var(--font-size-body);
+                              }
+                              .momentum-table-container tbody td small {
+                                color: var(--text-muted) !important;
+                                font-size: var(--font-size-metadata);
+                              }
+                              .momentum-table-container .badge {
+                                color: var(--tag-text) !important;
+                              }
+                            `}
+                          </style>
+                          {(() => {
+                            // Filter sessions: only future sessions without calendar conflicts
+                            const futureSessions = opportunity.sessions.filter(
+                              session => new Date(session.end_time) >= new Date()
+                            );
+                            
+                            const sessionsWithoutConflicts = futureSessions.filter(
+                              session => !hasCalendarConflict(session)
+                            );
+                            
+                            const conflictedCount = futureSessions.length - sessionsWithoutConflicts.length;
+                            
+                            return (
+                              <>
+                                {conflictedCount > 0 && (
+                                  <div className="alert alert-info mb-3" style={{ marginBottom: '1rem' }}>
+                                    <i className="bi bi-info-circle me-2"></i>
+                                    {conflictedCount} conflicted slot{conflictedCount !== 1 ? 's' : ''} hidden from view
+                                  </div>
+                                )}
+                                <div className="table-responsive momentum-table-container">
+                                  <table className="table" aria-label="Available sessions">
+                                    <thead>
+                                      <tr>
+                                        <th scope="col">Date</th>
+                                        <th scope="col">Time</th>
+                                        <th scope="col">Action</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sessionsWithoutConflicts.length === 0 ? (
+                                        <tr>
+                                          <td colSpan={3} className="text-center py-4">
+                                            <small className="text-muted">
+                                              {futureSessions.length === 0 
+                                                ? 'No available sessions'
+                                                : 'All available sessions conflict with your calendar'}
+                                            </small>
+                                          </td>
+                                        </tr>
+                                      ) : (
+                                        sessionsWithoutConflicts.map((session) => {
+                                    const startDate = new Date(session.start_time);
+                                    const endDate = new Date(session.end_time);
+                                    
+                                    // Format date (e.g., "Nov 5, 2025")
+                                    const dateStr = startDate.toLocaleDateString('en-US', {
+                                      month: 'short',
+                                      day: 'numeric',
+                                      year: 'numeric'
+                                    });
+                                    
+                                    // Format timeslot (e.g., "9:00 AM to 9:30 AM")
+                                    const startTimeStr = startDate.toLocaleTimeString('en-US', {
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                      hour12: true
+                                    });
+                                    const endTimeStr = endDate.toLocaleTimeString('en-US', {
+                                      hour: 'numeric',
+                                      minute: '2-digit',
+                                      hour12: true
+                                    });
+                                    const timeSlotStr = `${startTimeStr} to ${endTimeStr}`;
+                                    
+                                    return (
+                                      <tr key={session.id}>
+                                        <td>{dateStr}</td>
+                                        <td>{timeSlotStr}</td>
+                                        <td>
+                                          {session.remaining > 0 ? (
+                                            <button 
+                                              className="btn btn-primary btn-sm"
+                                              onClick={() => handleBookSession(session.id)}
+                                              disabled={bookingLoading === session.id}
+                                              aria-label={`Book session on ${dateStr} from ${timeSlotStr}`}
+                                            >
+                                              {bookingLoading === session.id ? (
+                                                <>
+                                                  <span className="visually-hidden">Booking session...</span>
+                                                  Booking...
+                                                </>
+                                              ) : (
+                                                'Book'
+                                              )}
+                                            </button>
+                                          ) : (
+                                            <span className="badge bg-danger" aria-label="Session is full">Full</span>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </>
                       )}
                     </>
                   ) : (
@@ -512,6 +889,7 @@ const OpportunityDetail: React.FC = () => {
                             }
                           }}
                           disabled={!opportunity.external_link_optional}
+                          aria-label={opportunity.type === 'poll' ? 'Open poll in new tab' : 'Open survey in new tab'}
                           title={!opportunity.external_link_optional ? 'Link not available' : 'Opens in a new tab'}
                         >
                           {opportunity.type === 'poll' ? 'Open Poll' : 'Open Survey'}
@@ -522,6 +900,7 @@ const OpportunityDetail: React.FC = () => {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="btn btn-primary w-100"
+                          aria-label={opportunity.type === 'question' ? 'Answer question in new tab' : 'Participate in new tab'}
                           onClick={async () => {
                             // Track click for questions too if desired (though M6 spec only mentions poll/survey)
                           }}
@@ -535,7 +914,7 @@ const OpportunityDetail: React.FC = () => {
                     <div className="row mt-2">
                       <div className="col-md-4">
                         <small className="text-muted">
-                          <i className="bi bi-box-arrow-up-right me-1"></i>
+                          <i className="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>
                           Opens in a new tab
                         </small>
                       </div>
@@ -544,7 +923,6 @@ const OpportunityDetail: React.FC = () => {
                 </div>
               )}
             </div>
-
             {/* Footer with owner info (admin only) */}
             {user?.role === 'researcher_admin' && opportunity.owner_name && (
               <div className="card-footer bg-light">
@@ -556,6 +934,7 @@ const OpportunityDetail: React.FC = () => {
           </div>
         </div>
       </div>
+      </section>
     </div>
   );
 };

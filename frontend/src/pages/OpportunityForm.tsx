@@ -503,8 +503,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
-        <div className="spinner-border text-primary" role="status">
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }} aria-busy="true" aria-live="polite">
+        <div className="spinner-border text-primary" role="status" aria-label="Loading">
           <span className="visually-hidden">Loading...</span>
         </div>
       </div>
@@ -524,8 +524,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // Show loading spinner while loading opportunity for edit
   if (isEdit && loadingOpportunity) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }}>
-        <div className="spinner-border text-primary" role="status">
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }} aria-busy="true" aria-live="polite">
+        <div className="spinner-border text-primary" role="status" aria-label="Loading opportunity">
           <span className="visually-hidden">Loading opportunity...</span>
         </div>
       </div>
@@ -655,7 +655,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h1 className="h3 mb-1" style={{ fontSize: '1.75rem', fontWeight: '600', color: '#E0E0E0' }}>
+                  <h1 className="mb-1" style={{ fontSize: '1.75rem', fontWeight: '600', color: '#E0E0E0' }}>
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
                   <p className="mb-0" style={{ fontSize: '1rem', color: 'rgba(224, 224, 224, 0.7)' }}>
@@ -760,7 +760,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             >
                               {saving ? (
                                 <>
-                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
                                   Saving...
                                 </>
                               ) : (
@@ -823,7 +823,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             >
                               {saving ? (
                                 <>
-                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
                                   Saving...
                                 </>
                               ) : (
@@ -888,7 +888,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             >
                               {saving ? (
                                 <>
-                                  <span className="spinner-border spinner-border-sm me-2"></span>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
                                   Saving...
                                 </>
                               ) : (
@@ -908,7 +908,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           >
                             {saving ? (
                               <>
-                                <span className="spinner-border spinner-border-sm me-2"></span>
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
                                 {isEdit ? 'Updating...' : 'Creating...'}
                               </>
                             ) : (
