@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-backend",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "Adaptalabs recruitment app backend",
   "main": "dist/index.js",
   "scripts": {
