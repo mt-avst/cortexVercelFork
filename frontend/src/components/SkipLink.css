@@ -1,0 +1,40 @@
+/* Skip Link Styles
+ * Accessibility feature: Allows keyboard users to skip navigation
+ * Hidden by default, visible when focused (keyboard navigation)
+ */
+
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--brand-primary, #007bff);
+  color: #ffffff;
+  padding: 8px 16px;
+  text-decoration: none;
+  font-weight: 600;
+  z-index: 10000;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s ease-in-out;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+}
+
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 0;
+  clip: auto;
+  clip-path: none;
+  outline: 3px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.skip-link:hover {
+  background: var(--brand-primary-dark, #0056b3);
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.skip-link:active {
+  background: var(--brand-primary-dark, #0056b3);
+}
+

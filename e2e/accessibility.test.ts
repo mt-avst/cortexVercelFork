@@ -219,15 +219,33 @@ test.describe('Accessibility Tests', () => {
     await page.goto(BASE_URL);
     await page.waitForLoadState('networkidle');
     
-    // Focus skip link
+    // Check if skip link exists
+    const skipLink = page.locator('a.skip-link');
+    const skipLinkCount = await skipLink.count();
+    
+    // Skip link should exist
+    expect(skipLinkCount).toBeGreaterThan(0);
+    
+    // Focus skip link (Tab key focuses it)
+    // Skip link should be the first focusable element
     await page.keyboard.press('Tab');
     
+    // Wait a moment for CSS transition
+    await page.waitForTimeout(200);
+    
     // Skip link should be visible when focused
-    const skipLink = page.locator('a.skip-link');
-    await expect(skipLink).toBeVisible();
+    await expect(skipLink).toBeVisible({ timeout: 2000 });
+    
+    // Verify skip link is focused or has the correct href
+    const focusedElement = page.locator(':focus');
+    const focusedHref = await focusedElement.getAttribute('href');
+    expect(focusedHref).toBe('#main-content');
     
     // Activate skip link
     await page.keyboard.press('Enter');
+    
+    // Wait for navigation
+    await page.waitForTimeout(100);
     
     // Should focus main content
     const mainContent = page.locator('#main-content');
