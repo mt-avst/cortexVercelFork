@@ -26,7 +26,7 @@ const Header: React.FC = () => {
     <header className="header">
       <div className="container">
         <div className="header-content">
-          <Link to={logoLink} className="logo">
+          <Link to={logoLink} className="logo" aria-label="AdaptaLabs home">
             <img 
               src="/images/adaptalogo.png" 
               alt="Adaptalabs Logo" 
@@ -34,16 +34,17 @@ const Header: React.FC = () => {
             />
           </Link>
           
-          <nav className="nav">
+          <nav className="nav" aria-label="Main navigation">
             {/* Animation Toggle Button - Always visible */}
             <button
               onClick={toggleAnimations}
               className="btn btn-outline-secondary"
+              aria-label={animationsEnabled ? 'Disable animations' : 'Enable animations'}
               title={animationsEnabled ? 'Disable animations' : 'Enable animations'}
-              style={{ marginRight: '0.5rem' }}
+              style={{ marginRight: '0.5rem', color: '#8e9ba6' }}
             >
-              <i className={animationsEnabled ? 'bi bi-pause-fill' : 'bi bi-play-fill'}></i>
-              <span className="d-none d-md-inline ms-1">
+              <i className={animationsEnabled ? 'bi bi-pause-fill' : 'bi bi-play-fill'} aria-hidden="true"></i>
+              <span className="d-none d-md-inline ms-1" style={{ color: '#8e9ba6' }}>
                 {animationsEnabled ? 'Animations On' : 'Animations Off'}
               </span>
             </button>
@@ -59,6 +60,7 @@ const Header: React.FC = () => {
                       target="_blank"
                       rel="noopener noreferrer"
                       className="momentum-btn-secondary"
+                      aria-label="Submit Research Request (opens in new tab)"
                       style={{
                         backgroundColor: 'transparent',
                         border: '1px solid rgba(255, 255, 255, 0.2)',
@@ -136,50 +138,54 @@ const Header: React.FC = () => {
                       id="profileDropdown"
                       data-bs-toggle="dropdown" 
                       aria-expanded="false"
+                      aria-haspopup="true"
+                      aria-label="User profile menu"
                     >
-                      <i className="bi bi-person-circle me-1"></i>
+                      <i className="bi bi-person-circle me-1" aria-hidden="true"></i>
                       Your Profile
                     </button>
-                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown">
-                      <li>
+                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown" role="menu">
+                      <li role="none">
                         <div className="px-3 py-2">
-                          <i className="bi bi-person me-2"></i>
+                          <i className="bi bi-person me-2" aria-hidden="true"></i>
                           <span>Hello, {user.name || 'Unknown User'}</span>
                         </div>
                       </li>
-                      <li><hr className="dropdown-divider" /></li>
-                      <li>
+                      <li role="separator"><hr className="dropdown-divider" /></li>
+                      <li role="none">
                         <div className="px-3 py-2">
-                          <i className="bi bi-shield-check me-2"></i>
+                          <i className="bi bi-shield-check me-2" aria-hidden="true"></i>
                           <span>Role: {user.role === 'researcher_admin' ? 'admin' : 'user'}</span>
                         </div>
                       </li>
                       {user.role === 'researcher_admin' && (
-                        <li>
-                          <Link to="/admin/settings" className="px-3 py-2 d-block">
-                            <i className="bi bi-gear me-2"></i>
+                        <li role="none">
+                          <Link to="/admin/settings" className="px-3 py-2 d-block" role="menuitem">
+                            <i className="bi bi-gear me-2" aria-hidden="true"></i>
                             <span>Settings</span>
                           </Link>
                         </li>
                       )}
                       {user.role !== 'researcher_admin' && (
-                        <li>
-                          <Link to="/gamification" className="px-3 py-2 d-block">
-                            <i className="bi bi-trophy me-2"></i>
+                        <li role="none">
+                          <Link to="/gamification" className="px-3 py-2 d-block" role="menuitem">
+                            <i className="bi bi-trophy me-2" aria-hidden="true"></i>
                             <span>AdaptaBits</span>
                           </Link>
                         </li>
                       )}
-                      <li><hr className="dropdown-divider" /></li>
-                      <li>
+                      <li role="separator"><hr className="dropdown-divider" /></li>
+                      <li role="none">
                         <button 
                           onClick={(e) => {
                             e.preventDefault();
                             logout();
                           }} 
                           className="px-3 py-2 w-100 text-start border-0"
+                          role="menuitem"
+                          aria-label="Logout"
                         >
-                          <i className="bi bi-box-arrow-right me-2"></i>
+                          <i className="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
                           <span>Logout</span>
                         </button>
                       </li>
