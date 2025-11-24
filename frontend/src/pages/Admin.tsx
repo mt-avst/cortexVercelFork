@@ -231,9 +231,21 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+    <div className="container-fluid" style={{ minHeight: '100vh', padding: '1rem', backgroundColor: '#0A091A' }}>
       <style>
         {`
+          /* Responsive container padding */
+          @media (min-width: 576px) {
+            .container-fluid {
+              padding: 1.5rem !important;
+            }
+          }
+          @media (min-width: 768px) {
+            .container-fluid {
+              padding: 2rem !important;
+            }
+          }
+          
           .custom-tab-button {
             color: #E0E0E0 !important;
             background-color: rgba(255, 255, 255, 0.05) !important;
@@ -244,6 +256,17 @@ const Admin: React.FC = () => {
             text-align: center !important;
             font-weight: 500 !important;
             transition: all 0.2s ease-in-out !important;
+          }
+          
+          /* Mobile tab button adjustments */
+          @media (max-width: 576px) {
+            .custom-tab-button {
+              padding: 0.5rem 0.75rem !important;
+              font-size: 0.9rem !important;
+            }
+            .custom-tab-button i {
+              display: none !important;
+            }
           }
           .custom-tab-button.active {
             background-color: #FF4E50 !important;
@@ -414,77 +437,173 @@ const Admin: React.FC = () => {
             background-color: transparent !important;
           }
           
-          /* Optimize column widths for opportunities table */
-          .admin-dashboard table.table-hover thead th:nth-child(1),
-          .admin-dashboard table.table-hover tbody td:nth-child(1) {
-            width: 30%;
-            min-width: 250px;
-            max-width: 400px;
+          /* Responsive card adjustments */
+          @media (max-width: 576px) {
+            .admin-dashboard .card {
+              border-radius: 12px !important;
+              margin: 0 !important;
+            }
+            .admin-dashboard .card-header h1 {
+              font-size: 1.5rem !important;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(2),
-          .admin-dashboard table.table-hover tbody td:nth-child(2) {
-            width: 8%;
-            min-width: 80px;
-            white-space: nowrap;
+          
+          /* Responsive summary cards */
+          @media (max-width: 576px) {
+            .admin-dashboard .card-body .card {
+              margin-bottom: 0.75rem !important;
+            }
+            .admin-dashboard .card-body .card-body {
+              padding: 0.75rem !important;
+            }
+            .admin-dashboard .card-body .card-body h3 {
+              font-size: 1.5rem !important;
+            }
+            .admin-dashboard .card-body .card-body h6 {
+              font-size: 0.7rem !important;
+            }
+            .admin-dashboard .card-body .card-body small {
+              font-size: 0.75rem !important;
+            }
+            .admin-dashboard .card-body .card-body i {
+              font-size: 2rem !important;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(3),
-          .admin-dashboard table.table-hover tbody td:nth-child(3) {
-            width: 10%;
-            min-width: 100px;
-            white-space: nowrap;
+          
+          /* Responsive table wrapper */
+          @media (max-width: 768px) {
+            .admin-dashboard .table-responsive {
+              border-radius: 8px;
+              overflow-x: auto;
+              -webkit-overflow-scrolling: touch;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(4),
-          .admin-dashboard table.table-hover tbody td:nth-child(4) {
-            width: 8%;
-            min-width: 90px;
-            white-space: nowrap;
+          
+          /* Optimize column widths for opportunities table - Desktop */
+          @media (min-width: 992px) {
+            .admin-dashboard table.table-hover thead th:nth-child(1),
+            .admin-dashboard table.table-hover tbody td:nth-child(1) {
+              width: 30%;
+              min-width: 250px;
+              max-width: 400px;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(2),
+            .admin-dashboard table.table-hover tbody td:nth-child(2) {
+              width: 8%;
+              min-width: 80px;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(3),
+            .admin-dashboard table.table-hover tbody td:nth-child(3) {
+              width: 10%;
+              min-width: 100px;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(4),
+            .admin-dashboard table.table-hover tbody td:nth-child(4) {
+              width: 8%;
+              min-width: 90px;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(5),
+            .admin-dashboard table.table-hover tbody td:nth-child(5) {
+              width: 6%;
+              min-width: 70px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(6),
+            .admin-dashboard table.table-hover tbody td:nth-child(6) {
+              width: 6%;
+              min-width: 70px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(7),
+            .admin-dashboard table.table-hover tbody td:nth-child(7) {
+              width: 7%;
+              min-width: 85px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(8),
+            .admin-dashboard table.table-hover tbody td:nth-child(8) {
+              width: 7%;
+              min-width: 85px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(9),
+            .admin-dashboard table.table-hover tbody td:nth-child(9) {
+              width: 7%;
+              min-width: 80px;
+              text-align: center;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(10),
+            .admin-dashboard table.table-hover tbody td:nth-child(10) {
+              width: 8%;
+              min-width: 100px;
+              white-space: nowrap;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(11),
+            .admin-dashboard table.table-hover tbody td:nth-child(11) {
+              width: 5%;
+              min-width: 120px;
+              white-space: nowrap;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(5),
-          .admin-dashboard table.table-hover tbody td:nth-child(5) {
-            width: 6%;
-            min-width: 70px;
-            text-align: center;
-            white-space: nowrap;
+          
+          /* Mobile table adjustments */
+          @media (max-width: 991px) {
+            .admin-dashboard table.table-hover thead th,
+            .admin-dashboard table.table-hover tbody td {
+              padding: 12px 8px !important;
+              font-size: 0.9rem;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(1),
+            .admin-dashboard table.table-hover tbody td:nth-child(1) {
+              min-width: 200px;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(n+5),
+            .admin-dashboard table.table-hover tbody td:nth-child(n+5) {
+              font-size: 0.85rem;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(6),
-          .admin-dashboard table.table-hover tbody td:nth-child(6) {
-            width: 6%;
-            min-width: 70px;
-            text-align: center;
-            white-space: nowrap;
+          
+          /* Very small screens - hide less critical columns */
+          @media (max-width: 768px) {
+            .admin-dashboard table.table-hover thead th:nth-child(5),
+            .admin-dashboard table.table-hover tbody td:nth-child(5),
+            .admin-dashboard table.table-hover thead th:nth-child(6),
+            .admin-dashboard table.table-hover tbody td:nth-child(6),
+            .admin-dashboard table.table-hover thead th:nth-child(7),
+            .admin-dashboard table.table-hover tbody td:nth-child(7),
+            .admin-dashboard table.table-hover thead th:nth-child(8),
+            .admin-dashboard table.table-hover tbody td:nth-child(8) {
+              display: none;
+            }
           }
-          .admin-dashboard table.table-hover thead th:nth-child(7),
-          .admin-dashboard table.table-hover tbody td:nth-child(7) {
-            width: 7%;
-            min-width: 85px;
-            text-align: center;
-            white-space: nowrap;
-          }
-          .admin-dashboard table.table-hover thead th:nth-child(8),
-          .admin-dashboard table.table-hover tbody td:nth-child(8) {
-            width: 7%;
-            min-width: 85px;
-            text-align: center;
-            white-space: nowrap;
-          }
-          .admin-dashboard table.table-hover thead th:nth-child(9),
-          .admin-dashboard table.table-hover tbody td:nth-child(9) {
-            width: 7%;
-            min-width: 80px;
-            text-align: center;
-            white-space: nowrap;
-          }
-          .admin-dashboard table.table-hover thead th:nth-child(10),
-          .admin-dashboard table.table-hover tbody td:nth-child(10) {
-            width: 8%;
-            min-width: 100px;
-            white-space: nowrap;
-          }
-          .admin-dashboard table.table-hover thead th:nth-child(11),
-          .admin-dashboard table.table-hover tbody td:nth-child(11) {
-            width: 5%;
-            min-width: 120px;
-            white-space: nowrap;
+          
+          /* Extra small screens - show only essential columns */
+          @media (max-width: 576px) {
+            .admin-dashboard table.table-hover thead th:nth-child(3),
+            .admin-dashboard table.table-hover tbody td:nth-child(3),
+            .admin-dashboard table.table-hover thead th:nth-child(9),
+            .admin-dashboard table.table-hover tbody td:nth-child(9),
+            .admin-dashboard table.table-hover thead th:nth-child(10),
+            .admin-dashboard table.table-hover tbody td:nth-child(10) {
+              display: none;
+            }
+            .admin-dashboard table.table-hover thead th,
+            .admin-dashboard table.table-hover tbody td {
+              padding: 10px 6px !important;
+              font-size: 0.85rem;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(1),
+            .admin-dashboard table.table-hover tbody td:nth-child(1) {
+              min-width: 150px;
+            }
           }
         `}
       </style>
@@ -496,43 +615,50 @@ const Admin: React.FC = () => {
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '16px'
+            borderRadius: '16px',
+            margin: '0 -0.5rem'
           }}>
-            <div className="card-header d-flex justify-content-between align-items-center border-0 bg-transparent" style={{ marginBottom: '2rem' }}>
-              <h1 className="h3 mb-0" style={{ color: '#E0E0E0' }}>Admin Dashboard</h1>
-              <div className="d-flex gap-2">
-                <button 
-                  className="btn btn-outline-secondary"
-                  onClick={() => navigate('/admin/settings')}
-                  aria-label="Settings"
-                  style={{
-                    backgroundColor: 'transparent',
-                    borderColor: 'rgba(255, 255, 255, 0.2)',
-                    color: '#E0E0E0'
-                  }}
-                >
-                  <i className="bi bi-gear me-2"></i>
-                  Settings
-                </button>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => navigate('/admin/opportunities/new')}
-                  aria-label="Create new research study"
-                  style={{
-                    backgroundColor: '#FF4E50',
-                    borderColor: '#FF4E50',
-                    color: '#FFFFFF'
-                  }}
-                >
-                  Create Research Study →
-                </button>
+            <div className="card-header border-0 bg-transparent" style={{ marginBottom: '2rem' }}>
+              <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
+                <h1 className="h3 mb-0" style={{ color: '#E0E0E0', fontSize: 'clamp(1.25rem, 4vw, 1.75rem)' }}>Admin Dashboard</h1>
+                <div className="d-flex flex-column flex-sm-row gap-2 w-100 w-md-auto">
+                  <button 
+                    className="btn btn-outline-secondary"
+                    onClick={() => navigate('/admin/settings')}
+                    aria-label="Settings"
+                    style={{
+                      backgroundColor: 'transparent',
+                      borderColor: 'rgba(255, 255, 255, 0.2)',
+                      color: '#E0E0E0',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <i className="bi bi-gear me-2"></i>
+                    <span className="d-none d-sm-inline">Settings</span>
+                    <span className="d-sm-none">Settings</span>
+                  </button>
+                  <button 
+                    className="btn btn-primary"
+                    onClick={() => navigate('/admin/opportunities/new')}
+                    aria-label="Create new research study"
+                    style={{
+                      backgroundColor: '#FF4E50',
+                      borderColor: '#FF4E50',
+                      color: '#FFFFFF',
+                      whiteSpace: 'nowrap'
+                    }}
+                  >
+                    <span className="d-none d-md-inline">Create Research Study →</span>
+                    <span className="d-md-none">Create Study →</span>
+                  </button>
+                </div>
               </div>
             </div>
 
             {/* Dashboard Statistics Cards */}
             {dashboardStats && (
-              <div className="row mb-4">
-                <div className="col-md-3 col-sm-6 mb-3">
+              <div className="row mb-4 g-3">
+                <div className="col-12 col-sm-6 col-md-3 mb-3 mb-md-0">
                   <div className="card border-0 shadow-sm h-100" style={{ 
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     backdropFilter: 'blur(16px)',
@@ -556,7 +682,7 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-3 col-sm-6 mb-3">
+                <div className="col-12 col-sm-6 col-md-3 mb-3 mb-md-0">
                   <div className="card border-0 shadow-sm h-100" style={{ 
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     backdropFilter: 'blur(16px)',
@@ -580,7 +706,7 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-3 col-sm-6 mb-3">
+                <div className="col-12 col-sm-6 col-md-3 mb-3 mb-md-0">
                   <div className="card border-0 shadow-sm h-100" style={{ 
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     backdropFilter: 'blur(16px)',
@@ -602,7 +728,7 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-md-3 col-sm-6 mb-3">
+                <div className="col-12 col-sm-6 col-md-3 mb-3 mb-md-0">
                   <div className="card border-0 shadow-sm h-100" style={{ 
                     backgroundColor: 'rgba(255, 255, 255, 0.05)',
                     backdropFilter: 'blur(16px)',
@@ -663,7 +789,7 @@ const Admin: React.FC = () => {
             
             <div className="card-body" style={{ backgroundColor: 'transparent', padding: '0' }}>
               {/* Tab Content */}
-              <div className="tab-content" style={{ padding: '1.5rem' }}>
+              <div className="tab-content" style={{ padding: 'clamp(1rem, 2vw, 1.5rem)' }}>
                 {/* Research Studies Tab */}
                 <div 
                   className={`tab-pane fade ${activeTab === 'opportunities' ? 'show active' : ''}`}
@@ -672,8 +798,8 @@ const Admin: React.FC = () => {
                   aria-labelledby="research-studies-tab-button"
                 >
                   {/* Filters */}
-                  <div className="row mb-4">
-                    <div className="col-md-4">
+                  <div className="row mb-4 g-3">
+                    <div className="col-12 col-md-4">
                       <label htmlFor="searchFilter" className="form-label mb-2">
                         <i className="bi bi-search me-1"></i>Search Studies
                       </label>
@@ -693,7 +819,7 @@ const Admin: React.FC = () => {
                         }}
                       />
                     </div>
-                    <div className="col-md-4">
+                    <div className="col-12 col-md-4">
                       <label htmlFor="statusFilter" className="form-label mb-2">Status</label>
                       <select
                         id="statusFilter"
@@ -713,7 +839,7 @@ const Admin: React.FC = () => {
                         <option value="closed">Closed</option>
                       </select>
                     </div>
-                    <div className="col-md-4">
+                    <div className="col-12 col-md-4">
                       <label htmlFor="typeFilter" className="form-label mb-2">Study Type</label>
                       <select
                         id="typeFilter"
