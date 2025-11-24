@@ -31,6 +31,7 @@ export interface AdminRequest {
   id: string;
   user_id: string;
   requested_at: string;
+  requested_role: 'researcher_admin' | 'superadmin';
   status: 'pending' | 'approved' | 'denied';
   reviewed_by?: string;
   reviewed_at?: string;
@@ -39,6 +40,7 @@ export interface AdminRequest {
   updated_at: string;
   email?: string;
   name?: string;
+  current_role?: string;
 }
 
 export interface NotificationPreference {

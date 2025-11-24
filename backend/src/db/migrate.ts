@@ -582,6 +582,7 @@ export async function runMigrations() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        requested_role TEXT NOT NULL CHECK (requested_role IN ('researcher_admin', 'superadmin')),
         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
         reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
         reviewed_at TIMESTAMPTZ,
@@ -591,6 +592,28 @@ export async function runMigrations() {
       )
     `);
     console.log('✅ Created admin_requests table');
+
+    // Add requested_role column if it doesn't exist (for existing tables)
+    try {
+      await client.query(`
+        ALTER TABLE admin_requests 
+        ADD COLUMN IF NOT EXISTS requested_role TEXT CHECK (requested_role IN ('researcher_admin', 'superadmin'));
+      `);
+      // Update existing rows to have requested_role = 'researcher_admin' (default for old requests)
+      await client.query(`
+        UPDATE admin_requests 
+        SET requested_role = 'researcher_admin' 
+        WHERE requested_role IS NULL;
+      `);
+      // Make it NOT NULL after setting defaults
+      await client.query(`
+        ALTER TABLE admin_requests 
+        ALTER COLUMN requested_role SET NOT NULL;
+      `);
+      console.log('✅ Added requested_role column to admin_requests');
+    } catch (error: any) {
+      console.log('ℹ️  requested_role column may already exist:', error.message);
+    }
 
     // Create indexes for admin_requests
     await client.query(`

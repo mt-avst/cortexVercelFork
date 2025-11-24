@@ -202,15 +202,19 @@ const Header: React.FC = () => {
                           </Link>
                         </li>
                       )}
-                      {user.role !== 'researcher_admin' && user.role !== 'superadmin' && (
+                      {user.role !== 'superadmin' && (
                         <>
-                          <li role="none">
-                            <Link to="/gamification" className="px-3 py-2 d-block" role="menuitem">
-                              <i className="bi bi-trophy me-2" aria-hidden="true"></i>
-                              <span>AdaptaBits</span>
-                            </Link>
-                          </li>
-                          <li role="separator"><hr className="dropdown-divider" /></li>
+                          {user.role === 'employee' && (
+                            <li role="none">
+                              <Link to="/gamification" className="px-3 py-2 d-block" role="menuitem">
+                                <i className="bi bi-trophy me-2" aria-hidden="true"></i>
+                                <span>AdaptaBits</span>
+                              </Link>
+                            </li>
+                          )}
+                          {user.role === 'employee' && (
+                            <li role="separator"><hr className="dropdown-divider" /></li>
+                          )}
                           <li role="none">
                             <button 
                               onClick={handleRequestAdmin}
@@ -220,7 +224,14 @@ const Header: React.FC = () => {
                               style={{ cursor: requestingAdmin ? 'not-allowed' : 'pointer' }}
                             >
                               <i className="bi bi-shield-plus me-2" aria-hidden="true"></i>
-                              <span>{requestingAdmin ? 'Submitting...' : 'Request Admin Access'}</span>
+                              <span>
+                                {requestingAdmin 
+                                  ? 'Submitting...' 
+                                  : user.role === 'researcher_admin' 
+                                    ? 'Request Superadmin Access' 
+                                    : 'Request Admin Access'
+                                }
+                              </span>
                             </button>
                           </li>
                           {adminRequestMessage && (

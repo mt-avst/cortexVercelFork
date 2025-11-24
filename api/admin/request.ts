@@ -14,34 +14,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json(createErrorResponse('Authentication required'));
     }
 
-    // Check if user already has admin role
-    if (user.role === 'researcher_admin' || user.role === 'superadmin') {
-      return res.status(400).json(createErrorResponse('User already has admin access'));
+    // Determine requested role based on current role
+    let requestedRole: 'researcher_admin' | 'superadmin';
+    if (user.role === 'employee') {
+      requestedRole = 'researcher_admin';
+    } else if (user.role === 'researcher_admin') {
+      requestedRole = 'superadmin';
+    } else {
+      return res.status(400).json(createErrorResponse('You already have the highest privilege level'));
     }
 
-    // Check if user already has a pending request
+    // Check if user already has a pending request for this role
     const existingRequest = await query(
       `SELECT id FROM admin_requests 
-       WHERE user_id = $1 AND status = 'pending'`,
-      [user.id]
+       WHERE user_id = $1 AND requested_role = $2 AND status = 'pending'`,
+      [user.id, requestedRole]
     );
 
     if (existingRequest.rows.length > 0) {
-      return res.status(400).json(createErrorResponse('You already have a pending admin request'));
+      const roleName = requestedRole === 'superadmin' ? 'superadmin' : 'admin';
+      return res.status(400).json(createErrorResponse(`You already have a pending ${roleName} request`));
     }
 
     // Create new request
     const result = await query(
-      `INSERT INTO admin_requests (user_id, requested_at, status)
-       VALUES ($1, NOW(), 'pending')
-       RETURNING id, requested_at, status`,
-      [user.id]
+      `INSERT INTO admin_requests (user_id, requested_at, requested_role, status)
+       VALUES ($1, NOW(), $2, 'pending')
+       RETURNING id, requested_at, requested_role, status`,
+      [user.id, requestedRole]
     );
 
+    const roleName = requestedRole === 'superadmin' ? 'superadmin' : 'admin';
     return res.status(201).json({
       success: true,
       request: result.rows[0],
-      message: 'Admin request submitted successfully'
+      message: `${roleName.charAt(0).toUpperCase() + roleName.slice(1)} request submitted successfully`
     });
   } catch (error: unknown) {
     console.error('Error creating admin request:', error);

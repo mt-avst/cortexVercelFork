@@ -20,12 +20,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ar.id,
         ar.user_id,
         ar.requested_at,
+        ar.requested_role,
         ar.status,
         ar.reviewed_by,
         ar.reviewed_at,
         ar.notes,
         u.email,
-        u.name
+        u.name,
+        u.role as current_role
       FROM admin_requests ar
       JOIN users u ON ar.user_id = u.id
     `;

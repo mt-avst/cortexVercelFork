@@ -246,6 +246,8 @@ const AdminManagement: React.FC = () => {
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
+                      <th>Current Role</th>
+                      <th>Requesting</th>
                       <th>Requested</th>
                       <th>Actions</th>
                     </tr>
@@ -253,7 +255,7 @@ const AdminManagement: React.FC = () => {
                   <tbody>
                     {pendingRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center text-muted py-4">
+                        <td colSpan={6} className="text-center text-muted py-4">
                           No pending requests
                         </td>
                       </tr>
@@ -262,6 +264,24 @@ const AdminManagement: React.FC = () => {
                         <tr key={request.id}>
                           <td>{request.name}</td>
                           <td>{request.email}</td>
+                          <td>
+                            <span className={`badge ${
+                              request.current_role === 'superadmin' ? 'bg-danger' :
+                              request.current_role === 'researcher_admin' ? 'bg-primary' :
+                              'bg-secondary'
+                            }`}>
+                              {request.current_role === 'superadmin' ? 'Superadmin' :
+                               request.current_role === 'researcher_admin' ? 'Admin' :
+                               'User'}
+                            </span>
+                          </td>
+                          <td>
+                            <span className={`badge ${
+                              request.requested_role === 'superadmin' ? 'bg-danger' : 'bg-primary'
+                            }`}>
+                              {request.requested_role === 'superadmin' ? 'Superadmin' : 'Admin'}
+                            </span>
+                          </td>
                           <td>{formatDate(request.requested_at)}</td>
                           <td>
                             <div className="btn-group" role="group">
@@ -300,6 +320,7 @@ const AdminManagement: React.FC = () => {
                     <tr>
                       <th>Name</th>
                       <th>Email</th>
+                      <th>Requested Role</th>
                       <th>Requested</th>
                       <th>Status</th>
                       <th>Reviewed</th>
@@ -309,7 +330,7 @@ const AdminManagement: React.FC = () => {
                   <tbody>
                     {historyRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
+                        <td colSpan={7} className="text-center text-muted py-4">
                           No history
                         </td>
                       </tr>
@@ -318,6 +339,13 @@ const AdminManagement: React.FC = () => {
                         <tr key={request.id}>
                           <td>{request.name}</td>
                           <td>{request.email}</td>
+                          <td>
+                            <span className={`badge ${
+                              request.requested_role === 'superadmin' ? 'bg-danger' : 'bg-primary'
+                            }`}>
+                              {request.requested_role === 'superadmin' ? 'Superadmin' : 'Admin'}
+                            </span>
+                          </td>
                           <td>{formatDate(request.requested_at)}</td>
                           <td>
                             <span className={`badge ${request.status === 'approved' ? 'bg-success' : 'bg-danger'}`}>
