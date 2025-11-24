@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnimation } from '../contexts/AnimationContext';
 import LoadingSpinner from './LoadingSpinner';
+import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
 import './Header.css';
 
@@ -16,6 +17,7 @@ const Header: React.FC = () => {
 
   const [requestingAdmin, setRequestingAdmin] = useState(false);
   const [adminRequestMessage, setAdminRequestMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Determine logo link based on user role
   // Use useMemo to ensure it updates when user changes
@@ -26,7 +28,12 @@ const Header: React.FC = () => {
     return '/';
   }, [user?.role]);
 
-  const handleRequestAdmin = async () => {
+  const handleRequestAdminClick = () => {
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirmRequest = async () => {
+    setShowConfirmModal(false);
     try {
       setRequestingAdmin(true);
       setAdminRequestMessage(null);
@@ -40,6 +47,24 @@ const Header: React.FC = () => {
       setTimeout(() => setAdminRequestMessage(null), 5000);
     } finally {
       setRequestingAdmin(false);
+    }
+  };
+
+  const getRequestModalContent = () => {
+    if (user?.role === 'researcher_admin') {
+      return {
+        title: 'Request Superadmin Access',
+        message: 'You are requesting superadmin access. This will allow you to manage admin access requests and existing admins. A superadmin will review your request.',
+        confirmText: 'Request Superadmin Access',
+        variant: 'primary' as const
+      };
+    } else {
+      return {
+        title: 'Request Admin Access',
+        message: 'You are requesting admin access. This will allow you to create and manage research studies. A superadmin will review your request.',
+        confirmText: 'Request Admin Access',
+        variant: 'primary' as const
+      };
     }
   };
 
@@ -217,7 +242,7 @@ const Header: React.FC = () => {
                           )}
                           <li role="none">
                             <button 
-                              onClick={handleRequestAdmin}
+                              onClick={handleRequestAdminClick}
                               className="px-3 py-2 w-100 text-start border-0 bg-transparent text-white"
                               role="menuitem"
                               disabled={requestingAdmin}
@@ -278,6 +303,20 @@ const Header: React.FC = () => {
           </nav>
         </div>
       </div>
+
+      {/* Admin Request Confirmation Modal */}
+      {user && user.role !== 'superadmin' && (
+        <ConfirmationModal
+          show={showConfirmModal}
+          title={getRequestModalContent().title}
+          message={getRequestModalContent().message}
+          confirmText={getRequestModalContent().confirmText}
+          cancelText="Cancel"
+          variant={getRequestModalContent().variant}
+          onConfirm={handleConfirmRequest}
+          onCancel={() => setShowConfirmModal(false)}
+        />
+      )}
     </header>
   );
 };
