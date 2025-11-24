@@ -981,60 +981,47 @@ const Landing: React.FC = () => {
             }
           }
           
-          /* Public Beta Badge - Corner Sash */
-          .public-beta-badge {
-            position: fixed;
-            top: 0;
-            left: 0;
-            z-index: 1000;
-            padding: 0.75rem 3rem;
-            background-color: #FF4E50;
-            color: #FFFFFF;
-            font-size: 0.875rem;
-            font-weight: 700;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 4px 12px rgba(255, 78, 80, 0.4);
-            transform: rotate(-45deg);
-            transform-origin: center;
-            margin-left: -3rem;
-            margin-top: 1.5rem;
-            width: 200px;
-            text-align: center;
-            pointer-events: none;
-            animation: pulse 2s ease-in-out infinite;
+          /* Beta Badge - Square Lozenge on Title */
+          .hero-headline {
+            position: relative;
+            display: inline-block;
           }
           
-          @keyframes pulse {
-            0%, 100% {
-              opacity: 1;
-              box-shadow: 0 4px 12px rgba(255, 78, 80, 0.4);
-            }
-            50% {
-              opacity: 0.95;
-              box-shadow: 0 4px 16px rgba(255, 78, 80, 0.5);
-            }
+          .beta-badge {
+            position: absolute;
+            top: -0.5rem;
+            right: -4rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.4rem 0.75rem;
+            background-color: #FF4E50;
+            color: #FFFFFF;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(255, 78, 80, 0.3);
+            white-space: nowrap;
+            z-index: 10;
           }
           
           @media (max-width: 768px) {
-            .public-beta-badge {
-              font-size: 0.7rem;
-              padding: 0.6rem 2.5rem;
-              width: 160px;
-              margin-left: -2.5rem;
-              margin-top: 1.2rem;
+            .beta-badge {
+              top: -0.4rem;
+              right: -3rem;
+              font-size: 0.65rem;
+              padding: 0.35rem 0.6rem;
             }
           }
           
           @media (max-width: 480px) {
-            .public-beta-badge {
-              font-size: 0.65rem;
-              padding: 0.5rem 2rem;
-              width: 140px;
-              margin-left: -2rem;
-              margin-top: 1rem;
+            .beta-badge {
+              top: -0.3rem;
+              right: -2.5rem;
+              font-size: 0.6rem;
+              padding: 0.3rem 0.5rem;
             }
           }
         `}
@@ -1128,9 +1115,6 @@ const Landing: React.FC = () => {
           })}
         </div>
         
-        {/* Public Beta Corner Sash */}
-        <span className="public-beta-badge">Public Beta</span>
-        
         {/* Hero Content */}
         <div className="hero-content">
           <img 
@@ -1138,7 +1122,10 @@ const Landing: React.FC = () => {
             alt="Research and Innovation" 
             className="hero-image"
           />
-          <h1 className="hero-headline">AdaptaLabs</h1>
+          <h1 className="hero-headline">
+            AdaptaLabs
+            <span className="beta-badge">BETA</span>
+          </h1>
           <p className="hero-subtext">
             Participate in research that shapes the future of our products. Browse opportunities, book
             sessions, and share feedback to help us build better experiences<span className="text-spark">.</span>
