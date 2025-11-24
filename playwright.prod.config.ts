@@ -1,25 +1,32 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Production accessibility testing config
- * Runs tests against production URL without starting local servers
+ * Production Testing Configuration
+ * Tests against the live production deployment
  */
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false, // Run sequentially for production
-  retries: 0,
-  workers: 1,
-  reporter: 'list',
+  forbidOnly: !!process.env.CI,
+  retries: 0, // Don't retry on production
+  workers: 1, // Single worker for production
+  reporter: [['html'], ['list']],
+  timeout: 30000, // 30 second timeout
+  
   use: {
-    baseURL: process.env.BASE_URL || 'https://adapta-labs-p62q.vercel.app',
-    trace: 'on-first-retry',
+    baseURL: process.env.PRODUCTION_URL || 'https://adapta-labs-p62q.vercel.app',
+    trace: 'on',
+    screenshot: 'only-on-failure',
+    video: 'retain-on-failure',
   },
+
   projects: [
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  // No webServer - testing against production
-});
 
+  // Don't start local server - we're testing production
+  webServer: undefined,
+});

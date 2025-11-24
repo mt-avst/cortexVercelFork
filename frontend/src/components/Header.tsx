@@ -38,16 +38,27 @@ const Header: React.FC = () => {
             {/* Animation Toggle Button - Always visible */}
             <button
               onClick={toggleAnimations}
-              className="btn btn-outline-secondary"
+              className="btn btn-outline-secondary animation-toggle-btn"
               aria-label={animationsEnabled ? 'Disable animations' : 'Enable animations'}
               title={animationsEnabled ? 'Disable animations' : 'Enable animations'}
-              style={{ marginRight: '0.5rem', color: '#8e9ba6' }}
+              style={{ marginRight: '0.5rem' }}
             >
               <i className={animationsEnabled ? 'bi bi-pause-fill' : 'bi bi-play-fill'} aria-hidden="true"></i>
-              <span className="d-none d-md-inline ms-1" style={{ color: '#8e9ba6' }}>
+              <span className="d-none d-md-inline ms-1 animation-toggle-text">
                 {animationsEnabled ? 'Animations On' : 'Animations Off'}
               </span>
             </button>
+            <style>{`
+              .header .animation-toggle-btn,
+              .header .animation-toggle-btn *,
+              .header .animation-toggle-text {
+                color: #8e9ba6 !important;
+              }
+              .header .animation-toggle-btn:hover,
+              .header .animation-toggle-btn:hover * {
+                color: #FFFFFF !important;
+              }
+            `}</style>
 
             {loading && initialAuthCheck ? (
               <LoadingSpinner size="small" text="Loading..." />
@@ -174,6 +185,13 @@ const Header: React.FC = () => {
                           </Link>
                         </li>
                       )}
+                      <li role="separator"><hr className="dropdown-divider" /></li>
+                      <li role="none">
+                        <Link to="/feedback" className="px-3 py-2 d-block" role="menuitem">
+                          <i className="bi bi-chat-left-text me-2" aria-hidden="true"></i>
+                          <span>Send Feedback</span>
+                        </Link>
+                      </li>
                       <li role="separator"><hr className="dropdown-divider" /></li>
                       <li role="none">
                         <button 
