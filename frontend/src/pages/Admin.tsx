@@ -231,10 +231,16 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '1rem', backgroundColor: '#0A091A' }}>
+    <div className="container-fluid" style={{ minHeight: '100vh', padding: '1rem', backgroundColor: '#0A091A', maxWidth: '100%', width: '100%' }}>
       <style>
         {`
-          /* Responsive container padding */
+          /* Make dashboard full width */
+          .admin-dashboard {
+            max-width: 100% !important;
+            width: 100% !important;
+          }
+          
+          /* Responsive container padding - reduced on larger screens for more table space */
           @media (min-width: 576px) {
             .container-fluid {
               padding: 1.5rem !important;
@@ -242,7 +248,17 @@ const Admin: React.FC = () => {
           }
           @media (min-width: 768px) {
             .container-fluid {
-              padding: 2rem !important;
+              padding: 1.5rem !important;
+            }
+          }
+          @media (min-width: 1200px) {
+            .container-fluid {
+              padding: 1.5rem 2rem !important;
+            }
+          }
+          @media (min-width: 1400px) {
+            .container-fluid {
+              padding: 1.5rem 3rem !important;
             }
           }
           
@@ -437,6 +453,29 @@ const Admin: React.FC = () => {
             background-color: transparent !important;
           }
           
+          /* Ensure table uses full width */
+          .admin-dashboard .table-responsive {
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          
+          .admin-dashboard table.table-hover {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: auto;
+          }
+          
+          /* On larger screens, allow table to expand naturally */
+          @media (min-width: 992px) {
+            .admin-dashboard table.table-hover {
+              table-layout: auto;
+            }
+            .admin-dashboard table.table-hover thead th:nth-child(1),
+            .admin-dashboard table.table-hover tbody td:nth-child(1) {
+              max-width: none !important;
+            }
+          }
+          
           /* Responsive card adjustments */
           @media (max-width: 576px) {
             .admin-dashboard .card {
@@ -616,7 +655,9 @@ const Admin: React.FC = () => {
             WebkitBackdropFilter: 'blur(16px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '16px',
-            margin: '0 -0.5rem'
+            margin: '0',
+            maxWidth: '100%',
+            width: '100%'
           }}>
             <div className="card-header border-0 bg-transparent" style={{ marginBottom: '2rem' }}>
               <div className="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-3">
