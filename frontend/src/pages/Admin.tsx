@@ -413,6 +413,79 @@ const Admin: React.FC = () => {
           .admin-dashboard .tab-content {
             background-color: transparent !important;
           }
+          
+          /* Optimize column widths for opportunities table */
+          .admin-dashboard table.table-hover thead th:nth-child(1),
+          .admin-dashboard table.table-hover tbody td:nth-child(1) {
+            width: 30%;
+            min-width: 250px;
+            max-width: 400px;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(2),
+          .admin-dashboard table.table-hover tbody td:nth-child(2) {
+            width: 8%;
+            min-width: 80px;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(3),
+          .admin-dashboard table.table-hover tbody td:nth-child(3) {
+            width: 10%;
+            min-width: 100px;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(4),
+          .admin-dashboard table.table-hover tbody td:nth-child(4) {
+            width: 8%;
+            min-width: 90px;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(5),
+          .admin-dashboard table.table-hover tbody td:nth-child(5) {
+            width: 6%;
+            min-width: 70px;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(6),
+          .admin-dashboard table.table-hover tbody td:nth-child(6) {
+            width: 6%;
+            min-width: 70px;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(7),
+          .admin-dashboard table.table-hover tbody td:nth-child(7) {
+            width: 7%;
+            min-width: 85px;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(8),
+          .admin-dashboard table.table-hover tbody td:nth-child(8) {
+            width: 7%;
+            min-width: 85px;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(9),
+          .admin-dashboard table.table-hover tbody td:nth-child(9) {
+            width: 7%;
+            min-width: 80px;
+            text-align: center;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(10),
+          .admin-dashboard table.table-hover tbody td:nth-child(10) {
+            width: 8%;
+            min-width: 100px;
+            white-space: nowrap;
+          }
+          .admin-dashboard table.table-hover thead th:nth-child(11),
+          .admin-dashboard table.table-hover tbody td:nth-child(11) {
+            width: 5%;
+            min-width: 120px;
+            white-space: nowrap;
+          }
         `}
       </style>
       <div className="row admin-dashboard">
@@ -708,36 +781,36 @@ const Admin: React.FC = () => {
                         <thead>
                           <tr>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 16px' }}
                               onClick={() => handleSort('title')}
                             >
                               Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 8px' }}
                               onClick={() => handleSort('type')}
                             >
                               Type {sortField === 'type' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Participants</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px' }}>Participants</th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 8px' }}
                               onClick={() => handleSort('status')}
                             >
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Clicks</th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Sessions</th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Total Slots</th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Remaining</th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Duration</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px', textAlign: 'center' }}>Clicks</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px', textAlign: 'center' }}>Sessions</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px', textAlign: 'center' }}>Total Slots</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px', textAlign: 'center' }}>Remaining</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px', textAlign: 'center' }}>Duration</th>
                             <th 
-                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 12px' }}
+                              style={{ cursor: 'pointer', userSelect: 'none', fontWeight: '600', padding: '16px 8px' }}
                               onClick={() => handleSort('created_at')}
                             >
                               Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th style={{ fontWeight: '600', padding: '16px 12px' }}>Actions</th>
+                            <th style={{ fontWeight: '600', padding: '16px 8px' }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -747,19 +820,19 @@ const Admin: React.FC = () => {
                               style={{ cursor: 'pointer' }}
                               onClick={() => navigate(`/admin/opportunities/${opportunity.id}/edit`)}
                             >
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 16px', verticalAlign: 'middle' }}>
                                 <div>
                                   <strong style={{ fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{opportunity.title}</strong>
                                   <br />
                                   <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle' }}>
                                 <span className={getTypeBadgeClass(opportunity.type)}>
                                   {formatOpportunityType(opportunity.type)}
                                 </span>
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle' }}>
                                 <span className="badge" style={{ 
                                   backgroundColor: 'var(--tag-test)', 
                                   color: 'var(--tag-text)',
@@ -781,7 +854,7 @@ const Admin: React.FC = () => {
                                   })()}
                                 </span>
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle' }}>
                                 <span className={getStatusBadgeClass(opportunity.status)}>
                                   {opportunity.status}
                                 </span>
@@ -789,21 +862,21 @@ const Admin: React.FC = () => {
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
                                 )}
                               </td>
-                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 {(opportunity.type === 'poll' || opportunity.type === 'survey') ? (
                                   opportunity.clicks_total ?? 0
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
                                   opportunity.sessions?.length || 0
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
                                   opportunity.sessions && opportunity.sessions.length > 0 ? (
                                     <span className="badge bg-success text-white" style={{ 
@@ -824,20 +897,20 @@ const Admin: React.FC = () => {
                                   ''
                                 )}
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
                                   ''
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td style={{ color: 'var(--text-muted)', padding: '16px 12px', verticalAlign: 'middle' }}>{opportunity.default_duration_minutes} min</td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ color: 'var(--text-muted)', padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>{opportunity.default_duration_minutes} min</td>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle' }}>
                                 <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
                                   {new Date(opportunity.created_at).toLocaleDateString()}
                                 </small>
                               </td>
-                              <td style={{ padding: '16px 12px', verticalAlign: 'middle' }}>
+                              <td style={{ padding: '16px 8px', verticalAlign: 'middle' }}>
                                 <div className="dropdown" style={{ position: 'relative' }}>
                                   <button
                                     className="btn btn-outline-secondary btn-sm"
