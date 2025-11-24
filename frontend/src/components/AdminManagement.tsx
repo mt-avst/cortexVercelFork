@@ -119,32 +119,190 @@ const AdminManagement: React.FC = () => {
           .admin-management .nav-tabs {
             border-bottom: 1px solid rgba(255, 255, 255, 0.1);
             margin-bottom: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+          }
+          .admin-management .nav-item {
+            flex: 1;
+            min-width: 0;
           }
           .admin-management .nav-link {
             color: var(--text-muted);
             border: none;
             border-bottom: 2px solid transparent;
-            padding: 0.75rem 1.5rem;
+            padding: 0.75rem 1rem;
+            white-space: nowrap;
+            width: 100%;
+            text-align: center;
+            background-color: transparent;
+            transition: all 0.2s ease-in-out;
           }
           .admin-management .nav-link:hover {
             color: var(--text-primary);
             border-bottom-color: rgba(255, 78, 80, 0.5);
+            background-color: rgba(255, 255, 255, 0.05);
           }
           .admin-management .nav-link.active {
             color: var(--brand-headline);
             border-bottom-color: var(--brand-headline);
             background-color: transparent;
+            font-weight: 600;
+          }
+          
+          /* Table styling - match Settings/Admin dashboard */
+          .admin-management .table-responsive {
+            border-radius: var(--card-radius);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            max-width: 100%;
           }
           .admin-management table {
             color: var(--text-primary);
+            background-color: transparent;
+            margin-bottom: 0;
+            width: 100%;
+            min-width: 600px;
           }
+          .admin-management table thead {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+          .admin-management table thead th {
+            color: var(--text-primary);
+            background-color: rgba(255, 255, 255, 0.05);
+            border: none;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.75rem 1rem;
+            font-weight: 600;
+            white-space: nowrap;
+          }
+          .admin-management table tbody {
+            background-color: transparent;
+          }
+          .admin-management table tbody tr {
+            background-color: transparent;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background-color 0.2s ease-in-out;
+          }
+          .admin-management table tbody tr:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+          }
+          .admin-management table tbody td {
+            color: var(--text-primary);
+            background-color: transparent;
+            border: none;
+            padding: 0.75rem 1rem;
+            vertical-align: middle;
+          }
+          .admin-management table tbody td.text-center {
+            text-align: center;
+          }
+          .admin-management table tbody td.text-muted {
+            color: var(--text-muted);
+          }
+          
+          /* Badge styling */
           .admin-management .badge {
             padding: 0.35em 0.65em;
             font-size: 0.85em;
+            font-weight: 500;
+            border-radius: var(--tag-radius);
+            white-space: nowrap;
           }
+          .admin-management .badge.bg-primary {
+            background-color: #007bff !important;
+          }
+          .admin-management .badge.bg-danger {
+            background-color: #dc3545 !important;
+          }
+          .admin-management .badge.bg-success {
+            background-color: #28a745 !important;
+          }
+          .admin-management .badge.bg-secondary {
+            background-color: #6c757d !important;
+          }
+          
+          /* Button styling */
           .admin-management .btn-sm {
-            padding: 0.25rem 0.75rem;
+            padding: 0.375rem 0.75rem;
             font-size: 0.875rem;
+            border-radius: var(--tag-radius);
+            white-space: nowrap;
+          }
+          .admin-management .btn-group {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+          }
+          .admin-management .btn-group .btn {
+            flex: 1;
+            min-width: auto;
+          }
+          
+          /* Alert styling */
+          .admin-management .alert {
+            background-color: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--card-radius);
+            color: var(--text-primary);
+          }
+          .admin-management .alert-danger {
+            border-color: rgba(244, 67, 54, 0.3);
+          }
+          .admin-management .alert .btn-outline-danger {
+            border-color: rgba(244, 67, 54, 0.5);
+            color: var(--text-primary);
+          }
+          .admin-management .alert .btn-outline-danger:hover {
+            background-color: rgba(244, 67, 54, 0.2);
+            border-color: rgba(244, 67, 54, 0.7);
+          }
+          
+          /* Responsive adjustments */
+          @media (max-width: 768px) {
+            .admin-management .nav-tabs {
+              flex-direction: column;
+            }
+            .admin-management .nav-item {
+              width: 100%;
+            }
+            .admin-management .nav-link {
+              padding: 0.5rem 1rem;
+              font-size: 0.9rem;
+            }
+            .admin-management .table-responsive {
+              max-height: 500px;
+            }
+            .admin-management table {
+              min-width: 700px;
+              font-size: 0.9rem;
+            }
+            .admin-management table thead th,
+            .admin-management table tbody td {
+              padding: 0.5rem 0.75rem;
+            }
+            .admin-management .btn-group {
+              flex-direction: column;
+            }
+            .admin-management .btn-group .btn {
+              width: 100%;
+            }
+            .admin-management .badge {
+              font-size: 0.75em;
+              padding: 0.25em 0.5em;
+            }
+          }
+          
+          @media (max-width: 576px) {
+            .admin-management table {
+              min-width: 600px;
+              font-size: 0.85rem;
+            }
+            .admin-management table thead th,
+            .admin-management table tbody td {
+              padding: 0.5rem;
+            }
           }
         `}
       </style>
@@ -185,7 +343,7 @@ const AdminManagement: React.FC = () => {
         <div className="tab-content">
           {activeTab === 'admins' && (
             <div className="tab-pane active">
-              <div className="table-responsive">
+              <div className="table-responsive" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                 <table className="table table-hover">
                   <thead>
                     <tr>
@@ -199,15 +357,15 @@ const AdminManagement: React.FC = () => {
                   <tbody>
                     {admins.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center text-muted py-4">
+                        <td colSpan={5} className="text-center text-muted py-4" style={{ color: 'var(--text-muted)' }}>
                           No admins found
                         </td>
                       </tr>
                     ) : (
                       admins.map((admin) => (
                         <tr key={admin.id}>
-                          <td>{admin.name}</td>
-                          <td>{admin.email}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{admin.name}</td>
+                          <td style={{ wordBreak: 'break-word', maxWidth: '200px' }}>{admin.email}</td>
                           <td>
                             <span className={`badge ${admin.role === 'superadmin' ? 'bg-danger' : 'bg-primary'}`}>
                               {admin.role === 'superadmin' ? 'Superadmin' : 'Admin'}
@@ -226,7 +384,7 @@ const AdminManagement: React.FC = () => {
                               </button>
                             )}
                             {admin.role === 'superadmin' && (
-                              <span className="text-muted small">Cannot revoke</span>
+                              <span className="text-muted small" style={{ color: 'var(--text-muted)' }}>Cannot revoke</span>
                             )}
                           </td>
                         </tr>
@@ -240,7 +398,7 @@ const AdminManagement: React.FC = () => {
 
           {activeTab === 'pending' && (
             <div className="tab-pane active">
-              <div className="table-responsive">
+              <div className="table-responsive" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                 <table className="table table-hover">
                   <thead>
                     <tr>
@@ -255,15 +413,15 @@ const AdminManagement: React.FC = () => {
                   <tbody>
                     {pendingRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-4">
+                        <td colSpan={6} className="text-center text-muted py-4" style={{ color: 'var(--text-muted)' }}>
                           No pending requests
                         </td>
                       </tr>
                     ) : (
                       pendingRequests.map((request) => (
                         <tr key={request.id}>
-                          <td>{request.name}</td>
-                          <td>{request.email}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{request.name}</td>
+                          <td style={{ wordBreak: 'break-word', maxWidth: '200px' }}>{request.email}</td>
                           <td>
                             <span className={`badge ${
                               request.current_role === 'superadmin' ? 'bg-danger' :
@@ -284,11 +442,16 @@ const AdminManagement: React.FC = () => {
                           </td>
                           <td>{formatDate(request.requested_at)}</td>
                           <td>
-                            <div className="btn-group" role="group">
+                            <div className="btn-group" role="group" style={{ display: 'flex', gap: '0.5rem' }}>
                               <button
                                 className="btn btn-sm btn-success"
                                 onClick={() => handleApprove(request.id)}
                                 disabled={processing === request.id}
+                                style={{ 
+                                  backgroundColor: processing === request.id ? 'rgba(40, 167, 69, 0.5)' : '#28a745',
+                                  borderColor: '#28a745',
+                                  color: '#fff'
+                                }}
                               >
                                 <i className="bi bi-check-circle me-1"></i>
                                 Approve
@@ -297,6 +460,11 @@ const AdminManagement: React.FC = () => {
                                 className="btn btn-sm btn-danger"
                                 onClick={() => setDenyConfirm({ show: true, request, notes: '' })}
                                 disabled={processing === request.id}
+                                style={{ 
+                                  backgroundColor: processing === request.id ? 'rgba(220, 53, 69, 0.5)' : '#dc3545',
+                                  borderColor: '#dc3545',
+                                  color: '#fff'
+                                }}
                               >
                                 <i className="bi bi-x-circle me-1"></i>
                                 Deny
@@ -314,7 +482,7 @@ const AdminManagement: React.FC = () => {
 
           {activeTab === 'history' && (
             <div className="tab-pane active">
-              <div className="table-responsive">
+              <div className="table-responsive" style={{ maxHeight: '600px', overflowY: 'auto' }}>
                 <table className="table table-hover">
                   <thead>
                     <tr>
@@ -330,15 +498,15 @@ const AdminManagement: React.FC = () => {
                   <tbody>
                     {historyRequests.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center text-muted py-4">
+                        <td colSpan={7} className="text-center text-muted py-4" style={{ color: 'var(--text-muted)' }}>
                           No history
                         </td>
                       </tr>
                     ) : (
                       historyRequests.map((request) => (
                         <tr key={request.id}>
-                          <td>{request.name}</td>
-                          <td>{request.email}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>{request.name}</td>
+                          <td style={{ wordBreak: 'break-word', maxWidth: '200px' }}>{request.email}</td>
                           <td>
                             <span className={`badge ${
                               request.requested_role === 'superadmin' ? 'bg-danger' : 'bg-primary'
@@ -352,8 +520,12 @@ const AdminManagement: React.FC = () => {
                               {request.status === 'approved' ? 'Approved' : 'Denied'}
                             </span>
                           </td>
-                          <td>{request.reviewed_at ? formatDate(request.reviewed_at) : '-'}</td>
-                          <td>{request.notes || '-'}</td>
+                          <td style={{ color: request.reviewed_at ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                            {request.reviewed_at ? formatDate(request.reviewed_at) : '-'}
+                          </td>
+                          <td style={{ color: request.notes ? 'var(--text-primary)' : 'var(--text-muted)', maxWidth: '200px', wordBreak: 'break-word' }}>
+                            {request.notes || '-'}
+                          </td>
                         </tr>
                       ))
                     )}
