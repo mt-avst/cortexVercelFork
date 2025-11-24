@@ -169,19 +169,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             // Map click counts by opportunity_id
             for (const row of clicksResult.rows) {
-              clicksMap.set(row.opportunity_id, parseInt(row.count || '0', 10));
+              const clickRow = row as { opportunity_id: string; count: string | number };
+              clicksMap.set(clickRow.opportunity_id, parseInt(String(clickRow.count || '0'), 10));
             }
           }
         } catch (clickError: unknown) {
           logger.error('Error loading click counts batch', {
-            error: getErrorMessage(clickError),
+            error: clickError instanceof Error ? clickError.message : String(clickError),
           });
           // Continue with empty clicks map
         }
       }
 
       // Combine results
-      const opportunities = result.rows.map(opp => {
+      const opportunities = result.rows.map((opp: any) => {
         const sessions = allSessionsMap.get(opp.id) || [];
         const clicks_total = ((opp.type === 'poll' || opp.type === 'survey') && isAdmin)
           ? (clicksMap.get(opp.id) ?? 0)
@@ -250,7 +251,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ]
       );
       
-      const opportunity = result.rows[0];
+      const opportunity = result.rows[0] as any;
       
       // Get owner info
       const ownerResult = await query(
@@ -258,10 +259,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [finalOwnerId]
       );
       
+      const ownerRow = ownerResult.rows[0] as { name?: string; email?: string } | undefined;
+      
       const opportunityWithOwner = {
         ...opportunity,
-        owner_name: ownerResult.rows[0]?.name || 'Unknown',
-        owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
+        owner_name: ownerRow?.name || 'Unknown',
+        owner_email: ownerRow?.email || 'unknown@example.com',
         sessions: [],
         created_at: opportunity.created_at.toISOString(),
         updated_at: opportunity.updated_at.toISOString(),

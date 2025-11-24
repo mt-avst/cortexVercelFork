@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ]
         );
         
-        const created = result.rows[0];
+        const created = result.rows[0] as any;
         createdSessions.push({
           ...created,
           start_time: created.start_time.toISOString(),
