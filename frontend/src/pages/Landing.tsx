@@ -846,6 +846,8 @@ const Landing: React.FC = () => {
             line-height: 1.1;
             text-align: center;
             width: 100%;
+            position: relative;
+            display: inline-block;
           }
 
           @media (max-width: 768px) {
@@ -982,11 +984,6 @@ const Landing: React.FC = () => {
           }
           
           /* Beta Badge - Square Lozenge on Title */
-          .hero-headline {
-            position: relative;
-            display: inline-block;
-          }
-          
           .beta-badge {
             position: absolute;
             top: -0.5rem;
