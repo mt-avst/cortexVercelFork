@@ -1469,8 +1469,16 @@ span.lozenge-question,
   color: #000000 !important;
 }
 
+/* Exclude confirmation modal from black text rule */
+.confirmation-modal-content .modal-title,
+.confirmation-modal-content .modal-body p,
+.confirmation-modal-content .modal-body * {
+  color: #E0E0E0 !important;
+}
+
 /* Confirmation Modal - Dark Theme Styling */
-.confirmation-modal-content {
+/* Override all modal styles with higher specificity */
+.modal.show .confirmation-modal-content {
   background-color: rgba(255, 255, 255, 0.05) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
@@ -1479,32 +1487,46 @@ span.lozenge-question,
   color: #E0E0E0 !important;
 }
 
-.confirmation-modal-header {
+.modal.show .confirmation-modal-header {
   background-color: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.confirmation-modal-body {
+.modal.show .confirmation-modal-body {
   background-color: transparent !important;
   color: #E0E0E0 !important;
 }
 
-.confirmation-modal-footer {
+.modal.show .confirmation-modal-footer {
   background-color: transparent !important;
   border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.confirmation-modal-title {
+.modal.show .confirmation-modal-title {
   color: #E0E0E0 !important;
 }
 
-.confirmation-modal-message {
+.modal.show .confirmation-modal-message {
   color: #E0E0E0 !important;
 }
 
-/* Ensure all text in modal is visible */
-.confirmation-modal-content * {
-  color: inherit;
+/* Force white text on all confirmation modal elements - highest specificity */
+.modal.show .confirmation-modal-content,
+.modal.show .confirmation-modal-content *,
+.modal.show .confirmation-modal-content p,
+.modal.show .confirmation-modal-content h1,
+.modal.show .confirmation-modal-content h2,
+.modal.show .confirmation-modal-content h3,
+.modal.show .confirmation-modal-content h4,
+.modal.show .confirmation-modal-content h5,
+.modal.show .confirmation-modal-content h6,
+.modal.show .confirmation-modal-content span,
+.modal.show .confirmation-modal-content div,
+.modal.show .confirmation-modal-content .modal-title,
+.modal.show .confirmation-modal-content .modal-body,
+.modal.show .confirmation-modal-content .modal-body p,
+.modal.show .confirmation-modal-content .modal-body * {
+  color: #E0E0E0 !important;
 }
 
 .confirmation-modal-content .form-label,
