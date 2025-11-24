@@ -980,6 +980,44 @@ const Landing: React.FC = () => {
               transform: rotate(360deg);
             }
           }
+          
+          /* Public Beta Badge */
+          .public-beta-badge {
+            display: inline-block;
+            padding: 0.5rem 1.25rem;
+            background-color: rgba(255, 78, 80, 0.15);
+            border: 1px solid rgba(255, 78, 80, 0.4);
+            border-radius: 20px;
+            color: #FF4E50;
+            font-size: 0.875rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            box-shadow: 0 2px 8px rgba(255, 78, 80, 0.2);
+            animation: pulse 2s ease-in-out infinite;
+          }
+          
+          @keyframes pulse {
+            0%, 100% {
+              opacity: 1;
+              box-shadow: 0 2px 8px rgba(255, 78, 80, 0.2);
+            }
+            50% {
+              opacity: 0.9;
+              box-shadow: 0 2px 12px rgba(255, 78, 80, 0.3);
+            }
+          }
+          
+          @media (max-width: 768px) {
+            .public-beta-badge {
+              font-size: 0.75rem;
+              padding: 0.4rem 1rem;
+              margin-bottom: 1rem;
+            }
+          }
         `}
       </style>
       <div className={`landing-hero-wrapper ${!animationsEnabled ? 'animations-disabled' : ''}`}>
@@ -1078,6 +1116,7 @@ const Landing: React.FC = () => {
             alt="Research and Innovation" 
             className="hero-image"
           />
+          <span className="public-beta-badge">Public Beta</span>
           <h1 className="hero-headline">AdaptaLabs</h1>
           <p className="hero-subtext">
             Participate in research that shapes the future of our products. Browse opportunities, book
