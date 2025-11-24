@@ -162,7 +162,6 @@ const AdminManagement: React.FC = () => {
             background-color: transparent;
             margin-bottom: 0;
             width: 100%;
-            min-width: 600px;
           }
           .admin-management table thead {
             background-color: rgba(255, 255, 255, 0.05);
@@ -275,7 +274,6 @@ const AdminManagement: React.FC = () => {
               max-height: 500px;
             }
             .admin-management table {
-              min-width: 700px;
               font-size: 0.9rem;
             }
             .admin-management table thead th,
@@ -296,7 +294,6 @@ const AdminManagement: React.FC = () => {
           
           @media (max-width: 576px) {
             .admin-management table {
-              min-width: 600px;
               font-size: 0.85rem;
             }
             .admin-management table thead th,

@@ -169,7 +169,7 @@ const Settings: React.FC = () => {
         `}
       </style>
       <div className="row settings-page">
-        <div className="col-12 col-lg-8 col-xl-6 mx-auto">
+        <div className={`col-12 ${user.role === 'superadmin' ? 'col-lg-12 col-xl-10' : 'col-lg-8 col-xl-6'} mx-auto`}>
           <div className="card">
             <div className="card-header d-flex justify-content-between align-items-center">
               <div>
