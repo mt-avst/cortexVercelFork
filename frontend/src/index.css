@@ -1476,6 +1476,7 @@ span.lozenge-question,
   -webkit-backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px !important;
+  color: #E0E0E0 !important;
 }
 
 .confirmation-modal-header {
@@ -1485,6 +1486,7 @@ span.lozenge-question,
 
 .confirmation-modal-body {
   background-color: transparent !important;
+  color: #E0E0E0 !important;
 }
 
 .confirmation-modal-footer {
@@ -1493,9 +1495,37 @@ span.lozenge-question,
 }
 
 .confirmation-modal-title {
-  color: var(--text-primary) !important;
+  color: #E0E0E0 !important;
 }
 
 .confirmation-modal-message {
-  color: var(--text-body) !important;
+  color: #E0E0E0 !important;
+}
+
+/* Ensure all text in modal is visible */
+.confirmation-modal-content * {
+  color: inherit;
+}
+
+.confirmation-modal-content .form-label,
+.confirmation-modal-content .form-control,
+.confirmation-modal-content textarea {
+  color: #E0E0E0 !important;
+}
+
+.confirmation-modal-content .form-control::placeholder {
+  color: rgba(224, 224, 224, 0.5) !important;
+}
+
+/* Button styling for modal */
+.confirmation-modal-footer .btn-secondary {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #E0E0E0 !important;
+}
+
+.confirmation-modal-footer .btn-secondary:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  color: #FFFFFF !important;
 }
