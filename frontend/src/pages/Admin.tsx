@@ -465,14 +465,16 @@ const Admin: React.FC = () => {
             table-layout: auto;
           }
           
-          /* On larger screens, allow table to expand naturally */
+          /* Ensure table doesn't overflow container */
+          .admin-dashboard .table-responsive {
+            overflow-x: auto;
+            overflow-y: visible;
+          }
+          
+          /* On larger screens, use fixed layout for better control */
           @media (min-width: 992px) {
             .admin-dashboard table.table-hover {
-              table-layout: auto;
-            }
-            .admin-dashboard table.table-hover thead th:nth-child(1),
-            .admin-dashboard table.table-hover tbody td:nth-child(1) {
-              max-width: none !important;
+              table-layout: fixed;
             }
           }
           
@@ -520,75 +522,79 @@ const Admin: React.FC = () => {
           
           /* Optimize column widths for opportunities table - Desktop */
           @media (min-width: 992px) {
+            .admin-dashboard table.table-hover {
+              table-layout: fixed;
+              width: 100%;
+            }
             .admin-dashboard table.table-hover thead th:nth-child(1),
             .admin-dashboard table.table-hover tbody td:nth-child(1) {
-              width: 30%;
-              min-width: 250px;
-              max-width: 400px;
+              width: 25%;
+              min-width: 0;
+              max-width: none;
             }
             .admin-dashboard table.table-hover thead th:nth-child(2),
             .admin-dashboard table.table-hover tbody td:nth-child(2) {
-              width: 8%;
-              min-width: 80px;
+              width: 7%;
+              min-width: 0;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(3),
             .admin-dashboard table.table-hover tbody td:nth-child(3) {
-              width: 10%;
-              min-width: 100px;
+              width: 9%;
+              min-width: 0;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(4),
             .admin-dashboard table.table-hover tbody td:nth-child(4) {
-              width: 8%;
-              min-width: 90px;
+              width: 7%;
+              min-width: 0;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(5),
             .admin-dashboard table.table-hover tbody td:nth-child(5) {
               width: 6%;
-              min-width: 70px;
+              min-width: 0;
               text-align: center;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(6),
             .admin-dashboard table.table-hover tbody td:nth-child(6) {
               width: 6%;
-              min-width: 70px;
+              min-width: 0;
               text-align: center;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(7),
             .admin-dashboard table.table-hover tbody td:nth-child(7) {
               width: 7%;
-              min-width: 85px;
+              min-width: 0;
               text-align: center;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(8),
             .admin-dashboard table.table-hover tbody td:nth-child(8) {
               width: 7%;
-              min-width: 85px;
+              min-width: 0;
               text-align: center;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(9),
             .admin-dashboard table.table-hover tbody td:nth-child(9) {
               width: 7%;
-              min-width: 80px;
+              min-width: 0;
               text-align: center;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(10),
             .admin-dashboard table.table-hover tbody td:nth-child(10) {
               width: 8%;
-              min-width: 100px;
+              min-width: 0;
               white-space: nowrap;
             }
             .admin-dashboard table.table-hover thead th:nth-child(11),
             .admin-dashboard table.table-hover tbody td:nth-child(11) {
               width: 5%;
-              min-width: 120px;
+              min-width: 0;
               white-space: nowrap;
             }
           }
