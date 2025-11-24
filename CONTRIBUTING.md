@@ -275,60 +275,216 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 ## Authentication & Authorization
 
+### Architecture Overview
+
+The codebase uses **two different authentication patterns** due to different deployment architectures:
+
+1. **Backend Express Routes** (`backend/src/routes/`) - Express middleware pattern
+2. **API Serverless Functions** (`api/`) - Direct function calls
+
+Both patterns are **correct for their contexts** - choose based on where your code runs.
+
+---
+
 ### Backend Express Routes
 
-Use middleware for authentication:
+**Location**: `backend/src/routes/*.ts`  
+**Pattern**: Express middleware (runs before route handler)  
+**Implementation**: `backend/src/middleware/authenticate.ts`
+
+**Why this pattern?**
+- Express middleware runs before route handlers
+- Uses `req.session` for session management
+- Sets `req.user` for downstream handlers
+
+**Usage**:
 
 ```typescript
 import { requireAuth, requireAdmin, optionalAuth } from '../middleware/authenticate';
 
-// ✅ Require authentication
+// ✅ Require authentication - user is guaranteed to exist
 router.get('/my-data', requireAuth, asyncHandler(async (req, res) => {
-  const userId = req.user!.id; // User is guaranteed to exist
+  const userId = req.user!.id; // TypeScript knows user exists
+  // ... handler code
 }));
 
 // ✅ Require admin role
 router.post('/admin-action', requireAdmin, asyncHandler(async (req, res) => {
   // Only researcher_admin can access
+  // req.user is guaranteed to be admin
 }));
 
 // ✅ Optional authentication (public endpoint, but attach user if logged in)
 router.get('/public-data', optionalAuth, asyncHandler(async (req, res) => {
   const userId = req.user?.id; // User might not exist
+  if (userId) {
+    // User-specific logic
+  }
 }));
 ```
 
+**Key Points**:
+- Middleware sets `req.user` from `req.session.user`
+- Returns `void` - modifies request object
+- Uses Express middleware chain
+
+---
+
 ### API Serverless Functions
 
-Use helper functions:
+**Location**: `api/**/*.ts`  
+**Pattern**: Direct function calls (Vercel serverless)  
+**Implementation**: `api/utils/auth.ts`
+
+**Why this pattern?**
+- Serverless functions don't use Express middleware
+- Uses cookies directly from request headers
+- Returns `SessionUser` directly or throws error
+
+**Usage**:
 
 ```typescript
 import { requireAuth, parseSessionCookie } from '../utils/auth';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // ✅ Require authentication
-  const user = requireAuth(req); // Throws if not authenticated
-  const userId = user.id;
+  try {
+    // ✅ Require authentication - throws if not authenticated
+    const user = requireAuth(req); // Returns SessionUser
+    const userId = user.id;
+    
+    // ... handler code
+  } catch (error: unknown) {
+    // Handle auth errors
+    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+      return res.status(401).json(createErrorResponse('Not authenticated'));
+    }
+    throw error;
+  }
+}
 
-  // ✅ Optional authentication
-  const user = parseSessionCookie(req);
+// ✅ Optional authentication
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const user = parseSessionCookie(req); // Returns SessionUser | null
   if (user && user.role === 'researcher_admin') {
     // Admin-specific logic
   }
+  // ... public logic
 }
 ```
+
+**Key Points**:
+- Function returns `SessionUser` directly
+- Throws error object with `{ status: 401, error: '...' }` if not authenticated
+- Uses cookie parsing directly (no Express session)
+
+---
 
 ### SessionUser Type
 
 **Always import from shared types**:
 
 ```typescript
-// ✅ Correct
-import { SessionUser } from '../../shared/types';
+// ✅ Correct - Single source of truth
+import { SessionUser } from '../../shared/types'; // From api/
+import { SessionUser } from '../../../shared/types'; // From backend/src/
 
 // ❌ Don't define your own
-interface SessionUser { ... } // WRONG!
+interface SessionUser { ... } // WRONG - Causes type inconsistencies!
 ```
+
+**Type Definition** (in `shared/types/index.ts`):
+```typescript
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  business_unit?: string | null;
+  role_title?: string | null;
+  role: 'employee' | 'researcher_admin';
+}
+```
+
+---
+
+### Decision Tree: Which Pattern to Use?
+
+```
+Is your code in backend/src/routes/?
+├─ YES → Use Express middleware pattern
+│   └─ Import from '../middleware/authenticate'
+│
+└─ NO → Is your code in api/?
+    ├─ YES → Use serverless function pattern
+    │   └─ Import from '../utils/auth' (or '../../utils/auth' etc.)
+    │
+    └─ NO → Review architecture - should be in one of these locations
+```
+
+---
+
+### Error Handling Differences
+
+**Backend Express**:
+```typescript
+// Middleware handles errors automatically
+router.get('/data', requireAuth, asyncHandler(async (req, res) => {
+  // If not authenticated, middleware returns 401 before this runs
+  // No need to catch auth errors here
+}));
+```
+
+**API Serverless**:
+```typescript
+// Must catch errors from requireAuth()
+try {
+  const user = requireAuth(req); // May throw
+} catch (error) {
+  if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
+    return res.status(401).json(createErrorResponse('Not authenticated'));
+  }
+  throw error;
+}
+```
+
+---
+
+### Common Mistakes to Avoid
+
+❌ **Don't mix patterns**:
+```typescript
+// ❌ WRONG - Using Express middleware in API route
+import { requireAuth } from '../middleware/authenticate';
+// This won't work - API routes don't use Express middleware!
+```
+
+❌ **Don't duplicate SessionUser type**:
+```typescript
+// ❌ WRONG - Defining your own SessionUser
+interface SessionUser { id: string; ... }
+// Always import from shared/types!
+```
+
+✅ **Do use the correct pattern for your location**:
+```typescript
+// ✅ CORRECT - API route uses API pattern
+import { requireAuth } from '../utils/auth';
+const user = requireAuth(req);
+```
+
+---
+
+### Summary Table
+
+| Aspect | Backend Express | API Serverless |
+|--------|----------------|----------------|
+| **Location** | `backend/src/routes/` | `api/` |
+| **Import** | `../middleware/authenticate` | `../utils/auth` |
+| **Pattern** | Middleware | Function call |
+| **Return Type** | `void` (sets `req.user`) | `SessionUser` |
+| **Error Handling** | Automatic (middleware) | Manual (try/catch) |
+| **User Access** | `req.user!.id` | `user.id` |
+| **Session Source** | `req.session.user` | Cookie parsing |
 
 ---
 

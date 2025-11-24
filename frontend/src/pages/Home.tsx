@@ -27,7 +27,7 @@ const Home: React.FC = () => {
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
 
   // Redirect admin users to admin dashboard
-  if (!authLoading && initialAuthCheck && user?.role === 'researcher_admin') {
+  if (!authLoading && initialAuthCheck && (user?.role === 'researcher_admin' || user?.role === 'superadmin')) {
     return <Navigate to="/admin" replace />;
   }
 
@@ -90,6 +90,15 @@ const Home: React.FC = () => {
     const urlParams = new URLSearchParams(location.search);
     if (urlParams.get('bookingSuccess') === 'true') {
       setShowBookingSuccess(true);
+      // Clean up URL parameter
+      navigate('/', { replace: true });
+    }
+    
+    // Check for OAuth error parameters
+    const authError = urlParams.get('error');
+    if (authError === 'google_auth_failed') {
+      const errorDetails = urlParams.get('details') || 'Authentication failed';
+      setError(`Login failed: ${decodeURIComponent(errorDetails)}. Please try again.`);
       // Clean up URL parameter
       navigate('/', { replace: true });
     }
@@ -731,11 +740,15 @@ const Home: React.FC = () => {
                 {/* Type filter dropdown */}
                 {!loading && !error && opportunities.length > 0 && (
                   <div className="col-md-6 d-flex justify-content-end">
+                    <label htmlFor="opportunity-type-filter" className="visually-hidden">
+                      Filter opportunities by study type
+                    </label>
                     <select 
                       id="opportunity-type-filter"
                       className="form-select" 
                       value={selectedType} 
                       onChange={(e) => setSelectedType(e.target.value)}
+                      aria-label="Filter opportunities by study type"
                     style={{
                       width: '352px',
                       backgroundColor: 'var(--bg-card)',
@@ -793,7 +806,7 @@ const Home: React.FC = () => {
               
               {/* Loading skeleton cards */}
               {loading && (
-                <div className="row">
+                <div className="row" aria-busy="true" aria-live="polite" aria-label="Loading opportunities">
                   {[...Array(6)].map((_, index) => (
                     <div key={index} className="col-md-6 col-lg-4 mb-4">
                       <div className="card h-100">
@@ -843,7 +856,7 @@ const Home: React.FC = () => {
                               </span>
                             </div>
                             
-                            <h5 className="card-title">{opportunity.title}</h5>
+                            <h2 className="card-title h5">{opportunity.title}</h2>
                             <p className="card-text" style={{ fontSize: 'var(--font-size-body)', lineHeight: '1.25', fontWeight: '400' }}>{opportunity.purpose_one_liner}</p>
                             
                             {opportunity.description_optional && (
@@ -945,7 +958,7 @@ const Home: React.FC = () => {
                             disabled={currentPage === 1}
                             aria-label="Previous page"
                           >
-                            <i className="bi bi-chevron-left"></i>
+                            <i className="bi bi-chevron-left" aria-hidden="true"></i>
                           </button>
                         </li>
                         {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
@@ -967,7 +980,7 @@ const Home: React.FC = () => {
                             disabled={currentPage === totalPages}
                             aria-label="Next page"
                           >
-                            <i className="bi bi-chevron-right"></i>
+                            <i className="bi bi-chevron-right" aria-hidden="true"></i>
                           </button>
                         </li>
                       </ul>

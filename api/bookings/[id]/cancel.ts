@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Get authenticated user from cookie
     const user = requireAuth(req);
     const userId = user.id;
-    const isAdmin = user.role === 'researcher_admin';
+    const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
 
     const pool = getPool();
 

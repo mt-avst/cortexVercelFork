@@ -3,6 +3,7 @@ import { pool } from '../config';
 import { requireAuth, optionalAuth } from '../middleware/authenticate';
 import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types';
 import calendarService from '../services/calendar';
+import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
@@ -207,6 +208,9 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
           error: createResult.error || 'Unknown error'
         });
       }
+
+      // Note: User calendar events are added via email links (Google Calendar link or .ics file)
+      // This avoids requiring write permissions and Google verification
     } catch (calendarError) {
       logger.error('Calendar integration failed', { error: calendarError });
       calendarResult = { success: false, eventId: undefined };
@@ -215,6 +219,12 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
 
     // Email notifications (after transaction commit)
     try {
+      logger.info('📧 Attempting to send booking confirmation email', {
+        participantEmail: req.user!.email,
+        participantName: req.user!.name,
+        opportunityTitle: session.opportunity_title,
+      });
+      
       // Send confirmation email to participant
       const confirmationTemplate = EmailService.getBookingConfirmationTemplate(
         session.opportunity_title,
@@ -226,10 +236,16 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
         ownerEmail
       );
 
-      await emailService.sendEmail(
+      const emailResult = await emailService.sendEmail(
         { email: req.user!.email, name: req.user!.name },
         confirmationTemplate
       );
+      
+      logger.info('📧 Email sending result:', {
+        success: emailResult.success,
+        messageId: emailResult.messageId,
+        error: emailResult.error,
+      });
 
       // Send notification to researcher (if enabled in preferences)
       try {
@@ -276,7 +292,10 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
         }
       }
     } catch (emailError) {
-      logger.error('Email notification failed', { error: emailError });
+      logger.error('Email notification failed', { 
+        error: emailError instanceof Error ? emailError.message : String(emailError),
+        stack: emailError instanceof Error ? emailError.stack : undefined,
+      });
       // Don't fail the booking if email fails
     }
 
@@ -407,6 +426,10 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
       }
     }
 
+    // Note: User calendar events are managed via email links (Google Calendar link or .ics file)
+    // Users need to manually delete events from their calendars when cancelling
+    // This avoids requiring write permissions and Google verification
+
     // Email notifications (after transaction commit)
     try {
       // Send cancellation email to participant
@@ -505,9 +528,10 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 
     // Load booking with current session details
     const bookingResult = await client.query(`
-      SELECT b.*, s.opportunity_id as current_opportunity_id
+      SELECT b.*, s.opportunity_id as current_opportunity_id, o.title as opportunity_title
       FROM bookings b
       JOIN sessions s ON b.session_id = s.id
+      JOIN opportunities o ON s.opportunity_id = o.id
       WHERE b.id = $1 AND b.user_id = $2 AND b.status = 'booked'
     `, [bookingId, userId]);
 
@@ -517,6 +541,7 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     }
 
     const booking = bookingResult.rows[0];
+    const oldSessionId = booking.session_id; // Store old session ID before update
 
     // Load target session with opportunity details
     const targetSessionResult = await client.query(`
@@ -674,6 +699,10 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
         // Don't fail the reschedule if calendar fails - booking is already rescheduled
       }
     }
+
+    // Note: User calendar events are managed via email links (Google Calendar link or .ics file)
+    // Users need to manually update their calendars when rescheduling
+    // This avoids requiring write permissions and Google verification
 
     // Email notifications (after transaction commit)
     try {

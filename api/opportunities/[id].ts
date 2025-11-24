@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
 import { parseSessionCookie } from '../utils/auth';
+import { logger } from '../utils/logger';
 
 /**
  * GET /api/opportunities/[id]
@@ -35,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Validate ID format (UUID should be 36 chars with hyphens)
     if (!opportunityId || opportunityId.length < 10) {
-      console.error('Invalid opportunity ID:', { 
+      logger.error('Invalid opportunity ID', { 
         id: opportunityId, 
         query: req.query,
         url: req.url 
@@ -46,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       // Get opportunity detail
       const user = parseSessionCookie(req);
-      const isAdmin = user?.role === 'researcher_admin';
+      const isAdmin = user?.role === 'researcher_admin' || user?.role === 'superadmin';
 
       // Get opportunity
       let opportunityResult;
@@ -55,15 +56,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `SELECT * FROM opportunities WHERE id = $1`,
           [opportunityId]
         );
-      } catch (queryError: any) {
-        console.error('Error querying opportunity:', {
-          error: queryError,
-          errorCode: queryError?.code,
-          errorMessage: queryError?.message,
+      } catch (queryError: unknown) {
+        const error = queryError as { code?: string; message?: string };
+        logger.error('Error querying opportunity', {
+          error: error.message || String(queryError),
+          errorCode: error.code,
           opportunityId
         });
         return res.status(500).json(
-          createErrorResponse('Failed to load opportunity', queryError?.message || 'Database error')
+          createErrorResponse('Failed to load opportunity', error.message || 'Database error')
         );
       }
 
@@ -89,8 +90,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `SELECT name, email FROM users WHERE id = $1`,
           [opportunity.owner_user_id]
         );
-      } catch (ownerError: any) {
-        console.error('Error fetching owner info:', ownerError);
+      } catch (ownerError: unknown) {
+        logger.error('Error fetching owner info', {
+          errorMessage: ownerError instanceof Error ? ownerError.message : String(ownerError),
+        });
         ownerResult = { rows: [{ name: 'Unknown', email: 'unknown@example.com' }] };
       }
 
@@ -111,8 +114,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
            ORDER BY s.start_time ASC`,
           [opportunityId]
         );
-      } catch (sessionsError: any) {
-        console.error('Error fetching sessions:', sessionsError);
+      } catch (sessionsError: unknown) {
+        logger.error('Error fetching sessions', {
+          errorMessage: sessionsError instanceof Error ? sessionsError.message : String(sessionsError),
+        });
         sessionsResult = { rows: [] };
       }
 
@@ -125,8 +130,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             [opportunityId]
           );
           clicks_total = clicksResult.rows[0]?.count || 0;
-        } catch (clicksError: any) {
-          console.error('Error fetching clicks:', clicksError);
+        } catch (clicksError: unknown) {
+          logger.error('Error fetching clicks', {
+            errorMessage: clicksError instanceof Error ? clicksError.message : String(clicksError),
+          });
           clicks_total = 0;
         }
       }
@@ -195,7 +202,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Build dynamic update query based on provided fields
       const updates: string[] = [];
-      const params: any[] = [];
+      const params: unknown[] = [];
       let paramIndex = 1;
 
       if (type !== undefined) {
@@ -315,10 +322,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json(createErrorResponse('Method not allowed'));
   } catch (error: unknown) {
     // Enhanced error logging
-    console.error('Error in opportunities [id] handler:', {
-      error,
-      errorType: typeof error,
+    logger.error('Error in opportunities [id] handler', {
       errorMessage: error instanceof Error ? error.message : String(error),
+      errorType: typeof error,
       errorStack: error instanceof Error ? error.stack : undefined,
       query: req.query,
       url: req.url,

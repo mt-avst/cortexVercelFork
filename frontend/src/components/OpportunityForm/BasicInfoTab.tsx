@@ -37,7 +37,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <label htmlFor="type" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Research Study Type *
               </label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+              <div id="type-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
                 {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
@@ -50,6 +50,9 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
                 value={formData.type}
                 onChange={(e) => handleInputChange('type', e.target.value)}
+                aria-describedby={validationErrors.type ? 'type-error type-help' : 'type-help'}
+                aria-invalid={validationErrors.type ? 'true' : 'false'}
+                aria-required="true"
                 required
               >
                 <option value="" disabled>Please select research study type</option>
@@ -60,7 +63,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
               </select>
                 {validationErrors.type && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.type}</div>
+                <div id="type-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.type}</div>
               )}
             </div>
           </div>
@@ -69,21 +72,23 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
             <div className="col-md-6">
               <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>Status</label>
-                <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
-                  Draft opportunities are only visible to admins
-                </div>
+              <div id="status-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+                Draft opportunities are only visible to admins
+              </div>
                 <select
                   id="status"
                   className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
                   style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
                   value={formData.status}
                   onChange={(e) => handleInputChange('status', e.target.value)}
+                  aria-describedby={validationErrors.status ? 'status-error status-help' : 'status-help'}
+                  aria-invalid={validationErrors.status ? 'true' : 'false'}
                 >
                   <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
                   <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
                 </select>
                 {validationErrors.status && (
-                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.status}</div>
+                  <div id="status-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.status}</div>
                 )}
               </div>
             </div>
@@ -96,7 +101,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <label htmlFor="title" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Title *
               </label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+              <div id="title-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Clear, concise title that describes the opportunity (4-140 characters)
               </div>
               <input
@@ -107,10 +112,13 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
                 placeholder="e.g., User Interface Testing Session"
+                aria-describedby={validationErrors.title ? 'title-error title-help' : 'title-help'}
+                aria-invalid={validationErrors.title ? 'true' : 'false'}
+                aria-required="true"
                 required
               />
               {validationErrors.title && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.title}</div>
+                <div id="title-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.title}</div>
               )}
             </div>
           </div>
@@ -120,7 +128,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Meeting Location *
               </label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+              <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Zoom, Google Meet, or other meeting link
               </div>
               <input
@@ -131,10 +139,13 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 value={formData.meeting_location_optional || ''}
                 onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
                 placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
+                aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
+                aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
+                aria-required="true"
                 required
               />
               {validationErrors.meeting_location_optional && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.meeting_location_optional}</div>
+                <div id="meeting_location-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.meeting_location_optional}</div>
               )}
             </div>
           </div>
@@ -146,7 +157,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <label htmlFor="purpose_one_liner" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                 Purpose *
               </label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+              <div id="purpose-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                 Description of what participants will do (10-180 characters)
               </div>
               <textarea
@@ -157,10 +168,13 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 value={formData.purpose_one_liner}
                 onChange={(e) => handleInputChange('purpose_one_liner', e.target.value)}
                 placeholder="e.g., Help us test the new dashboard interface to improve user experience"
+                aria-describedby={validationErrors.purpose_one_liner ? 'purpose-error purpose-help' : 'purpose-help'}
+                aria-invalid={validationErrors.purpose_one_liner ? 'true' : 'false'}
+                aria-required="true"
                 required
               />
               {validationErrors.purpose_one_liner && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.purpose_one_liner}</div>
+                <div id="purpose-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.purpose_one_liner}</div>
               )}
             </div>
           </div>
@@ -172,7 +186,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <label htmlFor="default_duration_minutes" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
                   Default Duration (minutes) *
                 </label>
-                <div className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+                <div id="duration-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
                   Expected time commitment for participants ({SESSION_DURATION.MIN_MINUTES}-{SESSION_DURATION.MAX_MINUTES} minutes)
                 </div>
                 <input
@@ -184,10 +198,13 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
                   min={SESSION_DURATION.MIN_MINUTES}
                   max={SESSION_DURATION.MAX_MINUTES}
+                  aria-describedby={validationErrors.default_duration_minutes ? 'duration-error duration-help' : 'duration-help'}
+                  aria-invalid={validationErrors.default_duration_minutes ? 'true' : 'false'}
+                  aria-required="true"
                   required
                 />
                 {validationErrors.default_duration_minutes && (
-                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.default_duration_minutes}</div>
+                  <div id="duration-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.default_duration_minutes}</div>
                 )}
               </div>
             </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getNotificationPreferences, updateNotificationPreferences, NotificationPreference } from '../api/client';
+import AdminManagement from '../components/AdminManagement';
 
 const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -226,6 +227,16 @@ const Settings: React.FC = () => {
                         onClick={() => setError('')}
                         aria-label="Close"
                       ></button>
+                    </div>
+                  )}
+
+                  {user.role === 'superadmin' && (
+                    <div className="mb-5">
+                      <h2 className="h5 mb-3">Admin Management</h2>
+                      <p className="text-muted mb-4">
+                        Manage admin access requests and existing admins. Approve or deny requests, and revoke admin access when needed.
+                      </p>
+                      <AdminManagement />
                     </div>
                   )}
 

@@ -6,9 +6,12 @@ interface ConfirmationModalProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmText?: string;
+  cancelText?: string;
   variant?: 'danger' | 'warning' | 'primary';
   onConfirm: () => void;
   onCancel: () => void;
+  renderCustomContent?: () => React.ReactNode;
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -17,10 +20,15 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   message,
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'danger',
   onConfirm,
-  onCancel
+  onCancel,
+  renderCustomContent
 }) => {
+  const finalConfirmText = confirmText || confirmLabel;
+  const finalCancelText = cancelText || cancelLabel;
   if (!show) return null;
 
   const getButtonClass = () => {
@@ -32,9 +40,51 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     }
   };
 
+  // Focus trap effect
+  React.useEffect(() => {
+    if (show) {
+      const modal = document.querySelector('.modal.show');
+      const focusableElements = modal?.querySelectorAll(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const firstElement = focusableElements?.[0] as HTMLElement;
+      const lastElement = focusableElements?.[focusableElements.length - 1] as HTMLElement;
+      
+      // Focus first element
+      firstElement?.focus();
+      
+      const handleTabKey = (e: Event) => {
+        const keyEvent = e as KeyboardEvent;
+        if (keyEvent.key !== 'Tab') return;
+        
+        if (keyEvent.shiftKey) {
+          if (document.activeElement === firstElement) {
+            keyEvent.preventDefault();
+            lastElement?.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            keyEvent.preventDefault();
+            firstElement?.focus();
+          }
+        }
+      };
+      
+      modal?.addEventListener('keydown', handleTabKey);
+      
+      return () => {
+        modal?.removeEventListener('keydown', handleTabKey);
+      };
+    }
+  }, [show]);
+
   return (
     <div 
       className="modal show d-block" 
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      aria-describedby="modal-message"
       tabIndex={-1}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
       onClick={(e) => {
@@ -46,16 +96,17 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       <div className="modal-dialog modal-dialog-centered">
         <div className="modal-content confirmation-modal-content">
           <div className="modal-header border-0 confirmation-modal-header">
-            <h5 className="modal-title confirmation-modal-title">{title}</h5>
+            <h5 className="modal-title confirmation-modal-title" id="modal-title">{title}</h5>
             <button 
               type="button" 
               className="btn-close btn-close-white" 
               onClick={onCancel}
-              aria-label="Close"
+              aria-label="Close modal"
             ></button>
           </div>
           <div className="modal-body confirmation-modal-body">
-            <p className="mb-0 confirmation-modal-message">{message}</p>
+            <p className="mb-0 confirmation-modal-message" id="modal-message">{message}</p>
+            {renderCustomContent && renderCustomContent()}
           </div>
           <div className="modal-footer border-0 confirmation-modal-footer">
             <button 
@@ -63,14 +114,14 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               className="btn btn-secondary" 
               onClick={onCancel}
             >
-              {cancelLabel}
+              {finalCancelText}
             </button>
             <button 
               type="button" 
               className={`btn ${getButtonClass()}`} 
               onClick={onConfirm}
             >
-              {confirmLabel}
+              {finalConfirmText}
             </button>
           </div>
         </div>

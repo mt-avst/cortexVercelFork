@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = requireAuth(req);
     
     // Check admin role
-    if (user.role !== 'researcher_admin') {
+    if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
       return res.status(403).json(createErrorResponse('Forbidden: Admin access required'));
     }
 

@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
 import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 import { requireAuth } from '../../utils/auth';
+import { logger } from '../../utils/logger';
 
 /**
  * GET /api/opportunities/[id]/analytics
@@ -18,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const user = requireAuth(req);
     
     // Check if user is admin
-    if (user.role !== 'researcher_admin') {
+    if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
       return res.status(403).json(createErrorResponse('Admin access required'));
     }
 
@@ -46,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Validate ID format (UUID should be 36 chars with hyphens)
     if (!opportunityId || opportunityId.length < 10) {
-      console.error('Analytics: Invalid opportunity ID', { 
+      logger.error('Analytics: Invalid opportunity ID', { 
         id: opportunityId, 
         query: req.query,
         url: req.url 
@@ -79,10 +80,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [opportunityId]
       );
       clicks_total = parseInt(String(totalResult.rows[0]?.count || '0'), 10);
-    } catch (queryError: any) {
-      console.error('Error querying total clicks:', queryError);
+    } catch (queryError: unknown) {
+      const error = queryError as { code?: string; message?: string };
+      logger.error('Error querying total clicks', {
+        error: error.message || String(queryError),
+        code: error.code,
+      });
       // If table doesn't exist, return 0
-      if (queryError?.code === '42P01') { // Table doesn't exist
+      if (error.code === '42P01') { // Table doesn't exist
         clicks_total = 0;
       } else {
         throw queryError;
@@ -98,9 +103,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [opportunityId]
       );
       clicks_24h = parseInt(String(hours24Result.rows[0]?.count || '0'), 10);
-    } catch (queryError: any) {
-      console.error('Error querying 24h clicks:', queryError);
-      if (queryError?.code === '42P01') { // Table doesn't exist
+    } catch (queryError: unknown) {
+      const error = queryError as { code?: string; message?: string };
+      logger.error('Error querying 24h clicks', {
+        error: error.message || String(queryError),
+        code: error.code,
+      });
+      if (error.code === '42P01') { // Table doesn't exist
         clicks_24h = 0;
       } else {
         throw queryError;
@@ -139,9 +148,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           count: parseInt(String(row.count || '0'), 10)
         };
       }).filter(Boolean) as Array<{ date: string; count: number }>;
-    } catch (queryError: any) {
-      console.error('Error querying daily clicks:', queryError);
-      if (queryError?.code === '42P01') { // Table doesn't exist
+    } catch (queryError: unknown) {
+      const error = queryError as { code?: string; message?: string };
+      logger.error('Error querying daily clicks', {
+        error: error.message || String(queryError),
+        code: error.code,
+      });
+      if (error.code === '42P01') { // Table doesn't exist
         clicks_by_day = [];
       } else {
         throw queryError;
@@ -164,10 +177,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     // Log full error details for debugging
-    console.error('Error in analytics handler:', {
-      error,
-      errorType: typeof error,
+    logger.error('Error in analytics handler', {
       errorMessage: error instanceof Error ? error.message : String(error),
+      errorType: typeof error,
       errorStack: error instanceof Error ? error.stack : undefined,
       query: req.query,
       url: req.url,

@@ -266,6 +266,297 @@ export class UserCalendarService {
   }
 
   /**
+   * Create a calendar event in the user's Google Calendar
+   * Demo mode: Returns mock event ID
+   * Production: Creates real event in user's calendar
+   */
+  async createUserCalendarEvent(
+    accessToken: string,
+    event: CalendarEvent
+  ): Promise<{ success: boolean; eventId?: string; error?: string }> {
+    if (this.isDemoMode) {
+      console.log(`📅 Demo: Created calendar event "${event.title}" in user's calendar for ${event.startTime.toISOString()}`);
+      const mockEventId = `demo-user-event-${Date.now()}`;
+      return { success: true, eventId: mockEventId };
+    }
+
+    // Production mode: Create real event in user's calendar
+    try {
+      const calendarEvent = {
+        summary: event.title,
+        description: event.description,
+        start: {
+          dateTime: event.startTime.toISOString(),
+          timeZone: 'UTC',
+        },
+        end: {
+          dateTime: event.endTime.toISOString(),
+          timeZone: 'UTC',
+        },
+        attendees: event.attendees?.map(attendee => ({
+          email: attendee.email,
+          displayName: attendee.name,
+        })),
+        location: event.location,
+        conferenceData: event.meetLink ? {
+          createRequest: {
+            requestId: `meet-${Date.now()}`,
+            conferenceSolutionKey: {
+              type: 'hangoutsMeet'
+            }
+          }
+        } : undefined,
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 }, // 24 hours before
+            { method: 'popup', minutes: 10 }, // 10 minutes before
+          ],
+        },
+      };
+
+      const response = await fetch(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(calendarEvent),
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please reconnect.');
+        }
+        const errorData = await response.text();
+        console.error('Google Calendar API error:', errorData);
+        throw new Error(`Failed to create calendar event: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as { id: string };
+      console.log(`📅 Created calendar event "${event.title}" in user's calendar: ${data.id}`);
+      return { success: true, eventId: data.id };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error creating calendar event in user calendar:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Update a calendar event in the user's Google Calendar
+   * Demo mode: Returns mock success
+   * Production: Updates real event in user's calendar
+   */
+  async updateUserCalendarEvent(
+    accessToken: string,
+    eventId: string,
+    event: CalendarEvent
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.isDemoMode) {
+      console.log(`📅 Demo: Updated calendar event "${event.title}" in user's calendar: ${eventId}`);
+      return { success: true };
+    }
+
+    // Production mode: Update real event in user's calendar
+    try {
+      const calendarEvent = {
+        summary: event.title,
+        description: event.description,
+        start: {
+          dateTime: event.startTime.toISOString(),
+          timeZone: 'UTC',
+        },
+        end: {
+          dateTime: event.endTime.toISOString(),
+          timeZone: 'UTC',
+        },
+        attendees: event.attendees?.map(attendee => ({
+          email: attendee.email,
+          displayName: attendee.name,
+        })),
+        location: event.location,
+        conferenceData: event.meetLink ? {
+          createRequest: {
+            requestId: `meet-${Date.now()}`,
+            conferenceSolutionKey: {
+              type: 'hangoutsMeet'
+            }
+          }
+        } : undefined,
+        reminders: {
+          useDefault: false,
+          overrides: [
+            { method: 'email', minutes: 24 * 60 }, // 24 hours before
+            { method: 'popup', minutes: 10 }, // 10 minutes before
+          ],
+        },
+      };
+
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+        {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(calendarEvent),
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please reconnect.');
+        }
+        if (response.status === 404) {
+          throw new Error('Calendar event not found');
+        }
+        const errorData = await response.text();
+        console.error('Google Calendar API error:', errorData);
+        throw new Error(`Failed to update calendar event: ${response.status} ${response.statusText}`);
+      }
+
+      console.log(`📅 Updated calendar event "${event.title}" in user's calendar: ${eventId}`);
+      return { success: true };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error updating calendar event in user calendar:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Find calendar events in user's calendar by title and time range
+   * Demo mode: Returns mock event ID
+   * Production: Searches user's calendar for matching events
+   */
+  async findUserCalendarEvent(
+    accessToken: string,
+    title: string,
+    startTime: Date,
+    endTime: Date
+  ): Promise<{ success: boolean; eventId?: string; error?: string }> {
+    if (this.isDemoMode) {
+      // In demo mode, return a mock event ID based on the title and time
+      const mockEventId = `demo-user-event-${startTime.getTime()}`;
+      return { success: true, eventId: mockEventId };
+    }
+
+    // Production mode: Search for matching events
+    try {
+      const timeMin = startTime.toISOString();
+      const timeMax = endTime.toISOString();
+      
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events?` +
+        `timeMin=${encodeURIComponent(timeMin)}&` +
+        `timeMax=${encodeURIComponent(timeMax)}&` +
+        `singleEvents=true&orderBy=startTime`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please reconnect.');
+        }
+        const errorData = await response.text();
+        console.error('Google Calendar API error:', errorData);
+        throw new Error(`Failed to search calendar events: ${response.status} ${response.statusText}`);
+      }
+
+      const data = await response.json() as {
+        items?: Array<{
+          id: string;
+          summary?: string;
+          start: { dateTime?: string; date?: string };
+          end: { dateTime?: string; date?: string };
+        }>;
+      };
+
+      // Find event matching title and time
+      const matchingEvent = (data.items || []).find(event => {
+        if (!event.start.dateTime || !event.end.dateTime) return false;
+        const eventStart = new Date(event.start.dateTime);
+        const eventEnd = new Date(event.end.dateTime);
+        
+        // Match if title contains our search title and times overlap
+        const titleMatches = event.summary?.includes(title) || title.includes(event.summary || '');
+        const timeMatches = Math.abs(eventStart.getTime() - startTime.getTime()) < 60000; // Within 1 minute
+        
+        return titleMatches && timeMatches;
+      });
+
+      if (matchingEvent) {
+        return { success: true, eventId: matchingEvent.id };
+      }
+
+      return { success: false, error: 'Event not found in user calendar' };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error searching calendar events:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Delete a calendar event from the user's Google Calendar
+   * Demo mode: Returns mock success
+   * Production: Deletes real event from user's calendar
+   */
+  async deleteUserCalendarEvent(
+    accessToken: string,
+    eventId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (this.isDemoMode) {
+      console.log(`📅 Demo: Deleted calendar event from user's calendar: ${eventId}`);
+      return { success: true };
+    }
+
+    // Production mode: Delete real event from user's calendar
+    try {
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Calendar access token expired. Please reconnect.');
+        }
+        // 404 is acceptable - event might already be deleted
+        if (response.status === 404) {
+          console.log(`📅 Calendar event not found in user calendar (already deleted): ${eventId}`);
+          return { success: true };
+        }
+        const errorData = await response.text();
+        console.error('Google Calendar API error:', errorData);
+        throw new Error(`Failed to delete calendar event: ${response.status} ${response.statusText}`);
+      }
+
+      console.log(`📅 Deleted calendar event from user's calendar: ${eventId}`);
+      return { success: true };
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('Error deleting calendar event from user calendar:', errorMessage);
+      return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
    * Generate realistic mock calendar events for testing
    * Creates specific conflicts for Demo User 1 (demo@example.com) at common session times
    */

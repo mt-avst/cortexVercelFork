@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
 import { createErrorResponse, getErrorMessage } from '../../utils/errors';
+import { logger } from '../../utils/logger';
 
 /**
  * GET /api/opportunities/[id]/sessions
@@ -22,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (!opportunityId) {
-      console.error('Opportunity ID not found in query or URL');
+      logger.error('Opportunity ID not found in query or URL');
       return res.status(400).json(createErrorResponse('Opportunity ID is required'));
     }
 
@@ -43,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               SELECT * FROM sessions 
               WHERE opportunity_id = $1
             `;
-            const params: any[] = [opportunityId];
+            const params: unknown[] = [opportunityId];
             
             // Handle query param (can be string, string[], or undefined)
             const includePast = Array.isArray(include_past) ? include_past[0] : include_past;
@@ -131,7 +132,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     return res.status(405).json(createErrorResponse('Method not allowed'));
   } catch (error: unknown) {
-    console.error('Error in sessions handler:', error);
+    logger.error('Error in sessions handler', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(
       createErrorResponse('Internal server error', errorMessage)

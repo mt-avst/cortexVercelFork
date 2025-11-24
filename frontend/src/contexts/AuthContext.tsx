@@ -135,9 +135,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                         window.location.pathname.includes('/opportunities') ||
                         window.location.pathname.includes('/sessions');
     
-    const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
+    // Determine if we're in production (not localhost)
+    const isProduction = typeof window !== 'undefined' && 
+                       !window.location.hostname.includes('localhost') &&
+                       !window.location.hostname.includes('127.0.0.1');
     
-    console.log('🔐 Redirecting to login:', loginRoute);
+    // Use Google OAuth in production, demo login in development
+    let loginRoute: string;
+    if (isAdminRoute) {
+      loginRoute = '/api/auth/admin-login';
+    } else if (isProduction) {
+      // Production: Use Google OAuth for real authentication
+      loginRoute = '/api/auth/google-login';
+    } else {
+      // Development: Use demo login
+      loginRoute = '/api/auth/demo-login';
+    }
+    
+    console.log('🔐 Redirecting to login:', loginRoute, { isProduction, isAdminRoute });
     window.location.href = getAuthUrl(loginRoute);
   };
 

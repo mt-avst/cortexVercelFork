@@ -14,7 +14,7 @@ export interface User {
   email: string;
   business_unit?: string;
   role_title?: string;
-  role: 'employee' | 'researcher_admin';
+  role: 'employee' | 'researcher_admin' | 'superadmin';
   created_at: string;
 }
 
@@ -24,7 +24,7 @@ export interface SessionUser {
   email: string;
   business_unit?: string;
   role_title?: string;
-  role: 'employee' | 'researcher_admin';
+  role: 'employee' | 'researcher_admin' | 'superadmin';
 }
 
 export interface NotificationPreference {
@@ -392,5 +392,5 @@ export interface LogContext {
 export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview';
 export type OpportunityStatus = 'draft' | 'published' | 'closed';
 export type ParticipantType = 'any' | 'internal' | 'external' | 'specific';
-export type UserRole = 'employee' | 'researcher_admin';
+export type UserRole = 'employee' | 'researcher_admin' | 'superadmin';
 export type BookingStatus = 'booked' | 'cancelled';

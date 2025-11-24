@@ -517,7 +517,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   }
 
   // Redirect to home if not admin (unless allowUserSubmission is true)
-  if (!loading && user && user.role !== 'researcher_admin' && !allowUserSubmission) {
+  if (!loading && user && user.role !== 'researcher_admin' && user.role !== 'superadmin' && !allowUserSubmission) {
     return <Navigate to="/" replace />;
   }
 

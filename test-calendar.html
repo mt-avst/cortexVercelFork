@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Calendar Link Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
+    .button { display: inline-block; padding: 12px 24px; margin: 10px 5px; 
+              text-decoration: none; border-radius: 4px; font-weight: bold; }
+    .google { background-color: #4285f4; color: white; }
+    .ics { background-color: #6c757d; color: white; }
+  </style>
+</head>
+<body>
+  <h1>Calendar Link Test</h1>
+  <p>Click the buttons below to test calendar links:</p>
+  
+  <div>
+    <a href="https://calendar.google.com/calendar/render?action=TEMPLATE&text=Research+Session%3A+User+Testing&dates=20241215T100000Z%2F20241215T110000Z&details=Research+session%3A+User+Testing%0A%0AResearcher%3A+John+Doe&location=Conference+Room+A" target="_blank" class="button google">
+      📅 Add to Google Calendar
+    </a>
+    <a href="data:text/calendar;charset=utf-8,BEGIN%3AVCALENDAR%0D%0AVERSION%3A2.0%0D%0APRODID%3A-%2F%2FAdaptaLabs%2F%2FResearch%20Platform%2F%2FEN%0D%0ABEGIN%3AVEVENT%0D%0AUID%3A1762299521731%40adaptalabs.com%0D%0ADTSTAMP%3A20251104T233841Z%0D%0ADTSTART%3A20241215T100000Z%0D%0ADTEND%3A20241215T110000Z%0D%0ASUMMARY%3AResearch%20Session%3A%20User%20Testing%0D%0ADESCRIPTION%3AResearch%20session%3A%20User%20Testing%5Cn%5CnResearcher%3A%20John%20Doe%0D%0ALOCATION%3AConference%20Room%20A%0D%0AORGANIZER%3BCN%3DJohn%20Doe%3AMAILTO%3Aresearcher%40adaptalabs.com%0D%0ASTATUS%3ACONFIRMED%0D%0AEND%3AVEVENT%0D%0AEND%3AVCALENDAR" download="test-booking.ics" class="button ics">
+      📥 Download Calendar File (.ics)
+    </a>
+  </div>
+  
+  <h2>Test Details</h2>
+  <ul>
+    <li><strong>Title:</strong> Research Session: User Testing</li>
+    <li><strong>Start:</strong> 12/15/2024, 10:00:00 AM</li>
+    <li><strong>End:</strong> 12/15/2024, 11:00:00 AM</li>
+    <li><strong>Location:</strong> Conference Room A</li>
+    <li><strong>Organizer:</strong> John Doe (researcher@adaptalabs.com)</li>
+  </ul>
+  
+  <h2>Expected Results</h2>
+  <ul>
+    <li><strong>Google Calendar:</strong> Should open Google Calendar with pre-filled event</li>
+    <li><strong>ICS File:</strong> Should download and can be imported into any calendar app</li>
+  </ul>
+</body>
+</html>

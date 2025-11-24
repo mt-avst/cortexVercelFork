@@ -297,7 +297,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Remove trailing slash if present
       frontendUrl = frontendUrl.replace(/\/$/, '');
       
-      if (sessionUser.role === 'researcher_admin') {
+      if (sessionUser.role === 'researcher_admin' || sessionUser.role === 'superadmin') {
         res.redirect(`${frontendUrl}/admin`);
       } else {
         res.redirect(frontendUrl);

@@ -12,7 +12,7 @@ export async function runMigrations() {
         email TEXT UNIQUE NOT NULL,
         business_unit TEXT,
         role_title TEXT,
-        role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('employee', 'researcher_admin')),
+        role TEXT NOT NULL DEFAULT 'employee' CHECK (role IN ('employee', 'researcher_admin', 'superadmin')),
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
@@ -469,7 +469,7 @@ export async function runMigrations() {
         if (roleColumnCheck.rows.length === 0) {
           // Add role column
           await client.query(`
-            ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee' CHECK (role IN ('employee', 'researcher_admin'))
+            ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'employee' CHECK (role IN ('employee', 'researcher_admin', 'superadmin'))
           `);
           
           // Migrate data from is_researcher_admin to role
@@ -491,6 +491,14 @@ export async function runMigrations() {
           `);
           
           console.log('✅ Migrated is_researcher_admin to role column');
+          
+          // Update role constraint to include superadmin
+          await client.query(`
+            ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+            ALTER TABLE users ADD CONSTRAINT users_role_check 
+              CHECK (role IN ('employee', 'researcher_admin', 'superadmin'));
+          `);
+          console.log('✅ Updated role constraint to include superadmin');
         } else {
           console.log('ℹ️  Role column already exists, skipping migration');
         }
@@ -567,6 +575,42 @@ export async function runMigrations() {
       ALTER TABLE opportunities 
       ADD COLUMN IF NOT EXISTS meeting_location_optional TEXT
     `);
+
+    // Create admin_requests table for admin access requests
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
+        reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        reviewed_at TIMESTAMPTZ,
+        notes TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Created admin_requests table');
+
+    // Create indexes for admin_requests
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_admin_requests_user_id ON admin_requests(user_id);
+      CREATE INDEX IF NOT EXISTS idx_admin_requests_status ON admin_requests(status);
+      CREATE INDEX IF NOT EXISTS idx_admin_requests_requested_at ON admin_requests(requested_at DESC);
+    `);
+    console.log('✅ Created admin_requests indexes');
+
+    // Update role constraint to include superadmin (if not already done)
+    try {
+      await client.query(`
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+        ALTER TABLE users ADD CONSTRAINT users_role_check 
+          CHECK (role IN ('employee', 'researcher_admin', 'superadmin'));
+      `);
+      console.log('✅ Updated role constraint to include superadmin');
+    } catch (error: any) {
+      console.log('ℹ️  Could not update role constraint (may already be updated):', error.message);
+    }
 
     console.log('✅ Database migrations completed successfully');
   } catch (error) {

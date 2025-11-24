@@ -740,8 +740,8 @@ const MyBookings: React.FC = () => {
     return (
       <>
         {gridAnimationJSX}
-        <Container className="mt-4 text-center my-bookings-content">
-          <Spinner animation="border" role="status">
+        <Container className="mt-4 text-center my-bookings-content" aria-busy="true" aria-live="polite">
+          <Spinner animation="border" role="status" aria-label="Loading bookings">
             <span className="visually-hidden">Loading...</span>
           </Spinner>
           <p className="mt-2">Loading your bookings...</p>
@@ -836,7 +836,7 @@ const MyBookings: React.FC = () => {
                           disabled={actionLoading === booking.id}
                         >
                           {actionLoading === booking.id ? (
-                            <Spinner size="sm" />
+                            <Spinner size="sm" aria-label="Processing cancellation" aria-busy="true" />
                           ) : (
                             'Cancel'
                           )}

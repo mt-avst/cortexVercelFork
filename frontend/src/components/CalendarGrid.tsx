@@ -628,7 +628,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
                                 transform: 'translate(-50%, -50%)',
                                 zIndex: 10
                               }}>
-                                <div className="spinner-border spinner-border-sm" role="status">
+                                <div className="spinner-border spinner-border-sm" role="status" aria-label="Booking session" aria-busy="true">
                                   <span className="visually-hidden">Booking...</span>
                                 </div>
                               </div>

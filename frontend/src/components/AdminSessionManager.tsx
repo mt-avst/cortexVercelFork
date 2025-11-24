@@ -1004,6 +1004,52 @@ const ListView: React.FC<{
   
   return (
     <div className="list-view">
+      <style>
+        {`
+          .momentum-table-container {
+            background: transparent;
+            border-radius: var(--card-radius);
+            overflow: hidden;
+          }
+          .momentum-table-container table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0;
+            background: transparent;
+          }
+          .momentum-table-container thead {
+            background: var(--bg-card);
+            backdrop-filter: blur(16px);
+          }
+          .momentum-table-container thead th {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-card);
+            font-weight: 600;
+            padding: 16px 12px;
+            font-size: var(--font-size-body);
+            vertical-align: middle;
+          }
+          .momentum-table-container tbody tr {
+            background: transparent;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: background-color var(--transition-card);
+          }
+          .momentum-table-container tbody tr:hover {
+            background: var(--bg-card);
+          }
+          .momentum-table-container tbody td {
+            color: var(--text-primary);
+            padding: 16px 12px;
+            vertical-align: middle;
+            font-size: var(--font-size-body);
+          }
+          .momentum-table-container tbody td small {
+            color: var(--text-muted);
+            font-size: var(--font-size-metadata);
+          }
+        `}
+      </style>
       <div className="card">
         <div className="card-header d-flex justify-content-between align-items-center">
           <div>
@@ -1029,8 +1075,8 @@ const ListView: React.FC<{
               <p className="mt-2 mb-0">No sessions created yet</p>
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="table table-sm">
+            <div className="table-responsive momentum-table-container">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Start Time</th>

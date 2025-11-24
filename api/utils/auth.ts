@@ -65,7 +65,7 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
       return null;
     }
     
-    if (user.role !== 'employee' && user.role !== 'researcher_admin') {
+    if (user.role !== 'employee' && user.role !== 'researcher_admin' && user.role !== 'superadmin') {
       return null;
     }
 

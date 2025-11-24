@@ -91,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       // Check if user is admin - non-admins should only see published opportunities
       const user = parseSessionCookie(req);
-      const isAdmin = user?.role === 'researcher_admin';
+      const isAdmin = user?.role === 'researcher_admin' || user?.role === 'superadmin';
       
       // Filter out drafts for non-admin users (unless they specifically requested draft status)
       if (!isAdmin && (!status || status !== 'draft')) {

@@ -263,41 +263,51 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
         <div className="card-body">
           <div className="row">
             <div className="col-md-3">
-              <label className="form-label">Start Time *</label>
+              <label htmlFor="session-start-time" className="form-label">Start Time *</label>
               <input
                 type="datetime-local"
+                id="session-start-time"
                 className="form-control"
                 value={newSession.start_time}
                 onChange={(e) => setNewSession(prev => ({ ...prev, start_time: e.target.value }))}
                 disabled={disabled}
+                aria-required="true"
+                required
               />
             </div>
             <div className="col-md-3">
-              <label className="form-label">End Time *</label>
+              <label htmlFor="session-end-time" className="form-label">End Time *</label>
               <input
                 type="datetime-local"
+                id="session-end-time"
                 className="form-control"
                 value={newSession.end_time}
                 onChange={(e) => setNewSession(prev => ({ ...prev, end_time: e.target.value }))}
                 disabled={disabled}
+                aria-required="true"
+                required
               />
             </div>
             <div className="col-md-2">
-              <label className="form-label">Capacity *</label>
+              <label htmlFor="session-capacity" className="form-label">Capacity *</label>
               <input
                 type="number"
+                id="session-capacity"
                 className="form-control"
                 value={newSession.capacity}
                 onChange={(e) => setNewSession(prev => ({ ...prev, capacity: parseInt(e.target.value) || 1 }))}
                 min="1"
                 max="500"
                 disabled={disabled}
+                aria-required="true"
+                required
               />
             </div>
             <div className="col-md-3">
-              <label className="form-label">Location/Link</label>
+              <label htmlFor="session-location" className="form-label">Location/Link</label>
               <input
                 type="text"
+                id="session-location"
                 className="form-control"
                 value={newSession.location_or_meet_link_optional}
                 onChange={(e) => setNewSession(prev => ({ ...prev, location_or_meet_link_optional: e.target.value }))}
@@ -334,6 +344,55 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
 
       {/* Sessions list */}
       <div className="card">
+        <style>
+          {`
+            .momentum-table-container {
+              background: transparent;
+              border-radius: var(--card-radius);
+              overflow: hidden;
+            }
+            .momentum-table-container table {
+              width: 100%;
+              border-collapse: separate;
+              border-spacing: 0;
+              background: transparent;
+            }
+            .momentum-table-container thead {
+              background: var(--bg-card);
+              backdrop-filter: blur(16px);
+            }
+            .momentum-table-container thead th {
+              background: var(--bg-card);
+              color: var(--text-primary);
+              border-bottom: 1px solid var(--border-card);
+              font-weight: 600;
+              padding: 16px 12px;
+              font-size: var(--font-size-body);
+              vertical-align: middle;
+            }
+            .momentum-table-container tbody tr {
+              background: transparent;
+              border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+              transition: background-color var(--transition-card);
+            }
+            .momentum-table-container tbody tr:hover {
+              background: var(--bg-card);
+            }
+            .momentum-table-container tbody tr.table-secondary {
+              opacity: 0.6;
+            }
+            .momentum-table-container tbody td {
+              color: var(--text-primary);
+              padding: 16px 12px;
+              vertical-align: middle;
+              font-size: var(--font-size-body);
+            }
+            .momentum-table-container tbody td small {
+              color: var(--text-muted);
+              font-size: var(--font-size-metadata);
+            }
+          `}
+        </style>
         <div className="card-header d-flex justify-content-between align-items-center">
           <h6 className="mb-0">Sessions ({sessions.length})</h6>
           {sessions.length > 0 && (
@@ -349,8 +408,8 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
               No sessions added yet. Add sessions above to create time slots for this opportunity.
             </div>
           ) : (
-            <div className="table-responsive">
-              <table className="table table-sm">
+            <div className="table-responsive momentum-table-container">
+              <table className="table">
                 <thead>
                   <tr>
                     <th>Start Time</th>
@@ -429,8 +488,8 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
               </div>
               <div className="modal-body">
                 <p>Review the sessions to be created:</p>
-                <div className="table-responsive">
-                  <table className="table table-sm">
+                <div className="table-responsive momentum-table-container">
+                  <table className="table">
                     <thead>
                       <tr>
                         <th>Start Time</th>

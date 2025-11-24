@@ -4,7 +4,7 @@ import { API_CONFIG, getAuthUrl } from '../config/api';
 import { ApiClient, AppError, mapAxiosError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 
-import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse } from './types';
+import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse, AdminRequest } from './types';
 
 // Import the getter functions to ensure dynamic evaluation
 import { getApiBaseUrl } from '../config/api';
@@ -111,12 +111,28 @@ api.interceptors.response.use(
                           window.location.pathname.includes('/opportunities') ||
                           window.location.pathname.includes('/sessions');
       
-      const loginRoute = isAdminRoute ? '/api/auth/admin-login' : '/api/auth/demo-login';
+      // Determine if we're in production (not localhost)
+      const isProduction = typeof window !== 'undefined' && 
+                         !window.location.hostname.includes('localhost') &&
+                         !window.location.hostname.includes('127.0.0.1');
+      
+      // Use Google OAuth in production, demo login in development
+      let loginRoute: string;
+      if (isAdminRoute) {
+        loginRoute = '/api/auth/admin-login';
+      } else if (isProduction) {
+        // Production: Use Google OAuth for real authentication
+        loginRoute = '/api/auth/google-login';
+      } else {
+        // Development: Use demo login
+        loginRoute = '/api/auth/demo-login';
+      }
       
       logger.info('Redirecting to login due to 401 error', {
         requestId: requestId || undefined,
         url: window.location.pathname,
         loginRoute,
+        isProduction,
       });
       window.location.href = getAuthUrl(loginRoute);
     }
@@ -486,6 +502,59 @@ export const updateNotificationPreferences = async (preferences: {
 }): Promise<NotificationPreference> => {
   const response = await api.patch('/notification-preferences', preferences);
   return response.data.data;
+};
+
+/**
+ * Admin Management Functions
+ */
+
+/**
+ * Request admin access
+ */
+export const requestAdminAccess = async (): Promise<{ success: boolean; request: AdminRequest; message: string }> => {
+  const response = await api.post('/admin/request');
+  return response.data;
+};
+
+/**
+ * Get all admin requests (superadmin only)
+ */
+export const getAdminRequests = async (status?: 'pending' | 'approved' | 'denied'): Promise<{ success: boolean; requests: AdminRequest[] }> => {
+  const params = status ? { status } : {};
+  const response = await api.get('/admin/requests', { params });
+  return response.data;
+};
+
+/**
+ * Approve an admin request (superadmin only)
+ */
+export const approveAdminRequest = async (requestId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post(`/admin/requests/${requestId}/approve`);
+  return response.data;
+};
+
+/**
+ * Deny an admin request (superadmin only)
+ */
+export const denyAdminRequest = async (requestId: string, notes?: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post(`/admin/requests/${requestId}/deny`, { notes });
+  return response.data;
+};
+
+/**
+ * Get all admins (superadmin only)
+ */
+export const getAdmins = async (): Promise<{ success: boolean; admins: User[] }> => {
+  const response = await api.get('/admin/admins');
+  return response.data;
+};
+
+/**
+ * Revoke admin access (superadmin only)
+ */
+export const revokeAdminAccess = async (adminId: string): Promise<{ success: boolean; message: string }> => {
+  const response = await api.delete(`/admin/admins?id=${adminId}`);
+  return response.data;
 };
 
 export default api;

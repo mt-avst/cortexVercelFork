@@ -247,15 +247,45 @@ Ensure these are set in production:
 - [ ] Database credentials secured
 - [ ] OIDC client secrets secured
 
+## 📚 Documentation
+
+### For Users
+- **[User Guide](USER_GUIDE.md)** - Complete guide for end users
+- **[Alpha Tester Quick Start](ALPHA_TESTER_QUICK_START.md)** - Quick start guide for alpha testers
+
+### For Admins
+- **[Admin Guide](ADMIN_GUIDE.md)** - Complete guide for researcher admins
+
+### For Developers
+- **[Plan](plan.md)** - Original project plan and requirements
+- **[Core](core.md)** - Core architecture and data model
+
+### Testing & Status
+- **[Alpha Testing Readiness](ALPHA_TESTING_READINESS.md)** - Comprehensive alpha readiness checklist
+- **[End-to-End Testing Checklist](END_TO_END_TESTING_CHECKLIST.md)** - Testing scenarios and checklist
+- **[Known Issues](KNOWN_ISSUES.md)** - Known issues, limitations, and workarounds
+- **[Plan Status Report](PLAN_STATUS_REPORT.md)** - Current milestone completion status
+
+## Current Status
+
+**Version**: 3.12.0  
+**Status**: ✅ Production Ready - Alpha Testing Phase  
+**Deployment**: https://adapta-labs-p62q.vercel.app
+
+### Milestones Completed
+- ✅ **M1**: Auth and Roles
+- ✅ **M2**: Opportunities
+- ✅ **M3**: Sessions
+- ✅ **M4**: Booking
+- ✅ **M5**: Calendar
+- ✅ **M6**: Polls and Surveys
+- ✅ **M7**: Dashboard and Settings
+- ⏳ **M8**: Branding and Accessibility (Partial)
+
 ## Next Milestones
 
-- **M2**: Opportunities CRUD and public browsing
-- **M3**: Sessions and capacity management  
-- **M4**: Booking, reschedule, cancel flows
-- **M5**: Google Calendar integration
-- **M6**: Polls and surveys with external links
-- **M7**: Dashboard and admin settings
-- **M8**: Branding and accessibility
+- **M8**: Complete WCAG 2.2 AA compliance audit
+- **Future**: Advanced analytics, export functionality, enhanced reporting
 
 ## Troubleshooting
 
@@ -329,3 +359,18 @@ Backend logs are written to console. In production, consider using a proper logg
 2. Write tests for new features
 3. Update documentation
 4. Follow security best practices
+
+## Alpha Testing
+
+AdaptaLabs is currently in **alpha testing phase**. 
+
+### For Alpha Testers
+- Start with the **[Alpha Tester Quick Start](ALPHA_TESTER_QUICK_START.md)**
+- Read the **[User Guide](USER_GUIDE.md)** for detailed instructions
+- Check **[Known Issues](KNOWN_ISSUES.md)** for limitations and workarounds
+- Use the **"Send Feedback"** link in the app to report issues
+
+### Feedback & Support
+- **Feedback Form**: Available in-app (header dropdown → "Send Feedback")
+- **Service Desk**: https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
+- **Email**: adaptalabs-support@adaptavist.com

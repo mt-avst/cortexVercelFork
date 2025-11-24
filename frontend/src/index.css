@@ -197,6 +197,7 @@ label, .form-label {
 }
 
 .App {
+  position: relative;
   background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
   background-attachment: fixed;
   min-height: 100vh;
@@ -226,6 +227,7 @@ label, .form-label {
   border-radius: var(--button-radius);
   border: 1px solid var(--cta-border) !important;
   font-weight: 600;
+  font-size: 18px !important; /* Increase font size to meet 3.0:1 ratio requirement for large text (≥18px) */
   box-shadow: var(--shadow-button);
   transition: all 0.2s ease-in-out;
   min-height: var(--min-hit-area);
@@ -268,9 +270,23 @@ label, .form-label {
   color: var(--cta-text-hover) !important;
 }
 
-/* Override Bootstrap primary text color to orange */
-.text-primary {
-  color: var(--link) !important;
+/* Override Bootstrap outline secondary button for dark theme */
+.btn-outline-secondary {
+  color: var(--text-on-dark) !important; /* Use light text on dark backgrounds */
+  border-color: rgba(224, 224, 224, 0.3) !important; /* Light border */
+  background-color: transparent !important;
+}
+
+.btn-outline-secondary:hover {
+  color: #FFFFFF !important; /* White on hover for better contrast */
+  border-color: rgba(224, 224, 224, 0.5) !important;
+  background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.btn-outline-secondary:focus {
+  color: var(--text-on-dark) !important;
+  border-color: var(--focus-ring) !important;
+  box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
 }
 
 /* Override Bootstrap primary border color to orange */

@@ -17,7 +17,7 @@ const ResearchRequestForm: React.FC = () => {
   }
 
   // Redirect admins to admin form
-  if (!loading && user?.role === 'researcher_admin') {
+  if (!loading && (user?.role === 'researcher_admin' || user?.role === 'superadmin')) {
     return <Navigate to="/admin/opportunities/new" replace />;
   }
 

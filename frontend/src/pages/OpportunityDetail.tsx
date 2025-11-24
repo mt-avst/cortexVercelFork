@@ -269,7 +269,7 @@ const OpportunityDetail: React.FC = () => {
   if (error) {
     // If error is 404 and user is not admin, offer helpful guidance
     const is404Error = error.includes('not found') || error.includes('404');
-    const isNotAdmin = !user || user.role !== 'researcher_admin';
+    const isNotAdmin = !user || (user.role !== 'researcher_admin' && user.role !== 'superadmin');
     
     return (
       <div className="container mt-4">
@@ -533,7 +533,7 @@ const OpportunityDetail: React.FC = () => {
                     <span className={getTypeBadgeClass(opportunity?.type)}>
                       {formatOpportunityType(opportunity?.type)}
                     </span>
-                    {user?.role === 'researcher_admin' && (
+                    {(user?.role === 'researcher_admin' || user?.role === 'superadmin') && (
                       <span className={getStatusBadgeClass(opportunity.status)}>
                         {opportunity.status}
                       </span>

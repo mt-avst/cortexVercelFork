@@ -129,7 +129,7 @@ const Admin: React.FC = () => {
   };
 
   useEffect(() => {
-    if (user?.role === 'researcher_admin') {
+    if (user?.role === 'researcher_admin' || user?.role === 'superadmin') {
       loadOpportunities();
       loadDashboardStats();
     }
@@ -226,7 +226,7 @@ const Admin: React.FC = () => {
     return <Navigate to="/" replace />;
   }
 
-  if (user.role !== 'researcher_admin') {
+  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
     return <Navigate to="/" replace />;
   }
 

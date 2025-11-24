@@ -16,13 +16,19 @@ const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
   };
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: '8px',
-      opacity: 0.7 
-    }}>
+    <div 
+      style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '8px',
+        opacity: 0.7 
+      }}
+      aria-busy="true"
+      aria-live="polite"
+    >
       <div 
+        role="status"
+        aria-label={text}
         style={{
           width: sizeClasses[size],
           height: sizeClasses[size],

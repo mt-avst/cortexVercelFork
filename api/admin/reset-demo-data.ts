@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json(createErrorResponse('Authentication required'));
     }
 
-    if (user.role !== 'researcher_admin') {
+    if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
       return res.status(403).json(createErrorResponse('Admin access required'));
     }
 
