@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { demoLogin, demoUser2Login, demoAdminLogin, googleLogin } from '../api/client';
+import { demoLogin, demoAdminLogin, googleLogin } from '../api/client';
 import { useAnimation } from '../contexts/AnimationContext';
 
 const Landing: React.FC = () => {
@@ -1112,52 +1112,27 @@ const Landing: React.FC = () => {
             )}
           </button>
           
-          {/* Demo Buttons Container - Hidden in production for alpha testing */}
-          {(() => {
-            // Hide demo buttons in production (check hostname at runtime)
-            const isLocalhost = typeof window !== 'undefined' && 
-                               (window.location.hostname === 'localhost' || 
-                                window.location.hostname === '127.0.0.1' ||
-                                window.location.hostname.includes('localhost'));
-            const showDemoButtons = isLocalhost || process.env.NODE_ENV === 'development';
-            
-            if (!showDemoButtons) return null;
-            
-            return (
-              <div className="demo-buttons-container">
-                <button 
-                  onClick={handleDemoLogin} 
-                  className="btn cta-secondary"
-                  disabled={loginLoading || googleLoading}
-                  aria-busy={loginLoading}
-                  aria-label={loginLoading ? "Signing in..." : "Demo Login"}
-                >
-                  {loginLoading ? 'Signing in...' : 'Demo Login'}
-                </button>
-                <button 
-                  onClick={() => {
-                    setLoginLoading(true);
-                    demoUser2Login();
-                  }} 
-                  className="btn cta-tertiary"
-                  disabled={loginLoading || googleLoading}
-                  aria-busy={loginLoading}
-                  aria-label={loginLoading ? "Signing in..." : "Demo User 2"}
-                >
-                  {loginLoading ? 'Signing in...' : 'Demo User 2'}
-                </button>
-                <button 
-                  onClick={handleDemoAdminLogin} 
-                  className="btn cta-tertiary"
-                  disabled={loginLoading || googleLoading}
-                  aria-busy={loginLoading}
-                  aria-label={loginLoading ? "Signing in..." : "Demo Admin"}
-                >
-                  {loginLoading ? 'Signing in...' : 'Demo Admin'}
-                </button>
-              </div>
-            );
-          })()}
+          {/* Demo Buttons Container - Show 1 demo user and 1 admin button */}
+          <div className="demo-buttons-container">
+            <button 
+              onClick={handleDemoLogin} 
+              className="btn cta-secondary"
+              disabled={loginLoading || googleLoading}
+              aria-busy={loginLoading}
+              aria-label={loginLoading ? "Signing in..." : "Demo Login"}
+            >
+              {loginLoading ? 'Signing in...' : 'Demo Login'}
+            </button>
+            <button 
+              onClick={handleDemoAdminLogin} 
+              className="btn cta-tertiary"
+              disabled={loginLoading || googleLoading}
+              aria-busy={loginLoading}
+              aria-label={loginLoading ? "Signing in..." : "Demo Admin"}
+            >
+              {loginLoading ? 'Signing in...' : 'Demo Admin'}
+            </button>
+          </div>
         </div>
       </div>
     </>
