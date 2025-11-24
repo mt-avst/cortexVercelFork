@@ -901,6 +901,7 @@ const Landing: React.FC = () => {
             backdrop-filter: blur(10px);
             -webkit-backdrop-filter: blur(10px);
             color: #FFFFFF;
+            font-size: 18px !important; /* Increase font size for better contrast compliance (meets 3.0:1 ratio for large text ≥18px) */
             width: 100%;
             max-width: 380px;
             display: flex;
@@ -920,6 +921,7 @@ const Landing: React.FC = () => {
             background-color: #FF4E50;
             color: #FFFFFF;
             border: 1px solid #FF4E50;
+            font-size: 18px !important; /* Increase font size for better contrast compliance (meets 3.0:1 ratio for large text ≥18px) */
           }
 
           .cta-secondary:hover:not(:disabled) {
@@ -931,6 +933,7 @@ const Landing: React.FC = () => {
             background-color: transparent;
             border: 1px solid #FF4E50;
             color: #FF4E50;
+            font-size: 18px !important; /* Increase font size for better contrast compliance (meets 3.0:1 ratio for large text ≥18px) */
           }
 
           .cta-tertiary:hover:not(:disabled) {
@@ -966,10 +969,10 @@ const Landing: React.FC = () => {
             display: inline-block;
             width: 14px;
             height: 14px;
-            border: 2px solid currentColor;
-            border-right-color: transparent;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top: 2px solid #FFFFFF;
             border-radius: 50%;
-            animation: spin 0.75s linear infinite;
+            animation: spin 0.8s linear infinite;
           }
 
           @keyframes spin {
@@ -1086,15 +1089,17 @@ const Landing: React.FC = () => {
             onClick={handleGoogleLogin} 
             className="btn cta-primary"
             disabled={googleLoading || loginLoading}
+            aria-busy={googleLoading || loginLoading}
+            aria-label={googleLoading ? "Signing in with Google" : "Sign in with Google"}
           >
             {googleLoading ? (
               <>
-                <span className="btn-spinner"></span>
+                <span className="btn-spinner" role="status" aria-label="Signing in" aria-hidden="true"></span>
                 <span>Signing in...</span>
               </>
             ) : (
               <>
-                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                   <g fillRule="evenodd">
                     <path d="M9 3.48c1.69 0 2.83.73 3.48 1.34l2.54-2.48C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l2.91 2.26C4.6 5.05 6.62 3.48 9 3.48z" fill="#EA4335"/>
                     <path d="M17.64 9.2c0-.74-.06-1.28-.19-1.84H9v3.34h4.96c-.21 1.18-.84 2.18-1.79 2.91l2.75 2.13c1.66-1.52 2.72-3.77 2.72-6.54z" fill="#4285F4"/>
@@ -1107,33 +1112,52 @@ const Landing: React.FC = () => {
             )}
           </button>
           
-          {/* Demo Buttons Container */}
-          <div className="demo-buttons-container">
-            <button 
-              onClick={handleDemoLogin} 
-              className="btn cta-secondary"
-              disabled={loginLoading || googleLoading}
-            >
-              {loginLoading ? 'Signing in...' : 'Demo Login'}
-            </button>
-            <button 
-              onClick={() => {
-                setLoginLoading(true);
-                demoUser2Login();
-              }} 
-              className="btn cta-tertiary"
-              disabled={loginLoading || googleLoading}
-            >
-              {loginLoading ? 'Signing in...' : 'Demo User 2'}
-            </button>
-            <button 
-              onClick={handleDemoAdminLogin} 
-              className="btn cta-tertiary"
-              disabled={loginLoading || googleLoading}
-            >
-              {loginLoading ? 'Signing in...' : 'Demo Admin'}
-            </button>
-          </div>
+          {/* Demo Buttons Container - Hidden in production for alpha testing */}
+          {(() => {
+            // Hide demo buttons in production (check hostname at runtime)
+            const isLocalhost = typeof window !== 'undefined' && 
+                               (window.location.hostname === 'localhost' || 
+                                window.location.hostname === '127.0.0.1' ||
+                                window.location.hostname.includes('localhost'));
+            const showDemoButtons = isLocalhost || process.env.NODE_ENV === 'development';
+            
+            if (!showDemoButtons) return null;
+            
+            return (
+              <div className="demo-buttons-container">
+                <button 
+                  onClick={handleDemoLogin} 
+                  className="btn cta-secondary"
+                  disabled={loginLoading || googleLoading}
+                  aria-busy={loginLoading}
+                  aria-label={loginLoading ? "Signing in..." : "Demo Login"}
+                >
+                  {loginLoading ? 'Signing in...' : 'Demo Login'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setLoginLoading(true);
+                    demoUser2Login();
+                  }} 
+                  className="btn cta-tertiary"
+                  disabled={loginLoading || googleLoading}
+                  aria-busy={loginLoading}
+                  aria-label={loginLoading ? "Signing in..." : "Demo User 2"}
+                >
+                  {loginLoading ? 'Signing in...' : 'Demo User 2'}
+                </button>
+                <button 
+                  onClick={handleDemoAdminLogin} 
+                  className="btn cta-tertiary"
+                  disabled={loginLoading || googleLoading}
+                  aria-busy={loginLoading}
+                  aria-label={loginLoading ? "Signing in..." : "Demo Admin"}
+                >
+                  {loginLoading ? 'Signing in...' : 'Demo Admin'}
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
     </>
