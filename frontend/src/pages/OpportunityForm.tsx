@@ -228,13 +228,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       errors.purpose_one_liner = 'Purpose must be no more than 180 characters';
     }
     
-    // Validate meeting location (required)
-    if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
-      errors.meeting_location_optional = 'Meeting location is required';
-    }
-    
-    // Only validate duration for test and interview type opportunities
+    // Only validate meeting location and duration for test and interview type opportunities
     if (formData.type === 'test' || formData.type === 'interview') {
+      if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
+        errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
+      }
       if (formData.default_duration_minutes < 5 || formData.default_duration_minutes > 240) {
         errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
       }
@@ -352,7 +350,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.purpose_one_liner.trim() !== originalFormData.purpose_one_liner.trim() ||
       formData.description_optional.trim() !== originalFormData.description_optional.trim() ||
       formData.product_optional.trim() !== originalFormData.product_optional.trim() ||
-      formData.meeting_location_optional.trim() !== originalFormData.meeting_location_optional.trim() ||
+      (formData.meeting_location_optional || '').trim() !== (originalFormData.meeting_location_optional || '').trim() ||
       formData.default_duration_minutes !== originalFormData.default_duration_minutes ||
       formData.external_link_optional.trim() !== originalFormData.external_link_optional.trim() ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
@@ -863,8 +861,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               } else if (formData.purpose_one_liner.trim().length < 10) {
                                 errors.purpose_one_liner = 'Purpose must be at least 10 characters';
                               }
-                              if (!formData.meeting_location_optional?.trim()) {
-                                errors.meeting_location_optional = 'Meeting location is required';
+                              // Only require meeting location for test/interview types
+                              if ((formData.type === 'test' || formData.type === 'interview') && !formData.meeting_location_optional?.trim()) {
+                                errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
                               }
                               
                               if (Object.keys(errors).length > 0) {
