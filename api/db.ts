@@ -65,7 +65,7 @@ export async function query(text: string, params?: unknown[]): Promise<{ rows: u
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('Database query error', {
-      error: errorMessage,
+      errorMessage,
       query: text.substring(0, 100),
       params: params || undefined,
       stack: error instanceof Error ? error.stack : undefined,

@@ -57,14 +57,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       const result = await query(sql, params);
       
-      const sessions = result.rows.map(s => ({
-        ...s,
-        start_time: s.start_time.toISOString(),
-        end_time: s.end_time.toISOString(),
-        created_at: s.created_at.toISOString(),
-        updated_at: s.updated_at.toISOString(),
-        remaining: s.capacity - s.booked_count,
-      }));
+      interface SessionRow {
+        id: string;
+        opportunity_id: string;
+        start_time: Date;
+        end_time: Date;
+        capacity: number;
+        booked_count: number;
+        created_at: Date;
+        updated_at: Date;
+        location_or_meet_link_optional?: string;
+      }
+      
+      const sessions = result.rows.map((row) => {
+        const s = row as SessionRow;
+        return {
+          ...s,
+          start_time: s.start_time.toISOString(),
+          end_time: s.end_time.toISOString(),
+          created_at: s.created_at.toISOString(),
+          updated_at: s.updated_at.toISOString(),
+          remaining: s.capacity - s.booked_count,
+        };
+      });
       
       return res.status(200).json(sessions);
     }

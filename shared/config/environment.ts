@@ -12,8 +12,8 @@ import { z } from 'zod';
  */
 export const backendEnvSchema = z.object({
   // Application Configuration
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().transform(Number).default(3001),
+  NODE_ENV: z.enum(['development', 'production', 'test']).catch('development'),
+  PORT: z.string().transform(Number).catch(3001),
   
   // Database Configuration
   DATABASE_URL: z.string().optional(),
@@ -33,10 +33,10 @@ export const backendEnvSchema = z.object({
   ),
   
   // CORS Configuration
-  CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').default('http://localhost:3000'),
+  CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').catch('http://localhost:3000'),
   
   // Security Configuration
-  ENABLE_CSRF: z.string().transform(val => val === 'true').default(false),
+  ENABLE_CSRF: z.string().transform(val => val === 'true').catch(false),
   
   // Email Configuration (Optional)
   EMAIL_FROM: z.string().email().optional(),
@@ -57,7 +57,7 @@ export const backendEnvSchema = z.object({
   GOOGLE_OAUTH_REDIRECT_URI: z.string().url('OAuth redirect URI must be a valid URL').optional(),
   
   // Frontend URL
-  FRONTEND_URL: z.string().url('Frontend URL must be a valid URL').default('http://localhost:3000'),
+  FRONTEND_URL: z.string().url('Frontend URL must be a valid URL').catch('http://localhost:3000'),
 });
 
 /**
@@ -65,16 +65,16 @@ export const backendEnvSchema = z.object({
  */
 export const frontendEnvSchema = z.object({
   // API Configuration
-  REACT_APP_API_URL: z.string().url('API URL must be a valid URL').default('http://localhost:3001'),
+  REACT_APP_API_URL: z.string().url('API URL must be a valid URL').catch('http://localhost:3001'),
   REACT_APP_API_BASE_URL: z.string().url('API base URL must be a valid URL').optional(),
   REACT_APP_AUTH_BASE_URL: z.string().url('Auth base URL must be a valid URL').optional(),
   
   // Environment
-  REACT_APP_ENVIRONMENT: z.enum(['development', 'production', 'test']).default('development'),
+  REACT_APP_ENVIRONMENT: z.enum(['development', 'production', 'test']).catch('development'),
   
   // Feature Flags
-  REACT_APP_ENABLE_ANALYTICS: z.string().transform(val => val === 'true').default(false),
-  REACT_APP_ENABLE_DEBUG: z.string().transform(val => val === 'true').default(false),
+  REACT_APP_ENABLE_ANALYTICS: z.string().transform(val => val === 'true').catch(false),
+  REACT_APP_ENABLE_DEBUG: z.string().transform(val => val === 'true').catch(false),
 });
 
 // ============================================================================

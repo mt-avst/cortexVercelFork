@@ -132,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Log only if email sending failed (errors are logged in email service)
         if (!emailResult.success) {
           logger.error('Failed to send booking confirmation email', {
-            error: emailResult.error,
+            errorMessage: emailResult.error,
             participantEmail: user.email,
           });
         }

@@ -29,12 +29,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Admin request not found'));
     }
 
-    if (requestResult.rows[0].status !== 'pending') {
+    const adminRequest = requestResult.rows[0] as { status: string; user_id: string; requested_role: string };
+
+    if (adminRequest.status !== 'pending') {
       return res.status(400).json(createErrorResponse('Request has already been processed'));
     }
 
-    const userId = requestResult.rows[0].user_id;
-    const requestedRole = requestResult.rows[0].requested_role;
+    const userId = adminRequest.user_id;
+    const requestedRole = adminRequest.requested_role;
 
     // Update user role to the requested role
     await query(

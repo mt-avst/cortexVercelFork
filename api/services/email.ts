@@ -97,7 +97,7 @@ export class EmailService {
     } catch (error: unknown) {
       const errorObj = error as { message?: string; stack?: string; code?: string; command?: string; response?: string; responseCode?: number };
       logger.error('Email sending failed', {
-        error: errorObj.message || String(error),
+        errorMessage: errorObj.message || String(error),
         stack: errorObj.stack,
         code: errorObj.code,
         command: errorObj.command,

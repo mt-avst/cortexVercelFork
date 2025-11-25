@@ -31,7 +31,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Admin request not found'));
     }
 
-    if (requestResult.rows[0].status !== 'pending') {
+    const adminRequest = requestResult.rows[0] as { status: string; user_id: string };
+
+    if (adminRequest.status !== 'pending') {
       return res.status(400).json(createErrorResponse('Request has already been processed'));
     }
 
