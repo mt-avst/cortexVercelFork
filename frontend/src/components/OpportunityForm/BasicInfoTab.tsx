@@ -10,6 +10,30 @@ interface BasicInfoTabProps {
   allowUserSubmission?: boolean;
 }
 
+// Helper to convert ISO string to date input value (YYYY-MM-DD)
+const formatDateForInput = (isoString: string | undefined): string => {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+  } catch {
+    return '';
+  }
+};
+
+// Helper to convert date input value to ISO string
+const formatDateToISO = (dateValue: string): string | undefined => {
+  if (!dateValue) return undefined;
+  try {
+    const date = new Date(dateValue + 'T00:00:00');
+    if (isNaN(date.getTime())) return undefined;
+    return date.toISOString();
+  } catch {
+    return undefined;
+  }
+};
+
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
@@ -17,6 +41,11 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   handleBlur,
   allowUserSubmission = false
 }) => {
+  const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
+    handleInputChange(field, formatDateToISO(value));
+  };
+
+  const isExternalLinkType = ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type);
   return (
     <div className="tab-pane active">
       <div className="form-section mb-5">
@@ -212,6 +241,66 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
             </div>
           )}
         </div>
+
+        {/* Study Period - only show for external link types (poll, survey, question, unmoderated) */}
+        {isExternalLinkType && (
+          <div className="row g-3 mt-2" style={{ alignItems: 'flex-start' }}>
+            <div className="col-12 mb-2">
+              <h3 className="h6 mb-1" style={{ fontSize: '1.1rem', fontWeight: '600', color: '#E0E0E0' }}>
+                Study Period
+              </h3>
+              <p className="mb-0" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                Set dates to show a countdown timer on the study card (optional)
+              </p>
+            </div>
+            <div className="col-md-6">
+              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <label htmlFor="start_date" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
+                  Start Date
+                </label>
+                <div id="start_date-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '1.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+                  When the study opens for participation
+                </div>
+                <input
+                  type="date"
+                  id="start_date"
+                  className={`form-control ${validationErrors.start_date ? 'is-invalid' : ''}`}
+                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '200px' }}
+                  value={formatDateForInput(formData.start_date)}
+                  onChange={(e) => handleDateChange('start_date', e.target.value)}
+                  aria-describedby={validationErrors.start_date ? 'start_date-error start_date-help' : 'start_date-help'}
+                  aria-invalid={validationErrors.start_date ? 'true' : 'false'}
+                />
+                {validationErrors.start_date && (
+                  <div id="start_date-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.start_date}</div>
+                )}
+              </div>
+            </div>
+            <div className="col-md-6">
+              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <label htmlFor="end_date" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5', color: '#E0E0E0' }}>
+                  End Date
+                </label>
+                <div id="end_date-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '1.5rem', lineHeight: '1.4', color: 'rgba(224, 224, 224, 0.7)' }}>
+                  When the study closes (shows countdown on card)
+                </div>
+                <input
+                  type="date"
+                  id="end_date"
+                  className={`form-control ${validationErrors.end_date ? 'is-invalid' : ''}`}
+                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '200px' }}
+                  value={formatDateForInput(formData.end_date)}
+                  onChange={(e) => handleDateChange('end_date', e.target.value)}
+                  aria-describedby={validationErrors.end_date ? 'end_date-error end_date-help' : 'end_date-help'}
+                  aria-invalid={validationErrors.end_date ? 'true' : 'false'}
+                />
+                {validationErrors.end_date && (
+                  <div id="end_date-error" className="fw-semibold" role="alert" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.end_date}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
