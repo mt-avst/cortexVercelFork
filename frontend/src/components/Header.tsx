@@ -204,21 +204,20 @@ const Header: React.FC = () => {
                     <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown" role="menu">
                       <li role="none">
                         <div className="px-3 py-2">
-                          <i className="bi bi-person me-2" aria-hidden="true"></i>
-                          <span>Hello, {user.name || 'Unknown User'}</span>
+                          <div className="d-flex align-items-start">
+                            <i className="bi bi-person me-2 mt-1" aria-hidden="true"></i>
+                            <div>
+                              <div>Hello, {user.name || 'Unknown User'}</div>
+                              <div className="text-muted small" style={{ opacity: 0.7 }}>
+                                {user.role === 'superadmin' ? 'Superadmin' :
+                                 user.role === 'researcher_admin' ? 'Admin' :
+                                 'User'}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </li>
                       <li role="separator"><hr className="dropdown-divider" /></li>
-                      <li role="none">
-                        <div className="px-3 py-2">
-                          <i className="bi bi-shield-check me-2" aria-hidden="true"></i>
-                          <span>Role: {
-                            user.role === 'superadmin' ? 'superadmin' :
-                            user.role === 'researcher_admin' ? 'admin' :
-                            'user'
-                          }</span>
-                        </div>
-                      </li>
                       {(user.role === 'researcher_admin' || user.role === 'superadmin') && (
                         <li role="none">
                           <Link to="/admin/settings" className="px-3 py-2 d-block" role="menuitem">
