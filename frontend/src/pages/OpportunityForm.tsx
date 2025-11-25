@@ -848,10 +848,35 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             className="btn btn-primary px-5 py-2 fw-semibold"
                             onClick={() => {
                               // Validate basic info before continuing
-                              if (!validateForm()) {
-                                console.log('Validation failed:', validationErrors);
+                              const errors: Record<string, string> = {};
+                              
+                              if (!formData.type) {
+                                errors.type = 'Please select a research study type';
+                              }
+                              if (!formData.title.trim()) {
+                                errors.title = 'Title is required';
+                              } else if (formData.title.trim().length < 4) {
+                                errors.title = 'Title must be at least 4 characters';
+                              }
+                              if (!formData.purpose_one_liner.trim()) {
+                                errors.purpose_one_liner = 'Purpose is required';
+                              } else if (formData.purpose_one_liner.trim().length < 10) {
+                                errors.purpose_one_liner = 'Purpose must be at least 10 characters';
+                              }
+                              if (!formData.meeting_location_optional?.trim()) {
+                                errors.meeting_location_optional = 'Meeting location is required';
+                              }
+                              
+                              if (Object.keys(errors).length > 0) {
+                                setValidationErrors(errors);
+                                // Show error message
+                                setError('Please fill in all required fields: ' + Object.values(errors).join(', '));
+                                // Scroll to top to see errors
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
                                 return;
                               }
+                              
+                              setError('');
                               setActiveTab(2);
                             }}
                             style={{ fontSize: '0.95rem' }}
