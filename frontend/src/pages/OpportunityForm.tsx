@@ -368,6 +368,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       e.preventDefault();
     }
     
+    // Prevent double-clicks - return early if already saving
+    if (saving) {
+      console.log('⏳ Already saving, ignoring duplicate click');
+      return undefined;
+    }
+    
     if (!validateForm()) {
       console.error('Validation errors:', validationErrors);
       return undefined;
@@ -473,8 +479,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // For user submissions, navigate to home with success message
           navigate('/', { state: { message: 'Research request submitted successfully! It will be reviewed by an admin.' } });
         } else {
-          // For admin, navigate to admin dashboard
-          navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
+          // For admin, show success message briefly then navigate to admin dashboard
+          setSuccessMessage(isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!');
+          // Brief delay to show success feedback before navigation
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: isEdit ? 'Opportunity updated!' : 'Opportunity created!' } });
         }
       }
       
