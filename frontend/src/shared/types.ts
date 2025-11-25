@@ -74,6 +74,7 @@ export interface Opportunity {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  display_width?: 'single' | 'double'; // Pod display width on user front page (superadmin only)
   created_at: string;
   updated_at: string;
   // Frontend-specific fields (populated by API joins)
