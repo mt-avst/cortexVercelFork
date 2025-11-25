@@ -449,6 +449,26 @@ export async function runMigrations() {
       console.log('ℹ️  Could not add participant_type_specific_details column (may already exist):', error.message);
     }
 
+    // Add display_width column for controlling pod size on user front page (superadmin only)
+    try {
+      const columnCheck = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'opportunities' 
+        AND column_name = 'display_width'
+      `);
+      
+      if (columnCheck.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN display_width TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))
+        `);
+        console.log('✅ Added display_width column to opportunities table');
+      } else {
+        console.log('ℹ️  display_width column already exists in opportunities table');
+      }
+    } catch (error: any) {
+      console.log('ℹ️  Could not add display_width column (may already exist):', error.message);
+    }
+
     // Migrate is_researcher_admin to role column if needed
     try {
       // Check if is_researcher_admin column exists

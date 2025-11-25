@@ -25,7 +25,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     external_link_optional: '',
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
-    status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published'
+    status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published',
+    display_width: 'single' as 'single' | 'double'
   });
   
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -108,7 +109,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         external_link_optional: opportunity.external_link_optional || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
-        status: opportunity.status === 'closed' ? 'draft' : opportunity.status
+        status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
+        display_width: opportunity.display_width || 'single'
       });
       
       setOpportunityId(opportunity.id);
@@ -125,7 +127,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         external_link_optional: opportunity.external_link_optional || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
-        status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published'
+        status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
+        display_width: opportunity.display_width || 'single' as 'single' | 'double'
       };
       setOriginalFormData(originalData);
       
@@ -390,6 +393,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // Only include default_duration_minutes for test and interview types
       if (formData.type === 'test' || formData.type === 'interview') {
         data.default_duration_minutes = formData.default_duration_minutes;
+      }
+      
+      // Only superadmins can set display_width
+      if (user?.role === 'superadmin') {
+        data.display_width = formData.display_width;
       }
       
       
@@ -746,6 +754,52 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleBlur={handleBlur}
                         allowUserSubmission={allowUserSubmission}
                       />
+                      
+                      {/* Display Width Setting - Superadmin Only */}
+                      {user?.role === 'superadmin' && (
+                        <div className="form-section mb-4" style={{ 
+                          borderTop: '1px solid rgba(255, 255, 255, 0.1)', 
+                          paddingTop: '1.5rem',
+                          marginTop: '1rem'
+                        }}>
+                          <div className="d-flex align-items-center mb-3">
+                            <div>
+                              <h3 className="h5 mb-1" style={{ fontSize: '1.2rem', fontWeight: '600', color: '#E0E0E0' }}>
+                                <i className="bi bi-layout-wtf me-2" style={{ color: '#FF4E50' }}></i>
+                                Display Settings
+                              </h3>
+                              <p className="mb-0" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                                Control how this study appears on the user home page (Superadmin only)
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="row g-3">
+                            <div className="col-md-6">
+                              <div className="form-group">
+                                <label htmlFor="display_width" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
+                                  Pod Display Width
+                                </label>
+                                <div id="display_width-help" className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                                  Double-width pods are more prominent on the user home page
+                                </div>
+                                <select
+                                  id="display_width"
+                                  className="form-select"
+                                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', maxWidth: '300px' }}
+                                  value={formData.display_width}
+                                  onChange={(e) => handleInputChange('display_width', e.target.value)}
+                                  aria-describedby="display_width-help"
+                                >
+                                  <option value="single">📦 Single Width - Standard display</option>
+                                  <option value="double">📦📦 Double Width - Featured display</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       {/* Navigation Buttons for Tab 1 */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">

@@ -134,14 +134,22 @@ const Home: React.FC = () => {
         return baseType === selectedType.toLowerCase();
       });
   
-  // Sort opportunities: test (app testing) first, then others
+  // Sort opportunities: double-width (featured) first, then by type (test first)
   const filteredOpportunities = [...filteredByType].sort((a, b) => {
+    // First priority: double-width opportunities come first
+    const aIsDouble = a.display_width === 'double';
+    const bIsDouble = b.display_width === 'double';
+    if (aIsDouble && !bIsDouble) return -1;
+    if (!aIsDouble && bIsDouble) return 1;
+    
+    // Second priority: test opportunities come before others
     const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
     const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
     const aIsTest = aType === 'test';
     const bIsTest = bType === 'test';
     if (aIsTest && !bIsTest) return -1;
     if (!aIsTest && bIsTest) return 1;
+    
     return 0;
   });
   
@@ -851,14 +859,8 @@ const Home: React.FC = () => {
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
                 <div className="bento-grid">
                   {paginatedOpportunities.map((opportunity, index) => {
-                    // Make the first test opportunity on each page wide (double pod)
-                    const oppType = opportunity.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-                    const isTestOpportunity = oppType === 'test';
-                    const isFirstTestOnPage = isTestOpportunity && paginatedOpportunities.findIndex(o => {
-                      const t = o.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-                      return t === 'test';
-                    }) === index;
-                    const isWide = isFirstTestOnPage;
+                    // Use display_width from database (set by superadmin), default to single
+                    const isWide = opportunity.display_width === 'double';
                     
                     return (
                       <div 

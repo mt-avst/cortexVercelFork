@@ -216,6 +216,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         external_link_optional,
         participant_type_required = 'any',
         participant_type_specific_details,
+        display_width,
       } = req.body;
       
       // Validate required fields
@@ -227,13 +228,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // In production, this should come from the authenticated user
       const finalOwnerId = owner_user_id || '633608bc-4b0e-4d60-a498-e680ee97c252'; // Demo admin ID
       
+      // Only superadmins can set display_width - default to 'single' otherwise
+      const user = parseSessionCookie(req);
+      const isSuperadmin = user?.role === 'superadmin';
+      const finalDisplayWidth = isSuperadmin && display_width ? display_width : 'single';
+      
       const result = await query(
         `INSERT INTO opportunities (
           type, title, purpose_one_liner, description_optional,
           product_optional, meeting_location_optional, default_duration_minutes, status,
           owner_user_id, external_link_optional, participant_type_required,
-          participant_type_specific_details
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          participant_type_specific_details, display_width
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *`,
         [
           type,
@@ -248,6 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           external_link_optional?.trim() || null,
           participant_type_required,
           participant_type_specific_details?.trim() || null,
+          finalDisplayWidth,
         ]
       );
       

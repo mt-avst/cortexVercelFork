@@ -144,6 +144,16 @@ async function runMigrations() {
     `);
     console.log('✅ Created admin_requests indexes');
 
+    // Add display_width column for controlling pod size on user front page (superadmin only)
+    try {
+      await client.query(`
+        ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS display_width TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))
+      `);
+      console.log('✅ Added display_width column to opportunities table');
+    } catch (error: any) {
+      console.log('ℹ️  display_width column may already exist:', error.message);
+    }
+
     console.log('\n✅ All migrations completed successfully!');
   } catch (error) {
     console.error('❌ Migration failed:', error);

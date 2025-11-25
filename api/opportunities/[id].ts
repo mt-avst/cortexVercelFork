@@ -153,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         external_link_optional: opportunity.external_link_optional || null,
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || null,
+        display_width: opportunity.display_width || 'single',
         owner_name: ownerResult.rows[0]?.name || 'Unknown',
         owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
         sessions: sessionsResult.rows.map(s => {
@@ -188,6 +189,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         external_link_optional,
         participant_type_required,
         participant_type_specific_details,
+        display_width,
       } = req.body;
 
       // Check if opportunity exists
@@ -248,6 +250,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (participant_type_specific_details !== undefined) {
         updates.push(`participant_type_specific_details = $${paramIndex++}`);
         params.push(participant_type_specific_details?.trim() || null);
+      }
+      
+      // Only superadmins can update display_width
+      if (display_width !== undefined) {
+        const user = parseSessionCookie(req);
+        if (user?.role === 'superadmin') {
+          updates.push(`display_width = $${paramIndex++}`);
+          params.push(display_width);
+        }
       }
 
       if (updates.length === 0) {
