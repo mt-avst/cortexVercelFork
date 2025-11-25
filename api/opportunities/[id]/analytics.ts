@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Opportunity not found'));
     }
 
-    const opportunity = opportunityResult.rows[0];
+    const opportunity = opportunityResult.rows[0] as { owner_user_id: string; created_at: Date };
 
     // Only owner can view analytics
     if (opportunity.owner_user_id !== user.id) {
@@ -95,13 +95,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     };
 
+    // Type for count query results
+    type CountRow = { count: number };
+    type DateRow = { first_click: Date | null; last_click: Date | null };
+
     // Get total clicks (views + actions combined)
     const clicks_total = await safeQuery(async () => {
       const result = await query(
         'SELECT COUNT(*)::int as count FROM opportunity_clicks WHERE opportunity_id = $1',
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get views total (click_type = 'view')
@@ -111,7 +115,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'view'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get actions total (click_type = 'action')
@@ -121,7 +125,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'action'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get clicks in last 24 hours (combined)
@@ -131,7 +135,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '24 hours'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get views in last 24 hours
@@ -141,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'view' AND clicked_at >= NOW() - INTERVAL '24 hours'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get actions in last 24 hours
@@ -151,7 +155,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'action' AND clicked_at >= NOW() - INTERVAL '24 hours'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get clicks in last 7 days (combined)
@@ -161,7 +165,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '7 days'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get views in last 7 days
@@ -171,7 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'view' AND clicked_at >= NOW() - INTERVAL '7 days'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get actions in last 7 days
@@ -181,7 +185,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          WHERE opportunity_id = $1 AND click_type = 'action' AND clicked_at >= NOW() - INTERVAL '7 days'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get unique users who clicked
@@ -191,7 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM opportunity_clicks WHERE opportunity_id = $1`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get unique users who viewed
@@ -201,7 +205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM opportunity_clicks WHERE opportunity_id = $1 AND click_type = 'view'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get unique users who took action
@@ -211,7 +215,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM opportunity_clicks WHERE opportunity_id = $1 AND click_type = 'action'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     // Get first and last click dates
@@ -223,11 +227,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          FROM opportunity_clicks WHERE opportunity_id = $1`,
         [opportunityId]
       );
+      const row = result.rows[0] as DateRow;
       return {
-        first_click: result.rows[0]?.first_click || null,
-        last_click: result.rows[0]?.last_click || null
+        first_click: row?.first_click || null,
+        last_click: row?.last_click || null
       };
     }, { first_click: null, last_click: null });
+
+    // Types for time series queries
+    type DayRow = { date: Date | string; total: number; views: number; actions: number };
+    type HourRow = { hour: number; count: number };
+    type WeekdayRow = { weekday: number; count: number };
 
     // Get clicks by day for selected period (with views and actions breakdown)
     const clicks_by_day = await safeQuery(async () => {
@@ -245,7 +255,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [opportunityId]
       );
 
-      return result.rows.map(row => {
+      return result.rows.map((r) => {
+        const row = r as DayRow;
         let dateStr: string;
         if (row.date instanceof Date) {
           dateStr = row.date.toISOString().split('T')[0];
@@ -275,10 +286,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
          ORDER BY hour ASC`,
         [opportunityId]
       );
-      return result.rows.map(row => ({
-        hour: row.hour,
-        count: row.count || 0
-      }));
+      return result.rows.map((r) => {
+        const row = r as HourRow;
+        return {
+          hour: row.hour,
+          count: row.count || 0
+        };
+      });
     }, []);
 
     // Get clicks by day of week
@@ -294,11 +308,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         [opportunityId]
       );
       const weekdays = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-      return result.rows.map(row => ({
-        weekday: weekdays[row.weekday] || 'Unknown',
-        weekday_num: row.weekday,
-        count: row.count || 0
-      }));
+      return result.rows.map((r) => {
+        const row = r as WeekdayRow;
+        return {
+          weekday: weekdays[row.weekday] || 'Unknown',
+          weekday_num: row.weekday,
+          count: row.count || 0
+        };
+      });
     }, []);
 
     // Calculate week-over-week change
@@ -310,7 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
            AND clicked_at < NOW() - INTERVAL '7 days'`,
         [opportunityId]
       );
-      return result.rows[0]?.count || 0;
+      return (result.rows[0] as CountRow)?.count || 0;
     }, 0);
 
     const week_over_week_change = previousWeekClicks > 0 

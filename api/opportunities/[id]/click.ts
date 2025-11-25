@@ -52,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Opportunity not found'));
     }
 
-    const opportunity = opportunityResult.rows[0];
+    const opportunity = opportunityResult.rows[0] as { id: string; type: string; status: string };
 
     // For 'action' clicks, only allow for poll/survey types (external link clicks)
     // For 'view' clicks, allow all opportunity types
