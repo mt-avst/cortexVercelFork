@@ -32,6 +32,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
@@ -357,6 +358,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
+      formData.display_width !== originalFormData.display_width ||
       sessions.some(session => session.id.startsWith('temp-session-'))
     );
   };
@@ -376,6 +378,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     try {
       setSaving(true);
       setError('');
+      setSuccessMessage('');
       
       const data: any = {
         type: formData.type,
@@ -455,6 +458,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // Update original form data after successful save
       if (isEdit) {
         setOriginalFormData({ ...formData });
+        // Show success message for edit mode
+        setSuccessMessage('Changes saved successfully!');
+        // Clear success message after 3 seconds
+        setTimeout(() => setSuccessMessage(''), 3000);
       }
       
       // For edit mode, return the existing opportunity ID
@@ -695,6 +702,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
                   <i className="bi bi-exclamation-triangle me-2"></i>
                   {error}
+                </div>
+              )}
+              
+              {successMessage && (
+                <div className="alert alert-success mx-4 mt-4 mb-0" role="alert" style={{
+                  backgroundColor: 'rgba(40, 167, 69, 0.2)',
+                  border: '1px solid rgba(40, 167, 69, 0.5)',
+                  color: '#90EE90'
+                }}>
+                  <i className="bi bi-check-circle me-2"></i>
+                  {successMessage}
                 </div>
               )}
 
