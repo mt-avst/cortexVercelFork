@@ -27,6 +27,22 @@ export interface SessionUser {
   role: 'employee' | 'researcher_admin' | 'superadmin';
 }
 
+export interface AdminRequest {
+  id: string;
+  user_id: string;
+  requested_at: string;
+  requested_role: 'researcher_admin' | 'superadmin';
+  status: 'pending' | 'approved' | 'denied';
+  reviewed_by?: string;
+  reviewed_at?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  email?: string;
+  name?: string;
+  current_role?: string;
+}
+
 export interface NotificationPreference {
   id: string;
   user_id: string;

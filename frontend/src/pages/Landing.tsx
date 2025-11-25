@@ -845,9 +845,9 @@ const Landing: React.FC = () => {
             margin-bottom: 1rem;
             line-height: 1.1;
             text-align: center;
-            width: 100%;
             position: relative;
             display: inline-block;
+            width: auto;
           }
 
           @media (max-width: 768px) {
@@ -986,39 +986,42 @@ const Landing: React.FC = () => {
           /* Beta Badge - Square Lozenge on Title */
           .beta-badge {
             position: absolute;
-            top: -0.5rem;
-            right: -4rem;
+            top: -0.4rem;
+            right: 0;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 0.4rem 0.75rem;
+            padding: 0.32rem 0.6rem;
             background-color: #FF4E50;
             color: #FFFFFF;
-            font-size: 0.75rem;
+            font-size: 0.6rem;
             font-weight: 700;
             letter-spacing: 0.05em;
             text-transform: uppercase;
-            border-radius: 6px;
+            border-radius: 5px;
             box-shadow: 0 2px 8px rgba(255, 78, 80, 0.3);
             white-space: nowrap;
             z-index: 10;
+            transform: translateX(calc(100% + 0.5rem));
           }
           
           @media (max-width: 768px) {
             .beta-badge {
-              top: -0.4rem;
-              right: -3rem;
-              font-size: 0.65rem;
-              padding: 0.35rem 0.6rem;
+              top: -0.32rem;
+              right: 0;
+              font-size: 0.52rem;
+              padding: 0.28rem 0.48rem;
+              transform: translateX(calc(100% + 0.4rem));
             }
           }
           
           @media (max-width: 480px) {
             .beta-badge {
-              top: -0.3rem;
-              right: -2.5rem;
-              font-size: 0.6rem;
-              padding: 0.3rem 0.5rem;
+              top: -0.24rem;
+              right: 0;
+              font-size: 0.48rem;
+              padding: 0.24rem 0.4rem;
+              transform: translateX(calc(100% + 0.3rem));
             }
           }
         `}
