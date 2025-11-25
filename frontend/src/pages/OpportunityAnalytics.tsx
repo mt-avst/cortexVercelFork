@@ -385,11 +385,11 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="col-12 col-md-4">
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
-                  <div className="d-flex justify-content-between align-items-start mb-2">
-                    <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                  <div className="mb-3">
+                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       👁️ Study Views
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Users who viewed details</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Users who viewed details</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#0d6efd' }}>
@@ -410,11 +410,11 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="col-12 col-md-4">
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
-                  <div className="d-flex justify-content-between align-items-start mb-2">
-                    <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                  <div className="mb-3">
+                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       🎯 Actions Taken
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Clicked link / Booked</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Clicked link / Booked</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#198754' }}>
@@ -435,11 +435,11 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="col-12 col-md-4">
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
-                  <div className="d-flex justify-content-between align-items-start mb-2">
-                    <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                  <div className="mb-3">
+                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       📊 Conversion Rate
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Views → Actions</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Views → Actions</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#ffaa50' }}>
