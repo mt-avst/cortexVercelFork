@@ -215,6 +215,8 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
         ...opportunity,
         created_at: opportunity.created_at.toISOString(),
         updated_at: opportunity.updated_at.toISOString(),
+        start_date: opportunity.start_date ? opportunity.start_date.toISOString() : null,
+        end_date: opportunity.end_date ? opportunity.end_date.toISOString() : null,
         sessions,
         clicks_total,
       };
@@ -283,6 +285,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     ...result.rows[0],
     created_at: result.rows[0].created_at.toISOString(),
     updated_at: result.rows[0].updated_at.toISOString(),
+    start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
+    end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
     sessions: sessionsResult.rows.map(session => ({
       ...session,
       start_time: session.start_time.toISOString(),
@@ -375,6 +379,8 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     ...result.rows[0],
     created_at: result.rows[0].created_at.toISOString(),
     updated_at: result.rows[0].updated_at.toISOString(),
+    start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
+    end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
     sessions: []
   };
   
@@ -482,6 +488,8 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     ...result.rows[0],
     created_at: result.rows[0].created_at.toISOString(),
     updated_at: result.rows[0].updated_at.toISOString(),
+    start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
+    end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
     sessions: []
   };
   
