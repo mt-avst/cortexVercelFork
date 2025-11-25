@@ -8,6 +8,7 @@ import userCalendarRouter from './userCalendar';
 import gamificationRouter from './gamification';
 import adminRouter from './admin';
 import notificationPreferencesRouter from './notificationPreferences';
+import feedbackRouter from './feedback';
 
 const router: Router = Router();
 
@@ -39,5 +40,8 @@ router.use('/admin', adminRouter);
 
 // Mount notification preferences routes
 router.use('/notification-preferences', notificationPreferencesRouter);
+
+// Mount feedback routes
+router.use('/feedback', feedbackRouter);
 
 export default router;

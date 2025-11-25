@@ -198,6 +198,49 @@ export class EmailService {
       .replace(/\n/g, '\\n');
   }
 
+  static getFeedbackTemplate(
+    category: string,
+    feedback: string,
+    userName: string,
+    userEmail: string,
+    userAgent: string,
+    url: string
+  ): EmailTemplate {
+    const subject = `[AdaptaLabs Feedback] ${category === 'bug' ? 'Bug Report' : category === 'feature' ? 'Feature Request' : category === 'question' ? 'Question' : 'Feedback'}`;
+    
+    const html = `
+      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2>New Feedback Received</h2>
+        <p><strong>Category:</strong> ${category}</p>
+        <p><strong>User:</strong> ${userName} (${userEmail})</p>
+        <hr />
+        <h3>Feedback:</h3>
+        <p style="white-space: pre-wrap;">${feedback}</p>
+        <hr />
+        <p><small><strong>Browser:</strong> ${userAgent}</small></p>
+        <p><small><strong>URL:</strong> ${url}</small></p>
+        <p><small><strong>Timestamp:</strong> ${new Date().toISOString()}</small></p>
+      </div>
+    `;
+
+    const text = `
+New Feedback Received
+---------------------
+Category: ${category}
+User: ${userName} (${userEmail})
+
+Feedback:
+${feedback}
+
+---
+Browser: ${userAgent}
+URL: ${url}
+Timestamp: ${new Date().toISOString()}
+    `;
+
+    return { subject, html, text };
+  }
+
   // Email templates
   static getBookingConfirmationTemplate(
     opportunityTitle: string,
