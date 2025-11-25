@@ -713,11 +713,14 @@ const OpportunityDetail: React.FC = () => {
                         <>
                           <style>
                             {`
+                              /* Momentum Design System - Table List View */
                               .momentum-table-container {
                                 background: transparent !important;
-                                border-radius: var(--card-radius);
+                                background-color: transparent !important;
+                                border-radius: 16px;
                                 overflow: hidden;
                               }
+                              .momentum-table-container .table,
                               .momentum-table-container table,
                               .momentum-table-container table.table {
                                 width: 100%;
@@ -725,55 +728,81 @@ const OpportunityDetail: React.FC = () => {
                                 border-spacing: 0;
                                 background: transparent !important;
                                 background-color: transparent !important;
+                                --bs-table-bg: transparent !important;
+                                --bs-table-color: #E0E0E0 !important;
                               }
-                              .momentum-table-container thead {
-                                background: var(--bg-card) !important;
-                                background-color: var(--bg-card) !important;
+                              .momentum-table-container thead,
+                              .momentum-table-container .table > thead,
+                              .momentum-table-container table > thead {
+                                background: rgba(255, 255, 255, 0.08) !important;
+                                background-color: rgba(255, 255, 255, 0.08) !important;
                                 backdrop-filter: blur(16px);
                                 -webkit-backdrop-filter: blur(16px);
                               }
-                              .momentum-table-container thead th {
-                                background: var(--bg-card) !important;
-                                background-color: var(--bg-card) !important;
-                                color: var(--text-primary) !important;
-                                border-bottom: 1px solid var(--border-card) !important;
+                              .momentum-table-container thead th,
+                              .momentum-table-container .table > thead > tr > th,
+                              .momentum-table-container table > thead > tr > th,
+                              .momentum-table-container thead tr th {
+                                background: rgba(255, 255, 255, 0.08) !important;
+                                background-color: rgba(255, 255, 255, 0.08) !important;
+                                color: #E0E0E0 !important;
+                                border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important;
                                 border-top: none !important;
                                 border-left: none !important;
                                 border-right: none !important;
                                 font-weight: 600;
                                 padding: 16px 12px;
-                                font-size: var(--font-size-body);
+                                font-size: 15px;
                                 vertical-align: middle;
+                                --bs-table-bg: rgba(255, 255, 255, 0.08) !important;
                               }
-                              .momentum-table-container tbody {
+                              .momentum-table-container tbody,
+                              .momentum-table-container .table > tbody,
+                              .momentum-table-container table > tbody {
                                 background: transparent !important;
                                 background-color: transparent !important;
                               }
-                              .momentum-table-container tbody tr {
+                              .momentum-table-container tbody tr,
+                              .momentum-table-container .table > tbody > tr,
+                              .momentum-table-container table > tbody > tr {
                                 background: transparent !important;
                                 background-color: transparent !important;
                                 border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
-                                transition: background-color var(--transition-card);
+                                transition: background-color 180ms ease;
+                                --bs-table-bg: transparent !important;
                               }
-                              .momentum-table-container tbody tr:hover {
-                                background: var(--bg-card) !important;
-                                background-color: var(--bg-card) !important;
+                              .momentum-table-container tbody tr:hover,
+                              .momentum-table-container .table > tbody > tr:hover,
+                              .momentum-table-container table > tbody > tr:hover {
+                                background: rgba(255, 255, 255, 0.05) !important;
+                                background-color: rgba(255, 255, 255, 0.05) !important;
+                                --bs-table-hover-bg: rgba(255, 255, 255, 0.05) !important;
                               }
-                              .momentum-table-container tbody td {
+                              .momentum-table-container tbody td,
+                              .momentum-table-container .table > tbody > tr > td,
+                              .momentum-table-container table > tbody > tr > td,
+                              .momentum-table-container tbody tr td {
                                 background: transparent !important;
                                 background-color: transparent !important;
-                                color: var(--text-primary) !important;
+                                color: #E0E0E0 !important;
                                 border: none !important;
+                                border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
                                 padding: 16px 12px;
                                 vertical-align: middle;
-                                font-size: var(--font-size-body);
+                                font-size: 15px;
+                                --bs-table-bg: transparent !important;
                               }
                               .momentum-table-container tbody td small {
-                                color: var(--text-muted) !important;
-                                font-size: var(--font-size-metadata);
+                                color: rgba(224, 224, 224, 0.7) !important;
+                                font-size: 14px;
                               }
                               .momentum-table-container .badge {
-                                color: var(--tag-text) !important;
+                                color: #FFFFFF !important;
+                              }
+                              /* Override Bootstrap table striping */
+                              .momentum-table-container .table-striped > tbody > tr:nth-of-type(odd) > * {
+                                background-color: transparent !important;
+                                --bs-table-bg-type: transparent !important;
                               }
                             `}
                           </style>
