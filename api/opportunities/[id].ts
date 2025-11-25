@@ -154,6 +154,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || null,
         display_width: opportunity.display_width || 'single',
+        start_date: opportunity.start_date ? new Date(opportunity.start_date).toISOString() : null,
+        end_date: opportunity.end_date ? new Date(opportunity.end_date).toISOString() : null,
         owner_name: ownerResult.rows[0]?.name || 'Unknown',
         owner_email: ownerResult.rows[0]?.email || 'unknown@example.com',
         sessions: sessionsResult.rows.map(s => {
@@ -190,6 +192,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         participant_type_required,
         participant_type_specific_details,
         display_width,
+        start_date,
+        end_date,
       } = req.body;
 
       // Check if opportunity exists
@@ -251,6 +255,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updates.push(`participant_type_specific_details = $${paramIndex++}`);
         params.push(participant_type_specific_details?.trim() || null);
       }
+      if (start_date !== undefined) {
+        updates.push(`start_date = $${paramIndex++}`);
+        params.push(start_date || null);
+      }
+      if (end_date !== undefined) {
+        updates.push(`end_date = $${paramIndex++}`);
+        params.push(end_date || null);
+      }
       
       // Only superadmins can update display_width
       if (display_width !== undefined) {
@@ -305,6 +317,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })),
         created_at: opportunity.created_at.toISOString(),
         updated_at: opportunity.updated_at.toISOString(),
+        start_date: opportunity.start_date ? new Date(opportunity.start_date).toISOString() : null,
+        end_date: opportunity.end_date ? new Date(opportunity.end_date).toISOString() : null,
       };
 
       return res.status(200).json(opportunityWithOwner);

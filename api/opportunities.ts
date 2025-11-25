@@ -56,6 +56,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Convert timestamps to ISO strings
         opportunity.created_at = opportunity.created_at.toISOString();
         opportunity.updated_at = opportunity.updated_at.toISOString();
+        opportunity.start_date = opportunity.start_date ? new Date(opportunity.start_date).toISOString() : null;
+        opportunity.end_date = opportunity.end_date ? new Date(opportunity.end_date).toISOString() : null;
         
         return res.status(200).json(opportunity);
       }
@@ -192,6 +194,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ...opp,
           created_at: opp.created_at.toISOString(),
           updated_at: opp.updated_at.toISOString(),
+          start_date: opp.start_date ? new Date(opp.start_date).toISOString() : null,
+          end_date: opp.end_date ? new Date(opp.end_date).toISOString() : null,
           owner_name: opp.owner_name || 'Unknown',
           owner_email: opp.owner_email || 'unknown@example.com',
           sessions,
@@ -217,6 +221,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         participant_type_required = 'any',
         participant_type_specific_details,
         display_width,
+        start_date,
+        end_date,
       } = req.body;
       
       // Validate required fields
@@ -238,8 +244,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           type, title, purpose_one_liner, description_optional,
           product_optional, meeting_location_optional, default_duration_minutes, status,
           owner_user_id, external_link_optional, participant_type_required,
-          participant_type_specific_details, display_width
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          participant_type_specific_details, display_width, start_date, end_date
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *`,
         [
           type,
@@ -255,6 +261,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           participant_type_required,
           participant_type_specific_details?.trim() || null,
           finalDisplayWidth,
+          start_date || null,
+          end_date || null,
         ]
       );
       
@@ -275,6 +283,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sessions: [],
         created_at: opportunity.created_at.toISOString(),
         updated_at: opportunity.updated_at.toISOString(),
+        start_date: opportunity.start_date ? new Date(opportunity.start_date).toISOString() : null,
+        end_date: opportunity.end_date ? new Date(opportunity.end_date).toISOString() : null,
       };
       
       return res.status(201).json(opportunityWithOwner);

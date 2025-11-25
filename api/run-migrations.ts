@@ -176,6 +176,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         log('ℹ️  display_width column may already exist: ' + err.message);
       }
 
+      // Add start_date and end_date columns for external link study types
+      try {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ
+        `);
+        log('✅ Added start_date column to opportunities table');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  start_date column may already exist: ' + err.message);
+      }
+
+      try {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ
+        `);
+        log('✅ Added end_date column to opportunities table');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  end_date column may already exist: ' + err.message);
+      }
+
       // Create opportunity_clicks table for click tracking (M6)
       // click_type: 'view' = user viewed the study details, 'action' = user clicked action button (open link/book session)
       await client.query(`
