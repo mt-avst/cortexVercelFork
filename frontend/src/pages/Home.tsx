@@ -915,10 +915,11 @@ const Home: React.FC = () => {
                               {/* Timing Info Section - Bookable Types (Test/Interview) */}
                               {(opportunity.type === 'test' || opportunity.type === 'interview') && (
                                 <>
-                                  {/* Study Period and Time Remaining */}
-                                  {opportunity.sessions && opportunity.sessions.length > 0 && (() => {
-                                    const dateRange = getStudyDateRange(opportunity.sessions);
-                                    const timeRemaining = getTimeRemaining(opportunity.sessions);
+                                  {/* Study Period, Time Remaining, Duration and Slots */}
+                                  {(() => {
+                                    const hasSessions = opportunity.sessions && opportunity.sessions.length > 0;
+                                    const dateRange = hasSessions ? getStudyDateRange(opportunity.sessions!) : { formatted: null };
+                                    const timeRemaining = hasSessions ? getTimeRemaining(opportunity.sessions!) : { text: null, urgency: 'normal' };
                                     
                                     return (
                                       <div className="timing-info mb-3 p-2" style={{ 
@@ -926,15 +927,23 @@ const Home: React.FC = () => {
                                         borderRadius: '6px',
                                         border: '1px solid rgba(255, 255, 255, 0.1)'
                                       }}>
+                                        {/* Duration Row */}
+                                        <div className="d-flex flex-wrap gap-3 mb-1">
+                                          <small className="text-muted d-flex align-items-center">
+                                            <Clock size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                            {opportunity.default_duration_minutes} min session
+                                          </small>
+                                        </div>
+
                                         {/* Date Range Row */}
-                                        {dateRange.formatted && (
+                                        {hasSessions && dateRange.formatted && (
                                           <div className="d-flex align-items-center mb-1">
                                             <Calendar size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
                                             <small style={{ color: 'var(--text-muted)' }}>{dateRange.formatted}</small>
                                           </div>
                                         )}
                                         {/* Time Remaining Row */}
-                                        {timeRemaining.text && (
+                                        {hasSessions && timeRemaining.text && (
                                           <div className="d-flex align-items-center">
                                             <Timer size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
                                             <small className={`timing-urgency-${timeRemaining.urgency}`} style={{ fontWeight: 500 }}>
@@ -945,20 +954,6 @@ const Home: React.FC = () => {
                                       </div>
                                     );
                                   })()}
-                                  
-                                  {/* Duration and Slots Row */}
-                                  <div className="d-flex flex-wrap gap-3 mb-2">
-                                    <small className="text-muted d-flex align-items-center">
-                                      <Clock size={14} className="me-1" style={{ opacity: 0.7 }} />
-                                      {opportunity.default_duration_minutes} min
-                                    </small>
-                                    {opportunity.sessions && opportunity.sessions.length > 0 && (
-                                      <small className="text-muted d-flex align-items-center">
-                                        <Users size={14} className="me-1" style={{ opacity: 0.7 }} />
-                                        {opportunity.sessions.reduce((total, session) => total + (session.remaining || 0), 0)} slots
-                                      </small>
-                                    )}
-                                  </div>
                                   
                                   {/* Participant Type */}
                                   {opportunity.participant_type_required !== 'specific' && (

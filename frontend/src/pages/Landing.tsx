@@ -1138,7 +1138,7 @@ const Landing: React.FC = () => {
           />
           <h1 className="hero-headline">
             AdaptaLabs
-            <span className="beta-badge">BETA v5</span>
+            <span className="beta-badge">BETA v5.1</span>
           </h1>
           <p className="hero-subtext">
             Help influence the products you use by taking part in quick, well designed research sessions
