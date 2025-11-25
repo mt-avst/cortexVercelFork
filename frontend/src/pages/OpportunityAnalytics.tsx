@@ -348,7 +348,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             ← Back to Dashboard
           </button>
           <h1 className="h3 mb-2" style={{ color: 'var(--text-primary)' }}>
-            📊 Click Analytics
+            Click Analytics
           </h1>
           <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
             Tracking engagement for <strong>{opportunity.title}</strong>
@@ -387,7 +387,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
-                      👁️ Study Views
+                      Study Views
                     </h6>
                     <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Users who viewed details</span>
                   </div>
@@ -412,7 +412,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
-                      🎯 Actions Taken
+                      Actions Taken
                     </h6>
                     <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Clicked link / Booked</span>
                   </div>
@@ -437,7 +437,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
-                      📊 Conversion Rate
+                      Conversion Rate
                     </h6>
                     <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Views → Actions</span>
                   </div>
@@ -468,7 +468,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 title="Total Interactions" 
                 value={analytics?.clicks_total ?? 0}
                 subtitle="Views + Actions"
-                icon="🖱️"
                 color="#6f42c1"
               />
             </div>
@@ -477,7 +476,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 title="Last 7 Days" 
                 value={analytics?.clicks_7d ?? 0}
                 subtitle={`${(analytics?.week_over_week_change ?? 0) >= 0 ? '+' : ''}${analytics?.week_over_week_change ?? 0}% vs prev week`}
-                icon="📈"
                 color="#198754"
                 trend={analytics?.week_over_week_change ?? 0}
               />
@@ -486,7 +484,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <StatCard 
                 title="Last 24 Hours" 
                 value={analytics?.clicks_24h ?? 0}
-                icon="⏰"
                 color="#0d6efd"
               />
             </div>
@@ -495,7 +492,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 title="Unique Users" 
                 value={analytics?.unique_users ?? 0}
                 subtitle="Distinct visitors"
-                icon="👥"
                 color="#ffaa50"
               />
             </div>
@@ -509,7 +505,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: '600' }}>
-                      👁️ Study Views ({selectedPeriod}d)
+                      Study Views ({selectedPeriod}d)
                     </h5>
                     <span className="text-muted" style={{ fontSize: '0.8rem' }}>
                       Total: {analytics?.views_7d ?? 0} (7d)
@@ -524,7 +520,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     />
                   ) : (
                     <div className="text-center py-4 text-muted">
-                      <span style={{ fontSize: '2rem', opacity: 0.3 }}>👁️</span>
                       <p className="mt-2 mb-0">No views recorded</p>
                     </div>
                   )}
@@ -538,7 +533,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: '600' }}>
-                      🎯 Actions Taken ({selectedPeriod}d)
+                      Actions Taken ({selectedPeriod}d)
                     </h5>
                     <span className="text-muted" style={{ fontSize: '0.8rem' }}>
                       Total: {analytics?.actions_7d ?? 0} (7d)
@@ -553,7 +548,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     />
                   ) : (
                     <div className="text-center py-4 text-muted">
-                      <span style={{ fontSize: '2rem', opacity: 0.3 }}>🎯</span>
                       <p className="mt-2 mb-0">No actions recorded</p>
                     </div>
                   )}
@@ -567,7 +561,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="card-body" style={{ padding: '1.5rem' }}>
               <div className="d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }}>
                 <h5 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '1rem', fontWeight: '600' }}>
-                  📈 Total Interactions Over Time ({selectedPeriod} days)
+                  Total Interactions Over Time ({selectedPeriod} days)
                 </h5>
                 <span className="text-muted" style={{ fontSize: '0.85rem' }}>
                   Avg: {analytics?.avg_clicks_per_day ?? 0}/day
@@ -584,7 +578,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 </div>
               ) : (
                 <div className="text-center py-5 text-muted">
-                  <span style={{ fontSize: '3rem', opacity: 0.3 }}>📊</span>
                   <p className="mt-2">No interactions recorded in this period</p>
                 </div>
               )}
@@ -629,7 +622,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                   <div className="card-body" style={{ padding: '1.25rem' }}>
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <h6 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
-                        📅 Clicks by Day of Week
+                        Clicks by Day of Week
                       </h6>
                       {analytics?.clicks_by_weekday && analytics.clicks_by_weekday.length > 0 && (
                         <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>
@@ -704,7 +697,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <h6 className="mb-3" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
-                    🎯 Performance Summary
+                    Performance Summary
                   </h6>
                   <div className="d-flex flex-column gap-2">
                     <div className="d-flex justify-content-between align-items-center">
