@@ -389,7 +389,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Study Views
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Users who viewed details</span>
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>Users who viewed details</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#0d6efd' }}>
@@ -414,7 +414,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Actions Taken
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Clicked link / Booked</span>
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>Clicked link / Booked</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#198754' }}>
@@ -439,7 +439,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Conversion Rate
                     </h6>
-                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem', border: '1px solid #FF4E50' }}>Views → Actions</span>
+                    <span className="text-muted" style={{ fontSize: '0.75rem' }}>Views → Actions</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#ffaa50' }}>
