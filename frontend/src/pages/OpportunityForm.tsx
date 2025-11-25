@@ -453,13 +453,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         
         console.log('✅ CREATE MODE - Opportunity created');
         
-        // For types that use external links (no sessions), show success and navigate
+        // For types that use external links (no sessions), show success message
+        // User will click "Return to Dashboard" button to navigate
         if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-          // Show success message
           setSuccessMessage('Opportunity created successfully!');
-          // Brief delay to show success feedback before navigation
-          await new Promise(resolve => setTimeout(resolve, 1500));
-          navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: 'Opportunity created!' } });
           return savedOpportunity.id;
         }
         
@@ -722,13 +719,28 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               )}
               
               {successMessage && (
-                <div className="alert alert-success mx-4 mt-4 mb-0" role="alert" style={{
-                  backgroundColor: 'rgba(40, 167, 69, 0.2)',
-                  border: '1px solid rgba(40, 167, 69, 0.5)',
-                  color: '#90EE90'
+                <div className="alert mx-4 mt-4 mb-0" role="alert" style={{
+                  backgroundColor: 'rgba(40, 167, 69, 0.25)',
+                  border: '2px solid #28a745',
+                  color: '#28a745',
+                  borderRadius: '8px',
+                  padding: '1rem 1.25rem'
                 }}>
-                  <i className="bi bi-check-circle me-2"></i>
-                  {successMessage}
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div className="d-flex align-items-center">
+                      <i className="bi bi-check-circle-fill me-2" style={{ fontSize: '1.25rem' }}></i>
+                      <span style={{ fontWeight: 600, fontSize: '1rem' }}>{successMessage}</span>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-success btn-sm"
+                      onClick={() => navigate('/admin', { state: { refresh: true, timestamp: Date.now() } })}
+                      style={{ fontWeight: 600 }}
+                    >
+                      <i className="bi bi-arrow-left me-1"></i>
+                      Return to Dashboard
+                    </button>
+                  </div>
                 </div>
               )}
 
