@@ -84,7 +84,7 @@ const validateSessionData = (data: CreateSessionRequest): string[] => {
 router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { type, q, status } = req.query;
-    const isAdmin = req.user?.role === 'researcher_admin';
+    const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
     
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
@@ -232,7 +232,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
 // GET /api/opportunities/:id - Get opportunity detail
 router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const isAdmin = req.user?.role === 'researcher_admin';
+  const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
   
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
@@ -561,7 +561,7 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      const isAdmin = req.user?.role === 'researcher_admin';
+      const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
       
       // Non-admin users can only see published opportunities
       if (!isAdmin && opportunity.status !== 'published') {
@@ -611,7 +611,7 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
     }
     
     const opportunity = opportunityCheck.rows[0];
-    const isAdmin = req.user?.role === 'researcher_admin';
+    const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
     
     // Non-admin users can only see published opportunities
     if (!isAdmin && opportunity.status !== 'published') {

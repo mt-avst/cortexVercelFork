@@ -863,6 +863,17 @@ const Landing: React.FC = () => {
             margin-left: auto;
             margin-right: auto;
             line-height: 1.6;
+            margin-bottom: 0.75rem;
+            text-align: center;
+          }
+
+          .hero-subtext-secondary {
+            color: #9CA3AF;
+            font-size: 0.95rem;
+            max-width: 44rem;
+            margin-left: auto;
+            margin-right: auto;
+            line-height: 1.5;
             margin-bottom: 2.5rem;
             text-align: center;
           }
@@ -870,6 +881,9 @@ const Landing: React.FC = () => {
           @media (max-width: 768px) {
             .hero-subtext {
               font-size: 1rem;
+            }
+            .hero-subtext-secondary {
+              font-size: 0.875rem;
             }
           }
 
@@ -1124,11 +1138,13 @@ const Landing: React.FC = () => {
           />
           <h1 className="hero-headline">
             AdaptaLabs
-            <span className="beta-badge">BETA v4.4</span>
+            <span className="beta-badge">BETA v4.5</span>
           </h1>
           <p className="hero-subtext">
-            Participate in research that shapes the future of our products. Browse opportunities, book
-            sessions, and share feedback to help us build better experiences<span className="text-spark">.</span>
+            Help influence the products you use by taking part in quick, well designed research sessions
+          </p>
+          <p className="hero-subtext-secondary">
+            Book studies, test ideas, and shape the next generation of Adaptavist products
           </p>
           
           {/* Primary CTA - Sign in with Google */}

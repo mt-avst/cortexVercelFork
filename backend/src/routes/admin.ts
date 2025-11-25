@@ -25,7 +25,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
   const user = req.user!;
   
   // Check admin role
-  if (user.role !== 'researcher_admin') {
+  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Forbidden: Admin access required' });
   }
 

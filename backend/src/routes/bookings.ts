@@ -348,7 +348,7 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
 
   const { id: bookingId } = req.params;
   const userId = req.user!.id;
-  const isAdmin = req.user!.role === 'researcher_admin';
+  const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
 
   // Load booking with session and opportunity details
   const bookingResult = await pool.query(`
@@ -903,7 +903,7 @@ router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res:
 
     const { id: opportunityId } = req.params;
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'researcher_admin';
+    const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
 
     if (!isAdmin) {
       return res.status(403).json({ error: 'Admin access required' });
@@ -1047,7 +1047,7 @@ router.get('/pending-approvals', requireAuth, asyncHandler(async (req: Request, 
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
-  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
     throw new ForbiddenError('Only admins can view pending approvals');
   }
 
@@ -1090,7 +1090,7 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
-  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
     throw new ForbiddenError('Only admins can approve sessions');
   }
 
@@ -1173,7 +1173,7 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
-  if (userResult.rows.length === 0 || userResult.rows[0].role !== 'researcher_admin') {
+  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
     throw new ForbiddenError('Only admins can reject sessions');
   }
 

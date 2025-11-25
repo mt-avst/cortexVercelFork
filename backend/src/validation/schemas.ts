@@ -12,7 +12,7 @@ export const UserSchema = z.object({
   email: EmailSchema,
   business_unit: z.string().optional(),
   role_title: z.string().optional(),
-  role: z.enum(['employee', 'researcher_admin']),
+  role: z.enum(['employee', 'researcher_admin', 'superadmin']),
   created_at: z.string().datetime(),
 });
 
@@ -22,7 +22,7 @@ export const SessionUserSchema = z.object({
   email: EmailSchema,
   business_unit: z.string().optional(),
   role_title: z.string().optional(),
-  role: z.enum(['employee', 'researcher_admin']),
+  role: z.enum(['employee', 'researcher_admin', 'superadmin']),
 });
 
 // Opportunity schemas
@@ -36,7 +36,7 @@ export const CreateOpportunitySchema = z.object({
   purpose_one_liner: z.string().min(10).max(180),
   description_optional: z.string().optional(),
   product_optional: z.string().optional(),
-  meeting_location_optional: z.string().min(1, 'Meeting location is required'),
+  meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
@@ -52,7 +52,7 @@ export const UpdateOpportunitySchema = z.object({
   purpose_one_liner: z.string().min(10).max(180).optional(),
   description_optional: z.string().optional(),
   product_optional: z.string().optional(),
-  meeting_location_optional: z.string().min(1, 'Meeting location cannot be empty').optional(),
+  meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
