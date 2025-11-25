@@ -276,7 +276,7 @@ No, for privacy reasons, you can only see:
 
 1. Try the troubleshooting steps above
 2. Use the **"Send Feedback"** link in the header
-3. Contact support: adaptalabs-support@adaptavist.com
+3. Contact support: nfine@adaptavist.com
 4. Submit a ticket via Service Desk
 
 ### Is My Data Secure?
@@ -299,7 +299,7 @@ Yes, AdaptaLabs is responsive and works on mobile devices. Some features may be 
 
 - **Send Feedback**: Click "Send Feedback" in the header dropdown menu
 - **Service Desk**: https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
-- **Email**: adaptalabs-support@adaptavist.com
+- **Email**: nfine@adaptavist.com
 
 ### Reporting Issues
 

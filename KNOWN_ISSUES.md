@@ -227,7 +227,7 @@ _None currently known. All critical bugs have been resolved._
 
 1. **Use Feedback Form**: Click "Send Feedback" in header
 2. **Service Desk**: Submit ticket via Service Desk
-3. **Email**: adaptalabs-support@adaptavist.com
+3. **Email**: nfine@adaptavist.com
 
 ### What to Include
 
@@ -318,5 +318,5 @@ When reporting issues, please include:
 ---
 
 **Last Updated**: 2025-01-27  
-**For Questions**: Use feedback form or contact adaptalabs-support@adaptavist.com
+**For Questions**: Use feedback form or contact nfine@adaptavist.com
 

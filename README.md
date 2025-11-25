@@ -373,4 +373,4 @@ AdaptaLabs is currently in **alpha testing phase**.
 ### Feedback & Support
 - **Feedback Form**: Available in-app (header dropdown → "Send Feedback")
 - **Service Desk**: https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
-- **Email**: adaptalabs-support@adaptavist.com
+- **Email**: nfine@adaptavist.com

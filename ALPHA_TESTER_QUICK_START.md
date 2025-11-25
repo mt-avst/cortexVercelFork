@@ -79,7 +79,7 @@ This quick guide will help you get started testing the application.
    - https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
 
 3. **Email**
-   - adaptalabs-support@adaptavist.com
+   - nfine@adaptavist.com
 
 ### What to Include
 
@@ -186,7 +186,7 @@ We're particularly interested in feedback on:
 
 - **Feedback Form**: Click "Send Feedback" in header
 - **Service Desk**: https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
-- **Email**: adaptalabs-support@adaptavist.com
+- **Email**: nfine@adaptavist.com
 
 ---
 

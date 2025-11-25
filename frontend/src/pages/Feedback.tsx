@@ -22,7 +22,7 @@ const Feedback: React.FC = () => {
       `Timestamp: ${new Date().toISOString()}`
     );
     
-    window.location.href = `mailto:adaptalabs-support@adaptavist.com?subject=${subject}&body=${body}`;
+    window.location.href = `mailto:nfine@adaptavist.com?subject=${subject}&body=${body}`;
     setSubmitted(true);
   };
 
@@ -37,7 +37,7 @@ const Feedback: React.FC = () => {
                 <h2 className="mt-3">Thank You!</h2>
                 <p className="lead">Your feedback has been submitted.</p>
                 <p>If your email client didn't open automatically, please send your feedback to:</p>
-                <p><strong>adaptalabs-support@adaptavist.com</strong></p>
+                <p><strong>nfine@adaptavist.com</strong></p>
                 <button 
                   className="btn btn-primary mt-3"
                   onClick={() => {
@@ -140,7 +140,7 @@ const Feedback: React.FC = () => {
                     </a>
                   </li>
                   <li>
-                    <strong>Email:</strong> adaptalabs-support@adaptavist.com
+                    <strong>Email:</strong> nfine@adaptavist.com
                   </li>
                 </ul>
               </div>
