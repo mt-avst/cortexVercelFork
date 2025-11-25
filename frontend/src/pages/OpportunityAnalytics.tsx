@@ -386,7 +386,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
-                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                    <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Study Views
                     </h6>
                     <span className="text-muted" style={{ fontSize: '0.75rem' }}>Users who viewed details</span>
@@ -411,7 +411,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
-                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                    <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Actions Taken
                     </h6>
                     <span className="text-muted" style={{ fontSize: '0.75rem' }}>Clicked link / Booked</span>
@@ -436,7 +436,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
                 <div className="card-body" style={{ padding: '1.25rem' }}>
                   <div className="mb-3">
-                    <h6 className="text-muted mb-2" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
+                    <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Conversion Rate
                     </h6>
                     <span className="text-muted" style={{ fontSize: '0.75rem' }}>Views → Actions</span>
