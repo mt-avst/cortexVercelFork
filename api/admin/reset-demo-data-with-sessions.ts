@@ -40,12 +40,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = user.id;
 
-    // Calculate dates for sessions (spread across next two weeks, Monday-Friday)
-    const today = new Date();
-    const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + (8 - today.getDay()) % 7 || 7);
-    nextMonday.setHours(0, 0, 0, 0);
-    // Week 1: days 0-4 (Mon-Fri), Week 2: days 7-11 (Mon-Fri)
+    // Set fixed dates for sessions: December 2025, two weeks starting Dec 1st
+    // Week 1: Dec 1-5, 2025 (Mon-Fri)
+    // Week 2: Dec 8-12, 2025 (Mon-Fri)
+    const week1Monday = new Date('2025-12-01T00:00:00.000Z');
+    const nextMonday = week1Monday; // Alias for compatibility with existing code
 
     // Helper to create sessions for an opportunity
     const createSessions = async (opportunityId: string, defaultDuration: number, days: number[], location?: string) => {
