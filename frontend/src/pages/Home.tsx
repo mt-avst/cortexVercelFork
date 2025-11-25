@@ -16,9 +16,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const [selectedType, setSelectedType] = useState<string>('all');
-  const itemsPerPage = 6; // 6 studies per page (2 rows of 3 cards)
   
   const { user, loading: authLoading, initialAuthCheck } = useAuth();
   const { animationsEnabled } = useAnimation();
@@ -55,7 +53,6 @@ const Home: React.FC = () => {
           console.log('First opportunity sessions:', data[0].sessions?.length || 0);
         }
       }
-      setCurrentPage(1); // Reset to first page when data loads
     } catch (err: any) {
       console.error('Error loading opportunities:', err);
       setError('Failed to load opportunities - backend not available in production demo');
@@ -195,22 +192,6 @@ const Home: React.FC = () => {
   };
   
   const filteredOpportunities = arrangeBentoLayout(sortedByType);
-  
-  const totalPages = Math.ceil(filteredOpportunities.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedOpportunities = filteredOpportunities.slice(startIndex, endIndex);
-  
-  // Reset to page 1 when filter changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedType]);
-
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
-    // Scroll to top when page changes
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   // Randomize square positions on each animation cycle (only for logged-in users)
   useEffect(() => {
@@ -901,7 +882,7 @@ const Home: React.FC = () => {
               
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
                 <div className="bento-grid">
-                  {paginatedOpportunities.map((opportunity, index) => {
+                  {filteredOpportunities.map((opportunity, index) => {
                     // Use display_width from database (set by superadmin), default to single
                     const isWide = opportunity.display_width === 'double';
                     // Use _gridPosition to determine if double-width should be on left or right
@@ -1086,50 +1067,6 @@ const Home: React.FC = () => {
                       </div>
                     );
                   })}
-                </div>
-              )}
-
-              {/* Pagination Controls */}
-              {!loading && !error && filteredOpportunities.length > itemsPerPage && (
-                <div className="row mt-4">
-                  <div className="col-12 d-flex justify-content-center align-items-center">
-                    <nav aria-label="Page navigation">
-                      <ul className="pagination mb-0">
-                        <li className={`page-item ${currentPage === 1 ? 'disabled' : ''}`}>
-                          <button 
-                            className="page-link"
-                            onClick={() => handlePageChange(currentPage - 1)}
-                            disabled={currentPage === 1}
-                            aria-label="Previous page"
-                          >
-                            <i className="bi bi-chevron-left" aria-hidden="true"></i>
-                          </button>
-                        </li>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                          <li key={page} className={`page-item ${currentPage === page ? 'active' : ''}`}>
-                            <button 
-                              className="page-link"
-                              onClick={() => handlePageChange(page)}
-                              aria-label={`Go to page ${page}`}
-                              aria-current={currentPage === page ? 'page' : undefined}
-                            >
-                              {page}
-                            </button>
-                          </li>
-                        ))}
-                        <li className={`page-item ${currentPage === totalPages ? 'disabled' : ''}`}>
-                          <button 
-                            className="page-link"
-                            onClick={() => handlePageChange(currentPage + 1)}
-                            disabled={currentPage === totalPages}
-                            aria-label="Next page"
-                          >
-                            <i className="bi bi-chevron-right" aria-hidden="true"></i>
-                          </button>
-                        </li>
-                      </ul>
-                    </nav>
-                  </div>
                 </div>
               )}
             </div>
