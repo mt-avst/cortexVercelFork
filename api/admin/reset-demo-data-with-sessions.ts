@@ -26,6 +26,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('🧹 Starting database reset with sessions by admin:', user.email);
 
+    // Ensure display_width column exists
+    try {
+      await query(`
+        ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS display_width TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))
+      `);
+      console.log('✅ Ensured display_width column exists');
+    } catch (e) {
+      console.log('ℹ️ display_width column check skipped (may already exist)');
+    }
+
     // Delete all bookings first
     await query('DELETE FROM bookings');
     console.log('✅ Deleted all bookings');
@@ -80,12 +90,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return sessions;
     };
 
-    // 1. Test Opportunity 1: User Interface Testing
+    // 1. Test Opportunity 1: User Interface Testing (DOUBLE WIDTH - Featured)
     const test1Result = await query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, participant_type_required, display_width
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
         'test',
@@ -96,7 +106,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         45,
         'published',
         userId,
-        'any'
+        'any',
+        'double' // Featured as double-width on user home page
       ]
     );
     const test1Id = test1Result.rows[0].id;
