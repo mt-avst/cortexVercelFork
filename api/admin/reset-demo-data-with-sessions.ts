@@ -40,11 +40,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userId = user.id;
 
-    // Calculate dates for sessions (next week, Monday-Friday)
+    // Calculate dates for sessions (spread across next two weeks, Monday-Friday)
     const today = new Date();
     const nextMonday = new Date(today);
     nextMonday.setDate(today.getDate() + (8 - today.getDay()) % 7 || 7);
     nextMonday.setHours(0, 0, 0, 0);
+    // Week 1: days 0-4 (Mon-Fri), Week 2: days 7-11 (Mon-Fri)
 
     // Helper to create sessions for an opportunity
     const createSessions = async (opportunityId: string, defaultDuration: number, days: number[], location?: string) => {
@@ -100,8 +101,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const test1Id = test1Result.rows[0].id;
-    await createSessions(test1Id, 45, [0, 1, 2, 3, 4], 'https://zoom.us/j/1234567890'); // Mon-Fri
-    console.log('✅ Created Test Opportunity 1: User Interface Testing (15 sessions)');
+    await createSessions(test1Id, 45, [0, 1, 2, 3, 4], 'https://zoom.us/j/1234567890'); // Week 1: Mon-Fri
+    console.log('✅ Created Test Opportunity 1: User Interface Testing (15 sessions - Week 1)');
 
     // 2. Test Opportunity 2: Feature Validation
     const test2Result = await query(
@@ -123,8 +124,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const test2Id = test2Result.rows[0].id;
-    await createSessions(test2Id, 30, [0, 2, 4], 'https://meet.google.com/abc-defg-hij'); // Mon, Wed, Fri
-    console.log('✅ Created Test Opportunity 2: New Feature Validation (9 sessions)');
+    await createSessions(test2Id, 30, [7, 9, 11], 'https://meet.google.com/abc-defg-hij'); // Week 2: Mon, Wed, Fri
+    console.log('✅ Created Test Opportunity 2: New Feature Validation (9 sessions - Week 2)');
 
     // 3. Poll Opportunity 1: Work-Life Balance
     const poll1Result = await query(
@@ -146,8 +147,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const poll1Id = poll1Result.rows[0].id;
-    await createSessions(poll1Id, 5, [0, 1, 2, 3, 4], 'https://zoom.us/j/2345678901'); // Mon-Fri
-    console.log('✅ Created Poll Opportunity 1: Work-Life Balance Survey (15 sessions)');
+    await createSessions(poll1Id, 5, [0, 2, 4], 'https://zoom.us/j/2345678901'); // Week 1: Mon, Wed, Fri
+    console.log('✅ Created Poll Opportunity 1: Work-Life Balance Survey (9 sessions - Week 1)');
 
     // 4. Poll Opportunity 2: Remote Work Preferences
     const poll2Result = await query(
@@ -169,8 +170,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const poll2Id = poll2Result.rows[0].id;
-    await createSessions(poll2Id, 5, [1, 3], 'https://meet.google.com/bcd-efgh-ijk'); // Tue, Thu
-    console.log('✅ Created Poll Opportunity 2: Remote Work Preferences (6 sessions)');
+    await createSessions(poll2Id, 5, [8, 10], 'https://meet.google.com/bcd-efgh-ijk'); // Week 2: Tue, Thu
+    console.log('✅ Created Poll Opportunity 2: Remote Work Preferences (6 sessions - Week 2)');
 
     // 5. Survey Opportunity 1: Employee Engagement
     const survey1Result = await query(
@@ -192,8 +193,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const survey1Id = survey1Result.rows[0].id;
-    await createSessions(survey1Id, 15, [0, 2, 4], 'https://zoom.us/j/3456789012'); // Mon, Wed, Fri
-    console.log('✅ Created Survey Opportunity 1: Employee Engagement Survey (9 sessions)');
+    await createSessions(survey1Id, 15, [1, 3], 'https://zoom.us/j/3456789012'); // Week 1: Tue, Thu
+    console.log('✅ Created Survey Opportunity 1: Employee Engagement Survey (6 sessions - Week 1)');
 
     // 6. Survey Opportunity 2: Product Feedback
     const survey2Result = await query(
@@ -216,8 +217,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]
     );
     const survey2Id = survey2Result.rows[0].id;
-    await createSessions(survey2Id, 20, [1, 3], 'https://meet.google.com/cde-fghi-jkl'); // Tue, Thu
-    console.log('✅ Created Survey Opportunity 2: Product Feedback Survey (6 sessions)');
+    await createSessions(survey2Id, 20, [7, 8, 9, 10, 11], 'https://meet.google.com/cde-fghi-jkl'); // Week 2: Mon-Fri
+    console.log('✅ Created Survey Opportunity 2: Product Feedback Survey (15 sessions - Week 2)');
 
     // Get final counts
     const opportunitiesCount = await query('SELECT COUNT(*)::int as count FROM opportunities');
