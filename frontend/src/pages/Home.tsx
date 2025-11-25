@@ -134,24 +134,67 @@ const Home: React.FC = () => {
         return baseType === selectedType.toLowerCase();
       });
   
-  // Sort opportunities: double-width (featured) first, then by type (test first)
-  const filteredOpportunities = [...filteredByType].sort((a, b) => {
-    // First priority: double-width opportunities come first
-    const aIsDouble = a.display_width === 'double';
-    const bIsDouble = b.display_width === 'double';
-    if (aIsDouble && !bIsDouble) return -1;
-    if (!aIsDouble && bIsDouble) return 1;
-    
-    // Second priority: test opportunities come before others
+  // Sort opportunities by type (test first) for initial ordering
+  const sortedByType = [...filteredByType].sort((a, b) => {
     const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
     const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
     const aIsTest = aType === 'test';
     const bIsTest = bType === 'test';
     if (aIsTest && !bIsTest) return -1;
     if (!aIsTest && bIsTest) return 1;
-    
     return 0;
   });
+  
+  // Arrange opportunities for optimal bento grid layout
+  // Pattern for 3-column grid:
+  // Row 1: Double (cols 1-2) + Single (col 3)
+  // Row 2: Single (col 1) + Double (cols 2-3)
+  // Row 3+: Fill with singles, or repeat pattern if more doubles
+  const arrangeBentoLayout = (opportunities: typeof sortedByType): Array<typeof sortedByType[0] & { _gridPosition?: 'left' | 'right' }> => {
+    const doubles = opportunities.filter(o => o.display_width === 'double');
+    const singles = opportunities.filter(o => o.display_width !== 'double');
+    const result: Array<typeof sortedByType[0] & { _gridPosition?: 'left' | 'right' }> = [];
+    
+    let doubleIndex = 0;
+    let singleIndex = 0;
+    let rowNumber = 0;
+    
+    while (doubleIndex < doubles.length || singleIndex < singles.length) {
+      rowNumber++;
+      
+      if (rowNumber % 2 === 1) {
+        // Odd rows: Double on left (if available), single on right
+        if (doubleIndex < doubles.length) {
+          result.push({ ...doubles[doubleIndex++], _gridPosition: 'left' as const });
+          if (singleIndex < singles.length) {
+            result.push(singles[singleIndex++]);
+          }
+        } else {
+          // No more doubles, fill with up to 3 singles
+          for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
+            result.push(singles[singleIndex++]);
+          }
+        }
+      } else {
+        // Even rows: Single on left, Double on right (if available)
+        if (doubleIndex < doubles.length) {
+          if (singleIndex < singles.length) {
+            result.push(singles[singleIndex++]);
+          }
+          result.push({ ...doubles[doubleIndex++], _gridPosition: 'right' as const });
+        } else {
+          // No more doubles, fill with up to 3 singles
+          for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
+            result.push(singles[singleIndex++]);
+          }
+        }
+      }
+    }
+    
+    return result;
+  };
+  
+  const filteredOpportunities = arrangeBentoLayout(sortedByType);
   
   const totalPages = Math.ceil(filteredOpportunities.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -861,11 +904,16 @@ const Home: React.FC = () => {
                   {paginatedOpportunities.map((opportunity, index) => {
                     // Use display_width from database (set by superadmin), default to single
                     const isWide = opportunity.display_width === 'double';
+                    // Use _gridPosition to determine if double-width should be on left or right
+                    const gridPosition = (opportunity as any)._gridPosition;
+                    const gridClass = isWide 
+                      ? (gridPosition === 'right' ? 'bento-grid-item-wide-right' : 'bento-grid-item-wide')
+                      : 'bento-grid-item';
                     
                     return (
                       <div 
                         key={opportunity.id} 
-                        className={isWide ? 'bento-grid-item-wide' : 'bento-grid-item'}
+                        className={gridClass}
                       >
                         <div className="card h-100">
                           <div className="card-body d-flex flex-column opportunity-card-body">

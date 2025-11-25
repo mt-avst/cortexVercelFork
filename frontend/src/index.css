@@ -483,6 +483,11 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   grid-column: span 2; /* Wide items span 2 columns */
 }
 
+/* Double-width item positioned on the right side of its row */
+.bento-grid-item-wide-right {
+  grid-column: 2 / 4; /* Span columns 2-3 (right side of 3-column grid) */
+}
+
 /* Responsive Bento Grid */
 @media (max-width: 992px) {
   .bento-grid {
@@ -492,6 +497,10 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   .bento-grid-item-wide {
     grid-column: span 2;
   }
+  
+  .bento-grid-item-wide-right {
+    grid-column: span 2; /* On 2-column grid, just span both */
+  }
 }
 
 @media (max-width: 768px) {
@@ -499,7 +508,8 @@ div.card-body p.card-text:not(.text-muted):not(.small),
     grid-template-columns: 1fr;
   }
   
-  .bento-grid-item-wide {
+  .bento-grid-item-wide,
+  .bento-grid-item-wide-right {
     grid-column: span 1;
   }
 }
