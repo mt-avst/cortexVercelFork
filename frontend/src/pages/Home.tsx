@@ -4,10 +4,10 @@ import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnimation } from '../contexts/AnimationContext';
-import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { formatOpportunityType, getTypeBadgeClass, getStudyDateRange, getTimeRemaining, isExternalLinkType } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
-import { Users, Lock, Globe } from 'lucide-react';
+import { Users, Lock, Globe, Calendar, Clock, Timer } from 'lucide-react';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -931,22 +931,55 @@ const Home: React.FC = () => {
                             )}
                             
                             <div className="mt-auto">
+                              {/* Timing Info Section - Bookable Types (Test/Interview) */}
                               {(opportunity.type === 'test' || opportunity.type === 'interview') && (
                                 <>
-                                  <div className="mb-2">
-                                    <small className="text-muted">
-                                      <i className="bi bi-clock me-1"></i>
+                                  {/* Study Period and Time Remaining */}
+                                  {opportunity.sessions && opportunity.sessions.length > 0 && (() => {
+                                    const dateRange = getStudyDateRange(opportunity.sessions);
+                                    const timeRemaining = getTimeRemaining(opportunity.sessions);
+                                    
+                                    return (
+                                      <div className="timing-info mb-3 p-2" style={{ 
+                                        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                                        borderRadius: '6px',
+                                        border: '1px solid rgba(255, 255, 255, 0.1)'
+                                      }}>
+                                        {/* Date Range Row */}
+                                        {dateRange.formatted && (
+                                          <div className="d-flex align-items-center mb-1">
+                                            <Calendar size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                            <small style={{ color: 'var(--text-muted)' }}>{dateRange.formatted}</small>
+                                          </div>
+                                        )}
+                                        {/* Time Remaining Row */}
+                                        {timeRemaining.text && (
+                                          <div className="d-flex align-items-center">
+                                            <Timer size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                            <small className={`timing-urgency-${timeRemaining.urgency}`} style={{ fontWeight: 500 }}>
+                                              {timeRemaining.text}
+                                            </small>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                  
+                                  {/* Duration and Slots Row */}
+                                  <div className="d-flex flex-wrap gap-3 mb-2">
+                                    <small className="text-muted d-flex align-items-center">
+                                      <Clock size={14} className="me-1" style={{ opacity: 0.7 }} />
                                       {opportunity.default_duration_minutes} min
                                     </small>
-                                  </div>
-                                  {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 && (
-                                    <div className="mb-2">
+                                    {opportunity.sessions && opportunity.sessions.length > 0 && (
                                       <small className="text-muted d-flex align-items-center">
                                         <Users size={14} className="me-1" style={{ opacity: 0.7 }} />
-                                        {opportunity.sessions.reduce((total, session) => total + (session.remaining || 0), 0)} slots available
+                                        {opportunity.sessions.reduce((total, session) => total + (session.remaining || 0), 0)} slots
                                       </small>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
+                                  
+                                  {/* Participant Type */}
                                   {opportunity.participant_type_required !== 'specific' && (
                                     <div className="mb-2">
                                       <small className="text-muted d-flex align-items-center">
@@ -986,6 +1019,22 @@ const Home: React.FC = () => {
                                     </div>
                                   )}
                                 </>
+                              )}
+                              
+                              {/* Timing Info Section - External Link Types (Poll/Survey/Question/Unmoderated) */}
+                              {isExternalLinkType(opportunity.type) && (
+                                <div className="timing-info mb-3 p-2" style={{ 
+                                  backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                                  borderRadius: '6px',
+                                  border: '1px solid rgba(255, 255, 255, 0.1)'
+                                }}>
+                                  <div className="d-flex align-items-center">
+                                    <Clock size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                    <small style={{ color: 'var(--text-muted)' }}>
+                                      ~{opportunity.default_duration_minutes || 5} min to complete
+                                    </small>
+                                  </div>
+                                </div>
                               )}
                               
                               {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (

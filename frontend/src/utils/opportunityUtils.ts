@@ -1,5 +1,135 @@
 // Utility functions for opportunity-related operations
 
+import { Session } from '../api/types';
+
+/**
+ * Gets the study date range from sessions
+ * @param sessions - Array of session objects
+ * @returns Object with formatted date range string, or null if no valid sessions
+ */
+export const getStudyDateRange = (sessions: Session[] | undefined): { 
+  startDate: Date | null; 
+  endDate: Date | null; 
+  formatted: string | null;
+} => {
+  if (!sessions || sessions.length === 0) {
+    return { startDate: null, endDate: null, formatted: null };
+  }
+
+  // Filter to future sessions only and get valid dates
+  const now = new Date();
+  const validSessions = sessions.filter(s => {
+    const endTime = new Date(s.end_time);
+    return !isNaN(endTime.getTime());
+  });
+
+  if (validSessions.length === 0) {
+    return { startDate: null, endDate: null, formatted: null };
+  }
+
+  // Find earliest start and latest end
+  const startDates = validSessions.map(s => new Date(s.start_time));
+  const endDates = validSessions.map(s => new Date(s.end_time));
+  
+  const startDate = new Date(Math.min(...startDates.map(d => d.getTime())));
+  const endDate = new Date(Math.max(...endDates.map(d => d.getTime())));
+
+  // Format the date range
+  const formatDate = (date: Date): string => {
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const startFormatted = formatDate(startDate);
+  const endFormatted = formatDate(endDate);
+
+  // If same day, just show one date
+  if (startDate.toDateString() === endDate.toDateString()) {
+    return { startDate, endDate, formatted: startFormatted };
+  }
+
+  return { 
+    startDate, 
+    endDate, 
+    formatted: `${startFormatted} - ${endFormatted}` 
+  };
+};
+
+/**
+ * Gets the time remaining until the last session ends
+ * @param sessions - Array of session objects
+ * @returns Object with countdown string and urgency level
+ */
+export const getTimeRemaining = (sessions: Session[] | undefined): {
+  text: string | null;
+  urgency: 'normal' | 'warning' | 'critical' | 'ended';
+} => {
+  if (!sessions || sessions.length === 0) {
+    return { text: null, urgency: 'normal' };
+  }
+
+  // Find the latest session end time
+  const now = new Date();
+  const futureSessions = sessions.filter(s => {
+    const endTime = new Date(s.end_time);
+    return !isNaN(endTime.getTime()) && endTime > now;
+  });
+
+  if (futureSessions.length === 0) {
+    // Check if all sessions have passed
+    const allSessions = sessions.filter(s => !isNaN(new Date(s.end_time).getTime()));
+    if (allSessions.length > 0) {
+      return { text: 'Ended', urgency: 'ended' };
+    }
+    return { text: null, urgency: 'normal' };
+  }
+
+  // Get the latest end time from future sessions
+  const latestEnd = new Date(Math.max(...futureSessions.map(s => new Date(s.end_time).getTime())));
+  
+  const diffMs = latestEnd.getTime() - now.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  // Determine urgency level
+  let urgency: 'normal' | 'warning' | 'critical' | 'ended' = 'normal';
+  if (diffDays < 1) {
+    urgency = 'critical';
+  } else if (diffDays < 3) {
+    urgency = 'warning';
+  }
+
+  // Format the countdown text
+  let text: string;
+  if (diffHours < 1) {
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    text = diffMinutes <= 1 ? 'Ending soon' : `${diffMinutes} min left`;
+    urgency = 'critical';
+  } else if (diffHours < 24) {
+    text = diffHours === 1 ? '1 hour left' : `${diffHours} hours left`;
+  } else if (diffDays === 1) {
+    text = 'Ends tomorrow';
+  } else if (diffDays < 7) {
+    text = `${diffDays} days left`;
+  } else if (diffDays < 14) {
+    text = '1 week left';
+  } else {
+    const weeks = Math.floor(diffDays / 7);
+    text = `${weeks} weeks left`;
+  }
+
+  return { text, urgency };
+};
+
+/**
+ * Checks if an opportunity type uses external links (no sessions)
+ * @param type - The opportunity type
+ * @returns true if the type uses external links
+ */
+export const isExternalLinkType = (type: string | null | undefined): boolean => {
+  if (!type) return false;
+  return ['poll', 'survey', 'question', 'unmoderated'].includes(type.toLowerCase());
+};
+
 /**
  * Formats opportunity type for display
  * Handles cases where type might be concatenated with status (e.g., 'testpublished' -> 'APP TESTING')

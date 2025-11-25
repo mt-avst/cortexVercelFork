@@ -1222,6 +1222,36 @@ span.lozenge-unmoderated,
   background-color: #3D2E2A !important;
 }
 
+/* ============================================================================
+   TIMING URGENCY STYLES - For study card countdown indicators
+   ============================================================================ */
+
+/* Normal - Default muted color */
+.timing-urgency-normal {
+  color: var(--text-muted) !important;
+}
+
+/* Warning - Orange/amber for < 3 days remaining */
+.timing-urgency-warning {
+  color: #F0A500 !important;
+}
+
+/* Critical - Red/coral for < 24 hours remaining */
+.timing-urgency-critical {
+  color: #FF4E50 !important;
+}
+
+/* Ended - Dimmed, struck-through */
+.timing-urgency-ended {
+  color: var(--text-muted) !important;
+  opacity: 0.6;
+}
+
+/* Timing info container styles */
+.timing-info {
+  font-size: 0.875rem;
+}
+
 /* Analytics Badge - Electric Coral on Carbon Black */
 span.lozenge-analytics,
 .lozenge-analytics {
