@@ -451,10 +451,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
         
-        // Note: Session creation is now handled by AdminSessionManager after opportunity is saved
-        // This keeps the session creation logic in one place and ensures proper timing
-        console.log('✅ CREATE MODE - Opportunity created, AdminSessionManager will handle session creation');
+        console.log('✅ CREATE MODE - Opportunity created');
         
+        // For types that use external links (no sessions), show success and navigate
+        if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+          // Show success message
+          setSuccessMessage('Opportunity created successfully!');
+          // Brief delay to show success feedback before navigation
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: 'Opportunity created!' } });
+          return savedOpportunity.id;
+        }
+        
+        // For test/interview types, AdminSessionManager will handle session creation
         // Return the opportunity ID so AdminSessionManager can create sessions
         return savedOpportunity.id;
       }
