@@ -40,7 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json(createErrorResponse('Admin not found'));
       }
 
-      if (adminResult.rows[0].role === 'superadmin') {
+      const adminUser = adminResult.rows[0] as { role: string };
+      if (adminUser.role === 'superadmin') {
         return res.status(400).json(createErrorResponse('Cannot revoke superadmin access'));
       }
 

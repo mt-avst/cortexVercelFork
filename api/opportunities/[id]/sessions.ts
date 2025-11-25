@@ -3,6 +3,19 @@ import { query } from '../../db';
 import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 
+// Type for session row from database
+interface SessionRow {
+  id: string;
+  opportunity_id: string;
+  start_time: Date;
+  end_time: Date;
+  capacity: number;
+  booked_count: number;
+  created_at: Date;
+  updated_at: Date;
+  location_or_meet_link_optional?: string;
+}
+
 /**
  * GET /api/opportunities/[id]/sessions
  * Gets sessions for an opportunity
@@ -56,18 +69,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       sql += ` ORDER BY start_time ASC`;
       
       const result = await query(sql, params);
-      
-      interface SessionRow {
-        id: string;
-        opportunity_id: string;
-        start_time: Date;
-        end_time: Date;
-        capacity: number;
-        booked_count: number;
-        created_at: Date;
-        updated_at: Date;
-        location_or_meet_link_optional?: string;
-      }
       
       const sessions = result.rows.map((row) => {
         const s = row as SessionRow;
@@ -131,7 +132,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ]
         );
         
-        const created = result.rows[0];
+        const created = result.rows[0] as SessionRow;
         createdSessions.push({
           ...created,
           start_time: created.start_time.toISOString(),

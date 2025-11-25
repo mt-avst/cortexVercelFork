@@ -84,11 +84,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               location || `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
             ]
           );
-          sessions.push(result.rows[0].id);
+          const sessionRow = result.rows[0] as { id: string };
+          sessions.push(sessionRow.id);
         }
       }
       return sessions;
     };
+
+    // Type for opportunity result
+    type OpportunityRow = { id: string };
 
     // 1. Test Opportunity 1: User Interface Testing (DOUBLE WIDTH - Featured)
     const test1Result = await query(
@@ -110,7 +114,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'double' // Featured as double-width on user home page
       ]
     );
-    const test1Id = test1Result.rows[0].id;
+    const test1Id = (test1Result.rows[0] as OpportunityRow).id;
     await createSessions(test1Id, 45, [0, 1, 2, 3, 4], 'https://zoom.us/j/1234567890'); // Week 1: Mon-Fri
     console.log('✅ Created Test Opportunity 1: User Interface Testing (15 sessions - Week 1)');
 
@@ -133,7 +137,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'internal'
       ]
     );
-    const test2Id = test2Result.rows[0].id;
+    const test2Id = (test2Result.rows[0] as OpportunityRow).id;
     await createSessions(test2Id, 30, [7, 9, 11], 'https://meet.google.com/abc-defg-hij'); // Week 2: Mon, Wed, Fri
     console.log('✅ Created Test Opportunity 2: New Feature Validation (9 sessions - Week 2)');
 
@@ -156,7 +160,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'internal'
       ]
     );
-    const poll1Id = poll1Result.rows[0].id;
+    const poll1Id = (poll1Result.rows[0] as OpportunityRow).id;
     await createSessions(poll1Id, 5, [0, 2, 4], 'https://zoom.us/j/2345678901'); // Week 1: Mon, Wed, Fri
     console.log('✅ Created Poll Opportunity 1: Work-Life Balance Survey (9 sessions - Week 1)');
 
@@ -179,7 +183,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'any'
       ]
     );
-    const poll2Id = poll2Result.rows[0].id;
+    const poll2Id = (poll2Result.rows[0] as OpportunityRow).id;
     await createSessions(poll2Id, 5, [8, 10], 'https://meet.google.com/bcd-efgh-ijk'); // Week 2: Tue, Thu
     console.log('✅ Created Poll Opportunity 2: Remote Work Preferences (6 sessions - Week 2)');
 
@@ -202,7 +206,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'internal'
       ]
     );
-    const survey1Id = survey1Result.rows[0].id;
+    const survey1Id = (survey1Result.rows[0] as OpportunityRow).id;
     await createSessions(survey1Id, 15, [1, 3], 'https://zoom.us/j/3456789012'); // Week 1: Tue, Thu
     console.log('✅ Created Survey Opportunity 1: Employee Engagement Survey (6 sessions - Week 1)');
 
@@ -226,7 +230,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'any'
       ]
     );
-    const survey2Id = survey2Result.rows[0].id;
+    const survey2Id = (survey2Result.rows[0] as OpportunityRow).id;
     await createSessions(survey2Id, 20, [7, 8, 9, 10, 11], 'https://meet.google.com/cde-fghi-jkl'); // Week 2: Mon-Fri
     console.log('✅ Created Survey Opportunity 2: Product Feedback Survey (15 sessions - Week 2)');
 
