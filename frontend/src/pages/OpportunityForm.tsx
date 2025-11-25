@@ -26,7 +26,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
     status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published',
-    display_width: 'single' as 'single' | 'double'
+    display_width: 'single' as 'single' | 'double',
+    start_date: '' as string | undefined,
+    end_date: '' as string | undefined
   });
   
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -111,7 +113,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
-        display_width: opportunity.display_width || 'single'
+        display_width: opportunity.display_width || 'single',
+        start_date: opportunity.start_date || '',
+        end_date: opportunity.end_date || ''
       });
       
       setOpportunityId(opportunity.id);
@@ -129,7 +133,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
-        display_width: opportunity.display_width || 'single' as 'single' | 'double'
+        display_width: opportunity.display_width || 'single' as 'single' | 'double',
+        start_date: opportunity.start_date || '',
+        end_date: opportunity.end_date || ''
       };
       setOriginalFormData(originalData);
       
@@ -400,6 +406,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // Only include default_duration_minutes for test and interview types
       if (formData.type === 'test' || formData.type === 'interview') {
         data.default_duration_minutes = formData.default_duration_minutes;
+      }
+      
+      // Include start_date and end_date for external link types
+      if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+        data.start_date = formData.start_date || undefined;
+        data.end_date = formData.end_date || undefined;
       }
       
       // Only superadmins can set display_width

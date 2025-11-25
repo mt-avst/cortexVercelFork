@@ -75,6 +75,8 @@ export interface Opportunity {
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
   display_width?: 'single' | 'double'; // Pod display width on user front page (superadmin only)
+  start_date?: string; // Study start date for external link types
+  end_date?: string; // Study end date for countdown display
   created_at: string;
   updated_at: string;
   // Frontend-specific fields (populated by API joins)
@@ -96,6 +98,8 @@ export interface CreateOpportunityRequest {
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
   status?: 'draft' | 'published';
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface UpdateOpportunityRequest {
@@ -110,6 +114,8 @@ export interface UpdateOpportunityRequest {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 // ============================================================================
@@ -375,6 +381,8 @@ export interface OpportunityFormData {
   
   // External Link Tab
   external_link_optional?: string;
+  start_date?: string;
+  end_date?: string;
 }
 
 export interface SessionFormData {

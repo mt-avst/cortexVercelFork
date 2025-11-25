@@ -4,7 +4,7 @@ import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnimation } from '../contexts/AnimationContext';
-import { formatOpportunityType, getTypeBadgeClass, getStudyDateRange, getTimeRemaining, isExternalLinkType } from '../utils/opportunityUtils';
+import { formatOpportunityType, getTypeBadgeClass, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import { Users, Lock, Globe, Calendar, Clock, Timer } from 'lucide-react';
@@ -1022,20 +1022,48 @@ const Home: React.FC = () => {
                               )}
                               
                               {/* Timing Info Section - External Link Types (Poll/Survey/Question/Unmoderated) */}
-                              {isExternalLinkType(opportunity.type) && (
-                                <div className="timing-info mb-3 p-2" style={{ 
-                                  backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                                  borderRadius: '6px',
-                                  border: '1px solid rgba(255, 255, 255, 0.1)'
-                                }}>
-                                  <div className="d-flex align-items-center">
-                                    <Clock size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
-                                    <small style={{ color: 'var(--text-muted)' }}>
-                                      ~{opportunity.default_duration_minutes || 5} min to complete
-                                    </small>
+                              {isExternalLinkType(opportunity.type) && (() => {
+                                const dateRange = getDirectDateRange(opportunity);
+                                const timeRemaining = getDirectTimeRemaining(opportunity);
+                                
+                                return (
+                                  <div className="timing-info mb-3 p-2" style={{ 
+                                    backgroundColor: 'rgba(255, 255, 255, 0.05)', 
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                                  }}>
+                                    {/* Date Range Row - only if dates are set */}
+                                    {dateRange.formatted && (
+                                      <div className="d-flex align-items-center mb-1">
+                                        <Calendar size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                        <small style={{ color: 'var(--text-muted)' }}>{dateRange.formatted}</small>
+                                      </div>
+                                    )}
+                                    {/* Time Remaining Row - only if end date is set */}
+                                    {timeRemaining.text && (
+                                      <div className="d-flex align-items-center mb-1">
+                                        <Timer size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                        <small style={{ 
+                                          color: timeRemaining.urgency === 'critical' ? 'var(--accent-coral)' :
+                                                 timeRemaining.urgency === 'warning' ? 'var(--accent-amber)' :
+                                                 timeRemaining.urgency === 'ended' ? 'var(--text-muted)' :
+                                                 'var(--accent-teal)',
+                                          fontWeight: timeRemaining.urgency === 'critical' || timeRemaining.urgency === 'warning' ? '600' : 'normal'
+                                        }}>
+                                          {timeRemaining.text}
+                                        </small>
+                                      </div>
+                                    )}
+                                    {/* Duration Row */}
+                                    <div className="d-flex align-items-center">
+                                      <Clock size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
+                                      <small style={{ color: 'var(--text-muted)' }}>
+                                        ~{opportunity.default_duration_minutes || 5} min to complete
+                                      </small>
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })()}
                               
                               {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
                                 <div className="mb-2">

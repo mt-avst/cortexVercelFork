@@ -194,6 +194,8 @@ export async function runMigrations() {
         meeting_location_optional TEXT,
         participant_type_required participant_type DEFAULT 'any',
         participant_type_specific_details TEXT,
+        start_date TIMESTAMPTZ,
+        end_date TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT NOW(),
         updated_at TIMESTAMPTZ DEFAULT NOW()
       )
@@ -476,6 +478,45 @@ export async function runMigrations() {
       }
     } catch (error: any) {
       console.log('ℹ️  Could not add display_width column (may already exist):', error.message);
+    }
+
+    // Add start_date and end_date columns for external link study types (poll, survey, question, unmoderated)
+    try {
+      const startDateCheck = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'opportunities' 
+        AND column_name = 'start_date'
+      `);
+      
+      if (startDateCheck.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN start_date TIMESTAMPTZ
+        `);
+        console.log('✅ Added start_date column to opportunities table');
+      } else {
+        console.log('ℹ️  start_date column already exists in opportunities table');
+      }
+    } catch (error: any) {
+      console.log('ℹ️  Could not add start_date column (may already exist):', error.message);
+    }
+
+    try {
+      const endDateCheck = await client.query(`
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'opportunities' 
+        AND column_name = 'end_date'
+      `);
+      
+      if (endDateCheck.rows.length === 0) {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN end_date TIMESTAMPTZ
+        `);
+        console.log('✅ Added end_date column to opportunities table');
+      } else {
+        console.log('ℹ️  end_date column already exists in opportunities table');
+      }
+    } catch (error: any) {
+      console.log('ℹ️  Could not add end_date column (may already exist):', error.message);
     }
 
     // Migrate is_researcher_admin to role column if needed

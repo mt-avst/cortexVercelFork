@@ -318,6 +318,8 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       external_link_optional: data.external_link_optional?.trim() || null,
       participant_type_required: data.participant_type_required || 'any',
       participant_type_specific_details: data.participant_type_specific_details?.trim() || null,
+      start_date: data.start_date || null,
+      end_date: data.end_date || null,
       created_at: new Date(),
       updated_at: new Date(),
       owner_name: req.user!.name,
@@ -345,8 +347,9 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional, 
       product_optional, meeting_location_optional, default_duration_minutes, status, 
-      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
+      start_date, end_date
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
     RETURNING *
   `;
   
@@ -362,7 +365,9 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     req.user!.id,
     data.external_link_optional?.trim() || null,
     data.participant_type_required || 'any',
-    data.participant_type_specific_details?.trim() || null
+    data.participant_type_specific_details?.trim() || null,
+    data.start_date || null,
+    data.end_date || null
   ];
   
   const result = await pool.query(query, values);

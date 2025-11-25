@@ -42,6 +42,8 @@ export const CreateOpportunitySchema = z.object({
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: z.enum(['draft', 'published']).optional(),
+  start_date: z.string().datetime().optional().nullable(),
+  end_date: z.string().datetime().optional().nullable(),
 });
 
 export const UpdateOpportunitySchema = z.object({
@@ -56,6 +58,8 @@ export const UpdateOpportunitySchema = z.object({
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),
+  start_date: z.string().datetime().optional().nullable(),
+  end_date: z.string().datetime().optional().nullable(),
 });
 
 export const OpportunitySchema = z.object({
@@ -72,6 +76,8 @@ export const OpportunitySchema = z.object({
   external_link_optional: z.string().optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
+  start_date: z.string().datetime().optional().nullable(),
+  end_date: z.string().datetime().optional().nullable(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
