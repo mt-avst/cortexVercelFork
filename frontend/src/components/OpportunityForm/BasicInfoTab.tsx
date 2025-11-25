@@ -42,9 +42,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   allowUserSubmission = false
 }) => {
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
-    const formatted = formatDateToISO(value);
-    console.log('📅 handleDateChange called:', field, 'value:', value, 'formatted:', formatted);
-    handleInputChange(field, formatted);
+    handleInputChange(field, formatDateToISO(value));
   };
 
   const isExternalLinkType = ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type);
