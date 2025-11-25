@@ -198,24 +198,31 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
               <div className="text-center">
                 <p className="mb-3" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>{getCurrentMonth()}</p>
                 
-                {/* Placeholder for image */}
-                <div className="border rounded d-flex align-items-center justify-content-center mb-3" style={{ 
-                  height: '150px', 
-                  minHeight: '150px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  borderColor: 'var(--border-card)',
-                  borderRadius: 'var(--card-radius)'
+                {/* Prize Image */}
+                <div className="mb-3" style={{ 
+                  borderRadius: 'var(--card-radius)',
+                  overflow: 'hidden'
                 }}>
-                  <i className="bi bi-image fs-1" style={{ color: 'var(--text-muted)' }}></i>
+                  <img 
+                    src="/images/amazon-giftcard.png" 
+                    alt="£25 Amazon Gift Card - Monthly Prize"
+                    style={{ 
+                      width: '100%', 
+                      height: 'auto',
+                      maxHeight: '180px',
+                      objectFit: 'contain',
+                      borderRadius: '12px'
+                    }}
+                  />
                 </div>
                 
-                {/* Two lines of placeholder text */}
+                {/* Prize description */}
                 <div className="text-center">
-                  <p className="mb-1" style={{ minHeight: '20px', color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                    {/* Placeholder line 1 */}
+                  <p className="mb-1 fw-semibold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)' }}>
+                    £25 Amazon Gift Card
                   </p>
-                  <p className="mb-0" style={{ minHeight: '20px', color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                    {/* Placeholder line 2 */}
+                  <p className="mb-0" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
+                    Top contributor wins!
                   </p>
                 </div>
               </div>

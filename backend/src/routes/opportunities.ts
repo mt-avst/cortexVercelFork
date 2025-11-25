@@ -181,7 +181,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     if (isAdmin) {
       try {
         const pollSurveyOppIds = result.rows
-          .filter(opp => opp.type === 'poll' || opp.type === 'survey')
+          .filter(opp => opp.type === 'poll' || opp.type === 'survey' || opp.type === 'unmoderated')
           .map(opp => opp.id);
         
         if (pollSurveyOppIds.length > 0) {
@@ -207,7 +207,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     // Combine results
     const opportunities = result.rows.map(opportunity => {
       const sessions = allSessionsMap.get(opportunity.id) || [];
-      const clicks_total = ((opportunity.type === 'poll' || opportunity.type === 'survey') && isAdmin)
+      const clicks_total = ((opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && isAdmin)
         ? (clicksMap.get(opportunity.id) ?? 0)
         : undefined;
 
@@ -334,10 +334,10 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   const data: CreateOpportunityRequest = req.body;
   // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
   
-  // Additional validation for published polls/surveys (M6 requirement)
-  if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
+  // Additional validation for published polls/surveys/unmoderated (M6 requirement)
+  if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey' || data.type === 'unmoderated')) {
     if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
-      throw new ValidationError('External link is required for published polls and surveys');
+      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests');
     }
   }
   

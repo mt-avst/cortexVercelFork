@@ -904,7 +904,9 @@ const Admin: React.FC = () => {
           .admin-dashboard table tbody td .lozenge-usertest,
           .admin-dashboard table tbody td span.lozenge-usertest,
           .admin-dashboard table tbody td .lozenge-question,
-          .admin-dashboard table tbody td span.lozenge-question {
+          .admin-dashboard table tbody td span.lozenge-question,
+          .admin-dashboard table tbody td .lozenge-unmoderated,
+          .admin-dashboard table tbody td span.lozenge-unmoderated {
             padding: 0.5rem 0.9rem !important;
             font-size: 0.75rem !important;
             font-weight: 600 !important;
@@ -1730,7 +1732,7 @@ const Admin: React.FC = () => {
                                 )}
                               </td>
                               <td style={{ color: 'var(--text-muted)', padding: '16px 8px', verticalAlign: 'middle', textAlign: 'center' }}>
-                                {(opportunity.type === 'poll' || opportunity.type === 'survey') ? (
+                                {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') ? (
                                   opportunity.clicks_total ?? 0
                                 ) : (
                                   ''
@@ -1838,8 +1840,8 @@ const Admin: React.FC = () => {
                                       >
                                         Copy
                                       </button>
-                                      {/* Analytics - Only for polls and surveys */}
-                                      {(opportunity.type === 'poll' || opportunity.type === 'survey') && (
+                                      {/* Analytics - Only for polls, surveys, and unmoderated tests */}
+                                      {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && (
                                         <>
                                           <div className="dropdown-divider"></div>
                                           <button

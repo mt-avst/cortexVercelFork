@@ -28,7 +28,7 @@ export interface Setting {
 }
 export interface Opportunity {
     id: string;
-    type: 'test' | 'poll' | 'survey' | 'question';
+    type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
     title: string;
     purpose_one_liner: string;
     description_optional?: string;
@@ -46,7 +46,7 @@ export interface Opportunity {
     sessions?: Session[];
 }
 export interface CreateOpportunityRequest {
-    type: 'test' | 'poll' | 'survey' | 'question';
+    type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
     title: string;
     purpose_one_liner: string;
     description_optional?: string;
@@ -58,7 +58,7 @@ export interface CreateOpportunityRequest {
     status?: 'draft' | 'published';
 }
 export interface UpdateOpportunityRequest {
-    type?: 'test' | 'poll' | 'survey' | 'question';
+    type?: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
     title?: string;
     purpose_one_liner?: string;
     description_optional?: string;
@@ -109,7 +109,7 @@ export interface BookingWithDetails extends Booking {
     session_capacity: number;
     session_location?: string;
     opportunity_title: string;
-    opportunity_type: 'test' | 'poll' | 'survey' | 'question';
+    opportunity_type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
     opportunity_purpose: string;
     owner_name: string;
     owner_email: string;
@@ -179,7 +179,7 @@ export declare const isSessionUser: (obj: any) => obj is SessionUser;
 export declare const isOpportunity: (obj: any) => obj is Opportunity;
 export declare const isSession: (obj: any) => obj is Session;
 export declare const isBooking: (obj: any) => obj is Booking;
-export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview';
+export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
 export type OpportunityStatus = 'draft' | 'published' | 'closed';
 export type ParticipantType = 'any' | 'internal' | 'external' | 'specific';
 export type UserRole = 'employee' | 'researcher_admin';

@@ -890,12 +890,12 @@ const OpportunityDetail: React.FC = () => {
                 </>
               )}
 
-              {/* External link for polls, surveys, and questions - only show if not test or interview */}
+              {/* External link for polls, surveys, questions, and unmoderated - only show if not test or interview */}
               {opportunity.type !== 'test' && opportunity.type !== 'interview' && (
                 <div className="mb-4">
                   <div className="row">
                     <div className="col-md-4">
-                      {opportunity.type === 'poll' || opportunity.type === 'survey' ? (
+                      {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' ? (
                         <button 
                           className="btn btn-primary w-100"
                           onClick={async () => {
@@ -906,10 +906,16 @@ const OpportunityDetail: React.FC = () => {
                             }
                           }}
                           disabled={!opportunity.external_link_optional}
-                          aria-label={opportunity.type === 'poll' ? 'Open poll in new tab' : 'Open survey in new tab'}
+                          aria-label={
+                            opportunity.type === 'poll' ? 'Open poll in new tab' : 
+                            opportunity.type === 'survey' ? 'Open survey in new tab' : 
+                            'Start unmoderated test in new tab'
+                          }
                           title={!opportunity.external_link_optional ? 'Link not available' : 'Opens in a new tab'}
                         >
-                          {opportunity.type === 'poll' ? 'Open Poll' : 'Open Survey'}
+                          {opportunity.type === 'poll' ? 'Open Poll' : 
+                           opportunity.type === 'survey' ? 'Open Survey' : 
+                           'Start Test'}
                         </button>
                       ) : (
                         <a 
@@ -927,7 +933,7 @@ const OpportunityDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {(opportunity.type === 'poll' || opportunity.type === 'survey') && (
+                  {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && (
                     <div className="row mt-2">
                       <div className="col-md-4">
                         <small className="text-muted">

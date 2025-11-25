@@ -62,7 +62,7 @@ export interface Setting {
 
 export interface Opportunity {
   id: string;
-  type: 'test' | 'poll' | 'survey' | 'question' | 'interview';
+  type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
   title: string;
   purpose_one_liner: string;
   description_optional?: string;
@@ -85,7 +85,7 @@ export interface Opportunity {
 }
 
 export interface CreateOpportunityRequest {
-  type: 'test' | 'poll' | 'survey' | 'question' | 'interview';
+  type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
   title: string;
   purpose_one_liner: string;
   description_optional?: string;
@@ -99,7 +99,7 @@ export interface CreateOpportunityRequest {
 }
 
 export interface UpdateOpportunityRequest {
-  type?: 'test' | 'poll' | 'survey' | 'question' | 'interview';
+  type?: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
   title?: string;
   purpose_one_liner?: string;
   description_optional?: string;
@@ -165,7 +165,7 @@ export interface BookingWithDetails extends Booking {
   session_capacity: number;
   session_location?: string;
   opportunity_title: string;
-  opportunity_type: 'test' | 'poll' | 'survey' | 'question' | 'interview';
+  opportunity_type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
   opportunity_purpose: string;
   owner_name: string;
   owner_email: string;
@@ -360,7 +360,7 @@ export const isBooking = (obj: any): obj is Booking => {
 
 export interface OpportunityFormData {
   // Basic Info Tab
-  type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | '';
+  type: 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated' | '';
   title: string;
   purpose_one_liner: string;
   default_duration_minutes: number;
@@ -406,7 +406,7 @@ export interface LogContext {
 // UTILITY TYPES
 // ============================================================================
 
-export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview';
+export type OpportunityType = 'test' | 'poll' | 'survey' | 'question' | 'interview' | 'unmoderated';
 export type OpportunityStatus = 'draft' | 'published' | 'closed';
 export type ParticipantType = 'any' | 'internal' | 'external' | 'specific';
 export type UserRole = 'employee' | 'researcher_admin' | 'superadmin';

@@ -54,10 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const opportunity = opportunityResult.rows[0] as { id: string; type: string; status: string };
 
-    // For 'action' clicks, only allow for poll/survey types (external link clicks)
+    // For 'action' clicks, only allow for poll/survey/unmoderated types (external link clicks) and test/interview (session bookings)
     // For 'view' clicks, allow all opportunity types
-    if (clickType === 'action' && opportunity.type !== 'poll' && opportunity.type !== 'survey' && opportunity.type !== 'test' && opportunity.type !== 'interview') {
-      return res.status(400).json(createErrorResponse('Action click tracking is only available for polls, surveys, tests, and interviews'));
+    if (clickType === 'action' && opportunity.type !== 'poll' && opportunity.type !== 'survey' && opportunity.type !== 'unmoderated' && opportunity.type !== 'test' && opportunity.type !== 'interview') {
+      return res.status(400).json(createErrorResponse('Action click tracking is only available for polls, surveys, unmoderated tests, tests, and interviews'));
     }
 
     // Only allow tracking for published opportunities

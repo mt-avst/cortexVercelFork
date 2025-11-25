@@ -242,12 +242,12 @@ const Header: React.FC = () => {
                           <li role="none">
                             <button 
                               onClick={handleRequestAdminClick}
-                              className="px-3 py-2 w-100 text-start border-0 bg-transparent text-white"
+                              className="px-3 py-2 w-100 text-start border-0 bg-transparent text-white d-flex align-items-start"
                               role="menuitem"
                               disabled={requestingAdmin}
                               style={{ cursor: requestingAdmin ? 'not-allowed' : 'pointer' }}
                             >
-                              <i className="bi bi-shield-plus me-2" aria-hidden="true"></i>
+                              <i className="bi bi-shield-plus me-2 mt-1" aria-hidden="true" style={{ flexShrink: 0 }}></i>
                               <span>
                                 {requestingAdmin 
                                   ? 'Submitting...' 

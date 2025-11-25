@@ -21,7 +21,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
               External Link
             </h2>
             <p className="mb-0" style={{ fontSize: '0.95rem', color: 'rgba(224, 224, 224, 0.7)' }}>
-              Configure the external tool for polls and surveys
+              Configure the external tool for polls, surveys, and unmoderated tests
             </p>
           </div>
         </div>
@@ -33,7 +33,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
                 External Link *
               </label>
               <div className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
-                URL to the external poll or survey tool (Google Forms, SurveyMonkey, etc.)
+                URL to the external tool (Google Forms, SurveyMonkey, Maze, UserTesting, etc.)
               </div>
               <input
                 type="url"
@@ -42,7 +42,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                 value={formData.external_link_optional}
                 onChange={(e) => handleInputChange('external_link_optional', e.target.value)}
-                placeholder="https://forms.google.com/your-poll-or-survey"
+                placeholder="https://forms.google.com/your-form or https://maze.co/your-test"
               />
               {validationErrors.external_link_optional && (
                 <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block', color: '#FF4E50' }}>{validationErrors.external_link_optional}</div>

@@ -133,6 +133,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `);
     log('✅ Created admin_requests indexes');
 
+    // Add 'unmoderated' to opportunity_type enum if it doesn't exist
+    try {
+      // Check if 'unmoderated' value exists in the enum
+      const enumCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT 1 FROM pg_enum 
+          WHERE enumlabel = 'unmoderated' 
+          AND enumtypid = (SELECT oid FROM pg_type WHERE typname = 'opportunity_type')
+        )
+      `);
+      
+      if (!enumCheck.rows[0]?.exists) {
+        await client.query(`ALTER TYPE opportunity_type ADD VALUE 'unmoderated'`);
+        log('✅ Added unmoderated to opportunity_type enum');
+      } else {
+        log('ℹ️  unmoderated already exists in opportunity_type enum');
+      }
+    } catch (error: unknown) {
+      const err = error as Error;
+      log('ℹ️  Could not add unmoderated to enum: ' + err.message);
+    }
+
     // Check if opportunities table exists (it might have been created by another migration)
     const opportunitiesCheck = await client.query(`
       SELECT EXISTS (

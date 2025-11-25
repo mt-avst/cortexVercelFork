@@ -232,6 +232,7 @@ export const OPPORTUNITY_TYPES = {
   POLL: 'poll',
   SURVEY: 'survey',
   QUESTION: 'question',
+  UNMODERATED: 'unmoderated',
 } as const;
 
 export const OPPORTUNITY_STATUSES = {

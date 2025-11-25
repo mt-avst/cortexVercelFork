@@ -145,7 +145,16 @@ export async function runMigrations() {
     // Create opportunity types enum
     await client.query(`
       DO $$ BEGIN
-        CREATE TYPE opportunity_type AS ENUM ('test', 'poll', 'survey', 'question', 'interview');
+        CREATE TYPE opportunity_type AS ENUM ('test', 'poll', 'survey', 'question', 'interview', 'unmoderated');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+    `);
+    
+    // Add 'unmoderated' to existing enum if it doesn't exist
+    await client.query(`
+      DO $$ BEGIN
+        ALTER TYPE opportunity_type ADD VALUE IF NOT EXISTS 'unmoderated';
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;

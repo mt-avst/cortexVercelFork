@@ -150,12 +150,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Continue with empty sessions map - opportunities will have empty sessions array
       }
 
-      // Get all click counts for poll/survey opportunities in one query (only if admin)
+      // Get all click counts for poll/survey/unmoderated opportunities in one query (only if admin)
       let clicksMap: Map<string, number> = new Map();
       if (isAdmin) {
         try {
           const pollSurveyOppIds = result.rows
-            .filter(opp => opp.type === 'poll' || opp.type === 'survey')
+            .filter(opp => opp.type === 'poll' || opp.type === 'survey' || opp.type === 'unmoderated')
             .map(opp => opp.id);
           
           if (pollSurveyOppIds.length > 0) {
@@ -184,7 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Combine results
       const opportunities = result.rows.map((opp: any) => {
         const sessions = allSessionsMap.get(opp.id) || [];
-        const clicks_total = ((opp.type === 'poll' || opp.type === 'survey') && isAdmin)
+        const clicks_total = ((opp.type === 'poll' || opp.type === 'survey' || opp.type === 'unmoderated') && isAdmin)
           ? (clicksMap.get(opp.id) ?? 0)
           : undefined;
 

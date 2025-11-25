@@ -121,9 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sessionsResult = { rows: [] };
       }
 
-      // Get click count for polls/surveys (admin only)
+      // Get click count for polls/surveys/unmoderated (admin only)
       let clicks_total = null;
-      if (isAdmin && (opportunity.type === 'poll' || opportunity.type === 'survey')) {
+      if (isAdmin && (opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated')) {
         try {
           const clicksResult = await query(
             `SELECT COUNT(*)::int as count FROM opportunity_clicks WHERE opportunity_id = $1`,

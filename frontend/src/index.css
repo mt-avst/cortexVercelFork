@@ -1215,6 +1215,13 @@ span.lozenge-question,
   background-color: #322E42 !important;
 }
 
+/* Unmoderated Testing - Text: #E8A87C, Background: #3D2E2A */
+span.lozenge-unmoderated,
+.lozenge-unmoderated {
+  color: #E8A87C !important;
+  background-color: #3D2E2A !important;
+}
+
 /* Analytics Badge - Electric Coral on Carbon Black */
 span.lozenge-analytics,
 .lozenge-analytics {

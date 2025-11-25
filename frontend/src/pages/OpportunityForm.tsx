@@ -15,7 +15,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const isEdit = Boolean(id);
   
   const [formData, setFormData] = useState({
-    type: '' as 'test' | 'interview' | 'poll' | 'survey' | 'question' | '',
+    type: '' as 'test' | 'interview' | 'poll' | 'survey' | 'question' | 'unmoderated' | '',
     title: '',
     purpose_one_liner: '',
     description_optional: '',
@@ -46,7 +46,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
     ];
 
-    if (['poll', 'survey', 'question'].includes(formData.type)) {
+    if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
       tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
     }
 
@@ -238,9 +238,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     }
     
-    if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
+    if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
       if (!formData.external_link_optional.trim()) {
-        errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+        errors.external_link_optional = 'External link is required for published polls, surveys, questions, and unmoderated tests';
       } else {
         try {
           new URL(formData.external_link_optional);
@@ -307,9 +307,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
         break;
       case 'external_link_optional':
-        if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
+        if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
           if (!value.trim()) {
-            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, questions, and unmoderated tests';
           } else {
             try {
               new URL(value);
@@ -676,8 +676,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
-                  {/* Analytics button - only for polls and surveys in edit mode */}
-                  {isEdit && id && (formData.type === 'poll' || formData.type === 'survey') && (
+                  {/* Analytics button - only for polls, surveys, and unmoderated tests in edit mode */}
+                  {isEdit && id && (formData.type === 'poll' || formData.type === 'survey' || formData.type === 'unmoderated') && (
                     <button
                       className="btn btn-outline-primary btn-sm"
                       onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}
@@ -943,7 +943,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           >
                             {formData.type === 'test' || formData.type === 'interview' 
                               ? 'Continue to Session Setup' 
-                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
+                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question' || formData.type === 'unmoderated'
                               ? 'Continue to Link Setup'
                               : 'Continue'}
                             <i className="bi bi-arrow-right ms-2"></i>
@@ -954,7 +954,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   )}
 
                   {/* External Link Tab - Only for polls, surveys, and questions */}
-                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && (
+                  {activeTab === 3 && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type) && (
                     <>
                       <ExternalLinkTab
                         formData={formData}

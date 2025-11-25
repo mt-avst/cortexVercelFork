@@ -37,6 +37,8 @@ export const formatOpportunityType = (type: string | null | undefined): string =
       return 'SURVEY';
     case 'question':
       return 'QUESTION';
+    case 'unmoderated':
+      return 'UNMODERATED';
     default:
       return type.toUpperCase();
   }
@@ -74,6 +76,8 @@ export const getTypeBadgeClass = (type: string | null | undefined): string => {
       return 'lozenge lozenge-survey';
     case 'question':
       return 'lozenge lozenge-question';
+    case 'unmoderated':
+      return 'lozenge lozenge-unmoderated';
     default:
       return 'badge bg-secondary';
   }
