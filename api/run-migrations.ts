@@ -154,6 +154,45 @@ async function runMigrations() {
       console.log('ℹ️  display_width column may already exist:', error.message);
     }
 
+    // Create opportunity_clicks table for click tracking (M6)
+    // click_type: 'view' = user viewed the study details, 'action' = user clicked action button (open link/book session)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_clicks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        click_type TEXT NOT NULL DEFAULT 'action',
+        clicked_at TIMESTAMPTZ DEFAULT NOW(),
+        user_agent TEXT,
+        ip_hash TEXT
+      )
+    `);
+    console.log('✅ Created opportunity_clicks table');
+
+    // Add click_type column if table already exists without it
+    try {
+      await client.query(`
+        ALTER TABLE opportunity_clicks 
+        ADD COLUMN IF NOT EXISTS click_type TEXT NOT NULL DEFAULT 'action'
+      `);
+      console.log('✅ Added click_type column to opportunity_clicks');
+    } catch (error: any) {
+      console.log('ℹ️  click_type column may already exist:', error.message);
+    }
+
+    // Create index for efficient analytics queries
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_clicks_opportunity 
+      ON opportunity_clicks(opportunity_id, clicked_at)
+    `);
+    
+    // Create index for click_type filtering
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_clicks_type 
+      ON opportunity_clicks(opportunity_id, click_type, clicked_at)
+    `);
+    console.log('✅ Created opportunity_clicks indexes');
+
     console.log('\n✅ All migrations completed successfully!');
   } catch (error) {
     console.error('❌ Migration failed:', error);
