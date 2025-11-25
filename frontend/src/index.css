@@ -707,6 +707,11 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   --cta-border: #FF4E50;                 /* Electric Coral border */
   --focus-ring: #FF4E50;
   
+  /* Accent Colors - For timing urgency indicators */
+  --accent-coral: #FF4E50;              /* Critical/urgent - < 24 hours */
+  --accent-amber: #F0A500;              /* Warning - 1-3 days remaining */
+  --accent-teal: #4DD4C0;               /* Normal - > 3 days remaining */
+  
   /* Tag Colors - Momentum Design System */
   --tag-survey: #222222;                /* Dark grey pills */
   --tag-poll: #222222;
