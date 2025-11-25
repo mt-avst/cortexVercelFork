@@ -719,28 +719,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               )}
               
               {successMessage && (
-                <div className="alert mx-4 mt-4 mb-0" role="alert" style={{
-                  backgroundColor: 'rgba(40, 167, 69, 0.25)',
-                  border: '2px solid #28a745',
-                  color: '#28a745',
-                  borderRadius: '8px',
-                  padding: '1rem 1.25rem'
-                }}>
-                  <div className="d-flex align-items-center justify-content-between">
-                    <div className="d-flex align-items-center">
-                      <i className="bi bi-check-circle-fill me-2" style={{ fontSize: '1.25rem' }}></i>
-                      <span style={{ fontWeight: 600, fontSize: '1rem' }}>{successMessage}</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="btn btn-success btn-sm"
-                      onClick={() => navigate('/admin', { state: { refresh: true, timestamp: Date.now() } })}
-                      style={{ fontWeight: 600 }}
-                    >
-                      <i className="bi bi-arrow-left me-1"></i>
-                      Return to Dashboard
-                    </button>
+                <div className="alert alert-success d-flex justify-content-between align-items-center mx-4 mt-4 mb-0" role="alert" aria-live="polite">
+                  <div>
+                    <i className="bi bi-check-circle me-2" aria-hidden="true"></i>
+                    {successMessage}
                   </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-success"
+                    onClick={() => navigate('/admin', { state: { refresh: true, timestamp: Date.now() } })}
+                  >
+                    Return to Dashboard
+                  </button>
                 </div>
               )}
 
