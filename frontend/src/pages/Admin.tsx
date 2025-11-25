@@ -478,10 +478,15 @@ const Admin: React.FC = () => {
               overflow: visible !important;
             }
             .admin-dashboard .card-header .btn {
-              width: 100% !important;
-              font-size: 0.9rem !important;
-              padding: 0.5rem 0.75rem !important;
+              font-size: 0.75rem !important;
+              padding: 0.4rem 0.6rem !important;
               overflow: visible !important;
+            }
+            /* Keep buttons right-aligned on mobile */
+            .admin-dashboard .card-header > div > div:last-child {
+              align-self: flex-end !important;
+              flex-direction: row !important;
+              gap: 0.5rem !important;
             }
           }
           
@@ -492,6 +497,10 @@ const Admin: React.FC = () => {
             .admin-dashboard .card-header .btn {
               font-size: 0.9rem !important;
               padding: 0.5rem 0.875rem !important;
+            }
+            /* Keep buttons right-aligned on tablet */
+            .admin-dashboard .card-header > div > div:last-child {
+              align-self: flex-end !important;
             }
           }
           
@@ -1337,7 +1346,7 @@ const Admin: React.FC = () => {
                   maxWidth: '100%',
                   overflow: 'visible'
                 }}>Admin Dashboard</h1>
-                <div className="d-flex flex-column flex-sm-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
+                <div className="d-flex flex-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
                   <button 
                     className="btn btn-outline-secondary"
                     onClick={() => navigate('/admin/settings')}
