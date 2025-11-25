@@ -1,39 +1,50 @@
-#!/usr/bin/env node
-/**
- * Run database migrations for production
- * Uses DATABASE_URL from environment variables
- */
-
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Pool } from 'pg';
 
-const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
-
-if (!databaseUrl) {
-  console.error('❌ DATABASE_URL or POSTGRES_URL environment variable is not set');
-  process.exit(1);
-}
-
-// Clean up connection string
-let cleanUrl = databaseUrl.trim();
-if (cleanUrl.startsWith('"') || cleanUrl.startsWith("'")) {
-  cleanUrl = cleanUrl.slice(1, -1);
-}
-if (cleanUrl.startsWith("psql '")) {
-  cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
-}
-
-const pool = new Pool({
-  connectionString: cleanUrl,
-  ssl: {
-    rejectUnauthorized: false
+/**
+ * GET /api/run-migrations
+ * Run database migrations
+ * This endpoint should be called manually to run migrations
+ */
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
-});
 
-async function runMigrations() {
-  const client = await pool.connect();
-  
+  const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+
+  if (!databaseUrl) {
+    return res.status(500).json({ 
+      error: 'DATABASE_URL or POSTGRES_URL environment variable is not set' 
+    });
+  }
+
+  // Clean up connection string
+  let cleanUrl = databaseUrl.trim();
+  if (cleanUrl.startsWith('"') || cleanUrl.startsWith("'")) {
+    cleanUrl = cleanUrl.slice(1, -1);
+  }
+  if (cleanUrl.startsWith("psql '")) {
+    cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
+  }
+
+  const pool = new Pool({
+    connectionString: cleanUrl,
+    ssl: {
+      rejectUnauthorized: false
+    }
+  });
+
+  const logs: string[] = [];
+  const log = (message: string) => {
+    console.log(message);
+    logs.push(message);
+  };
+
+  let client;
   try {
-    console.log('🔄 Running database migrations...\n');
+    client = await pool.connect();
+    log('🔄 Running database migrations...');
 
     // Create users table
     await client.query(`
@@ -47,7 +58,7 @@ async function runMigrations() {
         created_at TIMESTAMPTZ DEFAULT NOW()
       )
     `);
-    console.log('✅ Created users table');
+    log('✅ Created users table');
 
     // Update existing role constraint to include superadmin (if table exists)
     try {
@@ -56,10 +67,10 @@ async function runMigrations() {
         ALTER TABLE users ADD CONSTRAINT users_role_check 
           CHECK (role IN ('employee', 'researcher_admin', 'superadmin'));
       `);
-      console.log('✅ Updated users role constraint to include superadmin');
-    } catch (error: any) {
-      // Table might not exist yet, or constraint might not exist - that's okay
-      console.log('ℹ️  Role constraint update skipped (may already be correct)');
+      log('✅ Updated users role constraint to include superadmin');
+    } catch (error: unknown) {
+      const err = error as Error;
+      log('ℹ️  Role constraint update skipped: ' + err.message);
     }
 
     // Create notification_preferences table
@@ -71,7 +82,7 @@ async function runMigrations() {
         on_cancel_email BOOLEAN DEFAULT true
       )
     `);
-    console.log('✅ Created notification_preferences table');
+    log('✅ Created notification_preferences table');
 
     // Create user_calendar_tokens table
     await client.query(`
@@ -88,14 +99,14 @@ async function runMigrations() {
         last_refreshed_at TIMESTAMPTZ
       )
     `);
-    console.log('✅ Created user_calendar_tokens table');
+    log('✅ Created user_calendar_tokens table');
 
     // Create index for user_calendar_tokens
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_user_calendar_tokens_user_id 
       ON user_calendar_tokens(user_id)
     `);
-    console.log('✅ Created indexes');
+    log('✅ Created user_calendar_tokens indexes');
 
     // Create admin_requests table
     await client.query(`
@@ -103,7 +114,7 @@ async function runMigrations() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        requested_role TEXT NOT NULL CHECK (requested_role IN ('researcher_admin', 'superadmin')),
+        requested_role TEXT NOT NULL DEFAULT 'researcher_admin' CHECK (requested_role IN ('researcher_admin', 'superadmin')),
         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied')),
         reviewed_by UUID REFERENCES users(id) ON DELETE SET NULL,
         reviewed_at TIMESTAMPTZ,
@@ -112,29 +123,7 @@ async function runMigrations() {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
-    console.log('✅ Created admin_requests table');
-
-    // Add requested_role column if it doesn't exist (for existing tables)
-    try {
-      await client.query(`
-        ALTER TABLE admin_requests 
-        ADD COLUMN IF NOT EXISTS requested_role TEXT CHECK (requested_role IN ('researcher_admin', 'superadmin'));
-      `);
-      // Update existing rows to have requested_role = 'researcher_admin' (default for old requests)
-      await client.query(`
-        UPDATE admin_requests 
-        SET requested_role = 'researcher_admin' 
-        WHERE requested_role IS NULL;
-      `);
-      // Make it NOT NULL after setting defaults
-      await client.query(`
-        ALTER TABLE admin_requests 
-        ALTER COLUMN requested_role SET NOT NULL;
-      `);
-      console.log('✅ Added requested_role column to admin_requests');
-    } catch (error: any) {
-      console.log('ℹ️  requested_role column may already exist:', error.message);
-    }
+    log('✅ Created admin_requests table');
 
     // Create indexes for admin_requests
     await client.query(`
@@ -142,78 +131,93 @@ async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_admin_requests_status ON admin_requests(status);
       CREATE INDEX IF NOT EXISTS idx_admin_requests_requested_at ON admin_requests(requested_at DESC);
     `);
-    console.log('✅ Created admin_requests indexes');
+    log('✅ Created admin_requests indexes');
 
-    // Add display_width column for controlling pod size on user front page (superadmin only)
-    try {
-      await client.query(`
-        ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS display_width TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))
-      `);
-      console.log('✅ Added display_width column to opportunities table');
-    } catch (error: any) {
-      console.log('ℹ️  display_width column may already exist:', error.message);
-    }
-
-    // Create opportunity_clicks table for click tracking (M6)
-    // click_type: 'view' = user viewed the study details, 'action' = user clicked action button (open link/book session)
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS opportunity_clicks (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
-        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-        click_type TEXT NOT NULL DEFAULT 'action',
-        clicked_at TIMESTAMPTZ DEFAULT NOW(),
-        user_agent TEXT,
-        ip_hash TEXT
+    // Check if opportunities table exists (it might have been created by another migration)
+    const opportunitiesCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'opportunities'
       )
     `);
-    console.log('✅ Created opportunity_clicks table');
+    const opportunitiesExists = opportunitiesCheck.rows[0]?.exists;
 
-    // Add click_type column if table already exists without it
-    try {
+    if (opportunitiesExists) {
+      // Add display_width column for controlling pod size on user front page (superadmin only)
+      try {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS display_width TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))
+        `);
+        log('✅ Added display_width column to opportunities table');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  display_width column may already exist: ' + err.message);
+      }
+
+      // Create opportunity_clicks table for click tracking (M6)
+      // click_type: 'view' = user viewed the study details, 'action' = user clicked action button (open link/book session)
       await client.query(`
-        ALTER TABLE opportunity_clicks 
-        ADD COLUMN IF NOT EXISTS click_type TEXT NOT NULL DEFAULT 'action'
+        CREATE TABLE IF NOT EXISTS opportunity_clicks (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
+          user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+          click_type TEXT NOT NULL DEFAULT 'action',
+          clicked_at TIMESTAMPTZ DEFAULT NOW(),
+          user_agent TEXT,
+          ip_hash TEXT
+        )
       `);
-      console.log('✅ Added click_type column to opportunity_clicks');
-    } catch (error: any) {
-      console.log('ℹ️  click_type column may already exist:', error.message);
+      log('✅ Created opportunity_clicks table');
+
+      // Add click_type column if table already exists without it
+      try {
+        await client.query(`
+          ALTER TABLE opportunity_clicks 
+          ADD COLUMN IF NOT EXISTS click_type TEXT NOT NULL DEFAULT 'action'
+        `);
+        log('✅ Added click_type column to opportunity_clicks');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  click_type column may already exist: ' + err.message);
+      }
+
+      // Create index for efficient analytics queries
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_clicks_opportunity 
+        ON opportunity_clicks(opportunity_id, clicked_at)
+      `);
+      
+      // Create index for click_type filtering
+      await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_clicks_type 
+        ON opportunity_clicks(opportunity_id, click_type, clicked_at)
+      `);
+      log('✅ Created opportunity_clicks indexes');
+    } else {
+      log('⚠️  Opportunities table does not exist - skipping opportunity-related migrations');
     }
 
-    // Create index for efficient analytics queries
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_clicks_opportunity 
-      ON opportunity_clicks(opportunity_id, clicked_at)
-    `);
-    
-    // Create index for click_type filtering
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_clicks_type 
-      ON opportunity_clicks(opportunity_id, click_type, clicked_at)
-    `);
-    console.log('✅ Created opportunity_clicks indexes');
+    log('✅ All migrations completed successfully!');
 
-    console.log('\n✅ All migrations completed successfully!');
-  } catch (error) {
-    console.error('❌ Migration failed:', error);
-    throw error;
+    return res.status(200).json({
+      success: true,
+      message: 'Migrations completed successfully',
+      logs
+    });
+  } catch (error: unknown) {
+    const err = error as Error;
+    console.error('❌ Migration failed:', err);
+    log('❌ Migration failed: ' + err.message);
+    
+    return res.status(500).json({
+      success: false,
+      error: err.message,
+      logs
+    });
   } finally {
-    client.release();
+    if (client) {
+      client.release();
+    }
     await pool.end();
   }
 }
-
-runMigrations()
-  .then(() => {
-    console.log('\n🎉 Database is ready!');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('\n❌ Migration failed:', error);
-    process.exit(1);
-  });
-
-
-
-
-
