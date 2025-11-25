@@ -105,7 +105,7 @@ const StatCard: React.FC<{
   }}>
     <div className="card-body" style={{ padding: '1.25rem' }}>
       <div className="d-flex justify-content-between align-items-start mb-2">
-        <h6 className="text-muted mb-0" style={{ fontSize: '0.8rem', fontWeight: '600', textTransform: 'uppercase' }}>
+        <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
           {title}
         </h6>
         {icon && (
