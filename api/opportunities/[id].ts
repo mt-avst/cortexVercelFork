@@ -179,6 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'PATCH') {
       // Update opportunity
+      console.log('📅 PATCH request body:', JSON.stringify(req.body, null, 2));
       const {
         type,
         title,
@@ -195,6 +196,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         start_date,
         end_date,
       } = req.body;
+      console.log('📅 Extracted start_date:', start_date, 'type:', typeof start_date);
+      console.log('📅 Extracted end_date:', end_date, 'type:', typeof end_date);
 
       // Check if opportunity exists
       const checkResult = await query(
@@ -256,13 +259,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         params.push(participant_type_specific_details?.trim() || null);
       }
       if (start_date !== undefined) {
+        console.log('📅 Adding start_date to update:', start_date);
         updates.push(`start_date = $${paramIndex++}`);
         params.push(start_date || null);
       }
       if (end_date !== undefined) {
+        console.log('📅 Adding end_date to update:', end_date);
         updates.push(`end_date = $${paramIndex++}`);
         params.push(end_date || null);
       }
+      console.log('📅 Final updates array:', updates);
+      console.log('📅 Final params array:', params);
       
       // Only superadmins can update display_width
       if (display_width !== undefined) {
