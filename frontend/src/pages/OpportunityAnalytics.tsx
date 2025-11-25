@@ -99,11 +99,8 @@ const StatCard: React.FC<{
   color?: string;
   trend?: number;
 }> = ({ title, value, subtitle, icon, color = '#ffaa50', trend }) => (
-  <div className="card border-0 shadow-sm h-100" style={{ 
-    background: 'var(--card-bg)', 
-    borderRadius: '12px' 
-  }}>
-    <div className="card-body" style={{ padding: '1.25rem' }}>
+  <div className="card h-100">
+    <div className="card-body">
       <div className="d-flex justify-content-between align-items-start mb-2">
         <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
           {title}
@@ -383,8 +380,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <div className="row g-3 mb-4">
             {/* Views Card */}
             <div className="col-12 col-md-4">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <div className="mb-3">
                     <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Study Views
@@ -408,8 +405,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
             {/* Actions Card */}
             <div className="col-12 col-md-4">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <div className="mb-3">
                     <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Actions Taken
@@ -433,8 +430,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
             {/* Conversion Rate Card */}
             <div className="col-12 col-md-4">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <div className="mb-3">
                     <h6 className="text-muted mb-0" style={{ fontSize: '1.125rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       Conversion Rate
@@ -501,8 +498,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <div className="row g-3 mb-4">
             {/* Views Chart */}
             <div className="col-12 col-lg-6">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: '600' }}>
                       Study Views ({selectedPeriod}d)
@@ -529,8 +526,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
             {/* Actions Chart */}
             <div className="col-12 col-lg-6">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.95rem', fontWeight: '600' }}>
                       Actions Taken ({selectedPeriod}d)
@@ -588,8 +585,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="row g-3 mb-4">
               {/* Hourly Distribution */}
               <div className="col-md-6">
-                <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                  <div className="card-body" style={{ padding: '1.25rem' }}>
+                <div className="card h-100">
+                  <div className="card-body">
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <h6 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
                         ⏱️ Clicks by Hour
@@ -618,8 +615,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
               {/* Day of Week Distribution */}
               <div className="col-md-6">
-                <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                  <div className="card-body" style={{ padding: '1.25rem' }}>
+                <div className="card h-100">
+                  <div className="card-body">
                     <div className="d-flex justify-content-between align-items-center mb-3">
                       <h6 className="mb-0" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
                         Clicks by Day of Week
@@ -651,8 +648,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <div className="row g-3">
             {/* Timeline Info */}
             <div className="col-md-6">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <h6 className="mb-3" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
                     📌 Timeline
                   </h6>
@@ -694,8 +691,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
             {/* Performance Summary */}
             <div className="col-md-6">
-              <div className="card border-0 shadow-sm h-100" style={{ background: 'var(--card-bg)', borderRadius: '12px' }}>
-                <div className="card-body" style={{ padding: '1.25rem' }}>
+              <div className="card h-100">
+                <div className="card-body">
                   <h6 className="mb-3" style={{ color: 'var(--text-primary)', fontSize: '0.9rem', fontWeight: '600' }}>
                     Performance Summary
                   </h6>
