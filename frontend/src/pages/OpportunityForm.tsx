@@ -845,7 +845,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving}
+                              disabled={saving || !!successMessage}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -934,7 +934,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving}
+                              disabled={saving || !!successMessage}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -999,7 +999,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving}
+                              disabled={saving || !!successMessage}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1019,7 +1019,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             type="button"
                             className="btn btn-success px-5 py-2 fw-semibold"
                             onClick={() => handleSubmit()}
-                            disabled={saving}
+                            disabled={saving || !!successMessage}
                             style={{ fontSize: '0.95rem' }}
                           >
                             {saving ? (
