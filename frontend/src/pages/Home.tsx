@@ -126,13 +126,24 @@ const Home: React.FC = () => {
   const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
   
   // Filter opportunities by type
-  const filteredOpportunities = selectedType === 'all' 
+  const filteredByType = selectedType === 'all' 
     ? safeOpportunities 
     : safeOpportunities.filter(opp => {
         // Handle concatenated type+status values (e.g., 'testpublished')
         const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
         return baseType === selectedType.toLowerCase();
       });
+  
+  // Sort opportunities: test (app testing) first, then others
+  const filteredOpportunities = [...filteredByType].sort((a, b) => {
+    const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+    const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+    const aIsTest = aType === 'test';
+    const bIsTest = bType === 'test';
+    if (aIsTest && !bIsTest) return -1;
+    if (!aIsTest && bIsTest) return 1;
+    return 0;
+  });
   
   const totalPages = Math.ceil(filteredOpportunities.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -839,9 +850,15 @@ const Home: React.FC = () => {
               
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
                 <div className="bento-grid">
-                  {paginatedOpportunities.map((opportunity) => {
-                    // Make "New Feature Validation" and "User Interface Testing" wide
-                    const isWide = opportunity.title === 'New Feature Validation' || opportunity.title === 'User Interface Testing';
+                  {paginatedOpportunities.map((opportunity, index) => {
+                    // Make the first test opportunity on each page wide (double pod)
+                    const oppType = opportunity.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+                    const isTestOpportunity = oppType === 'test';
+                    const isFirstTestOnPage = isTestOpportunity && paginatedOpportunities.findIndex(o => {
+                      const t = o.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+                      return t === 'test';
+                    }) === index;
+                    const isWide = isFirstTestOnPage;
                     
                     return (
                       <div 
