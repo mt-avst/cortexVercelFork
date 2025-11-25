@@ -426,11 +426,16 @@ export const disconnectCalendar = async (): Promise<void> => {
 
 // Click tracking API functions (M6)
 /**
- * Track a click on a poll or survey opportunity
+ * Track a click on an opportunity
+ * @param opportunityId - The opportunity ID
+ * @param clickType - 'view' (viewed study details) or 'action' (clicked action button)
  */
-export const trackOpportunityClick = async (opportunityId: string): Promise<{ ok: boolean }> => {
+export const trackOpportunityClick = async (
+  opportunityId: string, 
+  clickType: 'view' | 'action' = 'action'
+): Promise<{ ok: boolean }> => {
   try {
-    const response = await api.post(`/opportunities/${opportunityId}/click`);
+    const response = await api.post(`/opportunities/${opportunityId}/click`, { click_type: clickType });
     return response.data;
   } catch (error) {
     // Don't fail the navigation if tracking fails - just log it
@@ -440,16 +445,57 @@ export const trackOpportunityClick = async (opportunityId: string): Promise<{ ok
 };
 
 export interface OpportunityAnalytics {
+  // Combined summary stats
   clicks_total: number;
   clicks_24h: number;
-  clicks_by_day: Array<{ date: string; count: number }>;
+  clicks_7d: number;
+  unique_users: number;
+  avg_clicks_per_day: number;
+  week_over_week_change: number;
+  
+  // Views (user clicked to view study details)
+  views_total: number;
+  views_24h: number;
+  views_7d: number;
+  unique_viewers: number;
+  
+  // Actions (user clicked action button - Open Poll/Survey, Book Session)
+  actions_total: number;
+  actions_24h: number;
+  actions_7d: number;
+  unique_actors: number;
+  
+  // Conversion rate (views -> actions)
+  conversion_rate: number;
+  
+  // Dates
+  first_click: string | null;
+  last_click: string | null;
+  opportunity_created: string;
+  
+  // Peak info
+  peak_day: { date: string; count: number; views?: number; actions?: number } | null;
+  peak_hour: { hour: number; hour_label: string; count: number } | null;
+  
+  // Time series data (with views/actions breakdown)
+  clicks_by_day: Array<{ date: string; count: number; views: number; actions: number }>;
+  clicks_by_hour: Array<{ hour: number; count: number }>;
+  clicks_by_weekday: Array<{ weekday: string; weekday_num: number; count: number }>;
+  
+  // Period info
+  period: number;
 }
+
+export type AnalyticsPeriod = 7 | 14 | 30;
 
 /**
  * Get click analytics for an opportunity (admin only)
  */
-export const getOpportunityAnalytics = async (opportunityId: string): Promise<OpportunityAnalytics> => {
-  const response = await api.get(`/opportunities/${opportunityId}/analytics`);
+export const getOpportunityAnalytics = async (
+  opportunityId: string, 
+  period: AnalyticsPeriod = 30
+): Promise<OpportunityAnalytics> => {
+  const response = await api.get(`/opportunities/${opportunityId}/analytics?period=${period}`);
   return response.data;
 };
 

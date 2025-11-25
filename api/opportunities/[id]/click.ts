@@ -6,7 +6,13 @@ import * as crypto from 'crypto';
 
 /**
  * POST /api/opportunities/[id]/click
- * Track click for poll/survey opportunities (M6)
+ * Track clicks for opportunities (M6)
+ * 
+ * Two click types:
+ * - 'view': User clicked to view the study details (all opportunity types)
+ * - 'action': User clicked the action button (Open Poll/Survey link, Book Session)
+ * 
+ * Body: { click_type?: 'view' | 'action' } - defaults to 'action' for backwards compatibility
  * Auth: Optional (allows both authenticated and unauthenticated users)
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -30,6 +36,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json(createErrorResponse('Opportunity ID is required'));
     }
 
+    // Get click type from body, default to 'action' for backwards compatibility
+    const clickType = req.body?.click_type || 'action';
+    if (clickType !== 'view' && clickType !== 'action') {
+      return res.status(400).json(createErrorResponse('Invalid click_type. Must be "view" or "action"'));
+    }
+
     // Load opportunity to check type and status
     const opportunityResult = await query(
       'SELECT id, type, status FROM opportunities WHERE id = $1',
@@ -42,9 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const opportunity = opportunityResult.rows[0];
 
-    // Only allow click tracking for poll or survey types
-    if (opportunity.type !== 'poll' && opportunity.type !== 'survey') {
-      return res.status(400).json(createErrorResponse('Click tracking is only available for polls and surveys'));
+    // For 'action' clicks, only allow for poll/survey types (external link clicks)
+    // For 'view' clicks, allow all opportunity types
+    if (clickType === 'action' && opportunity.type !== 'poll' && opportunity.type !== 'survey' && opportunity.type !== 'test' && opportunity.type !== 'interview') {
+      return res.status(400).json(createErrorResponse('Action click tracking is only available for polls, surveys, tests, and interviews'));
     }
 
     // Only allow tracking for published opportunities
@@ -75,14 +88,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .substring(0, 32); // Store only first 32 chars
     }
 
-    // Record the click
+    // Record the click with type
     await query(
-      `INSERT INTO opportunity_clicks (opportunity_id, user_id, user_agent, ip_hash)
-       VALUES ($1, $2, $3, $4)`,
-      [opportunityId, userId, userAgent, ipHash]
+      `INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, user_agent, ip_hash)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [opportunityId, userId, clickType, userAgent, ipHash]
     );
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, click_type: clickType });
   } catch (error: unknown) {
     console.error('Error in click tracking handler:', error);
     return res.status(500).json(createErrorResponse(getErrorMessage(error)));

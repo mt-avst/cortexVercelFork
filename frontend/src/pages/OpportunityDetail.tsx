@@ -59,6 +59,16 @@ const OpportunityDetail: React.FC = () => {
     loadOpportunity(true);
   }, [id]);
 
+  // Track view click when user opens the study details page
+  useEffect(() => {
+    if (opportunity && id) {
+      // Track the view (user clicked to view study details)
+      trackOpportunityClick(id, 'view').catch(() => {
+        // Silently fail - tracking shouldn't block user experience
+      });
+    }
+  }, [opportunity?.id]); // Only run once when opportunity is first loaded
+
   // Fetch calendar events when sessions are available
   useEffect(() => {
     const loadCalendarEvents = async () => {
@@ -186,6 +196,13 @@ const OpportunityDetail: React.FC = () => {
       
       const bookingResult = await bookSession(sessionId);
       console.log('Booking successful:', bookingResult);
+      
+      // Track action click for successful booking
+      if (id) {
+        trackOpportunityClick(id, 'action').catch(() => {
+          // Silently fail - tracking shouldn't block user experience
+        });
+      }
       
       setBookingSuccess('Successfully booked! Check your bookings page.');
       
@@ -882,9 +899,9 @@ const OpportunityDetail: React.FC = () => {
                         <button 
                           className="btn btn-primary w-100"
                           onClick={async () => {
-                            // Track click before opening
+                            // Track action click before opening external link
                             if (opportunity.external_link_optional) {
-                              await trackOpportunityClick(opportunity.id);
+                              await trackOpportunityClick(opportunity.id, 'action');
                               window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
                             }
                           }}
