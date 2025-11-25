@@ -42,6 +42,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   allowUserSubmission = false
 }) => {
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
+    console.log('📅 handleDateChange called:', { field, value, formatted: formatDateToISO(value) });
     handleInputChange(field, formatDateToISO(value));
   };
 

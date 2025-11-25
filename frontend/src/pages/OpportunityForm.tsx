@@ -410,8 +410,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       
       // Include start_date and end_date for external link types
       if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+        console.log('📅 Date values from formData:', {
+          start_date: formData.start_date,
+          end_date: formData.end_date,
+          start_date_type: typeof formData.start_date,
+          end_date_type: typeof formData.end_date
+        });
         data.start_date = formData.start_date || undefined;
         data.end_date = formData.end_date || undefined;
+        console.log('📅 Date values being sent:', {
+          start_date: data.start_date,
+          end_date: data.end_date
+        });
       }
       
       // Only superadmins can set display_width
