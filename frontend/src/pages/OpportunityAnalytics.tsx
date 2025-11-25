@@ -389,7 +389,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       👁️ Study Views
                     </h6>
-                    <span className="badge bg-info" style={{ fontSize: '0.65rem' }}>Users who viewed details</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Users who viewed details</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#0d6efd' }}>
@@ -414,7 +414,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       🎯 Actions Taken
                     </h6>
-                    <span className="badge bg-success" style={{ fontSize: '0.65rem' }}>Clicked link / Booked</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Clicked link / Booked</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#198754' }}>
@@ -439,7 +439,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
                     <h6 className="text-muted mb-0" style={{ fontSize: '0.75rem', fontWeight: '600', textTransform: 'uppercase' }}>
                       📊 Conversion Rate
                     </h6>
-                    <span className="badge bg-warning text-dark" style={{ fontSize: '0.65rem' }}>Views → Actions</span>
+                    <span className="lozenge lozenge-analytics" style={{ fontSize: '0.65rem' }}>Views → Actions</span>
                   </div>
                   <div className="d-flex align-items-baseline gap-3 mb-2">
                     <h2 className="mb-0" style={{ fontSize: '2.25rem', fontWeight: 'bold', color: '#ffaa50' }}>

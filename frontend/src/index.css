@@ -1215,6 +1215,13 @@ span.lozenge-question,
   background-color: #322E42 !important;
 }
 
+/* Analytics Badge - Electric Coral on Carbon Black */
+span.lozenge-analytics,
+.lozenge-analytics {
+  color: #FF4E50 !important;
+  background-color: #1A1A1A !important;
+}
+
 /* Legacy badge support - deprecated, use .lozenge classes instead */
 .badge.type-test {
   background-color: var(--tag-test) !important; /* Dark grey pill */
