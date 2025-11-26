@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/authenticate';
+import { requireAuth, requireSuperadmin } from '../middleware/authenticate';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 
 const router: Router = Router();
 
@@ -101,6 +102,251 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
   return res.status(200).json({
     success: true,
     data: stats
+  });
+}));
+
+// ============================================================================
+// ADMIN MANAGEMENT ROUTES (Superadmin only)
+// ============================================================================
+
+// POST /api/admin/request - Request admin access (any authenticated user)
+router.post('/request', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  
+  // Check if user already has admin or superadmin role
+  if (user.role === 'researcher_admin' || user.role === 'superadmin') {
+    return res.status(400).json({ error: 'You already have admin access' });
+  }
+  
+  // Check if there's already a pending request
+  const existingRequest = await pool.query(
+    'SELECT id, status FROM admin_requests WHERE user_id = $1 AND status = $2',
+    [user.id, 'pending']
+  );
+  
+  if (existingRequest.rows.length > 0) {
+    return res.status(400).json({ error: 'You already have a pending admin request' });
+  }
+  
+  // Create new admin request
+  const result = await pool.query(
+    `INSERT INTO admin_requests (user_id, requested_role, status)
+     VALUES ($1, $2, $3)
+     RETURNING id, user_id, requested_at, requested_role, status, created_at, updated_at`,
+    [user.id, 'researcher_admin', 'pending']
+  );
+  
+  logger.info('Admin access requested', { userId: user.id, email: user.email });
+  
+  return res.status(201).json({
+    success: true,
+    request: result.rows[0],
+    message: 'Admin access request submitted successfully'
+  });
+}));
+
+// GET /api/admin/requests - Get all admin requests (superadmin only)
+router.get('/requests', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+  const { status } = req.query;
+  
+  let query = `
+    SELECT 
+      ar.id, ar.user_id, ar.requested_at, ar.requested_role, ar.status, 
+      ar.reviewed_by, ar.reviewed_at, ar.notes, ar.created_at, ar.updated_at,
+      u.email, u.name, u.role as current_role
+    FROM admin_requests ar
+    JOIN users u ON ar.user_id = u.id
+  `;
+  const params: string[] = [];
+  
+  if (status && typeof status === 'string') {
+    query += ' WHERE ar.status = $1';
+    params.push(status);
+  }
+  
+  query += ' ORDER BY ar.requested_at DESC';
+  
+  const result = await pool.query(query, params);
+  
+  return res.status(200).json({
+    success: true,
+    requests: result.rows
+  });
+}));
+
+// POST /api/admin/requests/:id/approve - Approve admin request (superadmin only)
+router.post('/requests/:id/approve', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const superadminId = req.user!.id;
+  
+  // Get the request
+  const requestResult = await pool.query(
+    'SELECT * FROM admin_requests WHERE id = $1',
+    [id]
+  );
+  
+  if (requestResult.rows.length === 0) {
+    return res.status(404).json({ error: 'Admin request not found' });
+  }
+  
+  const request = requestResult.rows[0];
+  
+  if (request.status !== 'pending') {
+    return res.status(400).json({ error: 'This request has already been processed' });
+  }
+  
+  // Start transaction
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    
+    // Update the request status
+    await client.query(
+      `UPDATE admin_requests 
+       SET status = $1, reviewed_by = $2, reviewed_at = NOW(), updated_at = NOW()
+       WHERE id = $3`,
+      ['approved', superadminId, id]
+    );
+    
+    // Update the user's role
+    await client.query(
+      'UPDATE users SET role = $1 WHERE id = $2',
+      [request.requested_role, request.user_id]
+    );
+    
+    await client.query('COMMIT');
+    
+    logger.info('Admin request approved', { 
+      requestId: id, 
+      userId: request.user_id, 
+      approvedBy: superadminId,
+      newRole: request.requested_role
+    });
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Admin request approved successfully'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+// POST /api/admin/requests/:id/deny - Deny admin request (superadmin only)
+router.post('/requests/:id/deny', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { notes } = req.body;
+  const superadminId = req.user!.id;
+  
+  // Get the request
+  const requestResult = await pool.query(
+    'SELECT * FROM admin_requests WHERE id = $1',
+    [id]
+  );
+  
+  if (requestResult.rows.length === 0) {
+    return res.status(404).json({ error: 'Admin request not found' });
+  }
+  
+  const request = requestResult.rows[0];
+  
+  if (request.status !== 'pending') {
+    return res.status(400).json({ error: 'This request has already been processed' });
+  }
+  
+  // Update the request status
+  await pool.query(
+    `UPDATE admin_requests 
+     SET status = $1, reviewed_by = $2, reviewed_at = NOW(), notes = $3, updated_at = NOW()
+     WHERE id = $4`,
+    ['denied', superadminId, notes || null, id]
+  );
+  
+  logger.info('Admin request denied', { 
+    requestId: id, 
+    userId: request.user_id, 
+    deniedBy: superadminId 
+  });
+  
+  return res.status(200).json({
+    success: true,
+    message: 'Admin request denied'
+  });
+}));
+
+// GET /api/admin/admins - Get all admins (superadmin only)
+router.get('/admins', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+  const result = await pool.query(
+    `SELECT id, name, email, business_unit, role_title, role, created_at
+     FROM users 
+     WHERE role IN ('researcher_admin', 'superadmin')
+     ORDER BY 
+       CASE role 
+         WHEN 'superadmin' THEN 1 
+         WHEN 'researcher_admin' THEN 2 
+       END,
+       created_at DESC`
+  );
+  
+  return res.status(200).json({
+    success: true,
+    admins: result.rows
+  });
+}));
+
+// DELETE /api/admin/admins - Revoke admin access (superadmin only)
+router.delete('/admins', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+  const adminId = req.query.id as string;
+  const superadminId = req.user!.id;
+  
+  if (!adminId) {
+    return res.status(400).json({ error: 'Admin ID is required' });
+  }
+  
+  // Check if the target user exists and is an admin
+  const userResult = await pool.query(
+    'SELECT id, email, role FROM users WHERE id = $1',
+    [adminId]
+  );
+  
+  if (userResult.rows.length === 0) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+  
+  const targetUser = userResult.rows[0];
+  
+  // Prevent revoking superadmin access
+  if (targetUser.role === 'superadmin') {
+    return res.status(403).json({ error: 'Cannot revoke superadmin access' });
+  }
+  
+  // Prevent self-revocation
+  if (targetUser.id === superadminId) {
+    return res.status(403).json({ error: 'Cannot revoke your own admin access' });
+  }
+  
+  if (targetUser.role !== 'researcher_admin') {
+    return res.status(400).json({ error: 'User does not have admin access' });
+  }
+  
+  // Revoke admin access
+  await pool.query(
+    'UPDATE users SET role = $1 WHERE id = $2',
+    ['employee', adminId]
+  );
+  
+  logger.info('Admin access revoked', { 
+    adminId, 
+    email: targetUser.email, 
+    revokedBy: superadminId 
+  });
+  
+  return res.status(200).json({
+    success: true,
+    message: 'Admin access revoked successfully'
   });
 }));
 

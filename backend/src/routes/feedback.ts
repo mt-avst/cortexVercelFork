@@ -3,31 +3,9 @@ import { asyncHandler } from '../utils/errorHandler';
 import emailService, { EmailService } from '../services/email';
 import { logger } from '../utils/logger';
 import { pool } from '../config/index';
-import { requireAuth } from '../middleware/authenticate';
+import { requireAdmin, requireSuperadmin } from '../middleware/authenticate';
 
 const router = Router();
-
-// Helper to check if user is superadmin
-const requireSuperadmin = (req: Request, res: Response, next: () => void) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (req.user.role !== 'superadmin') {
-    return res.status(403).json({ error: 'Superadmin access required' });
-  }
-  next();
-};
-
-// Helper to check if user is admin (researcher_admin or superadmin)
-const requireAdmin = (req: Request, res: Response, next: () => void) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-  if (req.user.role !== 'researcher_admin' && req.user.role !== 'superadmin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
-};
 
 // POST /api/feedback - Submit feedback (saves to database, optionally sends email)
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
@@ -80,7 +58,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 // GET /api/feedback - List all feedback (admin access - researcher_admin and superadmin)
-router.get('/', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const result = await pool.query(
     `SELECT id, user_id, user_name, user_email, category, feedback, url, user_agent, created_at
      FROM feedback
@@ -91,7 +69,7 @@ router.get('/', requireAuth, requireAdmin, asyncHandler(async (req: Request, res
 }));
 
 // DELETE /api/feedback/:id - Delete a feedback item (superadmin only)
-router.delete('/:id', requireAuth, requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const result = await pool.query(
@@ -108,7 +86,7 @@ router.delete('/:id', requireAuth, requireSuperadmin, asyncHandler(async (req: R
 }));
 
 // GET /api/feedback/export - Export all feedback as CSV (admin access - researcher_admin and superadmin)
-router.get('/export', requireAuth, requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/export', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const result = await pool.query(
     `SELECT id, user_name, user_email, category, feedback, url, user_agent, created_at
      FROM feedback

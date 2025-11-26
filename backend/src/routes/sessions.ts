@@ -24,8 +24,14 @@ const isDatabaseAvailable = async (): Promise<boolean> => {
   }
 };
 
-// Helper function to check session ownership
-const checkSessionOwnership = async (sessionId: string, userId: string): Promise<boolean> => {
+// Helper function to check session ownership (superadmin can access any)
+const checkSessionOwnership = async (sessionId: string, userId: string, userRole: string): Promise<boolean> => {
+  // Superadmins can access any session
+  if (userRole === 'superadmin') {
+    const result = await pool.query('SELECT id FROM sessions WHERE id = $1', [sessionId]);
+    return result.rows.length > 0;
+  }
+  
   const result = await pool.query(`
     SELECT o.owner_user_id 
     FROM sessions s 
@@ -153,8 +159,9 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      // Check ownership
-      if (opportunity.owner_user_id !== req.user!.id) {
+      // Check ownership (superadmins can add sessions to any)
+      const isSuperadmin = req.user!.role === 'superadmin';
+      if (!isSuperadmin && opportunity.owner_user_id !== req.user!.id) {
         return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
       }
       
@@ -185,8 +192,10 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
       return res.status(404).json({ error: 'Opportunity not found' });
     }
     
+    // Check ownership (superadmins can add sessions to any)
     const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
-    if (!isOwner) {
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && !isOwner) {
       return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
     }
     
@@ -279,9 +288,10 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
         return res.status(404).json({ error: 'Session not found' });
       }
       
-      // Check ownership through opportunity
+      // Check ownership through opportunity (superadmins can edit any)
       const opportunity = getMockOpportunity(session.opportunity_id);
-      if (!opportunity || opportunity.owner_user_id !== req.user!.id) {
+      const isSuperadmin = req.user!.role === 'superadmin';
+      if (!opportunity || (!isSuperadmin && opportunity.owner_user_id !== req.user!.id)) {
         return res.status(403).json({ error: 'Only the owner can edit this session' });
       }
       
@@ -294,9 +304,9 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
       return res.json(updatedSession);
     }
     
-    // Check session ownership
-    const isOwner = await checkSessionOwnership(sessionId, req.user!.id);
-    if (!isOwner) {
+    // Check session ownership (superadmins can edit any)
+    const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
+    if (!hasAccess) {
       return res.status(403).json({ error: 'Only the owner can edit this session' });
     }
     
@@ -403,9 +413,10 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
         return res.status(404).json({ error: 'Session not found' });
       }
       
-      // Check ownership through opportunity
+      // Check ownership through opportunity (superadmins can delete any)
       const opportunity = getMockOpportunity(session.opportunity_id);
-      if (!opportunity || opportunity.owner_user_id !== req.user!.id) {
+      const isSuperadmin = req.user!.role === 'superadmin';
+      if (!opportunity || (!isSuperadmin && opportunity.owner_user_id !== req.user!.id)) {
         return res.status(403).json({ error: 'Only the owner can delete this session' });
       }
       
@@ -418,9 +429,9 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
       return res.status(204).send();
     }
     
-    // Check session ownership
-    const isOwner = await checkSessionOwnership(sessionId, req.user!.id);
-    if (!isOwner) {
+    // Check session ownership (superadmins can delete any)
+    const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
+    if (!hasAccess) {
       return res.status(403).json({ error: 'Only the owner can delete this session' });
     }
     
@@ -460,8 +471,9 @@ router.post('/opportunities/:id/duplicate', requireAdmin, asyncHandler(async (re
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      // Check ownership
-      if (existingOpportunity.owner_user_id !== req.user!.id) {
+      // Check ownership (superadmins can duplicate any)
+      const isSuperadmin = req.user!.role === 'superadmin';
+      if (!isSuperadmin && existingOpportunity.owner_user_id !== req.user!.id) {
         return res.status(403).json({ error: 'Only the owner can duplicate this opportunity' });
       }
       
@@ -503,7 +515,9 @@ router.post('/opportunities/:id/duplicate', requireAdmin, asyncHandler(async (re
       return res.status(404).json({ error: 'Opportunity not found' });
     }
     
-    if (ownershipCheck.rows[0].owner_user_id !== req.user!.id) {
+    // Check ownership (superadmins can duplicate any)
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && ownershipCheck.rows[0].owner_user_id !== req.user!.id) {
       return res.status(403).json({ error: 'Only the owner can duplicate this opportunity' });
     }
     
@@ -567,8 +581,10 @@ router.post('/opportunities/:id/close-if-past', requireAdmin, asyncHandler(async
       return res.status(404).json({ error: 'Opportunity not found' });
     }
     
+    // Check ownership (superadmins can close any)
     const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
-    if (!isOwner) {
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && !isOwner) {
       return res.status(403).json({ error: 'Only the owner can close this opportunity' });
     }
     

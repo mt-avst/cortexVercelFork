@@ -481,8 +481,8 @@ router.get('/google-callback', async (req, res) => {
         name: userInfo.name,
         email: userInfo.email,
         business_unit: 'Engineering', // Default, can be updated from Google profile if available
-        role_title: userRole === 'researcher_admin' ? 'Research Manager' : 'Software Engineer',
-        role: userRole as 'employee' | 'researcher_admin',
+        role_title: userRole === 'researcher_admin' || userRole === 'superadmin' ? 'Research Manager' : 'Software Engineer',
+        role: userRole as 'employee' | 'researcher_admin' | 'superadmin',
       };
 
       // Regenerate session to prevent fixation (same as OIDC callback)
