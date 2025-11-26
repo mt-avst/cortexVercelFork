@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo, useEffect, useCallback, useMemo } from 'react';
 
 interface ConfirmationModalProps {
   show: boolean;
@@ -14,7 +14,18 @@ interface ConfirmationModalProps {
   renderCustomContent?: () => React.ReactNode;
 }
 
-const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
+const BUTTON_CLASS_MAP = {
+  danger: 'btn-danger',
+  warning: 'btn-warning',
+  primary: 'btn-primary'
+} as const;
+
+/**
+ * ConfirmationModal Component
+ * Displays an accessible confirmation dialog with focus trap.
+ * Wrapped in React.memo for performance optimization.
+ */
+const ConfirmationModal: React.FC<ConfirmationModalProps> = memo(({
   show,
   title,
   message,
@@ -29,54 +40,55 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 }) => {
   const finalConfirmText = confirmText || confirmLabel;
   const finalCancelText = cancelText || cancelLabel;
-  if (!show) return null;
+  const buttonClass = useMemo(() => BUTTON_CLASS_MAP[variant] || 'btn-danger', [variant]);
 
-  const getButtonClass = () => {
-    switch (variant) {
-      case 'danger': return 'btn-danger';
-      case 'warning': return 'btn-warning';
-      case 'primary': return 'btn-primary';
-      default: return 'btn-danger';
-    }
-  };
-
-  // Focus trap effect
-  React.useEffect(() => {
-    if (show) {
-      const modal = document.querySelector('.modal.show');
-      const focusableElements = modal?.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      const firstElement = focusableElements?.[0] as HTMLElement;
-      const lastElement = focusableElements?.[focusableElements.length - 1] as HTMLElement;
+  // Focus trap effect - must be before any conditional returns
+  useEffect(() => {
+    if (!show) return;
+    
+    const modal = document.querySelector('.modal.show');
+    if (!modal) return;
+    
+    const focusableElements = modal.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const firstElement = focusableElements[0] as HTMLElement;
+    const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement;
+    
+    // Focus first element
+    firstElement?.focus();
+    
+    const handleTabKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return;
       
-      // Focus first element
-      firstElement?.focus();
-      
-      const handleTabKey = (e: Event) => {
-        const keyEvent = e as KeyboardEvent;
-        if (keyEvent.key !== 'Tab') return;
-        
-        if (keyEvent.shiftKey) {
-          if (document.activeElement === firstElement) {
-            keyEvent.preventDefault();
-            lastElement?.focus();
-          }
-        } else {
-          if (document.activeElement === lastElement) {
-            keyEvent.preventDefault();
-            firstElement?.focus();
-          }
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          e.preventDefault();
+          lastElement?.focus();
         }
-      };
-      
-      modal?.addEventListener('keydown', handleTabKey);
-      
-      return () => {
-        modal?.removeEventListener('keydown', handleTabKey);
-      };
-    }
+      } else {
+        if (document.activeElement === lastElement) {
+          e.preventDefault();
+          firstElement?.focus();
+        }
+      }
+    };
+    
+    modal.addEventListener('keydown', handleTabKey as EventListener);
+    
+    return () => {
+      modal.removeEventListener('keydown', handleTabKey as EventListener);
+    };
   }, [show]);
+
+  // Handle backdrop click
+  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onCancel();
+    }
+  }, [onCancel]);
+
+  if (!show) return null;
 
   return (
     <div 
@@ -87,11 +99,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       aria-describedby="modal-message"
       tabIndex={-1}
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)' }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onCancel();
-        }
-      }}
+      onClick={handleBackdropClick}
     >
       <div className="modal-dialog modal-dialog-centered">
         <div className="modal-content confirmation-modal-content">
@@ -102,7 +110,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
               className="btn-close btn-close-white" 
               onClick={onCancel}
               aria-label="Close modal"
-            ></button>
+            />
           </div>
           <div className="modal-body confirmation-modal-body">
             <p className="mb-0 confirmation-modal-message" id="modal-message">{message}</p>
@@ -118,7 +126,7 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             </button>
             <button 
               type="button" 
-              className={`btn ${getButtonClass()}`} 
+              className={`btn ${buttonClass}`} 
               onClick={onConfirm}
             >
               {finalConfirmText}
@@ -128,7 +136,8 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       </div>
     </div>
   );
-};
+});
+
+ConfirmationModal.displayName = 'ConfirmationModal';
 
 export default ConfirmationModal;
-

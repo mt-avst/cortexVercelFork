@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo, useMemo, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnimation } from '../contexts/AnimationContext';
@@ -7,7 +7,12 @@ import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
 import './Header.css';
 
-const Header: React.FC = () => {
+/**
+ * Header Component
+ * Main navigation header with auth controls and animation toggle.
+ * Wrapped in React.memo for performance optimization.
+ */
+const Header: React.FC = memo(() => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
   const { animationsEnabled, toggleAnimations } = useAnimation();
   const location = useLocation();
@@ -94,17 +99,6 @@ const Header: React.FC = () => {
                 {animationsEnabled ? 'Animations On' : 'Animations Off'}
               </span>
             </button>
-            <style>{`
-              .header .animation-toggle-btn,
-              .header .animation-toggle-btn *,
-              .header .animation-toggle-text {
-                color: #8e9ba6 !important;
-              }
-              .header .animation-toggle-btn:hover,
-              .header .animation-toggle-btn:hover * {
-                color: #FFFFFF !important;
-              }
-            `}</style>
 
             {loading && initialAuthCheck ? (
               <LoadingSpinner size="small" text="Loading..." />
@@ -118,65 +112,12 @@ const Header: React.FC = () => {
                       rel="noopener noreferrer"
                       className="momentum-btn-secondary"
                       aria-label="Submit Research Request (opens in new tab)"
-                      style={{
-                        backgroundColor: 'transparent',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        color: '#E0E0E0',
-                        borderRadius: '6px',
-                        padding: '10px 20px',
-                        fontWeight: 600,
-                        fontSize: '15px',
-                        minHeight: '40px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
-                        transition: 'all 0.2s ease-in-out',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-                        marginRight: '0.5rem'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.22)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-                      }}
                     >
                       Submit Research Request
                     </a>
                     <Link 
                       to="/my-bookings" 
                       className="momentum-btn-secondary"
-                      style={{
-                        backgroundColor: 'transparent',
-                        border: '1px solid rgba(255, 255, 255, 0.2)',
-                        color: '#E0E0E0',
-                        borderRadius: '6px',
-                        padding: '10px 20px',
-                        fontWeight: 600,
-                        fontSize: '15px',
-                        minHeight: '40px',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        textDecoration: 'none',
-                        transition: 'all 0.2s ease-in-out',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                        e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.22)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = 'transparent';
-                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                        e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
-                      }}
                     >
                       My Bookings
                     </Link>
@@ -318,6 +259,8 @@ const Header: React.FC = () => {
       )}
     </header>
   );
-};
+});
+
+Header.displayName = 'Header';
 
 export default Header;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
@@ -8,7 +8,11 @@ import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import { Lock, Globe, Calendar, Clock, Timer } from 'lucide-react';
 
-const Home: React.FC = () => {
+/**
+ * Home Page Component
+ * Displays the main landing page and opportunity listings.
+ */
+const Home: React.FC = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
@@ -19,12 +23,13 @@ const Home: React.FC = () => {
   
   const { user, loading: authLoading, initialAuthCheck } = useAuth();
 
-  // Redirect admin users to admin dashboard
-  if (!authLoading && initialAuthCheck && (user?.role === 'researcher_admin' || user?.role === 'superadmin')) {
-    return <Navigate to="/admin" replace />;
-  }
+  // Memoized check for admin redirect
+  const shouldRedirectToAdmin = useMemo(() => {
+    return !authLoading && initialAuthCheck && (user?.role === 'researcher_admin' || user?.role === 'superadmin');
+  }, [authLoading, initialAuthCheck, user?.role]);
 
-  const loadOpportunities = async () => {
+  // Load opportunities function - memoized to prevent recreation
+  const loadOpportunities = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -47,7 +52,7 @@ const Home: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Consolidated effect to load opportunities - prevents duplicate API calls
   useEffect(() => {
@@ -95,49 +100,43 @@ const Home: React.FC = () => {
     }
   }, [location.pathname, showBookingSuccess]);
 
-  
-
-  const getStatusBadgeClass = (status: string) => {
+  // Memoized status badge class getter
+  const getStatusBadgeClass = useCallback((status: string) => {
     switch (status) {
       case 'published': return 'badge bg-success text-white';
       case 'draft': return 'badge bg-warning text-white';
       case 'closed': return 'badge bg-secondary text-white';
       default: return 'badge bg-secondary text-white';
     }
-  };
+  }, []);
 
-  // Filter and pagination logic
-  const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
-  
-  // Filter opportunities by type
-  const filteredByType = selectedType === 'all' 
-    ? safeOpportunities 
-    : safeOpportunities.filter(opp => {
-        // Handle concatenated type+status values (e.g., 'testpublished')
-        const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-        return baseType === selectedType.toLowerCase();
-      });
-  
-  // Sort opportunities by type (test first) for initial ordering
-  const sortedByType = [...filteredByType].sort((a, b) => {
-    const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-    const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-    const aIsTest = aType === 'test';
-    const bIsTest = bType === 'test';
-    if (aIsTest && !bIsTest) return -1;
-    if (!aIsTest && bIsTest) return 1;
-    return 0;
-  });
-  
-  // Arrange opportunities for optimal bento grid layout
-  // Pattern for 3-column grid:
-  // Row 1: Double (cols 1-2) + Single (col 3)
-  // Row 2: Single (col 1) + Double (cols 2-3)
-  // Row 3+: Fill with singles, or repeat pattern if more doubles
-  const arrangeBentoLayout = (opportunities: typeof sortedByType): Array<typeof sortedByType[0] & { _gridPosition?: 'left' | 'right' }> => {
-    const doubles = opportunities.filter(o => o.display_width === 'double');
-    const singles = opportunities.filter(o => o.display_width !== 'double');
-    const result: Array<typeof sortedByType[0] & { _gridPosition?: 'left' | 'right' }> = [];
+  // Memoized filtered and arranged opportunities
+  const filteredOpportunities = useMemo(() => {
+    const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
+    
+    // Filter by type
+    const filteredByType = selectedType === 'all' 
+      ? safeOpportunities 
+      : safeOpportunities.filter(opp => {
+          const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+          return baseType === selectedType.toLowerCase();
+        });
+    
+    // Sort by type (test first)
+    const sortedByType = [...filteredByType].sort((a, b) => {
+      const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+      const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
+      const aIsTest = aType === 'test';
+      const bIsTest = bType === 'test';
+      if (aIsTest && !bIsTest) return -1;
+      if (!aIsTest && bIsTest) return 1;
+      return 0;
+    });
+    
+    // Arrange for bento grid layout
+    const doubles = sortedByType.filter(o => o.display_width === 'double');
+    const singles = sortedByType.filter(o => o.display_width !== 'double');
+    const result: Array<Opportunity & { _gridPosition?: 'left' | 'right' }> = [];
     
     let doubleIndex = 0;
     let singleIndex = 0;
@@ -147,27 +146,23 @@ const Home: React.FC = () => {
       rowNumber++;
       
       if (rowNumber % 2 === 1) {
-        // Odd rows: Double on left (if available), single on right
         if (doubleIndex < doubles.length) {
           result.push({ ...doubles[doubleIndex++], _gridPosition: 'left' as const });
           if (singleIndex < singles.length) {
             result.push(singles[singleIndex++]);
           }
         } else {
-          // No more doubles, fill with up to 3 singles
           for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
             result.push(singles[singleIndex++]);
           }
         }
       } else {
-        // Even rows: Single on left, Double on right (if available)
         if (doubleIndex < doubles.length) {
           if (singleIndex < singles.length) {
             result.push(singles[singleIndex++]);
           }
           result.push({ ...doubles[doubleIndex++], _gridPosition: 'right' as const });
         } else {
-          // No more doubles, fill with up to 3 singles
           for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
             result.push(singles[singleIndex++]);
           }
@@ -176,9 +171,12 @@ const Home: React.FC = () => {
     }
     
     return result;
-  };
-  
-  const filteredOpportunities = arrangeBentoLayout(sortedByType);
+  }, [opportunities, selectedType]);
+
+  // Admin redirect - placed after all hooks to comply with React's rules
+  if (shouldRedirectToAdmin) {
+    return <Navigate to="/admin" replace />;
+  }
 
   return (
     <>
@@ -510,6 +508,8 @@ const Home: React.FC = () => {
       )}
     </>
   );
-};
+});
+
+Home.displayName = 'Home';
 
 export default Home;
