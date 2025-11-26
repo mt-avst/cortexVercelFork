@@ -77,8 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const opportunity = opportunityResult.rows[0] as { owner_user_id: string; created_at: Date };
 
-    // Only owner can view analytics
-    if (opportunity.owner_user_id !== user.id) {
+    // Only owner or superadmin can view analytics
+    if (opportunity.owner_user_id !== user.id && user.role !== 'superadmin') {
       return res.status(403).json(createErrorResponse('Only the opportunity owner can view analytics'));
     }
 
