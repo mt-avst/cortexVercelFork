@@ -6,6 +6,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import SkipLink from './components/SkipLink';
 import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
+import BackgroundAnimation from './components/BackgroundAnimation';
 
 // Eagerly load the home page for fast initial load
 import Home from './pages/Home';
@@ -37,6 +38,7 @@ function App() {
           <Router>
             <div className="App">
               <SkipLink />
+              <BackgroundAnimation />
               <Header />
               <main id="main-content" className="main" role="main">
                 <div className="container">
