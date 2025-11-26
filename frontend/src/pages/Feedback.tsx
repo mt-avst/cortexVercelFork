@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useAnimation } from '../contexts/AnimationContext';
+import { submitFeedback } from '../api/client';
 
 const Feedback: React.FC = () => {
   const { user } = useAuth();
@@ -214,29 +215,12 @@ const Feedback: React.FC = () => {
     setError(null);
     
     try {
-      const token = localStorage.getItem('token');
-      const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-      };
-      
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch('/api/feedback', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          category,
-          feedback,
-          userAgent: navigator.userAgent,
-          url: window.location.href,
-        }),
+      await submitFeedback({
+        category,
+        feedback,
+        userAgent: navigator.userAgent,
+        url: window.location.href,
       });
-
-      if (!response.ok) {
-        throw new Error('Failed to submit feedback');
-      }
 
       setSubmitted(true);
     } catch (err) {
@@ -539,8 +523,22 @@ const Feedback: React.FC = () => {
                 </p>
                 
                 {error && (
-                  <div className="alert alert-danger" role="alert">
-                    {error}
+                  <div 
+                    className="alert" 
+                    role="alert"
+                    style={{
+                      backgroundColor: 'rgba(220, 53, 69, 0.15)',
+                      border: '1px solid rgba(220, 53, 69, 0.3)',
+                      color: '#ff6b6d',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      marginBottom: '1.5rem',
+                      display: 'flex',
+                      alignItems: 'center'
+                    }}
+                  >
+                    <i className="bi bi-exclamation-triangle-fill me-2" style={{ fontSize: '1.2rem' }}></i>
+                    <div>{error}</div>
                   </div>
                 )}
                 
@@ -595,8 +593,8 @@ const Feedback: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <i className="bi bi-send me-2"></i>
-                          Send Feedback
+                      <i className="bi bi-send me-2"></i>
+                      Send Feedback
                         </>
                       )}
                     </button>

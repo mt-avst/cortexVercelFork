@@ -181,6 +181,12 @@ export const demoAdminLogin = async (): Promise<void> => {
   window.location.href = getAuthUrl('/api/auth/admin-login');
 };
 
+export const demoSuperadminLogin = async (): Promise<void> => {
+  // Set a flag to detect when we return from login
+  sessionStorage.setItem('loginRedirect', 'true');
+  window.location.href = getAuthUrl('/api/auth/superadmin-login');
+};
+
 /**
  * Google OAuth login - redirects to Google OAuth flow
  */
@@ -601,6 +607,59 @@ export const getAdmins = async (): Promise<{ success: boolean; admins: User[] }>
 export const revokeAdminAccess = async (adminId: string): Promise<{ success: boolean; message: string }> => {
   const response = await api.delete(`/admin/admins?id=${adminId}`);
   return response.data;
+};
+
+/**
+ * Submit feedback
+ */
+export const submitFeedback = async (data: {
+  category: string;
+  feedback: string;
+  userAgent: string;
+  url: string;
+}): Promise<{ success: boolean }> => {
+  const response = await api.post('/feedback', data);
+  return response.data;
+};
+
+/**
+ * Feedback item type
+ */
+export interface FeedbackItem {
+  id: string;
+  user_id: string | null;
+  user_name: string;
+  user_email: string;
+  category: 'bug' | 'feature' | 'question' | 'other';
+  feedback: string;
+  url: string;
+  user_agent: string;
+  created_at: string;
+}
+
+/**
+ * Get all feedback (superadmin only)
+ */
+export const getFeedback = async (): Promise<FeedbackItem[]> => {
+  const response = await api.get('/feedback');
+  return response.data.data;
+};
+
+/**
+ * Delete a feedback item (superadmin only)
+ */
+export const deleteFeedback = async (id: string): Promise<{ success: boolean }> => {
+  const response = await api.delete(`/feedback/${id}`);
+  return response.data;
+};
+
+/**
+ * Export feedback as CSV (superadmin only)
+ * Returns the download URL
+ */
+export const exportFeedbackCsv = async (): Promise<void> => {
+  // Trigger a download by opening the export URL
+  window.location.href = `${getApiBaseUrl()}/api/feedback/export`;
 };
 
 export default api;

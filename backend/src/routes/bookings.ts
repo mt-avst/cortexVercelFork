@@ -1116,8 +1116,9 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
 
     const booking = bookingResult.rows[0];
 
-    // Check if admin owns the opportunity or is a super admin
-    if (booking.owner_user_id !== adminId) {
+    // Check if admin owns the opportunity or is a superadmin (superadmins can approve any session)
+    const isSuperadmin = userResult.rows[0].role === 'superadmin';
+    if (!isSuperadmin && booking.owner_user_id !== adminId) {
       await client.query('ROLLBACK');
       throw new ForbiddenError('You can only approve sessions for your own opportunities');
     }
@@ -1197,8 +1198,9 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
 
     const booking = bookingResult.rows[0];
 
-    // Check if admin owns the opportunity or is a super admin
-    if (booking.owner_user_id !== adminId) {
+    // Check if admin owns the opportunity or is a superadmin (superadmins can reject any session)
+    const isSuperadmin = userResult.rows[0].role === 'superadmin';
+    if (!isSuperadmin && booking.owner_user_id !== adminId) {
       await client.query('ROLLBACK');
       throw new ForbiddenError('You can only reject sessions for your own opportunities');
     }

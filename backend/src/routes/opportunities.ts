@@ -976,8 +976,9 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
 
     const opportunity = opportunityResult.rows[0];
 
-    // Only owner can view analytics
-    if (opportunity.owner_user_id !== userId) {
+    // Only owner or superadmin can view analytics
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && opportunity.owner_user_id !== userId) {
       throw new ForbiddenError('Only the opportunity owner can view analytics');
     }
 

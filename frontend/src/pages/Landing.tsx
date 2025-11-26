@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { demoLogin, demoAdminLogin, googleLogin } from '../api/client';
+import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
 import { useAnimation } from '../contexts/AnimationContext';
 
 const Landing: React.FC = () => {
@@ -60,6 +60,11 @@ const Landing: React.FC = () => {
   const handleDemoAdminLogin = () => {
     setLoginLoading(true);
     demoAdminLogin();
+  };
+
+  const handleDemoSuperadminLogin = () => {
+    setLoginLoading(true);
+    demoSuperadminLogin();
   };
 
   const handleGoogleLogin = () => {
@@ -1138,7 +1143,7 @@ const Landing: React.FC = () => {
           />
           <h1 className="hero-headline">
             AdaptaLabs
-            <span className="beta-badge">BETA v5.1.1</span>
+            <span className="beta-badge">BETA v5.1.2</span>
           </h1>
           <p className="hero-subtext">
             Help influence the products you use by taking part in quick, well designed research sessions
@@ -1194,6 +1199,16 @@ const Landing: React.FC = () => {
               aria-label={loginLoading ? "Signing in..." : "Demo Admin"}
             >
               {loginLoading ? 'Signing in...' : 'Demo Admin'}
+            </button>
+            <button 
+              onClick={handleDemoSuperadminLogin} 
+              className="btn cta-tertiary"
+              disabled={loginLoading || googleLoading}
+              aria-busy={loginLoading}
+              aria-label={loginLoading ? "Signing in..." : "Demo Superadmin"}
+              style={{ borderColor: '#FF4E50', color: '#FF4E50' }}
+            >
+              {loginLoading ? 'Signing in...' : 'Demo Superadmin'}
             </button>
           </div>
         </div>

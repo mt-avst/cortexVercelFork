@@ -723,6 +723,30 @@ export async function runMigrations() {
       console.log('ℹ️  Could not update role constraint (may already be updated):', error.message);
     }
 
+    // Create feedback table for storing user feedback (superadmin inbox)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        user_name TEXT,
+        user_email TEXT,
+        category TEXT NOT NULL CHECK (category IN ('bug', 'feature', 'question', 'other')),
+        feedback TEXT NOT NULL,
+        url TEXT,
+        user_agent TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    console.log('✅ Created feedback table');
+
+    // Create indexes for feedback table
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_feedback_category ON feedback(category);
+      CREATE INDEX IF NOT EXISTS idx_feedback_user_id ON feedback(user_id);
+    `);
+    console.log('✅ Created feedback indexes');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

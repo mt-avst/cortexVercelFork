@@ -675,6 +675,81 @@ if (process.env.NODE_ENV === 'development') {
     });
   });
 
+  // GET /auth/superadmin-login - Demo superadmin login
+  router.get('/superadmin-login', async (req, res) => {
+    const demoSuperadmin: SessionUser = {
+      id: 'c3d4e5f6-a7b8-9012-cdef-123456789012',
+      name: 'Demo Superadmin',
+      email: 'superadmin@test.com',
+      business_unit: 'Administration',
+      role_title: 'System Administrator',
+      role: 'superadmin',
+    };
+    
+    req.session.user = demoSuperadmin;
+    
+    // Auto-connect calendar for demo superadmin
+    try {
+      const dbClient = await pool.connect();
+      try {
+        // Check if calendar tokens already exist
+        const existingTokens = await dbClient.query(
+          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
+          [demoSuperadmin.id]
+        );
+
+        if (existingTokens.rows.length === 0) {
+          // Generate mock calendar tokens
+          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
+          
+          // Encrypt tokens
+          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
+          const encryptedRefreshToken = refreshToken
+            ? userCalendarService.encrypt(refreshToken)
+            : null;
+
+          // Store mock calendar tokens
+          await dbClient.query(`
+            INSERT INTO user_calendar_tokens (
+              user_id, access_token, refresh_token, expires_at,
+              token_type, scope, connected_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (user_id) 
+            DO UPDATE SET
+              access_token = EXCLUDED.access_token,
+              refresh_token = EXCLUDED.refresh_token,
+              expires_at = EXCLUDED.expires_at
+          `, [
+            demoSuperadmin.id,
+            encryptedAccessToken,
+            encryptedRefreshToken,
+            expiryDate,
+            'Bearer',
+            'https://www.googleapis.com/auth/calendar.readonly'
+          ]);
+
+          logger.info('Auto-connected calendar for demo superadmin');
+        }
+      } finally {
+        dbClient.release();
+      }
+    } catch (error) {
+      // Don't fail login if calendar connection fails
+      logger.warn('Failed to auto-connect calendar for demo superadmin (non-blocking)', { error });
+    }
+    
+    req.session.save((err) => {
+      if (err) {
+        logger.error('Session save error', { error: err });
+        return res.status(500).json({ error: 'Session creation failed' });
+      }
+      // Redirect superadmin users to admin dashboard
+      const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+      res.redirect(`${corsOrigin}/admin`);
+    });
+  });
+
   // GET /auth/demo-user-2-login - Demo User 2 login
   router.get('/demo-user-2-login', async (req, res) => {
     const demoUser2: SessionUser = {

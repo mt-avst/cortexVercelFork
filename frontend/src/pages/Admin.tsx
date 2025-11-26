@@ -5,6 +5,7 @@ import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboard
 import { Opportunity } from '../api/types';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 import PendingApprovals from '../components/PendingApprovals';
+import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
 import '../components/Header.css';
@@ -21,7 +22,7 @@ const Admin: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; opportunity: { id: string; title: string } | null }>({ show: false, opportunity: null });
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -1347,7 +1348,7 @@ const Admin: React.FC = () => {
                   minWidth: 0,
                   maxWidth: '100%',
                   overflow: 'visible'
-                }}>Admin Dashboard</h1>
+                }}>{user?.role === 'superadmin' ? 'Superadmin Dashboard' : 'Admin Dashboard'}</h1>
                 <div className="d-flex flex-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
                   <button 
                     className="btn btn-outline-secondary"
@@ -1502,6 +1503,20 @@ const Admin: React.FC = () => {
                   >
                     <i className="bi bi-clock-history me-2"></i>
                     <span>Completion Approvals</span>
+                  </button>
+                </li>
+                {/* Feedback tab - all admins (researcher_admin and superadmin) */}
+                <li className="nav-item">
+                  <button
+                    className={`custom-tab-button ${activeTab === 'feedback' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('feedback')}
+                    role="tab"
+                    aria-selected={activeTab === 'feedback'}
+                    aria-controls="feedback-tab"
+                    tabIndex={0}
+                  >
+                    <i className="bi bi-chat-left-text me-2"></i>
+                    <span>Feedback</span>
                   </button>
                 </li>
               </ul>
@@ -1888,6 +1903,16 @@ const Admin: React.FC = () => {
                   aria-labelledby="completion-approvals-tab-button"
                 >
                   <PendingApprovals />
+                </div>
+
+                {/* Feedback Tab - all admins (researcher_admin and superadmin) */}
+                <div 
+                  className={`tab-pane fade ${activeTab === 'feedback' ? 'show active' : ''}`}
+                  id="feedback-tab"
+                  role="tabpanel"
+                  aria-labelledby="feedback-tab-button"
+                >
+                  <AdminFeedback />
                 </div>
               </div>
             </div>
