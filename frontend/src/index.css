@@ -131,7 +131,7 @@ small, .small {
 }
 
 /* Paragraphs on dark backgrounds use on-dark color */
-.main p:not(.text-danger):not(.card p):not(.lead) {
+.main p:not(.text-danger):not(.card p):not(.lead):not(.hero-subtext):not(.hero-subtext-secondary) {
   color: var(--text-on-dark) !important;
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
@@ -2201,12 +2201,13 @@ span.lozenge-analytics,
 }
 
 .hero-subtext {
-  color: #D1D5DB;
-  font-size: 1.125rem;
+  color: #FFFFFF;
+  font-size: 1.35rem;
+  font-weight: 500;
   max-width: 44rem;
   margin-left: auto;
   margin-right: auto;
-  line-height: 1.6;
+  line-height: 1.5;
   margin-bottom: 0.75rem;
   text-align: center;
 }

@@ -153,13 +153,12 @@ const Landing: React.FC = memo(() => {
           />
           <h1 className="hero-headline">
             AdaptaLabs
-            <span className="beta-badge">BETA v5.6.0</span>
           </h1>
           <p className="hero-subtext">
-            Help influence the products you use by taking part in quick, well designed research sessions
+            Help us build the tools you use every day
           </p>
           <p className="hero-subtext-secondary">
-            Book studies, test ideas, and shape the next generation of Adaptavist products
+            Turn participation into progress - your feedback shapes new features and improvements
           </p>
           
           {/* Primary CTA - Sign in with Google */}
