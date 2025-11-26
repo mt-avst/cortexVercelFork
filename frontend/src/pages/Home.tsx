@@ -33,28 +33,20 @@ const Home: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      console.log('Loading opportunities...');
       const data = await getOpportunities({});
-      console.log('Loaded opportunities:', data?.length || 0, 'opportunities');
       
       // Ensure data is an array and not HTML
       if (!Array.isArray(data)) {
-        console.error('API returned non-array data (backend may not be deployed):', typeof data);
         setOpportunities([]);
         if (typeof data === 'string' && (data as string).includes('<!doctype html>')) {
-          console.error('Received HTML instead of JSON - backend not deployed');
           setError('Backend API not available');
         } else {
           setError('No backend available. This is a production demo with frontend only.');
         }
       } else {
         setOpportunities(data);
-        if (data.length > 0) {
-          console.log('First opportunity sessions:', data[0].sessions?.length || 0);
-        }
       }
     } catch (err: any) {
-      console.error('Error loading opportunities:', err);
       setError('Failed to load opportunities - backend not available in production demo');
       setOpportunities([]); // Set empty array on error
     } finally {

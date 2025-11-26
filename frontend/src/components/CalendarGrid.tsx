@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
@@ -9,7 +9,7 @@ interface CalendarGridProps {
   bookingLoading: string | null;
 }
 
-const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bookingLoading }) => {
+const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading }) => {
   const navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
@@ -17,8 +17,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   
-  // Debug logging
-  console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
+  // Debug logging (disabled in production for performance)
+  // console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
   
   // Load user bookings and populate bookedSlots when sessions change
   useEffect(() => {
@@ -38,11 +38,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           .filter(booking => booking.status === 'booked' && sessionIds.has(booking.session_id))
           .map(booking => booking.session_id);
         
-        console.log('📅 CalendarGrid: Found booked sessions:', {
-          totalBookings: allBookings.length,
-          bookedSessionIds: bookedSessionIds,
-          sessionsCount: sessions.length
-        });
+        // Performance: debug logging disabled in production
+        // console.log('📅 CalendarGrid: Found booked sessions:', { totalBookings: allBookings.length, bookedSessionIds, sessionsCount: sessions.length });
         
         setBookedSlots(new Set(bookedSessionIds));
       } catch (error) {
@@ -69,18 +66,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
           calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
           
-          console.log('📅 CalendarGrid: Connection status:', status);
+          // Performance: debug logging disabled in production
+          // console.log('📅 CalendarGrid: Connection status:', status);
           
           if (!status.connected) {
-            console.log('📅 CalendarGrid: Calendar not connected, but will try to fetch events anyway (demo mode)');
+            // console.log('📅 CalendarGrid: Calendar not connected, but will try to fetch events anyway (demo mode)');
             // In demo mode, we still want to fetch mock events even if "not connected"
             // So we continue rather than returning early
           }
         } catch (error: any) {
-          console.error('📅 CalendarGrid: Error checking connection status:', error);
+          // Performance: error logging kept but verbose logging disabled
+          // console.error('📅 CalendarGrid: Error checking connection status:', error);
           setCalendarConnected(false);
           // Still try to fetch events in demo mode even if connection check fails
-          console.log('📅 CalendarGrid: Will attempt to fetch events anyway (demo mode)');
         }
 
         // Get date range from sessions
@@ -97,20 +95,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
         endTime.setHours(23, 59, 59, 999);
 
         // Fetch calendar events
-        console.log('📅 CalendarGrid: Fetching calendar events from', startTime.toISOString(), 'to', endTime.toISOString());
+        // Performance: debug logging disabled in production
         const events = await getMyCalendarEvents(
           startTime.toISOString(),
           endTime.toISOString()
         );
         
-        console.log('📅 CalendarGrid: Fetched calendar events:', events.length, 'events');
-        if (events.length > 0) {
-          console.log('📅 CalendarGrid: Sample event:', {
-            title: events[0].title,
-            start: events[0].start,
-            end: events[0].end
-          });
-        }
         setUserCalendarEvents(events);
       } catch (error: any) {
         if (error.response?.status === 404) {
@@ -155,19 +145,14 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
       const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
       
-      if (overlaps) {
-        console.log('📅 Calendar conflict detected:', {
-          session: `${sessionStart.toISOString()} - ${sessionEnd.toISOString()}`,
-          event: `${event.title} (${eventStart.toISOString()} - ${eventEnd.toISOString()})`,
-          status: event.status
-        });
-      }
+      // Performance: conflict logging disabled in production
+      // if (overlaps) { console.log('📅 Calendar conflict detected:', {...}); }
       
       return overlaps;
     });
     
     return hasConflict;
-  }, [calendarConnected, userCalendarEvents]);
+  }, [userCalendarEvents]);
 
   // Format time for display (12-hour format with AM/PM)
   const formatTime = (dateString: string) => {
@@ -285,8 +270,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
     return allDays;
   };
 
-  const sessionsByDate = groupSessionsByDate();
-  const timeMarkers = generateTimeMarkers();
+  // Memoize expensive calculations to prevent recalculation on every render
+  const sessionsByDate = useMemo(() => groupSessionsByDate(), [sessions]);
+  const timeMarkers = useMemo(() => generateTimeMarkers(), []);
   const timelineHeight = '900px'; // Fixed height for 16 hours
 
   const handleSlotClick = (session: Session) => {
@@ -645,6 +631,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({ sessions, onBookSession, bo
       </div>
     </div>
   );
-};
+});
+
+// Display name for React DevTools debugging
+CalendarGrid.displayName = 'CalendarGrid';
 
 export default CalendarGrid;

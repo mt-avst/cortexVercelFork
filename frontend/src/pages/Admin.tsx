@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats } from '../api/client';
@@ -20,7 +20,16 @@ const Admin: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>('');
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; opportunity: { id: string; title: string } | null }>({ show: false, opportunity: null });
+
+  // Debounce search query to prevent filtering on every keystroke
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -30,38 +39,40 @@ const Admin: React.FC = () => {
   const [loadingStats, setLoadingStats] = useState(false);
   
   
-  // Filter opportunities based on search query
-  const filteredOpportunities = opportunities.filter(opp => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
+  // Filter opportunities based on debounced search query (memoized for performance)
+  const filteredOpportunities = useMemo(() => {
+    if (!debouncedSearchQuery) return opportunities;
+    const query = debouncedSearchQuery.toLowerCase();
+    return opportunities.filter(opp => 
       opp.title.toLowerCase().includes(query) ||
       opp.purpose_one_liner.toLowerCase().includes(query) ||
       (opp.description_optional && opp.description_optional.toLowerCase().includes(query))
     );
-  });
+  }, [opportunities, debouncedSearchQuery]);
 
-  // Sort filtered opportunities
-  const sortedOpportunities = [...filteredOpportunities].sort((a, b) => {
-    let aValue: any = a[sortField];
-    let bValue: any = b[sortField];
-    
-    if (sortField === 'created_at') {
-      aValue = new Date(a.created_at).getTime();
-      bValue = new Date(b.created_at).getTime();
-    }
-    
-    if (typeof aValue === 'string') {
-      aValue = aValue.toLowerCase();
-      bValue = bValue.toLowerCase();
-    }
-    
-    if (sortDirection === 'asc') {
-      return aValue > bValue ? 1 : -1;
-    } else {
-      return aValue < bValue ? 1 : -1;
-    }
-  });
+  // Sort filtered opportunities (memoized for performance)
+  const sortedOpportunities = useMemo(() => {
+    return [...filteredOpportunities].sort((a, b) => {
+      let aValue: any = a[sortField];
+      let bValue: any = b[sortField];
+      
+      if (sortField === 'created_at') {
+        aValue = new Date(a.created_at).getTime();
+        bValue = new Date(b.created_at).getTime();
+      }
+      
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+      
+      if (sortDirection === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+  }, [filteredOpportunities, sortField, sortDirection]);
 
   const handleSort = (field: 'title' | 'created_at' | 'type' | 'status') => {
     if (field === sortField) {
@@ -82,12 +93,12 @@ const Admin: React.FC = () => {
         if (statusFilter) params.status = statusFilter;
         if (typeFilter) params.type = typeFilter;
       }
-      console.log('Loading opportunities with params:', params);
+      // Performance: debug logging disabled in production
       const data = await getOpportunities(params);
-      console.log('Loaded opportunities:', data?.length || 0);
+      // Performance: debug logging disabled in production
       setOpportunities(data || []);
     } catch (err) {
-      console.error('Error loading research studies:', err);
+      // Performance: error logging kept but reduced verbosity
       setError('Failed to load research studies');
       setOpportunities([]);
     } finally {
@@ -101,8 +112,7 @@ const Admin: React.FC = () => {
       const stats = await getDashboardStats();
       setDashboardStats(stats);
     } catch (err) {
-      console.error('Error loading dashboard stats:', err);
-      // Don't show error to user, just log it
+      // Don't show error to user - dashboard stats are non-critical
     } finally {
       setLoadingStats(false);
     }
@@ -118,13 +128,11 @@ const Admin: React.FC = () => {
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
     if (location.state?.refresh && user?.role === 'researcher_admin') {
-      console.log('Admin: Refresh triggered from navigation state', location.state);
       // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
       // Force refresh without filters to ensure new items are visible
       // Use a small delay to ensure navigation is complete
       setTimeout(() => {
-        console.log('Admin: Forcing refresh without filters');
         loadOpportunities(true); // true = force clear filters
       }, 150);
     }
@@ -157,7 +165,6 @@ const Admin: React.FC = () => {
       await loadOpportunities();
       setDeleteConfirm({ show: false, opportunity: null });
     } catch (err) {
-      console.error('Error deleting research study:', err);
       setError('Failed to delete research study');
     }
   };
@@ -171,7 +178,6 @@ const Admin: React.FC = () => {
       await duplicateOpportunity(id);
       await loadOpportunities();
     } catch (err) {
-      console.error('Error duplicating research study:', err);
       setError('Failed to duplicate research study');
     }
   };

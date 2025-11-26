@@ -209,6 +209,7 @@ export const ENVIRONMENT = {
 export const USER_ROLES = {
   EMPLOYEE: 'employee',
   RESEARCHER_ADMIN: 'researcher_admin',
+  SUPERADMIN: 'superadmin',
 } as const;
 
 export const PERMISSIONS = {
@@ -232,6 +233,7 @@ export const OPPORTUNITY_TYPES = {
   POLL: 'poll',
   SURVEY: 'survey',
   QUESTION: 'question',
+  INTERVIEW: 'interview',
   UNMODERATED: 'unmoderated',
 } as const;
 

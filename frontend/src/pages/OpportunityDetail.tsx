@@ -25,14 +25,11 @@ const OpportunityDetail: React.FC = () => {
     try {
       setLoading(true);
       setError('');
-      console.log('Loading opportunity with ID:', id, 'forceRefresh:', forceRefresh);
       
       // Always use cache busting when force refreshing or when coming back to the page
       const params = forceRefresh ? { _t: Date.now() } : undefined;
       const data = await getOpportunity(id, params);
       
-      console.log('Loaded opportunity data:', data);
-      console.log('Sessions data:', data.sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
       setOpportunity(data);
     } catch (err: any) {
       console.error('Error loading opportunity:', err);
@@ -144,11 +141,21 @@ const OpportunityDetail: React.FC = () => {
   }, [userCalendarEvents]);
 
   // Refresh data when user returns to the page (handles browser back/forward)
+  // Throttled to prevent excessive refreshes - only refresh if page was hidden for > 30 seconds
   useEffect(() => {
+    let hiddenTime: number | null = null;
+    
     const handleVisibilityChange = () => {
-      if (!document.hidden && id) {
-        console.log('Page became visible, refreshing opportunity data');
-        loadOpportunity(true);
+      if (document.hidden) {
+        // Record when page became hidden
+        hiddenTime = Date.now();
+      } else if (!document.hidden && id && hiddenTime) {
+        // Page became visible - only refresh if hidden for > 30 seconds
+        const hiddenDuration = Date.now() - hiddenTime;
+        if (hiddenDuration > 30000) {
+          loadOpportunity(true);
+        }
+        hiddenTime = null;
       }
     };
 
@@ -176,26 +183,10 @@ const OpportunityDetail: React.FC = () => {
       setError('');
       setBookingSuccess(null);
       
-      console.log('Attempting to book session:', sessionId);
-      
-      // Log session details before booking attempt
-      const sessionToBook = opportunity?.sessions?.find(s => s.id === sessionId);
-      if (sessionToBook) {
-        console.log('Session details before booking:', {
-          id: sessionToBook.id,
-          capacity: sessionToBook.capacity,
-          booked_count: sessionToBook.booked_count,
-          remaining: sessionToBook.remaining,
-          start_time: sessionToBook.start_time,
-          end_time: sessionToBook.end_time
-        });
-      }
-      
       // Store the session ID for potential retry
       sessionStorage.setItem('lastAttemptedSession', sessionId);
       
       const bookingResult = await bookSession(sessionId);
-      console.log('Booking successful:', bookingResult);
       
       // Track action click for successful booking
       if (id) {
@@ -212,19 +203,7 @@ const OpportunityDetail: React.FC = () => {
       // Reload opportunity to update remaining slots with cache busting
       await loadOpportunity(true);
     } catch (err: any) {
-      console.error('Error booking session:', err);
-      console.error('Error response:', err.response?.data);
-      console.error('Error status:', err.response?.status);
-      console.error('Error code:', err.code);
-      console.error('Error message:', err.message);
-      console.error('Full error object:', {
-        status: err.response?.status,
-        statusText: err.response?.statusText,
-        data: err.response?.data,
-        code: err.code,
-        message: err.message,
-        stack: err.stack
-      });
+      // Performance: verbose error logging disabled in production
       
       if (err.response?.status === 409) {
         // Use the specific error message from the backend
@@ -233,7 +212,6 @@ const OpportunityDetail: React.FC = () => {
         
         // If it's a capacity issue, refresh the opportunity data to get latest info
         if (errorMessage.includes('full') || errorMessage.includes('capacity')) {
-          console.log('Capacity issue detected, refreshing opportunity data...');
           await loadOpportunity(true);
         }
       } else if (err.response?.status === 401) {
