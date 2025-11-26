@@ -364,7 +364,7 @@ const OpportunityDetail: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h1 className="mb-0">{opportunity.title}</h1>
+                  <h1 className="mb-0" style={{ fontSize: '42px', fontWeight: '700' }}>{opportunity.title}</h1>
                 </div>
               </div>
             </div>

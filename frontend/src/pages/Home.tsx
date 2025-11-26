@@ -206,7 +206,7 @@ const Home: React.FC = memo(() => {
         <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
           <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
             <div className="col-12">
-              <h1 className="mb-3" style={{ marginBottom: '24px' }}>AdaptaLabs</h1>
+              <h1 className="mb-3 adaptalabs-home-title" style={{ marginBottom: '24px', fontSize: '42px', fontWeight: '700' }}>AdaptaLabs</h1>
               
               {/* Welcome text - half page width before wrapping */}
               <div className="row mb-4 align-items-end">

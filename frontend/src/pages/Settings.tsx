@@ -8,6 +8,14 @@ const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'account' | 'notifications'>('account');
+
+  // Add admin-page class to body for wider header alignment
+  useEffect(() => {
+    document.body.classList.add('admin-page');
+    return () => {
+      document.body.classList.remove('admin-page');
+    };
+  }, []);
   const [preferences, setPreferences] = useState<NotificationPreference | null>(null);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -74,9 +82,51 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+    <div className="container-fluid settings-container" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
       <style>
         {`
+          /* Make settings page full width */
+          .settings-container {
+            max-width: 100% !important;
+            width: 100% !important;
+            position: relative !important;
+            z-index: 10 !important;
+          }
+          
+          /* Responsive padding adjustments for full-width settings page */
+          @media (min-width: 768px) {
+            .settings-container {
+              padding-left: 2rem !important;
+              padding-right: 2rem !important;
+            }
+          }
+          @media (min-width: 1200px) {
+            .settings-container {
+              padding-left: 2.5rem !important;
+              padding-right: 2.5rem !important;
+            }
+          }
+          @media (min-width: 1400px) {
+            .settings-container {
+              padding-left: 3rem !important;
+              padding-right: 3rem !important;
+            }
+          }
+          @media (min-width: 1920px) {
+            .settings-container {
+              padding-left: 3.5rem !important;
+              padding-right: 3.5rem !important;
+            }
+          }
+          
+          /* Very large screens constraint for settings */
+          @media (min-width: 2560px) {
+            .settings-container {
+              max-width: 2560px !important;
+              margin: 0 auto !important;
+            }
+          }
+          
           .settings-page .card {
             background: var(--bg-card) !important;
             backdrop-filter: blur(16px);

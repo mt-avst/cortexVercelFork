@@ -14,6 +14,14 @@ const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Add admin-page class to body for wider header alignment
+  useEffect(() => {
+    document.body.classList.add('admin-page');
+    return () => {
+      document.body.classList.remove('admin-page');
+    };
+  }, []);
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loadingOpportunities, setLoadingOpportunities] = useState(true);
   const [error, setError] = useState<string>('');
@@ -220,10 +228,12 @@ const Admin: React.FC = () => {
     <div className="container-fluid" style={{ minHeight: '100vh', padding: '0.5rem 0.75rem', backgroundColor: '#0A091A', maxWidth: '100%', width: '100%' }}>
       <style>
         {`
-          /* Make dashboard full width */
+          /* Make dashboard full width for admin pages */
           .admin-dashboard {
             max-width: 100% !important;
             width: 100% !important;
+            position: relative !important;
+            z-index: 10 !important;
           }
           
           /* On large screens, allow dashboard to use more width by reducing padding */
@@ -403,7 +413,7 @@ const Admin: React.FC = () => {
             margin-right: 0.25rem !important;
           }
           
-          /* Responsive container padding - reduced on larger screens for more table space */
+          /* Responsive container padding for full-width dashboard */
           @media (max-width: 575px) {
             .admin-dashboard .container-fluid {
               padding: 0.5rem 0.5rem !important;
@@ -1344,9 +1354,10 @@ const Admin: React.FC = () => {
           }}>
             <div className="card-header border-0 bg-transparent" style={{ marginBottom: '2rem', paddingBottom: '1rem', paddingLeft: 0, paddingRight: 0, overflow: 'visible' }}>
               <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3" style={{ flexWrap: 'wrap', minWidth: 0 }}>
-                <h1 className="h3 mb-0" style={{ 
+                <h1 className="mb-0" style={{ 
                   color: '#E0E0E0', 
-                  fontSize: 'clamp(1.25rem, 4vw, 1.75rem)',
+                  fontSize: '42px',
+                  fontWeight: '700',
                   lineHeight: '1.2',
                   wordBreak: 'break-word',
                   overflowWrap: 'break-word',
