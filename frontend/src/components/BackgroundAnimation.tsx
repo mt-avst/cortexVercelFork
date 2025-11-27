@@ -10,54 +10,9 @@ import { useTheme } from '../contexts/ThemeContext';
  * Uses React.memo to prevent unnecessary re-renders.
  */
 const BackgroundAnimation: React.FC = memo(() => {
-  const squaresRef = useRef<(HTMLDivElement | null)[]>([]);
   const fullGridSquareRefs = useRef<(HTMLDivElement | null)[]>([]);
   const { isDarkMode } = useTheme();
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
-  const intervalsRef = useRef<NodeJS.Timeout[]>([]);
-
-  // Randomize square positions on each animation cycle
-  useEffect(() => {
-    // Clear existing intervals
-    intervalsRef.current.forEach(interval => clearInterval(interval));
-    intervalsRef.current = [];
-
-    // Skip animations in light mode
-    if (!isDarkMode) return;
-
-    const randomizePositions = () => {
-      squaresRef.current.forEach((square) => {
-        if (square) {
-          const randomX = Math.floor(Math.random() * 600 - 300);
-          const randomY = Math.floor(Math.random() * 600 - 300);
-          square.style.setProperty('--translate-x', `${randomX}px`);
-          square.style.setProperty('--translate-y', `${randomY}px`);
-        }
-      });
-    };
-
-    // Randomize initially
-    randomizePositions();
-
-    // Set up interval for each square
-    squaresRef.current.forEach((square) => {
-      if (square) {
-        const baseInterval = 2500 + Math.random() * 2000;
-        const interval = setInterval(() => {
-          const randomX = Math.floor(Math.random() * 600 - 300);
-          const randomY = Math.floor(Math.random() * 600 - 300);
-          square.style.setProperty('--translate-x', `${randomX}px`);
-          square.style.setProperty('--translate-y', `${randomY}px`);
-        }, baseInterval);
-        intervalsRef.current.push(interval);
-      }
-    });
-
-    return () => {
-      intervalsRef.current.forEach(interval => clearInterval(interval));
-      intervalsRef.current = [];
-    };
-  }, [isDarkMode]);
 
   // Randomize full grid squares position and lighting
   useEffect(() => {
@@ -140,7 +95,7 @@ const BackgroundAnimation: React.FC = memo(() => {
       {/* Static Grid Background */}
       <div className="mesh-gradient-background" aria-hidden="true" />
       
-      {/* Retro Computing Grid Squares Overlay */}
+      {/* Grid Squares Overlay - Illuminated cells on grid */}
       <div 
         className="grid-squares-overlay"
         aria-hidden="true"
@@ -151,14 +106,6 @@ const BackgroundAnimation: React.FC = memo(() => {
             key={`full-grid-${i}`}
             ref={(el) => { fullGridSquareRefs.current[i] = el; }}
             className="full-grid-square"
-          />
-        ))}
-        {/* Small glowing squares (20 total) */}
-        {Array.from({ length: 20 }, (_, i) => (
-          <div
-            key={`grid-square-${i}`}
-            ref={(el) => { squaresRef.current[i] = el; }}
-            className="grid-square"
           />
         ))}
       </div>

@@ -1,33 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
 import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
-
-// Helper function to convert HSL to RGB - defined outside component for performance
-const hslToRgb = (h: number, s: number, l: number): [number, number, number] => {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs((h * 6) % 2 - 1));
-  const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 1/6) { r = c; g = x; b = 0; }
-  else if (h < 2/6) { r = x; g = c; b = 0; }
-  else if (h < 3/6) { r = 0; g = c; b = x; }
-  else if (h < 4/6) { r = 0; g = x; b = c; }
-  else if (h < 5/6) { r = x; g = 0; b = c; }
-  else { r = c; g = 0; b = x; }
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255)
-  ];
-};
-
-// Pre-computed dot data structure
-interface DotData {
-  opacity: number;
-  hslColor: string;
-  rgb: [number, number, number];
-  shadowIntensity: number;
-}
 
 /**
  * Landing Page Component
@@ -39,25 +12,8 @@ const Landing: React.FC = memo(() => {
   const coralDotsRef = useRef<(HTMLDivElement | null)[]>([]);
   const { isDarkMode } = useTheme();
   
-  // Pre-compute all dot data at once (memoized)
-  const dotData = useMemo<DotData[]>(() => {
-    return Array.from({ length: 30 }, () => {
-      const hue = 340 + Math.random() * 20;
-      const saturation = 70 + Math.random() * 30;
-      const lightness = 25 + Math.random() * 15;
-      const h = hue / 360;
-      const s = saturation / 100;
-      const l = lightness / 100;
-      const opacity = 0.2 + Math.random() * 0.8;
-      
-      return {
-        opacity,
-        hslColor: `hsl(${Math.round(hue)}, ${Math.round(saturation)}%, ${Math.round(lightness)}%)`,
-        rgb: hslToRgb(h, s, l),
-        shadowIntensity: opacity
-      };
-    });
-  }, []);
+  // Total number of traveling dots (20 horizontal + 20 vertical)
+  const DOT_COUNT = 40;
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -79,14 +35,14 @@ const Landing: React.FC = memo(() => {
     googleLogin();
   };
 
-  // Coral dots animation - randomize positions on grid lines (only in dark mode)
+  // Randomize dot positions on grid lines (only in dark mode)
   useEffect(() => {
     if (!isDarkMode) return;
 
     const randomizeCoralDots = () => {
       coralDotsRef.current.forEach((dot, index) => {
         if (dot) {
-          const isHorizontal = index < 15;
+          const isHorizontal = index < DOT_COUNT / 2;
           const gridRowOrCol = Math.floor(Math.random() * 15);
           const position = (gridRowOrCol * 80);
           
@@ -98,8 +54,8 @@ const Landing: React.FC = memo(() => {
             dot.style.top = '0';
           }
           
-          const duration = 12 + Math.random() * 8;
-          const delay = Math.random() * 10;
+          const duration = 8 + Math.random() * 20;  // 8-28 seconds for more speed variety
+          const delay = Math.random() * 15;
           dot.style.animationDuration = `${duration}s`;
           dot.style.animationDelay = `${delay}s`;
         }
@@ -114,30 +70,17 @@ const Landing: React.FC = memo(() => {
 
   return (
     <div className={`landing-hero-wrapper ${!isDarkMode ? 'light-mode' : ''}`}>
-      {/* Coral dots traveling along grid lines - 30 dots with pre-computed data (only in dark mode) */}
+      {/* Traveling rectangles along grid lines - 40 total (20 horizontal + 20 vertical) */}
       {isDarkMode && <div className="coral-dots-container">
-        {dotData.map((dot, index) => {
-          const isHorizontal = index < 15;
-          const [r, g, b] = dot.rgb;
-          
+        {Array.from({ length: DOT_COUNT }, (_, index) => {
+          const isHorizontal = index < DOT_COUNT / 2;
           return (
             <div
               key={index}
-              ref={(el) => {
-                coralDotsRef.current[index] = el;
-                if (el) {
-                  el.style.setProperty('opacity', dot.opacity.toString(), 'important');
-                  el.style.setProperty('background-color', dot.hslColor, 'important');
-                  el.style.setProperty('box-shadow', `0 0 ${12 * dot.shadowIntensity}px ${dot.hslColor}, 0 0 ${20 * dot.shadowIntensity}px rgba(${r}, ${g}, ${b}, ${0.8 * dot.shadowIntensity})`, 'important');
-                }
-              }}
+              ref={(el) => { coralDotsRef.current[index] = el; }}
               className={`coral-dot ${isHorizontal ? 'coral-dot-horizontal' : 'coral-dot-vertical'}`}
               style={{
-                animation: isHorizontal ? 'travelHorizontal 15s linear infinite' : 'travelVertical 15s linear infinite',
-                animationDelay: '0s',
-                opacity: dot.opacity,
-                backgroundColor: dot.hslColor,
-                boxShadow: `0 0 ${12 * dot.shadowIntensity}px ${dot.hslColor}, 0 0 ${20 * dot.shadowIntensity}px rgba(${r}, ${g}, ${b}, ${0.8 * dot.shadowIntensity})`
+                animation: isHorizontal ? 'travelHorizontal 15s linear infinite' : 'travelVertical 15s linear infinite'
               }}
             />
           );
