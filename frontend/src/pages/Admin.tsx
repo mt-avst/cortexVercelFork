@@ -225,7 +225,7 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid" style={{ minHeight: '100vh', padding: '0.5rem 0.75rem', backgroundColor: '#0A091A', maxWidth: '100%', width: '100%' }}>
+    <div className="container-fluid admin-page-container" style={{ minHeight: '100vh', padding: '0.5rem 0.75rem', maxWidth: '100%', width: '100%' }}>
       <style>
         {`
           /* Make dashboard full width for admin pages */
@@ -640,9 +640,9 @@ const Admin: React.FC = () => {
           }
           
           .custom-tab-button {
-            color: #E0E0E0 !important;
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            color: var(--text-primary) !important;
+            background-color: var(--bg-tab) !important;
+            border: 1px solid var(--border-card) !important;
             padding: 0.5rem 1rem !important;
             cursor: pointer !important;
             width: 100% !important;
@@ -731,16 +731,16 @@ const Admin: React.FC = () => {
             }
           }
           .custom-tab-button.active {
-            background-color: #FF4E50 !important;
-            border-color: #FF4E50 !important;
+            background-color: var(--brand-headline) !important;
+            border-color: var(--brand-headline) !important;
           }
           .custom-tab-button:hover {
-            background-color: rgba(255, 255, 255, 0.1) !important;
-            border-color: #FF4E50 !important;
+            background-color: var(--bg-hover) !important;
+            border-color: var(--brand-headline) !important;
           }
           .custom-tab-button.active:hover {
-            background-color: #FF4E50 !important;
-            border-color: #FF4E50 !important;
+            background-color: var(--brand-headline) !important;
+            border-color: var(--brand-headline) !important;
           }
           .custom-tab-button.active {
             color: #FFFFFF !important;
@@ -751,36 +751,36 @@ const Admin: React.FC = () => {
           }
           .custom-tab-button i,
           .custom-tab-button span {
-            color: #E0E0E0 !important;
+            color: var(--text-primary) !important;
           }
           
-          /* Admin dashboard dark theme form controls */
+          /* Admin dashboard form controls - theme-aware */
           .admin-dashboard .form-control,
           .admin-dashboard .form-select {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: #E0E0E0 !important;
+            background-color: var(--bg-input) !important;
+            border: 1px solid var(--border-card) !important;
+            color: var(--text-primary) !important;
           }
           .admin-dashboard .form-control:focus,
           .admin-dashboard .form-select:focus {
-            background-color: rgba(255, 255, 255, 0.08) !important;
-            border-color: #FF4E50 !important;
-            color: #E0E0E0 !important;
-            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+            background-color: var(--bg-input-focus) !important;
+            border-color: var(--brand-headline) !important;
+            color: var(--text-primary) !important;
+            box-shadow: 0 0 0 0.2rem var(--focus-ring-color) !important;
           }
           .admin-dashboard .form-control::placeholder {
-            color: rgba(224, 224, 224, 0.5) !important;
+            color: var(--text-muted) !important;
           }
           .admin-dashboard .form-label {
-            color: #E0E0E0 !important;
+            color: var(--text-primary) !important;
           }
           .admin-dashboard .form-select option {
-            background-color: #0A091A !important;
-            color: #E0E0E0 !important;
+            background-color: var(--bg-card) !important;
+            color: var(--text-primary) !important;
           }
           
-          /* Admin dashboard table styling - Dark theme with glassmorphism */
-          /* OVERRIDE ALL BOOTSTRAP TABLE STYLES - FORCE DARK THEME */
+          /* Admin dashboard table styling - theme-aware */
+          /* OVERRIDE ALL BOOTSTRAP TABLE STYLES */
           .admin-dashboard table,
           .admin-dashboard .table,
           .admin-dashboard table.table,
@@ -795,20 +795,20 @@ const Admin: React.FC = () => {
             background: transparent !important;
             border-radius: var(--card-radius);
           }
-          /* Table header - glassmorphism */
+          /* Table header */
           .admin-dashboard table.table-hover thead,
           .admin-dashboard table thead,
           .admin-dashboard table.table-striped thead {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            background: rgba(255, 255, 255, 0.05) !important;
+            background-color: var(--bg-table-header) !important;
+            background: var(--bg-table-header) !important;
           }
           .admin-dashboard table.table-hover thead th,
           .admin-dashboard table thead th,
           .admin-dashboard table.table-striped thead th {
             color: var(--text-primary) !important;
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            background: rgba(255, 255, 255, 0.05) !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background-color: var(--bg-table-header) !important;
+            background: var(--bg-table-header) !important;
+            border-bottom: 1px solid var(--border-card) !important;
             border-top: none !important;
             border-left: none !important;
             border-right: none !important;
@@ -828,14 +828,14 @@ const Admin: React.FC = () => {
           .admin-dashboard table.table-striped tbody tr:nth-of-type(even) {
             background-color: transparent !important;
             background: transparent !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-bottom: 1px solid var(--border-table-row) !important;
           }
-          /* Table rows - glassmorphism on hover */
+          /* Table rows - hover */
           .admin-dashboard table.table-hover tbody tr:hover,
           .admin-dashboard table tbody tr:hover,
           .admin-dashboard table.table-striped tbody tr:hover {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            background: rgba(255, 255, 255, 0.05) !important;
+            background-color: var(--bg-hover) !important;
+            background: var(--bg-hover) !important;
           }
           /* Table cells - transparent */
           .admin-dashboard table.table-hover tbody td,
@@ -868,10 +868,10 @@ const Admin: React.FC = () => {
             background-color: transparent !important;
             background: transparent !important;
           }
-          /* Ensure header cells maintain glassmorphism */
+          /* Ensure header cells maintain proper background */
           .admin-dashboard table thead th {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            background: rgba(255, 255, 255, 0.05) !important;
+            background-color: var(--bg-table-header) !important;
+            background: var(--bg-table-header) !important;
           }
           
           /* Status badges - Momentum Design System with proper padding */
@@ -1339,12 +1339,8 @@ const Admin: React.FC = () => {
       </style>
       <div className="row admin-dashboard">
         <div className="col-12" style={{ paddingLeft: '0.5rem', paddingRight: '0.5rem' }}>
-          <div className="card" style={{ 
+          <div className="card admin-card" style={{ 
             minHeight: 'calc(100vh - 4rem)',
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
             borderRadius: '16px',
             margin: '0',
             maxWidth: '100%',
@@ -1354,8 +1350,7 @@ const Admin: React.FC = () => {
           }}>
             <div className="card-header border-0 bg-transparent" style={{ marginBottom: '2rem', paddingBottom: '1rem', paddingLeft: 0, paddingRight: 0, overflow: 'visible' }}>
               <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3" style={{ flexWrap: 'wrap', minWidth: 0 }}>
-                <h1 className="mb-0" style={{ 
-                  color: '#E0E0E0', 
+                <h1 className="mb-0 admin-dashboard-title" style={{ 
                   fontSize: '42px',
                   fontWeight: '700',
                   lineHeight: '1.2',
@@ -1368,13 +1363,10 @@ const Admin: React.FC = () => {
                 }}>{user?.role === 'superadmin' ? 'Superadmin Dashboard' : 'Admin Dashboard'}</h1>
                 <div className="d-flex flex-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
                   <button 
-                    className="btn btn-outline-secondary"
+                    className="btn btn-outline-secondary admin-settings-btn"
                     onClick={() => navigate('/admin/settings')}
                     aria-label="Settings"
                     style={{
-                      backgroundColor: 'transparent',
-                      borderColor: 'rgba(255, 255, 255, 0.2)',
-                      color: '#E0E0E0',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
                       minWidth: 'fit-content'
@@ -1384,13 +1376,10 @@ const Admin: React.FC = () => {
                     <span>Settings</span>
                   </button>
                   <button 
-                    className="btn btn-primary"
+                    className="btn btn-primary admin-create-btn"
                     onClick={() => navigate('/admin/opportunities/new')}
                     aria-label="Create new research study"
                     style={{
-                      backgroundColor: '#FF4E50',
-                      borderColor: '#FF4E50',
-                      color: '#FFFFFF',
                       whiteSpace: 'nowrap',
                       flexShrink: 0,
                       minWidth: 'fit-content'
@@ -1407,84 +1396,56 @@ const Admin: React.FC = () => {
             {dashboardStats && (
               <div className="row mb-3 g-2">
                 <div className="col-6 col-sm-3">
-                  <div className="card border-0 shadow-sm h-100 stat-card" style={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    padding: 0
-                  }}>
+                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body" style={{ padding: '0.25rem 0.75rem 0.25rem' }}>
                       <div className="d-flex align-items-center justify-content-between" style={{ marginBottom: '-0.25rem' }}>
-                        <span className="text-uppercase" style={{ fontSize: '0.85rem', color: '#E0E0E0', opacity: 0.7, letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>Studies</span>
-                        <i className="bi bi-clipboard-data" style={{ fontSize: '2.7rem', color: '#FF4E50' }}></i>
+                        <span className="text-uppercase stat-label">Studies</span>
+                        <i className="bi bi-clipboard-data stat-icon"></i>
                       </div>
-                      <h2 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '700', fontSize: '3.375rem', lineHeight: 1, whiteSpace: 'nowrap' }}>{dashboardStats.total_opportunities}</h2>
-                      <small style={{ color: '#E0E0E0', opacity: 0.6, fontSize: '0.8rem', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      <h2 className="mb-0 stat-value">{dashboardStats.total_opportunities}</h2>
+                      <small className="stat-subtitle">
                         {dashboardStats.published_opportunities} live · {dashboardStats.draft_opportunities} draft
                       </small>
                     </div>
                   </div>
                 </div>
                 <div className="col-6 col-sm-3">
-                  <div className="card border-0 shadow-sm h-100 stat-card" style={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    padding: 0
-                  }}>
+                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body" style={{ padding: '0.25rem 0.75rem 0.25rem' }}>
                       <div className="d-flex align-items-center justify-content-between" style={{ marginBottom: '-0.25rem' }}>
-                        <span className="text-uppercase" style={{ fontSize: '0.85rem', color: '#E0E0E0', opacity: 0.7, letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>Bookings</span>
-                        <i className="bi bi-calendar-check" style={{ fontSize: '2.7rem', color: '#FF4E50' }}></i>
+                        <span className="text-uppercase stat-label">Bookings</span>
+                        <i className="bi bi-calendar-check stat-icon"></i>
                       </div>
-                      <h2 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '700', fontSize: '3.375rem', lineHeight: 1, whiteSpace: 'nowrap' }}>{dashboardStats.total_bookings}</h2>
-                      <small style={{ color: '#E0E0E0', opacity: 0.6, fontSize: '0.8rem', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      <h2 className="mb-0 stat-value">{dashboardStats.total_bookings}</h2>
+                      <small className="stat-subtitle">
                         {dashboardStats.upcoming_bookings} up · {dashboardStats.past_bookings} past
                       </small>
                     </div>
                   </div>
                 </div>
                 <div className="col-6 col-sm-3">
-                  <div className="card border-0 shadow-sm h-100 stat-card" style={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    padding: 0
-                  }}>
+                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body" style={{ padding: '0.25rem 0.75rem 0.25rem' }}>
                       <div className="d-flex align-items-center justify-content-between" style={{ marginBottom: '-0.25rem' }}>
-                        <span className="text-uppercase" style={{ fontSize: '0.85rem', color: '#E0E0E0', opacity: 0.7, letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>Users</span>
-                        <i className="bi bi-people" style={{ fontSize: '2.7rem', color: '#FF4E50' }}></i>
+                        <span className="text-uppercase stat-label">Users</span>
+                        <i className="bi bi-people stat-icon"></i>
                       </div>
-                      <h2 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '700', fontSize: '3.375rem', lineHeight: 1, whiteSpace: 'nowrap' }}>{dashboardStats.total_participants}</h2>
-                      <small style={{ color: '#E0E0E0', opacity: 0.6, fontSize: '0.8rem', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
+                      <small className="stat-subtitle">
                         Unique participants
                       </small>
                     </div>
                   </div>
                 </div>
                 <div className="col-6 col-sm-3">
-                  <div className="card border-0 shadow-sm h-100 stat-card" style={{ 
-                    backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                    backdropFilter: 'blur(16px)',
-                    WebkitBackdropFilter: 'blur(16px)',
-                    border: '1px solid rgba(255, 255, 255, 0.1)',
-                    borderRadius: '10px',
-                    padding: 0
-                  }}>
+                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body" style={{ padding: '0.25rem 0.75rem 0.25rem' }}>
                       <div className="d-flex align-items-center justify-content-between" style={{ marginBottom: '-0.25rem' }}>
-                        <span className="text-uppercase" style={{ fontSize: '0.85rem', color: '#E0E0E0', opacity: 0.7, letterSpacing: '0.05em', fontWeight: 600, whiteSpace: 'nowrap' }}>Slots</span>
-                        <i className="bi bi-clock" style={{ fontSize: '2.7rem', color: '#FF4E50' }}></i>
+                        <span className="text-uppercase stat-label">Slots</span>
+                        <i className="bi bi-clock stat-icon"></i>
                       </div>
-                      <h2 className="mb-0" style={{ color: '#E0E0E0', fontWeight: '700', fontSize: '3.375rem', lineHeight: 1, whiteSpace: 'nowrap' }}>{dashboardStats.available_slots}</h2>
-                      <small style={{ color: '#E0E0E0', opacity: 0.6, fontSize: '0.8rem', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                      <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
+                      <small className="stat-subtitle">
                         {dashboardStats.booked_slots}/{dashboardStats.total_slots} booked
                       </small>
                     </div>
@@ -1643,15 +1604,15 @@ const Admin: React.FC = () => {
                       <div className="spinner-border" role="status">
                         <span className="visually-hidden">Loading...</span>
                       </div>
-                      <p className="mt-2" style={{ color: '#E0E0E0' }}>Loading research studies...</p>
+                      <p className="mt-2 admin-loading-text">Loading research studies...</p>
                     </div>
                   )}
 
                   {/* Empty State */}
                   {!loadingOpportunities && !error && sortedOpportunities.length === 0 && (
                     <div className="text-center py-5">
-                      <h4 style={{ color: '#E0E0E0' }}>No research studies found</h4>
-                                  <p style={{ color: '#E0E0E0', opacity: 0.7 }}>
+                      <h4 className="admin-empty-title">No research studies found</h4>
+                                  <p className="admin-empty-text">
                         {searchQuery || statusFilter || typeFilter ? 'No research studies match your search or filters.' : 'Create your first research study to get started.'}
                       </p>
                       <button 

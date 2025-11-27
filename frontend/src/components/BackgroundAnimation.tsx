@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, memo } from 'react';
-import { useAnimation } from '../contexts/AnimationContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * BackgroundAnimation Component
  * 
  * Renders a retro computing-inspired animated grid background.
+ * Only renders in dark mode - light mode uses a clean background without animation.
  * CSS is centralized in index.css for performance (prevents re-injection on renders).
  * Uses React.memo to prevent unnecessary re-renders.
  */
 const BackgroundAnimation: React.FC = memo(() => {
   const squaresRef = useRef<(HTMLDivElement | null)[]>([]);
   const fullGridSquareRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const { animationsEnabled } = useAnimation();
+  const { isDarkMode } = useTheme();
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const intervalsRef = useRef<NodeJS.Timeout[]>([]);
 
@@ -21,16 +22,8 @@ const BackgroundAnimation: React.FC = memo(() => {
     intervalsRef.current.forEach(interval => clearInterval(interval));
     intervalsRef.current = [];
 
-    if (!animationsEnabled) {
-      // Hide animated squares when animations are disabled
-      squaresRef.current.forEach((square) => {
-        if (square) {
-          square.style.opacity = '0';
-          square.style.animationPlayState = 'paused';
-        }
-      });
-      return;
-    }
+    // Skip animations in light mode
+    if (!isDarkMode) return;
 
     const randomizePositions = () => {
       squaresRef.current.forEach((square) => {
@@ -64,24 +57,18 @@ const BackgroundAnimation: React.FC = memo(() => {
       intervalsRef.current.forEach(interval => clearInterval(interval));
       intervalsRef.current = [];
     };
-  }, [animationsEnabled]);
+  }, [isDarkMode]);
 
   // Randomize full grid squares position and lighting
   useEffect(() => {
     timeoutRefs.current.forEach(timeout => clearTimeout(timeout));
     timeoutRefs.current = [];
 
+    // Skip animations in light mode
+    if (!isDarkMode) return;
+
     const squares = fullGridSquareRefs.current.filter(sq => sq !== null);
     if (squares.length === 0) return;
-
-    if (!animationsEnabled) {
-      squares.forEach((square) => {
-        if (square) {
-          square.style.opacity = '0';
-        }
-      });
-      return;
-    }
 
     const meshBackground = document.querySelector('.mesh-gradient-background');
     const overlay = squares[0]?.parentElement;
@@ -89,8 +76,6 @@ const BackgroundAnimation: React.FC = memo(() => {
     if (!meshBackground || !overlay) return;
 
     const randomizePosition = (gridSquare: HTMLDivElement) => {
-      if (!animationsEnabled) return;
-      
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const meshRect = meshBackground.getBoundingClientRect();
@@ -112,9 +97,7 @@ const BackgroundAnimation: React.FC = memo(() => {
       
       const fadeDuration = 1500 + Math.random() * 2000;
       const fadeTimeout = setTimeout(() => {
-        if (animationsEnabled) {
-          gridSquare.style.opacity = '0';
-        }
+        gridSquare.style.opacity = '0';
       }, fadeDuration);
       timeoutRefs.current.push(fadeTimeout);
     };
@@ -123,20 +106,15 @@ const BackgroundAnimation: React.FC = memo(() => {
     squares.forEach((square, index) => {
       const initialDelay = (index * 200) + Math.random() * 500;
       const initialTimeout = setTimeout(() => {
-        if (animationsEnabled) {
-          randomizePosition(square);
-        }
+        randomizePosition(square);
       }, initialDelay);
       timeoutRefs.current.push(initialTimeout);
 
       const scheduleNext = () => {
-        if (!animationsEnabled) return;
         const delay = 1000 + Math.random() * 2500;
         const nextTimeout = setTimeout(() => {
-          if (animationsEnabled) {
-            randomizePosition(square);
-            scheduleNext();
-          }
+          randomizePosition(square);
+          scheduleNext();
         }, delay);
         timeoutRefs.current.push(nextTimeout);
       };
@@ -148,7 +126,14 @@ const BackgroundAnimation: React.FC = memo(() => {
       timeoutRefs.current.forEach(timeout => clearTimeout(timeout));
       timeoutRefs.current = [];
     };
-  }, [animationsEnabled]);
+  }, [isDarkMode]);
+
+  // Light mode: render only static grid (no animations)
+  if (!isDarkMode) {
+    return (
+      <div className="mesh-gradient-background mesh-gradient-light" aria-hidden="true" />
+    );
+  }
 
   return (
     <>
@@ -157,7 +142,7 @@ const BackgroundAnimation: React.FC = memo(() => {
       
       {/* Retro Computing Grid Squares Overlay */}
       <div 
-        className={`grid-squares-overlay ${!animationsEnabled ? 'animations-disabled' : ''}`} 
+        className="grid-squares-overlay"
         aria-hidden="true"
       >
         {/* Full Grid Squares - Randomly light up (21 total) */}
@@ -184,4 +169,3 @@ const BackgroundAnimation: React.FC = memo(() => {
 BackgroundAnimation.displayName = 'BackgroundAnimation';
 
 export default BackgroundAnimation;
-

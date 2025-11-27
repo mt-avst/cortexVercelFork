@@ -226,14 +226,13 @@ const Home: React.FC = memo(() => {
                     </label>
                     <select 
                       id="opportunity-type-filter"
-                      className="form-select" 
+                      className="form-select study-type-filter" 
                       value={selectedType} 
                       onChange={(e) => setSelectedType(e.target.value)}
                       aria-label="Filter opportunities by study type"
                     style={{
                       width: '352px',
                       backgroundColor: 'var(--bg-card)',
-                      borderColor: 'var(--border-card)',
                       color: 'var(--text-primary)',
                       fontSize: 'var(--font-size-body)'
                     }}
@@ -485,9 +484,9 @@ const Home: React.FC = memo(() => {
                                 </div>
                               )}
                               
-                              <div className="d-grid">
+                              <div className="d-flex justify-content-end">
                                 <button 
-                                  className="btn btn-primary"
+                                  className="btn btn-view-details"
                                   onClick={() => navigate(`/opportunities/${opportunity.id}`)}
                                   aria-label={`View details for ${opportunity.title}`}
                                 >

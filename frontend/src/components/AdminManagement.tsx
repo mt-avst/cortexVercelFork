@@ -117,7 +117,7 @@ const AdminManagement: React.FC = () => {
       <style>
         {`
           .admin-management .nav-tabs {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-card);
             margin-bottom: 1.5rem;
             display: flex;
             flex-wrap: wrap;
@@ -140,8 +140,8 @@ const AdminManagement: React.FC = () => {
           }
           .admin-management .nav-link:hover {
             color: var(--text-primary);
-            border-bottom-color: rgba(255, 78, 80, 0.5);
-            background-color: rgba(255, 255, 255, 0.05);
+            border-bottom-color: var(--brand-headline);
+            background-color: var(--bg-hover);
           }
           .admin-management .nav-link.active {
             color: var(--brand-headline);
@@ -164,14 +164,14 @@ const AdminManagement: React.FC = () => {
             width: 100%;
           }
           .admin-management table thead {
-            background-color: rgba(255, 255, 255, 0.05);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: var(--bg-table-header);
+            border-bottom: 1px solid var(--border-card);
           }
           .admin-management table thead th {
             color: var(--text-primary);
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--bg-table-header);
             border: none;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-card);
             padding: 0.75rem 1rem;
             font-weight: 600;
             white-space: nowrap;
@@ -181,11 +181,11 @@ const AdminManagement: React.FC = () => {
           }
           .admin-management table tbody tr {
             background-color: transparent;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid var(--border-table-row);
             transition: background-color 0.2s ease-in-out;
           }
           .admin-management table tbody tr:hover {
-            background-color: rgba(255, 255, 255, 0.05);
+            background-color: var(--bg-hover);
           }
           .admin-management table tbody td {
             color: var(--text-primary);
@@ -241,8 +241,8 @@ const AdminManagement: React.FC = () => {
           
           /* Alert styling */
           .admin-management .alert {
-            background-color: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background-color: var(--bg-hover);
+            border: 1px solid var(--border-card);
             border-radius: var(--card-radius);
             color: var(--text-primary);
           }

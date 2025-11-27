@@ -196,7 +196,7 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
             </div>
             <div className="card-body">
               <div className="text-center">
-                <p className="mb-3" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>{getCurrentMonth()}</p>
+                <p className="mb-3" style={{ color: 'var(--text-body)', fontSize: 'var(--font-size-metadata)' }}>{getCurrentMonth()}</p>
                 
                 {/* Prize Image */}
                 <div className="mb-3" style={{ 

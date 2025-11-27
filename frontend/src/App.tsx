@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { AnimationProvider } from './contexts/AnimationContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import SkipLink from './components/SkipLink';
 import Header from './components/Header';
@@ -34,7 +34,7 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <AnimationProvider>
+        <ThemeProvider>
           <Router>
             <div className="App">
               <SkipLink />
@@ -62,7 +62,7 @@ function App() {
               </main>
             </div>
           </Router>
-        </AnimationProvider>
+        </ThemeProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

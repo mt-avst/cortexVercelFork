@@ -72,7 +72,7 @@ const Settings: React.FC = () => {
   };
 
   if (loading || !initialAuthCheck) {
-    return <div className="container-fluid" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+    return <div className="container-fluid admin-page-container" style={{ minHeight: '100vh', padding: '2rem' }}>
       <div className="card text-center" style={{ background: 'var(--bg-card)', color: 'var(--text-primary)' }}>Loading...</div>
     </div>;
   }
@@ -82,7 +82,7 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid settings-container" style={{ minHeight: '100vh', padding: '2rem', backgroundColor: '#0A091A' }}>
+    <div className="container-fluid settings-container admin-page-container" style={{ minHeight: '100vh', padding: '2rem' }}>
       <style>
         {`
           /* Make settings page full width */
@@ -137,7 +137,7 @@ const Settings: React.FC = () => {
           }
           .settings-page .card-header {
             background-color: transparent !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-bottom: 1px solid var(--border-card) !important;
           }
           .settings-page .card-body {
             background-color: transparent !important;
@@ -159,8 +159,8 @@ const Settings: React.FC = () => {
             color: var(--brand-headline) !important;
           }
           .settings-page .list-group-item {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background-color: var(--bg-hover) !important;
+            border: 1px solid var(--border-card) !important;
             border-radius: var(--card-radius) !important;
             margin-bottom: 1rem;
             padding: var(--card-padding) !important;
@@ -171,10 +171,10 @@ const Settings: React.FC = () => {
           .settings-page .list-group-item small {
             color: var(--text-muted) !important;
           }
-          /* Custom toggle switches - Momentum Design System (Red) */
+          /* Custom toggle switches - Momentum Design System */
           .settings-page .form-check-input {
-            background-color: rgba(255, 255, 255, 0.2) !important;
-            border-color: rgba(255, 255, 255, 0.3) !important;
+            background-color: var(--bg-input) !important;
+            border-color: var(--border-card) !important;
             width: 3rem !important;
             height: 1.5rem !important;
           }
@@ -183,7 +183,7 @@ const Settings: React.FC = () => {
             border-color: var(--brand-headline) !important;
           }
           .settings-page .form-check-input:focus {
-            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
+            box-shadow: 0 0 0 0.2rem var(--focus-ring-color) !important;
           }
           .settings-page .bi-envelope-check,
           .settings-page .bi-envelope-x {
@@ -195,8 +195,8 @@ const Settings: React.FC = () => {
           }
           /* Alerts - Momentum Design System */
           .settings-page .alert {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background-color: var(--bg-hover) !important;
+            border: 1px solid var(--border-card) !important;
             border-radius: var(--card-radius) !important;
             color: var(--text-primary) !important;
           }
@@ -207,7 +207,7 @@ const Settings: React.FC = () => {
             border-color: rgba(244, 67, 54, 0.3) !important;
           }
           .settings-page .alert .btn-close {
-            filter: invert(1);
+            filter: var(--btn-close-filter, invert(1));
           }
           .settings-page .btn-outline-danger {
             border-color: rgba(244, 67, 54, 0.5) !important;
@@ -220,7 +220,7 @@ const Settings: React.FC = () => {
           
           /* Settings tabs styling */
           .settings-page .nav-tabs {
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid var(--border-card);
             margin-bottom: 2rem;
             display: flex;
             gap: 0.5rem;
@@ -241,8 +241,8 @@ const Settings: React.FC = () => {
           }
           .settings-page .nav-link:hover {
             color: var(--text-primary);
-            border-bottom-color: rgba(255, 78, 80, 0.5);
-            background-color: rgba(255, 255, 255, 0.05);
+            border-bottom-color: var(--brand-headline);
+            background-color: var(--bg-hover);
           }
           .settings-page .nav-link.active {
             color: var(--brand-headline);

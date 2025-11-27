@@ -1,3 +1,40 @@
+/* Ensure dropdown container allows overflow */
+.dropdown {
+  position: relative !important;
+  overflow: visible !important;
+}
+
+.nav-items {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.nav {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.header {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.header-content {
+  overflow: visible !important;
+  position: relative !important;
+}
+
+/* Ensure banner doesn't clip dropdown */
+header,
+[role="banner"] {
+  overflow: visible !important;
+}
+
+/* Container inside header must also allow overflow */
+.header .container {
+  overflow: visible !important;
+}
+
 /* Momentum Design System - Context Menu Styling */
 .dropdown-menu {
   background-color: rgba(26, 24, 43, 0.95) !important;
@@ -10,6 +47,8 @@
   min-width: 220px !important;
   color: #E0E0E0 !important;
   font-family: 'Inter', sans-serif !important;
+  z-index: 99999 !important;
+  overflow: visible !important;
 }
 
 /* Admin dropdown items - ensure consistent styling */
@@ -150,4 +189,140 @@
 
 .dropdown-menu li:hover .text-danger {
   color: #FF6B6D !important;
+}
+
+/* ============================================================
+   LIGHT MODE DROPDOWN OVERRIDES
+   ============================================================ */
+
+body.theme-light .dropdown-menu {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item:hover {
+  background-color: rgba(232, 108, 36, 0.1) !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item i {
+  color: #E86C24 !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item:hover i {
+  color: #D35F1D !important;
+}
+
+body.theme-light .dropdown-menu li {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu li div {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu li:hover div {
+  background-color: rgba(232, 108, 36, 0.1) !important;
+}
+
+body.theme-light .dropdown-menu li span {
+  color: #374151 !important;
+}
+
+/* Keep Hello User greeting bold in light mode */
+body.theme-light .dropdown-menu li:first-child span {
+  font-weight: 600 !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu li:first-child i {
+  color: #E86C24 !important;
+}
+
+body.theme-light .dropdown-menu li a {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu li:hover a {
+  background-color: rgba(232, 108, 36, 0.1) !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu li a i {
+  color: #E86C24 !important;
+}
+
+body.theme-light .dropdown-menu li:hover a i {
+  color: #D35F1D !important;
+}
+
+body.theme-light .dropdown-menu li button {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu li:hover button {
+  background-color: rgba(232, 108, 36, 0.1) !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu li button i {
+  color: #E86C24 !important;
+}
+
+body.theme-light .dropdown-menu li:hover button i {
+  color: #D35F1D !important;
+}
+
+body.theme-light .dropdown-menu li i {
+  color: #E86C24 !important;
+}
+
+body.theme-light .dropdown-menu li:hover i:not(:first-child) {
+  color: #D35F1D !important;
+}
+
+/* Divider styling for light mode */
+body.theme-light .dropdown-menu .dropdown-divider,
+body.theme-light .dropdown-menu hr.dropdown-divider {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Light mode text color overrides */
+body.theme-light .dropdown-menu .text-white {
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu .text-muted {
+  color: #6B7280 !important;
+}
+
+body.theme-light .dropdown-menu .text-dark {
+  color: #1A1A1A !important;
+}
+
+body.theme-light .dropdown-menu .text-danger {
+  color: #DC2626 !important;
+}
+
+body.theme-light .dropdown-menu li:hover .text-danger {
+  color: #B91C1C !important;
+}
+
+/* Dropdown menu item text - theme aware */
+.dropdown-menu-item-text {
+  color: #E0E0E0 !important;
+}
+
+body.theme-light .dropdown-menu-item-text {
+  color: #374151 !important;
+}
+
+body.theme-light .dropdown-menu li:hover .dropdown-menu-item-text {
+  color: #1A1A1A !important;
 }

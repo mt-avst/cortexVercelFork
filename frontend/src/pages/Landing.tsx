@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, memo } from 'react';
 import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
-import { useAnimation } from '../contexts/AnimationContext';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Helper function to convert HSL to RGB - defined outside component for performance
 const hslToRgb = (h: number, s: number, l: number): [number, number, number] => {
@@ -37,7 +37,7 @@ const Landing: React.FC = memo(() => {
   const [loginLoading, setLoginLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const coralDotsRef = useRef<(HTMLDivElement | null)[]>([]);
-  const { animationsEnabled } = useAnimation();
+  const { isDarkMode } = useTheme();
   
   // Pre-compute all dot data at once (memoized)
   const dotData = useMemo<DotData[]>(() => {
@@ -79,9 +79,9 @@ const Landing: React.FC = memo(() => {
     googleLogin();
   };
 
-  // Coral dots animation - randomize positions on grid lines
+  // Coral dots animation - randomize positions on grid lines (only in dark mode)
   useEffect(() => {
-    if (!animationsEnabled) return;
+    if (!isDarkMode) return;
 
     const randomizeCoralDots = () => {
       coralDotsRef.current.forEach((dot, index) => {
@@ -110,12 +110,12 @@ const Landing: React.FC = memo(() => {
     const intervalId = setInterval(randomizeCoralDots, 20000);
 
     return () => clearInterval(intervalId);
-  }, [animationsEnabled]);
+  }, [isDarkMode]);
 
   return (
-    <div className={`landing-hero-wrapper ${!animationsEnabled ? 'animations-disabled' : ''}`}>
-      {/* Coral dots traveling along grid lines - 30 dots with pre-computed data */}
-      <div className="coral-dots-container">
+    <div className={`landing-hero-wrapper ${!isDarkMode ? 'light-mode' : ''}`}>
+      {/* Coral dots traveling along grid lines - 30 dots with pre-computed data (only in dark mode) */}
+      {isDarkMode && <div className="coral-dots-container">
         {dotData.map((dot, index) => {
           const isHorizontal = index < 15;
           const [r, g, b] = dot.rgb;
@@ -142,7 +142,7 @@ const Landing: React.FC = memo(() => {
             />
           );
         })}
-      </div>
+      </div>}
       
       {/* Hero Content - Redesigned Layout */}
       <div className="hero-content hero-content-redesign">

@@ -210,22 +210,22 @@ const AdminFeedback: React.FC = () => {
             background-color: transparent !important;
           }
           .admin-feedback .feedback-table thead th {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            color: #E0E0E0 !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
+            background-color: var(--bg-table-header) !important;
+            color: var(--text-primary) !important;
+            border-bottom: 1px solid var(--border-card) !important;
             padding: 12px 16px !important;
           }
           .admin-feedback .feedback-table tbody tr {
             background-color: transparent !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05) !important;
+            border-bottom: 1px solid var(--border-table-row) !important;
             cursor: pointer;
             transition: background-color 0.15s ease;
           }
           .admin-feedback .feedback-table tbody tr:hover {
-            background-color: rgba(255, 255, 255, 0.08) !important;
+            background-color: var(--bg-hover) !important;
           }
           .admin-feedback .feedback-table tbody td {
-            color: #E0E0E0 !important;
+            color: var(--text-primary) !important;
             padding: 16px !important;
             vertical-align: middle !important;
           }
@@ -242,27 +242,92 @@ const AdminFeedback: React.FC = () => {
             overflow: hidden;
           }
           .admin-feedback .read-more {
-            color: #FF4E50;
+            color: var(--brand-headline);
             font-size: 0.85rem;
             margin-top: 4px;
           }
           .admin-feedback .user-info {
             font-size: 0.85rem;
-            color: rgba(224, 224, 224, 0.7);
+            color: var(--text-muted);
           }
           .admin-feedback .sortable {
             cursor: pointer;
             user-select: none;
           }
           .admin-feedback .sortable:hover {
-            color: #FF4E50 !important;
+            color: var(--brand-headline) !important;
+          }
+          .admin-feedback .feedback-heading {
+            color: var(--text-primary);
+          }
+          .admin-feedback .empty-state-icon {
+            color: var(--text-muted);
+          }
+          .admin-feedback .empty-state-title {
+            color: var(--text-primary);
+          }
+          .admin-feedback .empty-state-text {
+            color: var(--text-muted);
+          }
+          .admin-feedback .date-text {
+            color: var(--text-muted);
+          }
+          /* Modal styling */
+          .admin-feedback .feedback-modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-card);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+          }
+          .admin-feedback .feedback-modal-header {
+            border-bottom: 1px solid var(--border-card);
+          }
+          .admin-feedback .feedback-modal-header h5 {
+            color: var(--text-primary);
+          }
+          .admin-feedback .feedback-modal-header small {
+            color: var(--text-muted);
+          }
+          .admin-feedback .feedback-modal-header button {
+            color: var(--text-muted);
+          }
+          .admin-feedback .feedback-modal-text {
+            color: var(--text-primary);
+          }
+          .admin-feedback .feedback-modal-placeholder {
+            color: var(--text-muted);
+            font-style: italic;
+          }
+          .admin-feedback .feedback-modal-meta {
+            border-top: 1px solid var(--border-table-row);
+            color: var(--text-muted);
+            font-size: 0.85rem;
+          }
+          .admin-feedback .feedback-modal-meta i {
+            color: var(--brand-headline);
+            opacity: 0.7;
+            margin-right: 0.5rem;
+          }
+          .admin-feedback .feedback-modal-footer {
+            border-top: 1px solid var(--border-card);
+          }
+          .admin-feedback .feedback-nav-btn {
+            background: var(--bg-hover);
+            border: 1px solid var(--border-card);
+            color: var(--text-primary);
+          }
+          .admin-feedback .feedback-nav-btn:hover:not(:disabled) {
+            background: var(--bg-table-header);
+          }
+          .admin-feedback .feedback-pagination-text {
+            color: var(--text-muted);
           }
           
         `}
       </style>
 
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-        <h3 className="text-white mb-0">
+        <h3 className="feedback-heading mb-0">
           <i className="bi bi-chat-left-text me-2"></i>
           Feedback Inbox
           {feedback.length > 0 && (
@@ -293,9 +358,9 @@ const AdminFeedback: React.FC = () => {
 
       {feedback.length === 0 ? (
         <div className="text-center py-5">
-          <i className="bi bi-inbox" style={{ fontSize: '3rem', color: 'rgba(224, 224, 224, 0.5)' }}></i>
-          <h4 className="mt-3" style={{ color: '#E0E0E0' }}>No feedback yet</h4>
-          <p style={{ color: 'rgba(224, 224, 224, 0.7)' }}>
+          <i className="bi bi-inbox empty-state-icon" style={{ fontSize: '3rem' }}></i>
+          <h4 className="mt-3 empty-state-title">No feedback yet</h4>
+          <p className="empty-state-text">
             Feedback submitted by users will appear here.
           </p>
         </div>
@@ -340,7 +405,7 @@ const AdminFeedback: React.FC = () => {
                     onClick={() => openViewModal(index)}
                   >
                     <td>
-                      <small style={{ color: 'rgba(224, 224, 224, 0.7)' }}>
+                      <small className="date-text">
                         {formatDate(item.created_at)}
                       </small>
                     </td>
@@ -408,9 +473,8 @@ const AdminFeedback: React.FC = () => {
         >
           <div 
             onClick={(e) => e.stopPropagation()}
+            className="feedback-modal-content"
             style={{
-              background: 'linear-gradient(135deg, rgba(30, 28, 50, 0.98) 0%, rgba(20, 18, 35, 0.98) 100%)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
               borderRadius: '16px',
               maxWidth: '700px',
               width: '100%',
@@ -420,9 +484,8 @@ const AdminFeedback: React.FC = () => {
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
             }}
           >
-            <div style={{
+            <div className="feedback-modal-header" style={{
               padding: '1.5rem',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'flex-start'
@@ -460,24 +523,22 @@ const AdminFeedback: React.FC = () => {
               overflowY: 'auto',
               flex: 1
             }}>
-              <div style={{
+              <div className="feedback-modal-text" style={{
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 lineHeight: 1.7,
-                color: '#E0E0E0',
                 fontSize: '1rem',
                 minHeight: '60px'
               }}>
-                {currentFeedback.feedback || <span style={{ color: 'rgba(224, 224, 224, 0.4)', fontStyle: 'italic' }}>No feedback text provided</span>}
+                {currentFeedback.feedback || <span className="feedback-modal-placeholder">No feedback text provided</span>}
               </div>
               
-              <div style={{
+              <div className="feedback-modal-meta" style={{
                 display: 'flex',
                 flexWrap: 'wrap',
                 gap: '1rem',
                 marginTop: '1rem',
-                paddingTop: '1rem',
-                borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+                paddingTop: '1rem'
               }}>
                 <div style={{ fontSize: '0.85rem', color: 'rgba(224, 224, 224, 0.6)' }}>
                   <i className="bi bi-calendar3" style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }}></i>
@@ -492,9 +553,8 @@ const AdminFeedback: React.FC = () => {
               </div>
             </div>
             
-            <div style={{
+            <div className="feedback-modal-footer" style={{
               padding: '1rem 1.5rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.1)',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center'
@@ -503,10 +563,8 @@ const AdminFeedback: React.FC = () => {
                 onClick={goToPrevious}
                 disabled={viewModal.index === 0}
                 aria-label="Previous feedback"
+                className="feedback-nav-btn"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: viewModal.index === 0 ? 'rgba(224, 224, 224, 0.3)' : '#E0E0E0',
                   width: '48px',
                   height: '48px',
                   borderRadius: '50%',
@@ -522,7 +580,7 @@ const AdminFeedback: React.FC = () => {
               </button>
               
               <div className="d-flex align-items-center gap-3">
-                <span style={{ color: 'rgba(224, 224, 224, 0.6)', fontSize: '0.9rem' }}>
+                <span className="feedback-pagination-text" style={{ fontSize: '0.9rem' }}>
                   {viewModal.index + 1} of {sortedFeedback.length}
                 </span>
                 {isSuperadmin && (
@@ -541,10 +599,8 @@ const AdminFeedback: React.FC = () => {
                 onClick={goToNext}
                 disabled={viewModal.index === sortedFeedback.length - 1}
                 aria-label="Next feedback"
+                className="feedback-nav-btn"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  color: viewModal.index === sortedFeedback.length - 1 ? 'rgba(224, 224, 224, 0.3)' : '#E0E0E0',
                   width: '48px',
                   height: '48px',
                   borderRadius: '50%',

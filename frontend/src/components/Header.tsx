@@ -1,7 +1,7 @@
 import React, { useState, memo, useMemo, useCallback } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useAnimation } from '../contexts/AnimationContext';
+import { useTheme } from '../contexts/ThemeContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
@@ -14,7 +14,7 @@ import './Header.css';
  */
 const Header: React.FC = memo(() => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
-  const { animationsEnabled, toggleAnimations } = useAnimation();
+  const { theme, toggleTheme, isDarkMode } = useTheme();
   const location = useLocation();
   
   // Check if we're on an admin page
@@ -86,17 +86,16 @@ const Header: React.FC = memo(() => {
           </Link>
           
           <nav className="nav" aria-label="Main navigation">
-            {/* Animation Toggle Button - Always visible */}
+            {/* Theme Toggle Button - Always visible */}
             <button
-              onClick={toggleAnimations}
-              className="btn btn-outline-secondary animation-toggle-btn"
-              aria-label={animationsEnabled ? 'Disable animations' : 'Enable animations'}
-              title={animationsEnabled ? 'Disable animations' : 'Enable animations'}
-              style={{ marginRight: '0.5rem' }}
+              onClick={toggleTheme}
+              className="momentum-btn-secondary"
+              aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <i className={animationsEnabled ? 'bi bi-pause-fill' : 'bi bi-play-fill'} aria-hidden="true"></i>
-              <span className="d-none d-md-inline ms-1 animation-toggle-text">
-                {animationsEnabled ? 'Animations On' : 'Animations Off'}
+              <i className={isDarkMode ? 'bi bi-sun-fill' : 'bi bi-moon-fill'} aria-hidden="true"></i>
+              <span className="d-none d-md-inline ms-1">
+                {isDarkMode ? 'Light Mode' : 'Dark Mode'}
               </span>
             </button>
 
@@ -183,7 +182,7 @@ const Header: React.FC = memo(() => {
                           <li role="none">
                             <button 
                               onClick={handleRequestAdminClick}
-                              className="px-3 py-2 w-100 text-start border-0 bg-transparent text-white d-flex align-items-start"
+                              className="px-3 py-2 w-100 text-start border-0 bg-transparent d-flex align-items-start dropdown-menu-item-text"
                               role="menuitem"
                               disabled={requestingAdmin}
                               style={{ cursor: requestingAdmin ? 'not-allowed' : 'pointer' }}

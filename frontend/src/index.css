@@ -172,9 +172,9 @@ span.badge {
   color: var(--text-muted) !important;
 }
 
-/* On dark backgrounds, use lighter muted text */
-.main .text-muted:not(.card .text-muted),
-:not(.card)>.text-muted {
+/* On dark backgrounds, use lighter muted text (dark theme only) */
+body:not(.theme-light) .main .text-muted:not(.card .text-muted),
+body:not(.theme-light) :not(.card)>.text-muted {
   color: rgba(244, 244, 244, 0.7) !important;
 }
 
@@ -363,6 +363,8 @@ label,
   border-bottom: none;
   padding: 1rem 0;
   color: var(--text-on-dark);
+  position: relative;
+  z-index: 1000;
 }
 
 /* Header logo area */
@@ -502,21 +504,41 @@ body.admin-page .header .container {
 
 /* Exception: card-text paragraphs should use light grey for Momentum design */
 /* Higher specificity to override .card p rule */
-div.card-body p.card-text:not(.text-muted):not(.small),
-.card-body p.card-text:not(.text-muted):not(.small),
-.card .card-body p.card-text:not(.text-muted):not(.small) {
+div.card-body p.card-text:not(.text-muted),
+.card-body p.card-text:not(.text-muted),
+.card .card-body p.card-text:not(.text-muted) {
   color: var(--text-body) !important;
   font-size: var(--font-size-body) !important;
-  line-height: 1.25 !important;
+  line-height: 1.4 !important;
   font-weight: 400 !important;
+}
+
+/* Description text with small class - ensure readable in dark mode */
+body:not(.theme-light) .card-body p.card-text.small,
+body:not(.theme-light) .card .card-body p.card-text.small {
+  color: rgba(224, 224, 224, 0.85) !important;
+  font-size: var(--font-size-metadata) !important;
+  line-height: 1.5 !important;
+}
+
+/* Description text with small class - light mode uses dark text */
+body.theme-light .card-body p.card-text.small,
+body.theme-light .card .card-body p.card-text.small {
+  color: #4B5563 !important;
+  font-size: var(--font-size-metadata) !important;
+  line-height: 1.5 !important;
 }
 
 .card small,
 .card .small {
   font-size: var(--font-size-metadata);
   line-height: var(--line-height-metadata);
-  opacity: 0.7;
-  /* De-emphasize metadata */
+}
+
+/* Dark mode card small text - readable without opacity */
+body:not(.theme-light) .card small,
+body:not(.theme-light) .card .small {
+  color: rgba(224, 224, 224, 0.85) !important;
 }
 
 /* Bento Grid Layout - Momentum Design System */
@@ -573,7 +595,11 @@ div.card-body p.card-text:not(.text-muted):not(.small),
 .card .text-muted {
   font-size: var(--font-size-metadata);
   line-height: var(--line-height-metadata);
-  color: var(--text-muted) !important;
+}
+
+/* Dark mode card muted text */
+body:not(.theme-light) .card .text-muted {
+  color: rgba(224, 224, 224, 0.85) !important;
 }
 
 
@@ -827,6 +853,16 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   /* Divider */
   --divider: #EAEAEA;
 
+  /* Admin Dashboard Theme Variables - Dark Theme */
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-tab: rgba(255, 255, 255, 0.05);
+  --bg-table-header: rgba(255, 255, 255, 0.05);
+  --border-table-row: rgba(255, 255, 255, 0.05);
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --bg-input-focus: rgba(255, 255, 255, 0.08);
+  --focus-ring-color: rgba(255, 78, 80, 0.25);
+  --btn-close-filter: invert(1);
+
   /* Typography - Momentum Design System */
   --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
   --font-weight-h1: 700;
@@ -895,6 +931,598 @@ div.card-body p.card-text:not(.text-muted):not(.small),
   --calendar-hover-transform: translateY(-1px);
   --calendar-hover-scale: scale(1.02);
   --calendar-hover-shadow-selected: 0 4px 8px rgba(255, 122, 51, 0.3);
+}
+
+/* ============================================================
+   LIGHT THEME - Traditional Clean Design
+   ============================================================ */
+body.theme-light {
+  /* Background Colors - Clean white */
+  --bg-app: #FFFFFF;
+  --bg-app-gradient-top: #F8F9FA;
+  --bg-app-gradient-bottom: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --border-card: rgba(0, 0, 0, 0.12);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.05);
+
+  /* Text Colors - Dark for readability */
+  --text-primary: #1A1A1A;
+  --text-body: #374151;
+  --text-muted: #4B5563;
+  --text-on-dark: #1A1A1A;
+
+  /* Brand Colors - Adjusted for light backgrounds (Adaptavist Orange) */
+  --brand-headline: #E86C24;
+  --cta-bg: #E86C24;
+  --cta-bg-hover: #D35F1D;
+  --cta-text: #FFFFFF;
+  --cta-text-hover: #FFFFFF;
+  --cta-border: #E86C24;
+  --focus-ring: #E86C24;
+
+  /* Accent Colors */
+  --accent-coral: #E86C24;
+  --accent-amber: #D97706;
+  --accent-teal: #0D9488;
+
+  /* Tag Colors - Light theme */
+  --tag-survey: #F3F4F6;
+  --tag-poll: #F3F4F6;
+  --tag-test: #F3F4F6;
+  --tag-text: #374151;
+
+  /* Link Colors */
+  --link: #E86C24;
+  --link-hover: #D35F1D;
+
+  /* Divider */
+  --divider: #E5E7EB;
+
+  /* Shadows - Softer for light theme */
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-button-hover: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+
+  /* Admin Dashboard Theme Variables - Light Theme */
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-tab: rgba(0, 0, 0, 0.03);
+  --bg-table-header: rgba(0, 0, 0, 0.03);
+  --border-table-row: rgba(0, 0, 0, 0.06);
+  --bg-input: rgba(255, 255, 255, 0.9);
+  --bg-input-focus: rgba(255, 255, 255, 1);
+  --focus-ring-color: rgba(232, 108, 36, 0.25);
+  --btn-close-filter: none;
+}
+
+/* Light theme body background */
+body.theme-light,
+body.theme-light html {
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%) !important;
+  color: var(--text-body) !important;
+}
+
+/* Hide animated elements in light mode - keep static grid */
+body.theme-light .grid-squares-overlay,
+body.theme-light .coral-dots-container {
+  display: none !important;
+}
+
+/* Light mode static grid - orange color */
+.mesh-gradient-light {
+  background-image:
+    linear-gradient(rgba(232, 108, 36, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 108, 36, 0.15) 1px, transparent 1px) !important;
+  background-size: 80px 80px !important;
+  opacity: 0.6 !important;
+}
+
+/* Light theme card styling - clear glass effect */
+body.theme-light .card,
+body.theme-light .momentum-card {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Light theme study cards - professional corporate style */
+body.theme-light .bento-grid .card {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid transparent !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.04) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  transition: all 0.2s ease-out !important;
+}
+
+/* Light theme study cards - hover state with lift and orange accent */
+body.theme-light .bento-grid .card:hover {
+  transform: translateY(-4px) !important;
+  border: 1px solid rgba(232, 108, 36, 0.25) !important;
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 12px 28px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(232, 108, 36, 0.1) !important;
+}
+
+/* Light theme headings */
+body.theme-light h1,
+body.theme-light .h1 {
+  color: var(--brand-headline) !important;
+}
+
+body.theme-light h2,
+body.theme-light .h2,
+body.theme-light h3,
+body.theme-light .h3 {
+  color: var(--text-primary) !important;
+}
+
+/* Light theme main content headings */
+body.theme-light .main h2,
+body.theme-light .main .h2,
+body.theme-light .main h3,
+body.theme-light .main .h3 {
+  color: var(--text-primary) !important;
+}
+
+/* Light theme header - clear glass */
+body.theme-light .header {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  overflow: visible !important;
+}
+
+/* Ensure light theme header elements allow dropdown overflow */
+body.theme-light .header .container,
+body.theme-light .header-content,
+body.theme-light .header .nav,
+body.theme-light .header .nav-items,
+body.theme-light .header .dropdown {
+  overflow: visible !important;
+}
+
+body.theme-light .header .nav .btn-outline-secondary {
+  color: #1A1A1A !important;
+  border-color: #374151 !important;
+  background: transparent !important;
+}
+
+body.theme-light .header .nav .btn-outline-secondary:hover {
+  background: #E86C24 !important;
+  border-color: #E86C24 !important;
+  color: #FFFFFF !important;
+}
+
+/* Light theme dropdown menu - clear glass */
+body.theme-light .dropdown-menu {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item,
+body.theme-light .dropdown-menu button,
+body.theme-light .dropdown-menu a {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .dropdown-menu .dropdown-item:hover,
+body.theme-light .dropdown-menu button:hover,
+body.theme-light .dropdown-menu a:hover {
+  background: rgba(0, 0, 0, 0.05) !important;
+  color: var(--text-primary) !important;
+}
+
+body.theme-light .dropdown-divider {
+  border-color: var(--border-card) !important;
+}
+
+/* Light theme momentum buttons */
+body.theme-light .momentum-btn-secondary {
+  background: transparent !important;
+  border: 1px solid #374151 !important;
+  color: #1A1A1A !important;
+}
+
+body.theme-light .momentum-btn-secondary:hover {
+  background: #E86C24 !important;
+  border-color: #E86C24 !important;
+  color: #FFFFFF !important;
+}
+
+/* Light theme CTA buttons */
+body.theme-light .momentum-cta {
+  background: var(--cta-bg) !important;
+  color: var(--cta-text) !important;
+  border-color: var(--cta-border) !important;
+}
+
+body.theme-light .momentum-cta:hover {
+  background: var(--cta-bg-hover) !important;
+}
+
+/* Light theme form inputs - clear glass */
+body.theme-light .form-control,
+body.theme-light .form-select {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: var(--text-body) !important;
+}
+
+/* Light theme filter section - orange border */
+body.theme-light .filter-section {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(232, 108, 36, 0.3) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Light theme study type filter dropdown - orange border (matches study cards) */
+body.theme-light .study-type-filter,
+body.theme-light #opportunity-type-filter,
+body.theme-light select.study-type-filter {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(232, 108, 36, 0.3) !important;
+  border-radius: 8px !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+/* Dark mode study type filter - subtle border */
+.study-type-filter,
+#opportunity-type-filter {
+  border: 1px solid var(--border-card) !important;
+  border-radius: 8px !important;
+}
+
+body.theme-light .form-control:focus,
+body.theme-light .form-select:focus {
+  border-color: var(--focus-ring) !important;
+  box-shadow: 0 0 0 3px rgba(232, 108, 36, 0.15) !important;
+}
+
+body.theme-light .form-control::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Light theme alerts - clear glass */
+body.theme-light .alert {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: var(--text-body) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+}
+
+body.theme-light .alert-success {
+  border-color: #10B981 !important;
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+body.theme-light .alert-danger {
+  border-color: #EF4444 !important;
+  background: rgba(239, 68, 68, 0.05) !important;
+}
+
+/* Light theme tables - clear glass */
+body.theme-light .table {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .table thead th {
+  background: rgba(255, 255, 255, 0.5) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .table tbody td {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+  background: transparent !important;
+}
+
+body.theme-light .table-hover tbody tr:hover {
+  background: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Light theme nav welcome text */
+body.theme-light .nav-items .text-white-50 {
+  color: var(--text-muted) !important;
+}
+
+/* Light theme badge/pills */
+body.theme-light .badge,
+body.theme-light .tag {
+  background: var(--tag-survey) !important;
+  color: var(--tag-text) !important;
+}
+
+/* Light theme lozenges - refined with subtle shadow */
+body.theme-light .bento-grid .lozenge {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  padding: 0.5rem 0.9rem !important;
+}
+
+/* Light theme spinner */
+body.theme-light .spinner-border {
+  border-color: var(--brand-headline) !important;
+  border-right-color: transparent !important;
+}
+
+/* Light theme modal - clear glass */
+body.theme-light .modal-content {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  color: var(--text-body) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+body.theme-light .modal-header {
+  border-color: var(--border-card) !important;
+}
+
+body.theme-light .modal-footer {
+  border-color: var(--border-card) !important;
+}
+
+body.theme-light .btn-close {
+  filter: none !important;
+}
+
+/* Light theme list groups - clear glass */
+body.theme-light .list-group-item {
+  background: rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+  color: var(--text-body) !important;
+}
+
+/* Light theme settings page - clear glass */
+body.theme-light .settings-page .card {
+  background: rgba(255, 255, 255, 0.7) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+body.theme-light .settings-page .nav-link {
+  color: var(--text-muted) !important;
+}
+
+body.theme-light .settings-page .nav-link:hover {
+  color: var(--text-primary) !important;
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .settings-page .nav-link.active {
+  color: var(--brand-headline) !important;
+}
+
+/* Light theme landing hero */
+body.theme-light .landing-hero-wrapper {
+  background: transparent !important;
+}
+
+/* Light theme hero content glass panel */
+body.theme-light .hero-content::before {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+}
+
+body.theme-light .hero-content-redesign::before {
+  background: rgba(255, 255, 255, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+}
+
+body.theme-light .hero-content h1 {
+  color: var(--brand-headline) !important;
+}
+
+body.theme-light .hero-content p {
+  color: var(--text-body) !important;
+}
+
+/* Light theme hero value section */
+body.theme-light .hero-value-heading {
+  color: var(--text-primary) !important;
+  border-bottom-color: var(--border-card) !important;
+}
+
+body.theme-light .hero-value-list li {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .hero-subtitle-centered {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .hero-cta-primary {
+  background: var(--cta-bg) !important;
+  color: var(--cta-text) !important;
+  border-color: var(--cta-border) !important;
+}
+
+body.theme-light .hero-cta-primary:hover {
+  background: var(--cta-bg-hover) !important;
+}
+
+body.theme-light .hero-demo-link {
+  color: var(--brand-headline) !important;
+}
+
+body.theme-light .hero-demo-link:hover {
+  color: var(--link-hover) !important;
+}
+
+body.theme-light .hero-demo-divider {
+  color: var(--text-muted) !important;
+}
+
+/* Light theme home page */
+body.theme-light .adaptalabs-home-title {
+  color: var(--brand-headline) !important;
+}
+
+body.theme-light .main .lead {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .main .tagline {
+  color: var(--text-primary) !important;
+}
+
+body.theme-light .main p {
+  color: var(--text-body) !important;
+}
+
+/* Light theme opportunity cards - clear glass */
+body.theme-light .opportunity-card {
+  background: rgba(255, 255, 255, 0.65) !important;
+  border: 1px solid rgba(232, 108, 36, 0.3) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+body.theme-light .opportunity-card .text-muted,
+body.theme-light .opportunity-card small {
+  color: var(--text-muted) !important;
+}
+
+body.theme-light .opportunity-card .card-subtitle,
+body.theme-light .opportunity-card .card-description {
+  color: var(--text-body) !important;
+}
+
+/* Light theme metadata section */
+body.theme-light .card-metadata,
+body.theme-light .opportunity-metadata,
+body.theme-light .metadata-item {
+  color: var(--text-muted) !important;
+}
+
+/* Light theme filter dropdown */
+body.theme-light .form-select {
+  background-color: #FFFFFF !important;
+  border-color: var(--border-card) !important;
+  color: var(--text-body) !important;
+}
+
+/* Light theme timing info section in cards */
+body.theme-light .timing-info {
+  background-color: rgba(249, 250, 251, 0.8) !important;
+  border: none !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-radius: 0 !important;
+  margin-top: 16px !important;
+  padding-top: 12px !important;
+}
+
+body.theme-light .timing-info .text-muted,
+body.theme-light .timing-info small,
+body.theme-light .timing-info .d-flex small {
+  color: #4B5563 !important;
+}
+
+body.theme-light .card .text-muted,
+body.theme-light .bento-grid .text-muted,
+body.theme-light .card-body .text-muted {
+  color: #4B5563 !important;
+}
+
+/* Light theme small text - force all small text to be visible */
+body.theme-light small,
+body.theme-light .small,
+body.theme-light .card small,
+body.theme-light .card-body small {
+  color: #4B5563 !important;
+}
+
+/* Light theme icons in cards */
+body.theme-light .timing-info svg,
+body.theme-light .card svg,
+body.theme-light .card-body svg {
+  color: #4B5563 !important;
+  stroke: #4B5563 !important;
+}
+
+/* Light theme empty states */
+body.theme-light .text-center.text-muted {
+  color: #4B5563 !important;
+}
+
+body.theme-light .text-center.text-muted h4 {
+  color: var(--text-primary) !important;
+}
+
+/* Force all timing-urgency text to be visible in light mode */
+body.theme-light .timing-urgency-normal,
+body.theme-light .timing-urgency-warning,
+body.theme-light .timing-urgency-urgent {
+  color: #4B5563 !important;
+}
+
+body.theme-light .timing-urgency-warning {
+  color: #D97706 !important;
+}
+
+body.theme-light .timing-urgency-urgent {
+  color: #DC2626 !important;
+}
+
+/* Critical: Override main section text-muted colors for light mode */
+body.theme-light .main .text-muted,
+body.theme-light .main .text-muted:not(.card .text-muted),
+body.theme-light :not(.card)>.text-muted,
+body.theme-light .text-muted {
+  color: #4B5563 !important;
+}
+
+/* Force all small and muted text in cards for light mode */
+body.theme-light .card-body .text-muted,
+body.theme-light .card-body small.text-muted,
+body.theme-light .bento-grid .card .text-muted,
+body.theme-light .bento-grid small {
+  color: #4B5563 !important;
+}
+
+/* Global override: Force all metadata-style text to be dark in light mode */
+body.theme-light .card small,
+body.theme-light .card .d-flex small,
+body.theme-light .timing-info small,
+body.theme-light .timing-info .d-flex small,
+body.theme-light .mb-2 small,
+body.theme-light .mb-3 small,
+body.theme-light small.text-muted.d-flex,
+body.theme-light .d-flex.align-items-center small {
+  color: #374151 !important;
+}
+
+/* Force icons in light mode to be darker */
+body.theme-light .card svg,
+body.theme-light .timing-info svg {
+  color: #374151 !important;
+  stroke: #374151 !important;
+}
+
+/* Ultimate fallback: Force ALL small elements in light mode to be dark */
+body.theme-light small {
+  color: #374151 !important;
+}
+
+body.theme-light .text-muted {
+  color: #4B5563 !important;
 }
 
 /* Custom calendar slot colors */
@@ -1342,6 +1970,59 @@ span.lozenge-unmoderated,
 }
 
 /* ============================================================================
+   LIGHT MODE LOZENGE STYLES - Pastel backgrounds with darker text
+   ============================================================================ */
+
+/* Light mode: Survey - Dark cyan text on light cyan background */
+body.theme-light span.lozenge-survey,
+body.theme-light .lozenge-survey {
+  color: #1A6569 !important;
+  background-color: #E0F4F5 !important;
+}
+
+/* Light mode: Poll - Dark green text on light green background */
+body.theme-light span.lozenge-poll,
+body.theme-light .lozenge-poll {
+  color: #1A5A45 !important;
+  background-color: #E0F5EC !important;
+}
+
+/* Light mode: Interview - Dark blue text on light blue background */
+body.theme-light span.lozenge-interview,
+body.theme-light .lozenge-interview {
+  color: #2A4570 !important;
+  background-color: #E5EDF8 !important;
+}
+
+/* Light mode: User Test - Dark gray-blue text on light gray background */
+body.theme-light span.lozenge-usertest,
+body.theme-light .lozenge-usertest {
+  color: #3D4555 !important;
+  background-color: #EAEDF2 !important;
+}
+
+/* Light mode: Question - Dark purple text on light purple background */
+body.theme-light span.lozenge-question,
+body.theme-light .lozenge-question {
+  color: #5A4580 !important;
+  background-color: #F0E8F7 !important;
+}
+
+/* Light mode: Unmoderated - Dark orange text on light orange background */
+body.theme-light span.lozenge-unmoderated,
+body.theme-light .lozenge-unmoderated {
+  color: #8B5A30 !important;
+  background-color: #FCF0E4 !important;
+}
+
+/* Light mode: Analytics - Dark coral text on light pink background */
+body.theme-light span.lozenge-analytics,
+body.theme-light .lozenge-analytics {
+  color: #B22D2F !important;
+  background-color: #FDEBEB !important;
+}
+
+/* ============================================================================
    TIMING URGENCY STYLES - For study card countdown indicators
    ============================================================================ */
 
@@ -1369,6 +2050,20 @@ span.lozenge-unmoderated,
 /* Timing info container styles */
 .timing-info {
   font-size: 0.875rem;
+}
+
+/* Dark mode timing info text - ensure readability */
+body:not(.theme-light) .timing-info small,
+body:not(.theme-light) .timing-info .text-muted,
+body:not(.theme-light) .card .timing-info small {
+  color: rgba(224, 224, 224, 0.9) !important;
+}
+
+/* Dark mode card icons - ensure visibility */
+body:not(.theme-light) .card svg,
+body:not(.theme-light) .timing-info svg {
+  color: rgba(224, 224, 224, 0.85) !important;
+  stroke: rgba(224, 224, 224, 0.85) !important;
 }
 
 /* Analytics Badge - Electric Coral on Carbon Black */
@@ -1650,104 +2345,196 @@ span.lozenge-analytics,
   }
 }
 
+/* Modal positioning - ensure full-screen overlay */
+.modal.show.d-block {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  z-index: 1050 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.modal.show.d-block .modal-dialog {
+  margin: auto !important;
+  max-width: 500px !important;
+  width: 100% !important;
+}
+
 /* Modal text color override - ensure black text in modals */
-.modal-content {
+.modal-content:not(.confirmation-modal-content) {
   background-color: white !important;
 }
 
-.modal-header,
-.modal-body,
-.modal-footer {
+.modal-header:not(.confirmation-modal-header),
+.modal-body:not(.confirmation-modal-body),
+.modal-footer:not(.confirmation-modal-footer) {
   background-color: white !important;
 }
 
-.modal-title,
-.modal-body p,
-.modal-body * {
+.modal-title:not(.confirmation-modal-title),
+.modal-body:not(.confirmation-modal-body) p,
+.modal-body:not(.confirmation-modal-body) * {
   color: #000000 !important;
 }
 
-/* Exclude confirmation modal from black text rule */
-.confirmation-modal-content .modal-title,
-.confirmation-modal-content .modal-body p,
-.confirmation-modal-content .modal-body * {
-  color: #E0E0E0 !important;
+/* Exclude confirmation modal from black text rule - use theme colors instead */
+.modal.show .confirmation-modal-content .modal-title,
+.modal.show .confirmation-modal-content .modal-body p,
+.modal.show .confirmation-modal-content .modal-body *,
+.modal.show .confirmation-modal-content .confirmation-modal-message {
+  color: var(--text-primary) !important;
 }
 
-/* Confirmation Modal - Dark Theme Styling */
-/* Override all modal styles with higher specificity */
-.modal.show .confirmation-modal-content {
-  background-color: rgba(255, 255, 255, 0.05) !important;
+/* Confirmation Modal - Theme-Aware Styling */
+/* Dark theme (default) */
+body:not(.theme-light) .modal.show .confirmation-modal-content {
+  background: rgba(10, 9, 26, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
   backdrop-filter: blur(16px) !important;
   -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px !important;
-  color: #E0E0E0 !important;
 }
 
-.modal.show .confirmation-modal-header {
-  background-color: transparent !important;
+body:not(.theme-light) .modal.show .confirmation-modal-header {
+  background: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.modal.show .confirmation-modal-body {
+body:not(.theme-light) .modal.show .confirmation-modal-body {
   background-color: transparent !important;
-  color: #E0E0E0 !important;
 }
 
-.modal.show .confirmation-modal-footer {
+body:not(.theme-light) .modal.show .confirmation-modal-footer {
   background-color: transparent !important;
   border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.modal.show .confirmation-modal-title {
+body:not(.theme-light) .modal.show .confirmation-modal-title {
+  color: #FFFFFF !important;
+}
+
+body:not(.theme-light) .modal.show .confirmation-modal-message {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+body:not(.theme-light) .confirmation-modal-cancel-btn {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  color: #FFFFFF !important;
+}
+
+/* Light theme */
+body.theme-light .modal.show .confirmation-modal-content {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border-radius: 16px !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-header {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-body {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-footer {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-top: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-title {
+  color: #1A1A1A !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-message {
+  color: #374151 !important;
+}
+
+body.theme-light .confirmation-modal-cancel-btn {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: #374151 !important;
+}
+
+/* Light theme - ensure all text in modal is dark */
+body.theme-light .modal.show .confirmation-modal-content *,
+body.theme-light .modal.show .confirmation-modal-content p,
+body.theme-light .modal.show .confirmation-modal-content div,
+body.theme-light .modal.show .confirmation-modal-content span {
+  color: #374151 !important;
+}
+
+body.theme-light .modal.show .confirmation-modal-content .modal-title,
+body.theme-light .modal.show .confirmation-modal-content h5 {
+  color: #1A1A1A !important;
+}
+
+/* Dark theme - light text on dark background */
+body:not(.theme-light) .modal.show .confirmation-modal-content,
+body:not(.theme-light) .modal.show .confirmation-modal-content *,
+body:not(.theme-light) .modal.show .confirmation-modal-content p,
+body:not(.theme-light) .modal.show .confirmation-modal-content h1,
+body:not(.theme-light) .modal.show .confirmation-modal-content h2,
+body:not(.theme-light) .modal.show .confirmation-modal-content h3,
+body:not(.theme-light) .modal.show .confirmation-modal-content h4,
+body:not(.theme-light) .modal.show .confirmation-modal-content h5,
+body:not(.theme-light) .modal.show .confirmation-modal-content h6,
+body:not(.theme-light) .modal.show .confirmation-modal-content span,
+body:not(.theme-light) .modal.show .confirmation-modal-content div,
+body:not(.theme-light) .modal.show .confirmation-modal-content .modal-title,
+body:not(.theme-light) .modal.show .confirmation-modal-content .modal-body,
+body:not(.theme-light) .modal.show .confirmation-modal-content .modal-body p,
+body:not(.theme-light) .modal.show .confirmation-modal-content .modal-body * {
   color: #E0E0E0 !important;
 }
 
-.modal.show .confirmation-modal-message {
+body:not(.theme-light) .confirmation-modal-content .form-label,
+body:not(.theme-light) .confirmation-modal-content .form-control,
+body:not(.theme-light) .confirmation-modal-content textarea {
   color: #E0E0E0 !important;
 }
 
-/* Force white text on all confirmation modal elements - highest specificity */
-.modal.show .confirmation-modal-content,
-.modal.show .confirmation-modal-content *,
-.modal.show .confirmation-modal-content p,
-.modal.show .confirmation-modal-content h1,
-.modal.show .confirmation-modal-content h2,
-.modal.show .confirmation-modal-content h3,
-.modal.show .confirmation-modal-content h4,
-.modal.show .confirmation-modal-content h5,
-.modal.show .confirmation-modal-content h6,
-.modal.show .confirmation-modal-content span,
-.modal.show .confirmation-modal-content div,
-.modal.show .confirmation-modal-content .modal-title,
-.modal.show .confirmation-modal-content .modal-body,
-.modal.show .confirmation-modal-content .modal-body p,
-.modal.show .confirmation-modal-content .modal-body * {
-  color: #E0E0E0 !important;
-}
-
-.confirmation-modal-content .form-label,
-.confirmation-modal-content .form-control,
-.confirmation-modal-content textarea {
-  color: #E0E0E0 !important;
-}
-
-.confirmation-modal-content .form-control::placeholder {
+body:not(.theme-light) .confirmation-modal-content .form-control::placeholder {
   color: rgba(224, 224, 224, 0.5) !important;
 }
 
-/* Button styling for modal */
-.confirmation-modal-footer .btn-secondary {
+/* Dark theme button styling for modal */
+body:not(.theme-light) .confirmation-modal-footer .btn-secondary {
   background-color: rgba(255, 255, 255, 0.1) !important;
   border-color: rgba(255, 255, 255, 0.2) !important;
   color: #E0E0E0 !important;
 }
 
-.confirmation-modal-footer .btn-secondary:hover {
+body:not(.theme-light) .confirmation-modal-footer .btn-secondary:hover {
   background-color: rgba(255, 255, 255, 0.15) !important;
   border-color: rgba(255, 255, 255, 0.3) !important;
   color: #FFFFFF !important;
+}
+
+/* Light theme close button - should be dark */
+body.theme-light .confirmation-modal-header .btn-close,
+body.theme-light .confirmation-modal-header .btn-close-white {
+  filter: none !important;
+  opacity: 0.7;
+}
+
+body.theme-light .confirmation-modal-header .btn-close:hover,
+body.theme-light .confirmation-modal-header .btn-close-white:hover {
+  opacity: 1;
 }
 
 /* ============================================================
@@ -2068,21 +2855,195 @@ span.lozenge-analytics,
   min-height: 100vh;
 }
 
-.opportunity-detail-page .card {
+/* Dark mode opportunity detail card - ensure glassmorphism effect */
+.opportunity-detail-page .card,
+.opportunity-detail-page .card.h-100,
+.opportunity-detail-page > .container > .row > .col-12 > .card,
+body:not(.theme-light) .opportunity-detail-page .card {
+  background: rgba(255, 255, 255, 0.05) !important;
   background-color: rgba(255, 255, 255, 0.05) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   border-radius: 16px !important;
 }
 
-.opportunity-detail-page .card-header {
+.opportunity-detail-page .card-header,
+body:not(.theme-light) .opportunity-detail-page .card-header {
+  background: transparent !important;
   background-color: transparent !important;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.opportunity-detail-page .card-body {
+.opportunity-detail-page .card-body,
+body:not(.theme-light) .opportunity-detail-page .card-body {
+  background: transparent !important;
   background-color: transparent !important;
+}
+
+/* Ensure alerts inside opportunity detail use dark theme */
+body:not(.theme-light) .opportunity-detail-page .alert-info {
+  background: rgba(33, 150, 243, 0.1) !important;
+  background-color: rgba(33, 150, 243, 0.1) !important;
+  border-color: rgba(33, 150, 243, 0.3) !important;
+  color: #81d4fa !important;
+}
+
+/* Light theme opportunity detail page */
+body.theme-light .opportunity-detail-page {
+  background-color: transparent;
+}
+
+body.theme-light .opportunity-detail-page .card {
+  background: rgba(255, 255, 255, 0.85) !important;
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+}
+
+body.theme-light .opportunity-detail-page .card-header {
+  background: transparent !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-light .opportunity-detail-page .card-body {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+body.theme-light .opportunity-detail-page .alert-info {
+  background: rgba(33, 150, 243, 0.08) !important;
+  background-color: rgba(33, 150, 243, 0.08) !important;
+  border-color: rgba(33, 150, 243, 0.2) !important;
+  color: #1565c0 !important;
+}
+
+/* ============================================================
+   CALENDAR GRID - Theme-aware styles
+   ============================================================ */
+
+/* Dark mode calendar (default) */
+.calendar-view {
+  --calendar-bg: #0A091A;
+  --calendar-text: #FF4E50;
+  --calendar-border: rgba(255, 78, 80, 0.3);
+  --calendar-legend-text: #FF4E50;
+}
+
+/* Calendar legend text - dark mode */
+.calendar-legend-text {
+  color: var(--calendar-legend-text) !important;
+  font-weight: 500;
+}
+
+/* Calendar time column - dark mode */
+.calendar-time-column {
+  background-color: var(--calendar-bg);
+}
+
+.calendar-time-header {
+  background-color: var(--calendar-bg);
+  border-bottom: 2px solid var(--calendar-border);
+}
+
+.calendar-time-markers {
+  border-left: 2px solid var(--calendar-border);
+  border-right: 2px solid var(--calendar-border);
+}
+
+.calendar-time-label {
+  color: var(--calendar-text);
+  border-top: 1.5px solid var(--calendar-border);
+}
+
+/* Calendar days container - dark mode */
+.calendar-days-container {
+  background-color: var(--calendar-bg);
+}
+
+/* Calendar day header - dark mode */
+.calendar-day-header {
+  background-color: var(--calendar-bg);
+  border-bottom: 1px solid var(--calendar-border);
+}
+
+.calendar-day-title {
+  color: var(--calendar-text) !important;
+}
+
+.calendar-day-sessions {
+  color: var(--calendar-text) !important;
+}
+
+/* Calendar timeline container - dark mode */
+.calendar-timeline-container {
+  background-color: var(--calendar-bg);
+}
+
+/* ============================================================
+   LIGHT MODE CALENDAR OVERRIDES
+   ============================================================ */
+
+body.theme-light .calendar-view {
+  --calendar-bg: #FFFFFF;
+  --calendar-text: #1A1A1A;
+  --calendar-border: rgba(0, 0, 0, 0.12);
+  --calendar-legend-text: #374151;
+}
+
+/* Light mode specific overrides with higher specificity */
+body.theme-light .calendar-legend-text {
+  color: #374151 !important;
+}
+
+body.theme-light .calendar-time-column {
+  background-color: #FFFFFF !important;
+}
+
+body.theme-light .calendar-time-header {
+  background-color: #FFFFFF !important;
+  border-bottom-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.theme-light .calendar-time-markers {
+  border-left-color: rgba(0, 0, 0, 0.12) !important;
+  border-right-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.theme-light .calendar-time-label {
+  color: #1A1A1A !important;
+  border-top-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .calendar-days-container {
+  background-color: #FFFFFF !important;
+}
+
+body.theme-light .calendar-day-header {
+  background-color: #F8F9FA !important;
+  border-bottom-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+body.theme-light .calendar-day-title {
+  color: #1A1A1A !important;
+}
+
+body.theme-light .calendar-day-sessions {
+  color: #4B5563 !important;
+}
+
+body.theme-light .calendar-timeline-container {
+  background-color: #FAFAFA !important;
+}
+
+/* Light mode calendar timeline wrapper */
+body.theme-light .calendar-view .calendar-timeline {
+  background: #FFFFFF !important;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .opportunity-detail-page h1,
@@ -2100,6 +3061,22 @@ span.lozenge-analytics,
 
 .opportunity-detail-page p {
   color: var(--text-primary) !important;
+}
+
+/* Ensure opportunity detail page card content is visible in dark mode */
+body:not(.theme-light) .opportunity-detail-page .card p,
+body:not(.theme-light) .opportunity-detail-page .card-body p,
+body:not(.theme-light) .opportunity-detail-page .card .mb-0,
+body:not(.theme-light) .opportunity-detail-page .card-body .mb-0 {
+  color: #E0E0E0 !important;
+}
+
+/* Light mode opportunity detail card text */
+body.theme-light .opportunity-detail-page .card p,
+body.theme-light .opportunity-detail-page .card-body p,
+body.theme-light .opportunity-detail-page .card .mb-0,
+body.theme-light .opportunity-detail-page .card-body .mb-0 {
+  color: #374151 !important;
 }
 
 .opportunity-detail-page .alert {
@@ -3034,4 +4011,441 @@ span.lozenge-analytics,
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22);
   color: #E0E0E0;
   text-decoration: none;
+}
+
+/* ============================================================
+   VIEW DETAILS BUTTON - Elegant Study Card CTA
+   ============================================================ */
+
+.btn-view-details {
+  background: transparent !important;
+  color: var(--cta-text) !important;
+  border: 1px solid var(--cta-border) !important;
+  border-radius: var(--button-radius);
+  font-weight: 500;
+  font-size: 14px !important;
+  padding: 8px 16px;
+  min-height: 36px;
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+}
+
+.btn-view-details::after {
+  content: '→';
+  font-weight: 400;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-view-details:hover {
+  background: var(--cta-bg-hover) !important;
+  color: var(--cta-text-hover) !important;
+  border-color: var(--cta-bg-hover) !important;
+  transform: translateY(-1px);
+}
+
+.btn-view-details:hover::after {
+  transform: translateX(3px);
+  opacity: 1;
+}
+
+.btn-view-details:focus {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  box-shadow: 0 0 0 0.15rem rgba(255, 78, 80, 0.2);
+}
+
+/* Light theme View Details button */
+body.theme-light .btn-view-details {
+  background: transparent !important;
+  color: var(--cta-bg) !important;
+  border: 1px solid var(--cta-border) !important;
+}
+
+body.theme-light .btn-view-details:hover {
+  background: var(--cta-bg) !important;
+  color: #FFFFFF !important;
+  border-color: var(--cta-bg) !important;
+}
+
+/* ============================================================
+   GAMIFICATION PAGE - Light Mode Text Fixes
+   Ensures all text is legible with proper contrast
+   ============================================================ */
+
+/* Force all muted text in cards to be dark in light mode */
+body.theme-light .card p,
+body.theme-light .card-body p,
+body.theme-light .card small,
+body.theme-light .card-body small {
+  color: #4B5563 !important;
+}
+
+/* Card headings and primary text */
+body.theme-light .card h2,
+body.theme-light .card-body h2,
+body.theme-light .card h4,
+body.theme-light .card-body h4,
+body.theme-light .card h5,
+body.theme-light .card-body h5,
+body.theme-light .card .mb-0,
+body.theme-light .card-body .mb-0,
+body.theme-light .card .mb-1,
+body.theme-light .card-body .mb-1,
+body.theme-light .card .mb-3,
+body.theme-light .card-body .mb-3 {
+  color: #1A1A1A !important;
+}
+
+/* Numbers/stats in gamification */
+body.theme-light .card .fs-3,
+body.theme-light .card-body .fs-3,
+body.theme-light .card .text-center h2,
+body.theme-light .card-body .text-center h2 {
+  color: #E86C24 !important;
+}
+
+/* Prize description text */
+body.theme-light .card .fw-semibold,
+body.theme-light .card-body .fw-semibold {
+  color: #1A1A1A !important;
+}
+
+/* Card header text */
+body.theme-light .card-header h4,
+body.theme-light .card-header h5,
+body.theme-light .card-header .mb-0 {
+  color: #1A1A1A !important;
+}
+
+/* Card header background for light mode */
+body.theme-light .card-header {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - Light Mode Styles
+   ============================================================ */
+
+/* Admin page container */
+.admin-page-container {
+  background-color: var(--bg-app);
+}
+
+/* Admin main card */
+.admin-card {
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-card) !important;
+}
+
+/* Admin dashboard title */
+.admin-dashboard-title {
+  color: var(--text-primary);
+}
+
+/* Admin settings button */
+.admin-settings-btn {
+  background-color: transparent !important;
+  border-color: var(--border-card) !important;
+  color: var(--text-primary) !important;
+}
+
+.admin-settings-btn:hover {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--brand-headline) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Admin create button */
+.admin-create-btn {
+  background-color: var(--brand-headline) !important;
+  border-color: var(--brand-headline) !important;
+  color: #FFFFFF !important;
+}
+
+.admin-create-btn:hover {
+  filter: brightness(1.1);
+}
+
+/* Admin stat cards */
+.admin-stat-card {
+  background: var(--bg-card) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-card) !important;
+  border-radius: 10px !important;
+  padding: 0;
+}
+
+.admin-stat-card .stat-label {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  opacity: 0.7;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.admin-stat-card .stat-icon {
+  font-size: 2.7rem;
+  color: var(--brand-headline);
+}
+
+.admin-stat-card .stat-value {
+  color: var(--text-primary);
+  font-weight: 700;
+  font-size: 3.375rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.admin-stat-card .stat-subtitle {
+  color: var(--text-primary);
+  opacity: 0.6;
+  font-size: 0.8rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Admin loading/empty state text */
+.admin-loading-text {
+  color: var(--text-primary);
+}
+
+.admin-empty-title {
+  color: var(--text-primary);
+}
+
+.admin-empty-text {
+  color: var(--text-muted);
+}
+
+/* Light theme specific admin styles */
+body.theme-light .admin-page-container {
+  background-color: var(--bg-app-gradient-top);
+}
+
+body.theme-light .admin-card {
+  background: rgba(255, 255, 255, 0.85) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+
+body.theme-light .admin-dashboard-title {
+  color: var(--brand-headline) !important;
+}
+
+body.theme-light .admin-settings-btn {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+  color: var(--text-body) !important;
+}
+
+body.theme-light .admin-settings-btn:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+  border-color: var(--brand-headline) !important;
+}
+
+body.theme-light .admin-stat-card {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+body.theme-light .admin-stat-card .stat-label {
+  color: var(--text-body);
+}
+
+body.theme-light .admin-stat-card .stat-value {
+  color: var(--text-primary);
+}
+
+body.theme-light .admin-stat-card .stat-subtitle {
+  color: var(--text-muted);
+}
+
+/* Light theme form controls for admin dashboard */
+body.theme-light .admin-dashboard .form-control,
+body.theme-light .admin-dashboard .form-select {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: var(--text-body) !important;
+}
+
+body.theme-light .admin-dashboard .form-control:focus,
+body.theme-light .admin-dashboard .form-select:focus {
+  background-color: #FFFFFF !important;
+  border-color: var(--brand-headline) !important;
+}
+
+body.theme-light .admin-dashboard .form-select option {
+  background-color: #FFFFFF !important;
+  color: var(--text-body) !important;
+}
+
+/* Light theme custom tab buttons */
+body.theme-light .custom-tab-button {
+  color: var(--text-body) !important;
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .custom-tab-button i,
+body.theme-light .custom-tab-button span {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .custom-tab-button:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+  border-color: var(--brand-headline) !important;
+}
+
+body.theme-light .custom-tab-button.active {
+  background-color: var(--brand-headline) !important;
+  border-color: var(--brand-headline) !important;
+  color: #FFFFFF !important;
+}
+
+body.theme-light .custom-tab-button.active i,
+body.theme-light .custom-tab-button.active span {
+  color: #FFFFFF !important;
+}
+
+/* Light theme table styles for admin dashboard */
+body.theme-light .admin-dashboard table thead {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .admin-dashboard table thead th {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .admin-dashboard table tbody tr {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
+}
+
+body.theme-light .admin-dashboard table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .admin-dashboard table tbody td {
+  color: var(--text-body) !important;
+}
+
+/* Light theme spinner */
+body.theme-light .admin-dashboard .spinner-border {
+  border-color: var(--brand-headline);
+  border-right-color: transparent;
+}
+
+/* Light theme dropdown menu in admin */
+body.theme-light .admin-dashboard .dropdown-menu {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+}
+
+body.theme-light .admin-dashboard .dropdown-item {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .admin-dashboard .dropdown-item:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+body.theme-light .admin-dashboard .dropdown-item.text-danger {
+  color: #dc3545 !important;
+}
+
+/* Admin Management component light theme */
+body.theme-light .admin-management .nav-tabs {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .admin-management .nav-link {
+  color: var(--text-muted);
+}
+
+body.theme-light .admin-management .nav-link:hover {
+  color: var(--text-primary);
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+body.theme-light .admin-management .nav-link.active {
+  color: var(--brand-headline);
+}
+
+body.theme-light .admin-management table thead {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .admin-management table thead th {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  color: var(--text-primary) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .admin-management table tbody tr {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
+}
+
+body.theme-light .admin-management table tbody tr:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .admin-management table tbody td {
+  color: var(--text-body) !important;
+}
+
+body.theme-light .admin-management .alert {
+  background-color: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Settings page light theme */
+body.theme-light .settings-page .list-group-item {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .settings-page .form-check-input {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+body.theme-light .settings-page .alert {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .settings-page .alert .btn-close {
+  filter: none;
+}
+
+/* Admin Feedback light theme */
+body.theme-light .admin-feedback .feedback-modal-content {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+body.theme-light .admin-feedback .feedback-heading {
+  color: var(--text-primary) !important;
+}
+
+body.theme-light .admin-feedback .btn-outline-light {
+  color: var(--text-body) !important;
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+body.theme-light .admin-feedback .btn-outline-light:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
 }
