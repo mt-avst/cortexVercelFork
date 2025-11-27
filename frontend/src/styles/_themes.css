@@ -198,7 +198,12 @@ body.theme-light .bento-grid .card .timing-info {
   border-color: rgba(0, 0, 0, 0.08);
 }
 
-/* Header - Match page background (top of gradient) */
+/* Header - Dark Mode (transparent for unified glassmorphic surface) */
+body.theme-dark .header {
+  background: transparent;
+}
+
+/* Header - Light Mode (match page background) */
 body.theme-light .header {
   background: var(--bg-app-gradient-top);
 }

@@ -3037,6 +3037,98 @@ body.admin-page .header .container {
   background: transparent;
 }
 
+/* ============================================================
+   BACKGROUND ANIMATION - Dark Mode Grid & Boxes
+   ============================================================ */
+
+/* Static Grid Background - Dark Mode */
+.mesh-gradient-background {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255, 78, 80, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 78, 80, 0.08) 1px, transparent 1px);
+  background-size: 80px 80px;
+  background-position: center center;
+}
+
+/* Grid Squares Overlay Container */
+.grid-squares-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Full Grid Squares - Large illuminated cells */
+.full-grid-square {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 78, 80, 0.15) 0%,
+    rgba(255, 122, 51, 0.08) 100%
+  );
+  border: 1px solid rgba(255, 78, 80, 0.2);
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.8s ease-in-out;
+  box-shadow: 
+    inset 0 0 20px rgba(255, 78, 80, 0.1),
+    0 0 30px rgba(255, 78, 80, 0.05);
+}
+
+/* Small Glowing Squares - Floating accent elements */
+.grid-square {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 78, 80, 0.6) 0%,
+    rgba(255, 78, 80, 0.2) 50%,
+    transparent 70%
+  );
+  border-radius: 2px;
+  top: 50%;
+  left: 50%;
+  transform: translate(var(--translate-x, 0), var(--translate-y, 0));
+  transition: transform 2.5s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 0 8px rgba(255, 78, 80, 0.4);
+  opacity: 0.7;
+}
+
+/* Pulse animation for grid squares */
+@keyframes gridPulse {
+  0%, 100% {
+    opacity: 0.5;
+    box-shadow: 0 0 8px rgba(255, 78, 80, 0.3);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 16px rgba(255, 78, 80, 0.5);
+  }
+}
+
+.grid-square:nth-child(odd) {
+  animation: gridPulse 4s ease-in-out infinite;
+}
+
+.grid-square:nth-child(even) {
+  animation: gridPulse 5s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
 /* Coral dots container */
 .coral-dots-container {
   position: fixed;
