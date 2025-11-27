@@ -100,7 +100,7 @@ const Landing: React.FC = memo(() => {
               />
               <div className="hero-text-stack">
                 <h1 className="hero-title-large">AdaptaLabs</h1>
-                <p className="hero-subtitle-centered">Help build our future, <span className="subtitle-emphasis">today</span></p>
+                <p className="hero-subtitle-centered">Help build our future, <span className="subtitle-emphasis">right now</span></p>
               </div>
             </div>
           </div>
