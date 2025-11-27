@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { gamificationApi, gamificationUtils, UserProfile } from '../api/gamification';
 import LoadingSpinner from '../components/LoadingSpinner';
+import { AlertTriangle, Info, UserCircle, Clock, Trophy } from 'lucide-react';
 
 interface UserProfileProps {
   userId?: string;
@@ -81,7 +82,7 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
         color: '#dc3545',
         padding: 'var(--card-padding)'
       }}>
-        <i className="bi bi-exclamation-triangle me-2"></i>
+        <AlertTriangle size={18} className="me-2" />
         {error}
       </div>
     );
@@ -96,7 +97,7 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
         color: 'var(--text-primary)',
         padding: 'var(--card-padding)'
       }}>
-        <i className="bi bi-info-circle me-2"></i>
+        <Info size={18} className="me-2" />
         No profile data available
       </div>
     );
@@ -110,8 +111,8 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
         <div className="col-lg-8">
           <div className="card h-100">
             <div className="card-header d-flex justify-content-between align-items-center">
-              <h4 className="mb-0">
-                <i className="bi bi-person-circle me-2"></i>
+              <h4 className="mb-0 d-flex align-items-center">
+                <UserCircle size={24} className="me-2" />
                 Your Profile
               </h4>
             </div>
@@ -175,8 +176,8 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
               {/* Last Activity */}
               {profile.last_activity_date && (
                 <div className="mt-3 pt-3 border-top" style={{ borderColor: 'var(--border-card)' }}>
-                  <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                    <i className="bi bi-clock me-1"></i>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }} className="d-flex align-items-center">
+                    <Clock size={14} className="me-1" />
                     Last activity: {new Date(profile.last_activity_date).toLocaleDateString()}
                   </small>
                 </div>
@@ -189,8 +190,8 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
         <div className="col-lg-4">
           <div className="card h-100">
             <div className="card-header">
-              <h5 className="mb-0">
-                <i className="bi bi-trophy me-2"></i>
+              <h5 className="mb-0 d-flex align-items-center">
+                <Trophy size={20} className="me-2" />
                 This Month's AdaptaBits Prize
               </h5>
             </div>

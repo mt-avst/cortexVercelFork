@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { AppError } from '../utils/errorHandler';
+import { AlertTriangle, MessageSquare, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 
 const AdminFeedback: React.FC = () => {
   const { user } = useAuth();
@@ -193,7 +194,7 @@ const AdminFeedback: React.FC = () => {
         color: '#ff6b6d',
         borderRadius: '8px'
       }}>
-        <i className="bi bi-exclamation-triangle-fill me-2"></i>
+        <AlertTriangle size={18} className="me-2" />
         {error}
         <button className="btn btn-outline-danger btn-sm ms-3" onClick={loadFeedback}>
           Retry
@@ -328,7 +329,7 @@ const AdminFeedback: React.FC = () => {
 
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h3 className="feedback-heading mb-0">
-          <i className="bi bi-chat-left-text me-2"></i>
+          <MessageSquare size={18} className="me-2" />
           Feedback Inbox
           {feedback.length > 0 && (
             <span className="badge bg-secondary ms-2" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>
@@ -342,7 +343,7 @@ const AdminFeedback: React.FC = () => {
             onClick={loadFeedback}
             disabled={loading}
           >
-            <i className="bi bi-arrow-clockwise me-1"></i>
+            <RefreshCw size={14} className="me-1" />
             Refresh
           </button>
           <button 
@@ -350,7 +351,7 @@ const AdminFeedback: React.FC = () => {
             onClick={handleExport}
             disabled={feedback.length === 0}
           >
-            <i className="bi bi-download me-1"></i>
+            <Download size={14} className="me-1" />
             Export
           </button>
         </div>
@@ -358,7 +359,7 @@ const AdminFeedback: React.FC = () => {
 
       {feedback.length === 0 ? (
         <div className="text-center py-5">
-          <i className="bi bi-inbox empty-state-icon" style={{ fontSize: '3rem' }}></i>
+          <Inbox size={48} className="empty-state-icon" />
           <h4 className="mt-3 empty-state-title">No feedback yet</h4>
           <p className="empty-state-text">
             Feedback submitted by users will appear here.
@@ -425,7 +426,7 @@ const AdminFeedback: React.FC = () => {
                         <div className="feedback-preview-text">{preview}</div>
                         {hasMore && (
                           <div className="read-more">
-                            <i className="bi bi-chevron-right me-1"></i>
+                            <ChevronRight size={14} className="me-1" />
                             Click to read more
                           </div>
                         )}
@@ -441,7 +442,7 @@ const AdminFeedback: React.FC = () => {
                           }}
                           title="Delete feedback"
                         >
-                          <i className="bi bi-trash"></i>
+                          <Trash2 size={16} />
                         </button>
                       </td>
                     )}
@@ -514,7 +515,7 @@ const AdminFeedback: React.FC = () => {
                   lineHeight: 1
                 }}
               >
-                <i className="bi bi-x-lg"></i>
+                <X size={20} />
               </button>
             </div>
             
@@ -541,12 +542,12 @@ const AdminFeedback: React.FC = () => {
                 paddingTop: '1rem'
               }}>
                 <div style={{ fontSize: '0.85rem', color: 'rgba(224, 224, 224, 0.6)' }}>
-                  <i className="bi bi-calendar3" style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }}></i>
+                  <Calendar size={14} style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }} />
                   {formatDate(currentFeedback.created_at)}
                 </div>
                 {currentFeedback.url && currentFeedback.url !== 'Unknown' && (
                   <div style={{ fontSize: '0.85rem', color: 'rgba(224, 224, 224, 0.6)' }}>
-                    <i className="bi bi-link-45deg" style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }}></i>
+                    <Link2 size={14} style={{ marginRight: '0.5rem', color: 'rgba(255, 78, 80, 0.7)' }} />
                     {currentFeedback.url}
                   </div>
                 )}
@@ -576,7 +577,7 @@ const AdminFeedback: React.FC = () => {
                   opacity: viewModal.index === 0 ? 0.3 : 1
                 }}
               >
-                <i className="bi bi-chevron-left"></i>
+                <ChevronLeft size={20} />
               </button>
               
               <div className="d-flex align-items-center gap-3">
@@ -589,7 +590,7 @@ const AdminFeedback: React.FC = () => {
                     onClick={() => handleDelete(currentFeedback)}
                     title="Delete this feedback"
                   >
-                    <i className="bi bi-trash me-1"></i>
+                    <Trash2 size={14} className="me-1" />
                     Delete
                   </button>
                 )}
@@ -612,7 +613,7 @@ const AdminFeedback: React.FC = () => {
                   opacity: viewModal.index === sortedFeedback.length - 1 ? 0.3 : 1
                 }}
               >
-                <i className="bi bi-chevron-right"></i>
+                <ChevronRight size={20} />
               </button>
             </div>
           </div>

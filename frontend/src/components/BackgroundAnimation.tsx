@@ -6,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
  * 
  * Renders a retro computing-inspired animated grid background.
  * Only renders in dark mode - light mode uses a clean background without animation.
- * CSS is centralized in index.css for performance (prevents re-injection on renders).
+ * CSS is centralized in main.css for performance (prevents re-injection on renders).
  * Uses React.memo to prevent unnecessary re-renders.
  */
 const BackgroundAnimation: React.FC = memo(() => {

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Info, XCircle, CheckCircle, PlusCircle } from 'lucide-react';
 
 interface FormActionsProps {
   isEdit: boolean;
@@ -19,7 +20,7 @@ const FormActions: React.FC<FormActionsProps> = ({
     <div className="border-top" style={{ paddingTop: '3rem', marginTop: '3rem', position: 'relative' }}>
       <div style={{ display: 'flex', alignItems: 'center', width: '100%' }}>
         <div className="text-muted d-flex align-items-center" style={{ fontSize: '0.9rem' }}>
-          <i className="bi bi-info-circle me-2 fs-6"></i>
+          <Info size={18} className="me-2" />
           <span>
             {isEdit ? 'Changes will be saved immediately' : 'Opportunity will be created and you can add sessions'}
           </span>
@@ -40,7 +41,7 @@ const FormActions: React.FC<FormActionsProps> = ({
             disabled={saving}
             style={{ fontSize: '0.95rem' }}
           >
-            <i className="bi bi-x-circle me-2"></i>
+            <XCircle size={16} className="me-2" />
             Cancel
           </button>
           
@@ -59,7 +60,7 @@ const FormActions: React.FC<FormActionsProps> = ({
                 </>
               ) : (
                 <>
-                  <i className={`bi ${isEdit ? 'bi-check-circle' : 'bi-plus-circle'} me-2`}></i>
+                  {isEdit ? <CheckCircle size={16} className="me-2" /> : <PlusCircle size={16} className="me-2" />}
                   {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
                 </>
               )}

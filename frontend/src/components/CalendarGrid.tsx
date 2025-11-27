@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
+import { Info, Check, X } from 'lucide-react';
 
 interface CalendarGridProps {
   sessions: Session[];
@@ -307,7 +308,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   if (sessions.length === 0) {
     return (
       <div className="alert alert-info">
-        <i className="bi bi-info-circle me-2"></i>
+        <Info size={18} className="me-2" />
         No sessions available
       </div>
     );
@@ -315,8 +316,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   if (sessionsByDate.length === 0) {
     return (
-      <div className="alert alert-info">
-        <i className="bi bi-info-circle me-2"></i>
+      <div className="alert alert-info d-flex align-items-center">
+        <Info size={18} className="me-2" />
         No sessions available
       </div>
     );
@@ -580,7 +581,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                   }}
                                   title="Confirm booking"
                                 >
-                                  <i className="bi bi-check"></i>
+                                  <Check size={14} />
                                 </button>
                                 <button
                                   className="btn btn-danger btn-sm confirmation-btn cancel-btn"
@@ -590,7 +591,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                   }}
                                   title="Cancel"
                                 >
-                                  <i className="bi bi-x"></i>
+                                  <X size={14} />
                                 </button>
                               </div>
                             )}

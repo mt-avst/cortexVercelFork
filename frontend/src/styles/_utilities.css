@@ -130,6 +130,7 @@
 .mt-5 { margin-top: var(--spacing-5); }
 .mt-6 { margin-top: var(--spacing-6); }
 .mt-8 { margin-top: var(--spacing-8); }
+.mt-auto { margin-top: auto; }
 
 /* Margin - Right */
 .mr-0 { margin-right: 0; }
@@ -346,6 +347,10 @@
 .border-r { border-right: 1px solid var(--border-card); }
 .border-b { border-bottom: 1px solid var(--border-card); }
 .border-l { border-left: 1px solid var(--border-card); }
+
+/* Ensure border-0 overrides component-specific borders */
+.card-header.border-0 { border-bottom: 0; }
+.card-footer.border-0 { border-top: 0; }
 
 .border-brand { border-color: var(--brand-primary); }
 .border-success { border-color: var(--status-success); }
@@ -573,5 +578,173 @@
   .d-lg-none { display: none; }
   .d-lg-block { display: block; }
   .d-lg-flex { display: flex; }
+}
+
+@media (min-width: 1200px) {
+  .d-xl-none { display: none; }
+  .d-xl-block { display: block; }
+  .d-xl-flex { display: flex; }
+}
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Height Utilities
+   ============================================================ */
+
+.h-25 { height: 25%; }
+.h-50 { height: 50%; }
+.h-75 { height: 75%; }
+.h-100 { height: 100%; }
+.mh-100 { max-height: 100%; }
+.vh-100 { height: 100vh; }
+.min-vh-100 { min-height: 100vh; }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Width Utilities (extended)
+   ============================================================ */
+
+.w-25 { width: 25%; }
+.w-50 { width: 50%; }
+.w-75 { width: 75%; }
+.w-100 { width: 100%; }
+.mw-100 { max-width: 100%; }
+.vw-100 { width: 100vw; }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Shadow Utilities
+   ============================================================ */
+
+.shadow-sm { box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075); }
+.shadow-md { box-shadow: var(--shadow-md); }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Border Utilities (extended)
+   ============================================================ */
+
+.border-top-0 { border-top: 0; }
+.border-end-0 { border-right: 0; }
+.border-bottom-0 { border-bottom: 0; }
+.border-start-0 { border-left: 0; }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Background Colors (extended)
+   ============================================================ */
+
+.bg-dark { background-color: #212529; color: #FFFFFF; }
+.bg-light { background-color: #f8f9fa; color: #212529; }
+.bg-primary { background-color: var(--brand-primary); color: #FFFFFF; }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Extended Padding Utilities
+   ============================================================ */
+
+/* Additional px values */
+.px-7 { padding-left: var(--spacing-8); padding-right: var(--spacing-8); }
+.px-8 { padding-left: 3rem; padding-right: 3rem; }
+
+/* Additional py values */
+.py-6 { padding-top: var(--spacing-6); padding-bottom: var(--spacing-6); }
+.py-7 { padding-top: var(--spacing-8); padding-bottom: var(--spacing-8); }
+.py-8 { padding-top: 3rem; padding-bottom: 3rem; }
+
+/* Bootstrap pe/ps (padding end/start) */
+.ps-0 { padding-left: 0; }
+.ps-1 { padding-left: var(--spacing-1); }
+.ps-2 { padding-left: var(--spacing-2); }
+.ps-3 { padding-left: var(--spacing-3); }
+.ps-4 { padding-left: var(--spacing-4); }
+.ps-5 { padding-left: var(--spacing-5); }
+
+.pe-0 { padding-right: 0; }
+.pe-1 { padding-right: var(--spacing-1); }
+.pe-2 { padding-right: var(--spacing-2); }
+.pe-3 { padding-right: var(--spacing-3); }
+.pe-4 { padding-right: var(--spacing-4); }
+.pe-5 { padding-right: var(--spacing-5); }
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Responsive Flex Utilities
+   ============================================================ */
+
+/* Small screens (576px+) */
+@media (min-width: 576px) {
+  .flex-sm-row { flex-direction: row; }
+  .flex-sm-column { flex-direction: column; }
+  .flex-sm-wrap { flex-wrap: wrap; }
+  .flex-sm-nowrap { flex-wrap: nowrap; }
+  .justify-content-sm-start { justify-content: flex-start; }
+  .justify-content-sm-end { justify-content: flex-end; }
+  .justify-content-sm-center { justify-content: center; }
+  .justify-content-sm-between { justify-content: space-between; }
+  .align-items-sm-start { align-items: flex-start; }
+  .align-items-sm-end { align-items: flex-end; }
+  .align-items-sm-center { align-items: center; }
+  .align-items-sm-stretch { align-items: stretch; }
+}
+
+/* Medium screens (768px+) */
+@media (min-width: 768px) {
+  .flex-md-row { flex-direction: row; }
+  .flex-md-column { flex-direction: column; }
+  .flex-md-wrap { flex-wrap: wrap; }
+  .flex-md-nowrap { flex-wrap: nowrap; }
+  .justify-content-md-start { justify-content: flex-start; }
+  .justify-content-md-end { justify-content: flex-end; }
+  .justify-content-md-center { justify-content: center; }
+  .justify-content-md-between { justify-content: space-between; }
+  .align-items-md-start { align-items: flex-start; }
+  .align-items-md-end { align-items: flex-end; }
+  .align-items-md-center { align-items: center; }
+  .align-items-md-stretch { align-items: stretch; }
+}
+
+/* Large screens (992px+) */
+@media (min-width: 992px) {
+  .flex-lg-row { flex-direction: row; }
+  .flex-lg-column { flex-direction: column; }
+  .flex-lg-wrap { flex-wrap: wrap; }
+  .flex-lg-nowrap { flex-wrap: nowrap; }
+  .justify-content-lg-start { justify-content: flex-start; }
+  .justify-content-lg-end { justify-content: flex-end; }
+  .justify-content-lg-center { justify-content: center; }
+  .justify-content-lg-between { justify-content: space-between; }
+  .align-items-lg-start { align-items: flex-start; }
+  .align-items-lg-end { align-items: flex-end; }
+  .align-items-lg-center { align-items: center; }
+  .align-items-lg-stretch { align-items: stretch; }
+}
+
+/* Extra large screens (1200px+) */
+@media (min-width: 1200px) {
+  .flex-xl-row { flex-direction: row; }
+  .flex-xl-column { flex-direction: column; }
+  .justify-content-xl-start { justify-content: flex-start; }
+  .justify-content-xl-end { justify-content: flex-end; }
+  .justify-content-xl-center { justify-content: center; }
+  .justify-content-xl-between { justify-content: space-between; }
+  .align-items-xl-start { align-items: flex-start; }
+  .align-items-xl-end { align-items: flex-end; }
+  .align-items-xl-center { align-items: center; }
+}
+
+/* ============================================================
+   BOOTSTRAP COMPATIBILITY - Responsive Text Utilities
+   ============================================================ */
+
+@media (min-width: 576px) {
+  .text-sm-start { text-align: left; }
+  .text-sm-center { text-align: center; }
+  .text-sm-end { text-align: right; }
+}
+
+@media (min-width: 768px) {
+  .text-md-start { text-align: left; }
+  .text-md-center { text-align: center; }
+  .text-md-end { text-align: right; }
+}
+
+@media (min-width: 992px) {
+  .text-lg-start { text-align: left; }
+  .text-lg-center { text-align: center; }
+  .text-lg-end { text-align: right; }
 }
 

@@ -29,7 +29,7 @@
   /* Text Colors */
   --text-primary: #E0E0E0;
   --text-body: #E0E0E0;
-  --text-muted: rgba(224, 224, 224, 0.7);
+  --text-muted: rgba(224, 224, 224, 0.85);
   --text-on-dark: #E0E0E0;
   --text-on-light: #1A1A1A;
   --text-inverse: #1A1A1A;
@@ -38,6 +38,7 @@
   --brand-headline: #FF4E50;
   --brand-primary: #FF4E50;
   --brand-secondary: #FF7A33;
+  --brand-gradient: linear-gradient(135deg, #FF4E50 0%, #FF7A33 100%);
 
   /* CTA (Call to Action) Colors */
   --cta-bg: transparent;

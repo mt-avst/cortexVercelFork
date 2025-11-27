@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
 
 export type Theme = 'dark' | 'light';
 
@@ -11,24 +11,34 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    // Load from localStorage, default to 'dark' (current default with animations)
-    try {
-      const saved = localStorage.getItem('theme');
-      // Migration: check old 'animationsEnabled' key
-      if (!saved) {
-        const oldAnimationPref = localStorage.getItem('animationsEnabled');
-        if (oldAnimationPref === 'false') {
-          return 'light'; // User had animations disabled, migrate to light theme
-        }
+// Helper function to get the initial theme - used both for state init and immediate body class application
+const getInitialTheme = (): Theme => {
+  try {
+    const saved = localStorage.getItem('theme');
+    // Migration: check old 'animationsEnabled' key
+    if (!saved) {
+      const oldAnimationPref = localStorage.getItem('animationsEnabled');
+      if (oldAnimationPref === 'false') {
+        return 'light'; // User had animations disabled, migrate to light theme
       }
-      return (saved === 'light' || saved === 'dark') ? saved : 'dark';
-    } catch (error) {
-      console.warn('localStorage not available, defaulting to dark theme:', error);
-      return 'dark';
     }
-  });
+    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+  } catch (error) {
+    console.warn('localStorage not available, defaulting to dark theme:', error);
+    return 'dark';
+  }
+};
+
+// CRITICAL: Apply theme class immediately on module load to prevent flash of wrong theme
+// This runs BEFORE React even starts rendering, ensuring body has the correct class
+if (typeof document !== 'undefined') {
+  const initialTheme = getInitialTheme();
+  document.body.classList.remove('theme-dark', 'theme-light');
+  document.body.classList.add(`theme-${initialTheme}`);
+}
+
+export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
 
   useEffect(() => {
     // Save to localStorage whenever theme changes
@@ -41,7 +51,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [theme]);
 
-  useEffect(() => {
+  // Use useLayoutEffect to apply theme class SYNCHRONOUSLY before browser paints
+  // This prevents flash of wrong theme when switching or on navigation
+  useLayoutEffect(() => {
     // Apply theme class to body for CSS variable switching
     document.body.classList.remove('theme-dark', 'theme-light');
     document.body.classList.add(`theme-${theme}`);
@@ -81,5 +93,6 @@ export const useAnimation = () => {
     toggleAnimations: toggleTheme
   };
 };
+
 
 

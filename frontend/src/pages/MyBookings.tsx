@@ -5,6 +5,7 @@ import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Badge, Alert, Spinner } from '../components/ui';
+import { ArrowLeft, RefreshCw } from 'lucide-react';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
@@ -175,7 +176,7 @@ const MyBookings: React.FC = () => {
   }
 
   return (
-    <div className="container mt-4 relative z-10">
+    <div className="container mt-4 relative z-10 my-bookings-page">
       <div className="row">
         <div className="col">
           <div className="flex justify-between items-start">
@@ -186,7 +187,7 @@ const MyBookings: React.FC = () => {
                 onClick={() => navigate('/')}
                 title="Back to AdaptaLabs"
               >
-                <i className="bi bi-arrow-left me-1"></i>
+                <ArrowLeft size={16} className="me-1" />
                 Back to AdaptaLabs
               </Button>
               <h2>My Bookings</h2>
@@ -198,7 +199,7 @@ const MyBookings: React.FC = () => {
               disabled={loading}
               title="Refresh bookings"
             >
-              <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`}></i>
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
               Refresh
             </Button>
           </div>

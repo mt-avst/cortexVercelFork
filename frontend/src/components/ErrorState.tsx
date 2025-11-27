@@ -1,4 +1,5 @@
 import React, { memo } from 'react';
+import { AlertTriangle, AlertCircle, Info, XCircle, LucideIcon } from 'lucide-react';
 
 interface ErrorStateProps {
   title?: string;
@@ -7,6 +8,13 @@ interface ErrorStateProps {
   onAction?: () => void;
   icon?: string;
 }
+
+const iconMap: Record<string, LucideIcon> = {
+  'alert-triangle': AlertTriangle,
+  'alert-circle': AlertCircle,
+  'info': Info,
+  'x-circle': XCircle,
+};
 
 /**
  * ErrorState Component
@@ -18,11 +26,13 @@ const ErrorState: React.FC<ErrorStateProps> = memo(({
   message, 
   actionLabel = 'Try Again',
   onAction,
-  icon = 'bi-exclamation-triangle'
+  icon = 'alert-triangle'
 }) => {
+  const IconComponent = iconMap[icon] || AlertTriangle;
+  
   return (
     <div className="alert alert-danger d-flex align-items-center" role="alert">
-      <i className={`bi ${icon} me-3`} style={{ fontSize: '1.5rem' }} aria-hidden="true" />
+      <IconComponent size={24} className="me-3" aria-hidden="true" />
       <div className="flex-grow-1">
         <h5 className="alert-heading mb-2">{title}</h5>
         <p className="mb-0">{message}</p>

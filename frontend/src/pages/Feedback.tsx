@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { submitFeedback } from '../api/client';
+import { CheckCircle, MessageSquare, AlertTriangle, Send } from 'lucide-react';
 
 const Feedback: React.FC = () => {
   const { user } = useAuth();
@@ -32,21 +33,21 @@ const Feedback: React.FC = () => {
     }
   };
 
-  // Styles for dark card
+  // Theme-aware styles for feedback card
   const styles = `
-    /* Feedback Card Styles - Dark Glassmorphism */
+    /* Feedback Card Styles - Theme Aware */
     .feedback-card {
-      background-color: rgba(255, 255, 255, 0.05);
+      background: var(--bg-card);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--border-card);
       border-radius: 16px;
-      color: #E0E0E0;
+      color: var(--text-body);
     }
     
     .feedback-card .card-header {
       background-color: transparent;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      border-bottom: 1px solid var(--border-card);
     }
     
     .feedback-card .card-body {
@@ -57,55 +58,86 @@ const Feedback: React.FC = () => {
     .feedback-card h5,
     .feedback-card .form-label,
     .feedback-card p {
-      color: #E0E0E0;
+      color: var(--text-primary);
     }
 
     .feedback-card .text-muted {
-      color: rgba(224, 224, 224, 0.7) !important;
+      color: var(--text-muted) !important;
     }
     
     .feedback-card .form-control, 
     .feedback-card .form-select {
-      background-color: rgba(0, 0, 0, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #E0E0E0;
+      background-color: var(--bg-input);
+      border: 1px solid var(--border-card);
+      color: var(--text-body);
     }
     
     .feedback-card .form-control:focus, 
     .feedback-card .form-select:focus {
-      background-color: rgba(0, 0, 0, 0.3);
-      border-color: rgba(255, 255, 255, 0.3);
-      color: #FFFFFF;
-      box-shadow: 0 0 0 0.25rem rgba(255, 255, 255, 0.1);
+      background-color: var(--bg-input-focus);
+      border-color: var(--focus-ring);
+      color: var(--text-primary);
+      box-shadow: 0 0 0 0.25rem var(--focus-ring-color);
     }
 
     .feedback-card .form-text {
-      color: rgba(224, 224, 224, 0.6);
+      color: var(--text-muted);
     }
 
     .feedback-card .bg-light {
-      background-color: rgba(255, 255, 255, 0.05) !important;
-      color: #E0E0E0;
+      background-color: var(--bg-tab) !important;
+      color: var(--text-body);
     }
     
     .feedback-card a {
-      color: #FF4E50;
+      color: var(--link);
     }
     
     .feedback-card a:hover {
-      color: #ff6b6d;
+      color: var(--link-hover);
       text-decoration: underline;
     }
     
     .feedback-card .btn-outline-secondary {
-      border-color: rgba(255, 255, 255, 0.3);
-      color: #E0E0E0;
+      border-color: var(--border-card);
+      color: var(--text-body);
     }
     
     .feedback-card .btn-outline-secondary:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-      border-color: rgba(255, 255, 255, 0.5);
-      color: #FFFFFF;
+      background-color: var(--bg-hover);
+      border-color: var(--brand-primary);
+      color: var(--text-primary);
+    }
+    
+    /* Dark theme specific overrides */
+    body.theme-dark .feedback-card {
+      background: rgba(30, 30, 50, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    body.theme-dark .feedback-card .form-control,
+    body.theme-dark .feedback-card .form-select {
+      background-color: rgba(0, 0, 0, 0.2);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    
+    body.theme-dark .feedback-card .form-control:focus,
+    body.theme-dark .feedback-card .form-select:focus {
+      background-color: rgba(0, 0, 0, 0.3);
+      border-color: var(--focus-ring);
+    }
+    
+    /* Light theme specific overrides */
+    body.theme-light .feedback-card {
+      background: rgba(255, 255, 255, 0.85);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+    }
+    
+    body.theme-light .feedback-card .form-control,
+    body.theme-light .feedback-card .form-select {
+      background-color: rgba(255, 255, 255, 0.9);
+      border-color: rgba(0, 0, 0, 0.12);
     }
   `;
 
@@ -118,7 +150,7 @@ const Feedback: React.FC = () => {
             <div className="col-md-8">
               <div className="card feedback-card">
                 <div className="card-body text-center">
-                  <i className="bi bi-check-circle text-success" style={{ fontSize: '3rem' }}></i>
+                  <CheckCircle size={48} className="text-success" />
                   <h2 className="mt-3">Thank You!</h2>
                   <p className="lead">Your feedback has been submitted successfully.</p>
                   <p>We appreciate you taking the time to help us improve AdaptaLabs.</p>
@@ -149,7 +181,7 @@ const Feedback: React.FC = () => {
             <div className="card feedback-card">
               <div className="card-header">
                 <h2 className="mb-0">
-                  <i className="bi bi-chat-left-text me-2"></i>
+                  <MessageSquare size={20} className="me-2" />
                   Send Feedback
                 </h2>
               </div>
@@ -173,7 +205,7 @@ const Feedback: React.FC = () => {
                       alignItems: 'center'
                     }}
                   >
-                    <i className="bi bi-exclamation-triangle-fill me-2" style={{ fontSize: '1.2rem' }}></i>
+                    <AlertTriangle size={20} className="me-2" />
                     <div>{error}</div>
                   </div>
                 )}
@@ -229,7 +261,7 @@ const Feedback: React.FC = () => {
                         </>
                       ) : (
                         <>
-                      <i className="bi bi-send me-2"></i>
+                      <Send size={16} className="me-2" />
                       Send Feedback
                         </>
                       )}

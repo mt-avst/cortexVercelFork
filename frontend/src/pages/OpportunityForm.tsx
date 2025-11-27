@@ -7,6 +7,7 @@ import AdminSessionManager from '../components/AdminSessionManager';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
+import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
 
 const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
@@ -573,121 +574,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   }
 
   return (
-    <div className="container-fluid py-4" style={{ backgroundColor: '#0A091A', minHeight: '100vh' }}>
-      <style>
-        {`
-          /* Opportunity Form dark theme styling */
-          .opportunity-form .card {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            border-radius: 16px !important;
-          }
-          .opportunity-form .card-header {
-            background-color: transparent !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1) !important;
-          }
-          .opportunity-form .card-body {
-            background-color: transparent !important;
-          }
-          .opportunity-form h1,
-          .opportunity-form h2,
-          .opportunity-form h3,
-          .opportunity-form h4 {
-            color: #E0E0E0 !important;
-          }
-          .opportunity-form .text-muted {
-            color: rgba(224, 224, 224, 0.7) !important;
-          }
-          .opportunity-form .form-label,
-          .opportunity-form label {
-            color: #E0E0E0 !important;
-          }
-          .opportunity-form .form-control,
-          .opportunity-form .form-select {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border: 1px solid rgba(255, 255, 255, 0.1) !important;
-            color: #E0E0E0 !important;
-          }
-          .opportunity-form .form-control:focus,
-          .opportunity-form .form-select:focus {
-            background-color: rgba(255, 255, 255, 0.08) !important;
-            border-color: #FF4E50 !important;
-            color: #E0E0E0 !important;
-            box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25) !important;
-          }
-          .opportunity-form .form-control::placeholder {
-            color: rgba(224, 224, 224, 0.5) !important;
-          }
-          .opportunity-form .form-select option {
-            background-color: #0A091A !important;
-            color: #E0E0E0 !important;
-          }
-          .opportunity-form .nav-tabs .nav-link {
-            color: #E0E0E0 !important;
-            background-color: transparent !important;
-            border-bottom-color: transparent !important;
-          }
-          .opportunity-form .nav-tabs .nav-link.active {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border-bottom-color: #FF4E50 !important;
-            color: #FF4E50 !important;
-          }
-          .opportunity-form .border-top,
-          .opportunity-form .border-bottom {
-            border-color: rgba(255, 255, 255, 0.1) !important;
-          }
-          .opportunity-form .btn-primary {
-            background-color: #FF4E50 !important;
-            border-color: #FF4E50 !important;
-            color: #FFFFFF !important;
-          }
-          .opportunity-form .btn-primary:hover {
-            background-color: #ff5e60 !important;
-            border-color: #ff5e60 !important;
-          }
-          .opportunity-form .btn-success {
-            background-color: #28a745 !important;
-            border-color: #28a745 !important;
-          }
-          .opportunity-form .btn-outline-secondary {
-            border-color: rgba(255, 255, 255, 0.2) !important;
-            color: #E0E0E0 !important;
-          }
-          .opportunity-form .btn-outline-secondary:hover {
-            background-color: rgba(255, 255, 255, 0.1) !important;
-            border-color: rgba(255, 255, 255, 0.3) !important;
-            color: #FFFFFF !important;
-          }
-          .opportunity-form .btn-outline-primary {
-            border-color: #FF4E50 !important;
-            color: #FF4E50 !important;
-          }
-          .opportunity-form .btn-outline-primary:hover {
-            background-color: #FF4E50 !important;
-            color: #FFFFFF !important;
-          }
-          .opportunity-form .alert {
-            background-color: rgba(255, 255, 255, 0.05) !important;
-            border-color: rgba(255, 255, 255, 0.1) !important;
-            color: #E0E0E0 !important;
-          }
-        `}
-      </style>
-      <div className="row justify-content-center opportunity-form">
+    <div className="container-fluid py-4 opportunity-form" style={{ minHeight: '100vh' }}>
+      <div className="row justify-content-center">
         <div className="col-12 col-xl-10">
           {/* Back button */}
           <button 
             className="btn btn-outline-secondary mb-3"
             onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
-            style={{
-              backgroundColor: 'transparent',
-              borderColor: 'rgba(255, 255, 255, 0.2)',
-              color: '#E0E0E0'
-            }}
           >
-            <i className="bi bi-arrow-left me-1"></i>
+            <ArrowLeft size={16} className="me-1" />
             {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
           </button>
           
@@ -695,10 +590,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h1 className="mb-1" style={{ fontSize: '1.75rem', fontWeight: '600', color: '#E0E0E0' }}>
+                  <h1 className="mb-1 form-title" style={{ fontSize: '1.75rem', fontWeight: '600' }}>
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
-                  <p className="mb-0" style={{ fontSize: '1rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                  <p className="mb-0 form-subtitle" style={{ fontSize: '1rem' }}>
                     {isEdit ? 'Update opportunity details and sessions' : 'Set up a new AdaptaLabs activity'}
                   </p>
                 </div>
@@ -710,12 +605,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}
                       style={{ fontSize: '0.875rem' }}
                     >
-                      <i className="bi bi-graph-up me-1"></i>
+                      <TrendingUp size={14} className="me-1" />
                       Analytics
                     </button>
                   )}
-                  <div style={{ fontSize: '0.9rem', color: 'rgba(224, 224, 224, 0.7)' }}>
-                    <i className="bi bi-person-circle me-1"></i>
+                  <div className="form-user-info" style={{ fontSize: '0.9rem' }}>
+                    <UserCircle size={16} className="me-1" />
                     {user?.name || 'Unknown User'}
                   </div>
                 </div>
@@ -725,7 +620,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             <div className="card-body p-0">
               {error && (
                 <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
-                  <i className="bi bi-exclamation-triangle me-2"></i>
+                  <AlertTriangle size={18} className="me-2" />
                   {error}
                 </div>
               )}
@@ -733,7 +628,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               {successMessage && (
                 <div className="alert alert-success d-flex justify-content-between align-items-center mx-4 mt-4 mb-0" role="alert" aria-live="polite">
                   <div>
-                    <i className="bi bi-check-circle me-2" aria-hidden="true"></i>
+                    <CheckCircle size={18} className="me-2" aria-hidden="true" />
                     {successMessage}
                   </div>
                   <button
@@ -754,32 +649,29 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       <button
                         key={tab.id}
                         type="button"
-                        className={`nav-link border-0 py-3 px-4 ${
+                        className={`nav-link border-0 py-3 px-4 opportunity-form-tab ${
                           activeTab === tab.id ? 'active fw-bold' : 'fw-semibold'
                         }`}
                         style={{
                           fontSize: activeTab === tab.id ? '1.1rem' : '0.95rem',
-                          backgroundColor: activeTab === tab.id ? 'rgba(255, 255, 255, 0.05)' : 'transparent',
-                          borderBottom: activeTab === tab.id ? '2px solid #FF4E50' : '2px solid transparent',
                           flex: '1',
                           width: '100%',
-                          color: activeTab === tab.id ? '#FF4E50' : '#E0E0E0',
                           transition: 'all 0.2s ease-in-out'
                         }}
                         onClick={() => setActiveTab(tab.id)}
                       >
                         <div className="text-center">
-                          <div style={{ 
+                          <div className="tab-title" style={{ 
                             fontSize: activeTab === tab.id ? '1.1rem' : 'inherit',
                             fontWeight: activeTab === tab.id ? '600' : '500'
                           }}>
                             {tab.title}
                           </div>
                           <small 
+                            className="tab-description"
                             style={{ 
                               fontSize: activeTab === tab.id ? '0.9rem' : '0.8rem',
-                              fontWeight: '400',
-                              color: activeTab === tab.id ? 'rgba(255, 78, 80, 0.8)' : 'rgba(224, 224, 224, 0.7)'
+                              fontWeight: '400'
                             }}
                           >
                             {tab.description}
@@ -805,18 +697,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       
                       {/* Display Width Setting - Superadmin Only */}
                       {user?.role === 'superadmin' && (
-                        <div className="form-section mb-4" style={{ 
-                          borderTop: '1px solid rgba(255, 255, 255, 0.1)', 
+                        <div className="form-section mb-4 display-settings-section" style={{ 
                           paddingTop: '1.5rem',
                           marginTop: '1rem'
                         }}>
                           <div className="d-flex align-items-center mb-3">
                             <div>
-                              <h3 className="h5 mb-1" style={{ fontSize: '1.2rem', fontWeight: '600', color: '#E0E0E0' }}>
-                                <i className="bi bi-layout-wtf me-2" style={{ color: '#FF4E50' }}></i>
+                              <h3 className="h5 mb-1 section-title" style={{ fontSize: '1.2rem', fontWeight: '600' }}>
+                                <LayoutGrid size={18} className="me-2 section-icon" />
                                 Display Settings
                               </h3>
-                              <p className="mb-0" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                              <p className="mb-0 section-description" style={{ fontSize: '0.875rem' }}>
                                 Control how this study appears on the user home page (Superadmin only)
                               </p>
                             </div>
@@ -825,10 +716,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           <div className="row g-3">
                             <div className="col-md-6">
                               <div className="form-group">
-                                <label htmlFor="display_width" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', color: '#E0E0E0' }}>
+                                <label htmlFor="display_width" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
                                   Pod Display Width
                                 </label>
-                                <div id="display_width-help" className="form-text mb-2" style={{ fontSize: '0.875rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                                <div id="display_width-help" className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
                                   Double-width pods are more prominent on the user home page
                                 </div>
                                 <select
@@ -867,7 +758,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                                 </>
                               ) : (
                                 <>
-                                  <i className="bi bi-save me-2"></i>
+                                  <Save size={16} className="me-2" />
                                   Save Changes
                                 </>
                               )}
@@ -913,7 +804,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             style={{ fontSize: '0.95rem' }}
                           >
                             Continue to Details
-                            <i className="bi bi-arrow-right ms-2"></i>
+                            <ArrowRight size={16} className="ms-2" />
                           </button>
                         </div>
                       </div>
@@ -938,7 +829,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             onClick={() => setActiveTab(1)}
                             style={{ fontSize: '0.95rem' }}
                           >
-                            <i className="bi bi-arrow-left me-2"></i>
+                            <ArrowLeft size={16} className="me-2" />
                             Back
                           </button>
                           {isEdit && hasChanges() && (
@@ -956,7 +847,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                                 </>
                               ) : (
                                 <>
-                                  <i className="bi bi-save me-2"></i>
+                                  <Save size={16} className="me-2" />
                                   Save Changes
                                 </>
                               )}
@@ -978,7 +869,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question' || formData.type === 'unmoderated'
                               ? 'Continue to Link Setup'
                               : 'Continue'}
-                            <i className="bi bi-arrow-right ms-2"></i>
+                            <ArrowRight size={16} className="ms-2" />
                           </button>
                         </div>
                       </div>
@@ -1003,7 +894,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             onClick={() => setActiveTab(2)}
                             style={{ fontSize: '0.95rem' }}
                           >
-                            <i className="bi bi-arrow-left me-2"></i>
+                            <ArrowLeft size={16} className="me-2" />
                             Back
                           </button>
                           {isEdit && hasChanges() && (
@@ -1021,7 +912,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                                 </>
                               ) : (
                                 <>
-                                  <i className="bi bi-save me-2"></i>
+                                  <Save size={16} className="me-2" />
                                   Save Changes
                                 </>
                               )}
@@ -1041,7 +932,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               </>
                             ) : (
                               <>
-                                <i className="bi bi-check-circle me-2"></i>
+                                <CheckCircle size={16} className="me-2" />
                                 {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
                               </>
                             )}
@@ -1057,8 +948,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       <div className="form-section mb-5">
                         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
                           <div>
-                            <h2 className="h4 mb-1" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600', color: '#E0E0E0' }}>Session Management</h2>
-                            <p className="mb-0" style={{ fontSize: '0.95rem', color: 'rgba(224, 224, 224, 0.7)' }}>
+                            <h2 className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>Session Management</h2>
+                            <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
                               Create time slots for participants to book
                             </p>
                           </div>
@@ -1066,7 +957,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         
                         {isEdit && !opportunityId && !loadingOpportunity && error ? (
                           <div className="alert alert-warning" role="alert">
-                            <i className="bi bi-exclamation-triangle me-2"></i>
+                            <AlertTriangle size={18} className="me-2" />
                             Cannot load session management. The opportunity may not exist or you may not have permission to edit it.
                           </div>
                         ) : (

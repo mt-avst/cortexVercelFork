@@ -5,6 +5,7 @@ import { Opportunity, CalendarEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 const OpportunityDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -303,7 +304,6 @@ const OpportunityDetail: React.FC = () => {
           <button 
             className="btn btn-outline-secondary mb-3"
             onClick={() => navigate('/')}
-            style={{ color: '#ffffff' }}
             aria-label="Navigate back to AdaptaLabs home"
           >
             ← Back to AdaptaLabs
@@ -321,7 +321,7 @@ const OpportunityDetail: React.FC = () => {
                   disabled={loading}
                   aria-label="Refresh opportunity data"
                 >
-                  <i className="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>
+                  <RefreshCw size={14} className="me-1" aria-hidden="true" />
                   Refresh Data
                 </button>
                 <button 
@@ -337,7 +337,7 @@ const OpportunityDetail: React.FC = () => {
                   disabled={loading}
                   aria-label="Retry booking a session"
                 >
-                  <i className="bi bi-arrow-repeat me-1" aria-hidden="true"></i>
+                  <RotateCcw size={14} className="me-1" aria-hidden="true" />
                   Retry Booking
                 </button>
               </div>
@@ -441,14 +441,14 @@ const OpportunityDetail: React.FC = () => {
                   {bookingSuccess ? (
                     <div className="alert alert-success d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }} role="alert" aria-live="polite">
                       <div>
-                        <i className="bi bi-check-circle me-2" aria-hidden="true"></i>
+                        <CheckCircle size={18} className="me-2" aria-hidden="true" />
                         {bookingSuccess}
                         <button 
                           className="btn btn-sm btn-outline-success ms-3"
                           onClick={() => navigate('/my-bookings')}
                           aria-label="Navigate to My Bookings page"
                         >
-                          <i className="bi bi-calendar-check me-1" aria-hidden="true"></i>
+                          <CalendarCheck size={14} className="me-1" aria-hidden="true" />
                           View My Bookings
                         </button>
                       </div>
@@ -461,7 +461,7 @@ const OpportunityDetail: React.FC = () => {
                     </div>
                   ) : (
                     <div className="alert alert-info" style={{ marginBottom: '1.5rem' }} role="status">
-                      <i className="bi bi-info-circle me-2" aria-hidden="true"></i>
+                      <Info size={18} className="me-2" aria-hidden="true" />
                       Click on a timeslot to book yourself in
                     </div>
                   )}
@@ -479,7 +479,7 @@ const OpportunityDetail: React.FC = () => {
                         aria-label="Refresh sessions data"
                         title="Refresh sessions data"
                       >
-                        <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`} aria-hidden="true"></i>
+                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
                         <span className="visually-hidden">{loading ? 'Refreshing' : 'Refresh'}</span>
                         Refresh
                       </button>
@@ -491,7 +491,7 @@ const OpportunityDetail: React.FC = () => {
                           aria-pressed={viewMode === 'calendar'}
                           aria-label="Switch to calendar view"
                         >
-                          <i className="bi bi-calendar-grid me-1" aria-hidden="true"></i>
+                          <LayoutGrid size={14} className="me-1" aria-hidden="true" />
                           Calendar
                         </button>
                         <button
@@ -501,7 +501,7 @@ const OpportunityDetail: React.FC = () => {
                           aria-pressed={viewMode === 'table'}
                           aria-label="Switch to table view"
                         >
-                          <i className="bi bi-table me-1" aria-hidden="true"></i>
+                          <Table2 size={14} className="me-1" aria-hidden="true" />
                           Table
                         </button>
                       </div>
@@ -534,8 +534,8 @@ const OpportunityDetail: React.FC = () => {
                             return (
                               <>
                                 {conflictedCount > 0 && (
-                                  <div className="alert alert-info mb-3" style={{ marginBottom: '1rem' }}>
-                                    <i className="bi bi-info-circle me-2"></i>
+                                  <div className="alert alert-info mb-3 d-flex align-items-center" style={{ marginBottom: '1rem' }}>
+                                    <Info size={16} className="me-2" />
                                     {conflictedCount} conflicted slot{conflictedCount !== 1 ? 's' : ''} hidden from view
                                   </div>
                                 )}
@@ -623,8 +623,8 @@ const OpportunityDetail: React.FC = () => {
                       )}
                     </>
                   ) : (
-                    <div className="alert alert-info">
-                      <i className="bi bi-info-circle me-2"></i>
+                    <div className="alert alert-info d-flex align-items-center">
+                      <Info size={18} className="me-2" />
                       Sessions will appear here when they are added by the researcher.
                     </div>
                   )}
@@ -678,8 +678,8 @@ const OpportunityDetail: React.FC = () => {
                   {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && (
                     <div className="row mt-2">
                       <div className="col-md-4">
-                        <small className="text-muted">
-                          <i className="bi bi-box-arrow-up-right me-1" aria-hidden="true"></i>
+                        <small className="text-muted d-flex align-items-center">
+                          <ExternalLink size={14} className="me-1" aria-hidden="true" />
                           Opens in a new tab
                         </small>
                       </div>

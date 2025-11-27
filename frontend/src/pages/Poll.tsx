@@ -1,5 +1,6 @@
 import React from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { ArrowLeft, BarChart3, Info } from 'lucide-react';
 
 const Poll: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,14 +18,14 @@ const Poll: React.FC = () => {
                   className="btn btn-outline-secondary"
                   onClick={() => navigate(-1)}
                 >
-                  <i className="bi bi-arrow-left me-1"></i>
+                  <ArrowLeft size={16} className="me-1" />
                   Back
                 </button>
               </div>
             </div>
             <div className="card-body text-center py-5">
               <div className="mb-4">
-                <i className="bi bi-bar-chart-fill text-primary" style={{ fontSize: '4rem' }}></i>
+                <BarChart3 size={64} className="text-primary" />
               </div>
               <h3 className="text-muted mb-3">Poll Feature Coming Soon</h3>
               <p className="text-muted mb-4">
@@ -32,7 +33,7 @@ const Poll: React.FC = () => {
                 The actual poll interface will be implemented in a future milestone.
               </p>
               <div className="alert alert-info">
-                <i className="bi bi-info-circle me-2"></i>
+                <Info size={18} className="me-2" />
                 <strong>Poll ID:</strong> {id || 'N/A'}
               </div>
               <button 

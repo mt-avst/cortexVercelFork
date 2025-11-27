@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getPendingApprovals, approveSession, rejectSession } from '../api/client';
 import LoadingSpinner from './LoadingSpinner';
 import { AppError } from '../utils/errorHandler';
+import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 
 interface PendingApproval {
   booking_id: string;
@@ -111,14 +112,14 @@ const PendingApprovals: React.FC = () => {
           onClick={loadPendingApprovals}
           disabled={loading}
         >
-          <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`}></i>
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Refresh
         </button>
       </div>
 
       {approvals.length === 0 ? (
         <div className="alert alert-info">
-          <i className="bi bi-check-circle me-2"></i>
+          <CheckCircle size={18} className="me-2" />
           No sessions pending approval
         </div>
       ) : (
@@ -128,7 +129,7 @@ const PendingApprovals: React.FC = () => {
               <div className="card border-secondary">
                 <div className="card-header border-secondary d-flex justify-content-between align-items-center bg-dark">
                   <h5 className="mb-0 text-white">
-                    <i className="bi bi-person-check me-2"></i>
+                    <UserCheck size={18} className="me-2" />
                     {approval.user_name}
                   </h5>
                   <small className="text-light">
@@ -178,7 +179,7 @@ const PendingApprovals: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <i className="bi bi-check-circle me-2"></i>
+                          <CheckCircle size={16} className="me-2" />
                           Approve & Award Points
                         </>
                       )}
@@ -195,7 +196,7 @@ const PendingApprovals: React.FC = () => {
                         </>
                       ) : (
                         <>
-                          <i className="bi bi-x-circle me-2"></i>
+                          <XCircle size={16} className="me-2" />
                           Reject
                         </>
                       )}

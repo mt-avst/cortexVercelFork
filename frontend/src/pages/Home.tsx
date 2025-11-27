@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatOpportunityType, getTypeBadgeClass, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
-import { Lock, Globe, Calendar, Clock, Timer } from 'lucide-react';
+import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
 /**
  * Home Page Component
@@ -192,7 +192,7 @@ const Home: React.FC = memo(() => {
             <div className="row">
               <div className="col-12">
                 <div className="alert alert-success mb-0 text-center">
-                  <i className="bi bi-check-circle me-2"></i>
+                  <CheckCircle size={18} className="me-2" />
                   Session booked. Thanks!
                 </div>
               </div>
@@ -206,21 +206,21 @@ const Home: React.FC = memo(() => {
         <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
           <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
             <div className="col-12">
-              <h1 className="mb-3 adaptalabs-home-title" style={{ marginBottom: '24px', fontSize: '42px', fontWeight: '700' }}>AdaptaLabs</h1>
+              <h1 className="mb-3 adaptalabs-home-title">AdaptaLabs</h1>
               
-              {/* Welcome text - half page width before wrapping */}
-              <div className="row mb-4 align-items-end">
-                <div className="col-md-6">
-                  <p className="lead" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', marginBottom: '16px' }}>
+              {/* Welcome text and filter - aligned with bento grid */}
+              <div className="home-header-grid mb-4">
+                <div className="home-header-text">
+                  <p className="lead mb-3">
                     Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                   </p>
-                  <p className="tagline" style={{ lineHeight: 'var(--line-height-body)', fontSize: 'var(--font-size-body)', fontWeight: '600', marginTop: '1rem', marginBottom: '0' }}>
-                    Together we turn <span style={{ fontStyle: 'italic' }}>participation into progress</span>
+                  <p className="tagline fw-semibold mt-3 mb-0">
+                    Together we turn <span className="fst-italic">participation into progress</span>
                   </p>
                 </div>
-                {/* Type filter dropdown */}
+                {/* Type filter dropdown - aligned with third column */}
                 {!loading && !error && opportunities.length > 0 && (
-                  <div className="col-md-6 d-flex justify-content-end">
+                  <div className="home-header-filter">
                     <label htmlFor="opportunity-type-filter" className="visually-hidden">
                       Filter opportunities by study type
                     </label>
@@ -230,12 +230,12 @@ const Home: React.FC = memo(() => {
                       value={selectedType} 
                       onChange={(e) => setSelectedType(e.target.value)}
                       aria-label="Filter opportunities by study type"
-                    style={{
-                      width: '352px',
-                      backgroundColor: 'var(--bg-card)',
-                      color: 'var(--text-primary)',
-                      fontSize: 'var(--font-size-body)'
-                    }}
+                      style={{
+                        width: '100%',
+                        backgroundColor: 'var(--bg-card)',
+                        color: 'var(--text-primary)',
+                        fontSize: 'var(--font-size-body)'
+                      }}
                     >
                       <option value="all">Filter by study type</option>
                       <option value="survey">Survey</option>
@@ -255,29 +255,28 @@ const Home: React.FC = memo(() => {
                     message={error}
                     actionLabel="Reload Studies"
                     onAction={loadOpportunities}
-                    icon="bi-exclamation-triangle"
+                    icon="alert-triangle"
                   />
                 </div>
               )}
               
               {!loading && !error && opportunities.length === 0 && (
-                <div className="text-center text-muted py-5">
-                  <i className="bi bi-inbox" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', opacity: 0.3 }}></i>
-                  <h4 className="mb-3">No studies available</h4>
+                <div className="empty-state">
+                  <Inbox size={48} className="empty-state-icon" />
+                  <h4 className="empty-state-title">No studies available</h4>
                   <p className="mb-2">No AdaptaLabs activities available at the moment.</p>
-                  <p style={{ fontSize: '0.9rem' }}>Check back later for new opportunities to participate!</p>
+                  <p className="empty-state-text">Check back later for new opportunities to participate!</p>
                 </div>
               )}
               
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length === 0 && (
-                <div className="text-center text-muted py-5">
-                  <i className="bi bi-funnel" style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem', opacity: 0.3 }}></i>
-                  <h4 className="mb-3">No opportunities found</h4>
+                <div className="empty-state">
+                  <Filter size={48} className="empty-state-icon" />
+                  <h4 className="empty-state-title">No opportunities found</h4>
                   <p className="mb-2">No opportunities match the selected filter.</p>
                   <button 
-                    className="btn btn-outline-primary" 
+                    className="btn btn-outline-primary mt-3" 
                     onClick={() => setSelectedType('all')}
-                    style={{ marginTop: '1rem' }}
                   >
                     Show All Types
                   </button>
@@ -333,8 +332,20 @@ const Home: React.FC = memo(() => {
                         key={opportunity.id} 
                         className={gridClass}
                       >
-                        <div className="card h-100">
-                          <div className="card-body d-flex flex-column opportunity-card-body">
+                        <div 
+                          className="card card-clickable" 
+                          onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              navigate(`/opportunities/${opportunity.id}`);
+                            }
+                          }}
+                          aria-label={`View ${opportunity.title}`}
+                        >
+                          <div className="card-body opportunity-card-body">
                             <div className="mb-4">
                               <span className={getTypeBadgeClass(opportunity.type)}>
                                 {formatOpportunityType(opportunity.type)}
@@ -342,13 +353,13 @@ const Home: React.FC = memo(() => {
                             </div>
                             
                             <h2 className="card-title h5">{opportunity.title}</h2>
-                            <p className="card-text" style={{ fontSize: 'var(--font-size-body)', lineHeight: '1.25', fontWeight: '400' }}>{opportunity.purpose_one_liner}</p>
+                            <p className="card-text">{opportunity.purpose_one_liner}</p>
                             
                             {opportunity.description_optional && (
                               <p className="card-text small">{opportunity.description_optional}</p>
                             )}
                             
-                            <div className="mt-auto">
+                            <div className="card-content-bottom">
                               {/* Timing Info Section - Bookable Types (Test/Interview) */}
                               {(opportunity.type === 'test' || opportunity.type === 'interview') && (
                                 <>
@@ -359,15 +370,11 @@ const Home: React.FC = memo(() => {
                                     const timeRemaining = hasSessions ? getTimeRemaining(opportunity.sessions!) : { text: null, urgency: 'normal' };
                                     
                                     return (
-                                      <div className="timing-info mb-3 p-2" style={{ 
-                                        backgroundColor: 'rgba(255, 255, 255, 0.05)', 
-                                        borderRadius: '6px',
-                                        border: '1px solid rgba(255, 255, 255, 0.1)'
-                                      }}>
+                                      <div className="timing-info">
                                         {/* Duration Row */}
                                         <div className="d-flex flex-wrap gap-3 mb-1">
                                           <small className="text-muted d-flex align-items-center">
-                                            <Clock size={14} className="me-1" style={{ opacity: 0.7 }} />
+                                            <Clock size={14} className="me-1 opacity-75" />
                                             {opportunity.default_duration_minutes} min session
                                           </small>
                                         </div>
@@ -375,15 +382,15 @@ const Home: React.FC = memo(() => {
                                         {/* Date Range Row */}
                                         {hasSessions && dateRange.formatted && (
                                           <div className="d-flex align-items-center mb-1">
-                                            <Calendar size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
-                                            <small style={{ color: 'var(--text-muted)' }}>{dateRange.formatted}</small>
+                                            <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                            <small className="text-muted">{dateRange.formatted}</small>
                                           </div>
                                         )}
                                         {/* Time Remaining Row */}
                                         {hasSessions && timeRemaining.text && (
                                           <div className="d-flex align-items-center">
-                                            <Timer size={14} className="me-2" style={{ opacity: 0.7, flexShrink: 0 }} />
-                                            <small className={`timing-urgency-${timeRemaining.urgency}`} style={{ fontWeight: 500 }}>
+                                            <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                            <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
                                               {timeRemaining.text}
                                             </small>
                                           </div>
@@ -484,15 +491,6 @@ const Home: React.FC = memo(() => {
                                 </div>
                               )}
                               
-                              <div className="d-flex justify-content-end">
-                                <button 
-                                  className="btn btn-view-details"
-                                  onClick={() => navigate(`/opportunities/${opportunity.id}`)}
-                                  aria-label={`View details for ${opportunity.title}`}
-                                >
-                                  View Details
-                                </button>
-                              </div>
                             </div>
                           </div>
                         </div>

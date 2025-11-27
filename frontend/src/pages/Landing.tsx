@@ -31,7 +31,7 @@ interface DotData {
 
 /**
  * Landing Page Component
- * CSS is centralized in index.css for performance.
+ * CSS is centralized in main.css for performance.
  */
 const Landing: React.FC = memo(() => {
   const [loginLoading, setLoginLoading] = useState(false);
@@ -165,7 +165,7 @@ const Landing: React.FC = memo(() => {
           {/* Section 2: Two Column Value Grid */}
           <div className="hero-value-grid">
             <div className="hero-value-column">
-              <h3 className="hero-value-heading">Innovation and first look</h3>
+              <h3 className="hero-value-heading">Innovation & First Look</h3>
               <ul className="hero-value-list">
                 <li>Try early features and new tools</li>
                 <li>Explore prototypes and experiments</li>
@@ -173,7 +173,7 @@ const Landing: React.FC = memo(() => {
               </ul>
             </div>
             <div className="hero-value-column">
-              <h3 className="hero-value-heading">Ask the organisation</h3>
+              <h3 className="hero-value-heading">Ask the Organisation</h3>
               <ul className="hero-value-list">
                 <li>Ask the whole enterprise a question</li>
                 <li>Run studies, polls and quick surveys</li>

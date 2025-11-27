@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getOpportunityAnalytics, getOpportunity, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
 import { Opportunity } from '../api/types';
 import ErrorState from '../components/ErrorState';
+import { ArrowLeft, Info } from 'lucide-react';
 
 // Simple bar chart component (pure CSS, no dependencies)
 const BarChart: React.FC<{
@@ -290,7 +291,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // Show loading state
   if (loading || loadingOpportunity) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '400px' }}>
+      <div className="loading-container">
         <div className="text-center">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading...</span>
@@ -311,7 +312,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
               className="btn btn-outline-secondary mb-4"
               onClick={() => navigate('/admin')}
             >
-              <i className="bi bi-arrow-left me-2"></i>
+              <ArrowLeft size={16} className="me-2" />
               Back to Admin Dashboard
             </button>
             <ErrorState 
@@ -333,21 +334,20 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const weekdayData = getWeekdayData();
 
   return (
-    <div className="container-fluid py-4" style={{ maxWidth: '1400px' }}>
+    <div className="container-fluid py-4 analytics-container">
       {/* Header */}
       <div className="d-flex flex-wrap justify-content-between align-items-start mb-4 gap-3">
         <div>
           <button
-            className="btn btn-outline-secondary mb-3"
+            className="btn btn-outline-secondary btn-sm mb-3"
             onClick={() => navigate('/admin')}
-            style={{ fontSize: '0.9rem' }}
           >
             ← Back to Dashboard
           </button>
-          <h1 className="h3 mb-2" style={{ color: 'var(--text-primary)' }}>
+          <h1 className="h3 mb-2">
             Click Analytics
           </h1>
-          <p className="text-muted mb-0" style={{ fontSize: '0.95rem' }}>
+          <p className="text-muted mb-0">
             Tracking engagement for <strong>{opportunity.title}</strong>
           </p>
         </div>
@@ -358,9 +358,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <button
               key={period}
               type="button"
-              className={`btn ${selectedPeriod === period ? 'btn-primary' : 'btn-outline-secondary'}`}
+              className={`btn btn-sm ${selectedPeriod === period ? 'btn-primary' : 'btn-outline-secondary'}`}
               onClick={() => handlePeriodChange(period)}
-              style={{ fontSize: '0.85rem' }}
             >
               {period}d
             </button>
@@ -735,8 +734,8 @@ const OpportunityAnalyticsPage: React.FC = () => {
           </div>
         </>
       ) : (
-        <div className="alert alert-info">
-          <i className="bi bi-info-circle me-2"></i>
+        <div className="alert alert-info d-flex align-items-center">
+          <Info size={18} className="me-2" />
           No analytics data available
         </div>
       )}

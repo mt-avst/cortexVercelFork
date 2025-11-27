@@ -3,6 +3,20 @@ import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
 import { getCalendarEvents, getAvailability } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
+import { 
+  CalendarX, 
+  Lock, 
+  CheckSquare, 
+  CalendarDays, 
+  Clock, 
+  AlertTriangle, 
+  Info, 
+  Trash2, 
+  LayoutGrid, 
+  List, 
+  RefreshCw, 
+  ArrowLeft 
+} from 'lucide-react';
 
 interface AdminSessionManagerProps {
   opportunityId: string;
@@ -452,13 +466,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             position: 'sticky',
             left: 0,
             zIndex: 10,
-            backgroundColor: '#0A091A' /* Black/near-black background */
+            backgroundColor: 'var(--bg-app)' /* Black/near-black background */
           }}>
           {/* Time Header */}
           <div style={{
             height: '60px',
             borderBottom: '2px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
-            backgroundColor: '#0A091A' /* Black/near-black background */
+            backgroundColor: 'var(--bg-app)' /* Black/near-black background */
           }}></div>
           {/* Time Markers */}
           <div style={{
@@ -466,7 +480,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             height: timelineHeight,
             minHeight: `${minTimelineHeight}px`,
             overflow: 'hidden',
-            backgroundColor: '#0A091A', /* Black/near-black background */
+            backgroundColor: 'var(--bg-app)', /* Black/near-black background */
             borderLeft: '2px solid rgba(255, 78, 80, 0.3)', /* Left keyline - starts at 7:00 AM */
             borderRight: '2px solid rgba(255, 78, 80, 0.3)' /* Right keyline - starts at 7:00 AM */
           }}>
@@ -493,7 +507,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     paddingTop: '2px', // Small padding to push text below border line
                     fontSize: '0.9rem',
                     fontWeight: '700',
-                    color: '#FF4E50', /* Electric Coral red text */
+                    color: 'var(--brand-headline)', /* Electric Coral red text */
                     textAlign: 'center', /* Center time labels within their cells */
                     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                     // Remove translateY(-50%) so border line aligns exactly with time position
@@ -514,7 +528,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           position: 'relative',
           flex: 1,
           minWidth: `${maxColumns * 120}px`,
-          backgroundColor: '#0A091A' /* Black/near-black background */
+          backgroundColor: 'var(--bg-app)' /* Black/near-black background */
         }}>
           {/* Day Columns Grid */}
           <div style={{ 
@@ -530,7 +544,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 <>
                   {/* Day Header */}
                   <div className="text-center p-2" style={{ 
-                    backgroundColor: '#0A091A', /* Black/near-black background */
+                    backgroundColor: 'var(--bg-app)', /* Black/near-black background */
                     borderRadius: '8px 8px 0 0',
                     border: 'none',
                     borderBottom: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
@@ -539,10 +553,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     flexDirection: 'column',
                     justifyContent: 'center'
                   }}>
-                    <h6 className="mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, color: '#FF4E50' }}>
+                    <h6 className="mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, color: 'var(--brand-headline)' }}>
                       {formatDate(column.date)}
                     </h6>
-                    <small style={{ fontSize: '0.7rem', color: '#FF4E50', fontWeight: '500' }}>
+                    <small style={{ fontSize: '0.7rem', color: 'var(--brand-headline)', fontWeight: '500' }}>
                       {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
                     </small>
                   </div>
@@ -552,7 +566,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     position: 'relative',
                     height: timelineHeight,
                     border: 'none',
-                    backgroundColor: '#0A091A', /* Black/near-black background */
+                    backgroundColor: 'var(--bg-app)', /* Black/near-black background */
                     overflow: 'hidden',
                     zIndex: 1
                   }}>
@@ -564,9 +578,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         top: '50%',
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
-                        color: '#FF4E50' /* Electric Coral red text */
+                        color: 'var(--brand-headline)' /* Electric Coral red text */
                       }}>
-                        <i className="bi bi-calendar-x me-1"></i>
+                        <CalendarX size={14} className="me-1" />
                         No available slots
                       </div>
                     ) : (
@@ -897,7 +911,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             {/* Show lock icon for unavailable slots */}
                             {(isBusy || (session && session.remaining <= 0) || isAllocated) && (
                               <div style={{ position: 'absolute', top: '2px', right: '2px' }}>
-                                <i className="bi bi-lock-fill" style={{ fontSize: '0.5rem' }}></i>
+                                <Lock size={8} />
                               </div>
                             )}
                             {/* Show checkbox icon ONLY when slot is selected (after user clicks) */}
@@ -909,7 +923,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                 color: '#198754',
                                 pointerEvents: 'none'
                               }}>
-                                <i className="bi bi-check-square-fill" style={{ fontSize: '0.75rem' }}></i>
+                                <CheckSquare size={12} />
                               </div>
                             )}
                           </div>
@@ -923,7 +937,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                 /* Empty column placeholder */
                 <>
                   <div className="text-center p-2" style={{ 
-                    backgroundColor: '#0A091A', /* Black/near-black background */
+                    backgroundColor: 'var(--bg-app)', /* Black/near-black background */
                     borderRadius: '8px 8px 0 0',
                     border: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     borderBottom: '2px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
@@ -933,7 +947,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     height: timelineHeight,
                     border: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
                     borderTop: 'none',
-                    backgroundColor: '#0A091A' /* Black/near-black background */
+                    backgroundColor: 'var(--bg-app)' /* Black/near-black background */
                   }}></div>
                 </>
               )}
@@ -950,7 +964,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       <div className="row">
         <div className="col-12">
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <h6 className="mb-0" style={{ color: '#FF4E50' }}>
+            <h6 className="mb-0" style={{ color: 'var(--brand-headline)' }}>
               Available Time Slots
               {needsMultiRow && (
                 <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
@@ -970,8 +984,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             {needsMultiRow && secondRowDays.length > 0 && (
               <div className="mt-4">
                 <div className="mb-2">
-                  <small style={{ color: '#FF4E50' }}>
-                    <i className="bi bi-calendar-week me-1"></i>
+                  <small style={{ color: 'var(--brand-headline)' }}>
+                    <CalendarDays size={14} className="me-1" />
                     Additional Days ({secondRowDays.length} more)
                   </small>
                 </div>
@@ -1056,7 +1070,7 @@ const ListView: React.FC<{
             <h6 className="mb-0">Existing Sessions</h6>
             {isTemporary && sessions.length > 0 && (
               <small className="text-warning">
-                <i className="bi bi-clock me-1"></i>
+                <Clock size={14} className="me-1" />
                 Sessions will be saved when opportunity is created
               </small>
             )}
@@ -1071,7 +1085,7 @@ const ListView: React.FC<{
         <div className="card-body">
           {sessions.length === 0 ? (
             <div className="text-center text-muted py-3">
-              <i className="bi bi-calendar-x text-muted" style={{ fontSize: '2rem' }}></i>
+              <CalendarX size={32} className="text-muted" />
               <p className="mt-2 mb-0">No sessions created yet</p>
             </div>
           ) : (
@@ -1876,14 +1890,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       {error && (
         <div className="alert alert-danger" role="alert">
-          <i className="bi bi-exclamation-triangle me-2"></i>
+          <AlertTriangle size={18} className="me-2" />
           {error}
         </div>
       )}
 
       {disabled && !isTemporary && !opportunityId && (
         <div className="alert alert-info" role="alert">
-          <i className="bi bi-info-circle me-2"></i>
+          <Info size={18} className="me-2" />
           Please wait while the opportunity loads, or save the opportunity first before adding sessions.
         </div>
       )}
@@ -1895,7 +1909,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             <div className="modal-content">
               <div className="modal-header">
                 <h5 className="modal-title">
-                  <i className="bi bi-exclamation-triangle text-warning me-2"></i>
+                  <AlertTriangle size={16} className="text-warning me-2" />
                   Confirm Reset All Sessions
                 </h5>
                 <button
@@ -1908,7 +1922,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               <div className="modal-body">
                 <p>Are you sure you want to delete all {sessions.length} session(s) for this opportunity?</p>
                 <div className="alert alert-warning">
-                  <i className="bi bi-info-circle me-2"></i>
+                  <Info size={18} className="me-2" />
                   <strong>This action cannot be undone.</strong> All session data will be permanently deleted.
                 </div>
                 <p className="mb-0">
@@ -1952,7 +1966,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-trash me-2"></i>
+                      <Trash2 size={14} className="me-2" />
                       Delete All Sessions
                     </>
                   )}
@@ -1985,7 +1999,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               padding: '0 15px'
             }}>
               <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
                   Start Date
                 </label>
                 <input
@@ -2007,7 +2021,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
                   End Date
                 </label>
                 <input
@@ -2029,7 +2043,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div style={{ minWidth: '120px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
                   Timeslot (mins)
                 </label>
                 <select
@@ -2049,7 +2063,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 </select>
               </div>
               <div style={{ minWidth: '80px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: '#E0E0E0', marginBottom: '4px', display: 'block' }}>
+                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
                   Days/Page
                 </label>
                 <select
@@ -2081,13 +2095,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     onChange={(e) => setExcludeWeekends(!e.target.checked)}
                     disabled={disabled}
                   />
-                  <label className="form-check-label" style={{ fontSize: '0.875rem', color: '#E0E0E0' }} htmlFor="includeWeekends">
+                  <label className="form-check-label" style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }} htmlFor="includeWeekends">
                     Include weekends
                   </label>
                 </div>
               </div>
               <div style={{ marginLeft: 'auto', paddingTop: '20px' }}>
-                <small style={{ color: 'rgba(224, 224, 224, 0.7)' }}>
+                <small style={{ color: 'var(--text-muted)' }}>
                   {(availableSlots || []).length} slots available
                 </small>
               </div>
@@ -2105,7 +2119,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             <div className="card-body py-2" style={{ backgroundColor: 'transparent' }}>
               <div className="row align-items-center">
                 <div className="col-auto">
-                  <small style={{ color: 'rgba(224, 224, 224, 0.7)' }} className="me-3">View:</small>
+                  <small style={{ color: 'var(--text-muted)' }} className="me-3">View:</small>
                 </div>
                 <div className="col-auto">
                   <div className="btn-group" role="group">
@@ -2115,7 +2129,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       onClick={() => setViewMode('grid')}
                       disabled={disabled}
                     >
-                      <i className="bi bi-grid-3x3-gap me-1"></i>
+                      <LayoutGrid size={14} className="me-1" />
                       Grid
                     </button>
                     <button
@@ -2124,7 +2138,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       onClick={() => setViewMode('list')}
                       disabled={disabled}
                     >
-                      <i className="bi bi-list-ul me-1"></i>
+                      <List size={14} className="me-1" />
                       List
                     </button>
                   </div>
@@ -2137,7 +2151,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     disabled={disabled || loading}
                     title="Refresh calendar to see latest booking status"
                   >
-                    <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`}></i>
+                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                     Refresh
                   </button>
                 </div>
@@ -2158,7 +2172,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     disabled={disabled || loading}
                     title="Delete all sessions (only if no bookings exist)"
                   >
-                    <i className="bi bi-trash me-1"></i>
+                    <Trash2 size={14} className="me-1" />
                     Reset All Sessions
                   </button>
                 </div>
@@ -2180,13 +2194,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading calendar...</span>
                   </div>
-                  <div className="mt-2" style={{ color: 'rgba(224, 224, 224, 0.7)' }}>Fetching calendar data...</div>
+                  <div className="mt-2" style={{ color: 'var(--text-muted)' }}>Fetching calendar data...</div>
                 </div>
               ) : viewMode === 'grid' ? (
                 <div>
                   {!durationMinutes && (
                     <div className="alert alert-info mb-3" role="alert">
-                      <i className="bi bi-info-circle me-2"></i>
+                      <Info size={18} className="me-2" />
                       Please select a timeslot duration (15, 30, 45, or 60 minutes) to view available slots.
                     </div>
                   )}
@@ -2232,7 +2246,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   textAlign: 'center'
                 }}>
                   {/* Slots selected indicator */}
-                  <div style={{ fontSize: '1rem', color: '#E0E0E0' }}>
+                  <div style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
                     <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
                   </div>
                   
@@ -2263,7 +2277,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                         onClick={onBack}
                         disabled={disabled || loading}
                       >
-                        <i className="bi bi-arrow-left me-2"></i>
+                        <ArrowLeft size={16} className="me-2" />
                         Back
                       </button>
                     )}
@@ -2304,7 +2318,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 disabled={disabled || loading}
                 style={{ fontSize: '0.95rem' }}
               >
-                <i className="bi bi-arrow-left me-2"></i>
+                <ArrowLeft size={16} className="me-2" />
                 Back
               </button>
             </div>

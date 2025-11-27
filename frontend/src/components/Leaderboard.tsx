@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { gamificationApi, gamificationUtils, LeaderboardEntry } from '../api/gamification';
 import LoadingSpinner from './LoadingSpinner';
+import { AlertTriangle, Trophy, Calendar, CalendarRange } from 'lucide-react';
 
 interface LeaderboardProps {
   limit?: number;
@@ -147,7 +148,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
         color: '#dc3545',
         padding: 'var(--card-padding)'
       }}>
-        <i className="bi bi-exclamation-triangle me-2"></i>
+        <AlertTriangle size={18} className="me-2" />
         {error}
       </div>
     );
@@ -159,8 +160,8 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
     <div className="card">
       <div className="card-header">
         <div className="d-flex justify-content-between align-items-center">
-          <h5 className="mb-0">
-            <i className="bi bi-trophy me-2"></i>
+          <h5 className="mb-0 d-flex align-items-center">
+            <Trophy size={20} className="me-2" />
             AdaptaBits Leaderboard
           </h5>
           <div className="btn-group" role="group">
@@ -169,7 +170,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
               className={`btn btn-sm ${activeTab === 'monthly' ? 'btn-primary' : 'btn-outline-primary'}`}
               onClick={() => setActiveTab('monthly')}
             >
-              <i className="bi bi-calendar-month me-1"></i>
+              <Calendar size={14} className="me-1" />
               This Month
             </button>
             <button
@@ -177,7 +178,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
               className={`btn btn-sm ${activeTab === 'total' ? 'btn-primary' : 'btn-outline-primary'}`}
               onClick={() => setActiveTab('total')}
             >
-              <i className="bi bi-calendar-range me-1"></i>
+              <CalendarRange size={14} className="me-1" />
               All Time
             </button>
           </div>
@@ -186,7 +187,7 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
       <div className="card-body">
         {currentLeaderboard.length === 0 ? (
           <div className="text-center py-4" style={{ color: 'var(--text-muted)' }}>
-            <i className="bi bi-trophy fs-1 mb-3 d-block" style={{ color: 'var(--text-muted)' }}></i>
+            <Trophy size={48} className="mb-3 d-block" style={{ color: 'var(--text-muted)' }} />
             <p style={{ color: 'var(--text-body)', fontSize: 'var(--font-size-body)' }}>No participants yet!</p>
             <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Be the first to complete a session and appear on the leaderboard.</small>
           </div>

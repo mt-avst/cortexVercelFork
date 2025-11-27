@@ -6,6 +6,19 @@ import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
 import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from './ui';
+import { 
+  UserCircle, 
+  Sun, 
+  Moon, 
+  User, 
+  Settings, 
+  Trophy, 
+  ShieldPlus, 
+  CheckCircle, 
+  AlertCircle, 
+  MessageSquare, 
+  LogOut 
+} from 'lucide-react';
 
 /**
  * Header Component
@@ -77,7 +90,7 @@ const Header: React.FC = memo(() => {
       type="button"
       aria-label="User profile menu"
     >
-      <i className="bi bi-person-circle me-1" aria-hidden="true"></i>
+      <UserCircle size={18} className="me-1" aria-hidden="true" />
       Your Profile
     </button>
   );
@@ -102,7 +115,7 @@ const Header: React.FC = memo(() => {
               aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
-              <i className={isDarkMode ? 'bi bi-sun-fill' : 'bi bi-moon-fill'} aria-hidden="true"></i>
+              {isDarkMode ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
               <span className="d-none d-md-inline ms-1">
                 {isDarkMode ? 'Light Mode' : 'Dark Mode'}
               </span>
@@ -145,7 +158,7 @@ const Header: React.FC = memo(() => {
                     {/* User Info Header */}
                     <DropdownHeader>
                       <div className="flex items-start gap-2">
-                        <i className="bi bi-person mt-1" aria-hidden="true"></i>
+                        <User size={16} className="mt-1" aria-hidden="true" />
                         <div>
                           <div className="font-semibold">Hello, {user.name || 'Unknown User'}</div>
                           <div className="text-muted text-sm">
@@ -162,7 +175,7 @@ const Header: React.FC = memo(() => {
                     {/* Settings link for admins */}
                     {(user.role === 'researcher_admin' || user.role === 'superadmin') && (
                       <Link to="/admin/settings" className="dropdown-item">
-                        <i className="bi bi-gear me-2" aria-hidden="true"></i>
+                        <Settings size={16} className="me-2" aria-hidden="true" />
                         Settings
                       </Link>
                     )}
@@ -173,7 +186,7 @@ const Header: React.FC = memo(() => {
                         {user.role === 'employee' && (
                           <>
                             <Link to="/gamification" className="dropdown-item">
-                              <i className="bi bi-trophy me-2" aria-hidden="true"></i>
+                              <Trophy size={16} className="me-2" aria-hidden="true" />
                               AdaptaBits
                             </Link>
                             <DropdownDivider />
@@ -184,7 +197,7 @@ const Header: React.FC = memo(() => {
                           onClick={handleRequestAdminClick}
                           disabled={requestingAdmin}
                         >
-                          <i className="bi bi-shield-plus me-2" aria-hidden="true"></i>
+                          <ShieldPlus size={16} className="me-2" aria-hidden="true" />
                           {requestingAdmin 
                             ? 'Submitting...' 
                             : user.role === 'researcher_admin' 
@@ -195,7 +208,7 @@ const Header: React.FC = memo(() => {
                         
                         {adminRequestMessage && (
                           <div className={`px-4 py-2 text-sm ${adminRequestMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                            <i className={`bi ${adminRequestMessage.type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2`} aria-hidden="true"></i>
+                            {adminRequestMessage.type === 'success' ? <CheckCircle size={16} className="me-2" aria-hidden="true" /> : <AlertCircle size={16} className="me-2" aria-hidden="true" />}
                             {adminRequestMessage.text}
                           </div>
                         )}
@@ -206,7 +219,7 @@ const Header: React.FC = memo(() => {
                     
                     {/* Feedback link */}
                     <Link to="/feedback" className="dropdown-item">
-                      <i className="bi bi-chat-left-text me-2" aria-hidden="true"></i>
+                      <MessageSquare size={16} className="me-2" aria-hidden="true" />
                       Send Feedback
                     </Link>
                     
@@ -220,7 +233,7 @@ const Header: React.FC = memo(() => {
                       }}
                       aria-label="Logout"
                     >
-                      <i className="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
+                      <LogOut size={16} className="me-2" aria-hidden="true" />
                       Logout
                     </DropdownItem>
                   </Dropdown>

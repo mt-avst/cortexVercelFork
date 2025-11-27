@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { getNotificationPreferences, updateNotificationPreferences, NotificationPreference } from '../api/client';
 import AdminManagement from '../components/AdminManagement';
 import { Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
+import { ArrowLeft, UserCog, Bell, UserCircle, AlertTriangle, CheckCircle, MailCheck, MailX } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -98,7 +99,7 @@ const Settings: React.FC = () => {
                   className="btn btn-link text-decoration-none p-0 mb-2"
                   onClick={() => navigate('/admin')}
                 >
-                  <i className="bi bi-arrow-left me-2"></i>
+                  <ArrowLeft size={16} className="me-2" />
                   Back to Dashboard
                 </button>
                 <h1 className="h4 mb-0">Settings</h1>
@@ -116,7 +117,7 @@ const Settings: React.FC = () => {
                     role="tab"
                     aria-selected={activeTab === 'account'}
                   >
-                    <i className="bi bi-person-gear me-2"></i>
+                    <UserCog size={16} className="me-2" />
                     Account Management
                   </button>
                 </li>
@@ -128,7 +129,7 @@ const Settings: React.FC = () => {
                     role="tab"
                     aria-selected={activeTab === 'notifications'}
                   >
-                    <i className="bi bi-bell me-2"></i>
+                    <Bell size={16} className="me-2" />
                     Notification Preferences
                   </button>
                 </li>
@@ -149,7 +150,7 @@ const Settings: React.FC = () => {
                       </div>
                     ) : (
                       <div className="text-center py-5">
-                        <i className="bi bi-person-circle text-muted mb-4" style={{ fontSize: '3rem', display: 'block' }}></i>
+                        <UserCircle size={48} className="text-muted mb-4" style={{ display: 'block' }} />
                         <p className="text-muted mb-0">
                           Account management features are available for superadmin users.
                         </p>
@@ -167,7 +168,7 @@ const Settings: React.FC = () => {
                       </div>
                     ) : error && !preferences ? (
                       <Alert variant="danger">
-                        <i className="bi bi-exclamation-triangle me-2"></i>
+                        <AlertTriangle size={16} className="me-2" />
                         {error}
                         <button 
                           className="btn btn-sm btn-outline-danger ms-3"
@@ -180,14 +181,14 @@ const Settings: React.FC = () => {
                       <>
                         {success && (
                           <Alert variant="success" dismissible onDismiss={() => setSuccess(false)}>
-                            <i className="bi bi-check-circle me-2"></i>
+                            <CheckCircle size={16} className="me-2" />
                             Settings saved successfully!
                           </Alert>
                         )}
 
                         {error && (
                           <Alert variant="danger" dismissible onDismiss={() => setError('')}>
-                            <i className="bi bi-exclamation-triangle me-2"></i>
+                            <AlertTriangle size={16} className="me-2" />
                             {error}
                           </Alert>
                         )}
@@ -202,8 +203,8 @@ const Settings: React.FC = () => {
                             <div className="list-group-item">
                               <div className="flex justify-between items-center">
                                 <div className="grow">
-                                  <h6 className="mb-1">
-                                    <i className="bi bi-envelope-check me-2"></i>
+                                  <h6 className="mb-1 d-flex align-items-center">
+                                    <MailCheck size={16} className="me-2" />
                                     Email on Booking
                                   </h6>
                                   <small className="text-muted">
@@ -227,8 +228,8 @@ const Settings: React.FC = () => {
                             <div className="list-group-item">
                               <div className="flex justify-between items-center">
                                 <div className="grow">
-                                  <h6 className="mb-1">
-                                    <i className="bi bi-envelope-x me-2"></i>
+                                  <h6 className="mb-1 d-flex align-items-center">
+                                    <MailX size={16} className="me-2" />
                                     Email on Cancellation
                                   </h6>
                                   <small className="text-muted">

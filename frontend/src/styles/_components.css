@@ -92,6 +92,24 @@
   .col-md-12 { flex: 0 0 auto; width: 100%; }
 }
 
+/* Responsive columns - Small (576px+) */
+@media (min-width: 576px) {
+  .col-sm { flex: 1 0 0%; }
+  .col-sm-auto { flex: 0 0 auto; width: auto; }
+  .col-sm-1 { flex: 0 0 auto; width: 8.333333%; }
+  .col-sm-2 { flex: 0 0 auto; width: 16.666667%; }
+  .col-sm-3 { flex: 0 0 auto; width: 25%; }
+  .col-sm-4 { flex: 0 0 auto; width: 33.333333%; }
+  .col-sm-5 { flex: 0 0 auto; width: 41.666667%; }
+  .col-sm-6 { flex: 0 0 auto; width: 50%; }
+  .col-sm-7 { flex: 0 0 auto; width: 58.333333%; }
+  .col-sm-8 { flex: 0 0 auto; width: 66.666667%; }
+  .col-sm-9 { flex: 0 0 auto; width: 75%; }
+  .col-sm-10 { flex: 0 0 auto; width: 83.333333%; }
+  .col-sm-11 { flex: 0 0 auto; width: 91.666667%; }
+  .col-sm-12 { flex: 0 0 auto; width: 100%; }
+}
+
 /* Responsive columns - Large (992px+) */
 @media (min-width: 992px) {
   .col-lg { flex: 1 0 0%; }
@@ -110,15 +128,171 @@
   .col-lg-12 { flex: 0 0 auto; width: 100%; }
 }
 
+/* Responsive columns - Extra Large (1200px+) */
+@media (min-width: 1200px) {
+  .col-xl { flex: 1 0 0%; }
+  .col-xl-auto { flex: 0 0 auto; width: auto; }
+  .col-xl-1 { flex: 0 0 auto; width: 8.333333%; }
+  .col-xl-2 { flex: 0 0 auto; width: 16.666667%; }
+  .col-xl-3 { flex: 0 0 auto; width: 25%; }
+  .col-xl-4 { flex: 0 0 auto; width: 33.333333%; }
+  .col-xl-5 { flex: 0 0 auto; width: 41.666667%; }
+  .col-xl-6 { flex: 0 0 auto; width: 50%; }
+  .col-xl-7 { flex: 0 0 auto; width: 58.333333%; }
+  .col-xl-8 { flex: 0 0 auto; width: 66.666667%; }
+  .col-xl-9 { flex: 0 0 auto; width: 75%; }
+  .col-xl-10 { flex: 0 0 auto; width: 83.333333%; }
+  .col-xl-11 { flex: 0 0 auto; width: 91.666667%; }
+  .col-xl-12 { flex: 0 0 auto; width: 100%; }
+}
+
+/* ============================================================
+   GRID GAP UTILITIES (Bootstrap g-* classes)
+   ============================================================ */
+
+.g-0 { --bs-gutter-x: 0; --bs-gutter-y: 0; }
+.g-1 { --bs-gutter-x: 0.25rem; --bs-gutter-y: 0.25rem; }
+.g-2 { --bs-gutter-x: 0.5rem; --bs-gutter-y: 0.5rem; }
+.g-3 { --bs-gutter-x: 1rem; --bs-gutter-y: 1rem; }
+.g-4 { --bs-gutter-x: 1.5rem; --bs-gutter-y: 1.5rem; }
+.g-5 { --bs-gutter-x: 3rem; --bs-gutter-y: 3rem; }
+
+.gx-0 { --bs-gutter-x: 0; }
+.gx-1 { --bs-gutter-x: 0.25rem; }
+.gx-2 { --bs-gutter-x: 0.5rem; }
+.gx-3 { --bs-gutter-x: 1rem; }
+.gx-4 { --bs-gutter-x: 1.5rem; }
+.gx-5 { --bs-gutter-x: 3rem; }
+
+.gy-0 { --bs-gutter-y: 0; }
+.gy-1 { --bs-gutter-y: 0.25rem; }
+.gy-2 { --bs-gutter-y: 0.5rem; }
+.gy-3 { --bs-gutter-y: 1rem; }
+.gy-4 { --bs-gutter-y: 1.5rem; }
+.gy-5 { --bs-gutter-y: 3rem; }
+
+/* Apply gutter to rows with g-* classes */
+.row.g-0, .row.g-1, .row.g-2, .row.g-3, .row.g-4, .row.g-5,
+.row.gx-0, .row.gx-1, .row.gx-2, .row.gx-3, .row.gx-4, .row.gx-5,
+.row.gy-0, .row.gy-1, .row.gy-2, .row.gy-3, .row.gy-4, .row.gy-5 {
+  margin-left: calc(var(--bs-gutter-x, 1.5rem) / -2);
+  margin-right: calc(var(--bs-gutter-x, 1.5rem) / -2);
+  margin-top: calc(var(--bs-gutter-y, 0) * -1);
+}
+
+.row.g-0 > *, .row.g-1 > *, .row.g-2 > *, .row.g-3 > *, .row.g-4 > *, .row.g-5 > *,
+.row.gx-0 > *, .row.gx-1 > *, .row.gx-2 > *, .row.gx-3 > *, .row.gx-4 > *, .row.gx-5 > *,
+.row.gy-0 > *, .row.gy-1 > *, .row.gy-2 > *, .row.gy-3 > *, .row.gy-4 > *, .row.gy-5 > * {
+  padding-left: calc(var(--bs-gutter-x, 1.5rem) / 2);
+  padding-right: calc(var(--bs-gutter-x, 1.5rem) / 2);
+  margin-top: var(--bs-gutter-y, 0);
+}
+
+/* ============================================================
+   PLACEHOLDER / SKELETON LOADING
+   ============================================================ */
+
+.placeholder {
+  display: inline-block;
+  min-height: 1em;
+  vertical-align: middle;
+  cursor: wait;
+  background-color: currentColor;
+  opacity: 0.5;
+  border-radius: var(--radius-sm);
+}
+
+.placeholder-glow .placeholder {
+  animation: placeholder-glow 2s ease-in-out infinite;
+}
+
+@keyframes placeholder-glow {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+.placeholder-wave {
+  mask-image: linear-gradient(130deg, #000 55%, rgba(0, 0, 0, 0.8) 75%, #000 95%);
+  mask-size: 200% 100%;
+  animation: placeholder-wave 2s linear infinite;
+}
+
+@keyframes placeholder-wave {
+  100% {
+    mask-position: -200% 0%;
+  }
+}
+
+/* Placeholder sizing */
+.placeholder-xs { min-height: 0.6em; }
+.placeholder-sm { min-height: 0.8em; }
+.placeholder-lg { min-height: 1.2em; }
+
 /* ============================================================
    BENTO GRID (Momentum Design)
    ============================================================ */
+
+/* Home Header Grid - aligns filter with third bento column */
+.home-header-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-grid-gutter);
+  align-items: end;
+}
+
+.home-header-text {
+  /* Text spans first two columns */
+  grid-column: span 2;
+}
+
+.home-header-filter {
+  /* Filter aligns with third column */
+  grid-column: span 1;
+  display: flex;
+  justify-content: stretch;
+  align-items: flex-end;
+}
+
+.home-header-filter .form-select {
+  width: 100%;
+}
+
+@media (max-width: 992px) {
+  .home-header-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .home-header-text {
+    grid-column: span 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .home-header-grid {
+    grid-template-columns: 1fr;
+    gap: var(--spacing-4);
+  }
+  
+  .home-header-text {
+    grid-column: span 1;
+  }
+  
+  .home-header-filter {
+    justify-content: flex-start;
+  }
+}
 
 .bento-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: var(--spacing-grid-gutter);
   margin-bottom: var(--spacing-section);
+  align-items: stretch;
+}
+
+.bento-grid > * {
+  min-height: 0;
 }
 
 .bento-grid-item {
@@ -334,6 +508,51 @@
   background: transparent;
   color: var(--status-danger);
   border-color: var(--status-danger);
+}
+
+/* View Details CTA Button */
+.btn-view-details {
+  background: transparent;
+  color: var(--cta-text);
+  border: 1px solid var(--cta-border);
+  border-radius: var(--button-radius);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 8px 16px;
+  min-height: 36px;
+  transition: all 0.2s ease-in-out;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+
+.btn-view-details::after {
+  content: '→';
+  font-weight: 400;
+  font-size: 14px;
+  opacity: 0.8;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.btn-view-details:hover {
+  background: var(--cta-bg-hover);
+  color: var(--cta-text-hover);
+  border-color: var(--cta-bg-hover);
+  transform: translateY(-1px);
+}
+
+.btn-view-details:hover::after {
+  transform: translateX(3px);
+  opacity: 1;
+}
+
+.btn-view-details:focus {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  box-shadow: 0 0 0 0.15rem rgba(255, 78, 80, 0.2);
 }
 
 .btn-outline-danger:hover {
@@ -608,6 +827,18 @@
   color: var(--text-muted);
 }
 
+/* Form Validation States */
+.form-control.is-invalid,
+.form-select.is-invalid {
+  border-color: var(--status-danger);
+}
+
+.form-control.is-invalid:focus,
+.form-select.is-invalid:focus {
+  border-color: var(--status-danger);
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.25);
+}
+
 /* ============================================================
    DROPDOWN
    ============================================================ */
@@ -842,12 +1073,32 @@
   padding-left: 0;
   margin-bottom: 0;
   list-style: none;
-  gap: var(--spacing-4);
+  gap: 0;
+}
+
+.nav-item {
+  flex: 1 1 0%;
+  text-align: center;
+}
+
+.nav-fill {
+  gap: 0;
+}
+
+.nav-fill .nav-item {
+  flex: 1 1 auto;
+  text-align: center;
+}
+
+.nav-fill .nav-link,
+.nav-fill .custom-tab-button {
+  width: 100%;
 }
 
 .nav-link {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: var(--spacing-2);
   padding: var(--spacing-2) var(--spacing-3);
   color: var(--text-muted);
@@ -865,19 +1116,64 @@
 }
 
 .nav-tabs {
-  border-bottom: 1px solid var(--border-card);
+  border-bottom: none;
+  display: flex;
+  width: 100%;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-tabs .nav-item {
+  flex: 1 1 0%;
+  margin: 0;
+  padding: 0;
 }
 
 .nav-tabs .nav-link {
   margin-bottom: -1px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  border-radius: 0;
 }
 
 .nav-tabs .nav-link.active {
   color: var(--text-primary);
   background: var(--bg-card);
   border-color: var(--border-card) var(--border-card) var(--bg-card);
+}
+
+/* ============================================================
+   TAB CONTENT & TAB PANES
+   ============================================================ */
+
+.tab-content {
+  width: 100%;
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+/* Bootstrap fade animation compatibility */
+.fade {
+  opacity: 0;
+  transition: opacity 0.15s linear;
+}
+
+.fade.show {
+  opacity: 1;
+}
+
+.tab-pane.fade {
+  display: none;
+}
+
+.tab-pane.fade.show.active {
+  display: block;
 }
 
 /* ============================================================
@@ -943,7 +1239,6 @@
 
 .header {
   background: var(--bg-app);
-  border-bottom: 1px solid var(--border-card);
   padding: var(--spacing-4) 0;
   position: relative;
   z-index: var(--z-sticky);
@@ -989,14 +1284,32 @@
   top: -40px;
   left: 0;
   background: var(--brand-primary);
-  color: white;
+  color: #FFFFFF;
   padding: var(--spacing-2) var(--spacing-4);
-  z-index: 100;
+  text-decoration: none;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-body);
+  z-index: 10000;
+  border-radius: 0 0 var(--radius-sm) 0;
   transition: top var(--transition-fast);
+  /* Hidden by default using clip-path for better accessibility */
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
 }
 
-.skip-link:focus {
+.skip-link:focus,
+.skip-link:focus-visible {
   top: 0;
+  clip: auto;
+  clip-path: none;
+  outline: 3px solid #FFFFFF;
+  outline-offset: 2px;
+}
+
+.skip-link:hover {
+  background: var(--brand-secondary);
+  color: #FFFFFF;
+  text-decoration: none;
 }
 
 /* ============================================================
@@ -1118,7 +1431,6 @@ a.dropdown-item:hover {
 
 .header {
   background: var(--bg-app);
-  border-bottom: 1px solid var(--border-card);
   padding: var(--spacing-4) 0;
   position: relative;
   z-index: var(--z-sticky);
@@ -1165,8 +1477,9 @@ a.dropdown-item:hover {
 }
 
 .logo-image {
-  height: 40px;
+  height: 36px;
   width: auto;
+  object-fit: contain;
 }
 
 .user-greeting {
@@ -1324,10 +1637,7 @@ a.dropdown-item:hover {
   box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
 }
 
-.settings-page .bi-envelope-check,
-.settings-page .bi-envelope-x {
-  color: var(--brand-headline);
-}
+/* Icon colors are handled by Lucide React components */
 
 .settings-page .spinner-border {
   border-color: var(--brand-headline);
@@ -1443,5 +1753,1959 @@ body.admin-page .header .container {
   margin: 0 auto;
   padding-left: var(--container-padding);
   padding-right: var(--container-padding);
+}
+
+/* ============================================================
+   ADMIN DASHBOARD
+   ============================================================ */
+
+/* Make dashboard full width for admin pages */
+.admin-dashboard {
+  max-width: 100%;
+  width: 100%;
+  position: relative;
+  z-index: 10;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+@media (min-width: 1400px) {
+  .admin-dashboard {
+    max-width: 100%;
+  }
+  .admin-dashboard .card {
+    max-width: 100%;
+  }
+  .admin-dashboard .card-body {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  .admin-dashboard .card-body {
+    padding-left: 2rem;
+    padding-right: 2rem;
+  }
+}
+
+@media (min-width: 2560px) {
+  .admin-dashboard .card-body {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+  .admin-dashboard {
+    max-width: 2560px;
+    margin: 0 auto;
+  }
+}
+
+/* Prevent text breaking in dashboard */
+.admin-dashboard h1,
+.admin-dashboard h2,
+.admin-dashboard h3 {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Admin dashboard card styling */
+.admin-dashboard .card {
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+/* Admin dashboard card body - transparent to match design system */
+.admin-dashboard .card-body {
+  background-color: transparent;
+  border-top: none;
+}
+
+/* Remove all borders from tab content area */
+.admin-dashboard .tab-content {
+  border: none;
+  border-top: none;
+}
+
+/* Header section */
+.admin-dashboard .card-header {
+  overflow: visible;
+  min-width: 0;
+}
+
+.admin-dashboard .card-header > .d-flex {
+  overflow: visible;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.admin-dashboard .card-header .btn {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - TABLES
+   ============================================================ */
+
+/* Table headers - allow wrapping and scale font */
+.admin-dashboard table thead th {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+  font-size: 0.8rem;
+  padding: 10px 6px;
+  text-align: center;
+  hyphens: auto;
+}
+
+/* Status and Clicks columns - prevent breaking */
+.admin-dashboard table thead th:nth-child(3),
+.admin-dashboard table thead th:nth-child(4) {
+  white-space: nowrap;
+  word-break: normal;
+}
+
+/* Title column - left aligned, slightly larger */
+.admin-dashboard table thead th:nth-child(1) {
+  text-align: left;
+  font-size: 0.85rem;
+  padding: 10px 12px;
+}
+
+/* Longer headers - smaller font to fit better */
+.admin-dashboard table thead th:nth-child(5),
+.admin-dashboard table thead th:nth-child(7) {
+  font-size: 0.75rem;
+}
+
+@media (min-width: 1200px) {
+  .admin-dashboard table thead th {
+    font-size: 0.85rem;
+  }
+  .admin-dashboard table thead th:nth-child(1) {
+    font-size: 0.9rem;
+  }
+  .admin-dashboard table thead th:nth-child(5),
+  .admin-dashboard table thead th:nth-child(7) {
+    font-size: 0.8rem;
+  }
+}
+
+@media (min-width: 1400px) {
+  .admin-dashboard table thead th {
+    font-size: 0.9rem;
+    padding: 12px 8px;
+  }
+  .admin-dashboard table thead th:nth-child(1) {
+    font-size: 0.95rem;
+  }
+}
+
+/* Table cell content */
+.admin-dashboard table tbody td {
+  overflow: visible;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+/* Admin table title - explicit styling */
+.admin-table-title {
+  color: #E0E0E0;
+  display: block;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-card-title);
+  margin-bottom: 0.25rem;
+}
+
+/* Ensure all interactive elements in table rows work properly */
+.admin-dashboard table tbody tr button,
+.admin-dashboard table tbody tr a,
+.admin-dashboard table tbody tr input,
+.admin-dashboard table tbody tr select,
+.admin-dashboard table tbody tr textarea,
+.admin-dashboard table tbody tr [role="button"],
+.admin-dashboard table tbody tr .dropdown,
+.admin-dashboard table tbody tr .dropdown-menu,
+.admin-dashboard table tbody tr .dropdown-item {
+  pointer-events: auto;
+}
+
+/* Prevent table rows from being keyboard focusable */
+.admin-dashboard table tbody tr {
+  outline: none;
+  user-select: none;
+  pointer-events: auto;
+}
+
+.admin-dashboard table tbody tr:focus,
+.admin-dashboard table tbody tr:focus-visible {
+  outline: none;
+}
+
+.admin-dashboard table tbody tr * {
+  pointer-events: auto;
+}
+
+/* Badges in table cells */
+.admin-dashboard table tbody td .badge {
+  white-space: nowrap;
+  overflow: visible;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0;
+  vertical-align: middle;
+}
+
+/* Status and clicks columns spacing */
+.admin-dashboard table tbody td:nth-child(3),
+.admin-dashboard table tbody td:nth-child(4) {
+  white-space: nowrap;
+  overflow: visible;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Type badges visibility */
+.admin-dashboard table tbody td:nth-child(2) {
+  overflow: visible;
+}
+
+.admin-dashboard table tbody td:nth-child(2) .badge {
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  max-width: none;
+}
+
+/* Status column isolation */
+.admin-dashboard table tbody td:nth-child(3) {
+  isolation: isolate;
+}
+
+.admin-dashboard table tbody td:nth-child(3) > * {
+  display: inline-block;
+  margin-right: 0.25rem;
+}
+
+/* Column alignment */
+.admin-dashboard table thead th:not(:first-child),
+.admin-dashboard table tbody td:not(:first-child) {
+  text-align: center;
+}
+
+.admin-dashboard table thead th:first-child,
+.admin-dashboard table tbody td:first-child {
+  text-align: left;
+}
+
+/* Badge/lozenge content centered within cells */
+.admin-dashboard table tbody td:not(:first-child) {
+  vertical-align: middle;
+}
+
+.admin-dashboard table tbody td:not(:first-child) > span,
+.admin-dashboard table tbody td:not(:first-child) > small,
+.admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown) {
+  display: inline-block;
+  text-align: center;
+}
+
+/* Centered lozenges and badges */
+.admin-dashboard table tbody td .lozenge,
+.admin-dashboard table tbody td .badge {
+  margin: 0 auto;
+}
+
+/* Title column responsiveness */
+@media (max-width: 991px) {
+  .admin-dashboard table tbody td:nth-child(1) {
+    max-width: 100%;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  .admin-dashboard table tbody td:nth-child(1) strong {
+    display: block;
+    word-break: break-word;
+  }
+  .admin-dashboard table tbody td:nth-child(1) small {
+    display: block;
+    word-break: break-word;
+    margin-top: 0.25rem;
+  }
+}
+
+/* OVERRIDE ALL BOOTSTRAP TABLE STYLES */
+.admin-dashboard table,
+.admin-dashboard .table,
+.admin-dashboard table.table,
+.admin-dashboard table.table-hover,
+.admin-dashboard table.table-striped {
+  background-color: transparent;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.admin-dashboard .table-responsive {
+  background-color: transparent;
+  background: transparent;
+  border-radius: var(--card-radius);
+  width: 100%;
+  max-width: 100%;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
+}
+
+/* Table header */
+.admin-dashboard table.table-hover thead,
+.admin-dashboard table thead,
+.admin-dashboard table.table-striped thead {
+  background-color: var(--bg-table-header);
+  background: var(--bg-table-header);
+}
+
+.admin-dashboard table.table-hover thead th,
+.admin-dashboard table thead th,
+.admin-dashboard table.table-striped thead th {
+  color: var(--text-primary);
+  background-color: var(--bg-table-header);
+  background: var(--bg-table-header);
+  border-bottom: 1px solid var(--border-card);
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+/* Table body - transparent */
+.admin-dashboard table.table-hover tbody,
+.admin-dashboard table tbody,
+.admin-dashboard table.table-striped tbody {
+  background-color: transparent;
+  background: transparent;
+}
+
+/* Table rows - transparent by default */
+.admin-dashboard table.table-hover tbody tr,
+.admin-dashboard table tbody tr,
+.admin-dashboard table.table-striped tbody tr,
+.admin-dashboard table.table-striped tbody tr:nth-of-type(odd),
+.admin-dashboard table.table-striped tbody tr:nth-of-type(even) {
+  background-color: transparent;
+  background: transparent;
+  border-bottom: 1px solid var(--border-table-row);
+}
+
+/* Table rows - hover */
+.admin-dashboard table.table-hover tbody tr:hover,
+.admin-dashboard table tbody tr:hover,
+.admin-dashboard table.table-striped tbody tr:hover {
+  background-color: var(--bg-hover);
+  background: var(--bg-hover);
+}
+
+/* Table cells - transparent */
+.admin-dashboard table.table-hover tbody td,
+.admin-dashboard table tbody td,
+.admin-dashboard table.table-striped tbody td,
+.admin-dashboard table.table-hover thead th,
+.admin-dashboard table thead th {
+  color: var(--text-primary);
+  background-color: transparent;
+  background: transparent;
+  border: none;
+  border-bottom: none;
+  position: relative;
+  overflow: visible;
+}
+
+/* Proper spacing between table cells */
+.admin-dashboard table.table-hover tbody td {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* Prevent content from spilling into adjacent cells */
+.admin-dashboard table.table-hover tbody td > * {
+  max-width: 100%;
+}
+
+/* Override any Bootstrap table cell backgrounds */
+.admin-dashboard table td,
+.admin-dashboard table th {
+  background-color: transparent;
+  background: transparent;
+}
+
+/* Ensure header cells maintain proper background */
+.admin-dashboard table thead th {
+  background-color: var(--bg-table-header);
+  background: var(--bg-table-header);
+}
+
+/* Table width and layout */
+.admin-dashboard .table-responsive table {
+  width: 100%;
+  margin: 0;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.admin-dashboard table.table-hover {
+  width: 100%;
+  max-width: 100%;
+  margin-bottom: 0;
+}
+
+@media (min-width: 992px) {
+  .admin-dashboard .table-responsive {
+    overflow-x: hidden;
+  }
+  .admin-dashboard .table-responsive table,
+  .admin-dashboard table.table-hover {
+    table-layout: fixed;
+  }
+}
+
+@media (max-width: 991px) {
+  .admin-dashboard .table-responsive {
+    overflow-x: auto;
+    overflow-y: visible;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - STATUS BADGES
+   ============================================================ */
+
+.admin-dashboard .badge.status-published,
+.admin-dashboard .badge.status-draft,
+.admin-dashboard .badge.status-closed {
+  border-radius: var(--tag-radius);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: filter var(--transition-card);
+  white-space: nowrap;
+  line-height: 1.2;
+  min-width: fit-content;
+  box-sizing: border-box;
+}
+
+.admin-dashboard .badge.status-published {
+  background-color: #28a745;
+}
+
+.admin-dashboard .badge.status-draft {
+  background-color: #ffc107;
+  color: #000000;
+}
+
+.admin-dashboard .badge.status-closed {
+  background-color: #6c757d;
+}
+
+.admin-dashboard .badge.status-published:hover,
+.admin-dashboard .badge.status-draft:hover,
+.admin-dashboard .badge.status-closed:hover {
+  filter: brightness(103%);
+}
+
+/* Type badges (lozenge) */
+.admin-dashboard table tbody td .lozenge,
+.admin-dashboard table tbody td span.lozenge {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: var(--tag-radius);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+  min-width: fit-content;
+  box-sizing: border-box;
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+/* Lozenge variants */
+.admin-dashboard table tbody td .lozenge-survey,
+.admin-dashboard table tbody td span.lozenge-survey,
+.admin-dashboard table tbody td .lozenge-poll,
+.admin-dashboard table tbody td span.lozenge-poll,
+.admin-dashboard table tbody td .lozenge-interview,
+.admin-dashboard table tbody td span.lozenge-interview,
+.admin-dashboard table tbody td .lozenge-usertest,
+.admin-dashboard table tbody td span.lozenge-usertest,
+.admin-dashboard table tbody td .lozenge-question,
+.admin-dashboard table tbody td span.lozenge-question,
+.admin-dashboard table tbody td .lozenge-unmoderated,
+.admin-dashboard table tbody td span.lozenge-unmoderated {
+  padding: 0.5rem 0.9rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - TAB BUTTONS
+   ============================================================ */
+
+/* Admin tabs container - positioned between stats and filters */
+.admin-tabs-container {
+  border: none;
+  background: transparent;
+}
+
+.admin-tabs-container .nav-tabs {
+  border: none;
+  background: transparent;
+}
+
+/* Remove any borders from the tab navigation area */
+.admin-dashboard .nav-tabs,
+.admin-card .nav-tabs {
+  border: none !important;
+  border-bottom: none !important;
+}
+
+.admin-dashboard .nav-tabs .nav-item,
+.admin-card .nav-tabs .nav-item {
+  border: none !important;
+}
+
+/* Ensure no border between sections */
+.admin-dashboard .card-body,
+.admin-card .card-body {
+  border-top: none !important;
+}
+
+.custom-tab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-2);
+  color: var(--text-primary);
+  background-color: var(--bg-tab);
+  border: 1px solid var(--border-card);
+  border-radius: 0;
+  padding: 0.875rem 1rem;
+  margin: 0;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  font-weight: 500;
+  font-size: var(--font-size-body);
+  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
+}
+
+/* First tab - rounded left corners */
+.nav-tabs .nav-item:first-child .custom-tab-button {
+  border-radius: var(--radius-md) 0 0 var(--radius-md);
+}
+
+/* Last tab - rounded right corners */
+.nav-tabs .nav-item:last-child .custom-tab-button {
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+/* Remove double borders between tabs */
+.nav-tabs .nav-item + .nav-item .custom-tab-button {
+  border-left: none;
+}
+
+.custom-tab-button.active {
+  background-color: var(--brand-headline);
+  border-color: var(--brand-headline);
+  color: #FFFFFF;
+}
+
+.custom-tab-button.active i,
+.custom-tab-button.active span {
+  color: #FFFFFF;
+}
+
+.custom-tab-button:hover:not(.active) {
+  background-color: rgba(255, 78, 80, 0.1);
+  border-color: var(--brand-headline);
+  color: var(--brand-headline);
+}
+
+.custom-tab-button.active:hover {
+  background-color: var(--brand-headline);
+  border-color: var(--brand-headline);
+  filter: brightness(1.1);
+}
+
+.custom-tab-button i,
+.custom-tab-button span {
+  color: inherit;
+}
+
+@media (max-width: 576px) {
+  .custom-tab-button {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.9rem;
+  }
+  .custom-tab-button i {
+    display: none;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - FORM CONTROLS
+   ============================================================ */
+
+.admin-dashboard .form-control,
+.admin-dashboard .form-select {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-card);
+  color: var(--text-primary);
+}
+
+.admin-dashboard .form-control:focus,
+.admin-dashboard .form-select:focus {
+  background-color: var(--bg-input-focus);
+  border-color: var(--brand-headline);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
+}
+
+.admin-dashboard .form-control::placeholder {
+  color: var(--text-muted);
+}
+
+.admin-dashboard .form-label {
+  color: var(--text-primary);
+}
+
+.admin-dashboard .form-select option {
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - STAT CARDS
+   ============================================================ */
+
+.admin-stat-card {
+  border-radius: var(--card-radius);
+}
+
+/* Stat card element base styles */
+.stat-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+}
+
+.stat-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.stat-icon {
+  font-size: 1.75rem;
+  color: var(--brand-headline);
+  opacity: 0.8;
+}
+
+@media (max-width: 991px) {
+  .stat-card .card-body {
+    padding: 0.2rem 0.5rem 0.2rem;
+  }
+  .stat-card .card-body > div:first-child > span {
+    font-size: 0.65rem;
+  }
+  .stat-card .card-body > div:first-child > i {
+    font-size: 1.5rem;
+  }
+  .stat-card .card-body h2 {
+    font-size: 2rem;
+  }
+  .stat-card .card-body small {
+    font-size: 0.6rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .stat-card .card-body {
+    padding: 0.15rem 0.35rem 0.15rem;
+  }
+  .stat-card .card-body > div:first-child > span {
+    font-size: 0.55rem;
+    letter-spacing: 0;
+  }
+  .stat-card .card-body > div:first-child > i {
+    font-size: 1.2rem;
+  }
+  .stat-card .card-body h2 {
+    font-size: 1.5rem;
+  }
+  .stat-card .card-body small {
+    font-size: 0.5rem;
+  }
+}
+
+/* Mobile: 2x2 grid for stat cards */
+@media (max-width: 575px) {
+  .admin-dashboard .row.mb-3.g-2 {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .admin-dashboard .row.mb-3.g-2 > div {
+    flex: 0 0 50%;
+    max-width: 50%;
+    width: 50%;
+  }
+  .stat-card {
+    border-radius: 6px;
+  }
+  .stat-card .card-body {
+    padding: 0.2rem 0.35rem 0.15rem;
+  }
+  .stat-card .card-body > div:first-child > span {
+    font-size: 0.5rem;
+  }
+  .stat-card .card-body > div:first-child > i {
+    font-size: 1rem;
+  }
+  .stat-card .card-body h2 {
+    font-size: 1.25rem;
+  }
+  .stat-card .card-body small {
+    font-size: 0.45rem;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - TAB CONTENT
+   ============================================================ */
+
+.admin-dashboard .tab-content {
+  background-color: transparent;
+  padding-top: clamp(1rem, 2vw, 1.5rem);
+  padding-bottom: clamp(1rem, 2vw, 1.5rem);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+@media (max-width: 575px) {
+  .admin-dashboard .tab-content {
+    padding-top: 0.75rem;
+    padding-bottom: 0.75rem;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - SUMMARY CARDS
+   ============================================================ */
+
+.admin-dashboard .row.mb-4 .card {
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-dashboard .row.mb-4 .card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+.admin-dashboard .row.mb-4 .card-body > .d-flex {
+  flex: 1;
+  align-items: flex-start;
+}
+
+.admin-dashboard .row.mb-4 .card-body h6 {
+  line-height: 1.2;
+  margin-bottom: 0.5rem;
+  min-height: 2.4em;
+  display: flex;
+  align-items: center;
+}
+
+.admin-dashboard .row.mb-4 .card-body h3 {
+  line-height: 1.2;
+  margin-bottom: 0.25rem;
+  min-height: 1.5em;
+}
+
+.admin-dashboard .row.mb-4 .card-body small {
+  line-height: 1.4;
+  display: block;
+  min-height: 2.8em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.admin-dashboard .row.mb-4 .card-body i {
+  flex-shrink: 0;
+  margin-top: 0.25rem;
+}
+
+/* Responsive summary cards */
+@media (max-width: 768px) {
+  .admin-dashboard .row.mb-4 {
+    margin-left: 0;
+    margin-right: 0;
+  }
+  .admin-dashboard .row.mb-4 > div {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .admin-dashboard .row.mb-4 .card {
+    min-height: 100px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .admin-dashboard .row.mb-4 .card-body h6 {
+    min-height: 2em;
+    font-size: 0.7rem;
+    word-break: break-word;
+  }
+  .admin-dashboard .row.mb-4 .card-body h3 {
+    font-size: 1.5rem;
+  }
+  .admin-dashboard .row.mb-4 .card-body small {
+    font-size: 0.75rem;
+    min-height: 2.4em;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  .admin-dashboard .row.mb-4 .card-body i {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 576px) {
+  .admin-dashboard .row.mb-4 > div {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    margin-bottom: 0.5rem;
+  }
+  .admin-dashboard .row.mb-4 .card {
+    min-height: 90px;
+    width: 100%;
+    max-width: 100%;
+  }
+  .admin-dashboard .row.mb-4 .card-body {
+    padding: 0.75rem;
+  }
+  .admin-dashboard .row.mb-4 .card-body h3 {
+    font-size: 1.25rem;
+  }
+  .admin-dashboard .row.mb-4 .card-body h6 {
+    font-size: 0.65rem;
+    min-height: 1.8em;
+    word-break: break-word;
+  }
+  .admin-dashboard .row.mb-4 .card-body small {
+    font-size: 0.7rem;
+    min-height: 2em;
+    word-break: break-word;
+    overflow-wrap: break-word;
+  }
+  .admin-dashboard .row.mb-4 .card-body i {
+    font-size: 1.75rem;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - RESPONSIVE TABLE WRAPPER
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .admin-dashboard .table-responsive {
+    border-radius: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Optimize column widths for opportunities table - Desktop */
+@media (min-width: 992px) {
+  .admin-dashboard table.table-hover {
+    table-layout: fixed;
+    width: 100%;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(1),
+  .admin-dashboard table.table-hover tbody td:nth-child(1) {
+    width: 26%;
+    min-width: 180px;
+    max-width: 26%;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(2),
+  .admin-dashboard table.table-hover tbody td:nth-child(2) {
+    width: 10%;
+    min-width: 100px;
+    max-width: 10%;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(3),
+  .admin-dashboard table.table-hover tbody td:nth-child(3) {
+    width: 8%;
+    min-width: 80px;
+    max-width: 8%;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(4),
+  .admin-dashboard table.table-hover tbody td:nth-child(4) {
+    width: 8%;
+    min-width: 70px;
+    max-width: 8%;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(5),
+  .admin-dashboard table.table-hover tbody td:nth-child(5) {
+    width: 8%;
+    min-width: 75px;
+    max-width: 8%;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(6),
+  .admin-dashboard table.table-hover tbody td:nth-child(6) {
+    width: 8%;
+    min-width: 75px;
+    max-width: 8%;
+    text-align: center;
+    white-space: normal;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(7),
+  .admin-dashboard table.table-hover tbody td:nth-child(7) {
+    width: 11%;
+    min-width: 110px;
+    max-width: 11%;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(8),
+  .admin-dashboard table.table-hover tbody td:nth-child(8) {
+    width: 11%;
+    min-width: 120px;
+    max-width: 11%;
+    white-space: nowrap;
+    text-align: center;
+  }
+}
+
+/* Tablet adjustments */
+@media (max-width: 991px) and (min-width: 769px) {
+  .admin-dashboard table.table-hover {
+    table-layout: auto;
+  }
+  .admin-dashboard table.table-hover thead th,
+  .admin-dashboard table.table-hover tbody td {
+    padding: 12px 8px;
+    font-size: 0.9rem;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(1),
+  .admin-dashboard table.table-hover tbody td:nth-child(1) {
+    min-width: 180px;
+    max-width: 35%;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(n+4),
+  .admin-dashboard table.table-hover tbody td:nth-child(n+4) {
+    font-size: 0.85rem;
+  }
+}
+
+/* Mobile table adjustments */
+@media (max-width: 768px) {
+  .admin-dashboard table.table-hover {
+    table-layout: auto;
+  }
+  .admin-dashboard table.table-hover thead th,
+  .admin-dashboard table.table-hover tbody td {
+    padding: 10px 6px;
+    font-size: 0.85rem;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(1),
+  .admin-dashboard table.table-hover tbody td:nth-child(1) {
+    min-width: 150px;
+    max-width: 40%;
+  }
+  /* Hide less critical columns */
+  .admin-dashboard table.table-hover thead th:nth-child(4),
+  .admin-dashboard table.table-hover tbody td:nth-child(4),
+  .admin-dashboard table.table-hover thead th:nth-child(5),
+  .admin-dashboard table.table-hover tbody td:nth-child(5),
+  .admin-dashboard table.table-hover thead th:nth-child(6),
+  .admin-dashboard table.table-hover tbody td:nth-child(6),
+  .admin-dashboard table.table-hover thead th:nth-child(7),
+  .admin-dashboard table.table-hover tbody td:nth-child(7) {
+    display: none;
+  }
+  .admin-dashboard .table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Extra small screens - show only essential columns */
+@media (max-width: 576px) {
+  .admin-dashboard table.table-hover thead th:nth-child(8),
+  .admin-dashboard table.table-hover tbody td:nth-child(8) {
+    display: none;
+  }
+  .admin-dashboard table.table-hover thead th,
+  .admin-dashboard table.table-hover tbody td {
+    padding: 10px 6px;
+    font-size: 0.85rem;
+  }
+  .admin-dashboard table.table-hover thead th:nth-child(1),
+  .admin-dashboard table.table-hover tbody td:nth-child(1) {
+    min-width: 150px;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - HEADER RESPONSIVENESS
+   ============================================================ */
+
+@media (max-width: 575px) {
+  .admin-dashboard .card-header {
+    padding: 1rem 0.75rem;
+    margin-bottom: 1rem;
+    overflow: visible;
+  }
+  .admin-dashboard .card-header h1 {
+    font-size: 1.25rem;
+    white-space: normal;
+    word-break: break-word;
+    margin-right: 0;
+    margin-bottom: 0.75rem;
+    overflow: visible;
+  }
+  .admin-dashboard .card-header .d-flex.flex-column {
+    gap: 0.75rem;
+    overflow: visible;
+  }
+  .admin-dashboard .card-header .btn {
+    font-size: 0.75rem;
+    padding: 0.4rem 0.6rem;
+    overflow: visible;
+  }
+  /* Keep buttons right-aligned on mobile */
+  .admin-dashboard .card-header > div > div:last-child {
+    align-self: flex-end;
+    flex-direction: row;
+    gap: 0.5rem;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 991px) {
+  .admin-dashboard .card-header h1 {
+    font-size: clamp(1.25rem, 3vw, 1.5rem);
+  }
+  .admin-dashboard .card-header .btn {
+    font-size: 0.9rem;
+    padding: 0.5rem 0.875rem;
+  }
+  /* Keep buttons right-aligned on tablet */
+  .admin-dashboard .card-header > div > div:last-child {
+    align-self: flex-end;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - FILTER SECTION RESPONSIVENESS
+   ============================================================ */
+
+@media (max-width: 575px) {
+  .admin-dashboard .row.mb-4.g-3 {
+    margin-bottom: 1rem;
+  }
+  .admin-dashboard .row.mb-4.g-3 > div {
+    margin-bottom: 0.75rem;
+  }
+  .admin-dashboard .form-label {
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+  }
+  .admin-dashboard .form-control,
+  .admin-dashboard .form-select {
+    font-size: 1rem;
+    padding: 0.625rem 0.875rem;
+    min-height: 2.5rem;
+  }
+}
+
+@media (min-width: 576px) and (max-width: 767px) {
+  .admin-dashboard .form-control,
+  .admin-dashboard .form-select {
+    font-size: 1rem;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - TABS RESPONSIVENESS
+   ============================================================ */
+
+@media (max-width: 575px) {
+  .admin-dashboard .nav-tabs {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .admin-dashboard .nav-item {
+    width: 100%;
+  }
+  .admin-dashboard .custom-tab-button {
+    width: 100%;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - DROPDOWN MENU RESPONSIVENESS
+   ============================================================ */
+
+@media (max-width: 575px) {
+  .admin-dashboard .dropdown-menu {
+    position: fixed;
+    top: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    right: auto;
+    min-width: 200px;
+    max-width: 90vw;
+    margin-top: 0.5rem;
+  }
+}
+
+/* ============================================================
+   ADMIN ACTION DROPDOWN - Custom inline dropdown styles
+   ============================================================ */
+
+.admin-action-dropdown {
+  background: rgba(30, 30, 50, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+
+.admin-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-size: 14px;
+  color: #E0E0E0;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.admin-dropdown-item:hover {
+  background: rgba(255, 78, 80, 0.2);
+  color: #FFFFFF;
+}
+
+.admin-dropdown-divider {
+  height: 1px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.admin-dropdown-item-danger {
+  color: #EF4444;
+}
+
+.admin-dropdown-item-danger:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #F87171;
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - CONTAINER PADDING
+   ============================================================ */
+
+@media (max-width: 575px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 0.5rem;
+  }
+  .admin-dashboard .col-12 {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+  }
+  .admin-dashboard .card {
+    border-radius: 12px;
+    margin: 0;
+    padding: 0.75rem;
+  }
+  .admin-dashboard .card-header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (min-width: 576px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.75rem 1rem;
+  }
+}
+
+@media (min-width: 768px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.75rem 1rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 1rem;
+  }
+}
+
+@media (min-width: 1400px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 1rem;
+  }
+}
+
+@media (min-width: 1600px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
+@media (min-width: 1920px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 0.5rem;
+  }
+}
+
+@media (min-width: 2560px) {
+  .admin-dashboard .container-fluid {
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* ============================================================
+   LANDING PAGE / LOGIN
+   ============================================================ */
+
+.landing-hero-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: 5vh;
+  background-color: transparent;
+  color: #E0E0E0;
+  font-family: 'Inter', sans-serif;
+  padding-left: 2rem;
+  padding-right: 2rem;
+  padding-bottom: 2rem;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Light mode landing */
+.landing-hero-wrapper.light-mode {
+  background: transparent;
+}
+
+/* Coral dots container */
+.coral-dots-container {
+  position: fixed;
+  top: -20%;
+  left: -20%;
+  width: 140%;
+  height: 140%;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+
+@keyframes travelHorizontal {
+  0% {
+    transform: translateX(-4px);
+  }
+  100% {
+    transform: translateX(calc(1.4 * 100vw - 4px));
+  }
+}
+
+@keyframes travelVertical {
+  0% {
+    transform: translateY(-4px);
+  }
+  100% {
+    transform: translateY(calc(1.4 * 100vh - 4px));
+  }
+}
+
+.coral-dot {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background-color: #FF4E50;
+  border-radius: 50%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.coral-dot-horizontal {
+  margin-top: -4px;
+  margin-left: -4px;
+}
+
+.coral-dot-vertical {
+  margin-top: -4px;
+  margin-left: -4px;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  max-width: 900px;
+  width: 100%;
+  padding: 0.75rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.hero-content::before {
+  content: '';
+  position: absolute;
+  top: -0.5rem;
+  left: -0.5rem;
+  right: -0.5rem;
+  bottom: -0.5rem;
+  z-index: -1;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 78, 80, 0.3);
+  border-radius: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Redesigned Hero Content - Enterprise Login Layout */
+.hero-content-redesign {
+  max-width: 800px;
+  padding: 48px;
+  text-align: left;
+}
+
+.hero-content-redesign::before {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+/* Section 1: Brand Header - Centered Stacked Layout */
+.hero-brand-header-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 48px;
+  width: 100%;
+}
+
+.hero-brand-lockup {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  margin-bottom: 20px;
+}
+
+.hero-text-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.hero-text-stack .hero-subtitle-centered {
+  font-size: 1.9rem;
+}
+
+.hero-logo-large {
+  width: 140px;
+  height: auto;
+  margin-bottom: 0;
+}
+
+.hero-title-large {
+  color: #FF4E50;
+  font-size: 4.5rem;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0;
+}
+
+.hero-subtitle-centered {
+  color: #9CA3AF;
+  font-size: 1.9rem;
+  font-weight: 400;
+  margin: 0;
+}
+
+.hero-subtitle-centered .subtitle-emphasis {
+  font-weight: 700;
+  font-style: italic;
+}
+
+/* Section 2: Two Column Value Grid */
+.hero-value-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+  margin-bottom: 48px;
+  width: 100%;
+}
+
+.hero-value-column {
+  /* No additional styles needed */
+}
+
+h3.hero-value-heading,
+.hero-value-heading {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem !important;
+  font-weight: 400 !important;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  margin: 0 0 12px 0;
+  padding-left: 20px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Light mode override for hero headings */
+body.theme-light h3.hero-value-heading,
+body.theme-light .hero-value-heading {
+  color: #4B5563 !important;
+  font-weight: 500 !important;
+}
+
+.hero-value-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.hero-value-list li {
+  color: #E0E0E0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  padding-left: 20px;
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.hero-value-list li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  background-color: #FF4E50;
+  border-radius: 50%;
+}
+
+.hero-value-list li:last-child {
+  margin-bottom: 0;
+}
+
+/* Section 3: Primary Action Zone */
+.hero-action-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding-top: 16px;
+}
+
+.hero-cta-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 320px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #FFFFFF;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.hero-cta-primary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.hero-cta-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hero-cta-primary:focus {
+  outline: 2px solid #FF4E50;
+  outline-offset: 2px;
+}
+
+.hero-demo-links {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.hero-demo-link {
+  background: none;
+  border: none;
+  color: #FF4E50;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s ease;
+}
+
+.hero-demo-link:hover:not(:disabled) {
+  color: #FF7A33;
+  text-decoration: underline;
+}
+
+.hero-demo-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.hero-demo-link:focus {
+  outline: 2px solid #FF4E50;
+  outline-offset: 2px;
+}
+
+.hero-demo-divider {
+  color: #6B7280;
+  font-size: 0.875rem;
+}
+
+/* Landing Page - Responsive: Mobile Layout */
+@media (max-width: 768px) {
+  .hero-content-redesign {
+    padding: 32px 24px;
+  }
+
+  .hero-brand-header-centered {
+    margin-bottom: 32px;
+  }
+
+  .hero-brand-lockup {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .hero-logo-large {
+    width: 80px;
+  }
+
+  .hero-title-large {
+    font-size: 2.5rem;
+  }
+
+  .hero-subtitle-centered {
+    font-size: 0.9rem;
+  }
+
+  .hero-value-grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
+    margin-bottom: 32px;
+  }
+
+  .hero-cta-primary {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .hero-demo-links {
+    flex-wrap: wrap;
+  }
+}
+
+/* ============================================================
+   OPPORTUNITY DETAIL PAGE
+   ============================================================ */
+.opportunity-detail-page .card {
+  background: var(--bg-card);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+}
+
+.opportunity-detail-page .card-header {
+  background: transparent;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.opportunity-detail-page .card-body {
+  background: transparent;
+}
+
+.opportunity-detail-page h1 {
+  color: var(--text-primary);
+}
+
+.opportunity-detail-page h6 {
+  color: var(--text-primary);
+}
+
+.opportunity-detail-page p {
+  color: var(--text-secondary);
+}
+
+.opportunity-detail-page .text-muted {
+  color: var(--text-muted) !important;
+}
+
+/* ============================================================
+   ADMIN TABLE - Cell Styling (Theme-aware)
+   ============================================================ */
+
+/* Table cell with title and description */
+.admin-cell-title {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-card-title);
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.admin-cell-description {
+  font-size: var(--font-size-metadata);
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+
+.admin-cell-metadata {
+  font-size: var(--font-size-metadata);
+  color: var(--text-muted);
+}
+
+/* Table cell standard styling */
+.admin-cell {
+  padding: 16px 8px;
+  vertical-align: middle;
+  background-color: transparent;
+}
+
+.admin-cell-title-col {
+  padding: 16px 16px;
+  vertical-align: middle;
+  background-color: transparent;
+}
+
+.admin-cell-center {
+  padding: 16px 8px;
+  vertical-align: middle;
+  text-align: center;
+}
+
+/* Admin table header styling */
+.admin-th {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  padding: 12px 8px;
+  white-space: normal;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.admin-th-title {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  padding: 12px 16px;
+  white-space: normal;
+  line-height: 1.3;
+  text-align: left;
+}
+
+.admin-th-nowrap {
+  white-space: nowrap;
+}
+
+/* Admin row clickable state */
+.admin-row-clickable {
+  cursor: pointer;
+}
+
+.admin-row-clickable:hover {
+  background: var(--bg-hover);
+}
+
+/* Admin action button (kebab menu) */
+.admin-action-btn-kebab {
+  font-size: 18px;
+  font-weight: bold;
+  padding: 4px 10px;
+}
+
+/* Admin action dropdown positioning */
+.admin-action-dropdown-menu {
+  position: absolute;
+  z-index: var(--z-dropdown);
+  min-width: 140px;
+  width: auto;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  display: block;
+}
+
+/* ============================================================
+   PAGE-SPECIFIC LAYOUT PATTERNS
+   ============================================================ */
+
+/* Admin Page Full-Height Container */
+.admin-page-fullheight {
+  min-height: 100vh;
+  padding: 0.5rem 0.75rem;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* Admin Main Card - Full height with responsive padding */
+.admin-card-main {
+  min-height: calc(100vh - 4rem);
+  border-radius: 16px;
+  padding: 0;
+  padding-top: clamp(0.75rem, 2vw, 1.5rem);
+  padding-bottom: clamp(0.75rem, 2vw, 1.5rem);
+  padding-left: clamp(0.75rem, 2vw, 1.5rem);
+  padding-right: clamp(0.75rem, 2vw, 1.5rem);
+}
+
+/* Dashboard/Page Title - Large heading style */
+.page-title-lg {
+  font-size: 42px;
+  font-weight: 700;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.1;
+  overflow: visible;
+}
+
+/* Alias for home page compatibility */
+.adaptalabs-home-title {
+  margin-bottom: 24px;
+  font-size: 42px;
+  font-weight: 700;
+}
+
+/* AdaptaBits Page Title */
+.adaptabits-page-title {
+  color: var(--brand-headline);
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-h1);
+  line-height: var(--line-height-heading);
+  display: flex;
+  align-items: center;
+}
+
+/* Admin Dashboard Title */
+.admin-dashboard-title {
+  font-size: 42px;
+  font-weight: 700;
+  background: var(--brand-gradient);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  line-height: 1.1;
+}
+
+/* Stat Card Body - Compact padding */
+.stat-card-body {
+  padding: 0.25rem 0.75rem 0.25rem;
+}
+
+/* Stat Card Header - Flex with negative margin bottom */
+.stat-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: -0.25rem;
+}
+
+/* Filters Row - Flex wrap container */
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Filter Field - Flexible width */
+.filter-field {
+  flex: 1 1 200px;
+  min-width: 200px;
+}
+
+.filter-field-sm {
+  flex: 1 1 150px;
+  min-width: 150px;
+}
+
+/* Opportunity Card Body - Flex column layout */
+.opportunity-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Clickable Card - Cursor and full height */
+.card-clickable {
+  cursor: pointer;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Card Body Flex - Auto-growing content */
+.card-body-flex {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+/* Card Content Spacer - Push to bottom */
+.card-content-bottom {
+  margin-top: auto;
+}
+
+/* Timing Info - Enhanced styling */
+.timing-info {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: var(--spacing-2);
+  margin-bottom: var(--spacing-3);
+}
+
+/* Analytics Container - Constrained width */
+.analytics-container {
+  max-width: 1400px;
+  padding: var(--spacing-4);
+}
+
+/* Loading Container - Centered with min height */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+/* Header Transparent with no bottom border */
+.card-header-transparent {
+  background: transparent;
+  border-bottom: none;
+  margin: 0;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  padding-left: 0;
+  padding-right: 0;
+  overflow: visible;
+}
+
+/* Tab Container */
+.tabs-container {
+  margin-bottom: 1.5rem;
+  margin-top: 0.5rem;
+}
+
+/* Tab Content Container */
+.tab-content-padded {
+  padding: clamp(1rem, 2vw, 1.5rem);
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Card Body Transparent */
+.card-body-transparent {
+  background-color: transparent;
+  padding: 0;
+}
+
+/* Button No Wrap */
+.btn-nowrap {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Empty State Icon */
+.empty-state-icon {
+  display: block;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+}
+
+/* Empty State Container */
+.empty-state {
+  text-align: center;
+  padding: var(--spacing-8) var(--spacing-4);
+  color: var(--text-muted);
+}
+
+.empty-state .empty-state-title {
+  margin-bottom: var(--spacing-3);
+  color: var(--text-primary);
+}
+
+.empty-state .empty-state-text {
+  font-size: 0.9rem;
 }
 

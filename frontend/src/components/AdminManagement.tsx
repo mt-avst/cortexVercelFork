@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getAdmins, getAdminRequests, approveAdminRequest, denyAdminRequest, revokeAdminAccess } from '../api/client';
 import { User, AdminRequest } from '../api/types';
 import ConfirmationModal from './ConfirmationModal';
+import { AlertTriangle, Users, History, ListChecks, XCircle, CheckCircle } from 'lucide-react';
 
 const AdminManagement: React.FC = () => {
   const [admins, setAdmins] = useState<User[]>([]);
@@ -103,7 +104,7 @@ const AdminManagement: React.FC = () => {
   if (error) {
     return (
       <div className="alert alert-danger">
-        <i className="bi bi-exclamation-triangle me-2"></i>
+        <AlertTriangle size={18} className="me-2" />
         {error}
         <button className="btn btn-sm btn-outline-danger ms-3" onClick={loadData}>
           Retry
@@ -311,7 +312,7 @@ const AdminManagement: React.FC = () => {
               onClick={() => setActiveTab('admins')}
               type="button"
             >
-              <i className="bi bi-people me-2"></i>
+              <Users size={16} className="me-2" />
               All Admins ({admins.length})
             </button>
           </li>
@@ -321,7 +322,7 @@ const AdminManagement: React.FC = () => {
               onClick={() => setActiveTab('pending')}
               type="button"
             >
-              <i className="bi bi-clock-history me-2"></i>
+              <History size={16} className="me-2" />
               Pending Requests ({pendingRequests.length})
             </button>
           </li>
@@ -331,7 +332,7 @@ const AdminManagement: React.FC = () => {
               onClick={() => setActiveTab('history')}
               type="button"
             >
-              <i className="bi bi-list-check me-2"></i>
+              <ListChecks size={16} className="me-2" />
               History ({historyRequests.length})
             </button>
           </li>
@@ -376,7 +377,7 @@ const AdminManagement: React.FC = () => {
                                 onClick={() => setRevokeConfirm({ show: true, admin })}
                                 disabled={processing === admin.id}
                               >
-                                <i className="bi bi-x-circle me-1"></i>
+                                <XCircle size={14} className="me-1" />
                                 Revoke
                               </button>
                             )}
@@ -450,7 +451,7 @@ const AdminManagement: React.FC = () => {
                                   color: '#fff'
                                 }}
                               >
-                                <i className="bi bi-check-circle me-1"></i>
+                                <CheckCircle size={14} className="me-1" />
                                 Approve
                               </button>
                               <button
@@ -463,7 +464,7 @@ const AdminManagement: React.FC = () => {
                                   color: '#fff'
                                 }}
                               >
-                                <i className="bi bi-x-circle me-1"></i>
+                                <XCircle size={14} className="me-1" />
                                 Deny
                               </button>
                             </div>

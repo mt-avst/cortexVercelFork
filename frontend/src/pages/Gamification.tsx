@@ -1,15 +1,16 @@
 import React from 'react';
 import UserProfileComponent from '../components/UserProfile';
 import Leaderboard from '../components/Leaderboard';
+import { Trophy } from 'lucide-react';
 
 const GamificationPage: React.FC = () => {
   return (
-    <div className="container-fluid py-4" style={{ position: 'relative', zIndex: 10 }}>
+    <div className="container-fluid py-4 gamification-page" style={{ position: 'relative', zIndex: 10 }}>
       <div className="row mb-4">
         <div className="col-12">
           <div className="d-flex justify-content-between align-items-center">
-            <h1 className="mb-0 adaptabits-page-title" style={{ color: '#FF4E50', fontSize: 'var(--font-size-h1)', fontWeight: 'var(--font-weight-h1)', lineHeight: 'var(--line-height-heading)' }}>
-              <i className="bi bi-trophy me-2"></i>
+            <h1 className="mb-0 adaptabits-page-title">
+              <Trophy size={32} className="me-2" />
               AdaptaBits
             </h1>
           </div>
