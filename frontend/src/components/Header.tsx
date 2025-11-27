@@ -1,20 +1,20 @@
-import React, { useState, memo, useMemo, useCallback } from 'react';
+import React, { useState, memo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { requestAdminAccess } from '../api/client';
-import './Header.css';
+import { Dropdown, DropdownItem, DropdownDivider, DropdownHeader } from './ui';
 
 /**
  * Header Component
- * Main navigation header with auth controls and animation toggle.
+ * Main navigation header with auth controls and theme toggle.
  * Wrapped in React.memo for performance optimization.
  */
 const Header: React.FC = memo(() => {
   const { user, loading, initialAuthCheck, logout } = useAuth();
-  const { theme, toggleTheme, isDarkMode } = useTheme();
+  const { isDarkMode, toggleTheme } = useTheme();
   const location = useLocation();
   
   // Check if we're on an admin page
@@ -25,7 +25,6 @@ const Header: React.FC = memo(() => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   // Determine logo link based on user role
-  // Use useMemo to ensure it updates when user changes
   const logoLink = React.useMemo(() => {
     if (user?.role === 'researcher_admin' || user?.role === 'superadmin') {
       return '/admin';
@@ -44,7 +43,6 @@ const Header: React.FC = memo(() => {
       setAdminRequestMessage(null);
       const result = await requestAdminAccess();
       setAdminRequestMessage({ type: 'success', text: result.message });
-      // Clear message after 5 seconds
       setTimeout(() => setAdminRequestMessage(null), 5000);
     } catch (error: any) {
       const message = error.response?.data?.error || error.message || 'Failed to submit admin request';
@@ -73,6 +71,17 @@ const Header: React.FC = memo(() => {
     }
   };
 
+  const renderDropdownTrigger = () => (
+    <button 
+      className="btn btn-outline-secondary" 
+      type="button"
+      aria-label="User profile menu"
+    >
+      <i className="bi bi-person-circle me-1" aria-hidden="true"></i>
+      Your Profile
+    </button>
+  );
+
   return (
     <header className="header">
       <div className="container">
@@ -81,15 +90,15 @@ const Header: React.FC = memo(() => {
             <img 
               src="/images/adaptalogo.png" 
               alt="Adaptalabs Logo" 
-              style={{ height: '40px', width: 'auto' }}
+              className="logo-image"
             />
           </Link>
           
           <nav className="nav" aria-label="Main navigation">
-            {/* Theme Toggle Button - Always visible */}
+            {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
-              className="momentum-btn-secondary"
+              className="btn btn-outline-secondary"
               aria-label={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
               title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
             >
@@ -109,14 +118,14 @@ const Header: React.FC = memo(() => {
                       href="https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="momentum-btn-secondary"
+                      className="btn btn-outline-secondary"
                       aria-label="Submit Research Request (opens in new tab)"
                     >
                       Submit Research Request
                     </a>
                     <Link 
                       to="/my-bookings" 
-                      className="momentum-btn-secondary"
+                      className="btn btn-outline-secondary"
                     >
                       My Bookings
                     </Link>
@@ -127,116 +136,99 @@ const Header: React.FC = memo(() => {
                     Admin
                   </Link>
                 )}
+                
                 <div className="nav-items">
-                  <div className="dropdown">
-                    <button 
-                      className="btn btn-outline-secondary dropdown-toggle" 
-                      type="button" 
-                      id="profileDropdown"
-                      data-bs-toggle="dropdown" 
-                      aria-expanded="false"
-                      aria-haspopup="true"
-                      aria-label="User profile menu"
-                    >
-                      <i className="bi bi-person-circle me-1" aria-hidden="true"></i>
-                      Your Profile
-                    </button>
-                    <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="profileDropdown" role="menu">
-                      <li role="none">
-                        <div className="px-3 py-2">
-                          <div className="d-flex align-items-start">
-                            <i className="bi bi-person me-2 mt-1" aria-hidden="true"></i>
-                            <div>
-                              <div>Hello, {user.name || 'Unknown User'}</div>
-                              <div className="text-muted small" style={{ opacity: 0.7 }}>
-                                {user.role === 'superadmin' ? 'Superadmin' :
-                                 user.role === 'researcher_admin' ? 'Admin' :
-                                 'User'}
-                              </div>
-                            </div>
+                  <Dropdown 
+                    trigger={renderDropdownTrigger()}
+                    align="end"
+                  >
+                    {/* User Info Header */}
+                    <DropdownHeader>
+                      <div className="flex items-start gap-2">
+                        <i className="bi bi-person mt-1" aria-hidden="true"></i>
+                        <div>
+                          <div className="font-semibold">Hello, {user.name || 'Unknown User'}</div>
+                          <div className="text-muted text-sm">
+                            {user.role === 'superadmin' ? 'Superadmin' :
+                             user.role === 'researcher_admin' ? 'Admin' :
+                             'User'}
                           </div>
                         </div>
-                      </li>
-                      <li role="separator"><hr className="dropdown-divider" /></li>
-                      {(user.role === 'researcher_admin' || user.role === 'superadmin') && (
-                        <li role="none">
-                          <Link to="/admin/settings" className="px-3 py-2 d-block" role="menuitem">
-                            <i className="bi bi-gear me-2" aria-hidden="true"></i>
-                            <span>Settings</span>
-                          </Link>
-                        </li>
-                      )}
-                      {user.role !== 'superadmin' && (
-                        <>
-                          {user.role === 'employee' && (
-                            <li role="none">
-                              <Link to="/gamification" className="px-3 py-2 d-block" role="menuitem">
-                                <i className="bi bi-trophy me-2" aria-hidden="true"></i>
-                                <span>AdaptaBits</span>
-                              </Link>
-                            </li>
-                          )}
-                          {user.role === 'employee' && (
-                            <li role="separator"><hr className="dropdown-divider" /></li>
-                          )}
-                          <li role="none">
-                            <button 
-                              onClick={handleRequestAdminClick}
-                              className="px-3 py-2 w-100 text-start border-0 bg-transparent d-flex align-items-start dropdown-menu-item-text"
-                              role="menuitem"
-                              disabled={requestingAdmin}
-                              style={{ cursor: requestingAdmin ? 'not-allowed' : 'pointer' }}
-                            >
-                              <i className="bi bi-shield-plus me-2 mt-1" aria-hidden="true" style={{ flexShrink: 0 }}></i>
-                              <span>
-                                {requestingAdmin 
-                                  ? 'Submitting...' 
-                                  : user.role === 'researcher_admin' 
-                                    ? 'Request Superadmin Access' 
-                                    : 'Request Admin Access'
-                                }
-                              </span>
-                            </button>
-                          </li>
-                          {adminRequestMessage && (
-                            <li role="none">
-                              <div className={`px-3 py-2 small ${adminRequestMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
-                                <i className={`bi ${adminRequestMessage.type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2`} aria-hidden="true"></i>
-                                {adminRequestMessage.text}
-                              </div>
-                            </li>
-                          )}
-                        </>
-                      )}
-                      <li role="separator"><hr className="dropdown-divider" /></li>
-                      <li role="none">
-                        <Link to="/feedback" className="px-3 py-2 d-block" role="menuitem">
-                          <i className="bi bi-chat-left-text me-2" aria-hidden="true"></i>
-                          <span>Send Feedback</span>
-                        </Link>
-                      </li>
-                      <li role="separator"><hr className="dropdown-divider" /></li>
-                      <li role="none">
-                        <button 
-                          onClick={(e) => {
-                            e.preventDefault();
-                            logout();
-                          }} 
-                          className="px-3 py-2 w-100 text-start border-0"
-                          role="menuitem"
-                          aria-label="Logout"
+                      </div>
+                    </DropdownHeader>
+                    
+                    <DropdownDivider />
+                    
+                    {/* Settings link for admins */}
+                    {(user.role === 'researcher_admin' || user.role === 'superadmin') && (
+                      <Link to="/admin/settings" className="dropdown-item">
+                        <i className="bi bi-gear me-2" aria-hidden="true"></i>
+                        Settings
+                      </Link>
+                    )}
+                    
+                    {/* Non-superadmin options */}
+                    {user.role !== 'superadmin' && (
+                      <>
+                        {user.role === 'employee' && (
+                          <>
+                            <Link to="/gamification" className="dropdown-item">
+                              <i className="bi bi-trophy me-2" aria-hidden="true"></i>
+                              AdaptaBits
+                            </Link>
+                            <DropdownDivider />
+                          </>
+                        )}
+                        
+                        <DropdownItem
+                          onClick={handleRequestAdminClick}
+                          disabled={requestingAdmin}
                         >
-                          <i className="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
-                          <span>Logout</span>
-                        </button>
-                      </li>
-                    </ul>
-                  </div>
+                          <i className="bi bi-shield-plus me-2" aria-hidden="true"></i>
+                          {requestingAdmin 
+                            ? 'Submitting...' 
+                            : user.role === 'researcher_admin' 
+                              ? 'Request Superadmin Access' 
+                              : 'Request Admin Access'
+                          }
+                        </DropdownItem>
+                        
+                        {adminRequestMessage && (
+                          <div className={`px-4 py-2 text-sm ${adminRequestMessage.type === 'success' ? 'text-success' : 'text-danger'}`}>
+                            <i className={`bi ${adminRequestMessage.type === 'success' ? 'bi-check-circle' : 'bi-exclamation-circle'} me-2`} aria-hidden="true"></i>
+                            {adminRequestMessage.text}
+                          </div>
+                        )}
+                      </>
+                    )}
+                    
+                    <DropdownDivider />
+                    
+                    {/* Feedback link */}
+                    <Link to="/feedback" className="dropdown-item">
+                      <i className="bi bi-chat-left-text me-2" aria-hidden="true"></i>
+                      Send Feedback
+                    </Link>
+                    
+                    <DropdownDivider />
+                    
+                    {/* Logout */}
+                    <DropdownItem
+                      onClick={(e) => {
+                        e.preventDefault();
+                        logout();
+                      }}
+                      aria-label="Logout"
+                    >
+                      <i className="bi bi-box-arrow-right me-2" aria-hidden="true"></i>
+                      Logout
+                    </DropdownItem>
+                  </Dropdown>
                 </div>
               </>
             ) : (
               <div className="nav-items">
-                <span className="text-white-50">Welcome to AdaptaLabs</span>
+                <span className="text-muted">Welcome to AdaptaLabs</span>
               </div>
             )}
           </nav>

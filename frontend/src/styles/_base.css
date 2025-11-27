@@ -1,0 +1,280 @@
+/**
+ * Base Styles - Momentum Design System
+ * 
+ * Foundational element styling including typography, links, and forms.
+ * These styles apply to raw HTML elements.
+ */
+
+/* ============================================================
+   ROOT & BODY
+   ============================================================ */
+
+html {
+  font-size: 16px;
+}
+
+body {
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-body);
+  line-height: var(--line-height-body);
+  color: var(--text-body);
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+
+/* ============================================================
+   TYPOGRAPHY
+   ============================================================ */
+
+h1, .h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-h1);
+  line-height: var(--line-height-heading);
+  color: var(--brand-headline);
+}
+
+h2, .h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-h2);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+h3, .h3 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-h3);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+h4, .h4 {
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-h4);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+h5, .h5 {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+h6, .h6 {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+}
+
+p {
+  margin-bottom: var(--spacing-4);
+  color: var(--text-body);
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+/* Lead text */
+.lead {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-primary);
+}
+
+/* Small/muted text */
+small, .small {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-metadata);
+}
+
+.text-muted {
+  color: var(--text-muted);
+  font-size: var(--font-size-metadata);
+  line-height: var(--line-height-metadata);
+}
+
+/* Code */
+code {
+  font-family: var(--font-family-mono);
+  font-size: 0.875em;
+  color: var(--brand-secondary);
+  background: var(--bg-card);
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-sm);
+}
+
+pre {
+  font-family: var(--font-family-mono);
+  font-size: var(--font-size-small);
+  line-height: 1.5;
+  background: var(--bg-card);
+  padding: var(--spacing-4);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
+/* ============================================================
+   LINKS
+   ============================================================ */
+
+a {
+  color: var(--link);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+a:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* ============================================================
+   LISTS
+   ============================================================ */
+
+ul, ol {
+  padding-left: var(--spacing-6);
+  margin-bottom: var(--spacing-4);
+}
+
+li {
+  margin-bottom: var(--spacing-2);
+}
+
+li:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   FORMS - Base Elements
+   ============================================================ */
+
+label {
+  display: block;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-body);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  padding: var(--spacing-3) var(--spacing-4);
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-primary);
+  background: var(--bg-input);
+  border: 1px solid var(--border-card);
+  border-radius: var(--input-radius);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+  background: var(--bg-input-focus);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+/* Checkbox & Radio */
+input[type="checkbox"],
+input[type="radio"] {
+  width: auto;
+  margin-right: var(--spacing-2);
+  accent-color: var(--brand-primary);
+}
+
+/* ============================================================
+   TABLES - Base
+   ============================================================ */
+
+table {
+  width: 100%;
+  margin-bottom: var(--spacing-4);
+}
+
+th {
+  text-align: left;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  padding: var(--spacing-4) var(--spacing-3);
+  background: var(--bg-table-header);
+  border-bottom: 1px solid var(--border-card);
+}
+
+td {
+  padding: var(--spacing-4) var(--spacing-3);
+  border-bottom: 1px solid var(--border-table-row);
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================
+   HORIZONTAL RULE
+   ============================================================ */
+
+hr {
+  border: none;
+  height: 1px;
+  background: var(--divider);
+  margin: var(--spacing-6) 0;
+}
+
+/* ============================================================
+   SELECTION
+   ============================================================ */
+
+::selection {
+  background: var(--brand-primary);
+  color: white;
+}
+
+/* ============================================================
+   SCROLLBAR (WebKit)
+   ============================================================ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--text-muted);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-primary);
+}
+

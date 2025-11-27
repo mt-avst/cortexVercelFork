@@ -1,0 +1,227 @@
+/**
+ * Design Tokens - Momentum Design System
+ * 
+ * Single source of truth for all design values.
+ * These CSS custom properties define the visual language of the application.
+ */
+
+:root {
+  /* ============================================================
+     COLORS - Dark Theme (Default)
+     ============================================================ */
+  
+  /* Background Colors */
+  --bg-app: #0A091A;
+  --bg-app-gradient-top: #0A091A;
+  --bg-app-gradient-bottom: #0A091A;
+  --bg-card: rgba(255, 255, 255, 0.05);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-tab: rgba(255, 255, 255, 0.05);
+  --bg-table-header: rgba(255, 255, 255, 0.05);
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --bg-input-focus: rgba(255, 255, 255, 0.08);
+
+  /* Border Colors */
+  --border-card: rgba(255, 255, 255, 0.1);
+  --border-table-row: rgba(255, 255, 255, 0.05);
+  --divider: rgba(255, 255, 255, 0.1);
+
+  /* Text Colors */
+  --text-primary: #E0E0E0;
+  --text-body: #E0E0E0;
+  --text-muted: rgba(224, 224, 224, 0.7);
+  --text-on-dark: #E0E0E0;
+  --text-on-light: #1A1A1A;
+  --text-inverse: #1A1A1A;
+
+  /* Brand Colors - Electric Coral */
+  --brand-headline: #FF4E50;
+  --brand-primary: #FF4E50;
+  --brand-secondary: #FF7A33;
+
+  /* CTA (Call to Action) Colors */
+  --cta-bg: transparent;
+  --cta-bg-hover: #FF4E50;
+  --cta-text: #FF4E50;
+  --cta-text-hover: #FFFFFF;
+  --cta-border: #FF4E50;
+
+  /* Link Colors */
+  --link: #FF7A33;
+  --link-hover: #FF974F;
+  --link-visited: #FF7A33;
+
+  /* Accent Colors - Status Indicators */
+  --accent-coral: #FF4E50;
+  --accent-amber: #F0A500;
+  --accent-teal: #4DD4C0;
+
+  /* Status Colors */
+  --status-success: #28a745;
+  --status-warning: #ffc107;
+  --status-danger: #dc3545;
+  --status-info: #17a2b8;
+
+  /* Tag Colors */
+  --tag-bg: #222222;
+  --tag-text: #FFFFFF;
+  --tag-survey: #222222;
+  --tag-poll: #222222;
+  --tag-test: #222222;
+
+  /* Focus & Accessibility */
+  --focus-ring: #FF4E50;
+  --focus-ring-color: rgba(255, 78, 80, 0.25);
+  --focus-outline: 2px solid var(--focus-ring);
+  --focus-outline-offset: 2px;
+
+  /* ============================================================
+     TYPOGRAPHY
+     ============================================================ */
+  
+  /* Font Family */
+  --font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 
+    'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 
+    'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-family-mono: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 
+    'Droid Sans Mono', 'Source Code Pro', monospace;
+
+  /* Font Sizes */
+  --font-size-h1: 2.25rem;    /* 36px */
+  --font-size-h2: 1.5rem;     /* 24px */
+  --font-size-h3: 1.25rem;    /* 20px */
+  --font-size-h4: 1.125rem;   /* 18px */
+  --font-size-body: 0.9375rem; /* 15px */
+  --font-size-small: 0.875rem; /* 14px */
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-card-title: 1.125rem; /* 18px */
+  --font-size-metadata: 0.875rem;   /* 14px */
+  --tag-font-size: 0.75rem;   /* 12px */
+
+  /* Font Weights */
+  --font-weight-h1: 700;
+  --font-weight-h2: 600;
+  --font-weight-h3: 600;
+  --font-weight-h4: 600;
+  --font-weight-body: 400;
+  --font-weight-card-title: 600;
+  --font-weight-metadata: 400;
+  --font-weight-bold: 700;
+  --font-weight-semibold: 600;
+  --font-weight-medium: 500;
+  --tag-font-weight: 500;
+
+  /* Line Heights */
+  --line-height-heading: 1.25;
+  --line-height-body: 1.6;
+  --line-height-metadata: 1.4;
+  --line-height-tight: 1.2;
+
+  /* ============================================================
+     SPACING
+     ============================================================ */
+  
+  --spacing-0: 0;
+  --spacing-1: 0.25rem;  /* 4px */
+  --spacing-2: 0.5rem;   /* 8px */
+  --spacing-3: 0.75rem;  /* 12px */
+  --spacing-4: 1rem;     /* 16px */
+  --spacing-5: 1.25rem;  /* 20px */
+  --spacing-6: 1.5rem;   /* 24px */
+  --spacing-8: 2rem;     /* 32px */
+  --spacing-10: 2.5rem;  /* 40px */
+  --spacing-12: 3rem;    /* 48px */
+  --spacing-16: 4rem;    /* 64px */
+
+  /* Component-specific spacing */
+  --spacing-section: 2.5rem;      /* 40px - Section spacing */
+  --spacing-grid-gutter: 2rem;    /* 32px - Grid gutters */
+  --spacing-vertical-rhythm: 1rem; /* 16px - Vertical rhythm */
+  --card-padding: 1.5rem;         /* 24px */
+  --tag-padding: 0.25rem 0.625rem; /* 4px 10px */
+
+  /* ============================================================
+     COMPONENT STYLING
+     ============================================================ */
+  
+  /* Border Radius */
+  --radius-none: 0;
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.5rem;    /* 8px */
+  --radius-lg: 1rem;      /* 16px */
+  --radius-xl: 1.5rem;    /* 24px */
+  --radius-full: 9999px;
+  --card-radius: 1rem;    /* 16px */
+  --button-radius: 0.375rem; /* 6px */
+  --tag-radius: 9999px;   /* Pill shape */
+  --input-radius: 0.5rem; /* 8px */
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.12);
+  --shadow-card-hover: 0 6px 16px rgba(0, 0, 0, 0.16);
+  --shadow-button: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-button-hover: 0 4px 10px rgba(0, 0, 0, 0.22);
+  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.3);
+
+  /* Card-specific */
+  --card-border: 1px solid var(--border-card);
+  --card-backdrop-blur: 16px;
+
+  /* ============================================================
+     TRANSITIONS & ANIMATIONS
+     ============================================================ */
+  
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-slow: 300ms ease;
+  --transition-card: 180ms ease;
+  --transition-button: 180ms ease;
+
+  /* ============================================================
+     ACCESSIBILITY
+     ============================================================ */
+  
+  --min-hit-area: 44px;  /* Minimum touch target size */
+  --min-click-area: 40px;
+
+  /* ============================================================
+     Z-INDEX SCALE
+     ============================================================ */
+  
+  --z-dropdown: 1000;
+  --z-sticky: 1020;
+  --z-fixed: 1030;
+  --z-modal-backdrop: 1040;
+  --z-modal: 1050;
+  --z-popover: 1060;
+  --z-tooltip: 1070;
+
+  /* ============================================================
+     LAYOUT
+     ============================================================ */
+  
+  --container-max-width: 1200px;
+  --container-padding: 1.25rem; /* 20px */
+  --header-height: 64px;
+
+  /* Grid Columns */
+  --grid-columns: 12;
+
+  /* ============================================================
+     LEGACY / CALENDAR (for backward compatibility)
+     ============================================================ */
+  
+  --calendar-hover-transition: all 0.2s ease;
+  --calendar-hover-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --calendar-hover-transform: translateY(-1px);
+  --calendar-hover-scale: scale(1.02);
+  --calendar-hover-shadow-selected: 0 4px 8px rgba(255, 122, 51, 0.3);
+
+  /* Filter button (for dark mode invert) */
+  --btn-close-filter: invert(1);
+}
+

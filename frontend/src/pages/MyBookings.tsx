@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Container, Row, Col, Card, Button, Badge, Alert, Spinner } from 'react-bootstrap';
 import { getMyBookings, cancelBooking, rescheduleBooking } from '../api/client';
 import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmationModal from '../components/ConfirmationModal';
+import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Badge, Alert, Spinner } from '../components/ui';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
@@ -136,198 +136,190 @@ const MyBookings: React.FC = () => {
       case 'booked':
         return null; // Don't show "Booked" badge
       case 'cancelled':
-        return <Badge bg="secondary">Cancelled</Badge>;
+        return <Badge variant="secondary">Cancelled</Badge>;
       default:
-        return <Badge bg="light" text="dark">{status}</Badge>;
+        return <Badge>{status}</Badge>;
     }
   };
 
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'test':
-        return <Badge bg="primary">Test</Badge>;
+        return <Badge className="ms-2">Test</Badge>;
       case 'poll':
-        return <Badge bg="info">Poll</Badge>;
+        return <Badge variant="info" className="ms-2">Poll</Badge>;
       case 'survey':
-        return <Badge bg="warning" text="dark">Survey</Badge>;
+        return <Badge variant="warning" className="ms-2">Survey</Badge>;
       default:
-        return <Badge bg="light" text="dark">{type}</Badge>;
+        return <Badge className="ms-2">{type}</Badge>;
     }
   };
 
   if (!user) {
     return (
-      <Container className="mt-4" style={{ position: 'relative', zIndex: 10 }}>
+      <div className="container mt-4 relative z-10">
         <Alert variant="warning">
           Please log in to view your bookings.
         </Alert>
-      </Container>
+      </div>
     );
   }
 
   if (loading) {
     return (
-      <Container className="mt-4 text-center" style={{ position: 'relative', zIndex: 10 }} aria-busy="true" aria-live="polite">
-        <Spinner animation="border" role="status" aria-label="Loading bookings">
-          <span className="visually-hidden">Loading...</span>
-        </Spinner>
+      <div className="container mt-4 text-center relative z-10" aria-busy="true" aria-live="polite">
+        <Spinner label="Loading bookings" />
         <p className="mt-2">Loading your bookings...</p>
-      </Container>
+      </div>
     );
   }
 
   return (
-    <Container className="mt-4" style={{ position: 'relative', zIndex: 10 }}>
-      <Row>
-        <Col>
-          <div className="d-flex justify-content-between align-items-start">
+    <div className="container mt-4 relative z-10">
+      <div className="row">
+        <div className="col">
+          <div className="flex justify-between items-start">
             <div>
-              <button
-                className="btn btn-outline-secondary mb-3"
+              <Button
+                variant="outline-secondary"
+                className="mb-3"
                 onClick={() => navigate('/')}
                 title="Back to AdaptaLabs"
               >
                 <i className="bi bi-arrow-left me-1"></i>
                 Back to AdaptaLabs
-              </button>
+              </Button>
               <h2>My Bookings</h2>
               <p className="text-muted">Manage your AdaptaLabs activity bookings</p>
             </div>
-            <button
-              className="btn btn-outline-primary"
+            <Button
+              variant="outline-primary"
               onClick={loadBookings}
               disabled={loading}
               title="Refresh bookings"
             >
               <i className={`bi bi-arrow-clockwise ${loading ? 'spinner-border spinner-border-sm' : ''}`}></i>
               Refresh
-            </button>
+            </Button>
           </div>
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       {error && (
-        <Row className="mt-3">
-          <Col>
-            <Alert variant="danger" dismissible onClose={() => setError(null)}>
+        <div className="row mt-3">
+          <div className="col">
+            <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
               {error}
             </Alert>
-          </Col>
-        </Row>
+          </div>
+        </div>
       )}
 
       {/* Upcoming Bookings */}
-      <Row className="mt-4">
-        <Col>
+      <div className="row mt-4">
+        <div className="col">
           <h4>Upcoming Bookings</h4>
           {bookings.upcoming.length === 0 ? (
             <Card>
-              <Card.Body className="text-center text-muted">
+              <CardBody className="text-center text-muted">
                 <p>No upcoming bookings</p>
-              </Card.Body>
+              </CardBody>
             </Card>
           ) : (
-            <Row>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {bookings.upcoming.map((booking) => (
-                <Col md={6} lg={4} key={booking.id} className="mb-3">
-                  <Card>
-                    <Card.Header className="d-flex justify-content-between align-items-center">
-                      <div>
-                        {getStatusBadge(booking.status)}
-                        {getTypeBadge(booking.opportunity_type)}
-                      </div>
-                    </Card.Header>
-                    <Card.Body>
-                      <Card.Title className="h6" style={{fontWeight: 'bold'}}>{booking.opportunity_title}</Card.Title>
-                      <Card.Text className="small text-muted">
-                        {booking.opportunity_purpose}
-                      </Card.Text>
-                      <div className="small">
-                        <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
-                        <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
-                        {booking.session_location && (
-                          <div><strong>Location:</strong> {booking.session_location}</div>
-                        )}
-                        <div><strong>Owner:</strong> {booking.owner_name}</div>
-                      </div>
-                    </Card.Body>
-                    <Card.Footer>
-                      <div className="d-flex gap-2">
-                        <Button
-                          variant="outline-danger"
-                          size="sm"
-                          onClick={() => handleCancelBooking(booking.id)}
-                          disabled={actionLoading === booking.id}
-                        >
-                          {actionLoading === booking.id ? (
-                            <Spinner size="sm" aria-label="Processing cancellation" aria-busy="true" />
-                          ) : (
-                            'Cancel'
-                          )}
-                        </Button>
-                        {/* Reschedule functionality will be implemented in a future release */}
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          disabled
-                        >
-                          Reschedule
-                        </Button>
-                      </div>
-                    </Card.Footer>
-                  </Card>
-                </Col>
+                <Card key={booking.id}>
+                  <CardHeader className="flex justify-between items-center">
+                    <div>
+                      {getStatusBadge(booking.status)}
+                      {getTypeBadge(booking.opportunity_type)}
+                    </div>
+                  </CardHeader>
+                  <CardBody>
+                    <CardTitle as="h6" className="font-bold">{booking.opportunity_title}</CardTitle>
+                    <p className="text-sm text-muted">
+                      {booking.opportunity_purpose}
+                    </p>
+                    <div className="text-sm">
+                      <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
+                      <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
+                      {booking.session_location && (
+                        <div><strong>Location:</strong> {booking.session_location}</div>
+                      )}
+                      <div><strong>Owner:</strong> {booking.owner_name}</div>
+                    </div>
+                  </CardBody>
+                  <CardFooter>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline-danger"
+                        size="sm"
+                        onClick={() => handleCancelBooking(booking.id)}
+                        disabled={actionLoading === booking.id}
+                        loading={actionLoading === booking.id}
+                      >
+                        Cancel
+                      </Button>
+                      {/* Reschedule functionality will be implemented in a future release */}
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        disabled
+                      >
+                        Reschedule
+                      </Button>
+                    </div>
+                  </CardFooter>
+                </Card>
               ))}
-            </Row>
+            </div>
           )}
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       {/* Past Bookings */}
-      <Row className="mt-5">
-        <Col>
+      <div className="row mt-5">
+        <div className="col">
           <h4>Past Bookings</h4>
           {bookings.past.length === 0 ? (
             <Card>
-              <Card.Body className="text-center text-muted">
+              <CardBody className="text-center text-muted">
                 <p>No past bookings</p>
-              </Card.Body>
+              </CardBody>
             </Card>
           ) : (
-            <Row>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {bookings.past.map((booking) => (
-                <Col md={6} lg={4} key={booking.id} className="mb-3">
-                  <Card className="opacity-75">
-                    <Card.Header className="d-flex justify-content-between align-items-center">
-                      <div>
-                        {getStatusBadge(booking.status)}
-                        {getTypeBadge(booking.opportunity_type)}
-                      </div>
-                    </Card.Header>
-                    <Card.Body>
-                      <Card.Title className="h6" style={{fontWeight: 'bold'}}>{booking.opportunity_title}</Card.Title>
-                      <Card.Text className="small text-muted">
-                        {booking.opportunity_purpose}
-                      </Card.Text>
-                      <div className="small">
-                        <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
-                        <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
-                        {booking.session_location && (
-                          <div><strong>Location:</strong> {booking.session_location}</div>
-                        )}
-                        <div><strong>Owner:</strong> {booking.owner_name}</div>
-                        {booking.cancelled_at && (
-                          <div><strong>Cancelled:</strong> {formatDateTime(booking.cancelled_at)}</div>
-                        )}
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
+                <Card key={booking.id} className="opacity-75">
+                  <CardHeader className="flex justify-between items-center">
+                    <div>
+                      {getStatusBadge(booking.status)}
+                      {getTypeBadge(booking.opportunity_type)}
+                    </div>
+                  </CardHeader>
+                  <CardBody>
+                    <CardTitle as="h6" className="font-bold">{booking.opportunity_title}</CardTitle>
+                    <p className="text-sm text-muted">
+                      {booking.opportunity_purpose}
+                    </p>
+                    <div className="text-sm">
+                      <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
+                      <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
+                      {booking.session_location && (
+                        <div><strong>Location:</strong> {booking.session_location}</div>
+                      )}
+                      <div><strong>Owner:</strong> {booking.owner_name}</div>
+                      {booking.cancelled_at && (
+                        <div><strong>Cancelled:</strong> {formatDateTime(booking.cancelled_at)}</div>
+                      )}
+                    </div>
+                  </CardBody>
+                </Card>
               ))}
-            </Row>
+            </div>
           )}
-        </Col>
-      </Row>
+        </div>
+      </div>
 
       <ConfirmationModal
         show={cancelConfirm.show}
@@ -350,7 +342,7 @@ const MyBookings: React.FC = () => {
         onConfirm={confirmRescheduleBooking}
         onCancel={cancelRescheduleBooking}
       />
-    </Container>
+    </div>
   );
 };
 

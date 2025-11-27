@@ -1,0 +1,456 @@
+/**
+ * Theme Overrides - Momentum Design System
+ * 
+ * Theme-specific styles that override base component styles.
+ * Uses CSS custom properties for clean theme switching.
+ * 
+ * Themes:
+ * - Dark (default): Applied via :root variables
+ * - Light: Applied via body.theme-light class
+ */
+
+/* ============================================================
+   LIGHT THEME - Variable Overrides
+   ============================================================ */
+
+body.theme-light {
+  /* Background Colors - Clean white */
+  --bg-app: #FFFFFF;
+  --bg-app-gradient-top: #F8F9FA;
+  --bg-app-gradient-bottom: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-hover: rgba(0, 0, 0, 0.04);
+  --bg-tab: rgba(0, 0, 0, 0.03);
+  --bg-table-header: rgba(0, 0, 0, 0.03);
+  --bg-input: rgba(255, 255, 255, 0.9);
+  --bg-input-focus: rgba(255, 255, 255, 1);
+
+  /* Border Colors */
+  --border-card: rgba(0, 0, 0, 0.12);
+  --border-table-row: rgba(0, 0, 0, 0.06);
+  --divider: #E5E7EB;
+
+  /* Text Colors - Dark for readability */
+  --text-primary: #1A1A1A;
+  --text-body: #374151;
+  --text-muted: #6B7280;
+  --text-on-dark: #1A1A1A;
+
+  /* Brand Colors - Adaptavist Orange for light backgrounds */
+  --brand-headline: #E86C24;
+  --brand-primary: #E86C24;
+  --brand-secondary: #D35F1D;
+
+  /* CTA Colors */
+  --cta-bg: #E86C24;
+  --cta-bg-hover: #D35F1D;
+  --cta-text: #FFFFFF;
+  --cta-text-hover: #FFFFFF;
+  --cta-border: #E86C24;
+
+  /* Link Colors */
+  --link: #E86C24;
+  --link-hover: #D35F1D;
+
+  /* Focus */
+  --focus-ring: #E86C24;
+  --focus-ring-color: rgba(232, 108, 36, 0.25);
+
+  /* Accent Colors */
+  --accent-coral: #E86C24;
+  --accent-amber: #D97706;
+  --accent-teal: #0D9488;
+
+  /* Tag Colors - Light theme */
+  --tag-bg: #F3F4F6;
+  --tag-text: #374151;
+  --tag-survey: #F3F4F6;
+  --tag-poll: #F3F4F6;
+  --tag-test: #F3F4F6;
+
+  /* Shadows - Softer for light theme */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-button-hover: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.15);
+
+  /* Filter (for icons) */
+  --btn-close-filter: none;
+}
+
+/* ============================================================
+   LIGHT THEME - Component Overrides
+   ============================================================ */
+
+/* Body */
+body.theme-light {
+  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  color: var(--text-body);
+}
+
+/* Cards - Glass effect */
+body.theme-light .card,
+body.theme-light .momentum-card {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.theme-light .card:hover {
+  border-color: rgba(232, 108, 36, 0.25);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(0, 0, 0, 0.08);
+}
+
+/* Bento Grid Cards - Professional style */
+body.theme-light .bento-grid .card {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid transparent;
+  border-top: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+body.theme-light .bento-grid .card:hover {
+  transform: translateY(-4px);
+  border: 1px solid rgba(232, 108, 36, 0.25);
+  box-shadow: 
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 12px 28px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(232, 108, 36, 0.1);
+}
+
+/* Header - Glass effect */
+body.theme-light .header {
+  background: rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.theme-light .header .logo {
+  color: var(--brand-headline);
+}
+
+body.theme-light .header .nav-link {
+  color: var(--text-body);
+}
+
+body.theme-light .header .nav-link:hover {
+  color: var(--brand-headline);
+}
+
+/* Dropdown Menu - Glass effect */
+body.theme-light .dropdown-menu {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-body);
+}
+
+body.theme-light .dropdown-header {
+  color: var(--text-primary);
+}
+
+body.theme-light .dropdown-item {
+  color: var(--text-body);
+}
+
+body.theme-light .dropdown-item:hover {
+  background: rgba(232, 108, 36, 0.1);
+  color: var(--text-primary);
+}
+
+body.theme-light .dropdown-item i {
+  color: var(--brand-primary);
+}
+
+body.theme-light .dropdown-item:hover i {
+  color: var(--brand-secondary);
+}
+
+body.theme-light .dropdown-divider {
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+body.theme-light a.dropdown-item {
+  color: var(--text-body);
+}
+
+body.theme-light a.dropdown-item:hover {
+  background: rgba(232, 108, 36, 0.1);
+  color: var(--text-primary);
+}
+
+/* Buttons */
+body.theme-light .btn-outline-secondary {
+  color: var(--text-primary);
+  border-color: #374151;
+}
+
+body.theme-light .btn-outline-secondary:hover {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #FFFFFF;
+}
+
+/* Forms - Glass effect */
+body.theme-light .form-control,
+body.theme-light .form-select {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-body);
+}
+
+body.theme-light .form-control:focus,
+body.theme-light .form-select:focus {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px rgba(232, 108, 36, 0.15);
+}
+
+body.theme-light .form-control::placeholder {
+  color: var(--text-muted);
+}
+
+/* Form select arrow for light theme */
+body.theme-light .form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+}
+
+/* Filter Section */
+body.theme-light .filter-section {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(232, 108, 36, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Alerts - Glass effect */
+body.theme-light .alert {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--text-body);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body.theme-light .alert-success {
+  border-color: #10B981;
+  background: rgba(16, 185, 129, 0.05);
+}
+
+body.theme-light .alert-danger {
+  border-color: #EF4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* Tables */
+body.theme-light .table {
+  color: var(--text-body);
+}
+
+body.theme-light .table thead th {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--text-primary);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .table tbody td {
+  border-color: rgba(0, 0, 0, 0.06);
+  background: transparent;
+}
+
+body.theme-light .table-hover tbody tr:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Badges */
+body.theme-light .badge,
+body.theme-light .tag,
+body.theme-light .lozenge {
+  background: var(--tag-bg);
+  color: var(--tag-text);
+}
+
+body.theme-light .bento-grid .lozenge {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+/* Spinner */
+body.theme-light .spinner-border {
+  border-color: var(--brand-headline);
+  border-right-color: transparent;
+}
+
+/* Modal - Glass effect */
+body.theme-light .modal-content {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: var(--text-body);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+body.theme-light .modal-header,
+body.theme-light .modal-footer {
+  border-color: var(--border-card);
+}
+
+/* List Group - Glass effect */
+body.theme-light .list-group-item {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(255, 255, 255, 0.4);
+  color: var(--text-body);
+}
+
+/* Nav */
+body.theme-light .nav-link {
+  color: var(--text-muted);
+}
+
+body.theme-light .nav-link:hover {
+  color: var(--text-primary);
+}
+
+body.theme-light .nav-link.active {
+  color: var(--brand-headline);
+}
+
+/* Settings Page */
+body.theme-light .settings-page .card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* ============================================================
+   BACKGROUND ANIMATION THEMES
+   ============================================================ */
+
+/* Hide animated grid in light mode, show static grid instead */
+body.theme-light .grid-squares-overlay,
+body.theme-light .coral-dots-container {
+  display: none;
+}
+
+/* Light mode static grid - orange color */
+.mesh-gradient-light {
+  background-image:
+    linear-gradient(rgba(232, 108, 36, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(232, 108, 36, 0.15) 1px, transparent 1px);
+  background-size: 80px 80px;
+  opacity: 0.6;
+}
+
+/* ============================================================
+   HERO SECTION - Light Theme
+   ============================================================ */
+
+body.theme-light .landing-hero-wrapper {
+  background: transparent;
+}
+
+body.theme-light .hero-content::before,
+body.theme-light .hero-content-redesign::before {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+body.theme-light .hero-content h1 {
+  color: var(--brand-headline);
+}
+
+body.theme-light .hero-content p {
+  color: var(--text-body);
+}
+
+body.theme-light .hero-value-heading {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-card);
+}
+
+body.theme-light .hero-value-list li {
+  color: var(--text-body);
+}
+
+body.theme-light .hero-subtitle-centered {
+  color: var(--text-body);
+}
+
+/* ============================================================
+   ADMIN DASHBOARD - Light Theme
+   ============================================================ */
+
+body.theme-light .admin-dashboard .card {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+body.theme-light .admin-tabs .nav-link {
+  color: var(--text-muted);
+}
+
+body.theme-light .admin-tabs .nav-link:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+body.theme-light .admin-tabs .nav-link.active {
+  color: var(--brand-headline);
+  background: rgba(232, 108, 36, 0.05);
+}
+
+/* ============================================================
+   DARK THEME - Explicit Overrides (if needed)
+   ============================================================ */
+
+/* Dark theme is the default via :root, but explicit class can be used */
+body.theme-dark {
+  /* Uses default :root variables */
+}
+
+/* ============================================================
+   REDUCED MOTION
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
+   HIGH CONTRAST MODE
+   ============================================================ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --border-card: rgba(255, 255, 255, 0.3);
+    --text-muted: rgba(224, 224, 224, 0.9);
+  }
+  
+  body.theme-light {
+    --border-card: rgba(0, 0, 0, 0.3);
+    --text-muted: #4B5563;
+  }
+}
+
