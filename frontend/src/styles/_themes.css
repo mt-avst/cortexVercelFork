@@ -197,9 +197,11 @@ body.theme-dark .bento-grid .card .text-muted {
   color: rgba(224, 224, 224, 0.75);
 }
 
-body.theme-dark .bento-grid .card .timing-info {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+body.theme-dark .bento-grid .card .timing-info,
+body.theme-dark .timing-info {
+  background-color: transparent;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* Bento Grid Card metadata text - Light theme */
@@ -207,9 +209,11 @@ body.theme-light .bento-grid .card .text-muted {
   color: #6B7280;
 }
 
-body.theme-light .bento-grid .card .timing-info {
-  background-color: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.08);
+body.theme-light .bento-grid .card .timing-info,
+body.theme-light .timing-info {
+  background-color: transparent;
+  border: none;
+  border-top: 1px solid rgba(0, 0, 0, 0.12);
 }
 
 /* Header - Dark Mode (transparent for unified glassmorphic surface) */
@@ -426,6 +430,19 @@ body.theme-light .filter-chip--all.is-active {
   background-color: #E86C24;
   color: #FFFFFF;
   border-color: #E86C24;
+}
+
+/* Home Intro Text - Light Mode */
+body.theme-light .home-intro-description {
+  color: #4B5563;
+}
+
+body.theme-light .home-intro-tagline {
+  color: #6B7280;
+}
+
+body.theme-light .home-intro-tagline em {
+  color: #E86C24;
 }
 
 /* Spinner */

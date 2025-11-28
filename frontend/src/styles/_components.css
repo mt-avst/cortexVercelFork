@@ -3639,6 +3639,32 @@ body.theme-light .hero-value-heading {
   letter-spacing: -0.02em;
 }
 
+/* Home Page Intro Text Block */
+.home-intro-text {
+  max-width: 65ch;
+  margin-bottom: 32px;
+}
+
+.home-intro-description {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.home-intro-tagline {
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #B0BEC5;
+  margin: 0;
+}
+
+.home-intro-tagline em {
+  font-style: italic;
+  color: var(--brand-headline);
+}
+
 /* AdaptaBits Page Title */
 .adaptabits-page-title {
   color: var(--brand-headline);
@@ -3697,6 +3723,7 @@ body.theme-light .hero-value-heading {
   display: flex;
   flex-direction: column;
   flex: 1;
+  height: 100%;
 }
 
 /* Clickable Card - Cursor and full height with dynamic hover */
@@ -3737,15 +3764,28 @@ body.theme-light .card.card-clickable:hover {
 /* Card Content Spacer - Push to bottom */
 .card-content-bottom {
   margin-top: auto;
+  padding-top: 16px;
 }
 
-/* Timing Info - Enhanced styling */
+/* Timing Info - Card metadata footer */
 .timing-info {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: var(--spacing-2);
-  margin-bottom: var(--spacing-3);
+  background-color: transparent !important;
+  background: transparent !important;
+  border-radius: 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 12px 0 0 0;
+  margin-top: auto;
+  margin-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Remove default margins from timing-info children */
+.timing-info > div,
+.timing-info > small {
+  margin-bottom: 0 !important;
 }
 
 /* Analytics Container - Constrained width */
@@ -3867,9 +3907,9 @@ body.theme-light .card.card-clickable:hover {
 }
 
 .filter-chip--all.is-active {
-  background-color: rgba(255, 255, 255, 0.95);
+  background-color: #E0E0E0;
   color: #1A1A1A;
-  border-color: rgba(255, 255, 255, 0.95);
+  border-color: #E0E0E0;
   font-weight: 600;
 }
 
