@@ -374,3 +374,34 @@ export const getCardHoverColor = (type: string | null | undefined): string => {
     default: return 'transparent';
   }
 };
+
+/**
+ * Gets the CSS variable for card hover background color based on opportunity type
+ * Used for light mode where we want softer pastel borders
+ * @param type - The opportunity type string (can be undefined/null)
+ * @returns CSS variable reference string
+ */
+export const getCardHoverBgColor = (type: string | null | undefined): string => {
+  if (!type) return 'transparent';
+  
+  // Extract base type if concatenated with status
+  const statusSuffixes = ['published', 'draft', 'closed'];
+  let baseType = type;
+  
+  for (const suffix of statusSuffixes) {
+    if (type.toLowerCase().endsWith(suffix)) {
+      baseType = type.slice(0, -suffix.length);
+      break;
+    }
+  }
+  
+  switch (baseType.toLowerCase()) {
+    case 'test': return 'var(--lozenge-usertest-bg)';
+    case 'survey': return 'var(--lozenge-survey-bg)';
+    case 'poll': return 'var(--lozenge-poll-bg)';
+    case 'interview': return 'var(--lozenge-interview-bg)';
+    case 'question': return 'var(--lozenge-question-bg)';
+    case 'unmoderated': return 'var(--lozenge-unmoderated-bg)';
+    default: return 'transparent';
+  }
+};
