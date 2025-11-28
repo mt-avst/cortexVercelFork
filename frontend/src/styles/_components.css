@@ -3468,11 +3468,54 @@ body.theme-light .hero-value-heading {
 /* ============================================================
    OPPORTUNITY DETAIL PAGE
    ============================================================ */
+
+/* Art Gallery Framing - Luxurious spacing */
+.opportunity-detail-page {
+  padding-top: 64px;
+  padding-bottom: 48px;
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
+.opportunity-detail-page > section {
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0;
+}
+
+/* Responsive padding adjustments */
+@media (max-width: 1200px) {
+  .opportunity-detail-page {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .opportunity-detail-page {
+    padding-top: 32px;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
 .opportunity-detail-page .card {
   background: var(--bg-card);
   border: var(--card-border);
   border-radius: var(--card-radius);
   box-shadow: var(--shadow-card);
+}
+
+/* Semantic Roof - Top Accent Bar */
+.opportunity-detail-card {
+  border-radius: 12px !important;
+  overflow: hidden; /* Ensures content respects border-radius */
+}
+
+.opportunity-detail-card .card-header {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
 }
 
 .opportunity-detail-page .card-header {
@@ -3498,6 +3541,255 @@ body.theme-light .hero-value-heading {
 
 .opportunity-detail-page .text-muted {
   color: var(--text-muted) !important;
+}
+
+/* ============================================================
+   OPPORTUNITY HERO SECTION
+   ============================================================ */
+
+.opportunity-hero {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-8);
+}
+
+.opportunity-hero-content {
+  flex: 2;
+  min-width: 0;
+}
+
+.opportunity-hero-content .lozenge {
+  margin-bottom: var(--spacing-4);
+}
+
+.opportunity-hero-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.opportunity-hero-description {
+  color: var(--text-secondary);
+  font-size: var(--font-size-body);
+  line-height: 1.6;
+  max-width: 65ch;
+  margin: 0;
+}
+
+.opportunity-hero-meta {
+  flex: 1;
+  min-width: 280px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.opportunity-hero-meta-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meta-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.meta-value {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+/* Responsive: Stack on smaller screens */
+@media (max-width: 768px) {
+  .opportunity-hero {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .opportunity-hero-meta {
+    min-width: 100%;
+  }
+
+  .opportunity-hero-title {
+    font-size: 2rem;
+  }
+}
+
+/* ============================================================
+   CALENDAR GRID - SWIMLANES & STYLING
+   ============================================================ */
+
+/* Day column swimlane borders */
+.calendar-day-column {
+  border-right: 1px solid var(--border-subtle);
+}
+
+.calendar-day-column:last-child {
+  border-right: none;
+}
+
+/* Zebra striping for even columns - full height */
+.calendar-day-column:nth-child(even) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Styled day headers */
+.calendar-day-header {
+  text-align: center;
+}
+
+.calendar-day-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-primary);
+}
+
+.calendar-day-sessions {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: lowercase;
+}
+
+/* Time column styling - right aligned with better contrast */
+.calendar-time-column {
+  text-align: right;
+}
+
+.calendar-time-label {
+  text-align: right !important;
+  padding-right: 16px !important;
+  color: var(--text-secondary) !important;
+  font-weight: 500 !important;
+}
+
+/* Controls row spacing */
+.calendar-controls-row,
+.opportunity-detail-page .d-flex.justify-content-between.align-items-center.mb-3 {
+  margin-bottom: 24px !important;
+}
+
+/* ============================================================
+   CALENDAR SLOT - GHOST BUTTON STYLE (Floating Chip Look)
+   ============================================================ */
+
+/* Base slot styling - floating inside column */
+.calendar-slot {
+  left: 6px !important;
+  right: 6px !important;
+  width: calc(100% - 12px) !important;
+  border-radius: 6px !important;
+}
+
+/* Slot text readability */
+.calendar-slot .timeslot-label {
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+}
+
+.calendar-slot-ghost {
+  background: transparent !important;
+  border: 1.5px solid var(--status-success) !important;
+  border-radius: 6px !important;
+  transition: all 0.2s ease !important;
+}
+
+.calendar-slot-ghost .timeslot-label {
+  color: var(--status-success) !important;
+  font-weight: 600 !important;
+}
+
+.calendar-slot-ghost:hover {
+  background: var(--status-success) !important;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.25) !important;
+  transform: scale(1.02) !important;
+}
+
+.calendar-slot-ghost:hover .timeslot-label {
+  color: #FFFFFF !important;
+}
+
+/* Booked slot styling */
+.calendar-slot-booked {
+  background: #ff7700 !important;
+  border-color: #ff7700 !important;
+  border-radius: 6px !important;
+}
+
+.calendar-slot-booked .timeslot-label {
+  color: #000000 !important;
+}
+
+/* Full slot styling */
+.calendar-slot-full {
+  background: var(--status-danger) !important;
+  border-color: var(--status-danger) !important;
+  border-radius: 6px !important;
+  opacity: 0.8 !important;
+}
+
+.calendar-slot-full .timeslot-label {
+  color: #FFFFFF !important;
+}
+
+/* Conflict slot styling */
+.calendar-slot-conflict {
+  background: var(--status-warning) !important;
+  border-color: var(--status-warning) !important;
+  border-radius: 6px !important;
+  opacity: 0.8 !important;
+}
+
+.calendar-slot-conflict .timeslot-label {
+  color: #000000 !important;
+}
+
+/* ============================================================
+   CALENDAR HINT - SUBTLE INFO TEXT
+   ============================================================ */
+
+/* Inline hint next to header */
+.calendar-hint-divider {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  opacity: 0.6;
+}
+
+.calendar-hint-inline {
+  color: var(--text-tertiary);
+  font-size: 0.875rem;
+  font-weight: 400;
+}
+
+/* Legacy hint (icon + text) */
+.calendar-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.calendar-hint svg {
+  opacity: 0.7;
 }
 
 /* ============================================================

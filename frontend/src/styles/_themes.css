@@ -33,6 +33,8 @@ body.theme-light {
   /* Text Colors - Dark for readability */
   --text-primary: #1A1A1A;
   --text-body: #374151;
+  --text-secondary: #546E7A;
+  --text-tertiary: #78909C;
   --text-muted: #6B7280;
   --text-on-dark: #1A1A1A;
 
@@ -1230,6 +1232,24 @@ body.theme-light .opportunity-detail-page .card-body {
   background: transparent;
 }
 
+/* Light Mode - Ghost Button Polish */
+body.theme-light .calendar-slot-ghost {
+  background-color: rgba(0, 200, 83, 0.08) !important;
+}
+
+body.theme-light .calendar-slot-ghost:hover {
+  background-color: var(--status-success) !important;
+}
+
+/* Light Mode - Zebra Striping (Swimlanes) */
+body.theme-light .calendar-day-column:nth-child(even) {
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+
+body.theme-light .calendar-day-column:nth-child(even) .calendar-day-header {
+  background: rgba(0, 0, 0, 0.03) !important;
+}
+
 /* ============================================================
    OPPORTUNITY DETAIL PAGE - Dark Theme
    ============================================================ */
@@ -1316,6 +1336,11 @@ body.theme-dark .opportunity-detail-page .calendar-day-sessions {
 body.theme-dark .calendar-day-header,
 body.theme-dark .opportunity-detail-page .calendar-day-header {
   background: rgba(255, 255, 255, 0.05);
+}
+
+/* Dark Mode - Zebra Striping (Swimlanes) - header matches column */
+body.theme-dark .calendar-day-column:nth-child(even) .calendar-day-header {
+  background: rgba(255, 255, 255, 0.07) !important;
 }
 
 /* ============================================================

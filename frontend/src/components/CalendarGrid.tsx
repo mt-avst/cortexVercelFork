@@ -386,13 +386,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       left: 0,
                       right: 0,
                       paddingTop: '2px',
-                      fontSize: '0.9rem',
-                      fontWeight: '700',
+                      paddingRight: '16px',
+                      fontSize: '0.875rem',
+                      fontWeight: '500',
                       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                       pointerEvents: 'none',
                       lineHeight: '1.3',
                       backgroundColor: 'transparent',
-                      textAlign: 'center'
+                      textAlign: 'right',
+                      color: 'var(--text-secondary)'
                     }}
                   >
                     {formatTimeLabel(marker.time)}
@@ -416,21 +418,22 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               position: 'relative',
               zIndex: 3
             }}>
-              {sessionsByDate.slice(0, 5).map(([date, dateSessions]) => (
+                {sessionsByDate.slice(0, 5).map(([date, dateSessions]) => (
                 <div key={date} className="calendar-day-column" style={{ position: 'relative' }}>
                   {/* Day Header */}
-                  <div className="calendar-day-header text-center p-2" style={{ 
+                  <div className="calendar-day-header p-2" style={{ 
                     borderRadius: '8px 8px 0 0',
                     border: 'none',
                     height: '60px',
                     display: 'flex',
                     flexDirection: 'column',
-                    justifyContent: 'center'
+                    justifyContent: 'center',
+                    alignItems: 'center'
                   }}>
-                    <h6 className="calendar-day-title mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, fontWeight: '700' }}>
+                    <h6 className="calendar-day-title mb-1" style={{ margin: 0 }}>
                       {formatDate(date)}
                     </h6>
-                    <small className="calendar-day-sessions" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
+                    <small className="calendar-day-sessions">
                       {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
                     </small>
                   </div>
@@ -462,33 +465,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(height * 10000) / 10000;
 
-                        // Determine styling
-                        let slotStyle: React.CSSProperties = {};
+                        // Determine slot class based on state
+                        let slotClass = 'calendar-slot calendar-slot-btn position-absolute ';
                         
                         if (isBooked) {
-                          slotStyle = { 
-                            backgroundColor: '#ff7700',
-                            color: '#000000',
-                            borderColor: '#ff7700'
-                          };
+                          slotClass += 'calendar-slot-booked';
                         } else if (isFull) {
-                          slotStyle = { 
-                            backgroundColor: '#dc3545',
-                            color: 'white',
-                            borderColor: '#dc3545'
-                          };
+                          slotClass += 'calendar-slot-full';
                         } else if (hasConflict) {
-                          slotStyle = { 
-                            backgroundColor: '#ffc107',
-                            color: '#000000',
-                            borderColor: '#ffc107'
-                          };
+                          slotClass += 'calendar-slot-conflict';
                         } else {
-                          slotStyle = { 
-                            backgroundColor: '#28a745',
-                            color: 'white',
-                            borderColor: '#28a745'
-                          };
+                          slotClass += 'calendar-slot-ghost';
                         }
 
                         const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading;
@@ -497,11 +484,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         return (
                           <div
                             key={session.id}
-                            className={`calendar-slot calendar-slot-btn border cursor-pointer position-absolute`}
+                            className={slotClass}
                             style={{ 
-                              ...slotStyle,
-                              left: '2px',
-                              right: '2px',
+                              left: '4px',
+                              right: '4px',
                               top: `${roundedTop}%`,
                               height: `${roundedHeight}%`,
                               maxHeight: `${roundedHeight}%`,
@@ -509,10 +495,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               boxSizing: 'border-box',
                               position: 'absolute',
                               cursor: canClick ? 'pointer' : 'not-allowed',
-                              opacity: (!canClick && !isBooked) ? 0.8 : 1,
-                              transition: 'all 0.2s ease',
-                              borderWidth: '1px',
-                              borderRadius: '0',
                               fontSize: '0.7rem',
                               padding: '2px 4px',
                               overflow: 'hidden',
@@ -528,16 +510,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               return `Available: ${startTime} - ${endTime} (${session.remaining} remaining)`;
                             })()}
                             onClick={() => canClick && handleSlotClick(session)}
-                            onMouseEnter={(e) => {
-                              if (canClick) {
-                                e.currentTarget.style.transform = 'scale(1.02)';
-                                e.currentTarget.style.boxShadow = '0 4px 8px rgba(40, 167, 69, 0.3)';
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = '';
-                              e.currentTarget.style.boxShadow = '';
-                            }}
                           >
                             {/* Time label */}
                             <div 
@@ -548,14 +520,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                 left: '4px',
                                 fontSize: '0.65rem',
                                 fontWeight: '600',
-                                color: (isFull || isBooked || hasConflict) ? (isBooked ? '#000000' : hasConflict ? '#000000' : 'white') : 'white',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 maxWidth: 'calc(100% - 24px)',
                                 pointerEvents: 'none',
-                                lineHeight: '1.2',
-                                opacity: 1
+                                lineHeight: '1.2'
                               }}>
                               {formatTime(session.start_time)} - {formatTime(session.end_time)}
                             </div>

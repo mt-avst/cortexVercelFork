@@ -1,10 +1,15 @@
 import { pool } from '../config';
 
 /**
- * Clean database and add 6 new demo opportunities
- * - 2 test opportunities
- * - 2 poll opportunities  
- * - 2 survey opportunities
+ * Clean database and add demo opportunities for all study types
+ * - 1 test opportunity (App Testing - requires sessions)
+ * - 1 interview opportunity (requires sessions)
+ * - 1 survey opportunity (external link)
+ * - 1 poll opportunity (external link)
+ * - 1 question opportunity (external link)
+ * - 1 unmoderated opportunity (external link)
+ * 
+ * All opportunities have sessions scheduled for December 2025
  */
 export async function resetDemoData() {
   const client = await pool.connect();
@@ -37,50 +42,71 @@ export async function resetDemoData() {
     const adminUserId = adminResult.rows[0].id;
     console.log(`✅ Using admin user ID: ${adminUserId}`);
     
-    // Calculate dates for sessions (next week, Monday-Friday)
+    // Calculate dates for sessions - start from tomorrow and go through December
     const today = new Date();
-    const nextMonday = new Date(today);
-    nextMonday.setDate(today.getDate() + (8 - today.getDay()) % 7 || 7);
-    nextMonday.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
     
-    // Helper to create sessions for an opportunity
-    const createSessions = async (opportunityId: string, defaultDuration: number, days: number[]) => {
+    // Helper to create sessions for an opportunity across multiple weeks
+    const createSessions = async (
+      opportunityId: string, 
+      defaultDuration: number, 
+      weekdayPattern: number[], // 0=Mon, 1=Tue, etc.
+      numWeeks: number = 4
+    ) => {
       const sessions = [];
-      for (const dayOffset of days) {
-        const sessionDate = new Date(nextMonday);
-        sessionDate.setDate(nextMonday.getDate() + dayOffset);
-        
-        // Create 3 sessions per day: 10am, 2pm, 3pm
-        const times = [10, 14, 15];
-        for (const hour of times) {
-          const startTime = new Date(sessionDate);
-          startTime.setHours(hour, 0, 0, 0);
+      
+      // Find the next occurrence of the first day in pattern
+      const startDate = new Date(tomorrow);
+      
+      for (let week = 0; week < numWeeks; week++) {
+        for (const dayOffset of weekdayPattern) {
+          const sessionDate = new Date(startDate);
+          // Add weeks and calculate the specific weekday
+          sessionDate.setDate(startDate.getDate() + (week * 7) + dayOffset);
           
-          const endTime = new Date(startTime);
-          endTime.setMinutes(endTime.getMinutes() + defaultDuration);
+          // Skip if the date is in the past
+          if (sessionDate < today) continue;
           
-          const result = await client.query(
-            `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id`,
-            [
-              opportunityId,
-              startTime.toISOString(),
-              endTime.toISOString(),
-              5, // Capacity of 5
-              `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
-            ]
-          );
-          sessions.push(result.rows[0].id);
+          // Create 3 sessions per day: 10am, 2pm, 3pm
+          const times = [10, 14, 15];
+          for (const hour of times) {
+            const startTime = new Date(sessionDate);
+            startTime.setHours(hour, 0, 0, 0);
+            
+            // Skip if this specific time is in the past
+            if (startTime < today) continue;
+            
+            const endTime = new Date(startTime);
+            endTime.setMinutes(endTime.getMinutes() + defaultDuration);
+            
+            const result = await client.query(
+              `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional)
+               VALUES ($1, $2, $3, $4, $5)
+               RETURNING id`,
+              [
+                opportunityId,
+                startTime.toISOString(),
+                endTime.toISOString(),
+                5, // Capacity of 5
+                `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
+              ]
+            );
+            sessions.push(result.rows[0].id);
+          }
         }
       }
+      console.log(`   📅 Created ${sessions.length} sessions`);
       return sessions;
     };
     
-    console.log('📝 Creating demo opportunities...');
+    console.log('📝 Creating demo opportunities for all study types...\n');
     
-    // 1. Test Opportunity 1: User Interface Testing
-    const test1Result = await client.query(
+    // ==========================================
+    // 1. TEST (App Testing) - Requires sessions
+    // ==========================================
+    const testResult = await client.query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
         default_duration_minutes, status, owner_user_id, participant_type_required
@@ -88,115 +114,51 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'test',
-        'User Interface Testing',
-        'Help us improve our mobile app interface through usability testing',
-        'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions and gather feedback on the design and usability.',
-        'Mobile Banking App',
+        'Mobile App Usability Testing',
+        'Help us improve our mobile banking app through hands-on testing',
+        'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions and gather feedback on the design and usability. Your feedback directly shapes our product roadmap.',
+        'Mobile Banking App v3.0',
         45,
         'published',
         adminUserId,
         'any'
       ]
     );
-    const test1Id = test1Result.rows[0].id;
-    await createSessions(test1Id, 45, [0, 1, 2, 3, 4]); // Mon-Fri
-    console.log('✅ Created Test Opportunity 1: User Interface Testing');
+    const testId = testResult.rows[0].id;
+    await createSessions(testId, 45, [0, 1, 2, 3, 4], 4); // Mon-Fri for 4 weeks
+    console.log('✅ Created TEST opportunity: Mobile App Usability Testing\n');
     
-    // 2. Test Opportunity 2: Feature Validation
-    const test2Result = await client.query(
+    // ==========================================
+    // 2. INTERVIEW - Requires sessions
+    // ==========================================
+    const interviewResult = await client.query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
-        default_duration_minutes, status, owner_user_id, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        default_duration_minutes, status, owner_user_id, participant_type_required,
+        meeting_location_optional
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING id`,
       [
-        'test',
-        'New Feature Validation',
-        'Test our latest dashboard features and provide feedback',
-        'We\'ve built some exciting new features for our analytics dashboard and need your help to validate them. Share your thoughts on functionality, design, and overall experience.',
-        'Analytics Dashboard',
-        30,
+        'interview',
+        'Customer Journey Research Interview',
+        'Share your experiences and help us understand customer needs',
+        'Join us for a 1-on-1 interview where we\'ll discuss your experience with our products and services. We want to understand your workflow, pain points, and what features would make your life easier. All feedback is confidential and used to improve our offerings.',
+        'Enterprise Platform',
+        60,
         'published',
         adminUserId,
-        'internal'
+        'external',
+        'Video call via Google Meet'
       ]
     );
-    const test2Id = test2Result.rows[0].id;
-    await createSessions(test2Id, 30, [0, 2, 4]); // Mon, Wed, Fri
-    console.log('✅ Created Test Opportunity 2: New Feature Validation');
+    const interviewId = interviewResult.rows[0].id;
+    await createSessions(interviewId, 60, [1, 3], 4); // Tue, Thu for 4 weeks
+    console.log('✅ Created INTERVIEW opportunity: Customer Journey Research Interview\n');
     
-    // 3. Poll Opportunity 1: Work-Life Balance
-    const poll1Result = await client.query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id`,
-      [
-        'poll',
-        'Work-Life Balance Survey',
-        'Share your thoughts on work-life balance at AdaptaLabs',
-        'We want to understand how our team members are managing work-life balance. Your anonymous input will help us improve our workplace policies and support programs.',
-        5,
-        'published',
-        adminUserId,
-        'https://forms.google.com/work-life-balance-poll',
-        'internal'
-      ]
-    );
-    const poll1Id = poll1Result.rows[0].id;
-    // Polls don't need sessions, but we can add them for consistency
-    await createSessions(poll1Id, 5, [0, 1, 2, 3, 4]);
-    console.log('✅ Created Poll Opportunity 1: Work-Life Balance Survey');
-    
-    // 4. Poll Opportunity 2: Remote Work Preferences
-    const poll2Result = await client.query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id`,
-      [
-        'poll',
-        'Remote Work Preferences',
-        'Tell us about your remote work preferences and experiences',
-        'Help us understand your preferences for remote, hybrid, and in-office work arrangements. This quick poll will inform our future office and remote work policies.',
-        5,
-        'published',
-        adminUserId,
-        'https://forms.google.com/remote-work-poll',
-        'any'
-      ]
-    );
-    const poll2Id = poll2Result.rows[0].id;
-    await createSessions(poll2Id, 5, [1, 3]); // Tue, Thu
-    console.log('✅ Created Poll Opportunity 2: Remote Work Preferences');
-    
-    // 5. Survey Opportunity 1: Employee Engagement
-    const survey1Result = await client.query(
-      `INSERT INTO opportunities (
-        type, title, purpose_one_liner, description_optional,
-        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      RETURNING id`,
-      [
-        'survey',
-        'Employee Engagement Survey',
-        'Help us understand engagement levels across the organization',
-        'Your feedback is crucial in helping us create a better workplace. This comprehensive survey covers topics like job satisfaction, team collaboration, career development, and company culture. All responses are confidential.',
-        15,
-        'published',
-        adminUserId,
-        'https://surveys.google.com/engagement-2024',
-        'internal'
-      ]
-    );
-    const survey1Id = survey1Result.rows[0].id;
-    await createSessions(survey1Id, 15, [0, 2, 4]); // Mon, Wed, Fri
-    console.log('✅ Created Survey Opportunity 1: Employee Engagement Survey');
-    
-    // 6. Survey Opportunity 2: Product Feedback
-    const survey2Result = await client.query(
+    // ==========================================
+    // 3. SURVEY - External link
+    // ==========================================
+    const surveyResult = await client.query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
         default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
@@ -204,28 +166,103 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'survey',
-        'Product Feedback Survey',
-        'Share your experience using our latest product features',
-        'We\'re continuously improving our products based on user feedback. This survey focuses on recent feature releases and your overall product experience. Your insights help shape our roadmap.',
-        'Customer Portal',
-        20,
+        'Annual Product Satisfaction Survey',
+        'Share your feedback on our products and services',
+        'Help us understand how well our products meet your needs. This comprehensive survey covers feature satisfaction, support quality, and future priorities. Your responses are anonymous and directly influence our 2025 roadmap.',
+        'All Products',
+        15,
         'published',
         adminUserId,
-        'https://surveys.google.com/product-feedback-2024',
+        'https://forms.google.com/product-satisfaction-2024',
         'any'
       ]
     );
-    const survey2Id = survey2Result.rows[0].id;
-    await createSessions(survey2Id, 20, [1, 3]); // Tue, Thu
-    console.log('✅ Created Survey Opportunity 2: Product Feedback Survey');
+    console.log('✅ Created SURVEY opportunity: Annual Product Satisfaction Survey\n');
     
-    console.log('\n✅ Database reset completed successfully!');
-    console.log('📊 Created 6 demo opportunities:');
-    console.log('   - 2 Test opportunities');
-    console.log('   - 2 Poll opportunities');
-    console.log('   - 2 Survey opportunities');
-    console.log('   - All bookings cleared');
-    console.log('   - All sessions cleared and recreated');
+    // ==========================================
+    // 4. POLL - External link
+    // ==========================================
+    const pollResult = await client.query(
+      `INSERT INTO opportunities (
+        type, title, purpose_one_liner, description_optional,
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id`,
+      [
+        'poll',
+        'Feature Priority Poll',
+        'Vote on which features we should build next',
+        'We have several exciting features in our backlog and want YOUR input on what to prioritize. This quick poll takes less than 5 minutes and helps us focus on what matters most to you.',
+        5,
+        'published',
+        adminUserId,
+        'https://forms.google.com/feature-priority-poll',
+        'internal'
+      ]
+    );
+    console.log('✅ Created POLL opportunity: Feature Priority Poll\n');
+    
+    // ==========================================
+    // 5. QUESTION - External link
+    // ==========================================
+    const questionResult = await client.query(
+      `INSERT INTO opportunities (
+        type, title, purpose_one_liner, description_optional,
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING id`,
+      [
+        'question',
+        'Quick Feedback: Dashboard Redesign',
+        'What do you think of our new dashboard design?',
+        'We recently redesigned our main dashboard and would love to hear your thoughts. What works well? What could be improved? Your candid feedback helps us iterate quickly.',
+        5,
+        'published',
+        adminUserId,
+        'https://forms.google.com/dashboard-feedback',
+        'any'
+      ]
+    );
+    console.log('✅ Created QUESTION opportunity: Quick Feedback: Dashboard Redesign\n');
+    
+    // ==========================================
+    // 6. UNMODERATED - External link
+    // ==========================================
+    const unmoderatedResult = await client.query(
+      `INSERT INTO opportunities (
+        type, title, purpose_one_liner, description_optional, product_optional,
+        default_duration_minutes, status, owner_user_id, external_link_optional, participant_type_required
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id`,
+      [
+        'unmoderated',
+        'Self-Guided Checkout Flow Test',
+        'Complete a series of tasks on our new checkout experience',
+        'Test our redesigned checkout flow at your own pace. You\'ll be given specific tasks to complete while your screen is recorded. This unmoderated test typically takes 15-20 minutes and can be done anytime that works for you.',
+        'E-commerce Platform',
+        20,
+        'published',
+        adminUserId,
+        'https://usertesting.com/checkout-flow-test',
+        'external'
+      ]
+    );
+    console.log('✅ Created UNMODERATED opportunity: Self-Guided Checkout Flow Test\n');
+    
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('✅ Database reset completed successfully!');
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('\n📊 Created 6 demo opportunities (one of each type):');
+    console.log('   🔬 TEST: Mobile App Usability Testing');
+    console.log('   🎤 INTERVIEW: Customer Journey Research Interview');
+    console.log('   📋 SURVEY: Annual Product Satisfaction Survey');
+    console.log('   📊 POLL: Feature Priority Poll');
+    console.log('   ❓ QUESTION: Quick Feedback: Dashboard Redesign');
+    console.log('   🖥️  UNMODERATED: Self-Guided Checkout Flow Test');
+    console.log('\n📅 Sessions scheduled for the next 4 weeks (Dec 2025)');
+    console.log('   - TEST: Mon-Fri, 3 sessions/day');
+    console.log('   - INTERVIEW: Tue & Thu, 3 sessions/day');
+    console.log('   - Other types: External links (no sessions needed)');
     
   } catch (error) {
     console.error('❌ Database reset failed:', error);
@@ -247,4 +284,3 @@ if (require.main === module) {
       process.exit(1);
     });
 }
-

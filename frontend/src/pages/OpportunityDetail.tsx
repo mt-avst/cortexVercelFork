@@ -4,7 +4,7 @@ import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents
 import { Opportunity, CalendarEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
-import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 const OpportunityDetail: React.FC = () => {
@@ -350,11 +350,21 @@ const OpportunityDetail: React.FC = () => {
             </div>
           )}
 
-          <div className="card">
-            <div className="card-header">
-              <div className="d-flex justify-content-between align-items-start">
-                <div>
-                  <div className="d-flex align-items-center gap-2 mb-4">
+          <div 
+            className="card opportunity-detail-card"
+            style={{ 
+              borderTop: `4px solid ${getCardHoverColor(opportunity?.type)}`,
+              borderLeft: '1px solid var(--border-subtle)',
+              borderRight: '1px solid var(--border-subtle)',
+              borderBottom: '1px solid var(--border-subtle)'
+            }}
+          >
+            <div className="card-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+              {/* Hero Section - Two Column Layout */}
+              <div className="opportunity-hero">
+                {/* Left Column: Content */}
+                <div className="opportunity-hero-content">
+                  <div className="d-flex align-items-center gap-2 mb-3">
                     <span className={getTypeBadgeClass(opportunity?.type)}>
                       {formatOpportunityType(opportunity?.type)}
                     </span>
@@ -364,81 +374,63 @@ const OpportunityDetail: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <h1 className="mb-0" style={{ fontSize: '42px', fontWeight: '700' }}>{opportunity.title}</h1>
+                  <h1 className="opportunity-hero-title">{opportunity.title}</h1>
+                  {/* Purpose/Description */}
+                  {opportunity.type !== 'question' && opportunity.purpose_one_liner && (
+                    <p className="opportunity-hero-description">{opportunity.purpose_one_liner}</p>
+                  )}
+                  {opportunity.description_optional && (
+                    <p className="opportunity-hero-description" style={{ marginTop: '12px' }}>{opportunity.description_optional}</p>
+                  )}
+                </div>
+
+                {/* Right Column: Metadata Box */}
+                <div className="opportunity-hero-meta">
+                  <div className="opportunity-hero-meta-grid">
+                    {/* Product - only show for non-question types */}
+                    {opportunity.type !== 'question' && opportunity.product_optional && (
+                      <div className="meta-item">
+                        <span className="meta-label">Product</span>
+                        <span className="meta-value">{opportunity.product_optional}</span>
+                      </div>
+                    )}
+
+                    {/* Duration - only show for test and interview types */}
+                    {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                      <div className="meta-item">
+                        <span className="meta-label">Duration</span>
+                        <span className="meta-value">{opportunity.default_duration_minutes} minutes</span>
+                      </div>
+                    )}
+
+                    {/* Participants */}
+                    <div className="meta-item">
+                      <span className="meta-label">Participants Sought</span>
+                      <span className="meta-value">
+                        {(() => {
+                          switch (opportunity.participant_type_required) {
+                            case 'any': return 'Any participants';
+                            case 'internal': return 'Internal employees only';
+                            case 'external': return 'External participants only';
+                            case 'specific': 
+                              return opportunity.participant_type_specific_details || 'Specific participants';
+                            default: return 'Any participants';
+                          }
+                        })()}
+                      </span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
             
             <div className="card-body">
-              {/* Three-column layout for opportunity details */}
-              <div className="row mb-4">
-                {/* Column 1: Purpose and Description */}
-                <div className="col-md-4">
-                  {/* Purpose - only show for non-question types */}
-                  {opportunity.type !== 'question' && (
-                    <div className="mb-3">
-                      <h6 className="fw-bold">Purpose</h6>
-                      <p className="mb-0" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', lineHeight: '1.25' }}>{opportunity.purpose_one_liner}</p>
-                    </div>
-                  )}
-
-                  {/* Description */}
-                  {opportunity.description_optional && (
-                    <div className="mb-3">
-                      <h6 className="fw-bold">Description</h6>
-                      <p className="mb-0">{opportunity.description_optional}</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Column 2: Product and Duration */}
-                <div className="col-md-4">
-                  {/* Product - only show for non-question types */}
-                  {opportunity.type !== 'question' && opportunity.product_optional && (
-                    <div className="mb-3">
-                      <h6 className="fw-bold">Product</h6>
-                      <p className="mb-0">{opportunity.product_optional}</p>
-                    </div>
-                  )}
-
-                  {/* Duration - only show for test and interview types */}
-                  {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                    <div className="mb-3">
-                      <h6 className="fw-bold">Duration</h6>
-                      <p className="mb-0">{opportunity.default_duration_minutes} minutes</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Column 3: Participants Sought */}
-                <div className="col-md-4">
-                  <div className="mb-3">
-                    <h6 className="fw-bold">Participants Sought</h6>
-                    <p className="mb-0">
-                      {(() => {
-                        switch (opportunity.participant_type_required) {
-                          case 'any': return '👥 Any participants';
-                          case 'internal': return '🏢 Internal employees only';
-                          case 'external': return '🌐 External participants only';
-                          case 'specific': 
-                            return (
-                              <>
-                                <span>🎯 {opportunity.participant_type_specific_details || 'Specific participants'}</span>
-                              </>
-                            );
-                          default: return '👥 Any participants';
-                        }
-                      })()}
-                    </p>
-                  </div>
-                </div>
-              </div>
 
               {/* Sessions for test and interview opportunities */}
               {(opportunity.type === 'test' || opportunity.type === 'interview') && (
                 <>
-                  {/* Help bar for test opportunities */}
-                  {bookingSuccess ? (
+                  {/* Success message for bookings */}
+                  {bookingSuccess && (
                     <div className="alert alert-success d-flex justify-content-between align-items-center" style={{ marginBottom: '1.5rem' }} role="alert" aria-live="polite">
                       <div>
                         <CheckCircle size={18} className="me-2" aria-hidden="true" />
@@ -459,54 +451,60 @@ const OpportunityDetail: React.FC = () => {
                         aria-label="Close success message"
                       ></button>
                     </div>
-                  ) : (
-                    <div className="alert alert-info" style={{ marginBottom: '1.5rem' }} role="status">
-                      <Info size={18} className="me-2" aria-hidden="true" />
-                      Click on a timeslot to book yourself in
-                    </div>
                   )}
 
                   {/* Calendar Integration */}
                   <div className="mb-4">
                     <div className="d-flex justify-content-between align-items-center mb-3">
-                      <h5>Available Sessions</h5>
-                    <div className="d-flex gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        onClick={() => loadOpportunity(true)}
-                        disabled={loading}
-                        aria-label="Refresh sessions data"
-                        title="Refresh sessions data"
-                      >
-                        <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
-                        <span className="visually-hidden">{loading ? 'Refreshing' : 'Refresh'}</span>
-                        Refresh
-                      </button>
-                      <div className="btn-group" role="group" aria-label="View mode selection">
+                      {/* Header with inline hint */}
+                      <div className="d-flex align-items-center gap-2">
+                        <h5 className="mb-0">Available Sessions</h5>
+                        {!bookingSuccess && (
+                          <>
+                            <span className="calendar-hint-divider" aria-hidden="true">•</span>
+                            <span className="calendar-hint-inline" aria-label="Click a timeslot to book">
+                              Click a timeslot to book
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div className="d-flex align-items-center gap-3">
                         <button
                           type="button"
-                          className={`btn btn-sm ${viewMode === 'calendar' ? 'btn-primary' : 'btn-outline-primary'}`}
-                          onClick={() => setViewMode('calendar')}
-                          aria-pressed={viewMode === 'calendar'}
-                          aria-label="Switch to calendar view"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => loadOpportunity(true)}
+                          disabled={loading}
+                          aria-label="Refresh sessions data"
+                          title="Refresh sessions data"
                         >
-                          <LayoutGrid size={14} className="me-1" aria-hidden="true" />
-                          Calendar
+                          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
+                          <span className="visually-hidden">{loading ? 'Refreshing' : 'Refresh'}</span>
+                          Refresh
                         </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-outline-primary'}`}
-                          onClick={() => setViewMode('table')}
-                          aria-pressed={viewMode === 'table'}
-                          aria-label="Switch to table view"
-                        >
-                          <Table2 size={14} className="me-1" aria-hidden="true" />
-                          Table
-                        </button>
+                        <div className="btn-group" role="group" aria-label="View mode selection">
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${viewMode === 'calendar' ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setViewMode('calendar')}
+                            aria-pressed={viewMode === 'calendar'}
+                            aria-label="Switch to calendar view"
+                          >
+                            <LayoutGrid size={14} className="me-1" aria-hidden="true" />
+                            Calendar
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-outline-primary'}`}
+                            onClick={() => setViewMode('table')}
+                            aria-pressed={viewMode === 'table'}
+                            aria-label="Switch to table view"
+                          >
+                            <Table2 size={14} className="me-1" aria-hidden="true" />
+                            Table
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
                   {opportunity.sessions && opportunity.sessions.length > 0 ? (
                     <>

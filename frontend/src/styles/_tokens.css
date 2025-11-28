@@ -23,12 +23,15 @@
 
   /* Border Colors */
   --border-card: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.08);
   --border-table-row: rgba(255, 255, 255, 0.05);
   --divider: rgba(255, 255, 255, 0.1);
 
   /* Text Colors */
   --text-primary: #E0E0E0;
   --text-body: #E0E0E0;
+  --text-secondary: rgba(224, 224, 224, 0.7);
+  --text-tertiary: rgba(224, 224, 224, 0.5);
   --text-muted: rgba(224, 224, 224, 0.85);
   --text-on-dark: #E0E0E0;
   --text-on-light: #1A1A1A;
