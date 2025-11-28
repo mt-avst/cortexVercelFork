@@ -1248,6 +1248,13 @@ body.theme-light .calendar-day-column:nth-child(even) {
 
 body.theme-light .calendar-day-column:nth-child(even) .calendar-day-header {
   background: rgba(0, 0, 0, 0.03) !important;
+  border-bottom: none !important;
+}
+
+/* Light Mode - Odd column headers (transparent to match white) */
+body.theme-light .calendar-day-column:nth-child(odd) .calendar-day-header {
+  background: transparent !important;
+  border-bottom: none !important;
 }
 
 /* ============================================================
@@ -1256,9 +1263,9 @@ body.theme-light .calendar-day-column:nth-child(even) .calendar-day-header {
 
 body.theme-dark .opportunity-detail-page .card,
 body.theme-dark .opportunity-detail-page > section > .row > .col-12 > .card {
-  background: rgba(30, 30, 50, 0.95);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(10, 15, 30, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 

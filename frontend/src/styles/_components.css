@@ -3477,11 +3477,30 @@ body.theme-light .hero-value-heading {
   padding-right: 48px;
 }
 
+/* Clean Background - Hide floating squares for focused reading */
+.opportunity-detail-page ~ .grid-squares-overlay,
+.opportunity-detail-page ~ .coral-dots-container,
+body:has(.opportunity-detail-page) .grid-squares-overlay,
+body:has(.opportunity-detail-page) .coral-dots-container {
+  display: none !important;
+}
+
 .opportunity-detail-page > section {
   max-width: 1400px;
   margin-left: auto;
   margin-right: auto;
   padding: 0;
+}
+
+/* Remove Bootstrap row/col padding for proper alignment */
+.opportunity-detail-page > section > .row {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+.opportunity-detail-page > section > .row > .col-12 {
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* Responsive padding adjustments */
