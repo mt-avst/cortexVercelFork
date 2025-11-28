@@ -3746,12 +3746,12 @@ body.theme-light .hero-value-heading {
   transform: translateY(-4px);
 }
 
-/* Light mode: use softer pastel background color for card borders */
+/* Light mode: use text color for crisp, high-contrast hover borders */
 body.theme-light .bento-grid .card.card-clickable:hover,
 body.theme-light .card.card-clickable:hover {
-  border-color: var(--dynamic-hover-bg, var(--brand-headline)) !important;
+  border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 
-              0 0 0 1px var(--dynamic-hover-bg, transparent) !important;
+              0 0 0 1px var(--dynamic-hover-color, transparent) !important;
 }
 
 /* Card Body Flex - Auto-growing content */
