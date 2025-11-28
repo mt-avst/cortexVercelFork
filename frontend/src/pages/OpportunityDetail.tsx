@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents } from '../api/client';
-import { Opportunity, CalendarEvent } from '../api/types';
+import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import CalendarGrid from '../components/CalendarGrid';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -19,6 +20,8 @@ const OpportunityDetail: React.FC = () => {
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
+  // Table view booking confirmation state
+  const [confirmBooking, setConfirmBooking] = useState<{ show: boolean; session: Session | null }>({ show: false, session: null });
 
   const loadOpportunity = async (forceRefresh = false) => {
     if (!id) return;
@@ -590,7 +593,7 @@ const OpportunityDetail: React.FC = () => {
                                           {session.remaining > 0 ? (
                                             <button 
                                               className="btn btn-primary btn-sm"
-                                              onClick={() => handleBookSession(session.id)}
+                                              onClick={() => setConfirmBooking({ show: true, session })}
                                               disabled={bookingLoading === session.id}
                                               aria-label={`Book session on ${dateStr} from ${timeSlotStr}`}
                                             >
@@ -698,6 +701,32 @@ const OpportunityDetail: React.FC = () => {
         </div>
       </div>
       </section>
+
+      {/* Table View Booking Confirmation Modal */}
+      <ConfirmationModal
+        show={confirmBooking.show}
+        title="Confirm Booking"
+        message={confirmBooking.session ? `Book this session?\n\n${new Date(confirmBooking.session.start_time).toLocaleDateString('en-US', {
+          weekday: 'long',
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
+        })} at ${new Date(confirmBooking.session.start_time).toLocaleTimeString('en-US', {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        })}` : 'Book this session?'}
+        confirmLabel="Confirm"
+        cancelLabel="Cancel"
+        variant="primary"
+        onConfirm={() => {
+          if (confirmBooking.session) {
+            handleBookSession(confirmBooking.session.id);
+          }
+          setConfirmBooking({ show: false, session: null });
+        }}
+        onCancel={() => setConfirmBooking({ show: false, session: null })}
+      />
     </div>
   );
 };
