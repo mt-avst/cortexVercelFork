@@ -15,14 +15,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const getInitialTheme = (): Theme => {
   try {
     const saved = localStorage.getItem('theme');
-    // Migration: check old 'animationsEnabled' key
-    if (!saved) {
-      const oldAnimationPref = localStorage.getItem('animationsEnabled');
-      if (oldAnimationPref === 'false') {
-        return 'light'; // User had animations disabled, migrate to light theme
-      }
-    }
-    return (saved === 'light' || saved === 'dark') ? saved : 'dark';
+    // Only use saved preference if it's explicitly 'light', otherwise default to dark
+    return saved === 'light' ? 'light' : 'dark';
   } catch (error) {
     console.warn('localStorage not available, defaulting to dark theme:', error);
     return 'dark';
