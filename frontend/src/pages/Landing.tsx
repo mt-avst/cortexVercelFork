@@ -118,9 +118,9 @@ const Landing: React.FC = memo(() => {
             <div className="hero-value-column">
               <h3 className="hero-value-heading">Ask the Organisation</h3>
               <ul className="hero-value-list">
-                <li>Ask the whole enterprise a question</li>
+                <li>Ask the whole company a question</li>
                 <li>Run studies, polls and quick surveys</li>
-                <li>Ask simple one-off questions</li>
+                <li>Test prototypes and ideas</li>
               </ul>
             </div>
           </div>
