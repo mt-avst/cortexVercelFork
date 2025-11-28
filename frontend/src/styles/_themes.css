@@ -415,6 +415,19 @@ body.theme-light .lozenge-question {
   background-color: #FFF8E1;
 }
 
+/* Filter Chip "All" - Light Mode */
+body.theme-light .filter-chip--all:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.3);
+  color: var(--text-primary);
+}
+
+body.theme-light .filter-chip--all.is-active {
+  background-color: #E86C24;
+  color: #FFFFFF;
+  border-color: #E86C24;
+}
+
 /* Spinner */
 body.theme-light .spinner-border {
   border-color: var(--brand-headline);
@@ -529,7 +542,7 @@ body.theme-light .hero-subtitle-centered {
 }
 
 body.theme-light .hero-subtitle-centered .subtitle-emphasis {
-  color: #1A1A1A; /* Darker emphasis */
+  color: #E86C24; /* Brand Orange */
 }
 
 body.theme-light .hero-title-large {
@@ -547,11 +560,11 @@ body.theme-light .hero-cta-primary:hover {
 }
 
 body.theme-light .hero-demo-link {
-  color: var(--brand-headline);
+  color: rgba(0, 0, 0, 0.5);
 }
 
 body.theme-light .hero-demo-link:hover {
-  color: var(--link-hover);
+  color: #E86C24;
 }
 
 body.theme-light .hero-demo-divider {

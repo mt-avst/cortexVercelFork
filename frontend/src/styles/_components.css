@@ -3263,6 +3263,7 @@ body.admin-page .header .container {
   font-weight: 700;
   line-height: 1;
   margin: 0;
+  letter-spacing: -0.02em;
 }
 
 .hero-subtitle-centered {
@@ -3274,7 +3275,7 @@ body.admin-page .header .container {
 
 .hero-subtitle-centered .subtitle-emphasis {
   font-weight: 700;
-  font-style: italic;
+  color: #FF5722;
 }
 
 /* Section 2: Two Column Value Grid */
@@ -3358,7 +3359,7 @@ body.theme-light .hero-value-heading {
   width: 320px;
   height: 48px;
   background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 8px;
   color: #FFFFFF;
   font-size: 1rem;
@@ -3393,7 +3394,7 @@ body.theme-light .hero-value-heading {
 .hero-demo-link {
   background: none;
   border: none;
-  color: #FF4E50;
+  color: rgba(255, 255, 255, 0.6);
   font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
@@ -3402,8 +3403,8 @@ body.theme-light .hero-value-heading {
 }
 
 .hero-demo-link:hover:not(:disabled) {
-  color: #FF7A33;
-  text-decoration: underline;
+  color: #FF5722;
+  text-decoration: none;
 }
 
 .hero-demo-link:disabled {
@@ -3412,7 +3413,7 @@ body.theme-light .hero-value-heading {
 }
 
 .hero-demo-link:focus {
-  outline: 2px solid #FF4E50;
+  outline: 2px solid #FF5722;
   outline-offset: 2px;
 }
 
@@ -3633,8 +3634,9 @@ body.theme-light .hero-value-heading {
 /* Alias for home page compatibility */
 .adaptalabs-home-title {
   margin-bottom: 24px;
-  font-size: 42px;
+  font-size: 52px;
   font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 /* AdaptaBits Page Title */
@@ -3859,15 +3861,16 @@ body.theme-light .card.card-clickable:hover {
    "All" Chip - Neutral styling
    ---------------------------------------- */
 .filter-chip--all:hover {
-  background-color: var(--bg-hover);
-  border-color: var(--text-muted);
+  background-color: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.4);
   color: var(--text-primary);
 }
 
 .filter-chip--all.is-active {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.95);
+  color: #1A1A1A;
+  border-color: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
 }
 
 /* ----------------------------------------
