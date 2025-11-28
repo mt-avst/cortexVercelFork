@@ -370,6 +370,37 @@ body.theme-light .bento-grid .lozenge {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
+/* Lozenge Type Variants - Light Mode (Tinted Clarity) */
+body.theme-light .lozenge-usertest {
+  color: #005F73;
+  background-color: #E0F7FA;
+}
+
+body.theme-light .lozenge-unmoderated {
+  color: #5D2E8C;
+  background-color: #F3E5F5;
+}
+
+body.theme-light .lozenge-survey {
+  color: #0A4F3D;
+  background-color: #E0F2F1;
+}
+
+body.theme-light .lozenge-poll {
+  color: #BF360C;
+  background-color: #FBE9E7;
+}
+
+body.theme-light .lozenge-interview {
+  color: #880E4F;
+  background-color: #FCE4EC;
+}
+
+body.theme-light .lozenge-question {
+  color: #795548;
+  background-color: #FFF8E1;
+}
+
 /* Spinner */
 body.theme-light .spinner-border {
   border-color: var(--brand-headline);

@@ -63,12 +63,23 @@
   --status-danger: #dc3545;
   --status-info: #17a2b8;
 
-  /* Tag Colors */
+  /* Tag Colors (Legacy) */
   --tag-bg: #222222;
   --tag-text: #FFFFFF;
-  --tag-survey: #222222;
-  --tag-poll: #222222;
-  --tag-test: #222222;
+
+  /* Lozenge Colors - Dark Mode (Bioluminescence) */
+  --lozenge-usertest-text: #4DD0E1;
+  --lozenge-usertest-bg: #00363A;
+  --lozenge-unmoderated-text: #E1BEE7;
+  --lozenge-unmoderated-bg: rgba(74, 20, 140, 0.3);
+  --lozenge-survey-text: #69F0AE;
+  --lozenge-survey-bg: rgba(27, 94, 32, 0.3);
+  --lozenge-poll-text: #FFAB91;
+  --lozenge-poll-bg: rgba(191, 54, 12, 0.3);
+  --lozenge-interview-text: #F48FB1;
+  --lozenge-interview-bg: rgba(136, 14, 79, 0.3);
+  --lozenge-question-text: #FFE082;
+  --lozenge-question-bg: rgba(255, 111, 0, 0.2);
 
   /* Focus & Accessibility */
   --focus-ring: #FF4E50;

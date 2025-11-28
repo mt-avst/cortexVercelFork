@@ -343,3 +343,34 @@ export const getDirectTimeRemaining = (opportunity: Opportunity): {
 
   return { text, urgency };
 };
+
+/**
+ * Gets the CSS variable for card hover color based on opportunity type
+ * Used for dynamic hover border colors that match the lozenge text color
+ * @param type - The opportunity type string (can be undefined/null)
+ * @returns CSS variable reference string
+ */
+export const getCardHoverColor = (type: string | null | undefined): string => {
+  if (!type) return 'transparent';
+  
+  // Extract base type if concatenated with status
+  const statusSuffixes = ['published', 'draft', 'closed'];
+  let baseType = type;
+  
+  for (const suffix of statusSuffixes) {
+    if (type.toLowerCase().endsWith(suffix)) {
+      baseType = type.slice(0, -suffix.length);
+      break;
+    }
+  }
+  
+  switch (baseType.toLowerCase()) {
+    case 'test': return 'var(--lozenge-usertest-text)';
+    case 'survey': return 'var(--lozenge-survey-text)';
+    case 'poll': return 'var(--lozenge-poll-text)';
+    case 'interview': return 'var(--lozenge-interview-text)';
+    case 'question': return 'var(--lozenge-question-text)';
+    case 'unmoderated': return 'var(--lozenge-unmoderated-text)';
+    default: return 'transparent';
+  }
+};

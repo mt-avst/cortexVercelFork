@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
-import { formatOpportunityType, getTypeBadgeClass, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
+import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
@@ -334,6 +334,7 @@ const Home: React.FC = memo(() => {
                       >
                         <div 
                           className="card card-clickable" 
+                          style={{ '--dynamic-hover-color': getCardHoverColor(opportunity.type) } as React.CSSProperties}
                           onClick={() => navigate(`/opportunities/${opportunity.id}`)}
                           role="button"
                           tabIndex={0}

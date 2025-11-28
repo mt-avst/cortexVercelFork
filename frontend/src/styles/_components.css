@@ -685,14 +685,48 @@
 .lozenge {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.75rem;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  justify-content: center;
+  padding: 4px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
   background: var(--tag-bg);
   color: var(--tag-text);
-  border-radius: var(--tag-radius);
+  border-radius: 100px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Lozenge Type Variants - Dark Mode (default) */
+.lozenge-usertest {
+  color: var(--lozenge-usertest-text);
+  background-color: var(--lozenge-usertest-bg);
+}
+
+.lozenge-unmoderated {
+  color: var(--lozenge-unmoderated-text);
+  background-color: var(--lozenge-unmoderated-bg);
+}
+
+.lozenge-survey {
+  color: var(--lozenge-survey-text);
+  background-color: var(--lozenge-survey-bg);
+}
+
+.lozenge-poll {
+  color: var(--lozenge-poll-text);
+  background-color: var(--lozenge-poll-bg);
+}
+
+.lozenge-interview {
+  color: var(--lozenge-interview-text);
+  background-color: var(--lozenge-interview-bg);
+}
+
+.lozenge-question {
+  color: var(--lozenge-question-text);
+  background-color: var(--lozenge-question-bg);
 }
 
 /* ============================================================
@@ -3663,12 +3697,24 @@ body.theme-light .hero-value-heading {
   flex: 1;
 }
 
-/* Clickable Card - Cursor and full height */
+/* Clickable Card - Cursor and full height with dynamic hover */
 .card-clickable {
   cursor: pointer;
   height: 100%;
   display: flex;
   flex-direction: column;
+  border: 1px solid transparent;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* Clickable Card Hover - Dynamic border color from study type */
+/* High specificity to override .bento-grid .card:hover in themes */
+.bento-grid .card.card-clickable:hover,
+.card.card-clickable:hover {
+  border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 
+              0 0 0 1px var(--dynamic-hover-color, transparent) !important;
+  transform: translateY(-4px);
 }
 
 /* Card Body Flex - Auto-growing content */
