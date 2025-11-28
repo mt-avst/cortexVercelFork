@@ -3812,3 +3812,149 @@ body.theme-light .hero-value-heading {
   font-size: 0.9rem;
 }
 
+/* ============================================================
+   STUDY FILTER CHIPS
+   ============================================================ */
+
+/* Container for filter chips */
+.study-filters-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+/* Base filter chip styles */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-card);
+  border-radius: 100px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.filter-chip:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+}
+
+/* ----------------------------------------
+   "All" Chip - Neutral styling
+   ---------------------------------------- */
+.filter-chip--all:hover {
+  background-color: var(--bg-hover);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.filter-chip--all.is-active {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+/* ----------------------------------------
+   App Testing Chip
+   ---------------------------------------- */
+.filter-chip--app-testing:hover {
+  background-color: var(--lozenge-usertest-bg);
+  border-color: var(--lozenge-usertest-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--app-testing.is-active {
+  background-color: var(--lozenge-usertest-bg);
+  color: var(--lozenge-usertest-text);
+  border-color: var(--lozenge-usertest-text);
+  box-shadow: 0 0 0 1px var(--lozenge-usertest-text);
+}
+
+/* ----------------------------------------
+   Unmoderated Chip
+   ---------------------------------------- */
+.filter-chip--unmoderated:hover {
+  background-color: var(--lozenge-unmoderated-bg);
+  border-color: var(--lozenge-unmoderated-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--unmoderated.is-active {
+  background-color: var(--lozenge-unmoderated-bg);
+  color: var(--lozenge-unmoderated-text);
+  border-color: var(--lozenge-unmoderated-text);
+  box-shadow: 0 0 0 1px var(--lozenge-unmoderated-text);
+}
+
+/* ----------------------------------------
+   Survey Chip
+   ---------------------------------------- */
+.filter-chip--survey:hover {
+  background-color: var(--lozenge-survey-bg);
+  border-color: var(--lozenge-survey-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--survey.is-active {
+  background-color: var(--lozenge-survey-bg);
+  color: var(--lozenge-survey-text);
+  border-color: var(--lozenge-survey-text);
+  box-shadow: 0 0 0 1px var(--lozenge-survey-text);
+}
+
+/* ----------------------------------------
+   Poll Chip
+   ---------------------------------------- */
+.filter-chip--poll:hover {
+  background-color: var(--lozenge-poll-bg);
+  border-color: var(--lozenge-poll-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--poll.is-active {
+  background-color: var(--lozenge-poll-bg);
+  color: var(--lozenge-poll-text);
+  border-color: var(--lozenge-poll-text);
+  box-shadow: 0 0 0 1px var(--lozenge-poll-text);
+}
+
+/* ----------------------------------------
+   Interview Chip
+   ---------------------------------------- */
+.filter-chip--interview:hover {
+  background-color: var(--lozenge-interview-bg);
+  border-color: var(--lozenge-interview-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--interview.is-active {
+  background-color: var(--lozenge-interview-bg);
+  color: var(--lozenge-interview-text);
+  border-color: var(--lozenge-interview-text);
+  box-shadow: 0 0 0 1px var(--lozenge-interview-text);
+}
+
+/* ----------------------------------------
+   Question Chip
+   ---------------------------------------- */
+.filter-chip--question:hover {
+  background-color: var(--lozenge-question-bg);
+  border-color: var(--lozenge-question-text);
+  color: var(--text-primary);
+}
+
+.filter-chip--question.is-active {
+  background-color: var(--lozenge-question-bg);
+  color: var(--lozenge-question-text);
+  border-color: var(--lozenge-question-text);
+  box-shadow: 0 0 0 1px var(--lozenge-question-text);
+}
+

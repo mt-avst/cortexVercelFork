@@ -69,6 +69,20 @@ body.theme-light {
   --tag-poll: #F3F4F6;
   --tag-test: #F3F4F6;
 
+  /* Lozenge Colors - Light Theme (Tinted Clarity) */
+  --lozenge-usertest-text: #005F73;
+  --lozenge-usertest-bg: #E0F7FA;
+  --lozenge-unmoderated-text: #5D2E8C;
+  --lozenge-unmoderated-bg: #F3E5F5;
+  --lozenge-survey-text: #0A4F3D;
+  --lozenge-survey-bg: #E0F2F1;
+  --lozenge-poll-text: #BF360C;
+  --lozenge-poll-bg: #FBE9E7;
+  --lozenge-interview-text: #880E4F;
+  --lozenge-interview-bg: #FCE4EC;
+  --lozenge-question-text: #795548;
+  --lozenge-question-bg: #FFF8E1;
+
   /* Shadows - Softer for light theme */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.06);

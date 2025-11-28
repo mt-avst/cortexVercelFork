@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
+import StudyFilters from '../components/StudyFilters';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
 /**
@@ -208,45 +209,23 @@ const Home: React.FC = memo(() => {
             <div className="col-12">
               <h1 className="mb-3 adaptalabs-home-title">AdaptaLabs</h1>
               
-              {/* Welcome text and filter - aligned with bento grid */}
-              <div className="home-header-grid mb-4">
-                <div className="home-header-text">
-                  <p className="lead mb-3">
-                    Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
-                  </p>
-                  <p className="tagline fw-semibold mt-3 mb-0">
-                    Together we turn <span className="fst-italic">participation into progress</span>
-                  </p>
-                </div>
-                {/* Type filter dropdown - aligned with third column */}
-                {!loading && !error && opportunities.length > 0 && (
-                  <div className="home-header-filter">
-                    <label htmlFor="opportunity-type-filter" className="visually-hidden">
-                      Filter opportunities by study type
-                    </label>
-                    <select 
-                      id="opportunity-type-filter"
-                      className="form-select study-type-filter" 
-                      value={selectedType} 
-                      onChange={(e) => setSelectedType(e.target.value)}
-                      aria-label="Filter opportunities by study type"
-                      style={{
-                        width: '100%',
-                        backgroundColor: 'var(--bg-card)',
-                        color: 'var(--text-primary)',
-                        fontSize: 'var(--font-size-body)'
-                      }}
-                    >
-                      <option value="all">Filter by study type</option>
-                      <option value="survey">Survey</option>
-                      <option value="poll">Poll</option>
-                      <option value="interview">Interview</option>
-                      <option value="test">App Testing</option>
-                      <option value="question">Question</option>
-                    </select>
-                  </div>
-                )}
+              {/* Welcome text */}
+              <div className="mb-4">
+                <p className="lead mb-3">
+                  Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
+                </p>
+                <p className="tagline fw-semibold mt-3 mb-0">
+                  Together we turn <span className="fst-italic">participation into progress</span>
+                </p>
               </div>
+              
+              {/* Study type filter chips */}
+              {!loading && !error && opportunities.length > 0 && (
+                <StudyFilters 
+                  currentFilter={selectedType} 
+                  onFilterChange={setSelectedType} 
+                />
+              )}
               
               {error && (
                 <div className="mb-4">
