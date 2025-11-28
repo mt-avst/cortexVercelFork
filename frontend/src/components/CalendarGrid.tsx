@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
-import { Info, Check, X } from 'lucide-react';
+import { Info } from 'lucide-react';
 
 interface CalendarGridProps {
   sessions: Session[];
@@ -305,6 +305,31 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     setConfirmingSlot(null);
   };
 
+  // Ref for popover click-outside detection
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Click-outside handler to close popover
+  useEffect(() => {
+    if (!confirmingSlot) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      // Check if click is outside the popover
+      if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
+        setConfirmingSlot(null);
+      }
+    };
+
+    // Add listener with a small delay to prevent immediate close on the opening click
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [confirmingSlot]);
+
   if (sessions.length === 0) {
     return (
       <div className="alert alert-info">
@@ -360,7 +385,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
             width: '90px',
             position: 'sticky',
             left: 0,
-            zIndex: 10
+            zIndex: 5
           }}>
             {/* Time Header */}
             <div className="calendar-time-header" style={{
@@ -443,7 +468,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                     position: 'relative',
                     height: timelineHeight,
                     border: 'none',
-                    overflow: 'hidden',
+                    overflow: 'visible',
                     zIndex: 1
                   }}>
                     {dateSessions.map((session) => {
@@ -465,10 +490,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(height * 10000) / 10000;
 
+                        const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading;
+                        const isConfirming = confirmingSlot === session.id;
+
                         // Determine slot class based on state
                         let slotClass = 'calendar-slot calendar-slot-btn position-absolute ';
                         
-                        if (isBooked) {
+                        if (isConfirming) {
+                          slotClass += 'calendar-slot-selected';
+                        } else if (isBooked) {
                           slotClass += 'calendar-slot-booked';
                         } else if (isFull) {
                           slotClass += 'calendar-slot-full';
@@ -477,9 +507,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         } else {
                           slotClass += 'calendar-slot-ghost';
                         }
-
-                        const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading;
-                        const isConfirming = confirmingSlot === session.id;
 
                         return (
                           <div
@@ -497,8 +524,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               cursor: canClick ? 'pointer' : 'not-allowed',
                               fontSize: '0.7rem',
                               padding: '2px 4px',
-                              overflow: 'hidden',
-                              zIndex: isBooked ? 5 : 1,
+                              overflow: isConfirming ? 'visible' : 'hidden',
+                              zIndex: isConfirming ? 9999 : (isBooked ? 5 : 1),
                               pointerEvents: canClick || isBooked ? 'auto' : 'none'
                             }}
                             title={(() => {
@@ -530,39 +557,34 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               {formatTime(session.start_time)} - {formatTime(session.end_time)}
                             </div>
 
-                            {/* Confirmation buttons */}
+                            {/* Booking confirmation popover */}
                             {isConfirming && (
-                              <div className="confirmation-buttons" style={{
-                                position: 'absolute',
-                                bottom: '2px',
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                display: 'flex',
-                                gap: '4px',
-                                zIndex: 10,
-                                maxHeight: 'calc(100% - 4px)',
-                                alignItems: 'flex-end'
-                              }}>
-                                <button
-                                  className="btn btn-success btn-sm confirmation-btn confirm-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleConfirmBooking(session.id);
-                                  }}
-                                  title="Confirm booking"
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  className="btn btn-danger btn-sm confirmation-btn cancel-btn"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCancelBooking();
-                                  }}
-                                  title="Cancel"
-                                >
-                                  <X size={14} />
-                                </button>
+                              <div 
+                                ref={popoverRef}
+                                className="booking-popover" 
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="booking-popover-text">Book this session?</div>
+                                <div className="booking-popover-actions">
+                                  <button
+                                    className="booking-popover-cancel"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleCancelBooking();
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    className="booking-popover-confirm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleConfirmBooking(session.id);
+                                    }}
+                                  >
+                                    Confirm
+                                  </button>
+                                </div>
                               </div>
                             )}
 

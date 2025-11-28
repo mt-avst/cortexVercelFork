@@ -3480,8 +3480,10 @@ body.theme-light .hero-value-heading {
 /* Clean Background - Hide floating squares for focused reading */
 .opportunity-detail-page ~ .grid-squares-overlay,
 .opportunity-detail-page ~ .coral-dots-container,
+.opportunity-detail-page ~ .mesh-gradient-background,
 body:has(.opportunity-detail-page) .grid-squares-overlay,
-body:has(.opportunity-detail-page) .coral-dots-container {
+body:has(.opportunity-detail-page) .coral-dots-container,
+body:has(.opportunity-detail-page) .mesh-gradient-background {
   display: none !important;
 }
 
@@ -3778,6 +3780,137 @@ body:has(.opportunity-detail-page) .coral-dots-container {
 
 .calendar-slot-conflict .timeslot-label {
   color: #000000 !important;
+}
+
+/* Selected slot state (clicked, awaiting confirmation) */
+.calendar-slot-selected {
+  background: var(--status-success) !important;
+  border-color: var(--status-success) !important;
+  color: #FFFFFF !important;
+  z-index: 1000 !important; /* Force it above grid lines */
+  position: relative; /* Ensure z-index applies */
+}
+
+.calendar-slot-selected .timeslot-label {
+  color: #FFFFFF !important;
+}
+
+/* ============================================================
+   BOOKING CONFIRMATION POPOVER
+   ============================================================ */
+
+.booking-popover {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  
+  /* Nuclear Z-Index - must beat all grid elements */
+  z-index: 9999 !important;
+  
+  /* Force Opaque Background */
+  background: #FFFFFF !important;
+  
+  border-radius: 8px;
+  padding: 16px;
+  min-width: 180px;
+  
+  /* Crisp border + Shadow */
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+
+  /* Entry Animation */
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+body.theme-dark .booking-popover {
+  background: #2A2A35 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+/* The Arrow pointing down */
+.booking-popover::after {
+  content: '';
+  position: absolute;
+  top: calc(100% - 1px); /* 1px overlap to eliminate seam */
+  left: 50%;
+  transform: translateX(-50%);
+  border: 8px solid transparent;
+  border-top-color: #FFFFFF;
+}
+
+/* CRITICAL: The arrow triangle must also turn dark to match */
+body.theme-dark .booking-popover::after {
+  border-top-color: #2A2A35 !important;
+}
+
+/* Typography */
+.booking-popover-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+/* Actions row */
+.booking-popover-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Primary Button */
+.booking-popover-confirm {
+  background-color: var(--status-success);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.booking-popover-confirm:hover {
+  opacity: 0.9;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* Secondary Button */
+.booking-popover-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.booking-popover-cancel:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Dark Mode Cancel Button - better contrast */
+body.theme-dark .booking-popover-cancel {
+  color: #A0A0B0;
+}
+
+body.theme-dark .booking-popover-cancel:hover {
+  color: #FFFFFF;
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(0px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(-8px); }
 }
 
 /* ============================================================
