@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, memo } from 'react';
+import React, { useEffect, useRef, memo, useState } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 
 /**
@@ -9,11 +9,29 @@ import { useTheme } from '../contexts/ThemeContext';
  * Light mode uses a clean background without animation.
  * CSS is centralized in main.css for performance (prevents re-injection on renders).
  * Uses React.memo to prevent unnecessary re-renders.
+ * 
+ * NOTE: Does not render on landing page (which has its own background)
  */
 const BackgroundAnimation: React.FC = memo(() => {
   const fullGridSquareRefs = useRef<(HTMLDivElement | null)[]>([]);
   const { isDarkMode } = useTheme();
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
+  const [isLandingPage, setIsLandingPage] = useState(false);
+
+  // Check if on landing page (body has 'landing-page' class)
+  useEffect(() => {
+    const checkLandingPage = () => {
+      setIsLandingPage(document.body.classList.contains('landing-page'));
+    };
+    
+    checkLandingPage();
+    
+    // Observe body class changes
+    const observer = new MutationObserver(checkLandingPage);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    
+    return () => observer.disconnect();
+  }, []);
 
   // Randomize full grid squares position and lighting
   useEffect(() => {
@@ -83,6 +101,11 @@ const BackgroundAnimation: React.FC = memo(() => {
       timeoutRefs.current = [];
     };
   }, [isDarkMode]);
+
+  // Don't render on landing page - it has its own background
+  if (isLandingPage) {
+    return null;
+  }
 
   // Light mode: render only static grid (no animations)
   if (!isDarkMode) {
