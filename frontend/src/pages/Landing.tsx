@@ -298,11 +298,16 @@ const Landing: React.FC = memo(() => {
 // Base styles
 const styles: { [key: string]: React.CSSProperties } = {
   pageWrapper: {
-    position: 'relative',
-    minHeight: '100vh',
-    width: '100%',
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100vw',
+    height: '100vh',
     background: '#030305',
     overflow: 'hidden',
+    zIndex: 50,
   },
   // Task 1: Full-screen Flexbox layout with justify-between
   layoutContainer: {
