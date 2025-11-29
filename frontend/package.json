@@ -1,9 +1,12 @@
 {
   "name": "adaptalabs-frontend",
-  "version": "6.9.0",
+  "version": "6.9.1",
   "description": "Adaptalabs recruitment app frontend",
   "private": true,
   "dependencies": {
+    "@react-three/drei": "^9.88.17",
+    "@react-three/fiber": "^8.15.19",
+    "@react-three/postprocessing": "^2.15.11",
     "@vercel/node": "^5.5.0",
     "axios": "^1.6.2",
     "framer-motion": "^12.23.24",
@@ -11,6 +14,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.8.1",
+    "three": "^0.160.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -21,6 +25,7 @@
     "@types/node": "^20.9.0",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
+    "@types/three": "^0.181.0",
     "http-proxy-middleware": "^3.0.5",
     "jest-environment-jsdom": "^29.7.0",
     "react-scripts": "5.0.1",

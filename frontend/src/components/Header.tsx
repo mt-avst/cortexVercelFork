@@ -241,7 +241,6 @@ const Header: React.FC = memo(() => {
               </>
             ) : (
               <div className="nav-items">
-                <span className="text-muted">Welcome to AdaptaLabs</span>
               </div>
             )}
           </nav>

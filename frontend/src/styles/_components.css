@@ -1471,6 +1471,42 @@ a.dropdown-item:hover {
   overflow: visible;
 }
 
+/* Landing page transparent header */
+body.landing-page .header,
+.landing-page .header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: transparent;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.landing-page .header .logo-image,
+.landing-page .header .logo-image {
+  filter: brightness(1.2);
+}
+
+body.landing-page .header .btn-outline-secondary,
+.landing-page .header .btn-outline-secondary {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+body.landing-page .header .btn-outline-secondary:hover,
+.landing-page .header .btn-outline-secondary:hover {
+  color: #FFFFFF;
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+body.landing-page .header .text-muted,
+.landing-page .header .text-muted {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
 .header .container {
   overflow: visible;
 }
@@ -5918,8 +5954,48 @@ body:has(.mad-science-landing) .atmospheric-orb-secondary {
 }
 
 /* Hide header on landing page for full immersive experience */
+/* Hide header on mad-science-landing */
 body:has(.mad-science-landing) .header {
   display: none !important;
+}
+
+/* Transparent glass header on Cortex landing */
+body:has(.cortex-landing) .header {
+  background: rgba(3, 3, 5, 0.4) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+body:has(.cortex-landing) .header .logo-image {
+  filter: brightness(1.2);
+}
+
+body:has(.cortex-landing) .header .btn {
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+body:has(.cortex-landing) .header .btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+body:has(.cortex-landing) .header .text-muted {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Full dark immersion on Cortex landing */
+body:has(.cortex-landing) {
+  background: #030305 !important;
+}
+
+body:has(.cortex-landing) #root {
+  background: transparent;
 }
 
 /* Neural Particle Field Canvas */
