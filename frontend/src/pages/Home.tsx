@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +8,7 @@ import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHov
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
+import { SpotlightCard } from '../components/SpotlightGrid';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
 /**
@@ -211,7 +213,7 @@ const Home: React.FC = memo(() => {
               
               {/* Welcome text */}
               <div className="home-intro-text">
-                <p className="home-intro-description">
+                <p className="home-intro-description text-gray-400">
                   Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                 </p>
                 <p className="home-intro-tagline">
@@ -296,180 +298,197 @@ const Home: React.FC = memo(() => {
               )}
               
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
-                <div className="bento-grid">
-                  {filteredOpportunities.map((opportunity, index) => {
-                    // Use display_width from database (set by superadmin), default to single
-                    const isWide = opportunity.display_width === 'double';
-                    // Use _gridPosition to determine if double-width should be on left or right
-                    const gridPosition = (opportunity as any)._gridPosition;
-                    const gridClass = isWide 
-                      ? (gridPosition === 'right' ? 'bento-grid-item-wide-right' : 'bento-grid-item-wide')
-                      : 'bento-grid-item';
-                    
-                    return (
-                      <div 
-                        key={opportunity.id} 
-                        className={gridClass}
-                      >
+                <motion.div 
+                  className="bento-grid spotlight-grid"
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    visible: {
+                      transition: {
+                        staggerChildren: 0.08
+                      }
+                    }
+                  }}
+                >
+                  <AnimatePresence mode="popLayout">
+                    {filteredOpportunities.map((opportunity, index) => {
+                      // Use display_width from database (set by superadmin), default to single
+                      const isWide = opportunity.display_width === 'double';
+                      // Use _gridPosition to determine if double-width should be on left or right
+                      const gridPosition = (opportunity as any)._gridPosition;
+                      const gridClass = isWide 
+                        ? (gridPosition === 'right' ? 'bento-grid-item-wide-right' : 'bento-grid-item-wide')
+                        : 'bento-grid-item';
+                      
+                      // Featured cards get glassmorphism treatment (first test type)
+                      const isFeatured = index === 0 && opportunity.type === 'test';
+                      
+                      return (
                         <div 
-                          className="card card-clickable" 
-                          style={{ 
-                            '--dynamic-hover-color': getCardHoverColor(opportunity.type),
-                            '--dynamic-hover-bg': getCardHoverBgColor(opportunity.type)
-                          } as React.CSSProperties}
-                          onClick={() => navigate(`/opportunities/${opportunity.id}`)}
-                          role="button"
-                          tabIndex={0}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              navigate(`/opportunities/${opportunity.id}`);
-                            }
-                          }}
-                          aria-label={`View ${opportunity.title}`}
+                          key={opportunity.id} 
+                          className={gridClass}
                         >
-                          <div className="card-body opportunity-card-body">
-                            <div className="mb-4">
-                              <span className={getTypeBadgeClass(opportunity.type)}>
-                                {formatOpportunityType(opportunity.type)}
-                              </span>
-                            </div>
-                            
-                            <h2 className="card-title h5">{opportunity.title}</h2>
-                            <p className="card-text">{opportunity.purpose_one_liner}</p>
-                            
-                            {opportunity.description_optional && (
-                              <p className="card-text small">{opportunity.description_optional}</p>
-                            )}
-                            
-                            <div className="card-content-bottom">
-                              {/* Timing Info Section - Bookable Types (Test/Interview) */}
-                              {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                                <>
-                                  {/* Study Period, Time Remaining, Duration and Slots */}
-                                  {(() => {
-                                    const hasSessions = opportunity.sessions && opportunity.sessions.length > 0;
-                                    const dateRange = hasSessions ? getStudyDateRange(opportunity.sessions!) : { formatted: null };
-                                    const timeRemaining = hasSessions ? getTimeRemaining(opportunity.sessions!) : { text: null, urgency: 'normal' };
-                                    
-                                    return (
-                                      <div className="timing-info">
-                                        {/* Duration Row */}
-                                        <div className="d-flex align-items-center">
-                                          <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                          <small className="text-muted">{opportunity.default_duration_minutes} min session</small>
-                                        </div>
-
-                                        {/* Date Range Row */}
-                                        {hasSessions && dateRange.formatted && (
-                                          <div className="d-flex align-items-center">
-                                            <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                            <small className="text-muted">{dateRange.formatted}</small>
-                                          </div>
-                                        )}
-                                        
-                                        {/* Time Remaining Row */}
-                                        {hasSessions && timeRemaining.text && (
-                                          <div className="d-flex align-items-center">
-                                            <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                            <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
-                                              {timeRemaining.text}
-                                            </small>
-                                          </div>
-                                        )}
-                                        
-                                        {/* Participant Type */}
-                                        {opportunity.participant_type_required !== 'specific' && (
-                                          <div className="d-flex align-items-center">
-                                            {(() => {
-                                              switch (opportunity.participant_type_required) {
-                                                case 'any': 
-                                                  return (
-                                                    <>
-                                                      <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                      <small className="text-muted">Open To All</small>
-                                                    </>
-                                                  );
-                                                case 'internal': 
-                                                  return (
-                                                    <>
-                                                      <Lock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                      <small className="text-muted">Internal</small>
-                                                    </>
-                                                  );
-                                                case 'external': 
-                                                  return (
-                                                    <>
-                                                      <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                      <small className="text-muted">External</small>
-                                                    </>
-                                                  );
-                                                default: 
-                                                  return (
-                                                    <>
-                                                      <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                      <small className="text-muted">Open To All</small>
-                                                    </>
-                                                  );
-                                              }
-                                            })()}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })()}
-                                </>
+                          <SpotlightCard
+                            index={index}
+                            isFeatured={isFeatured}
+                            style={{ 
+                              '--dynamic-hover-color': getCardHoverColor(opportunity.type),
+                              '--dynamic-hover-bg': getCardHoverBgColor(opportunity.type)
+                            } as React.CSSProperties}
+                            onClick={() => navigate(`/opportunities/${opportunity.id}`)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                navigate(`/opportunities/${opportunity.id}`);
+                              }
+                            }}
+                            aria-label={`View ${opportunity.title}`}
+                          >
+                            <div className="card-body opportunity-card-body">
+                              <div className="mb-4">
+                                <span className={getTypeBadgeClass(opportunity.type)}>
+                                  {formatOpportunityType(opportunity.type)}
+                                </span>
+                              </div>
+                              
+                              <h2 className="card-title h5">{opportunity.title}</h2>
+                              <p className="card-text">{opportunity.purpose_one_liner}</p>
+                              
+                              {opportunity.description_optional && (
+                                <p className="card-text small">{opportunity.description_optional}</p>
                               )}
                               
-                              {/* Timing Info Section - External Link Types (Poll/Survey/Question/Unmoderated) */}
-                              {isExternalLinkType(opportunity.type) && (() => {
-                                const dateRange = getDirectDateRange(opportunity);
-                                const timeRemaining = getDirectTimeRemaining(opportunity);
+                              <div className="card-content-bottom">
+                                {/* Timing Info Section - Bookable Types (Test/Interview) */}
+                                {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                                  <>
+                                    {/* Study Period, Time Remaining, Duration and Slots */}
+                                    {(() => {
+                                      const hasSessions = opportunity.sessions && opportunity.sessions.length > 0;
+                                      const dateRange = hasSessions ? getStudyDateRange(opportunity.sessions!) : { formatted: null };
+                                      const timeRemaining = hasSessions ? getTimeRemaining(opportunity.sessions!) : { text: null, urgency: 'normal' };
+                                      
+                                      return (
+                                        <div className="timing-info">
+                                          {/* Duration Row */}
+                                          <div className="d-flex align-items-center">
+                                            <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                            <small className="text-muted">{opportunity.default_duration_minutes} min session</small>
+                                          </div>
+
+                                          {/* Date Range Row */}
+                                          {hasSessions && dateRange.formatted && (
+                                            <div className="d-flex align-items-center">
+                                              <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                              <small className="text-muted">{dateRange.formatted}</small>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Time Remaining Row */}
+                                          {hasSessions && timeRemaining.text && (
+                                            <div className="d-flex align-items-center">
+                                              <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                              <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
+                                                {timeRemaining.text}
+                                              </small>
+                                            </div>
+                                          )}
+                                          
+                                          {/* Participant Type */}
+                                          {opportunity.participant_type_required !== 'specific' && (
+                                            <div className="d-flex align-items-center">
+                                              {(() => {
+                                                switch (opportunity.participant_type_required) {
+                                                  case 'any': 
+                                                    return (
+                                                      <>
+                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                                        <small className="text-muted">Open To All</small>
+                                                      </>
+                                                    );
+                                                  case 'internal': 
+                                                    return (
+                                                      <>
+                                                        <Lock size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                                        <small className="text-muted">Internal</small>
+                                                      </>
+                                                    );
+                                                  case 'external': 
+                                                    return (
+                                                      <>
+                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                                        <small className="text-muted">External</small>
+                                                      </>
+                                                    );
+                                                  default: 
+                                                    return (
+                                                      <>
+                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                                        <small className="text-muted">Open To All</small>
+                                                      </>
+                                                    );
+                                                }
+                                              })()}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+                                  </>
+                                )}
                                 
-                                return (
-                                  <div className="timing-info">
-                                    {/* Date Range Row - only if dates are set */}
-                                    {dateRange.formatted && (
+                                {/* Timing Info Section - External Link Types (Poll/Survey/Question/Unmoderated) */}
+                                {isExternalLinkType(opportunity.type) && (() => {
+                                  const dateRange = getDirectDateRange(opportunity);
+                                  const timeRemaining = getDirectTimeRemaining(opportunity);
+                                  
+                                  return (
+                                    <div className="timing-info">
+                                      {/* Date Range Row - only if dates are set */}
+                                      {dateRange.formatted && (
+                                        <div className="d-flex align-items-center">
+                                          <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                          <small className="text-muted">{dateRange.formatted}</small>
+                                        </div>
+                                      )}
+                                      {/* Time Remaining Row - only if end date is set */}
+                                      {timeRemaining.text && (
+                                        <div className="d-flex align-items-center">
+                                          <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                          <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
+                                            {timeRemaining.text}
+                                          </small>
+                                        </div>
+                                      )}
+                                      {/* Duration Row */}
                                       <div className="d-flex align-items-center">
-                                        <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                        <small className="text-muted">{dateRange.formatted}</small>
-                                      </div>
-                                    )}
-                                    {/* Time Remaining Row - only if end date is set */}
-                                    {timeRemaining.text && (
-                                      <div className="d-flex align-items-center">
-                                        <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                        <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
-                                          {timeRemaining.text}
+                                        <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
+                                        <small className="text-muted">
+                                          ~{opportunity.default_duration_minutes || 5} min to complete
                                         </small>
                                       </div>
-                                    )}
-                                    {/* Duration Row */}
+                                    </div>
+                                  );
+                                })()}
+                                
+                                {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
+                                  <div className="timing-info">
                                     <div className="d-flex align-items-center">
-                                      <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                      <small className="text-muted">
-                                        ~{opportunity.default_duration_minutes || 5} min to complete
-                                      </small>
+                                      <small className="text-muted">🎯 {opportunity.participant_type_specific_details}</small>
                                     </div>
                                   </div>
-                                );
-                              })()}
-                              
-                              {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
-                                <div className="timing-info">
-                                  <div className="d-flex align-items-center">
-                                    <small className="text-muted">🎯 {opportunity.participant_type_specific_details}</small>
-                                  </div>
-                                </div>
-                              )}
-                              
+                                )}
+                                
+                              </div>
                             </div>
-                          </div>
+                          </SpotlightCard>
                         </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </AnimatePresence>
+                </motion.div>
               )}
             </div>
           </div>

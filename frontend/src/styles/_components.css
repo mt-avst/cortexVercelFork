@@ -4293,12 +4293,29 @@ body.theme-dark .legend-label-booked {
   overflow: visible;
 }
 
-/* Alias for home page compatibility */
+/* AdaptaLabs Home Title - Premium Gradient Effect */
 .adaptalabs-home-title {
   margin-bottom: 24px;
-  font-size: 52px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(2.5rem, 8vw, 3.5rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  
+  /* Maximum contrast gradient: deep orange → white */
+  background: linear-gradient(
+    to right,
+    #FF5A1F 0%,
+    #FF7A45 35%,
+    #FFA070 60%,
+    #FFFFFF 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  
+  /* Subtle glow for depth */
+  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.4));
 }
 
 /* Home Page Intro Text Block */
@@ -4414,6 +4431,308 @@ body.theme-light .card.card-clickable:hover {
   border-color: var(--dynamic-hover-color, var(--brand-headline)) !important;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1), 
               0 0 0 1px var(--dynamic-hover-color, transparent) !important;
+}
+
+/* ============================================================
+   SPOTLIGHT CARDS - Level 4 Living Interface
+   Mouse-tracking border glow ("flashlight" effect)
+   ============================================================ */
+
+/* Spotlight Card Base */
+.spotlight-card {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--card-radius);
+  overflow: hidden;
+  isolation: isolate;
+  
+  /* CSS variables for mouse tracking */
+  --spotlight-x: 0px;
+  --spotlight-y: 0px;
+  --spotlight-opacity: 0;
+  --spotlight-size: 400px;
+  /* Use dynamic hover color from opportunity type, fallback to brand orange */
+  --spotlight-color: var(--dynamic-hover-color, rgba(255, 122, 51, 0.6));
+}
+
+/* Spotlight Border - Radial gradient that follows cursor */
+.spotlight-border {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  
+  /* Create the spotlight border effect */
+  background: radial-gradient(
+    var(--spotlight-size) circle at var(--spotlight-x) var(--spotlight-y),
+    var(--spotlight-color),
+    transparent 45%
+  );
+  
+  /* Mask to show only the border */
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 1.5px;
+  
+  opacity: var(--spotlight-opacity);
+  transition: opacity 0.25s ease-out;
+  z-index: 1;
+}
+
+/* Spotlight Inner Glow - Subtle radial fill */
+.spotlight-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  
+  /* Fallback for browsers without color-mix */
+  background: radial-gradient(
+    calc(var(--spotlight-size) * 1.2) circle at var(--spotlight-x) var(--spotlight-y),
+    rgba(255, 122, 51, 0.08),
+    transparent 50%
+  );
+  
+  /* Modern browsers with color-mix support */
+  @supports (background: color-mix(in srgb, red 50%, blue)) {
+    background: radial-gradient(
+      calc(var(--spotlight-size) * 1.2) circle at var(--spotlight-x) var(--spotlight-y),
+      color-mix(in srgb, var(--spotlight-color) 15%, transparent),
+      transparent 50%
+    );
+  }
+  
+  opacity: var(--spotlight-opacity);
+  transition: opacity 0.35s ease-out;
+  z-index: 0;
+}
+
+/* Spotlight Card Content */
+.spotlight-card-content {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+}
+
+/* Spotlight Card Hover State */
+.spotlight-card:hover {
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Featured/Active Card - Glassmorphism */
+.spotlight-card-featured {
+  --spotlight-color: var(--dynamic-hover-color, rgba(77, 208, 225, 0.7));
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 
+    0 4px 24px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.spotlight-card-featured::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* Fallback gradient */
+  background: linear-gradient(
+    145deg,
+    rgba(77, 208, 225, 0.08) 0%,
+    transparent 60%
+  );
+  /* Modern browsers with color-mix */
+  @supports (background: color-mix(in srgb, red 50%, blue)) {
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--spotlight-color) 12%, transparent) 0%,
+      transparent 60%
+    );
+  }
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Featured card shimmer on edge */
+.spotlight-card-featured::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.3) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Light Mode Spotlight Adjustments */
+body.theme-light .spotlight-card {
+  --spotlight-color: rgba(255, 78, 80, 0.4);
+}
+
+body.theme-light .spotlight-glow {
+  background: radial-gradient(
+    calc(var(--spotlight-size) * 1.5) circle at var(--spotlight-x) var(--spotlight-y),
+    rgba(255, 78, 80, 0.04),
+    transparent 40%
+  );
+}
+
+body.theme-light .spotlight-card-featured {
+  --spotlight-color: rgba(37, 99, 235, 0.5);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+/* Override card-clickable hover to work with spotlight */
+.spotlight-card.card-clickable:hover {
+  transform: none; /* Let framer-motion handle transforms */
+  box-shadow: none; /* Let the spotlight handle the glow */
+}
+
+/* Spotlight Grid Container */
+.spotlight-grid {
+  position: relative;
+}
+
+/* ============================================================
+   ATMOSPHERIC BACKGROUND - Breathing Orb
+   ============================================================ */
+
+/* Breathing Orb - Ambient light source */
+.atmospheric-orb {
+  position: fixed;
+  width: 900px;
+  height: 900px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  
+  /* Gradient orb - warm coral tones */
+  background: radial-gradient(
+    circle,
+    rgba(255, 78, 80, 0.15) 0%,
+    rgba(255, 122, 51, 0.10) 25%,
+    rgba(255, 78, 80, 0.05) 45%,
+    transparent 65%
+  );
+  
+  /* Blur for soft, atmospheric edges */
+  filter: blur(100px);
+  
+  /* Animation - slow, organic movement */
+  animation: breathe 10s ease-in-out infinite, drift 25s ease-in-out infinite;
+}
+
+/* Secondary orb for depth - cool accent */
+.atmospheric-orb-secondary {
+  position: fixed;
+  width: 700px;
+  height: 700px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  
+  background: radial-gradient(
+    circle,
+    rgba(77, 208, 225, 0.10) 0%,
+    rgba(99, 102, 241, 0.06) 35%,
+    transparent 65%
+  );
+  
+  filter: blur(120px);
+  animation: breathe 14s ease-in-out infinite reverse, drift-alt 30s ease-in-out infinite;
+}
+
+/* Breathing animation - organic pulse */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+}
+
+/* Drift animation - slow, organic movement */
+@keyframes drift {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  20% {
+    transform: translate(4%, 2%) scale(1.03);
+  }
+  40% {
+    transform: translate(-2%, 5%) scale(1.06);
+  }
+  60% {
+    transform: translate(-4%, 1%) scale(1.04);
+  }
+  80% {
+    transform: translate(2%, -3%) scale(1.02);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+/* Alternative drift for secondary orb - counter-movement */
+@keyframes drift-alt {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  25% {
+    transform: translate(-3%, 4%) scale(1.05);
+  }
+  50% {
+    transform: translate(5%, -2%) scale(0.97);
+  }
+  75% {
+    transform: translate(-2%, -4%) scale(1.03);
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+/* Light mode: Hide atmospheric orbs */
+body.theme-light .atmospheric-orb,
+body.theme-light .atmospheric-orb-secondary {
+  display: none;
+}
+
+/* Reduced motion: disable animations for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .atmospheric-orb,
+  .atmospheric-orb-secondary {
+    animation: none;
+    opacity: 0.5;
+  }
+  
+  .spotlight-border,
+  .spotlight-glow {
+    transition: none;
+  }
+  
+  .spotlight-card {
+    transition: border-color 0.15s ease;
+  }
 }
 
 /* Card Body Flex - Auto-growing content */
@@ -5002,7 +5321,7 @@ body.theme-light .booking-badge-survey {
   transition: opacity 0.3s ease;
 }
 
-.calendar-living-interface:not(:hover) .cursor-spotlight {
+.calendar-days-container:not(:hover) .cursor-spotlight {
   opacity: 0;
 }
 
