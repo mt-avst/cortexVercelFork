@@ -4308,15 +4308,29 @@ body.theme-dark .legend-label-booked {
   overflow: visible;
 }
 
-/* AdaptaLabs Home Title - Typography & Layout Only */
-/* Gradient effect is defined in _themes.css for highest priority */
-/* Font-size/weight aligned with .hero-title-large for consistent gradient visibility */
+/* AdaptaLabs Home Title - Same as hero-title-large for consistent gradient */
 .adaptalabs-home-title {
   margin-bottom: 24px;
   font-size: clamp(2.75rem, 10vw, 4.5rem);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -0.02em;
+  
+  /* Premium gradient effect: deep orange → peach → white (dark mode) */
+  background: linear-gradient(
+    to right,
+    #FF5A1F 0%,
+    #FF7A45 35%,
+    #FFA070 60%,
+    #FFFFFF 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  
+  /* Subtle glow for depth */
+  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.35));
 }
 
 /* Home Page Intro Text Block */
