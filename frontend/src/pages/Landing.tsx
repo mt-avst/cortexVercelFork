@@ -47,10 +47,21 @@ const Landing: React.FC = memo(() => {
   };
 
   // Dynamic styles based on theme
-  const getPageWrapperStyle = () => ({
-    ...styles.pageWrapper,
-    background: isDark ? '#030305' : '#f8fafc', // bg-slate-50
-  });
+  const getPageWrapperStyle = () => {
+    if (isDark) {
+      return {
+        ...styles.pageWrapper,
+        background: '#030305',
+      };
+    }
+    // Light mode: Dashboard grid pattern (24px graph paper)
+    return {
+      ...styles.pageWrapper,
+      background: '#f8fafc',
+      backgroundImage: 'linear-gradient(to right, #80808012 1px, transparent 1px), linear-gradient(to bottom, #80808012 1px, transparent 1px)',
+      backgroundSize: '24px 24px',
+    };
+  };
 
   const getProductNameStyle = () => {
     if (isDark) {
@@ -91,6 +102,7 @@ const Landing: React.FC = memo(() => {
       background: '#ffffff',
       border: '1px solid #f97316', // border-orange-500
       color: '#ea580c', // text-orange-600
+      fontWeight: 500, // font-medium - stands out against grid lines
       boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', // shadow-sm
       backdropFilter: 'none',
       WebkitBackdropFilter: 'none',
@@ -288,10 +300,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '120%',
-    maxWidth: '1100px',
-    height: '800px',
-    background: 'radial-gradient(closest-side, rgba(3,3,5, 0.85) 0%, rgba(3,3,5, 0.6) 50%, rgba(3,3,5, 0) 100%)',
+    width: '140%',
+    maxWidth: '1200px',
+    height: '900px',
+    // Solid black center for perfect contrast, fading to transparent at edges
+    background: 'radial-gradient(closest-side, #030305 40%, rgba(3,3,5, 0.8) 80%, transparent 100%)',
     pointerEvents: 'none',
     zIndex: -1,
   },
@@ -426,7 +439,7 @@ const responsiveStyles = `
   /* Mobile-first base styles - Dark mode (default) */
   .landing-parent-brand {
     font-size: 0.9rem !important;
-    letter-spacing: 0.2em !important;
+    letter-spacing: 0.4em !important;
     margin-bottom: 0.5rem !important;
   }
   
@@ -441,21 +454,16 @@ const responsiveStyles = `
     max-width: 320px !important;
   }
 
-  /* Light mode typography - 20% tighter tracking for eyebrow */
+  /* Light mode typography - tighter tracking for eyebrow (holds together on white) */
   body.theme-light .landing-parent-brand {
-    letter-spacing: 0.16em !important;
+    letter-spacing: 0.2em !important;
   }
 
   /* Tablet (640px+) */
   @media (min-width: 640px) {
     .landing-parent-brand {
       font-size: 1.1rem !important;
-      letter-spacing: 0.28em !important;
       margin-bottom: 0.75rem !important;
-    }
-    
-    body.theme-light .landing-parent-brand {
-      letter-spacing: 0.22em !important;
     }
     
     .landing-product-name {
@@ -472,12 +480,7 @@ const responsiveStyles = `
   @media (min-width: 1024px) {
     .landing-parent-brand {
       font-size: 1.4rem !important;
-      letter-spacing: 0.35em !important;
       margin-bottom: 1rem !important;
-    }
-    
-    body.theme-light .landing-parent-brand {
-      letter-spacing: 0.28em !important;
     }
     
     .landing-product-name {
@@ -494,11 +497,6 @@ const responsiveStyles = `
   @media (min-width: 1440px) {
     .landing-parent-brand {
       font-size: 1.6rem !important;
-      letter-spacing: 0.4em !important;
-    }
-    
-    body.theme-light .landing-parent-brand {
-      letter-spacing: 0.32em !important;
     }
     
     .landing-tagline {

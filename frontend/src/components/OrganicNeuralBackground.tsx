@@ -582,11 +582,8 @@ const OrganicNeuralBackground: React.FC = () => {
           alpha: false,
           powerPreference: 'high-performance',
         }}
-        onCreated={({ scene }) => {
-          // Set scene background directly - prevents any stray geometry artifacts
-          scene.background = new THREE.Color('#030305');
-        }}
       >
+        <color attach="background" args={['#030305']} />
 
         <AmbientGlow />
         <NeuralCloud />
