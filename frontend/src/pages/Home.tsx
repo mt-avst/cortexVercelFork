@@ -4,11 +4,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHoverBgColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
 import { SpotlightCard } from '../components/SpotlightGrid';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
+import StaticNeuralBackground from '../components/StaticNeuralBackground';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
 /**
@@ -18,6 +21,8 @@ import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 
 const Home: React.FC = memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -206,10 +211,14 @@ const Home: React.FC = memo(() => {
       
       {/* AdaptaLabs Section */}
       {user && (
-        <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
-          <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
-            <div className="col-12">
-              <h1 className="mb-3 adaptalabs-home-title">AdaptaLabs</h1>
+        <div className="study-listing-page">
+          {/* Theme-aware Background */}
+          {isDark ? <SlowNeuralBackground /> : <StaticNeuralBackground />}
+          
+          <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
+            <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
+              <div className="col-12">
+                <h1 className="mb-3 adaptalabs-home-title">AdaptaLabs</h1>
               
               {/* Welcome text */}
               <div className="home-intro-text">
@@ -490,6 +499,7 @@ const Home: React.FC = memo(() => {
                   </AnimatePresence>
                 </motion.div>
               )}
+              </div>
             </div>
           </div>
         </div>

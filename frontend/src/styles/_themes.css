@@ -27,7 +27,28 @@ body.theme-light .adaptalabs-home-title {
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  filter: drop-shadow(0 2px 8px rgba(232, 108, 36, 0.25));
+  /* Lighter glow for light backgrounds */
+  filter: drop-shadow(0 2px 12px rgba(232, 108, 36, 0.3));
+}
+
+/* ============================================================
+   STUDY LISTING PAGE - Theme Overrides
+   ============================================================ */
+
+/* Dark Mode - Study Listing Background */
+body.theme-dark .study-listing-page {
+  background: #030305;
+}
+
+/* Light Mode - Study Listing with Technical Grid Background */
+body.theme-light .study-listing-page {
+  background: #f8fafc;
+  /* Orange grid pattern matching login page (24px grid, 5% opacity) */
+  background-image: 
+    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  min-height: 100vh;
 }
 
 /* ============================================================
@@ -146,46 +167,68 @@ body.theme-light .card:hover {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(0, 0, 0, 0.08);
 }
 
-/* Bento Grid Cards - Professional style */
-body.theme-light .bento-grid .card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid transparent;
-  border-top: 1px solid rgba(255, 255, 255, 0.8);
+/* Bento Grid Cards - Light theme (Tactile "Precision" Interface) */
+body.theme-light .bento-grid .card,
+body.theme-light .study-listing-page .bento-grid .card,
+body.theme-light .spotlight-card {
+  /* Clean white with subtle transparency */
+  background: rgba(255, 255, 255, 0.92);
+  /* Crisp grey border (gray-200) for defined edges */
+  border: 1px solid #e5e7eb;
+  /* Detailed "tight" shadows for tactile feel - like physical tiles */
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 12px rgba(0, 0, 0, 0.06),
-    0 8px 24px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 4px 8px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-body.theme-light .bento-grid .card:hover {
+body.theme-light .bento-grid .card:hover,
+body.theme-light .study-listing-page .bento-grid .card:hover,
+body.theme-light .spotlight-card:hover {
+  /* Lift effect - translate up */
   transform: translateY(-4px);
-  border: 1px solid rgba(232, 108, 36, 0.25);
+  /* Slightly darker border on hover */
+  border: 1px solid #d1d5db;
+  /* Sharpened, deeper shadow for lifted effect */
   box-shadow: 
-    0 4px 8px rgba(0, 0, 0, 0.06),
-    0 12px 28px rgba(0, 0, 0, 0.08),
-    0 0 0 1px rgba(232, 108, 36, 0.1);
+    0 2px 4px rgba(0, 0, 0, 0.1),
+    0 4px 8px rgba(0, 0, 0, 0.08),
+    0 8px 16px rgba(0, 0, 0, 0.06),
+    0 16px 32px rgba(0, 0, 0, 0.04);
 }
 
-/* Bento Grid Cards - Dark theme */
-body.theme-dark .bento-grid .card {
-  background: rgba(30, 30, 50, 0.95);
+/* Bento Grid Cards - Dark theme (Glassmorphism "Immersive" Interface) */
+body.theme-dark .bento-grid .card,
+body.theme-dark .study-listing-page .bento-grid .card,
+body.theme-dark .spotlight-card {
+  /* Glassmorphism: dark charcoal/black with ~60% opacity */
+  background: rgba(15, 15, 25, 0.6);
+  /* Nearly transparent white border (white/10) */
   border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Heavy backdrop blur for glass effect */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.2),
-    0 4px 12px rgba(0, 0, 0, 0.15);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+    0 2px 4px rgba(0, 0, 0, 0.3),
+    0 8px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-body.theme-dark .bento-grid .card:hover {
+body.theme-dark .bento-grid .card:hover,
+body.theme-dark .study-listing-page .bento-grid .card:hover,
+body.theme-dark .spotlight-card:hover {
   transform: translateY(-4px);
-  border: 1px solid rgba(255, 78, 80, 0.4);
+  /* Orange glow border on hover */
+  border: 1px solid rgba(255, 85, 0, 0.5);
+  /* Brighter background on hover */
+  background: rgba(20, 20, 35, 0.7);
   box-shadow: 
-    0 4px 8px rgba(0, 0, 0, 0.2),
-    0 12px 28px rgba(0, 0, 0, 0.25),
-    0 0 0 1px rgba(255, 78, 80, 0.2);
+    0 4px 12px rgba(0, 0, 0, 0.3),
+    0 16px 32px rgba(0, 0, 0, 0.35),
+    0 0 30px rgba(255, 85, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 /* Bento Grid Card text - Dark theme */

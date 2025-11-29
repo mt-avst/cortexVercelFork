@@ -681,19 +681,19 @@
   color: #FFFFFF;
 }
 
-/* Lozenge variant (smaller, pill-shaped) */
+/* Lozenge variant (soft rectangle for modern look) */
 .lozenge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 12px;
-  font-size: 0.75rem;
+  padding: 5px 10px;
+  font-size: 0.7rem;
   font-weight: 600;
   background: var(--tag-bg);
   color: var(--tag-text);
-  border-radius: 100px;
+  border-radius: 6px; /* Soft rectangle instead of pill */
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   line-height: 1;
   transition: background-color 0.2s ease, color 0.2s ease;
 }
@@ -4344,13 +4344,15 @@ body.theme-dark .legend-label-booked {
   overflow: visible;
 }
 
-/* AdaptaLabs Home Title - Same as hero-title-large for consistent gradient */
+/* AdaptaLabs Home Title - Premium gradient with glow (like CORTEX logo) */
 .adaptalabs-home-title {
+  /* Use Inter font family to match landing page */
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   margin-bottom: 24px;
   font-size: clamp(2.75rem, 10vw, 4.5rem);
-  font-weight: 700;
+  font-weight: 800;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
   
   /* Premium gradient effect: deep orange → peach → white (dark mode) */
   background: linear-gradient(
@@ -4365,8 +4367,18 @@ body.theme-dark .legend-label-booked {
   -webkit-text-fill-color: transparent;
   color: transparent;
   
-  /* Subtle glow for depth */
-  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.35));
+  /* Outer glow effect - similar to CORTEX logo on landing */
+  filter: drop-shadow(0 0 40px rgba(255, 85, 0, 0.4)) drop-shadow(0 0 80px rgba(255, 85, 0, 0.2));
+}
+
+/* ============================================================
+   STUDY LISTING PAGE - Wrapper Styles
+   ============================================================ */
+
+.study-listing-page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
 }
 
 /* Home Page Intro Text Block */
