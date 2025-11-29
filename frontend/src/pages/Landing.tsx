@@ -193,49 +193,66 @@ const Landing: React.FC = memo(() => {
       {/* Conditional Background */}
       {isDark ? <OrganicNeuralBackground /> : <StaticNeuralBackground />}
       
-      {/* Main Content Container */}
-      <div style={styles.content}>
-        {/* Shadow Shield for text contrast - only in dark mode */}
-        {isDark && <div style={styles.shadowShield} />}
-        
-        {/* Brand Lockup - Responsive */}
-        <div style={styles.brandLockup}>
+      {/* Main Layout Container - Full-screen Flexbox */}
+      <div style={styles.layoutContainer}>
+        {/* Top Spacer - for navbar clearance */}
+        <div style={styles.topSpacer} />
+
+        {/* Hero Stack - Optical Center */}
+        <div style={styles.heroStack}>
+          {/* Shadow Shield - inside hero, always centered on text */}
+          <div 
+            style={{
+              ...styles.shadowShield,
+              background: isDark 
+                ? 'radial-gradient(closest-side, #030305 50%, rgba(3,3,5, 0.8) 80%, transparent 100%)' 
+                : 'none',
+            }} 
+          />
+          
+          {/* Eyebrow */}
           <span style={getParentBrandStyle()} className="landing-parent-brand">ADAPTAVIST</span>
+          
+          {/* Hero Title */}
           <h1 style={getProductNameStyle()} className="landing-product-name">CORTEX</h1>
+          
+          {/* Tagline */}
           <p style={getTaglineStyle()} className="landing-tagline">The organization's collective brain</p>
+
+          {/* CTA Button */}
+          <button 
+            onClick={handleGoogleLogin}
+            style={{
+              ...getButtonStyle(),
+              ...(googleLoading || loginLoading ? styles.glassButtonDisabled : {}),
+              marginTop: '2.5rem',
+              marginBottom: 0,
+            }}
+            disabled={googleLoading || loginLoading}
+            aria-busy={googleLoading || loginLoading}
+            aria-label={googleLoading ? "Connecting..." : "Access Cortex"}
+            onMouseEnter={handleButtonMouseEnter}
+            onMouseLeave={handleButtonMouseLeave}
+          >
+            {googleLoading ? (
+              <span style={styles.buttonContent}>
+                <span style={getSpinnerStyle()} />
+                Connecting...
+              </span>
+            ) : (
+              <span style={styles.buttonContent}>
+                Access Cortex
+                <svg style={styles.arrowIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* CTA Button */}
-        <button 
-          onClick={handleGoogleLogin}
-          style={{
-            ...getButtonStyle(),
-            ...(googleLoading || loginLoading ? styles.glassButtonDisabled : {}),
-          }}
-          disabled={googleLoading || loginLoading}
-          aria-busy={googleLoading || loginLoading}
-          aria-label={googleLoading ? "Connecting..." : "Access Cortex"}
-          onMouseEnter={handleButtonMouseEnter}
-          onMouseLeave={handleButtonMouseLeave}
-        >
-          {googleLoading ? (
-            <span style={styles.buttonContent}>
-              <span style={getSpinnerStyle()} />
-              Connecting...
-            </span>
-          ) : (
-            <span style={styles.buttonContent}>
-              Access Cortex
-              <svg style={styles.arrowIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </span>
-          )}
-        </button>
-
-        {/* Demo Access Section */}
-        <div style={styles.demoSection}>
+        {/* Demo Footer - Pinned Bottom */}
+        <div style={styles.demoFooter} className="landing-demo-footer">
           <span style={getDemoLabelStyle()}>DEMO ACCESS</span>
           <div style={styles.demoPills}>
             <button 
@@ -284,49 +301,64 @@ const styles: { [key: string]: React.CSSProperties } = {
     background: '#030305',
     overflow: 'hidden',
   },
-  content: {
+  // Task 1: Full-screen Flexbox layout with justify-between
+  layoutContainer: {
     position: 'relative',
     zIndex: 20,
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     minHeight: '100vh',
-    padding: '1.5rem',
-    textAlign: 'center',
+    width: '100%',
+    paddingTop: '4rem', // py-16 equivalent (safe zone top)
+    paddingBottom: '2rem', // Safe zone bottom
+    paddingLeft: '1.5rem',
+    paddingRight: '1.5rem',
+    overflow: 'hidden',
   },
+  topSpacer: {
+    // Empty div for flex spacing - allows hero to be optically centered
+    flexShrink: 0,
+    height: '1px',
+  },
+  // Task 2: Hero Stack - centered with flex-grow
+  heroStack: {
+    position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexGrow: 1,
+    zIndex: 10,
+    textAlign: 'center',
+    width: '100%',
+    maxWidth: '90vw',
+  },
+  // Task 3: Shadow Shield - inside hero, always centered
   shadowShield: {
     position: 'absolute',
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
     width: '140%',
-    maxWidth: '1200px',
-    height: '900px',
-    // Solid black center for perfect contrast, fading to transparent at edges
-    background: 'radial-gradient(closest-side, #030305 40%, rgba(3,3,5, 0.8) 80%, transparent 100%)',
-    pointerEvents: 'none',
+    height: '140%',
     zIndex: -1,
-  },
-  brandLockup: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-start',
-    width: '100%',
-    maxWidth: '90vw',
-    marginBottom: '2rem',
+    pointerEvents: 'none',
   },
   parentBrand: {
     fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     fontWeight: 600,
     color: '#FF5500',
     textShadow: '0 0 30px rgba(255, 85, 0, 0.5)',
+    marginBottom: '0.5rem', // mb-2 - tight gap to hero
   },
   productName: {
     fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
     fontWeight: 900,
     lineHeight: 0.9,
     margin: 0,
+    marginBottom: '2rem', // mb-8 - breathing room
     background: 'linear-gradient(180deg, #FFFFFF 0%, #F5F5F5 40%, #D4D4D4 100%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
@@ -359,7 +391,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     WebkitBackdropFilter: 'blur(12px)',
     boxShadow: '0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)',
     transition: 'all 0.3s ease',
-    marginBottom: '2rem',
   },
   glassButtonDisabled: {
     opacity: 0.6,
@@ -382,11 +413,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: '50%',
     animation: 'spin 0.8s linear infinite',
   },
-  demoSection: {
+  // Task 4: Demo Footer - pinned bottom
+  demoFooter: {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '1rem',
+    gap: '0.75rem',
+    marginBottom: '1rem',
+    opacity: 0.8,
+    transition: 'opacity 0.2s ease',
   },
   demoLabel: {
     fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
@@ -440,13 +475,11 @@ const responsiveStyles = `
   .landing-parent-brand {
     font-size: 0.9rem !important;
     letter-spacing: 0.4em !important;
-    margin-bottom: 0.5rem !important;
   }
   
   .landing-product-name {
     font-size: clamp(4rem, 18vw, 12rem) !important;
     letter-spacing: -0.04em !important;
-    margin-bottom: 1rem !important;
   }
   
   .landing-tagline {
@@ -459,15 +492,15 @@ const responsiveStyles = `
     letter-spacing: 0.2em !important;
   }
 
+  /* Demo footer hover effect */
+  .landing-demo-footer:hover {
+    opacity: 1 !important;
+  }
+
   /* Tablet (640px+) */
   @media (min-width: 640px) {
     .landing-parent-brand {
       font-size: 1.1rem !important;
-      margin-bottom: 0.75rem !important;
-    }
-    
-    .landing-product-name {
-      margin-bottom: 1.25rem !important;
     }
     
     .landing-tagline {
@@ -480,11 +513,6 @@ const responsiveStyles = `
   @media (min-width: 1024px) {
     .landing-parent-brand {
       font-size: 1.4rem !important;
-      margin-bottom: 1rem !important;
-    }
-    
-    .landing-product-name {
-      margin-bottom: 1.5rem !important;
     }
     
     .landing-tagline {
