@@ -566,7 +566,20 @@ body.theme-light .hero-subtitle-centered .subtitle-emphasis {
 }
 
 body.theme-light .hero-title-large {
-  color: #E86C24; /* Adaptavist Orange */
+  /* Premium gradient effect: deep orange → dark orange (light mode) */
+  background: linear-gradient(
+    to right,
+    #E86C24 0%,
+    #D35F1D 50%,
+    #C54E12 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  
+  /* Softer glow for light backgrounds */
+  filter: drop-shadow(0 2px 8px rgba(232, 108, 36, 0.25));
 }
 
 body.theme-light .hero-cta-primary {

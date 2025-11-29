@@ -3258,12 +3258,27 @@ body.admin-page .header .container {
 }
 
 .hero-title-large {
-  color: #FFFFFF;
   font-size: 4.5rem;
   font-weight: 700;
   line-height: 1;
   margin: 0;
   letter-spacing: -0.02em;
+  
+  /* Premium gradient effect: deep orange → white (dark mode) */
+  background: linear-gradient(
+    to right,
+    #FF5A1F 0%,
+    #FF7A45 35%,
+    #FFA070 60%,
+    #FFFFFF 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  
+  /* Subtle glow for depth */
+  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.35));
 }
 
 .hero-subtitle-centered {
