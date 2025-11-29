@@ -26,14 +26,19 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Cursor spotlight state
-  const containerRef = useRef<HTMLDivElement>(null);
+  // Cursor spotlight state - scoped to grid area only
+  const gridContainerRef = useRef<HTMLDivElement>(null);
+  const [isMouseInGrid, setIsMouseInGrid] = useState(false);
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
   
   // Smooth spring-based cursor tracking
   const smoothMouseX = useSpring(mouseX, { stiffness: 300, damping: 30 });
   const smoothMouseY = useSpring(mouseY, { stiffness: 300, damping: 30 });
+  
+  // Transform for spotlight position (hooks must be called unconditionally)
+  const spotlightX = useTransform(smoothMouseX, x => x - 200);
+  const spotlightY = useTransform(smoothMouseY, y => y - 200);
   
   // Update current time every minute for the time indicator
   useEffect(() => {
@@ -44,14 +49,22 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     return () => clearInterval(timer);
   }, []);
   
-  // Track mouse position for cursor spotlight
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
+  // Track mouse position for cursor spotlight - only within grid area
+  const handleGridMouseMove = useCallback((e: React.MouseEvent) => {
+    if (gridContainerRef.current) {
+      const rect = gridContainerRef.current.getBoundingClientRect();
       mouseX.set(e.clientX - rect.left);
       mouseY.set(e.clientY - rect.top);
     }
   }, [mouseX, mouseY]);
+  
+  const handleGridMouseEnter = useCallback(() => {
+    setIsMouseInGrid(true);
+  }, []);
+  
+  const handleGridMouseLeave = useCallback(() => {
+    setIsMouseInGrid(false);
+  }, []);
   
   // Load user bookings and populate bookedSlots when sessions change
   useEffect(() => {
@@ -459,30 +472,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   return (
     <div 
-      ref={containerRef}
       className="calendar-view calendar-living-interface" 
-      onMouseMove={handleMouseMove}
       style={{ overflow: 'visible', position: 'relative' }}
     >
       {/* Ambient Glow Background - Dark Mode Only (via CSS) */}
       <div className="calendar-ambient-glow" aria-hidden="true" />
       <div className="calendar-ambient-glow-secondary" aria-hidden="true" />
-      
-      {/* Cursor Spotlight Effect - Radial glow that follows the mouse */}
-      <motion.div
-        className="cursor-spotlight"
-        style={{
-          position: 'absolute',
-          width: 400,
-          height: 400,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 40%, transparent 70%)',
-          pointerEvents: 'none',
-          zIndex: 1,
-          x: useTransform(smoothMouseX, x => x - 200),
-          y: useTransform(smoothMouseY, y => y - 200),
-        }}
-      />
       
       {/* Color-coded legend with staggered animation */}
       <div className="calendar-legend d-flex flex-wrap gap-4 mb-4">
@@ -638,12 +633,38 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
             </div>
           </motion.div>
 
-          {/* Day Columns Container */}
-          <div className="calendar-days-container" style={{ 
-            position: 'relative',
-            flex: 1,
-            minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px`
-          }}>
+          {/* Day Columns Container - Spotlight effect scoped here */}
+          <div 
+            ref={gridContainerRef}
+            className="calendar-days-container" 
+            onMouseMove={handleGridMouseMove}
+            onMouseEnter={handleGridMouseEnter}
+            onMouseLeave={handleGridMouseLeave}
+            style={{ 
+              position: 'relative',
+              flex: 1,
+              minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px`,
+              overflow: 'hidden'
+            }}
+          >
+            {/* Cursor Spotlight Effect - Radial glow that follows the mouse within grid */}
+            <motion.div
+              className="cursor-spotlight"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: isMouseInGrid ? 1 : 0 }}
+              transition={{ duration: 0.2 }}
+              style={{
+                position: 'absolute',
+                width: 400,
+                height: 400,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 40%, transparent 70%)',
+                pointerEvents: 'none',
+                zIndex: 0,
+                x: spotlightX,
+                y: spotlightY,
+              }}
+            />
             {/* Horizontal hour dividers */}
             <div style={{
               position: 'absolute',

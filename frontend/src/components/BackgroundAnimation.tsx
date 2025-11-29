@@ -4,8 +4,9 @@ import { useTheme } from '../contexts/ThemeContext';
 /**
  * BackgroundAnimation Component
  * 
- * Renders a retro computing-inspired animated grid background.
- * Only renders in dark mode - light mode uses a clean background without animation.
+ * Level 4 "Living Interface" - Atmospheric depth with breathing orbs
+ * and subtle grid animations for dark mode.
+ * Light mode uses a clean background without animation.
  * CSS is centralized in main.css for performance (prevents re-injection on renders).
  * Uses React.memo to prevent unnecessary re-renders.
  */
@@ -92,6 +93,26 @@ const BackgroundAnimation: React.FC = memo(() => {
 
   return (
     <>
+      {/* Atmospheric Breathing Orbs - Level 4 depth effect */}
+      <div 
+        className="atmospheric-orb" 
+        style={{ 
+          top: '10%', 
+          right: '-15%',
+          animationDelay: '0s'
+        }} 
+        aria-hidden="true" 
+      />
+      <div 
+        className="atmospheric-orb-secondary" 
+        style={{ 
+          bottom: '5%', 
+          left: '-10%',
+          animationDelay: '-4s'
+        }} 
+        aria-hidden="true" 
+      />
+      
       {/* Static Grid Background */}
       <div className="mesh-gradient-background" aria-hidden="true" />
       
@@ -100,8 +121,8 @@ const BackgroundAnimation: React.FC = memo(() => {
         className="grid-squares-overlay"
         aria-hidden="true"
       >
-        {/* Full Grid Squares - Randomly light up (21 total) */}
-        {Array.from({ length: 21 }, (_, i) => (
+        {/* Full Grid Squares - Randomly light up (reduced to 12 for subtlety) */}
+        {Array.from({ length: 12 }, (_, i) => (
           <div
             key={`full-grid-${i}`}
             ref={(el) => { fullGridSquareRefs.current[i] = el; }}
