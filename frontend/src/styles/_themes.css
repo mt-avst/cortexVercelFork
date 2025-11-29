@@ -14,8 +14,9 @@
    Must be in themes layer to override base h1 color
    ============================================================ */
 
-.adaptalabs-home-title {
-  /* Premium gradient effect: deep orange → white */
+/* Dark Mode - AdaptaLabs Home Title Gradient */
+body.theme-dark .adaptalabs-home-title {
+  /* Premium gradient effect: deep orange → peach → white */
   background: linear-gradient(
     to right,
     #FF5A1F 0%,
@@ -27,7 +28,23 @@
   background-clip: text !important;
   -webkit-text-fill-color: transparent !important;
   color: transparent !important;
-  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.4));
+  filter: drop-shadow(0 2px 12px rgba(255, 90, 31, 0.4)) !important;
+}
+
+/* Light Mode - AdaptaLabs Home Title Gradient */
+body.theme-light .adaptalabs-home-title {
+  /* Premium gradient effect: bright orange → deep orange */
+  background: linear-gradient(
+    to right,
+    #E86C24 0%,
+    #D35F1D 50%,
+    #C54E12 100%
+  ) !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  filter: drop-shadow(0 2px 8px rgba(232, 108, 36, 0.25)) !important;
 }
 
 /* ============================================================
