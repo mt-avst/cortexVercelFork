@@ -5892,3 +5892,737 @@ body.theme-dark .calendar-day-column .calendar-timeline-container {
   animation: ambient-drift-alt 25s ease-in-out infinite;
 }
 
+/* ============================================================
+   MAD SCIENCE LANDING PAGE - Neuralink + xAI + Tony Stark Vibe
+   ============================================================ */
+
+/* Container */
+.mad-science-landing {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  background: #08080C;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Hide default background animation on landing */
+body:has(.mad-science-landing) .mesh-gradient-background,
+body:has(.mad-science-landing) .grid-squares-overlay,
+body:has(.mad-science-landing) .coral-dots-container,
+body:has(.mad-science-landing) .atmospheric-orb,
+body:has(.mad-science-landing) .atmospheric-orb-secondary {
+  display: none !important;
+}
+
+/* Hide header on landing page for full immersive experience */
+body:has(.mad-science-landing) .header {
+  display: none !important;
+}
+
+/* Neural Particle Field Canvas */
+.neural-particle-field {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Cinematic Gradient Overlays */
+.cinematic-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.gradient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  opacity: 0.4;
+}
+
+.gradient-orb-1 {
+  width: 800px;
+  height: 800px;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+  top: -20%;
+  right: -10%;
+  animation: orb-drift-1 25s ease-in-out infinite;
+}
+
+.gradient-orb-2 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(255, 90, 31, 0.35) 0%, transparent 70%);
+  bottom: -15%;
+  left: -5%;
+  animation: orb-drift-2 30s ease-in-out infinite;
+}
+
+.gradient-orb-3 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, transparent 70%);
+  top: 40%;
+  left: 30%;
+  animation: orb-drift-3 20s ease-in-out infinite;
+}
+
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-50px, 30px) scale(1.1); }
+  66% { transform: translate(30px, -20px) scale(0.95); }
+}
+
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, -30px) scale(1.05); }
+}
+
+@keyframes orb-drift-3 {
+  0%, 100% { transform: translate(0, 0); opacity: 0.3; }
+  50% { transform: translate(-30px, 20px); opacity: 0.5; }
+}
+
+/* Main Content */
+.mad-science-content {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  text-align: center;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ============================================================
+   BEAKER LOGO - Animated Lab Equipment
+   ============================================================ */
+
+.logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.beaker-logo-container {
+  position: relative;
+  width: 280px;
+  height: 380px;
+}
+
+.beaker-logo-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 0 30px rgba(139, 92, 246, 0.4));
+}
+
+/* Beaker ambient glow */
+.beaker-ambient-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 350px;
+  height: 450px;
+  background: radial-gradient(ellipse, rgba(139, 92, 246, 0.15) 0%, rgba(255, 90, 31, 0.1) 40%, transparent 70%);
+  filter: blur(40px);
+  z-index: -1;
+  animation: beaker-pulse 4s ease-in-out infinite;
+}
+
+@keyframes beaker-pulse {
+  0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.9; transform: translate(-50%, -50%) scale(1.05); }
+}
+
+/* Liquid wave animation */
+.liquid-wave {
+  animation: liquid-wave-motion 3s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+@keyframes liquid-wave-motion {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.02); }
+}
+
+/* Bubble animations */
+.bubble {
+  animation: bubble-rise 4s ease-in-out infinite;
+}
+
+.bubble-1 { animation-delay: 0s; animation-duration: 3.5s; }
+.bubble-2 { animation-delay: 0.5s; animation-duration: 4s; }
+.bubble-3 { animation-delay: 1s; animation-duration: 3.8s; }
+.bubble-4 { animation-delay: 0.3s; animation-duration: 4.2s; }
+.bubble-5 { animation-delay: 1.5s; animation-duration: 3.3s; }
+.bubble-6 { animation-delay: 0.8s; animation-duration: 4.5s; }
+.bubble-7 { animation-delay: 2s; animation-duration: 3.6s; }
+.bubble-8 { animation-delay: 1.2s; animation-duration: 3.9s; }
+
+@keyframes bubble-rise {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-60px) scale(1.2);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateY(-120px) scale(0.5);
+    opacity: 0;
+  }
+}
+
+/* Neural network animations */
+.neural-node {
+  animation: node-pulse 2s ease-in-out infinite;
+}
+
+.nn-1 { animation-delay: 0s; }
+.nn-2 { animation-delay: 0.3s; }
+.nn-3 { animation-delay: 0.6s; }
+.nn-4 { animation-delay: 0.9s; }
+.nn-5 { animation-delay: 1.2s; }
+.nn-6 { animation-delay: 1.5s; }
+.nn-7 { animation-delay: 1.8s; }
+
+@keyframes node-pulse {
+  0%, 100% { opacity: 0.8; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+.neural-connection {
+  animation: connection-pulse 3s ease-in-out infinite;
+}
+
+.nc-1 { animation-delay: 0s; }
+.nc-2 { animation-delay: 0.4s; }
+.nc-3 { animation-delay: 0.8s; }
+.nc-4 { animation-delay: 1.2s; }
+.nc-5 { animation-delay: 1.6s; }
+.nc-6 { animation-delay: 2s; }
+.nc-7 { animation-delay: 2.4s; }
+.nc-8 { animation-delay: 2.8s; }
+
+@keyframes connection-pulse {
+  0%, 100% { opacity: 0.4; stroke-width: 1; }
+  50% { opacity: 0.8; stroke-width: 2; }
+}
+
+/* Logo text beside beaker */
+.logo-text {
+  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-top: -1rem;
+}
+
+.logo-adapta {
+  color: #FFFFFF;
+}
+
+.logo-labs {
+  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 50%, #FF5A1F 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ============================================================
+   HEADLINE - Chromatic Aberration Effect
+   ============================================================ */
+
+.headline-section {
+  margin-bottom: 3rem;
+  position: relative;
+}
+
+.mad-headline {
+  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  position: relative;
+  margin: 0 0 1.5rem 0;
+}
+
+/* Chromatic aberration layers */
+.headline-layer {
+  display: block;
+}
+
+.headline-cyan {
+  position: absolute;
+  top: 0;
+  left: -3px;
+  color: #00FFFF;
+  opacity: 0.4;
+  animation: glitch-cyan 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.headline-red {
+  position: absolute;
+  top: 0;
+  left: 3px;
+  color: #FF0040;
+  opacity: 0.4;
+  animation: glitch-red 8s ease-in-out infinite;
+  animation-delay: 0.1s;
+  pointer-events: none;
+}
+
+.headline-main {
+  position: relative;
+  color: #FFFFFF;
+  text-shadow: 
+    0 0 40px rgba(139, 92, 246, 0.3),
+    0 0 80px rgba(255, 90, 31, 0.2);
+}
+
+@keyframes glitch-cyan {
+  0%, 90%, 100% { transform: translate(0, 0); opacity: 0.4; }
+  92% { transform: translate(-2px, 1px); opacity: 0.6; }
+  94% { transform: translate(2px, -1px); opacity: 0.3; }
+  96% { transform: translate(-1px, 2px); opacity: 0.5; }
+  98% { transform: translate(1px, -2px); opacity: 0.4; }
+}
+
+@keyframes glitch-red {
+  0%, 90%, 100% { transform: translate(0, 0); opacity: 0.4; }
+  91% { transform: translate(2px, -1px); opacity: 0.5; }
+  93% { transform: translate(-2px, 2px); opacity: 0.3; }
+  95% { transform: translate(1px, -2px); opacity: 0.6; }
+  97% { transform: translate(-1px, 1px); opacity: 0.4; }
+}
+
+.mad-subheadline {
+  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* ============================================================
+   BLOB CTA BUTTON - Organic Glowing Shape
+   ============================================================ */
+
+.cta-section {
+  margin-bottom: 3rem;
+}
+
+.blob-cta {
+  position: relative;
+  padding: 1.25rem 3rem;
+  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: #FFFFFF;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  overflow: visible;
+  transition: transform 0.3s ease;
+}
+
+.blob-cta:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.blob-cta:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.blob-cta:focus {
+  outline: none;
+}
+
+.blob-cta:focus-visible {
+  outline: 2px solid #8B5CF6;
+  outline-offset: 4px;
+  border-radius: 30px;
+}
+
+/* Blob background shape */
+.blob-bg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 110%;
+  height: 140%;
+  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 40%, #FF5A1F 100%);
+  border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
+  animation: blob-morph 8s ease-in-out infinite;
+  z-index: -2;
+}
+
+/* Blob glow effect */
+.blob-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 130%;
+  height: 160%;
+  background: radial-gradient(ellipse, rgba(139, 92, 246, 0.6) 0%, rgba(255, 90, 31, 0.3) 50%, transparent 70%);
+  border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
+  filter: blur(25px);
+  animation: blob-morph 8s ease-in-out infinite, glow-pulse 3s ease-in-out infinite;
+  z-index: -3;
+}
+
+@keyframes blob-morph {
+  0%, 100% {
+    border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
+  }
+  25% {
+    border-radius: 45% 55% 40% 60% / 60% 45% 55% 40%;
+  }
+  50% {
+    border-radius: 55% 45% 60% 40% / 40% 55% 45% 60%;
+  }
+  75% {
+    border-radius: 40% 60% 45% 55% / 55% 40% 60% 45%;
+  }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.blob-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.blob-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.arrow-icon {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.3s ease;
+}
+
+.blob-cta:hover .arrow-icon {
+  transform: translateX(4px);
+}
+
+/* ============================================================
+   DEMO PILLS - Glowing Role Buttons
+   ============================================================ */
+
+.demo-pills-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.demo-label {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.demo-pills {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.demo-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  font-family: 'Clash Grotesk', 'Inter', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 50px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.demo-pill:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+}
+
+.demo-pill:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.demo-pill:focus {
+  outline: none;
+}
+
+.demo-pill:focus-visible {
+  outline: 2px solid #8B5CF6;
+  outline-offset: 2px;
+}
+
+/* Pill glow effect */
+.pill-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 50px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 0;
+}
+
+.demo-pill:hover .pill-glow {
+  opacity: 1;
+}
+
+/* Individual pill colors */
+.demo-pill-user .pill-glow {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+}
+
+.demo-pill-admin .pill-glow {
+  background: linear-gradient(135deg, rgba(255, 122, 51, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(255, 122, 51, 0.3);
+}
+
+.demo-pill-super .pill-glow {
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+}
+
+.pill-icon {
+  font-size: 1.1rem;
+  z-index: 1;
+}
+
+.pill-text {
+  z-index: 1;
+}
+
+/* ============================================================
+   LANDING FOOTER
+   ============================================================ */
+
+.landing-footer {
+  margin-top: auto;
+  padding-top: 2rem;
+}
+
+.footer-text {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: #8B5CF6;
+  border-radius: 50%;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { 
+    opacity: 0.5; 
+    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5);
+  }
+  50% { 
+    opacity: 1; 
+    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);
+  }
+}
+
+/* ============================================================
+   MAD SCIENCE LANDING - Responsive
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .mad-science-content {
+    padding: 1.5rem;
+  }
+
+  .beaker-logo-container {
+    width: 200px;
+    height: 270px;
+  }
+
+  .logo-text {
+    font-size: 1.75rem;
+  }
+
+  .headline-section {
+    margin-bottom: 2rem;
+  }
+
+  .mad-headline {
+    font-size: 2rem;
+  }
+
+  .headline-cyan,
+  .headline-red {
+    left: -2px;
+  }
+
+  .headline-red {
+    left: 2px;
+  }
+
+  .mad-subheadline {
+    font-size: 1.25rem;
+  }
+
+  .blob-cta {
+    padding: 1rem 2.5rem;
+    font-size: 1.15rem;
+  }
+
+  .demo-pills {
+    gap: 0.75rem;
+  }
+
+  .demo-pill {
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+  }
+
+  .gradient-orb-1 {
+    width: 500px;
+    height: 500px;
+  }
+
+  .gradient-orb-2 {
+    width: 400px;
+    height: 400px;
+  }
+
+  .gradient-orb-3 {
+    width: 250px;
+    height: 250px;
+  }
+}
+
+@media (max-width: 480px) {
+  .beaker-logo-container {
+    width: 160px;
+    height: 220px;
+  }
+
+  .logo-text {
+    font-size: 1.5rem;
+    margin-top: -0.5rem;
+  }
+
+  .mad-headline {
+    font-size: 1.6rem;
+  }
+
+  .mad-subheadline {
+    font-size: 1.1rem;
+  }
+
+  .blob-cta {
+    padding: 0.875rem 2rem;
+    font-size: 1rem;
+  }
+
+  .demo-pills {
+    flex-direction: column;
+    width: 100%;
+    max-width: 200px;
+  }
+
+  .demo-pill {
+    justify-content: center;
+    width: 100%;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .neural-particle-field {
+    display: none;
+  }
+
+  .gradient-orb,
+  .blob-bg,
+  .blob-glow,
+  .bubble,
+  .neural-node,
+  .neural-connection,
+  .headline-cyan,
+  .headline-red,
+  .beaker-ambient-glow,
+  .pulse-dot {
+    animation: none;
+  }
+
+  .blob-bg {
+    border-radius: 50px;
+  }
+
+  .headline-cyan,
+  .headline-red {
+    opacity: 0;
+  }
+}
+
