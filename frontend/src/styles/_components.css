@@ -1471,17 +1471,13 @@ a.dropdown-item:hover {
   overflow: visible;
 }
 
-/* Landing page transparent header */
+/* Landing page header - base positioning */
 body.landing-page .header,
 .landing-page .header {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  background: transparent;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 body.landing-page .header .logo-image,

@@ -288,6 +288,25 @@ body.theme-dark .header {
   background: transparent;
 }
 
+/* Landing Page Header - Dark Mode (fully transparent, no blur) */
+body.theme-dark.landing-page .header,
+body.theme-dark .landing-page .header {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: none;
+  box-shadow: none;
+}
+
+/* Landing Page Header - Light Mode (subtle glass effect) */
+body.theme-light.landing-page .header,
+body.theme-light .landing-page .header {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
 /* Header - Light Mode (match page background) */
 body.theme-light .header {
   background: var(--bg-app-gradient-top);
