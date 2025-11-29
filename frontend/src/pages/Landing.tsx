@@ -201,11 +201,14 @@ const Landing: React.FC = memo(() => {
         {/* Hero Stack - Optical Center */}
         <div style={styles.heroStack}>
           {/* Shadow Shield - inside hero, always centered on text */}
+          {/* Subtler gradient: 85% center opacity, tighter spread, visible neural network behind */}
           <div 
             style={{
               ...styles.shadowShield,
+              width: '120%',
+              height: '120%',
               background: isDark 
-                ? 'radial-gradient(closest-side, #030305 50%, rgba(3,3,5, 0.8) 80%, transparent 100%)' 
+                ? 'radial-gradient(closest-side, rgba(3,3,5, 0.85) 20%, rgba(3,3,5, 0.4) 50%, transparent 80%)' 
                 : 'none',
             }} 
           />
