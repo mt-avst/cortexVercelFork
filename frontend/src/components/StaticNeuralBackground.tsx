@@ -31,7 +31,6 @@ const StaticNeuralBackground: React.FC = () => {
 
       // Configuration
       const NODE_COUNT = 80;
-      const GRID_SIZE = 20; // 20px x 20px grid
       const NODE_RADIUS = 2.5; // Small filled circles
       const CONNECTION_DISTANCE = 120; // Max distance for connections
       const CENTER_X = canvas.width / 2;
@@ -76,23 +75,8 @@ const StaticNeuralBackground: React.FC = () => {
         nodes.push({ x, y, isOrange });
       }
 
-      // Draw grid (extremely faint)
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)'; // Very subtle slate-300
-      ctx.lineWidth = 0.5;
-      
-      for (let x = 0; x < canvas.width; x += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, canvas.height);
-        ctx.stroke();
-      }
-      
-      for (let y = 0; y < canvas.height; y += GRID_SIZE) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(canvas.width, y);
-        ctx.stroke();
-      }
+      // Grid is now handled by Landing.tsx CSS (orange grid)
+      // Only draw nodes and connections here
 
       // Draw connections between nearby nodes
       ctx.strokeStyle = 'rgba(100, 116, 139, 0.1)'; // Very faint grey
@@ -145,8 +129,8 @@ const StaticNeuralBackground: React.FC = () => {
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 w-full h-full -z-10"
-      style={{ background: 'transparent' }}
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      style={{ background: 'transparent', zIndex: 1 }}
       aria-hidden="true"
     />
   );

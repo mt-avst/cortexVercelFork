@@ -54,11 +54,11 @@ const Landing: React.FC = memo(() => {
         background: '#030305',
       };
     }
-    // Light mode: Dashboard grid pattern (24px graph paper)
+    // Light mode: Orange grid pattern (24px, Adaptavist Orange at 5% opacity)
     return {
       ...styles.pageWrapper,
       background: '#f8fafc',
-      backgroundImage: 'linear-gradient(to right, #80808012 1px, transparent 1px), linear-gradient(to bottom, #80808012 1px, transparent 1px)',
+      backgroundImage: 'linear-gradient(to right, rgba(255,85,0,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,85,0,0.05) 1px, transparent 1px)',
       backgroundSize: '24px 24px',
     };
   };
@@ -201,14 +201,14 @@ const Landing: React.FC = memo(() => {
         {/* Hero Stack - Optical Center */}
         <div style={styles.heroStack}>
           {/* Shadow Shield - inside hero, always centered on text */}
-          {/* Subtler gradient: 85% center opacity, tighter spread, visible neural network behind */}
+          {/* Smooth circular gradient: no hard edges, spreads to full screen */}
           <div 
             style={{
               ...styles.shadowShield,
-              width: '120%',
-              height: '120%',
+              width: '200%',
+              height: '200%',
               background: isDark 
-                ? 'radial-gradient(closest-side, rgba(3,3,5, 0.85) 20%, rgba(3,3,5, 0.4) 50%, transparent 80%)' 
+                ? 'radial-gradient(circle at center, rgba(3,3,5, 0.85) 0%, rgba(3,3,5, 0.5) 50%, transparent 100%)' 
                 : 'none',
             }} 
           />
