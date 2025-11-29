@@ -4310,12 +4310,13 @@ body.theme-dark .legend-label-booked {
 
 /* AdaptaLabs Home Title - Typography & Layout Only */
 /* Gradient effect is defined in _themes.css for highest priority */
+/* Font-size/weight aligned with .hero-title-large for consistent gradient visibility */
 .adaptalabs-home-title {
   margin-bottom: 24px;
-  font-size: clamp(2.5rem, 8vw, 3.5rem);
-  font-weight: 800;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+  font-size: clamp(2.75rem, 10vw, 4.5rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 /* Home Page Intro Text Block */
