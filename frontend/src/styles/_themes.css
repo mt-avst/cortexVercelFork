@@ -504,13 +504,13 @@ body.theme-light .coral-dots-container {
   display: none;
 }
 
-/* Light mode static grid - orange color */
+/* Light mode static grid - nearly invisible */
 .mesh-gradient-light {
   background-image:
-    linear-gradient(rgba(232, 108, 36, 0.15) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 108, 36, 0.15) 1px, transparent 1px);
+    linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
   background-size: 80px 80px;
-  opacity: 0.6;
+  opacity: 1;
 }
 
 /* ============================================================

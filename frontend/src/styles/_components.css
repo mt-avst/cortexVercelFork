@@ -4453,3 +4453,317 @@ body.theme-light .card.card-clickable:hover {
   box-shadow: 0 0 0 1px var(--lozenge-question-text);
 }
 
+/* ============================================================
+   MY BOOKINGS - Card Variants & Polish
+   ============================================================ */
+
+/* Upcoming Booking Cards - Visual Hierarchy */
+.booking-card-upcoming {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--brand-primary);
+  box-shadow: 0 0 12px rgba(255, 78, 80, 0.15);
+  transition: transform var(--transition-card), box-shadow var(--transition-card);
+}
+
+.booking-card-upcoming:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 0 16px rgba(255, 78, 80, 0.25);
+}
+
+body.theme-light .booking-card-upcoming {
+  background: #FFFFFF;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+body.theme-light .booking-card-upcoming:hover {
+  border-color: var(--brand-primary);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+}
+
+/* Past Booking Cards - Archival State */
+.booking-card-past {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+
+.booking-card-past:hover {
+  transform: none;
+  box-shadow: var(--shadow-card);
+}
+
+/* Past cards in Light Mode - archive styling with readable text */
+body.theme-light .booking-card-past {
+  opacity: 0.85;
+  filter: grayscale(100%);
+  background: transparent;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: none;
+}
+
+body.theme-light .booking-card-past:hover {
+  opacity: 0.95;
+  filter: grayscale(80%);
+}
+
+/* ============================================================
+   MY BOOKINGS - Empty State
+   ============================================================ */
+
+.empty-state-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1.5rem;
+  text-align: center;
+}
+
+.empty-state-icon {
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 1rem;
+}
+
+body.theme-light .empty-state-icon {
+  color: #CBD5E1;
+}
+
+.empty-state-title {
+  color: #FFFFFF;
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+body.theme-light .empty-state-title {
+  color: #1E293B;
+}
+
+.empty-state-subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9375rem;
+  margin-bottom: 0;
+}
+
+body.theme-light .empty-state-subtitle {
+  color: #64748B;
+}
+
+/* ============================================================
+   MY BOOKINGS - Typography & Layout
+   ============================================================ */
+
+/* Booking Details Container */
+.booking-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.booking-details-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+/* Booking Labels - Muted */
+.booking-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 500;
+  font-size: 0.875rem;
+  min-width: 5.5rem;
+}
+
+body.theme-light .booking-label {
+  color: #64748B;
+}
+
+/* Booking Values - Bright */
+.booking-value {
+  color: #FFFFFF;
+  font-size: 0.875rem;
+}
+
+body.theme-light .booking-value {
+  color: #0F172A;
+}
+
+/* ============================================================
+   MY BOOKINGS - Meeting Links
+   ============================================================ */
+
+.meeting-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  color: #60A5FA;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color var(--transition-fast), text-decoration var(--transition-fast);
+}
+
+.meeting-link:hover {
+  color: #93C5FD;
+  text-decoration: underline;
+}
+
+.meeting-link svg {
+  flex-shrink: 0;
+}
+
+body.theme-light .meeting-link {
+  color: #2563EB;
+  font-weight: 600;
+}
+
+body.theme-light .meeting-link:hover {
+  color: #1D4ED8;
+  text-decoration: underline;
+}
+
+/* ============================================================
+   MY BOOKINGS - Buttons (Filled Style)
+   ============================================================ */
+
+/* Cancel Button */
+.btn-booking-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-button), color var(--transition-button);
+  background: rgba(220, 53, 69, 0.15);
+  color: #ff6b6b;
+}
+
+.btn-booking-cancel:hover:not(:disabled) {
+  background: rgba(220, 53, 69, 0.25);
+  color: #ff8585;
+}
+
+.btn-booking-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+body.theme-light .btn-booking-cancel {
+  background: #FEE2E2;
+  color: #DC2626;
+}
+
+body.theme-light .btn-booking-cancel:hover:not(:disabled) {
+  background: #FECACA;
+  color: #B91C1C;
+}
+
+/* Reschedule Button */
+.btn-booking-reschedule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.875rem;
+  border: none;
+  cursor: pointer;
+  transition: background var(--transition-button), color var(--transition-button);
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}
+
+.btn-booking-reschedule:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
+}
+
+.btn-booking-reschedule:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+body.theme-light .btn-booking-reschedule {
+  background: #F1F5F9;
+  color: #334155;
+}
+
+body.theme-light .btn-booking-reschedule:hover:not(:disabled) {
+  background: #E2E8F0;
+  color: #1E293B;
+}
+
+/* ============================================================
+   MY BOOKINGS - Badges (Premium Polish)
+   ============================================================ */
+
+.booking-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 0.375rem;
+  line-height: 1.4;
+}
+
+/* Status Badges */
+.booking-badge-cancelled {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9CA3AF;
+}
+
+body.theme-light .booking-badge-cancelled {
+  background: #F3F4F6;
+  color: #4B5563;
+}
+
+.booking-badge-upcoming {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ADE80;
+}
+
+body.theme-light .booking-badge-upcoming {
+  background: #DCFCE7;
+  color: #16A34A;
+}
+
+/* Type Badges */
+.booking-badge-test {
+  background: rgba(77, 208, 225, 0.15);
+  color: #4DD0E1;
+}
+
+body.theme-light .booking-badge-test {
+  background: #E0F7FA;
+  color: #00838F;
+}
+
+.booking-badge-poll {
+  background: rgba(255, 171, 145, 0.15);
+  color: #FFAB91;
+}
+
+body.theme-light .booking-badge-poll {
+  background: #FBE9E7;
+  color: #BF360C;
+}
+
+.booking-badge-survey {
+  background: rgba(105, 240, 174, 0.15);
+  color: #69F0AE;
+}
+
+body.theme-light .booking-badge-survey {
+  background: #E0F2F1;
+  color: #00695C;
+}
+

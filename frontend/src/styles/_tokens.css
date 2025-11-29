@@ -44,9 +44,9 @@
   --brand-gradient: linear-gradient(135deg, #FF4E50 0%, #FF7A33 100%);
 
   /* CTA (Call to Action) Colors */
-  --cta-bg: transparent;
-  --cta-bg-hover: #FF4E50;
-  --cta-text: #FF4E50;
+  --cta-bg: #FF4E50;
+  --cta-bg-hover: #ff6264;
+  --cta-text: #FFFFFF;
   --cta-text-hover: #FFFFFF;
   --cta-border: #FF4E50;
 

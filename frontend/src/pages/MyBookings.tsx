@@ -4,8 +4,8 @@ import { getMyBookings, cancelBooking, rescheduleBooking } from '../api/client';
 import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Badge, Alert, Spinner } from '../components/ui';
-import { ArrowLeft, RefreshCw } from 'lucide-react';
+import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
+import { ArrowLeft, RefreshCw, ExternalLink, CalendarX } from 'lucide-react';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
@@ -120,10 +120,7 @@ const MyBookings: React.FC = () => {
     setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
   };
 
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
+  // Date formatting helpers
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString();
   };
@@ -132,27 +129,82 @@ const MyBookings: React.FC = () => {
     return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Human-readable date format: "Nov 25, 2:29 PM"
+  const formatHumanDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(date);
+  };
+
+  // URL detection helper
+  const isUrl = (str: string): boolean => {
+    if (!str) return false;
+    return (
+      str.startsWith('http://') ||
+      str.startsWith('https://') ||
+      str.includes('meet.google.com') ||
+      str.includes('zoom.us') ||
+      str.includes('teams.microsoft.com')
+    );
+  };
+
+  // Get meeting platform name from URL
+  const getMeetingPlatform = (url: string): string => {
+    if (url.includes('meet.google.com')) return 'Join via Google Meet';
+    if (url.includes('zoom.us')) return 'Join via Zoom';
+    if (url.includes('teams.microsoft.com')) return 'Join via Teams';
+    return 'Join Meeting';
+  };
+
+  // Render location as link or text
+  const renderLocation = (location: string | null | undefined) => {
+    if (!location) return null;
+    
+    if (isUrl(location)) {
+      return (
+        <a 
+          href={location} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="meeting-link"
+        >
+          {getMeetingPlatform(location)}
+          <ExternalLink size={14} />
+        </a>
+      );
+    }
+    
+    return <span className="booking-value">{location}</span>;
+  };
+
+  // Status badge with premium styling
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'booked':
         return null; // Don't show "Booked" badge
       case 'cancelled':
-        return <Badge variant="secondary">Cancelled</Badge>;
+        return <span className="booking-badge booking-badge-cancelled">Cancelled</span>;
       default:
-        return <Badge>{status}</Badge>;
+        return <span className="booking-badge">{status}</span>;
     }
   };
 
+  // Type badge with premium styling
   const getTypeBadge = (type: string) => {
     switch (type) {
       case 'test':
-        return <Badge className="ms-2">Test</Badge>;
+        return <span className="booking-badge booking-badge-test ms-2">Test</span>;
       case 'poll':
-        return <Badge variant="info" className="ms-2">Poll</Badge>;
+        return <span className="booking-badge booking-badge-poll ms-2">Poll</span>;
       case 'survey':
-        return <Badge variant="warning" className="ms-2">Survey</Badge>;
+        return <span className="booking-badge booking-badge-survey ms-2">Survey</span>;
       default:
-        return <Badge className="ms-2">{type}</Badge>;
+        return <span className="booking-badge ms-2">{type}</span>;
     }
   };
 
@@ -222,14 +274,23 @@ const MyBookings: React.FC = () => {
           <h4>Upcoming Bookings</h4>
           {bookings.upcoming.length === 0 ? (
             <Card>
-              <CardBody className="text-center text-muted">
-                <p>No upcoming bookings</p>
+              <CardBody className="empty-state-container">
+                <CalendarX size={48} className="empty-state-icon" />
+                <h5 className="empty-state-title">No upcoming sessions</h5>
+                <p className="empty-state-subtitle">Check the dashboard to find new activities.</p>
+                <Button
+                  variant="primary"
+                  onClick={() => navigate('/')}
+                  className="mt-3"
+                >
+                  Browse Activities
+                </Button>
               </CardBody>
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {bookings.upcoming.map((booking) => (
-                <Card key={booking.id}>
+                <Card key={booking.id} className="booking-card-upcoming">
                   <CardHeader className="flex justify-between items-center">
                     <div>
                       {getStatusBadge(booking.status)}
@@ -241,34 +302,43 @@ const MyBookings: React.FC = () => {
                     <p className="text-sm text-muted">
                       {booking.opportunity_purpose}
                     </p>
-                    <div className="text-sm">
-                      <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
-                      <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
+                    <div className="booking-details">
+                      <div className="booking-details-row">
+                        <span className="booking-label">Date:</span>
+                        <span className="booking-value">{formatDate(booking.session_start_time)}</span>
+                      </div>
+                      <div className="booking-details-row">
+                        <span className="booking-label">Time:</span>
+                        <span className="booking-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</span>
+                      </div>
                       {booking.session_location && (
-                        <div><strong>Location:</strong> {booking.session_location}</div>
+                        <div className="booking-details-row">
+                          <span className="booking-label">Location:</span>
+                          {renderLocation(booking.session_location)}
+                        </div>
                       )}
-                      <div><strong>Owner:</strong> {booking.owner_name}</div>
+                      <div className="booking-details-row">
+                        <span className="booking-label">Owner:</span>
+                        <span className="booking-value">{booking.owner_name}</span>
+                      </div>
                     </div>
                   </CardBody>
                   <CardFooter>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline-danger"
-                        size="sm"
+                      <button
+                        className="btn-booking-cancel"
                         onClick={() => handleCancelBooking(booking.id)}
                         disabled={actionLoading === booking.id}
-                        loading={actionLoading === booking.id}
                       >
-                        Cancel
-                      </Button>
+                        {actionLoading === booking.id ? 'Cancelling...' : 'Cancel'}
+                      </button>
                       {/* Reschedule functionality will be implemented in a future release */}
-                      <Button
-                        variant="outline-primary"
-                        size="sm"
+                      <button
+                        className="btn-booking-reschedule"
                         disabled
                       >
                         Reschedule
-                      </Button>
+                      </button>
                     </div>
                   </CardFooter>
                 </Card>
@@ -279,7 +349,7 @@ const MyBookings: React.FC = () => {
       </div>
 
       {/* Past Bookings */}
-      <div className="row mt-5">
+      <div className="row mt-12">
         <div className="col">
           <h4>Past Bookings</h4>
           {bookings.past.length === 0 ? (
@@ -291,7 +361,7 @@ const MyBookings: React.FC = () => {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {bookings.past.map((booking) => (
-                <Card key={booking.id} className="opacity-75">
+                <Card key={booking.id} className="booking-card-past">
                   <CardHeader className="flex justify-between items-center">
                     <div>
                       {getStatusBadge(booking.status)}
@@ -303,15 +373,30 @@ const MyBookings: React.FC = () => {
                     <p className="text-sm text-muted">
                       {booking.opportunity_purpose}
                     </p>
-                    <div className="text-sm">
-                      <div><strong>Date:</strong> {formatDate(booking.session_start_time)}</div>
-                      <div><strong>Time:</strong> {formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</div>
+                    <div className="booking-details">
+                      <div className="booking-details-row">
+                        <span className="booking-label">Date:</span>
+                        <span className="booking-value">{formatDate(booking.session_start_time)}</span>
+                      </div>
+                      <div className="booking-details-row">
+                        <span className="booking-label">Time:</span>
+                        <span className="booking-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</span>
+                      </div>
                       {booking.session_location && (
-                        <div><strong>Location:</strong> {booking.session_location}</div>
+                        <div className="booking-details-row">
+                          <span className="booking-label">Location:</span>
+                          {renderLocation(booking.session_location)}
+                        </div>
                       )}
-                      <div><strong>Owner:</strong> {booking.owner_name}</div>
+                      <div className="booking-details-row">
+                        <span className="booking-label">Owner:</span>
+                        <span className="booking-value">{booking.owner_name}</span>
+                      </div>
                       {booking.cancelled_at && (
-                        <div><strong>Cancelled:</strong> {formatDateTime(booking.cancelled_at)}</div>
+                        <div className="booking-details-row">
+                          <span className="booking-label">Cancelled:</span>
+                          <span className="booking-value">{formatHumanDate(booking.cancelled_at)}</span>
+                        </div>
                       )}
                     </div>
                   </CardBody>
