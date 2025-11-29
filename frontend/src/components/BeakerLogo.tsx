@@ -15,11 +15,12 @@ const BeakerLogo: React.FC = memo(() => {
         xmlns="http://www.w3.org/2000/svg"
       >
         <defs>
-          {/* Liquid gradient */}
+          {/* Liquid gradient - Adaptavist orange palette */}
           <linearGradient id="liquidGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#8B5CF6" stopOpacity="0.9" />
-            <stop offset="50%" stopColor="#A855F7" stopOpacity="0.7" />
-            <stop offset="100%" stopColor="#FF5A1F" stopOpacity="0.5" />
+            <stop offset="0%" stopColor="#CC4A15" stopOpacity="0.95" />
+            <stop offset="40%" stopColor="#FF5A1F" stopOpacity="0.85" />
+            <stop offset="70%" stopColor="#FF7A33" stopOpacity="0.7" />
+            <stop offset="100%" stopColor="#FFAA66" stopOpacity="0.5" />
           </linearGradient>
           
           {/* Glow filter */}
@@ -108,26 +109,26 @@ const BeakerLogo: React.FC = memo(() => {
           </g>
         </g>
 
-        {/* Neural network inside beaker */}
+        {/* Neural network inside beaker - orange palette */}
         <g className="neural-network" filter="url(#neuralGlow)">
           {/* Neural connections */}
           <line className="neural-connection nc-1" x1="75" y1="160" x2="100" y2="140" stroke="#FF5A1F" strokeWidth="1.5" opacity="0.7" />
-          <line className="neural-connection nc-2" x1="100" y1="140" x2="125" y2="155" stroke="#8B5CF6" strokeWidth="1.5" opacity="0.7" />
-          <line className="neural-connection nc-3" x1="100" y1="140" x2="85" y2="180" stroke="#FF7A45" strokeWidth="1.5" opacity="0.6" />
-          <line className="neural-connection nc-4" x1="125" y1="155" x2="110" y2="190" stroke="#A855F7" strokeWidth="1.5" opacity="0.7" />
+          <line className="neural-connection nc-2" x1="100" y1="140" x2="125" y2="155" stroke="#FF7A33" strokeWidth="1.5" opacity="0.7" />
+          <line className="neural-connection nc-3" x1="100" y1="140" x2="85" y2="180" stroke="#FF4E50" strokeWidth="1.5" opacity="0.6" />
+          <line className="neural-connection nc-4" x1="125" y1="155" x2="110" y2="190" stroke="#E86C24" strokeWidth="1.5" opacity="0.7" />
           <line className="neural-connection nc-5" x1="85" y1="180" x2="110" y2="190" stroke="#FF5A1F" strokeWidth="1.5" opacity="0.6" />
-          <line className="neural-connection nc-6" x1="75" y1="160" x2="65" y2="195" stroke="#8B5CF6" strokeWidth="1" opacity="0.5" />
+          <line className="neural-connection nc-6" x1="75" y1="160" x2="65" y2="195" stroke="#CC4A15" strokeWidth="1" opacity="0.5" />
           <line className="neural-connection nc-7" x1="65" y1="195" x2="85" y2="180" stroke="#FF7A45" strokeWidth="1" opacity="0.5" />
-          <line className="neural-connection nc-8" x1="125" y1="155" x2="135" y2="185" stroke="#A855F7" strokeWidth="1" opacity="0.5" />
+          <line className="neural-connection nc-8" x1="125" y1="155" x2="135" y2="185" stroke="#FF6B35" strokeWidth="1" opacity="0.5" />
           
           {/* Neural nodes */}
           <circle className="neural-node nn-1" cx="75" cy="160" r="6" fill="#FF5A1F" />
-          <circle className="neural-node nn-2" cx="100" cy="140" r="8" fill="#8B5CF6" />
-          <circle className="neural-node nn-3" cx="125" cy="155" r="6" fill="#A855F7" />
+          <circle className="neural-node nn-2" cx="100" cy="140" r="8" fill="#FF4E50" />
+          <circle className="neural-node nn-3" cx="125" cy="155" r="6" fill="#FF7A33" />
           <circle className="neural-node nn-4" cx="85" cy="180" r="5" fill="#FF7A45" />
-          <circle className="neural-node nn-5" cx="110" cy="190" r="7" fill="#FF5A1F" />
-          <circle className="neural-node nn-6" cx="65" cy="195" r="4" fill="#8B5CF6" />
-          <circle className="neural-node nn-7" cx="135" cy="185" r="4" fill="#A855F7" />
+          <circle className="neural-node nn-5" cx="110" cy="190" r="7" fill="#E86C24" />
+          <circle className="neural-node nn-6" cx="65" cy="195" r="4" fill="#CC4A15" />
+          <circle className="neural-node nn-7" cx="135" cy="185" r="4" fill="#FF6B35" />
         </g>
 
         {/* Glass highlight */}
@@ -140,8 +141,8 @@ const BeakerLogo: React.FC = memo(() => {
         />
       </svg>
       
-      {/* Ambient glow behind beaker */}
-      <div className="beaker-ambient-glow" />
+      {/* Ambient glow behind beaker - orange */}
+      <div className="beaker-ambient-glow beaker-ambient-orange" />
     </div>
   );
 });

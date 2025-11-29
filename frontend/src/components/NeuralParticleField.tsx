@@ -1,149 +1,302 @@
 import React, { useEffect, useRef, memo, useCallback } from 'react';
 
-interface Particle {
+interface Neuron {
   x: number;
   y: number;
-  vx: number;
-  vy: number;
   radius: number;
+  glowIntensity: number;
+  pulsePhase: number;
+  pulseSpeed: number;
+}
+
+interface Dendrite {
+  startX: number;
+  startY: number;
+  segments: { x: number; y: number; thickness: number }[];
   color: string;
-  connections: number[];
+  glowColor: string;
+}
+
+interface NebulaBurst {
+  x: number;
+  y: number;
+  radius: number;
+  opacity: number;
+  color: string;
+  pulsePhase: number;
 }
 
 /**
  * NeuralParticleField Component
  * 
- * Creates a slow-moving neural network visualization with:
- * - Red/orange particles with subtle glow
- * - Dynamic connection lines between nearby particles
- * - Cinematic, atmospheric effect
+ * Creates organic neural network visualization with:
+ * - Branching dendrite structures
+ * - Glowing neuron nodes
+ * - Nebula burst effects at intersections
+ * - All in Adaptavist orange/coral palette
  */
 const NeuralParticleField: React.FC = memo(() => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const particlesRef = useRef<Particle[]>([]);
+  const neuronsRef = useRef<Neuron[]>([]);
+  const dendritesRef = useRef<Dendrite[]>([]);
+  const nebulasRef = useRef<NebulaBurst[]>([]);
   const animationRef = useRef<number>(0);
-  const mouseRef = useRef({ x: 0, y: 0 });
+  const timeRef = useRef<number>(0);
 
-  const colors = [
-    'rgba(255, 78, 80, 0.8)',    // Coral red
-    'rgba(255, 122, 51, 0.8)',   // Blood orange
-    'rgba(139, 92, 246, 0.6)',   // Electric violet
-    'rgba(255, 90, 31, 0.7)',    // Deep orange
-  ];
+  // Adaptavist orange/coral palette
+  const colors = {
+    brightOrange: '#FF5A1F',
+    coral: '#FF4E50',
+    deepOrange: '#E86C24',
+    amber: '#FF7A33',
+    darkOrange: '#CC4A15',
+    bloodOrange: '#FF6B35',
+  };
 
-  const initParticles = useCallback((width: number, height: number) => {
-    const particleCount = Math.min(80, Math.floor((width * height) / 15000));
-    const particles: Particle[] = [];
+  const colorArray = Object.values(colors);
 
-    for (let i = 0; i < particleCount; i++) {
-      particles.push({
+  // Generate branching dendrite path
+  const generateDendrite = useCallback((startX: number, startY: number, angle: number, length: number, depth: number): Dendrite => {
+    const segments: { x: number; y: number; thickness: number }[] = [];
+    let x = startX;
+    let y = startY;
+    const segmentCount = Math.floor(length / 15);
+    
+    for (let i = 0; i < segmentCount; i++) {
+      // Add organic waviness
+      const waveOffset = Math.sin(i * 0.5) * 8;
+      const angleVariation = (Math.random() - 0.5) * 0.3;
+      
+      x += Math.cos(angle + angleVariation) * 15 + waveOffset * Math.cos(angle + Math.PI / 2);
+      y += Math.sin(angle + angleVariation) * 15 + waveOffset * Math.sin(angle + Math.PI / 2);
+      
+      // Thickness tapers toward end
+      const thickness = Math.max(1, (3 - depth) * (1 - i / segmentCount) * 2);
+      
+      segments.push({ x, y, thickness });
+    }
+
+    const colorIndex = Math.floor(Math.random() * colorArray.length);
+    return {
+      startX,
+      startY,
+      segments,
+      color: colorArray[colorIndex],
+      glowColor: colorArray[(colorIndex + 1) % colorArray.length],
+    };
+  }, [colorArray]);
+
+  // Initialize neural network
+  const initNeuralNetwork = useCallback((width: number, height: number) => {
+    const neurons: Neuron[] = [];
+    const dendrites: Dendrite[] = [];
+    const nebulas: NebulaBurst[] = [];
+
+    // Create main neuron clusters at corners and edges
+    const clusterPositions = [
+      { x: width * 0.05, y: height * 0.15 },
+      { x: width * 0.95, y: height * 0.1 },
+      { x: width * 0.08, y: height * 0.85 },
+      { x: width * 0.92, y: height * 0.9 },
+      { x: width * 0.15, y: height * 0.5 },
+      { x: width * 0.85, y: height * 0.45 },
+      { x: width * 0.03, y: height * 0.35 },
+      { x: width * 0.97, y: height * 0.65 },
+    ];
+
+    clusterPositions.forEach((pos, index) => {
+      // Create main neuron node
+      neurons.push({
+        x: pos.x,
+        y: pos.y,
+        radius: 8 + Math.random() * 12,
+        glowIntensity: 0.6 + Math.random() * 0.4,
+        pulsePhase: Math.random() * Math.PI * 2,
+        pulseSpeed: 0.5 + Math.random() * 0.5,
+      });
+
+      // Create nebula burst at main nodes
+      nebulas.push({
+        x: pos.x,
+        y: pos.y,
+        radius: 60 + Math.random() * 80,
+        opacity: 0.15 + Math.random() * 0.15,
+        color: colorArray[index % colorArray.length],
+        pulsePhase: Math.random() * Math.PI * 2,
+      });
+
+      // Generate dendrites branching from each neuron
+      const dendriteCount = 3 + Math.floor(Math.random() * 4);
+      for (let d = 0; d < dendriteCount; d++) {
+        // Angle pointing toward center of screen with some variation
+        const centerAngle = Math.atan2(height / 2 - pos.y, width / 2 - pos.x);
+        const spreadAngle = (Math.PI / 2) * (d / dendriteCount - 0.5) + centerAngle;
+        const length = 150 + Math.random() * 250;
+        
+        const dendrite = generateDendrite(pos.x, pos.y, spreadAngle, length, 0);
+        dendrites.push(dendrite);
+
+        // Add secondary branches
+        if (dendrite.segments.length > 3) {
+          const branchPoints = [
+            Math.floor(dendrite.segments.length * 0.3),
+            Math.floor(dendrite.segments.length * 0.6),
+          ];
+          
+          branchPoints.forEach((branchIdx) => {
+            if (dendrite.segments[branchIdx]) {
+              const branchAngle = spreadAngle + (Math.random() - 0.5) * Math.PI * 0.6;
+              const branchLength = 80 + Math.random() * 120;
+              const branch = generateDendrite(
+                dendrite.segments[branchIdx].x,
+                dendrite.segments[branchIdx].y,
+                branchAngle,
+                branchLength,
+                1
+              );
+              dendrites.push(branch);
+
+              // Small neuron at branch point
+              neurons.push({
+                x: dendrite.segments[branchIdx].x,
+                y: dendrite.segments[branchIdx].y,
+                radius: 3 + Math.random() * 4,
+                glowIntensity: 0.4 + Math.random() * 0.3,
+                pulsePhase: Math.random() * Math.PI * 2,
+                pulseSpeed: 0.8 + Math.random() * 0.4,
+              });
+            }
+          });
+        }
+
+        // Small neuron at dendrite end
+        const lastSegment = dendrite.segments[dendrite.segments.length - 1];
+        if (lastSegment) {
+          neurons.push({
+            x: lastSegment.x,
+            y: lastSegment.y,
+            radius: 2 + Math.random() * 3,
+            glowIntensity: 0.3 + Math.random() * 0.3,
+            pulsePhase: Math.random() * Math.PI * 2,
+            pulseSpeed: 1 + Math.random() * 0.5,
+          });
+        }
+      }
+    });
+
+    // Add floating smaller nebula effects
+    for (let i = 0; i < 6; i++) {
+      nebulas.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        vx: (Math.random() - 0.5) * 0.3,
-        vy: (Math.random() - 0.5) * 0.3,
-        radius: Math.random() * 2 + 1,
-        color: colors[Math.floor(Math.random() * colors.length)],
-        connections: [],
+        radius: 40 + Math.random() * 60,
+        opacity: 0.08 + Math.random() * 0.1,
+        color: colorArray[Math.floor(Math.random() * colorArray.length)],
+        pulsePhase: Math.random() * Math.PI * 2,
       });
     }
 
-    particlesRef.current = particles;
-  }, []);
+    neuronsRef.current = neurons;
+    dendritesRef.current = dendrites;
+    nebulasRef.current = nebulas;
+  }, [colorArray, generateDendrite]);
 
-  const drawParticle = useCallback((ctx: CanvasRenderingContext2D, particle: Particle) => {
-    // Outer glow
+  // Draw nebula burst effect
+  const drawNebula = useCallback((ctx: CanvasRenderingContext2D, nebula: NebulaBurst, time: number) => {
+    const pulse = Math.sin(time * 0.001 + nebula.pulsePhase) * 0.3 + 0.7;
+    const radius = nebula.radius * pulse;
+    
     const gradient = ctx.createRadialGradient(
-      particle.x, particle.y, 0,
-      particle.x, particle.y, particle.radius * 4
+      nebula.x, nebula.y, 0,
+      nebula.x, nebula.y, radius
     );
-    gradient.addColorStop(0, particle.color);
-    gradient.addColorStop(0.5, particle.color.replace('0.8', '0.2').replace('0.6', '0.15').replace('0.7', '0.17'));
+    
+    // Parse color and create gradient stops
+    gradient.addColorStop(0, nebula.color.replace(')', `, ${nebula.opacity * pulse})`).replace('rgb', 'rgba').replace('#', 'rgba(').replace(/([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})([A-Fa-f0-9]{2})/, (_, r, g, b) => 
+      `${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, ${nebula.opacity * pulse})`
+    ));
+    gradient.addColorStop(0.4, `rgba(255, 90, 31, ${nebula.opacity * 0.5 * pulse})`);
     gradient.addColorStop(1, 'transparent');
 
     ctx.beginPath();
-    ctx.arc(particle.x, particle.y, particle.radius * 4, 0, Math.PI * 2);
+    ctx.arc(nebula.x, nebula.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+  }, []);
+
+  // Draw dendrite with glow
+  const drawDendrite = useCallback((ctx: CanvasRenderingContext2D, dendrite: Dendrite, time: number) => {
+    if (dendrite.segments.length < 2) return;
+
+    // Glow layer
+    ctx.save();
+    ctx.shadowColor = dendrite.glowColor;
+    ctx.shadowBlur = 15;
+    ctx.strokeStyle = dendrite.color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(dendrite.startX, dendrite.startY);
+    
+    dendrite.segments.forEach((seg, i) => {
+      ctx.lineWidth = seg.thickness + 2;
+      ctx.lineTo(seg.x, seg.y);
+    });
+    
+    ctx.stroke();
+    ctx.restore();
+
+    // Core line
+    ctx.strokeStyle = dendrite.color;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    ctx.moveTo(dendrite.startX, dendrite.startY);
+    
+    dendrite.segments.forEach((seg) => {
+      ctx.lineWidth = seg.thickness;
+      ctx.lineTo(seg.x, seg.y);
+    });
+    
+    ctx.stroke();
+  }, []);
+
+  // Draw neuron node with glow
+  const drawNeuron = useCallback((ctx: CanvasRenderingContext2D, neuron: Neuron, time: number) => {
+    const pulse = Math.sin(time * 0.002 * neuron.pulseSpeed + neuron.pulsePhase) * 0.3 + 0.7;
+    const glowRadius = neuron.radius * 3 * pulse;
+    
+    // Outer glow
+    const gradient = ctx.createRadialGradient(
+      neuron.x, neuron.y, 0,
+      neuron.x, neuron.y, glowRadius
+    );
+    gradient.addColorStop(0, `rgba(255, 90, 31, ${neuron.glowIntensity * pulse})`);
+    gradient.addColorStop(0.3, `rgba(255, 78, 80, ${neuron.glowIntensity * 0.5 * pulse})`);
+    gradient.addColorStop(0.6, `rgba(232, 108, 36, ${neuron.glowIntensity * 0.2 * pulse})`);
+    gradient.addColorStop(1, 'transparent');
+
+    ctx.beginPath();
+    ctx.arc(neuron.x, neuron.y, glowRadius, 0, Math.PI * 2);
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Core
+    // Core with bright center
+    const coreGradient = ctx.createRadialGradient(
+      neuron.x, neuron.y, 0,
+      neuron.x, neuron.y, neuron.radius
+    );
+    coreGradient.addColorStop(0, '#FFFFFF');
+    coreGradient.addColorStop(0.3, '#FF7A33');
+    coreGradient.addColorStop(0.7, '#FF5A1F');
+    coreGradient.addColorStop(1, '#CC4A15');
+
     ctx.beginPath();
-    ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
-    ctx.fillStyle = particle.color;
+    ctx.arc(neuron.x, neuron.y, neuron.radius * pulse, 0, Math.PI * 2);
+    ctx.fillStyle = coreGradient;
     ctx.fill();
-  }, []);
-
-  const drawConnections = useCallback((ctx: CanvasRenderingContext2D, particles: Particle[]) => {
-    const connectionDistance = 150;
-    
-    for (let i = 0; i < particles.length; i++) {
-      for (let j = i + 1; j < particles.length; j++) {
-        const dx = particles[i].x - particles[j].x;
-        const dy = particles[i].y - particles[j].y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-
-        if (distance < connectionDistance) {
-          const opacity = (1 - distance / connectionDistance) * 0.3;
-          
-          // Create gradient line
-          const gradient = ctx.createLinearGradient(
-            particles[i].x, particles[i].y,
-            particles[j].x, particles[j].y
-          );
-          gradient.addColorStop(0, `rgba(255, 78, 80, ${opacity})`);
-          gradient.addColorStop(0.5, `rgba(139, 92, 246, ${opacity * 0.7})`);
-          gradient.addColorStop(1, `rgba(255, 122, 51, ${opacity})`);
-
-          ctx.beginPath();
-          ctx.moveTo(particles[i].x, particles[i].y);
-          ctx.lineTo(particles[j].x, particles[j].y);
-          ctx.strokeStyle = gradient;
-          ctx.lineWidth = opacity * 2;
-          ctx.stroke();
-        }
-      }
-    }
-  }, []);
-
-  const updateParticles = useCallback((width: number, height: number) => {
-    const particles = particlesRef.current;
-    
-    particles.forEach((particle) => {
-      // Apply slight attraction to mouse
-      const dx = mouseRef.current.x - particle.x;
-      const dy = mouseRef.current.y - particle.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      
-      if (distance < 200 && distance > 0) {
-        const force = 0.00005;
-        particle.vx += (dx / distance) * force;
-        particle.vy += (dy / distance) * force;
-      }
-
-      // Update position
-      particle.x += particle.vx;
-      particle.y += particle.vy;
-
-      // Boundary wrapping
-      if (particle.x < 0) particle.x = width;
-      if (particle.x > width) particle.x = 0;
-      if (particle.y < 0) particle.y = height;
-      if (particle.y > height) particle.y = 0;
-
-      // Damping
-      particle.vx *= 0.999;
-      particle.vy *= 0.999;
-
-      // Random drift
-      particle.vx += (Math.random() - 0.5) * 0.01;
-      particle.vy += (Math.random() - 0.5) * 0.01;
-
-      // Speed limit
-      const speed = Math.sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
-      if (speed > 0.5) {
-        particle.vx = (particle.vx / speed) * 0.5;
-        particle.vy = (particle.vy / speed) * 0.5;
-      }
-    });
   }, []);
 
   const animate = useCallback(() => {
@@ -155,20 +308,29 @@ const NeuralParticleField: React.FC = memo(() => {
 
     const width = canvas.width;
     const height = canvas.height;
+    timeRef.current += 16;
 
-    // Clear with almost-black background
-    ctx.fillStyle = 'rgba(8, 8, 12, 0.15)';
+    // Clear with very dark background
+    ctx.fillStyle = '#08080C';
     ctx.fillRect(0, 0, width, height);
 
-    updateParticles(width, height);
-    drawConnections(ctx, particlesRef.current);
-    
-    particlesRef.current.forEach((particle) => {
-      drawParticle(ctx, particle);
+    // Draw nebula bursts first (background)
+    nebulasRef.current.forEach((nebula) => {
+      drawNebula(ctx, nebula, timeRef.current);
+    });
+
+    // Draw dendrites
+    dendritesRef.current.forEach((dendrite) => {
+      drawDendrite(ctx, dendrite, timeRef.current);
+    });
+
+    // Draw neurons on top
+    neuronsRef.current.forEach((neuron) => {
+      drawNeuron(ctx, neuron, timeRef.current);
     });
 
     animationRef.current = requestAnimationFrame(animate);
-  }, [updateParticles, drawConnections, drawParticle]);
+  }, [drawNebula, drawDendrite, drawNeuron]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -177,28 +339,22 @@ const NeuralParticleField: React.FC = memo(() => {
     const handleResize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
-      initParticles(canvas.width, canvas.height);
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
+      initNeuralNetwork(canvas.width, canvas.height);
     };
 
     handleResize();
     window.addEventListener('resize', handleResize);
-    window.addEventListener('mousemove', handleMouseMove);
 
     // Start animation
     animate();
 
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', handleMouseMove);
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [initParticles, animate]);
+  }, [initNeuralNetwork, animate]);
 
   return (
     <canvas
@@ -212,4 +368,3 @@ const NeuralParticleField: React.FC = memo(() => {
 NeuralParticleField.displayName = 'NeuralParticleField';
 
 export default NeuralParticleField;
-

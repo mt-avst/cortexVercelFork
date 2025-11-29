@@ -5955,7 +5955,7 @@ body:has(.mad-science-landing) .header {
 .gradient-orb-1 {
   width: 800px;
   height: 800px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.4) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255, 78, 80, 0.25) 0%, transparent 70%);
   top: -20%;
   right: -10%;
   animation: orb-drift-1 25s ease-in-out infinite;
@@ -5964,7 +5964,7 @@ body:has(.mad-science-landing) .header {
 .gradient-orb-2 {
   width: 600px;
   height: 600px;
-  background: radial-gradient(circle, rgba(255, 90, 31, 0.35) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(255, 90, 31, 0.3) 0%, transparent 70%);
   bottom: -15%;
   left: -5%;
   animation: orb-drift-2 30s ease-in-out infinite;
@@ -5973,7 +5973,7 @@ body:has(.mad-science-landing) .header {
 .gradient-orb-3 {
   width: 400px;
   height: 400px;
-  background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(232, 108, 36, 0.2) 0%, transparent 70%);
   top: 40%;
   left: 30%;
   animation: orb-drift-3 20s ease-in-out infinite;
@@ -6032,7 +6032,7 @@ body:has(.mad-science-landing) .header {
   filter: drop-shadow(0 0 30px rgba(139, 92, 246, 0.4));
 }
 
-/* Beaker ambient glow */
+/* Beaker ambient glow - orange */
 .beaker-ambient-glow {
   position: absolute;
   top: 50%;
@@ -6040,10 +6040,14 @@ body:has(.mad-science-landing) .header {
   transform: translate(-50%, -50%);
   width: 350px;
   height: 450px;
-  background: radial-gradient(ellipse, rgba(139, 92, 246, 0.15) 0%, rgba(255, 90, 31, 0.1) 40%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.2) 0%, rgba(255, 78, 80, 0.12) 40%, transparent 70%);
   filter: blur(40px);
   z-index: -1;
   animation: beaker-pulse 4s ease-in-out infinite;
+}
+
+.beaker-ambient-orange {
+  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.25) 0%, rgba(232, 108, 36, 0.15) 40%, transparent 70%);
 }
 
 @keyframes beaker-pulse {
@@ -6141,7 +6145,7 @@ body:has(.mad-science-landing) .header {
 }
 
 .logo-labs {
-  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 50%, #FF5A1F 100%);
+  background: linear-gradient(135deg, #FF4E50 0%, #FF5A1F 50%, #E86C24 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -6196,7 +6200,7 @@ body:has(.mad-science-landing) .header {
   position: relative;
   color: #FFFFFF;
   text-shadow: 
-    0 0 40px rgba(139, 92, 246, 0.3),
+    0 0 40px rgba(255, 78, 80, 0.3),
     0 0 80px rgba(255, 90, 31, 0.2);
 }
 
@@ -6261,12 +6265,12 @@ body:has(.mad-science-landing) .header {
 }
 
 .blob-cta:focus-visible {
-  outline: 2px solid #8B5CF6;
+  outline: 2px solid #FF5A1F;
   outline-offset: 4px;
   border-radius: 30px;
 }
 
-/* Blob background shape */
+/* Blob background shape - Adaptavist orange */
 .blob-bg {
   position: absolute;
   top: 50%;
@@ -6274,13 +6278,13 @@ body:has(.mad-science-landing) .header {
   transform: translate(-50%, -50%);
   width: 110%;
   height: 140%;
-  background: linear-gradient(135deg, #8B5CF6 0%, #A855F7 40%, #FF5A1F 100%);
+  background: linear-gradient(135deg, #FF4E50 0%, #FF5A1F 40%, #E86C24 100%);
   border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
   animation: blob-morph 8s ease-in-out infinite;
   z-index: -2;
 }
 
-/* Blob glow effect */
+/* Blob glow effect - orange */
 .blob-glow {
   position: absolute;
   top: 50%;
@@ -6288,7 +6292,7 @@ body:has(.mad-science-landing) .header {
   transform: translate(-50%, -50%);
   width: 130%;
   height: 160%;
-  background: radial-gradient(ellipse, rgba(139, 92, 246, 0.6) 0%, rgba(255, 90, 31, 0.3) 50%, transparent 70%);
+  background: radial-gradient(ellipse, rgba(255, 90, 31, 0.6) 0%, rgba(255, 78, 80, 0.3) 50%, transparent 70%);
   border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
   filter: blur(25px);
   animation: blob-morph 8s ease-in-out infinite, glow-pulse 3s ease-in-out infinite;
@@ -6407,7 +6411,7 @@ body:has(.mad-science-landing) .header {
 }
 
 .demo-pill:focus-visible {
-  outline: 2px solid #8B5CF6;
+  outline: 2px solid #FF5A1F;
   outline-offset: 2px;
 }
 
@@ -6428,20 +6432,20 @@ body:has(.mad-science-landing) .header {
   opacity: 1;
 }
 
-/* Individual pill colors */
+/* Individual pill colors - all orange shades */
 .demo-pill-user .pill-glow {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, transparent 100%);
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
+  background: linear-gradient(135deg, rgba(255, 90, 31, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(255, 90, 31, 0.3);
 }
 
 .demo-pill-admin .pill-glow {
-  background: linear-gradient(135deg, rgba(255, 122, 51, 0.3) 0%, transparent 100%);
-  box-shadow: 0 0 20px rgba(255, 122, 51, 0.3);
+  background: linear-gradient(135deg, rgba(255, 78, 80, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(255, 78, 80, 0.3);
 }
 
 .demo-pill-super .pill-glow {
-  background: linear-gradient(135deg, rgba(168, 85, 247, 0.3) 0%, transparent 100%);
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3);
+  background: linear-gradient(135deg, rgba(232, 108, 36, 0.3) 0%, transparent 100%);
+  box-shadow: 0 0 20px rgba(232, 108, 36, 0.3);
 }
 
 .pill-icon {
@@ -6476,7 +6480,7 @@ body:has(.mad-science-landing) .header {
 .pulse-dot {
   width: 8px;
   height: 8px;
-  background: #8B5CF6;
+  background: #FF5A1F;
   border-radius: 50%;
   animation: pulse-dot 2s ease-in-out infinite;
 }
@@ -6484,11 +6488,11 @@ body:has(.mad-science-landing) .header {
 @keyframes pulse-dot {
   0%, 100% { 
     opacity: 0.5; 
-    box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 0 0 rgba(255, 90, 31, 0.5);
   }
   50% { 
     opacity: 1; 
-    box-shadow: 0 0 0 8px rgba(139, 92, 246, 0);
+    box-shadow: 0 0 0 8px rgba(255, 90, 31, 0);
   }
 }
 
