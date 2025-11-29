@@ -200,15 +200,15 @@ const Landing: React.FC = memo(() => {
 
         {/* Hero Stack - Optical Center */}
         <div style={styles.heroStack}>
-          {/* Shadow Shield - inside hero, always centered on text */}
-          {/* Smooth circular gradient: no hard edges, spreads to full screen */}
+          {/* Shadow Shield - tight behind text only, doesn't affect outer elements */}
           <div 
             style={{
               ...styles.shadowShield,
-              width: '200%',
-              height: '200%',
+              width: '800px',
+              height: '500px',
+              maxWidth: '90vw',
               background: isDark 
-                ? 'radial-gradient(circle at center, rgba(3,3,5, 0.85) 0%, rgba(3,3,5, 0.5) 50%, transparent 100%)' 
+                ? 'radial-gradient(ellipse at center, rgba(3,3,5, 0.9) 0%, rgba(3,3,5, 0.6) 40%, transparent 70%)' 
                 : 'none',
             }} 
           />
