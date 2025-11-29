@@ -298,13 +298,14 @@ body.theme-dark .landing-page .header {
   box-shadow: none;
 }
 
-/* Landing Page Header - Light Mode (subtle glass effect) */
+/* Landing Page Header - Light Mode (fully transparent) */
 body.theme-light.landing-page .header,
 body.theme-light .landing-page .header {
-  background: rgba(255, 255, 255, 0.8);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-bottom: none;
+  box-shadow: none;
 }
 
 /* Header - Light Mode (match page background) */
