@@ -1,6 +1,8 @@
 import React, { useState, memo, useEffect } from 'react';
 import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
 import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
+import StaticNeuralBackground from '../components/StaticNeuralBackground';
+import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * Landing Page Component - Adaptavist Cortex
@@ -11,6 +13,9 @@ import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
  * - Glassmorphism UI elements
  */
 const Landing: React.FC = memo(() => {
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
+  
   // Add landing-page class to body for header transparency
   useEffect(() => {
     document.body.classList.add('landing-page');
@@ -41,49 +46,160 @@ const Landing: React.FC = memo(() => {
     googleLogin();
   };
 
+  // Dynamic styles based on theme
+  const getPageWrapperStyle = () => ({
+    ...styles.pageWrapper,
+    background: isDark ? '#030305' : '#f8fafc', // bg-slate-50
+  });
+
+  const getProductNameStyle = () => {
+    if (isDark) {
+      return styles.productName;
+    }
+    // Light mode: Use solid color text (not gradient)
+    return {
+      fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      fontWeight: 900,
+      lineHeight: 0.9,
+      margin: 0,
+      color: '#0f172a', // slate-900 - solid "heavy ink" feel
+      background: 'none',
+      WebkitBackgroundClip: 'unset',
+      WebkitTextFillColor: '#0f172a',
+      backgroundClip: 'unset',
+      filter: 'none',
+    };
+  };
+
+  const getParentBrandStyle = () => ({
+    ...styles.parentBrand,
+    textShadow: isDark ? '0 0 30px rgba(255, 85, 0, 0.5)' : 'none',
+  });
+
+  const getTaglineStyle = () => ({
+    ...styles.tagline,
+    color: isDark ? '#D4D4D4' : '#64748b', // text-gray-300 -> text-slate-500
+    textShadow: isDark ? '0 2px 10px rgba(0, 0, 0, 0.5)' : 'none',
+  });
+
+  const getButtonStyle = () => {
+    if (isDark) {
+      return styles.glassButton;
+    }
+    return {
+      ...styles.glassButton,
+      background: '#ffffff',
+      border: '1px solid #f97316', // border-orange-500
+      color: '#ea580c', // text-orange-600
+      boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)', // shadow-sm
+      backdropFilter: 'none',
+      WebkitBackdropFilter: 'none',
+    };
+  };
+
+  const getSpinnerStyle = () => ({
+    ...styles.spinner,
+    border: isDark 
+      ? '2px solid rgba(255, 255, 255, 0.3)' 
+      : '2px solid rgba(234, 88, 12, 0.3)', // orange-600 with opacity
+    borderTopColor: isDark ? '#FFFFFF' : '#ea580c', // orange-600
+  });
+
+  const handleButtonMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (googleLoading || loginLoading) return;
+    
+    if (isDark) {
+      e.currentTarget.style.background = 'rgba(255, 85, 0, 0.15)';
+      e.currentTarget.style.boxShadow = '0 0 30px rgba(255, 85, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
+      e.currentTarget.style.borderColor = 'rgba(255, 85, 0, 0.7)';
+    } else {
+      e.currentTarget.style.background = '#fff7ed'; // bg-orange-50
+    }
+  };
+
+  const handleButtonMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isDark) {
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
+      e.currentTarget.style.boxShadow = '0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
+      e.currentTarget.style.borderColor = 'rgba(255, 85, 0, 0.5)';
+    } else {
+      e.currentTarget.style.background = '#ffffff';
+    }
+  };
+
+  // Demo section theme-aware styles
+  const getDemoLabelStyle = () => ({
+    ...styles.demoLabel,
+    color: isDark ? 'rgba(255, 255, 255, 0.4)' : '#94a3b8', // slate-400
+  });
+
+  const getDemoPillStyle = () => {
+    if (isDark) {
+      return styles.demoPill;
+    }
+    return {
+      ...styles.demoPill,
+      color: '#64748b', // text-slate-500
+      background: '#ffffff',
+      border: '1px solid #e2e8f0', // border-slate-200
+      backdropFilter: 'none',
+      WebkitBackdropFilter: 'none',
+    };
+  };
+
+  const handleDemoPillMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isDark) {
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+    } else {
+      e.currentTarget.style.background = '#f8fafc'; // bg-slate-50
+      e.currentTarget.style.borderColor = '#cbd5e1'; // border-slate-300
+    }
+  };
+
+  const handleDemoPillMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (isDark) {
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+    } else {
+      e.currentTarget.style.background = '#ffffff';
+      e.currentTarget.style.borderColor = '#e2e8f0'; // border-slate-200
+    }
+  };
+
   return (
-    <div style={styles.pageWrapper}>
-      {/* Fixed Neural Background */}
-      <OrganicNeuralBackground />
+    <div style={getPageWrapperStyle()}>
+      {/* Conditional Background */}
+      {isDark ? <OrganicNeuralBackground /> : <StaticNeuralBackground />}
       
       {/* Main Content Container */}
       <div style={styles.content}>
-        {/* Shadow Shield for text contrast */}
-        <div style={styles.shadowShield} />
+        {/* Shadow Shield for text contrast - only in dark mode */}
+        {isDark && <div style={styles.shadowShield} />}
         
         {/* Brand Lockup - Responsive */}
         <div style={styles.brandLockup}>
-          <span style={styles.parentBrand} className="landing-parent-brand">ADAPTAVIST</span>
-          <h1 style={styles.productName} className="landing-product-name">CORTEX</h1>
-          <p style={styles.tagline} className="landing-tagline">The organization's collective brain.</p>
+          <span style={getParentBrandStyle()} className="landing-parent-brand">ADAPTAVIST</span>
+          <h1 style={getProductNameStyle()} className="landing-product-name">CORTEX</h1>
+          <p style={getTaglineStyle()} className="landing-tagline">The organization's collective brain</p>
         </div>
 
         {/* CTA Button */}
         <button 
           onClick={handleGoogleLogin}
           style={{
-            ...styles.glassButton,
+            ...getButtonStyle(),
             ...(googleLoading || loginLoading ? styles.glassButtonDisabled : {}),
           }}
           disabled={googleLoading || loginLoading}
           aria-busy={googleLoading || loginLoading}
           aria-label={googleLoading ? "Connecting..." : "Access Cortex"}
-          onMouseEnter={(e) => {
-            if (!googleLoading && !loginLoading) {
-              e.currentTarget.style.background = 'rgba(255, 85, 0, 0.15)';
-              e.currentTarget.style.boxShadow = '0 0 30px rgba(255, 85, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15)';
-              e.currentTarget.style.borderColor = 'rgba(255, 85, 0, 0.7)';
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-            e.currentTarget.style.boxShadow = '0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1)';
-            e.currentTarget.style.borderColor = 'rgba(255, 85, 0, 0.5)';
-          }}
+          onMouseEnter={handleButtonMouseEnter}
+          onMouseLeave={handleButtonMouseLeave}
         >
           {googleLoading ? (
             <span style={styles.buttonContent}>
-              <span style={styles.spinner} />
+              <span style={getSpinnerStyle()} />
               Connecting...
             </span>
           ) : (
@@ -99,50 +215,32 @@ const Landing: React.FC = memo(() => {
 
         {/* Demo Access Section */}
         <div style={styles.demoSection}>
-          <span style={styles.demoLabel}>DEMO ACCESS</span>
+          <span style={getDemoLabelStyle()}>DEMO ACCESS</span>
           <div style={styles.demoPills}>
             <button 
               onClick={handleDemoLogin}
-              style={styles.demoPill}
+              style={getDemoPillStyle()}
               disabled={loginLoading || googleLoading}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-              }}
+              onMouseEnter={handleDemoPillMouseEnter}
+              onMouseLeave={handleDemoPillMouseLeave}
             >
               User
             </button>
             <button 
               onClick={handleDemoAdminLogin}
-              style={styles.demoPill}
+              style={getDemoPillStyle()}
               disabled={loginLoading || googleLoading}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-              }}
+              onMouseEnter={handleDemoPillMouseEnter}
+              onMouseLeave={handleDemoPillMouseLeave}
             >
               Admin
             </button>
             <button 
               onClick={handleDemoSuperadminLogin}
-              style={styles.demoPill}
+              style={getDemoPillStyle()}
               disabled={loginLoading || googleLoading}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
-              }}
+              onMouseEnter={handleDemoPillMouseEnter}
+              onMouseLeave={handleDemoPillMouseLeave}
             >
               Superadmin
             </button>
@@ -303,10 +401,16 @@ const responsiveStyles = `
     to { transform: rotate(360deg); }
   }
 
-  /* Force dark background on landing page */
-  body.landing-page,
-  body.landing-page #root {
+  /* Landing page background - theme-aware */
+  body.landing-page.theme-dark,
+  body.landing-page.theme-dark #root {
     background: #030305 !important;
+    min-height: 100vh;
+  }
+  
+  body.landing-page.theme-light,
+  body.landing-page.theme-light #root {
+    background: #f8fafc !important;
     min-height: 100vh;
   }
 
