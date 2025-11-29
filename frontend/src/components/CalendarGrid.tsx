@@ -3,12 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
 import { Info } from 'lucide-react';
+import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
 interface CalendarGridProps {
   sessions: Session[];
   onBookSession: (sessionId: string) => void;
   bookingLoading: string | null;
 }
+
+// ============================================================
+// LEVEL 4: "LIVING INTERFACE" CALENDAR GRID
+// Features: Staggered entry, spring physics, cursor spotlight,
+// current time indicator, glassmorphic headers
+// ============================================================
 
 const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading }) => {
   const navigate = useNavigate();
@@ -17,9 +24,34 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [calendarConnected, setCalendarConnected] = useState(false);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
   
-  // Debug logging (disabled in production for performance)
-  // console.log('CalendarGrid received sessions:', sessions?.map(s => ({ id: s.id, remaining: s.remaining, booked_count: s.booked_count, capacity: s.capacity })));
+  // Cursor spotlight state
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  
+  // Smooth spring-based cursor tracking
+  const smoothMouseX = useSpring(mouseX, { stiffness: 300, damping: 30 });
+  const smoothMouseY = useSpring(mouseY, { stiffness: 300, damping: 30 });
+  
+  // Update current time every minute for the time indicator
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(timer);
+  }, []);
+  
+  // Track mouse position for cursor spotlight
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      mouseX.set(e.clientX - rect.left);
+      mouseY.set(e.clientY - rect.top);
+    }
+  }, [mouseX, mouseY]);
   
   // Load user bookings and populate bookedSlots when sessions change
   useEffect(() => {
@@ -34,13 +66,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         const allBookings = [...bookings.upcoming, ...bookings.past];
         const sessionIds = new Set(sessions.map(s => s.id));
         
-        // Find session IDs that user has booked
         const bookedSessionIds = allBookings
           .filter(booking => booking.status === 'booked' && sessionIds.has(booking.session_id))
           .map(booking => booking.session_id);
-        
-        // Performance: debug logging disabled in production
-        // console.log('📅 CalendarGrid: Found booked sessions:', { totalBookings: allBookings.length, bookedSessionIds, sessionsCount: sessions.length });
         
         setBookedSlots(new Set(bookedSessionIds));
       } catch (error) {
@@ -60,29 +88,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       try {
         setLoadingCalendar(true);
         
-        // First check if calendar is connected
         let calendarConnectedStatus = false;
         try {
           const status = await getCalendarConnectionStatus();
           calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
-          
-          // Performance: debug logging disabled in production
-          // console.log('📅 CalendarGrid: Connection status:', status);
-          
-          if (!status.connected) {
-            // console.log('📅 CalendarGrid: Calendar not connected, but will try to fetch events anyway (demo mode)');
-            // In demo mode, we still want to fetch mock events even if "not connected"
-            // So we continue rather than returning early
-          }
         } catch (error: any) {
-          // Performance: error logging kept but verbose logging disabled
-          // console.error('📅 CalendarGrid: Error checking connection status:', error);
           setCalendarConnected(false);
-          // Still try to fetch events in demo mode even if connection check fails
         }
 
-        // Get date range from sessions
         const dates = sessions
           .map(s => new Date(s.start_time))
           .sort((a, b) => a.getTime() - b.getTime());
@@ -95,8 +109,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         const endTime = new Date(dates[dates.length - 1]);
         endTime.setHours(23, 59, 59, 999);
 
-        // Fetch calendar events
-        // Performance: debug logging disabled in production
         const events = await getMyCalendarEvents(
           startTime.toISOString(),
           endTime.toISOString()
@@ -120,7 +132,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   // Check if a session conflicts with user's calendar
   const hasCalendarConflict = useCallback((session: Session): boolean => {
-    // Even if calendarConnected is false, check conflicts if we have events (demo mode)
     if (userCalendarEvents.length === 0) {
       return false;
     }
@@ -129,7 +140,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     const sessionEnd = new Date(session.end_time);
 
     const hasConflict = userCalendarEvents.some(event => {
-      // Skip cancelled or declined events
       if (event.status === 'cancelled' || event.status === 'declined') {
         return false;
       }
@@ -137,33 +147,45 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
       
-      // Skip if event times are invalid
       if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
         return false;
       }
       
-      // Check for actual overlap (not just touching)
-      // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
       const overlaps = (sessionStart < eventEnd && sessionEnd > eventStart);
-      
-      // Performance: conflict logging disabled in production
-      // if (overlaps) { console.log('📅 Calendar conflict detected:', {...}); }
-      
       return overlaps;
     });
     
     return hasConflict;
   }, [userCalendarEvents]);
 
-  // Format time for display (12-hour format with AM/PM, no leading zeros)
-  const formatTime = (dateString: string) => {
+  // Format time for display (condensed format)
+  const formatTime = (dateString: string, includeAmPm: boolean = true) => {
     const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric', // Remove leading zero (2:00 PM instead of 02:00 PM)
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'UTC'
-    });
+    const hours = date.getUTCHours();
+    const minutes = date.getUTCMinutes();
+    const isPM = hours >= 12;
+    const displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
+    const minuteStr = minutes.toString().padStart(2, '0');
+    
+    if (includeAmPm) {
+      return `${displayHour}:${minuteStr} ${isPM ? 'PM' : 'AM'}`;
+    }
+    return `${displayHour}:${minuteStr}`;
+  };
+
+  // Format time range - drops first AM/PM if both are the same
+  const formatTimeRange = (startTime: string, endTime: string) => {
+    const startDate = new Date(startTime);
+    const endDate = new Date(endTime);
+    const startIsPM = startDate.getUTCHours() >= 12;
+    const endIsPM = endDate.getUTCHours() >= 12;
+    
+    // If both are AM or both are PM, drop the first suffix
+    if (startIsPM === endIsPM) {
+      return `${formatTime(startTime, false)} - ${formatTime(endTime, true)}`;
+    }
+    // Different periods, show both
+    return `${formatTime(startTime, true)} - ${formatTime(endTime, true)}`;
   };
 
   const formatDate = (dateString: string) => {
@@ -182,9 +204,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
   const getTimePosition = (hour: number): number => {
-    const startHour = 7; // 7 AM
-    const endHour = 23; // 11 PM
-    const totalHours = endHour - startHour; // 16 hours
+    const startHour = 7;
+    const endHour = 23;
+    const totalHours = endHour - startHour;
     const adjustedHour = hour - startHour;
     return Math.max(0, Math.min(100, (adjustedHour / totalHours) * 100));
   };
@@ -195,7 +217,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     for (let hour = 7; hour <= 23; hour++) {
       markers.push({ time: hour, isHour: true });
       if (hour < 23) {
-        markers.push({ time: hour + 0.5, isHour: false }); // 30-minute marks
+        markers.push({ time: hour + 0.5, isHour: false });
       }
     }
     return markers;
@@ -220,7 +242,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       return [];
     }
 
-    // Find the date range from sessions
     const dates = sessions
       .map(s => new Date(s.start_time))
       .sort((a, b) => a.getTime() - b.getTime());
@@ -231,7 +252,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     const endDate = new Date(dates[dates.length - 1]);
     endDate.setUTCHours(23, 59, 59, 999);
 
-    // Group sessions by date
     const sessionsByDateMap = new Map<string, Session[]>();
     
     sessions.forEach(session => {
@@ -245,36 +265,51 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       sessionsByDateMap.get(dateKey)!.push(session);
     });
 
-    // Sort sessions within each date by start time
     sessionsByDateMap.forEach((sessions, date) => {
       sessions.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
     });
 
-    // Generate all days in the range (excluding weekends)
     const allDays: Array<[string, Session[]]> = [];
     const currentDate = new Date(startDate);
     
     while (currentDate <= endDate) {
-      const dayOfWeek = currentDate.getUTCDay(); // 0 = Sunday, 6 = Saturday
+      const dayOfWeek = currentDate.getUTCDay();
       
-      // Only include weekdays (Monday-Friday)
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         const dateKey = currentDate.toDateString();
         const dateSessions = sessionsByDateMap.get(dateKey) || [];
         allDays.push([dateKey, dateSessions]);
       }
       
-      // Move to next day
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
 
     return allDays;
   };
 
-  // Memoize expensive calculations to prevent recalculation on every render
   const sessionsByDate = useMemo(() => groupSessionsByDate(), [sessions]);
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
-  const timelineHeight = '900px'; // Fixed height for 16 hours
+  const timelineHeight = '900px';
+
+  // Calculate current time position for the "Now" indicator
+  const getCurrentTimePosition = useMemo(() => {
+    const now = currentTime;
+    const currentHour = now.getHours() + now.getMinutes() / 60;
+    return getTimePosition(currentHour);
+  }, [currentTime]);
+
+  // Check if today is in the visible date range
+  const todayColumnIndex = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toDateString();
+    
+    return sessionsByDate.findIndex(([date]) => {
+      const sessionDate = new Date(date);
+      sessionDate.setHours(0, 0, 0, 0);
+      return sessionDate.toDateString() === todayStr;
+    });
+  }, [sessionsByDate, currentTime]);
 
   const handleSlotClick = (session: Session) => {
     const isBooked = bookedSlots.has(session.id);
@@ -305,21 +340,17 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     setConfirmingSlot(null);
   };
 
-  // Ref for popover click-outside detection
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Click-outside handler to close popover
   useEffect(() => {
     if (!confirmingSlot) return;
 
     const handleClickOutside = (event: MouseEvent) => {
-      // Check if click is outside the popover
       if (popoverRef.current && !popoverRef.current.contains(event.target as Node)) {
         setConfirmingSlot(null);
       }
     };
 
-    // Add listener with a small delay to prevent immediate close on the opening click
     const timeoutId = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
     }, 0);
@@ -330,65 +361,167 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     };
   }, [confirmingSlot]);
 
+  // ============================================================
+  // FRAMER MOTION ANIMATION VARIANTS
+  // ============================================================
+  
+  // Staggered column entry animation
+  const columnVariants = {
+    hidden: { 
+      opacity: 0, 
+      y: 30,
+      scale: 0.95
+    },
+    visible: (i: number) => ({
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        delay: i * 0.1,
+        duration: 0.5,
+        ease: [0.25, 0.46, 0.45, 0.94] as const, // Custom easing for smooth feel
+      }
+    })
+  };
+
+  // Tactile slot interaction variants
+  const slotVariants = {
+    idle: { 
+      scale: 1,
+      boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+    },
+    hover: { 
+      scale: 1.03,
+      boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
+      transition: {
+        type: 'spring' as const,
+        stiffness: 400,
+        damping: 20
+      }
+    },
+    tap: { 
+      scale: 0.97,
+      transition: {
+        type: 'spring' as const,
+        stiffness: 600,
+        damping: 25
+      }
+    }
+  };
+
+  // Legend item animation
+  const legendItemVariants = {
+    hidden: { opacity: 0, x: -10 },
+    visible: (i: number) => ({
+      opacity: 1,
+      x: 0,
+      transition: {
+        delay: 0.5 + i * 0.08,
+        duration: 0.3
+      }
+    })
+  };
+
   if (sessions.length === 0) {
     return (
-      <div className="alert alert-info">
+      <motion.div 
+        className="alert alert-info"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <Info size={18} className="me-2" />
         No sessions available
-      </div>
+      </motion.div>
     );
   }
 
   if (sessionsByDate.length === 0) {
     return (
-      <div className="alert alert-info d-flex align-items-center">
+      <motion.div 
+        className="alert alert-info d-flex align-items-center"
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
         <Info size={18} className="me-2" />
         No sessions available
-      </div>
+      </motion.div>
     );
   }
 
+  const legendItems = [
+    { className: 'legend-available', label: 'Available', labelClass: 'legend-label-available' },
+    { className: 'legend-conflict', label: 'Calendar Conflict', labelClass: 'legend-label-conflict' },
+    { className: 'legend-full', label: 'Full', labelClass: 'legend-label-full' },
+    { className: 'legend-booked', label: 'Your Booking', labelClass: 'legend-label-booked' }
+  ];
+
   return (
-    <div className="calendar-view" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden' }}>
-      {/* Color-coded legend - synchronized with slot styles (uses CSS classes for dark mode) */}
+    <div 
+      ref={containerRef}
+      className="calendar-view calendar-living-interface" 
+      onMouseMove={handleMouseMove}
+      style={{ overflow: 'hidden', position: 'relative' }}
+    >
+      {/* Cursor Spotlight Effect - Radial glow that follows the mouse */}
+      <motion.div
+        className="cursor-spotlight"
+        style={{
+          position: 'absolute',
+          width: 400,
+          height: 400,
+          borderRadius: '50%',
+          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 40%, transparent 70%)',
+          pointerEvents: 'none',
+          zIndex: 1,
+          x: useTransform(smoothMouseX, x => x - 200),
+          y: useTransform(smoothMouseY, y => y - 200),
+        }}
+      />
+      
+      {/* Color-coded legend with staggered animation */}
       <div className="calendar-legend d-flex flex-wrap gap-4 mb-4">
-        <div className="d-flex align-items-center gap-2">
-          <div className="legend-swatch legend-available"></div>
-          <small className="legend-label legend-label-available">Available</small>
-        </div>
-        <div className="d-flex align-items-center gap-2">
-          <div className="legend-swatch legend-conflict"></div>
-          <small className="legend-label legend-label-conflict">Calendar Conflict</small>
-        </div>
-        <div className="d-flex align-items-center gap-2">
-          <div className="legend-swatch legend-full"></div>
-          <small className="legend-label legend-label-full">Full</small>
-        </div>
-        <div className="d-flex align-items-center gap-2">
-          <div className="legend-swatch legend-booked"></div>
-          <small className="legend-label legend-label-booked">Your Booking</small>
-        </div>
+        {legendItems.map((item, index) => (
+          <motion.div 
+            key={item.label}
+            className="d-flex align-items-center gap-2"
+            custom={index}
+            initial="hidden"
+            animate="visible"
+            variants={legendItemVariants}
+          >
+            <div className={`legend-swatch ${item.className}`}></div>
+            <small className={`legend-label ${item.labelClass}`}>{item.label}</small>
+          </motion.div>
+        ))}
       </div>
 
       {/* Calendar Timeline */}
       <div className="calendar-timeline" style={{ overflow: 'hidden' }}>
         <div style={{ 
           display: 'flex',
-          gap: '24px', /* gap-6 - healthy gap between time column and days */
+          gap: '24px',
           width: '100%',
           overflowX: 'hidden',
           overflowY: 'hidden'
         }}>
           {/* Time Column (Left) */}
-          <div className="calendar-time-column" style={{
-            minWidth: '90px',
-            width: '90px',
-            position: 'sticky',
-            left: 0,
-            zIndex: 5
-          }}>
-            {/* Time Header */}
-            <div className="calendar-time-header" style={{
+          <motion.div 
+            className="calendar-time-column" 
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            style={{
+              minWidth: '90px',
+              width: '90px',
+              position: 'sticky',
+              left: 0,
+              zIndex: 5
+            }}
+          >
+            {/* Glassmorphic Time Header */}
+            <div className="calendar-time-header calendar-header-glass" style={{
               height: '60px'
             }}></div>
             {/* Time Markers */}
@@ -397,7 +530,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               height: timelineHeight
             }}>
               {timeMarkers.map((marker, index) => {
-                if (!marker.isHour) return null; // Only show hour markers
+                if (!marker.isHour) return null;
                 
                 const position = getTimePosition(marker.time);
                 
@@ -427,18 +560,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                 );
               })}
             </div>
-          </div>
+          </motion.div>
 
           {/* Day Columns Container */}
           <div className="calendar-days-container" style={{ 
             position: 'relative',
             flex: 1,
-            minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px` /* Slightly wider to account for gaps */
+            minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px`
           }}>
-            {/* Horizontal hour dividers - guide the eye */}
+            {/* Horizontal hour dividers */}
             <div style={{
               position: 'absolute',
-              top: '60px', /* Below headers */
+              top: '60px',
               left: 0,
               right: 0,
               height: timelineHeight,
@@ -456,56 +589,181 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       left: 0,
                       right: 0,
                       height: '1px',
-                      backgroundColor: '#f3f4f6' /* gray-100 */
+                      backgroundColor: 'var(--border-subtle, #f3f4f6)'
                     }}
                   />
                 );
               })}
             </div>
-            {/* Day Columns Grid - wider gaps for distinct days */}
+            
+            {/* Current Time Indicator - The "Red Line" */}
+            {todayColumnIndex >= 0 && getCurrentTimePosition >= 0 && getCurrentTimePosition <= 100 && (
+              <motion.div
+                className="current-time-indicator"
+                initial={{ opacity: 0, scaleX: 0 }}
+                animate={{ opacity: 1, scaleX: 1 }}
+                transition={{ duration: 0.6, delay: 0.8, ease: 'easeOut' }}
+                style={{
+                  position: 'absolute',
+                  top: `calc(60px + ${getCurrentTimePosition}% * 900 / 100)`,
+                  left: 0,
+                  right: 0,
+                  zIndex: 10,
+                  pointerEvents: 'none',
+                  transformOrigin: 'left center'
+                }}
+              >
+                {/* Live dot with pulse animation */}
+                <motion.div
+                  className="current-time-dot"
+                  animate={{
+                    scale: [1, 1.3, 1],
+                    opacity: [1, 0.7, 1]
+                  }}
+                  transition={{
+                    duration: 2,
+                    repeat: Infinity,
+                    ease: 'easeInOut'
+                  }}
+                  style={{
+                    position: 'absolute',
+                    left: -6,
+                    top: -4,
+                    width: 10,
+                    height: 10,
+                    borderRadius: '50%',
+                    backgroundColor: '#ef4444',
+                    boxShadow: '0 0 8px rgba(239, 68, 68, 0.6)'
+                  }}
+                />
+                {/* The red line */}
+                <div
+                  style={{
+                    height: '2px',
+                    backgroundColor: '#ef4444',
+                    boxShadow: '0 0 4px rgba(239, 68, 68, 0.4)'
+                  }}
+                />
+                {/* Time label */}
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 1 }}
+                  style={{
+                    position: 'absolute',
+                    right: 0,
+                    top: -20,
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#ef4444',
+                    backgroundColor: 'var(--bg-card, white)',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                  }}
+                >
+                  NOW
+                </motion.span>
+              </motion.div>
+            )}
+
+            {/* Day Columns Grid with Staggered Entry */}
             <div style={{ 
               display: 'grid',
               gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
-              gap: '24px', /* gap-6 - days feel distinct without background colors */
+              gap: '24px',
               position: 'relative',
               zIndex: 3
             }}>
-                {sessionsByDate.slice(0, 5).map(([date, dateSessions]) => (
-                <div key={date} className="calendar-day-column" style={{ position: 'relative' }}>
-                  {/* Day Header - Transparent, just bold text floating above grid */}
-                  <div className="calendar-day-header p-2" style={{ 
-                    borderRadius: '0',
-                    border: 'none',
-                    background: 'transparent', /* Force transparency */
-                    height: '60px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                  }}>
-                    <h6 className="calendar-day-title mb-1" style={{ margin: 0 }}>
-                      {formatDate(date)}
-                    </h6>
-                    <small className="calendar-day-sessions">
-                      {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
-                    </small>
-                  </div>
+              {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
+                const isToday = columnIndex === todayColumnIndex;
+                const isPast = (() => {
+                  const sessionDate = new Date(date);
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  sessionDate.setHours(0, 0, 0, 0);
+                  return sessionDate < today;
+                })();
 
-                  {/* Timeline Container */}
-                  <div className="calendar-timeline-container" style={{ 
-                    position: 'relative',
-                    height: timelineHeight,
-                    border: 'none',
-                    overflow: 'visible',
-                    zIndex: 1
-                  }}>
-                    {dateSessions.map((session) => {
+                return (
+                  <motion.div 
+                    key={date} 
+                    className={`calendar-day-column ${isToday ? 'calendar-day-today' : ''} ${isPast ? 'calendar-day-past' : ''}`}
+                    custom={columnIndex}
+                    initial="hidden"
+                    animate="visible"
+                    variants={columnVariants}
+                    style={{ position: 'relative' }}
+                  >
+                    {/* Transparent Day Header - text floats on background */}
+                    <div 
+                      className="calendar-day-header p-2" 
+                      style={{ 
+                        borderRadius: '0',
+                        border: 'none',
+                        height: '60px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                        backgroundColor: 'transparent',
+                        position: 'sticky',
+                        top: 0,
+                        zIndex: 10
+                      }}
+                    >
+                      <h6 
+                        className="calendar-day-title mb-1" 
+                        style={{ 
+                          margin: 0,
+                          color: isToday ? 'var(--color-emerald-600, #059669)' : undefined
+                        }}
+                      >
+                        {formatDate(date)}
+                        {isToday && (
+                          <motion.span
+                            initial={{ opacity: 0, scale: 0 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.5 + columnIndex * 0.1 }}
+                            style={{
+                              marginLeft: '8px',
+                              fontSize: '10px',
+                              fontWeight: 700,
+                              color: 'white',
+                              backgroundColor: '#059669',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.5px'
+                            }}
+                          >
+                            Today
+                          </motion.span>
+                        )}
+                      </h6>
+                      <small className="calendar-day-sessions">
+                        {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
+                      </small>
+                    </div>
+
+                    {/* Timeline Container */}
+                    <div className="calendar-timeline-container" style={{ 
+                      position: 'relative',
+                      height: timelineHeight,
+                      border: 'none',
+                      overflow: 'visible',
+                      zIndex: 1,
+                      opacity: isPast ? 0.5 : 1,
+                      filter: isPast ? 'grayscale(30%)' : 'none',
+                      transition: 'opacity 0.3s ease, filter 0.3s ease'
+                    }}>
+                      {dateSessions.map((session, slotIndex) => {
                         const isBooked = bookedSlots.has(session.id);
                         const hasConflict = hasCalendarConflict(session);
                         const isFull = session.remaining <= 0;
                         const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
+                        const isSessionPast = new Date(session.end_time) < currentTime;
                         
-                        // Calculate position
                         const slotStartHour = getHourFromSlot(session.start_time);
                         const slotEndHour = getHourFromSlot(session.end_time);
                         
@@ -518,10 +776,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(height * 10000) / 10000;
 
-                        const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading;
+                        const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading && !isSessionPast;
                         const isConfirming = confirmingSlot === session.id;
 
-                        // Determine slot class based on state
                         let slotClass = 'calendar-slot calendar-slot-btn position-absolute ';
                         
                         if (isConfirming) {
@@ -532,14 +789,25 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                           slotClass += 'calendar-slot-full';
                         } else if (hasConflict) {
                           slotClass += 'calendar-slot-conflict';
+                        } else if (isSessionPast) {
+                          slotClass += 'calendar-slot-past';
                         } else {
                           slotClass += 'calendar-slot-ghost';
                         }
 
                         return (
-                          <div
+                          <motion.div
                             key={session.id}
                             className={slotClass}
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: isSessionPast ? 0.4 : 1, scale: 1 }}
+                            transition={{ 
+                              delay: 0.3 + columnIndex * 0.1 + slotIndex * 0.05,
+                              duration: 0.3
+                            }}
+                            variants={canClick ? slotVariants : undefined}
+                            whileHover={canClick ? 'hover' : undefined}
+                            whileTap={canClick ? 'tap' : undefined}
                             style={{ 
                               left: '4px',
                               right: '4px',
@@ -553,7 +821,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               fontSize: '0.7rem',
                               padding: '2px 4px',
                               overflow: isConfirming ? 'visible' : 'hidden',
-                              zIndex: isConfirming ? 9999 : (isBooked ? 5 : 1),
+                              zIndex: isConfirming ? 9999 : (isBooked ? 5 : 2),
                               pointerEvents: canClick || isBooked ? 'auto' : 'none'
                             }}
                             title={(() => {
@@ -562,11 +830,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               if (isBooked) return `Your booking: ${startTime} - ${endTime}`;
                               if (isFull) return `Full: ${startTime} - ${endTime}`;
                               if (hasConflict) return `Calendar conflict: ${startTime} - ${endTime}`;
+                              if (isSessionPast) return `Past: ${startTime} - ${endTime}`;
                               return `Available: ${startTime} - ${endTime} (${session.remaining} remaining)`;
                             })()}
                             onClick={() => canClick && handleSlotClick(session)}
                           >
-                            {/* Time label - Aggressive space saving typography */}
+                            {/* Time label */}
                             <div 
                               className="timeslot-label"
                               style={{
@@ -574,72 +843,97 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                 top: '2px',
                                 left: '0',
                                 right: '0',
-                                width: '100%', /* w-full */
-                                fontSize: '11px', /* text-[11px] */
+                                width: '100%',
+                                fontSize: '11px',
                                 fontWeight: '600',
-                                letterSpacing: '-0.025em', /* tracking-tight */
-                                lineHeight: '1.25', /* leading-tight */
-                                textAlign: 'center', /* text-center */
+                                letterSpacing: '-0.025em',
+                                lineHeight: '1.25',
+                                textAlign: 'center',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
                                 padding: '0 2px',
                                 pointerEvents: 'none'
                               }}>
-                              {formatTime(session.start_time)} - {formatTime(session.end_time)}
+                              {formatTimeRange(session.start_time, session.end_time)}
                             </div>
 
                             {/* Booking confirmation popover */}
-                            {isConfirming && (
-                              <div 
-                                ref={popoverRef}
-                                className="booking-popover" 
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                <div className="booking-popover-text">Book this session?</div>
-                                <div className="booking-popover-actions">
-                                  <button
-                                    className="booking-popover-cancel"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleCancelBooking();
-                                    }}
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    className="booking-popover-confirm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleConfirmBooking(session.id);
-                                    }}
-                                  >
-                                    Confirm
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                            <AnimatePresence>
+                              {isConfirming && (
+                                <motion.div 
+                                  ref={popoverRef}
+                                  className="booking-popover" 
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.15 }}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="booking-popover-header">Confirm Booking</div>
+                                  <div className="booking-popover-time">
+                                    {(() => {
+                                      const startDate = new Date(session.start_time);
+                                      const dayName = startDate.toLocaleDateString('en-US', { 
+                                        weekday: 'long',
+                                        timeZone: 'UTC'
+                                      });
+                                      return `${dayName}, ${formatTimeRange(session.start_time, session.end_time)}`;
+                                    })()}
+                                  </div>
+                                  <div className="booking-popover-actions">
+                                    <motion.button
+                                      className="booking-popover-cancel"
+                                      whileHover={{ scale: 1.02 }}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleCancelBooking();
+                                      }}
+                                    >
+                                      Cancel
+                                    </motion.button>
+                                    <motion.button
+                                      className="booking-popover-confirm"
+                                      whileHover={{ scale: 1.02 }}
+                                      whileTap={{ scale: 0.98 }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConfirmBooking(session.id);
+                                      }}
+                                    >
+                                      Confirm
+                                    </motion.button>
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
 
                             {/* Loading indicator */}
                             {bookingLoading === session.id && (
-                              <div style={{ 
-                                position: 'absolute',
-                                top: '50%',
-                                left: '50%',
-                                transform: 'translate(-50%, -50%)',
-                                zIndex: 10
-                              }}>
+                              <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                style={{ 
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '50%',
+                                  transform: 'translate(-50%, -50%)',
+                                  zIndex: 10
+                                }}
+                              >
                                 <div className="spinner-border spinner-border-sm" role="status" aria-label="Booking session" aria-busy="true">
                                   <span className="visually-hidden">Booking...</span>
                                 </div>
-                              </div>
+                              </motion.div>
                             )}
-                          </div>
+                          </motion.div>
                         );
                       })}
-                  </div>
-                </div>
-              ))}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -648,7 +942,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   );
 });
 
-// Display name for React DevTools debugging
 CalendarGrid.displayName = 'CalendarGrid';
 
 export default CalendarGrid;

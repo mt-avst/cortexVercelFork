@@ -20,6 +20,7 @@
   --bg-table-header: rgba(255, 255, 255, 0.05);
   --bg-input: rgba(255, 255, 255, 0.05);
   --bg-input-focus: rgba(255, 255, 255, 0.08);
+  --bg-glass: rgba(17, 24, 39, 0.85);
 
   /* Border Colors */
   --border-card: rgba(255, 255, 255, 0.1);

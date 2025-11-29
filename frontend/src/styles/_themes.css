@@ -24,6 +24,7 @@ body.theme-light {
   --bg-table-header: rgba(0, 0, 0, 0.03);
   --bg-input: rgba(255, 255, 255, 0.9);
   --bg-input-focus: rgba(255, 255, 255, 1);
+  --bg-glass: rgba(255, 255, 255, 0.85);
 
   /* Border Colors */
   --border-card: rgba(0, 0, 0, 0.12);
@@ -1232,27 +1233,33 @@ body.theme-light .opportunity-detail-page .card-body {
   background: transparent;
 }
 
-/* Light Mode - Ghost Button Polish */
+/* Light Mode - Available Slot Polish (crisp definition against white) */
 body.theme-light .calendar-slot-ghost {
-  background-color: rgba(0, 200, 83, 0.08) !important;
+  background-color: #ecfdf5 !important; /* emerald-50 */
+  border: 1px solid #6ee7b7 !important; /* emerald-300 - darker for definition */
+}
+
+body.theme-light .calendar-slot-ghost .timeslot-label {
+  color: #065f46 !important; /* emerald-800 - dark for readability */
+  font-weight: 600 !important;
 }
 
 body.theme-light .calendar-slot-ghost:hover {
-  background-color: var(--status-success) !important;
+  background-color: #d1fae5 !important; /* emerald-100 */
+  border-color: #34d399 !important; /* emerald-400 */
+}
+
+body.theme-light .calendar-slot-ghost:hover .timeslot-label {
+  color: #047857 !important; /* emerald-700 */
 }
 
 /* Light Mode - Zebra Striping (Swimlanes) */
-body.theme-light .calendar-day-column:nth-child(even) {
-  background: rgba(0, 0, 0, 0.03) !important;
+/* Light Mode - Force transparent columns (NO zebra striping) */
+body.theme-light .calendar-day-column {
+  background: transparent !important;
 }
 
-body.theme-light .calendar-day-column:nth-child(even) .calendar-day-header {
-  background: rgba(0, 0, 0, 0.03) !important;
-  border-bottom: none !important;
-}
-
-/* Light Mode - Odd column headers (transparent to match white) */
-body.theme-light .calendar-day-column:nth-child(odd) .calendar-day-header {
+body.theme-light .calendar-day-column .calendar-day-header {
   background: transparent !important;
   border-bottom: none !important;
 }
@@ -1341,13 +1348,13 @@ body.theme-dark .opportunity-detail-page .calendar-day-sessions {
 
 /* Calendar day header background in dark mode */
 body.theme-dark .calendar-day-header,
-body.theme-dark .opportunity-detail-page .calendar-day-header {
-  background: rgba(255, 255, 255, 0.05);
+/* Dark Mode - Force transparent columns & headers (NO zebra striping) */
+body.theme-dark .calendar-day-column {
+  background: transparent !important;
 }
 
-/* Dark Mode - Zebra Striping (Swimlanes) - header matches column */
-body.theme-dark .calendar-day-column:nth-child(even) .calendar-day-header {
-  background: rgba(255, 255, 255, 0.07) !important;
+body.theme-dark .calendar-day-column .calendar-day-header {
+  background: transparent !important;
 }
 
 /* ============================================================

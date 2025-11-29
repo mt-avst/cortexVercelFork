@@ -1,11 +1,12 @@
 {
   "name": "adaptalabs-frontend",
-  "version": "6.7.2",
+  "version": "6.8.0",
   "description": "Adaptalabs recruitment app frontend",
   "private": true,
   "dependencies": {
     "@vercel/node": "^5.5.0",
     "axios": "^1.6.2",
+    "framer-motion": "^12.23.24",
     "lucide-react": "^0.552.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

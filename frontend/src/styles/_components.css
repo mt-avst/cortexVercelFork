@@ -3861,17 +3861,18 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
 }
 
 /* ============================================================
-   SELECTED SLOT - Awaiting confirmation (elevated state)
+   SELECTED SLOT - Brand Orange (matches "Your Booking" legend)
+   Confirms "I am selecting this to make it mine"
    ============================================================ */
 .calendar-slot-selected {
-  background: #059669 !important; /* emerald-600 */
-  border: 1px solid #059669 !important;
+  background: #FF5A1F !important; /* Brand Orange */
+  border: 2px solid #EA580C !important; /* orange-600 */
   color: #FFFFFF !important;
   border-radius: 8px !important;
   z-index: 1000 !important;
   position: relative;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
-  transform: translateY(-2px) !important;
+  box-shadow: 0 10px 20px -3px rgba(255, 90, 31, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-2px) scale(1.02) !important;
 }
 
 .calendar-slot-selected .timeslot-label {
@@ -3879,15 +3880,24 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
   font-weight: 700 !important;
 }
 
+/* Dark mode: Same brand orange with glow */
+body.theme-dark .calendar-slot-selected {
+  background: #FF5A1F !important;
+  border: 2px solid #EA580C !important;
+  box-shadow: 0 0 20px rgba(255, 90, 31, 0.4), 0 10px 20px -3px rgba(0, 0, 0, 0.3) !important;
+}
+
 /* ============================================================
-   BOOKING CONFIRMATION POPOVER
+   BOOKING CONFIRMATION POPOVER - Enhanced UI
    ============================================================ */
 
 .booking-popover {
   position: absolute;
-  bottom: 100%;
+  bottom: calc(100% + 12px);
+  /* Center using left: 50% with negative margin */
   left: 50%;
-  transform: translateX(-50%) translateY(-8px);
+  margin-left: -100px; /* Half of min-width */
+  width: 200px;
   
   /* Nuclear Z-Index - must beat all grid elements */
   z-index: 9999 !important;
@@ -3895,45 +3905,68 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
   /* Force Opaque Background */
   background: #FFFFFF !important;
   
-  border-radius: 8px;
-  padding: 16px;
-  min-width: 180px;
+  /* Enhanced roundedness */
+  border-radius: 16px; /* rounded-xl */
+  padding: 16px 20px;
   
-  /* Crisp border + Shadow */
-  border: 1px solid #E2E8F0;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-
-  /* Entry Animation */
-  animation: popoverFadeIn 0.15s ease-out;
+  /* Crisp border + Enhanced Shadow */
+  border: 1px solid #F3F4F6; /* gray-100 */
+  box-shadow: 
+    0 10px 25px -5px rgba(0, 0, 0, 0.1),
+    0 8px 10px -6px rgba(0, 0, 0, 0.05);
 }
 
 body.theme-dark .booking-popover {
-  background: #2A2A35 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: #1F2937 !important; /* gray-800 */
+  border: 1px solid #374151 !important; /* gray-700 */
   color: #FFFFFF;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: 
+    0 10px 25px -5px rgba(0, 0, 0, 0.4),
+    0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
 
 /* The Arrow pointing down */
 .booking-popover::after {
   content: '';
   position: absolute;
-  top: calc(100% - 1px); /* 1px overlap to eliminate seam */
-  left: 50%;
-  transform: translateX(-50%);
+  top: 100%;
+  left: calc(50% - 8px); /* Center arrow (8px = half of border width) */
   border: 8px solid transparent;
   border-top-color: #FFFFFF;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.05));
 }
 
 /* CRITICAL: The arrow triangle must also turn dark to match */
 body.theme-dark .booking-popover::after {
-  border-top-color: #2A2A35 !important;
+  border-top-color: #1F2937 !important;
 }
 
-/* Typography */
+/* Header Typography */
+.booking-popover-header {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  text-align: center;
+}
+
+/* Time context sub-text */
+.booking-popover-time {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #6B7280; /* gray-500 */
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+body.theme-dark .booking-popover-time {
+  color: #9CA3AF; /* gray-400 */
+}
+
+/* Legacy text class (backwards compat) */
 .booking-popover-text {
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 16px;
   text-align: center;
@@ -3943,58 +3976,56 @@ body.theme-dark .booking-popover::after {
 .booking-popover-actions {
   display: flex;
   justify-content: center;
-  gap: 12px;
+  gap: 8px;
 }
 
-/* Primary Button */
+/* Primary Button - Brand Orange */
 .booking-popover-confirm {
-  background-color: var(--status-success);
+  background-color: #FF5A1F; /* Brand Orange */
   color: #FFFFFF;
   border: none;
-  border-radius: 6px;
-  padding: 8px 20px;
-  font-size: 0.75rem;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.8125rem;
   font-weight: 600;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.15s ease;
 }
 
 .booking-popover-confirm:hover {
-  opacity: 0.9;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  background-color: #EA580C; /* orange-600 */
 }
 
-/* Secondary Button */
+.booking-popover-confirm:active {
+  background-color: #C2410C; /* orange-700 */
+}
+
+/* Secondary Button - Ghost style */
 .booking-popover-cancel {
   background: transparent;
-  color: var(--text-secondary);
+  color: #6B7280; /* gray-500 */
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 12px;
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
 }
 
 .booking-popover-cancel:hover {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
+  background-color: #F3F4F6; /* gray-100 */
+  color: #374151; /* gray-700 */
 }
 
-/* Dark Mode Cancel Button - better contrast */
+/* Dark Mode Cancel Button */
 body.theme-dark .booking-popover-cancel {
-  color: #A0A0B0;
+  color: #9CA3AF; /* gray-400 */
 }
 
 body.theme-dark .booking-popover-cancel:hover {
-  color: #FFFFFF;
-}
-
-@keyframes popoverFadeIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(0px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(-8px); }
+  background-color: #374151; /* gray-700 */
+  color: #F9FAFB; /* gray-50 */
 }
 
 /* ============================================================
@@ -4952,5 +4983,318 @@ body.theme-light .booking-badge-poll {
 body.theme-light .booking-badge-survey {
   background: #E0F2F1;
   color: #00695C;
+}
+
+/* ============================================================
+   LEVEL 4: "LIVING INTERFACE" - Motion & Polish
+   Elevating from "Static" to "Kinetic"
+   ============================================================ */
+
+/* Living Interface Container */
+.calendar-living-interface {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Cursor Spotlight - Ambient glow that follows the mouse */
+.cursor-spotlight {
+  will-change: transform;
+  transition: opacity 0.3s ease;
+}
+
+.calendar-living-interface:not(:hover) .cursor-spotlight {
+  opacity: 0;
+}
+
+/* Dark mode: More visible spotlight */
+body.theme-dark .cursor-spotlight {
+  background: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.12) 0%,
+    rgba(16, 185, 129, 0.04) 40%,
+    transparent 70%
+  ) !important;
+}
+
+/* ============================================================
+   TRANSPARENT HEADERS - Text floats on page background
+   ============================================================ */
+
+.calendar-day-header {
+  background: transparent !important;
+  border: none !important;
+}
+
+body.theme-dark .calendar-day-header {
+  background: transparent !important;
+}
+
+/* Today column - subtle underline only, no background */
+.calendar-day-today .calendar-day-header {
+  background: transparent !important;
+}
+
+.calendar-day-today .calendar-day-title {
+  color: #059669 !important; /* emerald-600 */
+}
+
+body.theme-dark .calendar-day-today .calendar-day-title {
+  color: #34d399 !important; /* emerald-400 */
+}
+
+/* ============================================================
+   CURRENT TIME INDICATOR - The "Red Line"
+   ============================================================ */
+
+.current-time-indicator {
+  pointer-events: none;
+  z-index: 100;
+}
+
+.current-time-dot {
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(239, 68, 68, 0.8);
+    transform: scale(1.2);
+  }
+}
+
+/* ============================================================
+   TEMPORAL AWARENESS - Past Day Fading
+   ============================================================ */
+
+.calendar-day-past {
+  position: relative;
+}
+
+.calendar-day-past::after {
+  content: '';
+  position: absolute;
+  top: 60px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(156, 163, 175, 0.05) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+body.theme-dark .calendar-day-past::after {
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(0, 0, 0, 0.15) 100%
+  );
+}
+
+/* Past slot styling */
+.calendar-slot-past {
+  background: rgba(156, 163, 175, 0.1) !important;
+  border: 1px dashed rgba(156, 163, 175, 0.3) !important;
+  border-radius: 8px !important;
+  opacity: 0.5 !important;
+}
+
+.calendar-slot-past .timeslot-label {
+  color: #9ca3af !important;
+  text-decoration: line-through;
+}
+
+body.theme-dark .calendar-slot-past {
+  background: rgba(75, 85, 99, 0.2) !important;
+  border: 1px dashed rgba(75, 85, 99, 0.4) !important;
+}
+
+body.theme-dark .calendar-slot-past .timeslot-label {
+  color: #6b7280 !important;
+}
+
+/* ============================================================
+   TODAY COLUMN - Subtle Highlight
+   ============================================================ */
+
+.calendar-day-today {
+  position: relative;
+}
+
+.calendar-day-today .calendar-timeline-container {
+  background: linear-gradient(
+    180deg,
+    rgba(16, 185, 129, 0.02) 0%,
+    rgba(16, 185, 129, 0.05) 50%,
+    rgba(16, 185, 129, 0.02) 100%
+  );
+  border-radius: 0 0 12px 12px;
+}
+
+body.theme-dark .calendar-day-today .calendar-timeline-container {
+  background: linear-gradient(
+    180deg,
+    rgba(16, 185, 129, 0.03) 0%,
+    rgba(16, 185, 129, 0.08) 50%,
+    rgba(16, 185, 129, 0.03) 100%
+  );
+}
+
+/* ============================================================
+   ENHANCED SLOT INTERACTIONS - Spring Physics Feel
+   ============================================================ */
+
+/* Override existing hover to work with framer-motion */
+.calendar-living-interface .calendar-slot-ghost {
+  transition: none !important;
+  transform: none !important;
+}
+
+.calendar-living-interface .calendar-slot-ghost:hover {
+  transform: none !important;
+}
+
+/* Slot shadows for depth */
+.calendar-living-interface .calendar-slot {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Available slot enhanced glow on hover (controlled by framer-motion) */
+.calendar-living-interface .calendar-slot-ghost {
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 0 0 1px rgba(16, 185, 129, 0.1);
+}
+
+body.theme-dark .calendar-living-interface .calendar-slot-ghost {
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(52, 211, 153, 0.2),
+    0 0 12px rgba(52, 211, 153, 0.1);
+}
+
+/* ============================================================
+   STAGGERED ENTRY ANIMATIONS - CSS Fallback
+   (framer-motion handles the actual animation)
+   ============================================================ */
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fallback for when JS is disabled */
+@media (prefers-reduced-motion: no-preference) {
+  .calendar-day-column {
+    animation: slideUpFade 0.5s ease forwards;
+  }
+  
+  .calendar-day-column:nth-child(1) { animation-delay: 0s; }
+  .calendar-day-column:nth-child(2) { animation-delay: 0.1s; }
+  .calendar-day-column:nth-child(3) { animation-delay: 0.2s; }
+  .calendar-day-column:nth-child(4) { animation-delay: 0.3s; }
+  .calendar-day-column:nth-child(5) { animation-delay: 0.4s; }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .cursor-spotlight,
+  .current-time-dot {
+    animation: none !important;
+  }
+  
+  .calendar-day-column {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   POPOVER ENHANCEMENTS - Smoother feel
+   ============================================================ */
+
+.calendar-living-interface .booking-popover {
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+body.theme-dark .calendar-living-interface .booking-popover {
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    0 0 0 1px rgba(255, 255, 255, 0.1);
+  background: rgba(17, 24, 39, 0.95);
+}
+
+.calendar-living-interface .booking-popover-confirm,
+.calendar-living-interface .booking-popover-cancel {
+  transition: none; /* Let framer-motion handle it */
+}
+
+/* ============================================================
+   LEGEND ENHANCEMENTS - Subtle entry animation
+   ============================================================ */
+
+.calendar-living-interface .calendar-legend {
+  position: relative;
+  z-index: 5;
+}
+
+.calendar-living-interface .legend-swatch {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.calendar-living-interface .legend-swatch:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* ============================================================
+   LOADING SHIMMER - For async content
+   ============================================================ */
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.calendar-loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(156, 163, 175, 0.1) 25%,
+    rgba(156, 163, 175, 0.2) 50%,
+    rgba(156, 163, 175, 0.1) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+body.theme-dark .calendar-loading-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(75, 85, 99, 0.2) 25%,
+    rgba(75, 85, 99, 0.4) 50%,
+    rgba(75, 85, 99, 0.2) 75%
+  );
+  background-size: 200% 100%;
 }
 
