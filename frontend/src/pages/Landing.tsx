@@ -139,31 +139,40 @@ const Landing: React.FC = memo(() => {
     }
     return {
       ...styles.demoPill,
-      color: '#64748b', // text-slate-500
-      background: '#ffffff',
-      border: '1px solid #e2e8f0', // border-slate-200
+      color: '#475569', // text-slate-600
+      background: '#f1f5f9', // bg-slate-100
+      border: '1px solid #cbd5e1', // border-slate-300
       backdropFilter: 'none',
       WebkitBackdropFilter: 'none',
     };
   };
 
   const handleDemoPillMouseEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Orange glow on hover for both modes
     if (isDark) {
-      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
-      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+      e.currentTarget.style.background = 'rgba(255, 85, 0, 0.15)';
+      e.currentTarget.style.borderColor = 'rgba(255, 85, 0, 0.5)';
+      e.currentTarget.style.color = '#FF5500';
+      e.currentTarget.style.boxShadow = '0 0 20px rgba(255, 85, 0, 0.3)';
     } else {
-      e.currentTarget.style.background = '#f8fafc'; // bg-slate-50
-      e.currentTarget.style.borderColor = '#cbd5e1'; // border-slate-300
+      e.currentTarget.style.background = '#fff7ed'; // bg-orange-50
+      e.currentTarget.style.borderColor = '#f97316'; // border-orange-500
+      e.currentTarget.style.color = '#ea580c'; // text-orange-600
+      e.currentTarget.style.boxShadow = '0 0 15px rgba(249, 115, 22, 0.25)';
     }
   };
 
   const handleDemoPillMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
     if (isDark) {
-      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
-      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.12)';
+      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+      e.currentTarget.style.color = 'rgba(255, 255, 255, 0.8)';
+      e.currentTarget.style.boxShadow = 'none';
     } else {
-      e.currentTarget.style.background = '#ffffff';
-      e.currentTarget.style.borderColor = '#e2e8f0'; // border-slate-200
+      e.currentTarget.style.background = '#f1f5f9'; // bg-slate-100
+      e.currentTarget.style.borderColor = '#cbd5e1'; // border-slate-300
+      e.currentTarget.style.color = '#475569'; // text-slate-600
+      e.currentTarget.style.boxShadow = 'none';
     }
   };
 
@@ -279,10 +288,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '100%',
-    maxWidth: '900px',
-    height: '700px',
-    background: 'radial-gradient(closest-side, rgba(3,3,5, 0.95) 0%, rgba(3,3,5, 0.8) 40%, rgba(3,3,5, 0) 100%)',
+    width: '120%',
+    maxWidth: '1100px',
+    height: '800px',
+    background: 'radial-gradient(closest-side, rgba(3,3,5, 0.85) 0%, rgba(3,3,5, 0.6) 50%, rgba(3,3,5, 0) 100%)',
     pointerEvents: 'none',
     zIndex: -1,
   },
@@ -385,8 +394,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 500,
     fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     color: 'rgba(255, 255, 255, 0.8)',
-    background: 'rgba(255, 255, 255, 0.08)',
-    border: '1px solid rgba(255, 255, 255, 0.12)',
+    background: 'rgba(255, 255, 255, 0.1)',
+    border: '1px solid rgba(255, 255, 255, 0.2)',
     borderRadius: '100px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
@@ -414,7 +423,7 @@ const responsiveStyles = `
     min-height: 100vh;
   }
 
-  /* Mobile-first base styles */
+  /* Mobile-first base styles - Dark mode (default) */
   .landing-parent-brand {
     font-size: 0.9rem !important;
     letter-spacing: 0.2em !important;
@@ -432,12 +441,21 @@ const responsiveStyles = `
     max-width: 320px !important;
   }
 
+  /* Light mode typography - 20% tighter tracking for eyebrow */
+  body.theme-light .landing-parent-brand {
+    letter-spacing: 0.16em !important;
+  }
+
   /* Tablet (640px+) */
   @media (min-width: 640px) {
     .landing-parent-brand {
       font-size: 1.1rem !important;
       letter-spacing: 0.28em !important;
       margin-bottom: 0.75rem !important;
+    }
+    
+    body.theme-light .landing-parent-brand {
+      letter-spacing: 0.22em !important;
     }
     
     .landing-product-name {
@@ -458,6 +476,10 @@ const responsiveStyles = `
       margin-bottom: 1rem !important;
     }
     
+    body.theme-light .landing-parent-brand {
+      letter-spacing: 0.28em !important;
+    }
+    
     .landing-product-name {
       margin-bottom: 1.5rem !important;
     }
@@ -473,6 +495,10 @@ const responsiveStyles = `
     .landing-parent-brand {
       font-size: 1.6rem !important;
       letter-spacing: 0.4em !important;
+    }
+    
+    body.theme-light .landing-parent-brand {
+      letter-spacing: 0.32em !important;
     }
     
     .landing-tagline {
