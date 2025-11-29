@@ -3656,23 +3656,25 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
    CALENDAR GRID - SWIMLANES & STYLING
    ============================================================ */
 
-/* Day column swimlane borders */
+/* Day column - clean white background, no zebra striping */
 .calendar-day-column {
-  border-right: 1px solid var(--border-subtle);
+  background: transparent;
 }
 
-.calendar-day-column:last-child {
-  border-right: none;
+/* Horizontal hour row dividers - guide the eye */
+.calendar-hour-row {
+  border-bottom: 1px solid #f3f4f6; /* gray-100 */
 }
 
-/* Zebra striping for even columns - full height */
-.calendar-day-column:nth-child(even) {
-  background: rgba(255, 255, 255, 0.02);
-}
-
-/* Styled day headers */
+/* Styled day headers - Transparent, just bold text floating above grid */
 .calendar-day-header {
   text-align: center;
+  background: transparent !important;
+  border-radius: 0;
+}
+
+body.theme-dark .calendar-day-header {
+  background: transparent !important;
 }
 
 .calendar-day-title {
@@ -3689,7 +3691,7 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
   text-transform: lowercase;
 }
 
-/* Time column styling - right aligned with better contrast */
+/* Time column styling - de-emphasized for cleaner look */
 .calendar-time-column {
   text-align: right;
 }
@@ -3697,8 +3699,9 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
 .calendar-time-label {
   text-align: right !important;
   padding-right: 16px !important;
-  color: var(--text-secondary) !important;
-  font-weight: 500 !important;
+  color: #9ca3af !important; /* gray-400 - de-emphasized */
+  font-weight: 400 !important;
+  font-size: 0.8rem !important;
 }
 
 /* Controls row spacing */
@@ -3708,7 +3711,7 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
 }
 
 /* ============================================================
-   CALENDAR SLOT - GHOST BUTTON STYLE (Floating Chip Look)
+   CALENDAR SLOT - HIGH-CONVERSION INTERACTIVE CHIPS
    ============================================================ */
 
 /* Base slot styling - floating inside column */
@@ -3716,83 +3719,164 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
   left: 6px !important;
   right: 6px !important;
   width: calc(100% - 12px) !important;
-  border-radius: 6px !important;
+  border-radius: 8px !important; /* rounded-lg for friendlier feel */
 }
 
-/* Slot text readability */
+/* Slot text readability - bold for emphasis */
 .calendar-slot .timeslot-label {
   font-size: 0.75rem !important;
   font-weight: 600 !important;
 }
 
+/* ============================================================
+   AVAILABLE SLOT - Emerald Interactive Chip (High Conversion)
+   ============================================================ */
 .calendar-slot-ghost {
-  background: transparent !important;
-  border: 1.5px solid var(--status-success) !important;
-  border-radius: 6px !important;
-  transition: all 0.2s ease !important;
+  background: #ecfdf5 !important; /* emerald-50 */
+  border: 1px solid #a7f3d0 !important; /* emerald-200 */
+  border-radius: 8px !important; /* rounded-lg */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  cursor: pointer !important;
 }
 
 .calendar-slot-ghost .timeslot-label {
-  color: var(--status-success) !important;
-  font-weight: 600 !important;
+  color: #065f46 !important; /* emerald-800 */
+  font-weight: 600 !important; /* font-medium+ for time text */
 }
 
+/* HOVER EFFECT - "Lift" to encourage clicking */
 .calendar-slot-ghost:hover {
-  background: var(--status-success) !important;
-  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.25) !important;
-  transform: scale(1.02) !important;
+  background: #d1fae5 !important; /* emerald-100 - slightly darker */
+  border-color: #6ee7b7 !important; /* emerald-300 */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important; /* shadow-md */
+  transform: translateY(-2px) !important; /* lift effect */
 }
 
 .calendar-slot-ghost:hover .timeslot-label {
-  color: #FFFFFF !important;
+  color: #047857 !important; /* emerald-700 - slightly darker on hover */
 }
 
-/* Booked slot styling */
+/* ============================================================
+   DARK MODE: "GLOW" STYLE - High Contrast Available Slots
+   ============================================================ */
+body.theme-dark .calendar-slot-ghost {
+  background: rgba(16, 185, 129, 0.1) !important; /* emerald-500/10 */
+  border: 1px solid #34d399 !important; /* emerald-400 - bright glow border */
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.2) !important; /* subtle glow */
+}
+
+body.theme-dark .calendar-slot-ghost .timeslot-label {
+  color: #6ee7b7 !important; /* emerald-300 - bright text */
+  font-weight: 600 !important;
+}
+
+body.theme-dark .calendar-slot-ghost:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: #6ee7b7 !important; /* emerald-300 */
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+  transform: translateY(-2px) !important;
+}
+
+body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
+  color: #a7f3d0 !important; /* emerald-200 */
+}
+
+/* ============================================================
+   BOOKED SLOT - Brand Orange "Hero" (Your Booking)
+   Mode Agnostic: Solid Brand Color in both modes
+   ============================================================ */
 .calendar-slot-booked {
-  background: #ff7700 !important;
-  border-color: #ff7700 !important;
-  border-radius: 6px !important;
+  background: #FF5A1F !important; /* Brand Orange - solid fill */
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
 }
 
 .calendar-slot-booked .timeslot-label {
-  color: #000000 !important;
+  color: #FFFFFF !important; /* White text on orange */
+  font-weight: 700 !important;
 }
 
-/* Full slot styling */
+/* Dark mode: Same solid brand orange - the "hero" state */
+body.theme-dark .calendar-slot-booked {
+  background: #FF5A1F !important;
+  border: 1px solid transparent !important;
+  box-shadow: 0 0 10px rgba(255, 90, 31, 0.3) !important; /* subtle brand glow */
+}
+
+body.theme-dark .calendar-slot-booked .timeslot-label {
+  color: #FFFFFF !important;
+}
+
+/* ============================================================
+   FULL SLOT - "Dead End" / Inactive State
+   Light: Soft Red | Dark: Dimmed Gray (pushed to background)
+   ============================================================ */
 .calendar-slot-full {
-  background: var(--status-danger) !important;
-  border-color: var(--status-danger) !important;
-  border-radius: 6px !important;
-  opacity: 0.8 !important;
+  background: rgba(239, 68, 68, 0.1) !important; /* red-50ish */
+  border: 1px solid rgba(239, 68, 68, 0.3) !important;
+  border-radius: 8px !important;
+  opacity: 0.7 !important;
 }
 
 .calendar-slot-full .timeslot-label {
-  color: #FFFFFF !important;
+  color: #dc2626 !important; /* red-600 */
 }
 
-/* Conflict slot styling */
+/* DARK MODE: Dimmed/Inactive look - visible border for accessibility */
+body.theme-dark .calendar-slot-full {
+  background: #1f2937 !important; /* gray-800 - pushed to background */
+  border: 1px solid #4b5563 !important; /* gray-600 - lighter for visibility */
+  opacity: 0.7 !important;
+}
+
+body.theme-dark .calendar-slot-full .timeslot-label {
+  color: #9ca3af !important; /* gray-400 - slightly lighter for readability */
+}
+
+/* ============================================================
+   CONFLICT SLOT - Warning "Glow" State
+   Light: Soft Amber | Dark: Bright Yellow Glow
+   ============================================================ */
 .calendar-slot-conflict {
-  background: var(--status-warning) !important;
-  border-color: var(--status-warning) !important;
-  border-radius: 6px !important;
-  opacity: 0.8 !important;
+  background: rgba(245, 158, 11, 0.1) !important; /* amber-50ish */
+  border: 1px solid rgba(245, 158, 11, 0.3) !important;
+  border-radius: 8px !important;
+  opacity: 0.7 !important;
 }
 
 .calendar-slot-conflict .timeslot-label {
-  color: #000000 !important;
+  color: #d97706 !important; /* amber-600 */
 }
 
-/* Selected slot state (clicked, awaiting confirmation) */
+/* DARK MODE: Bright Yellow "Glow" - clearly distinguishable from orange/red */
+body.theme-dark .calendar-slot-conflict {
+  background: rgba(234, 179, 8, 0.1) !important; /* yellow-500/10 */
+  border: 1px solid #facc15 !important; /* yellow-400 - bright glow border */
+  opacity: 0.85 !important;
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.2) !important;
+}
+
+body.theme-dark .calendar-slot-conflict .timeslot-label {
+  color: #fef08a !important; /* yellow-200 - bright text */
+}
+
+/* ============================================================
+   SELECTED SLOT - Awaiting confirmation (elevated state)
+   ============================================================ */
 .calendar-slot-selected {
-  background: var(--status-success) !important;
-  border-color: var(--status-success) !important;
+  background: #059669 !important; /* emerald-600 */
+  border: 1px solid #059669 !important;
   color: #FFFFFF !important;
-  z-index: 1000 !important; /* Force it above grid lines */
-  position: relative; /* Ensure z-index applies */
+  border-radius: 8px !important;
+  z-index: 1000 !important;
+  position: relative;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05) !important;
+  transform: translateY(-2px) !important;
 }
 
 .calendar-slot-selected .timeslot-label {
   color: #FFFFFF !important;
+  font-weight: 700 !important;
 }
 
 /* ============================================================
@@ -3928,6 +4012,109 @@ body.theme-dark .booking-popover-cancel:hover {
   color: var(--text-tertiary);
   font-size: 0.875rem;
   font-weight: 400;
+}
+
+/* ============================================================
+   CALENDAR LEGEND - Theme-aware Color Swatches
+   Key must match the map perfectly for accessibility
+   ============================================================ */
+
+/* Base swatch styling */
+.legend-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* Base label styling */
+.legend-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* ---- AVAILABLE: The "Go" Signal ---- */
+.legend-available {
+  background-color: #ecfdf5; /* emerald-50 */
+  border: 1px solid #a7f3d0; /* emerald-200 */
+}
+
+.legend-label-available {
+  color: #065f46; /* emerald-800 */
+}
+
+/* Dark Mode: Emerald Glow */
+body.theme-dark .legend-available {
+  background-color: rgba(16, 185, 129, 0.1); /* emerald-500/10 */
+  border: 1px solid #34d399; /* emerald-400 */
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.25);
+}
+
+body.theme-dark .legend-label-available {
+  color: #6ee7b7; /* emerald-300 */
+}
+
+/* ---- CONFLICT: The Warning ---- */
+.legend-conflict {
+  background-color: rgba(245, 158, 11, 0.1); /* amber-50ish */
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.legend-label-conflict {
+  color: #d97706; /* amber-600 */
+}
+
+/* Dark Mode: Yellow Glow - distinguishes from orange/red */
+body.theme-dark .legend-conflict {
+  background-color: rgba(234, 179, 8, 0.1); /* yellow-500/10 */
+  border: 1px solid #facc15; /* yellow-400 */
+  box-shadow: 0 0 6px rgba(250, 204, 21, 0.2);
+}
+
+body.theme-dark .legend-label-conflict {
+  color: #fef08a; /* yellow-200 */
+}
+
+/* ---- FULL: The Dead End (Dimmed) ---- */
+.legend-full {
+  background-color: rgba(239, 68, 68, 0.1); /* red-50ish */
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.legend-label-full {
+  color: #dc2626; /* red-600 */
+}
+
+/* Dark Mode: Dimmed/Inactive - visible border for accessibility */
+body.theme-dark .legend-full {
+  background-color: #1f2937; /* gray-800 */
+  border: 1px solid #4b5563; /* gray-600 - lighter for visibility */
+}
+
+body.theme-dark .legend-label-full {
+  color: #9ca3af; /* gray-400 - slightly lighter for readability */
+}
+
+/* ---- YOUR BOOKING: The Hero (Mode Agnostic) ---- */
+.legend-booked {
+  background-color: #FF5A1F; /* Brand Orange - solid */
+  border: 1px solid transparent;
+}
+
+.legend-label-booked {
+  color: #FF5A1F;
+  font-weight: 600;
+}
+
+/* Dark Mode: Same solid brand - with subtle glow */
+body.theme-dark .legend-booked {
+  background-color: #FF5A1F;
+  border: 1px solid transparent;
+  box-shadow: 0 0 8px rgba(255, 90, 31, 0.3);
+}
+
+body.theme-dark .legend-label-booked {
+  color: #FF5A1F;
 }
 
 /* Legacy hint (icon + text) */

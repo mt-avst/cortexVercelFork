@@ -155,11 +155,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     return hasConflict;
   }, [userCalendarEvents]);
 
-  // Format time for display (12-hour format with AM/PM)
+  // Format time for display (12-hour format with AM/PM, no leading zeros)
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
+      hour: 'numeric', // Remove leading zero (2:00 PM instead of 02:00 PM)
       minute: '2-digit',
       hour12: true,
       timeZone: 'UTC'
@@ -350,23 +350,23 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   return (
     <div className="calendar-view" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden' }}>
-      {/* Color-coded legend */}
-      <div className="calendar-legend d-flex flex-wrap gap-3 mb-3">
+      {/* Color-coded legend - synchronized with slot styles (uses CSS classes for dark mode) */}
+      <div className="calendar-legend d-flex flex-wrap gap-4 mb-4">
         <div className="d-flex align-items-center gap-2">
-          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#28a745' }}></div>
-          <small className="calendar-legend-text">Available</small>
+          <div className="legend-swatch legend-available"></div>
+          <small className="legend-label legend-label-available">Available</small>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <div className="bg-warning" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small className="calendar-legend-text">Calendar Conflict</small>
+          <div className="legend-swatch legend-conflict"></div>
+          <small className="legend-label legend-label-conflict">Calendar Conflict</small>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <div className="bg-danger" style={{ width: '20px', height: '20px', borderRadius: '2px' }}></div>
-          <small className="calendar-legend-text">Full</small>
+          <div className="legend-swatch legend-full"></div>
+          <small className="legend-label legend-label-full">Full</small>
         </div>
         <div className="d-flex align-items-center gap-2">
-          <div style={{ width: '20px', height: '20px', borderRadius: '2px', backgroundColor: '#ff7700' }}></div>
-          <small className="calendar-legend-text">Your Booking</small>
+          <div className="legend-swatch legend-booked"></div>
+          <small className="legend-label legend-label-booked">Your Booking</small>
         </div>
       </div>
 
@@ -374,10 +374,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       <div className="calendar-timeline" style={{ overflow: 'hidden' }}>
         <div style={{ 
           display: 'flex',
-          gap: '8px',
+          gap: '24px', /* gap-6 - healthy gap between time column and days */
           width: '100%',
-          overflowX: 'hidden', /* Removed horizontal scrollbar */
-          overflowY: 'hidden' /* Removed vertical scrollbar */
+          overflowX: 'hidden',
+          overflowY: 'hidden'
         }}>
           {/* Time Column (Left) */}
           <div className="calendar-time-column" style={{
@@ -433,22 +433,50 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           <div className="calendar-days-container" style={{ 
             position: 'relative',
             flex: 1,
-            minWidth: `${Math.min(sessionsByDate.length, 5) * 120}px`
+            minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px` /* Slightly wider to account for gaps */
           }}>
-            {/* Day Columns Grid */}
+            {/* Horizontal hour dividers - guide the eye */}
+            <div style={{
+              position: 'absolute',
+              top: '60px', /* Below headers */
+              left: 0,
+              right: 0,
+              height: timelineHeight,
+              pointerEvents: 'none',
+              zIndex: 1
+            }}>
+              {timeMarkers.filter(m => m.isHour).map((marker, index) => {
+                const position = getTimePosition(marker.time);
+                return (
+                  <div
+                    key={`divider-${marker.time}-${index}`}
+                    style={{
+                      position: 'absolute',
+                      top: `${position}%`,
+                      left: 0,
+                      right: 0,
+                      height: '1px',
+                      backgroundColor: '#f3f4f6' /* gray-100 */
+                    }}
+                  />
+                );
+              })}
+            </div>
+            {/* Day Columns Grid - wider gaps for distinct days */}
             <div style={{ 
               display: 'grid',
               gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
-              gap: '8px',
+              gap: '24px', /* gap-6 - days feel distinct without background colors */
               position: 'relative',
               zIndex: 3
             }}>
                 {sessionsByDate.slice(0, 5).map(([date, dateSessions]) => (
                 <div key={date} className="calendar-day-column" style={{ position: 'relative' }}>
-                  {/* Day Header */}
+                  {/* Day Header - Transparent, just bold text floating above grid */}
                   <div className="calendar-day-header p-2" style={{ 
-                    borderRadius: '8px 8px 0 0',
+                    borderRadius: '0',
                     border: 'none',
+                    background: 'transparent', /* Force transparency */
                     height: '60px',
                     display: 'flex',
                     flexDirection: 'column',
@@ -538,21 +566,25 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             })()}
                             onClick={() => canClick && handleSlotClick(session)}
                           >
-                            {/* Time label */}
+                            {/* Time label - Aggressive space saving typography */}
                             <div 
                               className="timeslot-label"
                               style={{
                                 position: 'absolute',
                                 top: '2px',
-                                left: '4px',
-                                fontSize: '0.65rem',
+                                left: '0',
+                                right: '0',
+                                width: '100%', /* w-full */
+                                fontSize: '11px', /* text-[11px] */
                                 fontWeight: '600',
+                                letterSpacing: '-0.025em', /* tracking-tight */
+                                lineHeight: '1.25', /* leading-tight */
+                                textAlign: 'center', /* text-center */
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
-                                maxWidth: 'calc(100% - 24px)',
-                                pointerEvents: 'none',
-                                lineHeight: '1.2'
+                                padding: '0 2px',
+                                pointerEvents: 'none'
                               }}>
                               {formatTime(session.start_time)} - {formatTime(session.end_time)}
                             </div>
