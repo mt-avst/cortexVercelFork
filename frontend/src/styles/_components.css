@@ -3531,7 +3531,7 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
 /* Semantic Roof - Top Accent Bar */
 .opportunity-detail-card {
   border-radius: 12px !important;
-  overflow: hidden; /* Ensures content respects border-radius */
+  /* Note: overflow: visible to allow sticky headers - border-radius applied to children */
 }
 
 .opportunity-detail-card .card-header {
@@ -5296,5 +5296,265 @@ body.theme-dark .calendar-loading-shimmer {
     rgba(75, 85, 99, 0.2) 75%
   );
   background-size: 200% 100%;
+}
+
+/* ============================================================
+   LEVEL 4 POLISH: LIVING INTERFACE ENHANCEMENTS
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1. VIEWPORT-STICKY HEADER ROW
+   Frosted glass header that sticks to screen top
+   ------------------------------------------------------------ */
+
+/* Main sticky header row - sticks to viewport top */
+.calendar-sticky-header-row {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.85) 100%
+  );
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  margin-left: -24px;
+  margin-right: -24px;
+  padding-left: 24px;
+  padding-right: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.3s ease;
+}
+
+body.theme-dark .calendar-sticky-header-row {
+  background: linear-gradient(
+    180deg,
+    rgba(11, 15, 25, 0.95) 0%,
+    rgba(11, 15, 25, 0.88) 100%
+  );
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Individual header cell in the sticky row */
+.calendar-day-header-cell {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.calendar-day-header-cell:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+body.theme-dark .calendar-day-header-cell:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* Legacy glass header support */
+.calendar-header-glass {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+body.theme-dark .calendar-header-glass {
+  background: rgba(11, 15, 25, 0.7);
+}
+
+/* ------------------------------------------------------------
+   2. AMBIENT "GLOW" BACKGROUND (Dark Mode Only)
+   Subtle fixed gradient blob to break up flat backgrounds
+   ------------------------------------------------------------ */
+
+.calendar-ambient-glow {
+  position: fixed;
+  top: 20%;
+  left: 50%;
+  width: 600px;
+  height: 600px;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    circle,
+    rgba(99, 102, 241, 0.08) 0%,
+    rgba(99, 102, 241, 0.03) 40%,
+    rgba(0, 0, 0, 0) 70%
+  );
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+/* Only visible in dark mode */
+body.theme-dark .calendar-ambient-glow {
+  opacity: 1;
+}
+
+/* Secondary accent glow - offset for depth */
+.calendar-ambient-glow-secondary {
+  position: fixed;
+  top: 50%;
+  left: 30%;
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(
+    circle,
+    rgba(16, 185, 129, 0.06) 0%,
+    rgba(16, 185, 129, 0.02) 40%,
+    transparent 70%
+  );
+  filter: blur(60px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+body.theme-dark .calendar-ambient-glow-secondary {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------
+   3. GHOST HOVER - Empty Cell Micro-Interaction
+   Subtle highlight on hover over any grid area
+   ------------------------------------------------------------ */
+
+.calendar-timeline-container {
+  position: relative;
+}
+
+/* Ghost hover layer for empty cells */
+.calendar-ghost-hover {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Individual ghost cell that appears on hover */
+.calendar-ghost-cell {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  background: transparent;
+  border-radius: 6px;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.calendar-ghost-cell:hover {
+  background: rgba(107, 114, 128, 0.05);
+  border: 1px dashed rgba(107, 114, 128, 0.15);
+}
+
+body.theme-dark .calendar-ghost-cell:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+/* Interactive timeline background that responds to hover */
+.calendar-timeline-interactive {
+  position: relative;
+}
+
+.calendar-timeline-interactive::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  transition: background 0.3s ease;
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.calendar-timeline-interactive:hover::before {
+  background: rgba(107, 114, 128, 0.02);
+}
+
+body.theme-dark .calendar-timeline-interactive:hover::before {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+/* Hoverable hour rows that show faint highlight */
+.calendar-hour-ghost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: calc(100% / 16); /* 16 hours from 7am to 11pm */
+  background: transparent;
+  transition: background 0.15s ease-out;
+  z-index: 1;
+}
+
+.calendar-hour-ghost:hover {
+  background: rgba(107, 114, 128, 0.04);
+}
+
+body.theme-dark .calendar-hour-ghost:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* ------------------------------------------------------------
+   4. ENHANCED VISUAL POLISH
+   ------------------------------------------------------------ */
+
+/* Smooth scroll behavior for the calendar */
+.calendar-living-interface {
+  scroll-behavior: smooth;
+}
+
+/* Enhanced border dividers in dark mode */
+body.theme-dark .calendar-living-interface [style*="border"] {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Elevated content sits above ambient glow */
+.calendar-timeline,
+.calendar-legend,
+.calendar-days-container {
+  position: relative;
+  z-index: 2;
+}
+
+/* Subtle inner shadow on timeline containers for depth */
+.calendar-day-column .calendar-timeline-container {
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.02);
+}
+
+body.theme-dark .calendar-day-column .calendar-timeline-container {
+  box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Animate the ambient glow subtly */
+@keyframes ambient-drift {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0);
+  }
+  50% {
+    transform: translateX(-50%) translateY(20px);
+  }
+}
+
+.calendar-ambient-glow {
+  animation: ambient-drift 20s ease-in-out infinite;
+}
+
+/* Secondary glow drifts in opposite direction */
+@keyframes ambient-drift-alt {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-15px);
+  }
+}
+
+.calendar-ambient-glow-secondary {
+  animation: ambient-drift-alt 25s ease-in-out infinite;
 }
 

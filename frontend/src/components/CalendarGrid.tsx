@@ -462,8 +462,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       ref={containerRef}
       className="calendar-view calendar-living-interface" 
       onMouseMove={handleMouseMove}
-      style={{ overflow: 'hidden', position: 'relative' }}
+      style={{ overflow: 'visible', position: 'relative' }}
     >
+      {/* Ambient Glow Background - Dark Mode Only (via CSS) */}
+      <div className="calendar-ambient-glow" aria-hidden="true" />
+      <div className="calendar-ambient-glow-secondary" aria-hidden="true" />
+      
       {/* Cursor Spotlight Effect - Radial glow that follows the mouse */}
       <motion.div
         className="cursor-spotlight"
@@ -497,14 +501,90 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         ))}
       </div>
 
-      {/* Calendar Timeline */}
-      <div className="calendar-timeline" style={{ overflow: 'hidden' }}>
+      {/* Calendar Timeline - Page scroll with viewport-sticky headers */}
+      <div className="calendar-timeline" style={{ 
+        position: 'relative',
+        overflow: 'visible'
+      }}>
+        {/* Viewport-Sticky Header Row */}
+        <div className="calendar-sticky-header-row" style={{
+          display: 'flex',
+          gap: '24px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 100,
+          paddingTop: '8px',
+          paddingBottom: '12px',
+          marginBottom: '0'
+        }}>
+          {/* Empty space for time column alignment */}
+          <div style={{ minWidth: '90px', width: '90px' }} />
+          
+          {/* Day Headers */}
+          <div style={{
+            flex: 1,
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
+            gap: '24px'
+          }}>
+            {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
+              const isToday = columnIndex === todayColumnIndex;
+              return (
+                <motion.div
+                  key={`header-${date}`}
+                  className="calendar-day-header-cell"
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: columnIndex * 0.05 }}
+                  style={{
+                    textAlign: 'center',
+                    padding: '8px'
+                  }}
+                >
+                  <h6 
+                    className="calendar-day-title mb-1" 
+                    style={{ 
+                      margin: 0,
+                      marginBottom: '4px',
+                      color: isToday ? 'var(--color-emerald-500, #10b981)' : undefined
+                    }}
+                  >
+                    {formatDate(date)}
+                    {isToday && (
+                      <motion.span
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 0.3 }}
+                        style={{
+                          marginLeft: '8px',
+                          fontSize: '10px',
+                          fontWeight: 700,
+                          color: 'white',
+                          backgroundColor: '#059669',
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
+                      >
+                        Today
+                      </motion.span>
+                    )}
+                  </h6>
+                  <small className="calendar-day-sessions">
+                    {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
+                  </small>
+                </motion.div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Calendar Content */}
         <div style={{ 
           display: 'flex',
           gap: '24px',
-          width: '100%',
-          overflowX: 'hidden',
-          overflowY: 'hidden'
+          width: '100%'
         }}>
           {/* Time Column (Left) */}
           <motion.div 
@@ -520,10 +600,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               zIndex: 5
             }}
           >
-            {/* Glassmorphic Time Header */}
-            <div className="calendar-time-header calendar-header-glass" style={{
-              height: '60px'
-            }}></div>
             {/* Time Markers */}
             <div className="calendar-time-markers" style={{
               position: 'relative',
@@ -571,7 +647,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
             {/* Horizontal hour dividers */}
             <div style={{
               position: 'absolute',
-              top: '60px',
+              top: '0',
               left: 0,
               right: 0,
               height: timelineHeight,
@@ -605,7 +681,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                 transition={{ duration: 0.6, delay: 0.8, ease: 'easeOut' }}
                 style={{
                   position: 'absolute',
-                  top: `calc(60px + ${getCurrentTimePosition}% * 900 / 100)`,
+                  top: `calc(${getCurrentTimePosition}% * 900 / 100)`,
                   left: 0,
                   right: 0,
                   zIndex: 10,
@@ -667,7 +743,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               </motion.div>
             )}
 
-            {/* Day Columns Grid with Staggered Entry */}
+            {/* Day Columns Grid - Content scrolls under sticky header */}
             <div style={{ 
               display: 'grid',
               gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
@@ -695,59 +771,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                     variants={columnVariants}
                     style={{ position: 'relative' }}
                   >
-                    {/* Transparent Day Header - text floats on background */}
-                    <div 
-                      className="calendar-day-header p-2" 
-                      style={{ 
-                        borderRadius: '0',
-                        border: 'none',
-                        height: '60px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        alignItems: 'center',
-                        backgroundColor: 'transparent',
-                        position: 'sticky',
-                        top: 0,
-                        zIndex: 10
-                      }}
-                    >
-                      <h6 
-                        className="calendar-day-title mb-1" 
-                        style={{ 
-                          margin: 0,
-                          color: isToday ? 'var(--color-emerald-600, #059669)' : undefined
-                        }}
-                      >
-                        {formatDate(date)}
-                        {isToday && (
-                          <motion.span
-                            initial={{ opacity: 0, scale: 0 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.5 + columnIndex * 0.1 }}
-                            style={{
-                              marginLeft: '8px',
-                              fontSize: '10px',
-                              fontWeight: 700,
-                              color: 'white',
-                              backgroundColor: '#059669',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.5px'
-                            }}
-                          >
-                            Today
-                          </motion.span>
-                        )}
-                      </h6>
-                      <small className="calendar-day-sessions">
-                        {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
-                      </small>
-                    </div>
-
-                    {/* Timeline Container */}
-                    <div className="calendar-timeline-container" style={{ 
+                    {/* Timeline Container with Ghost Hover Effect */}
+                    <div className="calendar-timeline-container calendar-timeline-interactive" style={{ 
                       position: 'relative',
                       height: timelineHeight,
                       border: 'none',
@@ -757,6 +782,24 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       filter: isPast ? 'grayscale(30%)' : 'none',
                       transition: 'opacity 0.3s ease, filter 0.3s ease'
                     }}>
+                      {/* Ghost Hover Cells - Visible faint highlight on empty space hover */}
+                      {timeMarkers.filter(m => m.isHour && m.time < 23).map((marker, index) => {
+                        const topPos = getTimePosition(marker.time);
+                        const nextPos = getTimePosition(marker.time + 1);
+                        const height = nextPos - topPos;
+                        return (
+                          <div
+                            key={`ghost-${marker.time}-${index}`}
+                            className="calendar-ghost-cell"
+                            style={{
+                              top: `${topPos}%`,
+                              height: `${height}%`,
+                            }}
+                            aria-hidden="true"
+                          />
+                        );
+                      })}
+                      
                       {dateSessions.map((session, slotIndex) => {
                         const isBooked = bookedSlots.has(session.id);
                         const hasConflict = hasCalendarConflict(session);
