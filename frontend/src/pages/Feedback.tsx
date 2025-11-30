@@ -1,15 +1,21 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { submitFeedback } from '../api/client';
-import { CheckCircle, MessageSquare, AlertTriangle, Send } from 'lucide-react';
+import { CheckCircle, MessageSquare, AlertTriangle, Send, X } from 'lucide-react';
 
 const Feedback: React.FC = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [feedback, setFeedback] = useState('');
   const [category, setCategory] = useState<'bug' | 'feature' | 'question' | 'other'>('bug');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleClose = () => {
+    navigate(-1); // Go back to previous page
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,7 +154,37 @@ const Feedback: React.FC = () => {
         <div className="container mt-5" style={{ position: 'relative', zIndex: 10 }}>
           <div className="row justify-content-center">
             <div className="col-md-8">
-              <div className="card feedback-card">
+              <div className="card feedback-card" style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  aria-label="Close"
+                  style={{
+                    position: 'absolute',
+                    top: '16px',
+                    right: '16px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-muted)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                    e.currentTarget.style.color = 'var(--text-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                  }}
+                >
+                  <X size={24} />
+                </button>
                 <div className="card-body text-center">
                   <CheckCircle size={48} className="text-success" />
                   <h2 className="mt-3">Thank You!</h2>
@@ -179,11 +215,37 @@ const Feedback: React.FC = () => {
         <div className="row justify-content-center">
           <div className="col-md-8">
             <div className="card feedback-card">
-              <div className="card-header">
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h2 className="mb-0">
-                  <MessageSquare size={20} className="me-2" />
                   Send Feedback
                 </h2>
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  aria-label="Close"
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: '8px',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--text-muted)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                    e.currentTarget.style.color = 'var(--text-primary)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                    e.currentTarget.style.color = 'var(--text-muted)';
+                  }}
+                >
+                  <X size={24} />
+                </button>
               </div>
               <div className="card-body">
                 <p className="text-muted">
