@@ -42,8 +42,13 @@ body.theme-dark .study-listing-page {
 
 /* Light Mode - Study Listing with Technical Grid Background */
 body.theme-light .study-listing-page {
-  background: #f8fafc;
+  background: #FFFFFF; /* Pure white - matches login page */
   min-height: 100vh;
+}
+
+/* Override body background when study listing page is active (light mode) */
+body.theme-light:has(.study-listing-page) {
+  background: #FFFFFF; /* Pure white - no grey gradient */
 }
 
 /* Full-screen fixed grid overlay for light mode study listing */
