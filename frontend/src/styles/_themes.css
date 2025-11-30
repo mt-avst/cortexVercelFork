@@ -197,8 +197,8 @@ body.theme-light .card:hover {
 body.theme-light .bento-grid .card,
 body.theme-light .study-listing-page .bento-grid .card,
 body.theme-light .spotlight-card {
-  /* Solid white background - no transparency */
-  background: #FFFFFF;
+  /* FORCED pure white background - Lab aesthetic (no category tints) */
+  background: #FFFFFF !important;
   /* Crisp grey border (gray-200) for defined edges */
   border: 1px solid #e5e7eb;
   /* Tight shadow - physical lift feel (not soft/diffuse) */
@@ -208,7 +208,7 @@ body.theme-light .spotlight-card {
   /* No blur needed for solid cards */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* Smooth transition for hover lift */
+  /* Smooth transition for hover lift and border color */
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
@@ -217,8 +217,10 @@ body.theme-light .study-listing-page .bento-grid .card:hover,
 body.theme-light .spotlight-card:hover {
   /* Physical lift - translate up */
   transform: translateY(-4px);
-  /* Slightly darker border on hover */
-  border-color: #d1d5db;
+  /* Category color accent on hover border (via --dynamic-hover-color) */
+  border-color: var(--dynamic-hover-color, #d1d5db);
+  /* Keep pure white background on hover */
+  background: #FFFFFF !important;
   /* Sharpened shadow - card "lifts" off surface */
   box-shadow: 
     0 4px 6px rgba(0, 0, 0, 0.07),

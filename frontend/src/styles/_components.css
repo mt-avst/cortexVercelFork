@@ -4676,23 +4676,37 @@ body.theme-light .card.card-clickable:hover {
   z-index: 1;
 }
 
-/* Light Mode Spotlight Adjustments */
+/* Light Mode Spotlight Adjustments - "Lab" aesthetic
+   Pure white cards, no category-colored background tints
+   Color accent ONLY on hover border */
 body.theme-light .spotlight-card {
-  --spotlight-color: rgba(255, 78, 80, 0.4);
+  /* Force pure white background - no tints */
+  background: #FFFFFF !important;
+  /* Neutral spotlight - no colored glow in light mode */
+  --spotlight-color: rgba(0, 0, 0, 0.1);
 }
 
+/* Disable the inner glow effect entirely in light mode for clean Lab look */
 body.theme-light .spotlight-glow {
-  background: radial-gradient(
-    calc(var(--spotlight-size) * 1.5) circle at var(--spotlight-x) var(--spotlight-y),
-    rgba(255, 78, 80, 0.04),
-    transparent 40%
-  );
+  display: none;
+}
+
+/* Disable the spotlight border gradient in light mode */
+body.theme-light .spotlight-border {
+  display: none;
 }
 
 body.theme-light .spotlight-card-featured {
-  --spotlight-color: rgba(37, 99, 235, 0.5);
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  /* Pure white background even for featured cards */
+  background: #FFFFFF !important;
+  border: 1px solid #e5e7eb;
+}
+
+/* Light mode hover: category color on border ONLY */
+body.theme-light .spotlight-card:hover {
+  /* Use dynamic hover color for border accent */
+  border-color: var(--dynamic-hover-color, #d1d5db) !important;
+  background: #FFFFFF !important; /* Keep pure white on hover */
 }
 
 /* Override card-clickable hover to work with spotlight */
