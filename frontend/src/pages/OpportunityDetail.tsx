@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents } from '../api/client';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
-import CalendarGrid from '../components/CalendarGrid';
+import { useTheme } from '../contexts/ThemeContext';
+import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid';
 import ConfirmationModal from '../components/ConfirmationModal';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -12,6 +14,8 @@ const OpportunityDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user, login } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
@@ -299,13 +303,16 @@ const OpportunityDetail: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid py-4 opportunity-detail-page">
-      <section className="container mt-4" aria-label="Opportunity details">
+    <div className="container-fluid py-4 opportunity-detail-page mission-control">
+      {/* Living Neural Background - Dark Mode Only */}
+      {isDark && <SlowNeuralBackground />}
+      
+      <section className="container mt-4" aria-label="Opportunity details" style={{ position: 'relative', zIndex: 1 }}>
         <div className="row">
           <div className="col-12">
           {/* Back button */}
           <button 
-            className="btn btn-outline-secondary mb-3"
+            className="btn btn-outline-secondary mb-4 mission-back-btn"
             onClick={() => navigate('/')}
             aria-label="Navigate back to AdaptaLabs home"
           >
@@ -315,7 +322,7 @@ const OpportunityDetail: React.FC = () => {
 
           {/* Error message */}
           {error && (
-            <div className="alert alert-danger alert-dismissible fade show" role="alert" aria-live="assertive">
+            <div className="alert alert-danger alert-dismissible fade show mission-alert" role="alert" aria-live="assertive">
               {error}
               <div className="mt-2">
                 <button 
@@ -353,81 +360,83 @@ const OpportunityDetail: React.FC = () => {
             </div>
           )}
 
+          {/* ============================================================
+              MODULE A: THE BRIEF - Glass Panel (Title, Description, Meta)
+              ============================================================ */}
           <div 
-            className="card opportunity-detail-card"
+            className="mission-glass-panel mission-brief"
             style={{ 
-              borderTop: `4px solid ${getCardHoverColor(opportunity?.type)}`,
-              borderLeft: '1px solid var(--border-subtle)',
-              borderRight: '1px solid var(--border-subtle)',
-              borderBottom: '1px solid var(--border-subtle)'
-            }}
+              '--accent-border-color': getCardHoverColor(opportunity?.type)
+            } as React.CSSProperties}
           >
-            <div className="card-header" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-              {/* Hero Section - Two Column Layout */}
-              <div className="opportunity-hero">
-                {/* Left Column: Content */}
-                <div className="opportunity-hero-content">
-                  <div className="d-flex align-items-center gap-2 mb-3">
-                    <span className={getTypeBadgeClass(opportunity?.type)}>
-                      {formatOpportunityType(opportunity?.type)}
+            {/* Hero Section - Two Column Layout */}
+            <div className="mission-brief-layout">
+              {/* Left Column: Content (60%) */}
+              <div className="mission-brief-content">
+                <div className="d-flex align-items-center gap-2 mb-3">
+                  <span className={getTypeBadgeClass(opportunity?.type)}>
+                    {formatOpportunityType(opportunity?.type)}
+                  </span>
+                  {(user?.role === 'researcher_admin' || user?.role === 'superadmin') && (
+                    <span className={getStatusBadgeClass(opportunity.status)}>
+                      {opportunity.status}
                     </span>
-                    {(user?.role === 'researcher_admin' || user?.role === 'superadmin') && (
-                      <span className={getStatusBadgeClass(opportunity.status)}>
-                        {opportunity.status}
-                      </span>
-                    )}
-                  </div>
-                  <h1 className="opportunity-hero-title">{opportunity.title}</h1>
-                  {/* Purpose/Description */}
-                  {opportunity.type !== 'question' && opportunity.purpose_one_liner && (
-                    <p className="opportunity-hero-description">{opportunity.purpose_one_liner}</p>
-                  )}
-                  {opportunity.description_optional && (
-                    <p className="opportunity-hero-description" style={{ marginTop: '12px' }}>{opportunity.description_optional}</p>
                   )}
                 </div>
+                <h1 className="mission-title">{opportunity.title}</h1>
+                {/* Purpose/Description */}
+                {opportunity.type !== 'question' && opportunity.purpose_one_liner && (
+                  <p className="mission-description">{opportunity.purpose_one_liner}</p>
+                )}
+                {opportunity.description_optional && (
+                  <p className="mission-description" style={{ marginTop: '12px' }}>{opportunity.description_optional}</p>
+                )}
+              </div>
 
-                {/* Right Column: Metadata Box */}
-                <div className="opportunity-hero-meta">
-                  <div className="opportunity-hero-meta-grid">
-                    {/* Product - only show for non-question types */}
-                    {opportunity.type !== 'question' && opportunity.product_optional && (
-                      <div className="meta-item">
-                        <span className="meta-label">Product</span>
-                        <span className="meta-value">{opportunity.product_optional}</span>
-                      </div>
-                    )}
-
-                    {/* Duration - only show for test and interview types */}
-                    {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                      <div className="meta-item">
-                        <span className="meta-label">Duration</span>
-                        <span className="meta-value">{opportunity.default_duration_minutes} minutes</span>
-                      </div>
-                    )}
-
-                    {/* Participants */}
-                    <div className="meta-item">
-                      <span className="meta-label">Participants Sought</span>
-                      <span className="meta-value">
-                        {(() => {
-                          switch (opportunity.participant_type_required) {
-                            case 'any': return 'Any participants';
-                            case 'internal': return 'Internal employees only';
-                            case 'external': return 'External participants only';
-                            case 'specific': 
-                              return opportunity.participant_type_specific_details || 'Specific participants';
-                            default: return 'Any participants';
-                          }
-                        })()}
-                      </span>
+              {/* Right Column: Data Box (30%) - Technical Specs */}
+              <div className="mission-data-box">
+                <div className="mission-data-grid">
+                  {/* Product - only show for non-question types */}
+                  {opportunity.type !== 'question' && opportunity.product_optional && (
+                    <div className="mission-data-item">
+                      <span className="mission-data-label">PRODUCT</span>
+                      <span className="mission-data-value">{opportunity.product_optional}</span>
                     </div>
+                  )}
+
+                  {/* Duration - only show for test and interview types */}
+                  {(opportunity.type === 'test' || opportunity.type === 'interview') && (
+                    <div className="mission-data-item">
+                      <span className="mission-data-label">DURATION</span>
+                      <span className="mission-data-value">{opportunity.default_duration_minutes} min</span>
+                    </div>
+                  )}
+
+                  {/* Participants */}
+                  <div className="mission-data-item">
+                    <span className="mission-data-label">PARTICIPANTS</span>
+                    <span className="mission-data-value">
+                      {(() => {
+                        switch (opportunity.participant_type_required) {
+                          case 'any': return 'Any';
+                          case 'internal': return 'Internal only';
+                          case 'external': return 'External only';
+                          case 'specific': 
+                            return opportunity.participant_type_specific_details || 'Specific';
+                          default: return 'Any';
+                        }
+                      })()}
+                    </span>
                   </div>
                 </div>
               </div>
             </div>
-            
-            <div className="card-body">
+          </div>
+
+          {/* ============================================================
+              MODULE B: THE SCHEDULER - Glass Panel (Calendar)
+              ============================================================ */}
+          <div className="mission-glass-panel mission-scheduler">
 
               {/* Sessions for test and interview opportunities */}
               {(opportunity.type === 'test' || opportunity.type === 'interview') && (
@@ -458,51 +467,122 @@ const OpportunityDetail: React.FC = () => {
 
                   {/* Calendar Integration */}
                   <div className="mb-4">
-                    <div className="d-flex justify-content-between align-items-center mb-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
                       {/* Header with inline hint */}
                       <div className="d-flex align-items-center gap-2">
                         <h5 className="mb-0">Available Sessions</h5>
-                        {!bookingSuccess && (
-                          <>
-                            <span className="calendar-hint-divider" aria-hidden="true">•</span>
-                            <span className="calendar-hint-inline" aria-label="Click a timeslot to book">
-                              Click a timeslot to book
-                            </span>
-                          </>
-                        )}
+                        {/* Inline Legend */}
+                        <span className="calendar-hint-divider ms-2" aria-hidden="true">|</span>
+                        <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
+                          {CALENDAR_LEGEND_ITEMS.map((item) => (
+                            <div key={item.label} className="d-flex align-items-center gap-1" role="listitem">
+                              <div 
+                                className={`legend-swatch ${item.className}`} 
+                                style={{ width: '12px', height: '12px', borderRadius: '3px' }}
+                              />
+                              <small className={`legend-label ${item.labelClass}`} style={{ fontSize: '0.7rem' }}>
+                                {item.label}
+                              </small>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="d-flex align-items-center gap-3">
+                      <div className="d-flex align-items-center gap-2">
+                        {/* Ghost Refresh Button */}
                         <button
                           type="button"
-                          className="btn btn-sm btn-outline-secondary"
                           onClick={() => loadOpportunity(true)}
                           disabled={loading}
                           aria-label="Refresh sessions data"
                           title="Refresh sessions data"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            padding: '4px 8px',
+                            fontSize: '0.7rem',
+                            fontWeight: '500',
+                            border: '1px solid var(--border-card)',
+                            borderRadius: '4px',
+                            cursor: loading ? 'not-allowed' : 'pointer',
+                            transition: 'all 0.15s ease',
+                            backgroundColor: 'transparent',
+                            color: 'var(--text-muted)',
+                            opacity: loading ? 0.5 : 1
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!loading) {
+                              e.currentTarget.style.backgroundColor = 'var(--bg-hover)';
+                              e.currentTarget.style.color = 'var(--text-primary)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                          }}
                         >
-                          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
-                          <span className="visually-hidden">{loading ? 'Refreshing' : 'Refresh'}</span>
+                          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
                           Refresh
                         </button>
-                        <div className="btn-group" role="group" aria-label="View mode selection">
+                        
+                        {/* Segmented Control for View Mode */}
+                        <div 
+                          role="group" 
+                          aria-label="View mode selection"
+                          style={{
+                            display: 'inline-flex',
+                            backgroundColor: 'var(--bg-card)',
+                            borderRadius: '6px',
+                            padding: '3px',
+                            border: '1px solid var(--border-card)'
+                          }}
+                        >
                           <button
                             type="button"
-                            className={`btn btn-sm ${viewMode === 'calendar' ? 'btn-primary' : 'btn-outline-primary'}`}
                             onClick={() => setViewMode('calendar')}
                             aria-pressed={viewMode === 'calendar'}
                             aria-label="Switch to calendar view"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              fontSize: '0.75rem',
+                              fontWeight: viewMode === 'calendar' ? '600' : '500',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              backgroundColor: viewMode === 'calendar' ? 'var(--brand-primary)' : 'transparent',
+                              color: viewMode === 'calendar' ? '#FFFFFF' : 'var(--text-muted)',
+                              boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                            }}
                           >
-                            <LayoutGrid size={14} className="me-1" aria-hidden="true" />
+                            <LayoutGrid size={12} aria-hidden="true" />
                             Calendar
                           </button>
                           <button
                             type="button"
-                            className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-outline-primary'}`}
                             onClick={() => setViewMode('table')}
                             aria-pressed={viewMode === 'table'}
                             aria-label="Switch to table view"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              padding: '4px 10px',
+                              fontSize: '0.75rem',
+                              fontWeight: viewMode === 'table' ? '600' : '500',
+                              border: 'none',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              backgroundColor: viewMode === 'table' ? 'var(--brand-primary)' : 'transparent',
+                              color: viewMode === 'table' ? '#FFFFFF' : 'var(--text-muted)',
+                              boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                            }}
                           >
-                            <Table2 size={14} className="me-1" aria-hidden="true" />
+                            <Table2 size={12} aria-hidden="true" />
                             Table
                           </button>
                         </div>
@@ -517,6 +597,7 @@ const OpportunityDetail: React.FC = () => {
                           sessions={opportunity.sessions}
                           onBookSession={handleBookSession}
                           bookingLoading={bookingLoading}
+                          hideLegend={true}
                         />
                       ) : (
                         <>
@@ -640,7 +721,7 @@ const OpportunityDetail: React.FC = () => {
                     <div className="col-md-4">
                       {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' ? (
                         <button 
-                          className="btn btn-primary w-100"
+                          className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {
                             // Track action click before opening external link
                             if (opportunity.external_link_optional) {
@@ -665,7 +746,7 @@ const OpportunityDetail: React.FC = () => {
                           href={opportunity.external_link_optional}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="btn btn-primary w-100"
+                          className="btn btn-primary w-100 mission-cta-btn"
                           aria-label={opportunity.type === 'question' ? 'Answer question in new tab' : 'Participate in new tab'}
                           onClick={async () => {
                             // Track click for questions too if desired (though M6 spec only mentions poll/survey)
@@ -688,16 +769,17 @@ const OpportunityDetail: React.FC = () => {
                   )}
                 </div>
               )}
-            </div>
-            {/* Footer with owner info (admin only) */}
-            {user?.role === 'researcher_admin' && opportunity.owner_name && (
-              <div className="card-footer bg-light">
-                <small className="text-muted">
-                  <strong>Owner:</strong> {opportunity.owner_name} ({opportunity.owner_email})
-                </small>
-              </div>
-            )}
           </div>
+          {/* End of MODULE B: THE SCHEDULER */}
+
+          {/* Footer with owner info (admin only) */}
+          {user?.role === 'researcher_admin' && opportunity.owner_name && (
+            <div className="mission-footer">
+              <small className="text-muted">
+                <strong>Owner:</strong> {opportunity.owner_name} ({opportunity.owner_email})
+              </small>
+            </div>
+          )}
         </div>
       </div>
       </section>

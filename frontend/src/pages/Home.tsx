@@ -209,7 +209,7 @@ const Home: React.FC = memo(() => {
         </div>
       )}
       
-      {/* AdaptaLabs Section */}
+      {/* Cortex Section */}
       {user && (
         <div className="study-listing-page">
           {/* Theme-aware Background:
@@ -221,12 +221,13 @@ const Home: React.FC = memo(() => {
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
               <div className="col-12">
-                <h1 className="mb-3 adaptalabs-home-title">AdaptaLabs</h1>
+                <div className="eyebrow-label">Adaptavist</div>
+                <h1 className="mb-3 adaptalabs-home-title">Cortex</h1>
               
               {/* Welcome text */}
               <div className="home-intro-text">
                 <p className="home-intro-description text-gray-400">
-                  Welcome to AdaptaLabs - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
+                  Welcome to Cortex - every action you take here strengthens our group, sparks new ideas and helps us to leverage all the talent and experience that we have across TAG
                 </p>
                 <p className="home-intro-tagline">
                   Together we turn <em>participation into progress</em>
@@ -257,7 +258,7 @@ const Home: React.FC = memo(() => {
                 <div className="empty-state">
                   <Inbox size={48} className="empty-state-icon" />
                   <h4 className="empty-state-title">No studies available</h4>
-                  <p className="mb-2">No AdaptaLabs activities available at the moment.</p>
+                  <p className="mb-2">No Cortex activities available at the moment.</p>
                   <p className="empty-state-text">Check back later for new opportunities to participate!</p>
                 </div>
               )}

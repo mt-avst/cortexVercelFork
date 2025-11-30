@@ -9,7 +9,16 @@ interface CalendarGridProps {
   sessions: Session[];
   onBookSession: (sessionId: string) => void;
   bookingLoading: string | null;
+  hideLegend?: boolean; // Allow parent to render legend elsewhere
 }
+
+// Export legend items for use in parent component
+export const CALENDAR_LEGEND_ITEMS = [
+  { className: 'legend-available', label: 'Available', labelClass: 'legend-label-available' },
+  { className: 'legend-conflict', label: 'Conflict', labelClass: 'legend-label-conflict' },
+  { className: 'legend-full', label: 'Full', labelClass: 'legend-label-full' },
+  { className: 'legend-booked', label: 'Booked', labelClass: 'legend-label-booked' }
+];
 
 // ============================================================
 // LEVEL 4: "LIVING INTERFACE" CALENDAR GRID
@@ -17,7 +26,7 @@ interface CalendarGridProps {
 // current time indicator, glassmorphic headers
 // ============================================================
 
-const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading }) => {
+const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading, hideLegend = false }) => {
   const navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
   const [bookedSlots, setBookedSlots] = useState<Set<string>>(new Set());
@@ -463,38 +472,36 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     );
   }
 
-  const legendItems = [
-    { className: 'legend-available', label: 'Available', labelClass: 'legend-label-available' },
-    { className: 'legend-conflict', label: 'Calendar Conflict', labelClass: 'legend-label-conflict' },
-    { className: 'legend-full', label: 'Full', labelClass: 'legend-label-full' },
-    { className: 'legend-booked', label: 'Your Booking', labelClass: 'legend-label-booked' }
-  ];
+  // Use exported legend items
+  const legendItems = CALENDAR_LEGEND_ITEMS;
 
   return (
     <div 
-      className="calendar-view calendar-living-interface" 
+      className="calendar-view calendar-living-interface calendar-hud" 
       style={{ overflow: 'visible', position: 'relative' }}
     >
       {/* Ambient Glow Background - Dark Mode Only (via CSS) */}
       <div className="calendar-ambient-glow" aria-hidden="true" />
       <div className="calendar-ambient-glow-secondary" aria-hidden="true" />
       
-      {/* Color-coded legend with staggered animation */}
-      <div className="calendar-legend d-flex flex-wrap gap-4 mb-4">
-        {legendItems.map((item, index) => (
-          <motion.div 
-            key={item.label}
-            className="d-flex align-items-center gap-2"
-            custom={index}
-            initial="hidden"
-            animate="visible"
-            variants={legendItemVariants}
-          >
-            <div className={`legend-swatch ${item.className}`}></div>
-            <small className={`legend-label ${item.labelClass}`}>{item.label}</small>
-          </motion.div>
-        ))}
-      </div>
+      {/* Color-coded legend with staggered animation - conditionally rendered */}
+      {!hideLegend && (
+        <div className="calendar-legend d-flex flex-wrap gap-4 mb-4">
+          {legendItems.map((item, index) => (
+            <motion.div 
+              key={item.label}
+              className="d-flex align-items-center gap-2"
+              custom={index}
+              initial="hidden"
+              animate="visible"
+              variants={legendItemVariants}
+            >
+              <div className={`legend-swatch ${item.className}`}></div>
+              <small className={`legend-label ${item.labelClass}`}>{item.label}</small>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Calendar Timeline - Page scroll with viewport-sticky headers */}
       <div className="calendar-timeline" style={{ 
@@ -614,16 +621,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       top: `${position}%`,
                       left: 0,
                       right: 0,
-                      paddingTop: '2px',
-                      paddingRight: '16px',
-                      fontSize: '0.875rem',
-                      fontWeight: '500',
-                      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
                       pointerEvents: 'none',
-                      lineHeight: '1.3',
-                      backgroundColor: 'transparent',
-                      textAlign: 'right',
-                      color: 'var(--text-secondary)'
+                      backgroundColor: 'transparent'
                     }}
                   >
                     {formatTimeLabel(marker.time)}
@@ -665,28 +664,31 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                 y: spotlightY,
               }}
             />
-            {/* Horizontal hour dividers */}
-            <div style={{
-              position: 'absolute',
-              top: '0',
-              left: 0,
-              right: 0,
-              height: timelineHeight,
-              pointerEvents: 'none',
-              zIndex: 1
-            }}>
+            {/* Horizontal hour dividers - HUD style grid lines */}
+            <div 
+              className="calendar-grid-lines"
+              style={{
+                position: 'absolute',
+                top: '0',
+                left: 0,
+                right: 0,
+                height: timelineHeight,
+                pointerEvents: 'none',
+                zIndex: 1
+              }}
+            >
               {timeMarkers.filter(m => m.isHour).map((marker, index) => {
                 const position = getTimePosition(marker.time);
                 return (
                   <div
                     key={`divider-${marker.time}-${index}`}
+                    className="calendar-grid-line"
                     style={{
                       position: 'absolute',
                       top: `${position}%`,
                       left: 0,
                       right: 0,
-                      height: '1px',
-                      backgroundColor: 'var(--border-subtle, #f3f4f6)'
+                      height: '1px'
                     }}
                   />
                 );
@@ -790,11 +792,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                     initial="hidden"
                     animate="visible"
                     variants={columnVariants}
-                    style={{ position: 'relative' }}
+                    style={{ position: 'relative', width: '100%' }}
                   >
                     {/* Timeline Container with Ghost Hover Effect */}
                     <div className="calendar-timeline-container calendar-timeline-interactive" style={{ 
                       position: 'relative',
+                      width: '100%',
                       height: timelineHeight,
                       border: 'none',
                       overflow: 'visible',
@@ -873,14 +876,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             whileHover={canClick ? 'hover' : undefined}
                             whileTap={canClick ? 'tap' : undefined}
                             style={{ 
-                              left: '4px',
-                              right: '4px',
                               top: `${roundedTop}%`,
                               height: `${roundedHeight}%`,
                               maxHeight: `${roundedHeight}%`,
                               minHeight: '0',
                               boxSizing: 'border-box',
                               position: 'absolute',
+                              // left/right/width controlled by CSS
                               cursor: canClick ? 'pointer' : 'not-allowed',
                               fontSize: '0.7rem',
                               padding: '2px 4px',
@@ -899,15 +901,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             })()}
                             onClick={() => canClick && handleSlotClick(session)}
                           >
-                            {/* Time label */}
+                            {/* Time label - vertically centered */}
                             <div 
                               className="timeslot-label"
                               style={{
                                 position: 'absolute',
-                                top: '2px',
+                                top: '50%',
                                 left: '0',
                                 right: '0',
+                                transform: 'translateY(-50%)',
                                 width: '100%',
+                                height: 'auto',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
                                 fontSize: '11px',
                                 fontWeight: '600',
                                 letterSpacing: '-0.025em',

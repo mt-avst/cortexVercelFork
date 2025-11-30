@@ -3739,17 +3739,22 @@ body.theme-dark .calendar-day-header {
 }
 
 .calendar-day-title {
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: 0.75rem; /* text-xs */
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-primary);
+  letter-spacing: 0.1em; /* tracking-wider */
+  color: var(--text-secondary, #6b7280); /* text-gray-500 */
 }
 
 .calendar-day-sessions {
   font-size: 0.7rem;
   color: var(--text-muted);
   text-transform: lowercase;
+}
+
+/* Dark mode - slightly lighter text for visibility */
+body.theme-dark .calendar-day-title {
+  color: #9ca3af; /* gray-400 */
 }
 
 /* Time column styling - de-emphasized for cleaner look */
@@ -3760,9 +3765,13 @@ body.theme-dark .calendar-day-header {
 .calendar-time-label {
   text-align: right !important;
   padding-right: 16px !important;
-  color: #9ca3af !important; /* gray-400 - de-emphasized */
-  font-weight: 400 !important;
-  font-size: 0.8rem !important;
+  color: var(--text-secondary, #9ca3af) !important; /* gray-400 - de-emphasized */
+  font-weight: 500 !important;
+  font-size: 0.75rem !important; /* text-xs */
+  text-transform: uppercase;
+  letter-spacing: 0.05em; /* tracking-wider */
+  transform: translateY(-50%); /* Center on grid line */
+  line-height: 1 !important;
 }
 
 /* Controls row spacing */
@@ -3775,18 +3784,26 @@ body.theme-dark .calendar-day-header {
    CALENDAR SLOT - HIGH-CONVERSION INTERACTIVE CHIPS
    ============================================================ */
 
-/* Base slot styling - floating inside column */
+/* Base slot styling - centered inside column */
 .calendar-slot {
-  left: 6px !important;
-  right: 6px !important;
-  width: calc(100% - 12px) !important;
   border-radius: 8px !important; /* rounded-lg for friendlier feel */
+  /* Positioning handled by more specific .calendar-hud/.mission-scheduler rules */
 }
 
 /* Slot text readability - bold for emphasis */
 .calendar-slot .timeslot-label {
   font-size: 0.75rem !important;
   font-weight: 600 !important;
+  /* Vertical centering */
+  position: absolute !important;
+  top: 50% !important;
+  left: 0 !important;
+  right: 0 !important;
+  transform: translateY(-50%) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
 }
 
 /* ============================================================
@@ -3810,7 +3827,6 @@ body.theme-dark .calendar-day-header {
   background: #d1fae5 !important; /* emerald-100 - slightly darker */
   border-color: #6ee7b7 !important; /* emerald-300 */
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important; /* shadow-md */
-  transform: translateY(-2px) !important; /* lift effect */
 }
 
 .calendar-slot-ghost:hover .timeslot-label {
@@ -3835,7 +3851,6 @@ body.theme-dark .calendar-slot-ghost:hover {
   background: rgba(16, 185, 129, 0.2) !important;
   border-color: #6ee7b7 !important; /* emerald-300 */
   box-shadow: 0 0 12px rgba(52, 211, 153, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3) !important;
-  transform: translateY(-2px) !important;
 }
 
 body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
@@ -3933,7 +3948,6 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
   z-index: 1000 !important;
   position: relative;
   box-shadow: 0 10px 20px -3px rgba(255, 90, 31, 0.3), 0 4px 6px -2px rgba(0, 0, 0, 0.1) !important;
-  transform: translateY(-2px) scale(1.02) !important;
 }
 
 .calendar-slot-selected .timeslot-label {
@@ -4354,7 +4368,23 @@ body.theme-dark .legend-label-booked {
   overflow: visible;
 }
 
-/* AdaptaLabs Home Title - Premium gradient with glow (like CORTEX logo) */
+/* Eyebrow Label - Small uppercase text above main title */
+.eyebrow-label {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: -4px;
+  opacity: 0.85;
+}
+
+[data-theme="dark"] .eyebrow-label {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Cortex Home Title - Premium gradient with glow */
 .adaptalabs-home-title {
   /* Use Inter font family to match landing page */
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -5591,7 +5621,7 @@ body.theme-dark .calendar-day-today .calendar-timeline-container {
 }
 
 .calendar-living-interface .calendar-slot-ghost:hover {
-  transform: none !important;
+  /* No transform - centering handled by margin auto */
 }
 
 /* Slot shadows for depth */
@@ -6766,6 +6796,545 @@ body:has(.cortex-landing) #root {
   .headline-cyan,
   .headline-red {
     opacity: 0;
+  }
+}
+
+/* ============================================================
+   MISSION CONTROL - Study Details / Booking Page Redesign
+   A "High-Fidelity Glass" tactical interface that feels:
+   - Dark Mode: Futuristic, glass panels with neural bg visible
+   - Light Mode: Clean, precise, technical precision
+   ============================================================ */
+
+/* Page wrapper - allow neural background to show through */
+.mission-control {
+  position: relative;
+  z-index: 1;
+}
+
+/* Re-enable neural background for mission control pages */
+body:has(.mission-control) .grid-squares-overlay,
+body:has(.mission-control) .coral-dots-container,
+body:has(.mission-control) .mesh-gradient-background {
+  display: block !important;
+  opacity: 0.6;
+}
+
+/* ============================================================
+   GLASS PANEL - The Core "Module" Component
+   ============================================================ */
+.mission-glass-panel {
+  position: relative;
+  border-radius: 16px;
+  padding: 32px;
+  transition: all 0.3s ease;
+}
+
+/* Dark Mode: High-fidelity glass with blur */
+body.theme-dark .mission-glass-panel {
+  background: rgba(17, 24, 39, 0.6); /* gray-900/60 */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 
+    0 4px 24px rgba(0, 0, 0, 0.4),
+    0 0 1px rgba(255, 255, 255, 0.1) inset;
+}
+
+/* Light Mode: Clean white glass with subtle blur */
+body.theme-light .mission-glass-panel {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 
+    0 4px 20px rgba(0, 0, 0, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================================
+   MODULE A: THE BRIEF - Title, Description, Metadata
+   ============================================================ */
+.mission-brief {
+  margin-bottom: 24px; /* gap-6 between modules */
+}
+
+/* Dark Mode: Decisive status indicator - full opacity accent, 8px brand bar */
+body.theme-dark .mission-glass-panel.mission-brief {
+  border-top: 8px solid var(--accent-border-color, #FF5500) !important;
+}
+
+/* Light Mode: Keep visible refined accent, 8px brand bar */
+body.theme-light .mission-glass-panel.mission-brief {
+  border-top: 8px solid var(--accent-border-color, #06b6d4) !important;
+}
+
+.mission-brief-layout {
+  display: flex;
+  gap: 48px;
+  align-items: flex-start;
+}
+
+/* Left Column: Content (60%) */
+.mission-brief-content {
+  flex: 6;
+  min-width: 0;
+}
+
+.mission-title {
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  margin: 0 0 16px 0;
+}
+
+body.theme-dark .mission-title {
+  color: #F9FAFB; /* gray-50 */
+}
+
+body.theme-light .mission-title {
+  color: #111827; /* gray-900 */
+}
+
+.mission-description {
+  font-size: 1rem;
+  line-height: 1.7;
+  margin: 0;
+}
+
+body.theme-dark .mission-description {
+  color: rgba(209, 213, 219, 0.9); /* gray-300/90 */
+}
+
+body.theme-light .mission-description {
+  color: #4B5563; /* gray-600 */
+}
+
+/* ============================================================
+   DATA BOX - Right Column Technical Specs
+   Defined component with crisp borders and high contrast
+   ============================================================ */
+.mission-data-box {
+  flex: 3;
+  min-width: 260px;
+  padding: 20px 24px;
+  border-radius: 10px;
+}
+
+/* Dark Mode: Distinct separation with lighter background */
+body.theme-dark .mission-data-box {
+  background: rgba(255, 255, 255, 0.05); /* bg-white/5 */
+  border: 1px solid rgba(255, 255, 255, 0.1); /* border-white/10 - crisp */
+}
+
+/* Light Mode: Cool grey background with defined border */
+body.theme-light .mission-data-box {
+  background: #F8FAFC; /* slate-50 */
+  border: 1px solid #E5E7EB; /* border-gray-200 */
+}
+
+.mission-data-grid {
+  display: grid;
+  gap: 20px;
+}
+
+.mission-data-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Technical Labels - ALL CAPS, tracking-wide, muted */
+.mission-data-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body.theme-dark .mission-data-label {
+  color: #9CA3AF; /* text-gray-400 */
+}
+
+body.theme-light .mission-data-label {
+  color: #6B7280; /* text-gray-500 */
+}
+
+/* Data Values - Bold, high contrast */
+.mission-data-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+body.theme-dark .mission-data-value {
+  color: #FFFFFF; /* text-white - bold */
+}
+
+body.theme-light .mission-data-value {
+  color: #111827; /* text-gray-900 */
+}
+
+/* ============================================================
+   MODULE B: THE SCHEDULER - Calendar Container
+   ============================================================ */
+.mission-scheduler {
+  /* Calendar lives inside this glass panel */
+}
+
+/* HIDE ambient glow artifacts - SlowNeuralBackground provides the bg */
+.mission-scheduler .calendar-ambient-glow,
+.mission-scheduler .calendar-ambient-glow-secondary {
+  display: none !important;
+  opacity: 0 !important;
+}
+
+/* Available Sessions header styling */
+.mission-scheduler h5 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+body.theme-dark .mission-scheduler h5 {
+  color: #E5E7EB;
+}
+
+body.theme-light .mission-scheduler h5 {
+  color: #1F2937;
+}
+
+/* ============================================================
+   CALENDAR HUD - Grid Lines & Structure
+   "Tactical" grid with increased visibility
+   ============================================================ */
+
+/* Calendar HUD class for mission control style */
+.calendar-hud {
+  position: relative;
+}
+
+/* Grid line styling - increased visibility */
+.calendar-grid-line {
+  transition: opacity 0.2s ease;
+}
+
+/* Dark Mode: Visible grid lines (border-gray-700) */
+body.theme-dark .calendar-hud .calendar-grid-line {
+  background-color: #374151 !important; /* gray-700 - visible */
+}
+
+body.theme-dark .calendar-hud .calendar-timeline-container {
+  border-color: #374151 !important; /* gray-700 */
+}
+
+body.theme-dark .calendar-hud .calendar-days-container > div[style*="border"] {
+  border-color: #374151 !important;
+}
+
+/* Light Mode: More visible grid lines (darker for better visibility on white) */
+body.theme-light .calendar-hud .calendar-grid-line {
+  background-color: rgba(0, 0, 0, 0.08) !important; /* Slightly darker for visibility */
+}
+
+body.theme-light .calendar-hud .calendar-timeline-container {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Vertical column separators for structure */
+body.theme-dark .calendar-hud .calendar-day-column {
+  border-left: 1px solid rgba(55, 65, 81, 0.5) !important; /* gray-700/50 */
+}
+
+body.theme-dark .calendar-hud .calendar-day-column:first-child {
+  border-left: none !important;
+}
+
+body.theme-light .calendar-hud .calendar-day-column {
+  border-left: 1px solid #E5E7EB !important; /* gray-200 */
+}
+
+body.theme-light .calendar-hud .calendar-day-column:first-child {
+  border-left: none !important;
+}
+
+/* Day/Date Headers - Subtle background to anchor columns */
+.calendar-day-header-cell {
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+body.theme-dark .calendar-day-header-cell {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+body.theme-light .calendar-day-header-cell {
+  background: #F9FAFB; /* gray-50 */
+}
+
+/* ============================================================
+   TIME SLOTS - "TILE" Style (Not Pills)
+   Blocks of time that fill 90% of column width
+   ============================================================ */
+
+/* Base slot styling - TILES not pills */
+.calendar-hud .calendar-slot,
+.mission-scheduler .calendar-slot {
+  border-radius: 6px !important; /* rounded-md - tile shape */
+  /* Horizontal centering - equal padding on both sides */
+  left: 6px !important;
+  right: 6px !important;
+  width: auto !important;
+}
+
+/* DARK MODE: Transparent bg, Emerald border, Emerald text (Available = Green "Go" signal) */
+body.theme-dark .mission-scheduler .calendar-slot-ghost,
+body.theme-dark .calendar-hud .calendar-slot-ghost {
+  background: transparent !important;
+  border: 1.5px solid rgba(52, 211, 153, 0.5) !important; /* emerald-400/50 */
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+}
+
+body.theme-dark .mission-scheduler .calendar-slot-ghost .timeslot-label,
+body.theme-dark .calendar-hud .calendar-slot-ghost .timeslot-label {
+  color: #34D399 !important; /* emerald-400 */
+  font-weight: 600 !important;
+  text-shadow: none;
+}
+
+/* DARK MODE: Hover - bg-emerald-500/10 with subtle glow */
+body.theme-dark .mission-scheduler .calendar-slot-ghost:hover,
+body.theme-dark .calendar-hud .calendar-slot-ghost:hover {
+  background: rgba(16, 185, 129, 0.1) !important; /* emerald-500/10 */
+  border-color: #34D399 !important; /* emerald-400 */
+  box-shadow: 
+    0 0 12px rgba(52, 211, 153, 0.3),
+    0 0 20px rgba(52, 211, 153, 0.15) !important;
+}
+
+body.theme-dark .mission-scheduler .calendar-slot-ghost:hover .timeslot-label,
+body.theme-dark .calendar-hud .calendar-slot-ghost:hover .timeslot-label {
+  color: #6EE7B7 !important; /* emerald-300 */
+}
+
+/* LIGHT MODE: White bg with emerald border (Available = Green "Go" signal) */
+body.theme-light .mission-scheduler .calendar-slot-ghost,
+body.theme-light .calendar-hud .calendar-slot-ghost {
+  background: #ECFDF5 !important; /* emerald-50 - subtle green tint */
+  border: 1px solid #10B981 !important; /* emerald-500 */
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important; /* shadow-sm */
+  transition: all 0.15s ease !important;
+}
+
+body.theme-light .mission-scheduler .calendar-slot-ghost .timeslot-label,
+body.theme-light .calendar-hud .calendar-slot-ghost .timeslot-label {
+  color: #065F46 !important; /* emerald-800 - dark green text */
+  font-weight: 600 !important;
+}
+
+/* LIGHT MODE: Hover - Emerald tint with lift */
+body.theme-light .mission-scheduler .calendar-slot-ghost:hover,
+body.theme-light .calendar-hud .calendar-slot-ghost:hover {
+  background: #D1FAE5 !important; /* emerald-100 - stronger green tint */
+  border-color: #059669 !important; /* emerald-600 */
+  box-shadow: 
+    0 4px 6px -1px rgba(16, 185, 129, 0.15),
+    0 2px 4px -1px rgba(16, 185, 129, 0.1) !important; /* green-tinted shadow */
+}
+
+body.theme-light .mission-scheduler .calendar-slot-ghost:hover .timeslot-label,
+body.theme-light .calendar-hud .calendar-slot-ghost:hover .timeslot-label {
+  color: #047857 !important; /* emerald-700 */
+}
+
+/* SELECTED STATE (Both Modes): Solid Brand Orange - The Action State */
+/* When user clicks/selects a slot, it turns brand orange to confirm selection */
+body.theme-light .mission-scheduler .calendar-slot-selected,
+body.theme-light .calendar-hud .calendar-slot-selected,
+body.theme-dark .mission-scheduler .calendar-slot-selected,
+body.theme-dark .calendar-hud .calendar-slot-selected {
+  background: #FF5A1F !important; /* Brand Orange */
+  border: 1px solid #EA580C !important; /* orange-600 */
+  box-shadow: 0 4px 12px rgba(255, 90, 31, 0.3) !important;
+}
+
+body.theme-light .mission-scheduler .calendar-slot-selected .timeslot-label,
+body.theme-light .calendar-hud .calendar-slot-selected .timeslot-label,
+body.theme-dark .mission-scheduler .calendar-slot-selected .timeslot-label,
+body.theme-dark .calendar-hud .calendar-slot-selected .timeslot-label {
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+}
+
+/* ============================================================
+   BACK BUTTON - Mission Style
+   ============================================================ */
+.mission-back-btn {
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+body.theme-dark .mission-back-btn {
+  color: rgba(209, 213, 219, 0.8);
+  border-color: rgba(107, 114, 128, 0.4);
+  background: transparent;
+}
+
+body.theme-dark .mission-back-btn:hover {
+  color: #F9FAFB;
+  border-color: rgba(156, 163, 175, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+body.theme-light .mission-back-btn {
+  color: #4B5563;
+  border-color: #D1D5DB;
+  background: transparent;
+}
+
+body.theme-light .mission-back-btn:hover {
+  color: #111827;
+  border-color: #9CA3AF;
+  background: rgba(0, 0, 0, 0.03);
+}
+
+/* ============================================================
+   FOOTER - Owner Info (Admin Only)
+   ============================================================ */
+.mission-footer {
+  margin-top: 24px;
+  padding: 16px 24px;
+  border-radius: 12px;
+}
+
+body.theme-dark .mission-footer {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+body.theme-light .mission-footer {
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+/* ============================================================
+   CALENDAR HINT TEXT - Inline Style
+   ============================================================ */
+.mission-scheduler .calendar-hint-inline {
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+body.theme-dark .mission-scheduler .calendar-hint-inline {
+  color: rgba(156, 163, 175, 0.7);
+}
+
+body.theme-light .mission-scheduler .calendar-hint-inline {
+  color: #9CA3AF;
+}
+
+body.theme-dark .mission-scheduler .calendar-hint-divider {
+  color: rgba(107, 114, 128, 0.5);
+}
+
+body.theme-light .mission-scheduler .calendar-hint-divider {
+  color: #D1D5DB;
+}
+
+/* ============================================================
+   LEGEND - Refined for Mission Control
+   ============================================================ */
+.mission-scheduler .calendar-legend {
+  padding: 0; /* No padding - sits inline with header */
+  border-radius: 0;
+  margin-bottom: 0; /* Removed - integrated with header */
+  background: transparent !important;
+  border: none !important;
+}
+
+body.theme-dark .mission-scheduler .calendar-legend,
+body.theme-light .mission-scheduler .calendar-legend {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Legend swatches - match new Emerald slot styles */
+.mission-scheduler .legend-swatch {
+  border-radius: 4px !important; /* rounded-sm for polish */
+}
+
+body.theme-dark .mission-scheduler .legend-available {
+  background: transparent;
+  border: 2px solid rgba(52, 211, 153, 0.6) !important; /* emerald-400/60 */
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.25);
+}
+
+body.theme-dark .mission-scheduler .legend-label-available {
+  color: #34D399 !important; /* emerald-400 */
+}
+
+body.theme-light .mission-scheduler .legend-available {
+  background: #ECFDF5 !important; /* emerald-50 */
+  border: 1px solid #10B981 !important; /* emerald-500 */
+  box-shadow: 0 1px 3px rgba(16, 185, 129, 0.15);
+}
+
+body.theme-light .mission-scheduler .legend-label-available {
+  color: #065F46 !important; /* emerald-800 */
+}
+
+/* ============================================================
+   RESPONSIVE - Mission Control Breakpoints
+   ============================================================ */
+@media (max-width: 992px) {
+  .mission-brief-layout {
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .mission-data-box {
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 768px) {
+  .mission-glass-panel {
+    padding: 24px;
+    border-radius: 12px;
+  }
+
+  .mission-title {
+    font-size: 1.75rem;
+  }
+
+  .mission-brief {
+    margin-bottom: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .mission-glass-panel {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  .mission-title {
+    font-size: 1.5rem;
+  }
+
+  .mission-data-label {
+    font-size: 0.6rem;
+  }
+
+  .mission-data-value {
+    font-size: 0.875rem;
   }
 }
 

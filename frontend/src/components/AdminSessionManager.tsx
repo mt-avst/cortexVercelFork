@@ -723,8 +723,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             className={`calendar-slot calendar-slot-btn border cursor-pointer position-absolute ${slotClass}`}
                             style={{ 
                               ...slotStyle,
-                              left: '2px',
-                              right: '2px',
+                              width: 'calc(100% - 16px)',
+                              left: '8px',
                               top: `${roundedTop}%`,
                               height: `${roundedHeight}%`,
                               maxHeight: `${roundedHeight}%`, // Strict max height - no overflow
@@ -887,15 +887,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     className="timeslot-label"
                                     style={{
                                       position: 'absolute',
-                                      top: '2px',
-                                      left: '4px',
+                                      top: '50%',
+                                      left: '0',
+                                      right: '0',
+                                      transform: 'translateY(-50%)',
                                       fontSize: '0.65rem',
                                       fontWeight: '600',
                                       color: (isConfirmed || session) ? 'white' : (isSelected ? '#198754' : '#495057'),
                                       whiteSpace: 'nowrap',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',
-                                      maxWidth: 'calc(100% - 24px)',
+                                      textAlign: 'center',
                                       pointerEvents: 'none',
                                       lineHeight: '1.2',
                                       opacity: shouldShowLabel ? 1 : 0,
@@ -1986,9 +1988,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             WebkitBackdropFilter: 'blur(16px)',
             borderTop: '1px solid rgba(255, 255, 255, 0.1)',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '16px',
-            padding: '15px 0',
-            marginBottom: '20px',
+            borderRadius: '12px',
+            padding: '10px 0',
+            marginBottom: '12px',
             width: '100%'
           }}>
             <div style={{
@@ -1998,8 +2000,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               flexWrap: 'wrap',
               padding: '0 15px'
             }}>
-              <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+              <div style={{ minWidth: '130px' }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
                   Start Date
                 </label>
                 <input
@@ -2020,8 +2022,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   disabled={disabled}
                 />
               </div>
-              <div style={{ minWidth: '140px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+              <div style={{ minWidth: '130px' }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
                   End Date
                 </label>
                 <input
@@ -2042,8 +2044,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   disabled={disabled}
                 />
               </div>
-              <div style={{ minWidth: '120px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+              <div style={{ minWidth: '110px' }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
                   Timeslot (mins)
                 </label>
                 <select
@@ -2062,8 +2064,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <option value="60">60 minutes</option>
                 </select>
               </div>
-              <div style={{ minWidth: '80px' }}>
-                <label style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '4px', display: 'block' }}>
+              <div style={{ minWidth: '70px' }}>
+                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
                   Days/Page
                 </label>
                 <select
@@ -2085,7 +2087,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <option value={30}>30</option>
                 </select>
               </div>
-              <div style={{ minWidth: '140px', display: 'flex', alignItems: 'center', paddingTop: '20px' }}>
+              <div style={{ minWidth: '130px', display: 'flex', alignItems: 'center', paddingTop: '16px' }}>
                 <div className="form-check">
                   <input
                     className="form-check-input"
@@ -2095,13 +2097,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     onChange={(e) => setExcludeWeekends(!e.target.checked)}
                     disabled={disabled}
                   />
-                  <label className="form-check-label" style={{ fontSize: '0.875rem', color: 'var(--text-primary)' }} htmlFor="includeWeekends">
+                  <label className="form-check-label" style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }} htmlFor="includeWeekends">
                     Include weekends
                   </label>
                 </div>
               </div>
-              <div style={{ marginLeft: 'auto', paddingTop: '20px' }}>
-                <small style={{ color: 'var(--text-muted)' }}>
+              <div style={{ marginLeft: 'auto', paddingTop: '16px' }}>
+                <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
                   {(availableSlots || []).length} slots available
                 </small>
               </div>
@@ -2109,74 +2111,151 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           </div>
 
           {/* View Switcher */}
-          <div className="card mb-3" style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '16px'
+          <div className="mb-2" style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.03)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+            borderRadius: '10px',
+            padding: '6px 12px'
           }}>
-            <div className="card-body py-2" style={{ backgroundColor: 'transparent' }}>
-              <div className="row align-items-center">
-                <div className="col-auto">
-                  <small style={{ color: 'var(--text-muted)' }} className="me-3">View:</small>
-                </div>
-                <div className="col-auto">
-                  <div className="btn-group" role="group">
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-primary'}`}
-                      onClick={() => setViewMode('grid')}
-                      disabled={disabled}
-                    >
-                      <LayoutGrid size={14} className="me-1" />
-                      Grid
-                    </button>
-                    <button
-                      type="button"
-                      className={`btn btn-sm ${viewMode === 'list' ? 'btn-primary' : 'btn-outline-primary'}`}
-                      onClick={() => setViewMode('list')}
-                      disabled={disabled}
-                    >
-                      <List size={14} className="me-1" />
-                      List
-                    </button>
-                  </div>
-                </div>
-                <div className="col-auto">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={loadCalendarData}
-                    disabled={disabled || loading}
-                    title="Refresh calendar to see latest booking status"
-                  >
-                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                    Refresh
-                  </button>
-                </div>
-                <div className="col-auto ms-auto">
-                  <button
-                    type="button"
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => {
-                      console.log('Reset button clicked. Current state:', {
-                        sessionsLength: sessions.length,
-                        selectedSlotsSize: selectedSlots.size,
-                        confirmedSlotsSize: confirmedSlots.size,
-                        disabled: disabled,
-                        loading: loading
-                      });
-                      handleResetAllSessions();
-                    }}
-                    disabled={disabled || loading}
-                    title="Delete all sessions (only if no bookings exist)"
-                  >
-                    <Trash2 size={14} className="me-1" />
-                    Reset All Sessions
-                  </button>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              {/* Segmented Control for View Mode */}
+              <div style={{
+                display: 'inline-flex',
+                backgroundColor: 'rgba(255, 255, 255, 0.08)',
+                borderRadius: '6px',
+                padding: '3px'
+              }}>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  disabled={disabled}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: viewMode === 'grid' ? '600' : '500',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    backgroundColor: viewMode === 'grid' ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
+                    color: viewMode === 'grid' ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  <LayoutGrid size={12} />
+                  Calendar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  disabled={disabled}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '4px 10px',
+                    fontSize: '0.75rem',
+                    fontWeight: viewMode === 'list' ? '600' : '500',
+                    border: 'none',
+                    borderRadius: '4px',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    backgroundColor: viewMode === 'list' ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
+                    color: viewMode === 'list' ? 'var(--text-primary)' : 'var(--text-muted)',
+                    boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  <List size={12} />
+                  Table
+                </button>
               </div>
+
+              {/* Ghost Refresh Button */}
+              <button
+                type="button"
+                onClick={loadCalendarData}
+                disabled={disabled || loading}
+                title="Refresh calendar to see latest booking status"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  fontWeight: '500',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '4px',
+                  cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  backgroundColor: 'transparent',
+                  color: 'var(--text-muted)',
+                  opacity: disabled || loading ? 0.5 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!disabled && !loading) {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                    e.currentTarget.style.color = 'var(--text-primary)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                  e.currentTarget.style.color = 'var(--text-muted)';
+                }}
+              >
+                <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+
+              {/* Reset Button - pushed to right */}
+              <button
+                type="button"
+                onClick={() => {
+                  console.log('Reset button clicked. Current state:', {
+                    sessionsLength: sessions.length,
+                    selectedSlotsSize: selectedSlots.size,
+                    confirmedSlotsSize: confirmedSlots.size,
+                    disabled: disabled,
+                    loading: loading
+                  });
+                  handleResetAllSessions();
+                }}
+                disabled={disabled || loading}
+                title="Delete all sessions (only if no bookings exist)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  fontSize: '0.7rem',
+                  fontWeight: '500',
+                  marginLeft: 'auto',
+                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  borderRadius: '4px',
+                  cursor: disabled || loading ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.15s ease',
+                  backgroundColor: 'transparent',
+                  color: 'var(--status-danger)',
+                  opacity: disabled || loading ? 0.5 : 1
+                }}
+                onMouseEnter={(e) => {
+                  if (!disabled && !loading) {
+                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
+                    e.currentTarget.style.borderColor = 'rgba(220, 53, 69, 0.5)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = 'rgba(220, 53, 69, 0.3)';
+                }}
+              >
+                <Trash2 size={11} />
+                Reset All
+              </button>
             </div>
           </div>
 
