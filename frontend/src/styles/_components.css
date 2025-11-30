@@ -4686,13 +4686,15 @@ body.theme-light .spotlight-card {
   --spotlight-color: rgba(0, 0, 0, 0.1);
 }
 
-/* Disable the inner glow effect entirely in light mode for clean Lab look */
-body.theme-light .spotlight-glow {
+/* Disable the inner glow effect entirely for clean card look */
+body.theme-light .spotlight-glow,
+body.theme-dark .spotlight-glow {
   display: none;
 }
 
-/* Disable the spotlight border gradient in light mode */
-body.theme-light .spotlight-border {
+/* Disable the spotlight border gradient for clean card look */
+body.theme-light .spotlight-border,
+body.theme-dark .spotlight-border {
   display: none;
 }
 
