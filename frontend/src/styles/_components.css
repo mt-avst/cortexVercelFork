@@ -682,51 +682,65 @@
 }
 
 /* Lozenge variant (soft rectangle for modern look) */
+/* ============================================================
+   LOZENGES / STUDY TYPE BADGES - Technical Label Style
+   Cortex Design System: rectangular with subtle tinted backgrounds
+   ============================================================ */
+   
 .lozenge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 5px 10px;
-  font-size: 0.7rem;
+  padding: 6px 12px;
+  font-size: 0.65rem;
   font-weight: 600;
   background: var(--tag-bg);
   color: var(--tag-text);
-  border-radius: 6px; /* Soft rectangle instead of pill */
+  border-radius: 6px; /* rounded-md - rectangular, not pill */
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   line-height: 1;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  /* Technical label style - subtle and refined */
+  border: 1px solid transparent;
 }
 
 /* Lozenge Type Variants - Dark Mode (default) */
+/* Lozenge Type Variants - Subtle tinted backgrounds (10% opacity style) */
 .lozenge-usertest {
   color: var(--lozenge-usertest-text);
   background-color: var(--lozenge-usertest-bg);
+  border-color: color-mix(in srgb, var(--lozenge-usertest-text) 20%, transparent);
 }
 
 .lozenge-unmoderated {
   color: var(--lozenge-unmoderated-text);
   background-color: var(--lozenge-unmoderated-bg);
+  border-color: color-mix(in srgb, var(--lozenge-unmoderated-text) 20%, transparent);
 }
 
 .lozenge-survey {
   color: var(--lozenge-survey-text);
   background-color: var(--lozenge-survey-bg);
+  border-color: color-mix(in srgb, var(--lozenge-survey-text) 20%, transparent);
 }
 
 .lozenge-poll {
   color: var(--lozenge-poll-text);
   background-color: var(--lozenge-poll-bg);
+  border-color: color-mix(in srgb, var(--lozenge-poll-text) 20%, transparent);
 }
 
 .lozenge-interview {
   color: var(--lozenge-interview-text);
   background-color: var(--lozenge-interview-bg);
+  border-color: color-mix(in srgb, var(--lozenge-interview-text) 20%, transparent);
 }
 
 .lozenge-question {
   color: var(--lozenge-question-text);
   background-color: var(--lozenge-question-bg);
+  border-color: color-mix(in srgb, var(--lozenge-question-text) 20%, transparent);
 }
 
 /* ============================================================
@@ -4462,6 +4476,30 @@ body.theme-dark .legend-label-booked {
   flex-direction: column;
   flex: 1;
   height: 100%;
+}
+
+/* Study Card Typography - Cortex Design System */
+.opportunity-card-body .card-title,
+.bento-grid .card .card-title {
+  font-size: 1.125rem; /* 18px */
+  font-weight: 700; /* Bold */
+  letter-spacing: -0.02em; /* Tighter tracking */
+  line-height: 1.25;
+  margin-bottom: 0.625rem;
+}
+
+.opportunity-card-body .card-text,
+.bento-grid .card .card-text {
+  font-size: 0.9375rem; /* 15px */
+  line-height: 1.5;
+  margin-bottom: 0;
+}
+
+.opportunity-card-body .card-text.small,
+.bento-grid .card .card-text.small {
+  font-size: 0.8125rem; /* 13px */
+  line-height: 1.45;
+  margin-top: 0.5rem;
 }
 
 /* Clickable Card - Cursor and full height with dynamic hover */

@@ -4,32 +4,33 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
 
 // ============================================================================
-// Configuration - SLOWED 50% for ambient background use
+// Configuration - "Neural Deep" ambient background
+// Further dimmed (50%) and slowed (50%) for distraction-free dark mode
 // ============================================================================
 
 const CONFIG = {
-  // Volumetric cloud topology
-  nodeCount: 400, // Slightly fewer for performance
+  // Volumetric cloud topology - full screen random distribution
+  nodeCount: 350, // Reduced for subtler effect
   innerRadius: 28,
   outerRadius: 55,
   
-  // Node sizing - REDUCED by 50%
-  hotspotPercentage: 0.04,
-  hotspotScale: { min: 0.12, max: 0.25 },
-  nodeScale: { min: 0.03, max: 0.07 },
+  // Node sizing - smaller for ambient feel
+  hotspotPercentage: 0.03,
+  hotspotScale: { min: 0.08, max: 0.18 },
+  nodeScale: { min: 0.02, max: 0.05 },
   
-  // Dense connections
-  connectionThreshold: 14,
-  maxConnectionsPerNode: 5,
+  // Sparse connections for cleaner look
+  connectionThreshold: 12,
+  maxConnectionsPerNode: 4,
   
-  // Signal packets - the stars of the show
-  signalCount: 25, // Fewer signals for subtler effect
-  signalSpeed: 0.006, // 50% slower
+  // Signal packets - very subtle
+  signalCount: 15, // Fewer signals
+  signalSpeed: 0.003, // 75% slower than original (25% speed)
   
-  // Animation - SLOWED 50% for ambient, non-distracting feel
-  rotationSpeed: 0.006, // 50% of original 0.012
-  breatheSpeed: 0.09,  // 50% of original 0.18
-  breatheAmount: 0.35,
+  // Animation - very slow, ambient wallpaper feel
+  rotationSpeed: 0.003, // 25% of original speed
+  breatheSpeed: 0.045,  // 25% of original speed
+  breatheAmount: 0.25,
   
   // Camera
   cameraZ: 70,
@@ -323,7 +324,7 @@ const Nodes: React.FC<NodesProps> = ({ nodeData }) => {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
       <sphereGeometry args={[1, 6, 6]} />
-      <meshBasicMaterial toneMapped={false} transparent opacity={0.5} />
+      <meshBasicMaterial toneMapped={false} transparent opacity={0.25} />
     </instancedMesh>
   );
 };
@@ -349,7 +350,7 @@ const Connections: React.FC<ConnectionsProps> = ({ connectionData }) => {
       <lineBasicMaterial 
         vertexColors 
         transparent 
-        opacity={0.2}
+        opacity={0.1}
         blending={THREE.AdditiveBlending}
         toneMapped={false}
       />
@@ -434,7 +435,7 @@ const SignalPackets: React.FC<SignalPacketsProps> = ({ connectionData, nodeData 
         color={COLORS.hotYellow} 
         toneMapped={false}
         transparent
-        opacity={0.9}
+        opacity={0.45}
       />
     </instancedMesh>
   );
@@ -515,7 +516,7 @@ const AmbientGlow: React.FC = () => {
         size={1}
         vertexColors
         transparent
-        opacity={0.4}
+        opacity={0.2}
         sizeAttenuation
         blending={THREE.AdditiveBlending}
         toneMapped={false}
@@ -545,14 +546,14 @@ const SlowNeuralBackground: React.FC = () => {
         pointerEvents: 'none',
       }}
     >
-      {/* Vignette overlay - darkens corners for focus */}
+      {/* Subtle vignette - very light edge darkening for depth */}
       <div 
         style={{
           position: 'absolute',
           inset: 0,
           pointerEvents: 'none',
           zIndex: 10,
-          background: 'radial-gradient(circle at center, transparent 40%, rgba(3,3,5,0.6) 70%, #030305 100%)',
+          background: 'radial-gradient(circle at center, transparent 60%, rgba(3,3,5,0.3) 85%, rgba(3,3,5,0.5) 100%)',
         }}
       />
       <Canvas
@@ -576,10 +577,10 @@ const SlowNeuralBackground: React.FC = () => {
 
         <EffectComposer>
           <Bloom
-            intensity={1.8}
-            luminanceThreshold={0.15}
+            intensity={0.9}
+            luminanceThreshold={0.2}
             luminanceSmoothing={0.9}
-            radius={0.7}
+            radius={0.6}
             mipmapBlur
           />
         </EffectComposer>

@@ -71,19 +71,19 @@
   --tag-bg: #222222;
   --tag-text: #FFFFFF;
 
-  /* Lozenge Colors - Dark Mode (Bioluminescence) */
+  /* Lozenge Colors - Dark Mode (Technical Labels - subtle 10% opacity) */
   --lozenge-usertest-text: #4DD0E1;
-  --lozenge-usertest-bg: #00363A;
-  --lozenge-unmoderated-text: #E1BEE7;
-  --lozenge-unmoderated-bg: rgba(74, 20, 140, 0.3);
+  --lozenge-usertest-bg: rgba(77, 208, 225, 0.12);
+  --lozenge-unmoderated-text: #CE93D8;
+  --lozenge-unmoderated-bg: rgba(206, 147, 216, 0.12);
   --lozenge-survey-text: #69F0AE;
-  --lozenge-survey-bg: rgba(27, 94, 32, 0.3);
+  --lozenge-survey-bg: rgba(105, 240, 174, 0.12);
   --lozenge-poll-text: #FFAB91;
-  --lozenge-poll-bg: rgba(191, 54, 12, 0.3);
+  --lozenge-poll-bg: rgba(255, 171, 145, 0.12);
   --lozenge-interview-text: #F48FB1;
-  --lozenge-interview-bg: rgba(136, 14, 79, 0.3);
+  --lozenge-interview-bg: rgba(244, 143, 177, 0.12);
   --lozenge-question-text: #FFE082;
-  --lozenge-question-bg: rgba(255, 111, 0, 0.2);
+  --lozenge-question-bg: rgba(255, 224, 130, 0.12);
 
   /* Focus & Accessibility */
   --focus-ring: #FF4E50;

@@ -212,8 +212,11 @@ const Home: React.FC = memo(() => {
       {/* AdaptaLabs Section */}
       {user && (
         <div className="study-listing-page">
-          {/* Theme-aware Background */}
-          {isDark ? <SlowNeuralBackground /> : <StaticNeuralBackground />}
+          {/* Theme-aware Background:
+              - Light Mode: Clean Lab - just CSS grid, no particles (distraction-free)
+              - Dark Mode: Neural Deep - ambient full-screen particles (dimmed & slow)
+          */}
+          {isDark && <SlowNeuralBackground />}
           
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>

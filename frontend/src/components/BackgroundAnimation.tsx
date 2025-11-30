@@ -18,17 +18,19 @@ const BackgroundAnimation: React.FC = memo(() => {
   const timeoutRefs = useRef<NodeJS.Timeout[]>([]);
   const [isLandingPage, setIsLandingPage] = useState(false);
 
-  // Check if on landing page (body has 'landing-page' class)
+  // Check if on landing page or study listing page (which have their own backgrounds)
   useEffect(() => {
-    const checkLandingPage = () => {
-      setIsLandingPage(document.body.classList.contains('landing-page'));
+    const checkSpecialPage = () => {
+      const hasLandingPage = document.body.classList.contains('landing-page');
+      const hasStudyListingPage = document.querySelector('.study-listing-page') !== null;
+      setIsLandingPage(hasLandingPage || hasStudyListingPage);
     };
     
-    checkLandingPage();
+    checkSpecialPage();
     
-    // Observe body class changes
-    const observer = new MutationObserver(checkLandingPage);
-    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    // Observe body class changes and DOM changes
+    const observer = new MutationObserver(checkSpecialPage);
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
     
     return () => observer.disconnect();
   }, []);

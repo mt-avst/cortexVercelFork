@@ -440,12 +440,31 @@ const StaticNeuralBackground: React.FC = () => {
   }, [initNodes, animate]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 w-full h-full"
-      style={{ background: 'transparent', zIndex: 1 }}
-      aria-hidden="true"
-    />
+    <div
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100%',
+        height: '100%',
+        zIndex: 0,
+        pointerEvents: 'none',
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        style={{ 
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          background: 'transparent',
+        }}
+        aria-hidden="true"
+      />
+    </div>
   );
 };
 

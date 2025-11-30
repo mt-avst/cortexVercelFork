@@ -43,12 +43,26 @@ body.theme-dark .study-listing-page {
 /* Light Mode - Study Listing with Technical Grid Background */
 body.theme-light .study-listing-page {
   background: #f8fafc;
+  min-height: 100vh;
+}
+
+/* Full-screen fixed grid overlay for light mode study listing */
+body.theme-light .study-listing-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
   /* Orange grid pattern matching login page (24px grid, 5% opacity) */
   background-image: 
     linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
   background-size: 24px 24px;
-  min-height: 100vh;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* ============================================================
@@ -114,19 +128,19 @@ body.theme-light {
   --tag-poll: #F3F4F6;
   --tag-test: #F3F4F6;
 
-  /* Lozenge Colors - Light Theme (Tinted Clarity) */
-  --lozenge-usertest-text: #005F73;
-  --lozenge-usertest-bg: #E0F7FA;
-  --lozenge-unmoderated-text: #5D2E8C;
-  --lozenge-unmoderated-bg: #F3E5F5;
-  --lozenge-survey-text: #0A4F3D;
-  --lozenge-survey-bg: #E0F2F1;
-  --lozenge-poll-text: #BF360C;
-  --lozenge-poll-bg: #FBE9E7;
-  --lozenge-interview-text: #880E4F;
-  --lozenge-interview-bg: #FCE4EC;
-  --lozenge-question-text: #795548;
-  --lozenge-question-bg: #FFF8E1;
+  /* Lozenge Colors - Light Theme (Technical Labels - subtle 10% tint) */
+  --lozenge-usertest-text: #0891b2; /* cyan-600 */
+  --lozenge-usertest-bg: rgba(8, 145, 178, 0.1);
+  --lozenge-unmoderated-text: #9333ea; /* purple-600 */
+  --lozenge-unmoderated-bg: rgba(147, 51, 234, 0.1);
+  --lozenge-survey-text: #059669; /* emerald-600 */
+  --lozenge-survey-bg: rgba(5, 150, 105, 0.1);
+  --lozenge-poll-text: #ea580c; /* orange-600 */
+  --lozenge-poll-bg: rgba(234, 88, 12, 0.1);
+  --lozenge-interview-text: #db2777; /* pink-600 */
+  --lozenge-interview-bg: rgba(219, 39, 119, 0.1);
+  --lozenge-question-text: #d97706; /* amber-600 */
+  --lozenge-question-bg: rgba(217, 119, 6, 0.1);
 
   /* Shadows - Softer for light theme */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -167,67 +181,79 @@ body.theme-light .card:hover {
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(0, 0, 0, 0.08);
 }
 
-/* Bento Grid Cards - Light theme (Tactile "Precision" Interface) */
+/* ============================================================
+   STUDY CARDS - Light Mode: "Tactile Precision" Interface
+   Clean, physical cards with crisp edges and tight shadows
+   ============================================================ */
 body.theme-light .bento-grid .card,
 body.theme-light .study-listing-page .bento-grid .card,
 body.theme-light .spotlight-card {
-  /* Clean white with subtle transparency */
-  background: rgba(255, 255, 255, 0.92);
+  /* Solid white background - no transparency */
+  background: #FFFFFF;
   /* Crisp grey border (gray-200) for defined edges */
   border: 1px solid #e5e7eb;
-  /* Detailed "tight" shadows for tactile feel - like physical tiles */
+  /* Tight shadow - physical lift feel (not soft/diffuse) */
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.08),
-    0 2px 4px rgba(0, 0, 0, 0.06),
-    0 4px 8px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 2px 4px rgba(0, 0, 0, 0.04);
+  /* No blur needed for solid cards */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  /* Smooth transition for hover lift */
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 body.theme-light .bento-grid .card:hover,
 body.theme-light .study-listing-page .bento-grid .card:hover,
 body.theme-light .spotlight-card:hover {
-  /* Lift effect - translate up */
+  /* Physical lift - translate up */
   transform: translateY(-4px);
   /* Slightly darker border on hover */
-  border: 1px solid #d1d5db;
-  /* Sharpened, deeper shadow for lifted effect */
+  border-color: #d1d5db;
+  /* Sharpened shadow - card "lifts" off surface */
   box-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.1),
-    0 4px 8px rgba(0, 0, 0, 0.08),
-    0 8px 16px rgba(0, 0, 0, 0.06),
-    0 16px 32px rgba(0, 0, 0, 0.04);
+    0 4px 6px rgba(0, 0, 0, 0.07),
+    0 8px 15px rgba(0, 0, 0, 0.05),
+    0 12px 24px rgba(0, 0, 0, 0.04);
 }
 
-/* Bento Grid Cards - Dark theme (Glassmorphism "Immersive" Interface) */
+/* ============================================================
+   STUDY CARDS - Dark Mode: "Cinematic Glass" Interface
+   Glassmorphism with backdrop blur - neural background visible
+   ============================================================ */
 body.theme-dark .bento-grid .card,
 body.theme-dark .study-listing-page .bento-grid .card,
 body.theme-dark .spotlight-card {
-  /* Glassmorphism: dark charcoal/black with ~60% opacity */
-  background: rgba(15, 15, 25, 0.6);
-  /* Nearly transparent white border (white/10) */
+  /* Dark charcoal with 60% opacity - neural bg shows through */
+  background: rgba(17, 17, 27, 0.6);
+  /* Subtle white border (white/10) to define glass edge */
   border: 1px solid rgba(255, 255, 255, 0.1);
-  /* Heavy backdrop blur for glass effect */
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  /* Backdrop blur - the key to glassmorphism */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  /* Subtle depth shadow */
   box-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.3),
-    0 8px 24px rgba(0, 0, 0, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.25),
+    0 8px 24px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  /* Smooth transition for hover effects */
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
 body.theme-dark .bento-grid .card:hover,
 body.theme-dark .study-listing-page .bento-grid .card:hover,
 body.theme-dark .spotlight-card:hover {
+  /* Lift effect */
   transform: translateY(-4px);
-  /* Orange glow border on hover */
-  border: 1px solid rgba(255, 85, 0, 0.5);
-  /* Brighter background on hover */
-  background: rgba(20, 20, 35, 0.7);
+  /* Increase border opacity on hover (white/20) */
+  border-color: rgba(255, 255, 255, 0.2);
+  /* Slightly more opaque on hover */
+  background: rgba(20, 20, 32, 0.7);
+  /* Add faint orange glow on hover */
   box-shadow: 
     0 4px 12px rgba(0, 0, 0, 0.3),
-    0 16px 32px rgba(0, 0, 0, 0.35),
-    0 0 30px rgba(255, 85, 0, 0.15),
+    0 12px 32px rgba(0, 0, 0, 0.25),
+    0 0 24px rgba(255, 85, 0, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
@@ -261,26 +287,30 @@ body.theme-light .bento-grid .card small {
 
 /* Bento Grid Card metadata text - Dark theme */
 body.theme-dark .bento-grid .card .text-muted {
-  color: rgba(224, 224, 224, 0.75);
+  color: rgba(224, 224, 224, 0.7);
 }
 
 body.theme-dark .bento-grid .card .timing-info,
 body.theme-dark .timing-info {
   background-color: transparent;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 1rem;
+  margin-top: 1rem;
 }
 
 /* Bento Grid Card metadata text - Light theme */
 body.theme-light .bento-grid .card .text-muted {
-  color: #6B7280;
+  color: #64748b; /* slate-500 */
 }
 
 body.theme-light .bento-grid .card .timing-info,
 body.theme-light .timing-info {
   background-color: transparent;
   border: none;
-  border-top: 1px solid rgba(0, 0, 0, 0.12);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding-top: 1rem;
+  margin-top: 1rem;
 }
 
 /* Header - Dark Mode (transparent for unified glassmorphic surface) */
@@ -471,39 +501,50 @@ body.theme-light .lozenge {
   color: var(--tag-text);
 }
 
+/* Lozenges in Bento Grid - subtle polish */
 body.theme-light .bento-grid .lozenge {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  box-shadow: none;
 }
 
-/* Lozenge Type Variants - Light Mode (Tinted Clarity) */
+body.theme-dark .bento-grid .lozenge {
+  box-shadow: none;
+}
+
+/* Lozenge Type Variants - Light Mode (Technical Labels - subtle tints) */
 body.theme-light .lozenge-usertest {
-  color: #005F73;
-  background-color: #E0F7FA;
+  color: #0891b2; /* cyan-600 */
+  background-color: rgba(8, 145, 178, 0.1);
+  border-color: rgba(8, 145, 178, 0.2);
 }
 
 body.theme-light .lozenge-unmoderated {
-  color: #5D2E8C;
-  background-color: #F3E5F5;
+  color: #9333ea; /* purple-600 */
+  background-color: rgba(147, 51, 234, 0.1);
+  border-color: rgba(147, 51, 234, 0.2);
 }
 
 body.theme-light .lozenge-survey {
-  color: #0A4F3D;
-  background-color: #E0F2F1;
+  color: #059669; /* emerald-600 */
+  background-color: rgba(5, 150, 105, 0.1);
+  border-color: rgba(5, 150, 105, 0.2);
 }
 
 body.theme-light .lozenge-poll {
-  color: #BF360C;
-  background-color: #FBE9E7;
+  color: #ea580c; /* orange-600 */
+  background-color: rgba(234, 88, 12, 0.1);
+  border-color: rgba(234, 88, 12, 0.2);
 }
 
 body.theme-light .lozenge-interview {
-  color: #880E4F;
-  background-color: #FCE4EC;
+  color: #db2777; /* pink-600 */
+  background-color: rgba(219, 39, 119, 0.1);
+  border-color: rgba(219, 39, 119, 0.2);
 }
 
 body.theme-light .lozenge-question {
-  color: #795548;
-  background-color: #FFF8E1;
+  color: #d97706; /* amber-600 */
+  background-color: rgba(217, 119, 6, 0.1);
+  border-color: rgba(217, 119, 6, 0.2);
 }
 
 /* Filter Chip "All" - Light Mode */
