@@ -681,6 +681,68 @@
   color: #FFFFFF;
 }
 
+/* ============================================================
+   CORTEX BADGES - Type Modifiers (Compact, Soft Rectangle)
+   Matches User App Image 064 aesthetic
+   ============================================================ */
+
+/* Base badge styling for Cortex */
+.badge--cortex,
+.badge--test,
+.badge--unmoderated,
+.badge--question,
+.badge--poll,
+.badge--survey,
+.badge--interview {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.03em;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+/* App Testing / Test (Cyan) */
+.badge--test {
+  background: var(--badge-app-bg);
+  color: var(--badge-app-text);
+}
+
+/* Unmoderated (Purple) */
+.badge--unmoderated {
+  background: var(--badge-unmod-bg);
+  color: var(--badge-unmod-text);
+}
+
+/* Question (Gold) */
+.badge--question {
+  background: var(--badge-quest-bg);
+  color: var(--badge-quest-text);
+}
+
+/* Poll (Pink/Red) */
+.badge--poll {
+  background: var(--badge-poll-bg);
+  color: var(--badge-poll-text);
+}
+
+/* Survey (Green) */
+.badge--survey {
+  background: var(--badge-srvy-bg);
+  color: var(--badge-srvy-text);
+}
+
+/* Interview (Pink) */
+.badge--interview {
+  background: var(--badge-interview-bg);
+  color: var(--badge-interview-text);
+}
+
 /* Lozenge variant (soft rectangle for modern look) */
 /* ============================================================
    LOZENGES / STUDY TYPE BADGES - Technical Label Style
@@ -2092,11 +2154,7 @@ body.admin-page .header .container {
   text-align: center;
 }
 
-/* Centered lozenges and badges */
-.admin-dashboard table tbody td .lozenge,
-.admin-dashboard table tbody td .badge {
-  margin: 0 auto;
-}
+/* Badges centered via text-align on parent cell */
 
 /* Title column responsiveness */
 @media (max-width: 991px) {
@@ -2297,43 +2355,18 @@ body.admin-page .header .container {
   filter: brightness(103%);
 }
 
-/* Type badges (lozenge) */
+/* Type badges (lozenge) - base styles, overridden by col-type specific rules */
 .admin-dashboard table tbody td .lozenge,
 .admin-dashboard table tbody td span.lozenge {
-  padding: 0.5rem 0.9rem;
-  font-size: 0.75rem;
-  font-weight: 600;
   border-radius: var(--tag-radius);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  line-height: 1.2;
   min-width: fit-content;
   box-sizing: border-box;
   width: auto;
   height: auto;
-  margin: 0;
-}
-
-/* Lozenge variants */
-.admin-dashboard table tbody td .lozenge-survey,
-.admin-dashboard table tbody td span.lozenge-survey,
-.admin-dashboard table tbody td .lozenge-poll,
-.admin-dashboard table tbody td span.lozenge-poll,
-.admin-dashboard table tbody td .lozenge-interview,
-.admin-dashboard table tbody td span.lozenge-interview,
-.admin-dashboard table tbody td .lozenge-usertest,
-.admin-dashboard table tbody td span.lozenge-usertest,
-.admin-dashboard table tbody td .lozenge-question,
-.admin-dashboard table tbody td span.lozenge-question,
-.admin-dashboard table tbody td .lozenge-unmoderated,
-.admin-dashboard table tbody td span.lozenge-unmoderated {
-  padding: 0.5rem 0.9rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-  box-sizing: border-box;
 }
 
 /* ============================================================
@@ -2369,44 +2402,42 @@ body.admin-page .header .container {
   border-top: none !important;
 }
 
+/* Cortex Admin - Underline Tab Style */
 .custom-tab-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--spacing-2);
-  color: var(--text-primary);
-  background-color: var(--bg-tab);
-  border: 1px solid var(--border-card);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
   border-radius: 0;
-  padding: 0.875rem 1rem;
+  color: var(--text-muted);
+  padding: var(--spacing-3) var(--spacing-4);
   margin: 0;
   cursor: pointer;
   width: 100%;
   text-align: center;
   font-weight: 500;
   font-size: var(--font-size-body);
-  transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out, color 0.2s ease-in-out;
+  transition: color 0.2s ease-in-out, border-color 0.2s ease-in-out;
 }
 
-/* First tab - rounded left corners */
-.nav-tabs .nav-item:first-child .custom-tab-button {
-  border-radius: var(--radius-md) 0 0 var(--radius-md);
-}
-
-/* Last tab - rounded right corners */
+/* Remove pill corners - underline style has no radius */
+.nav-tabs .nav-item:first-child .custom-tab-button,
 .nav-tabs .nav-item:last-child .custom-tab-button {
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: 0;
 }
 
-/* Remove double borders between tabs */
+/* No borders between tabs in underline style */
 .nav-tabs .nav-item + .nav-item .custom-tab-button {
   border-left: none;
 }
 
 .custom-tab-button.active {
-  background-color: var(--brand-headline);
-  border-color: var(--brand-headline);
+  background: transparent;
   color: #FFFFFF;
+  border-bottom: 2px solid var(--color-brand-orange);
 }
 
 .custom-tab-button.active i,
@@ -2415,15 +2446,13 @@ body.admin-page .header .container {
 }
 
 .custom-tab-button:hover:not(.active) {
-  background-color: rgba(255, 78, 80, 0.1);
-  border-color: var(--brand-headline);
-  color: var(--brand-headline);
+  background: transparent;
+  color: var(--text-primary);
 }
 
 .custom-tab-button.active:hover {
-  background-color: var(--brand-headline);
-  border-color: var(--brand-headline);
-  filter: brightness(1.1);
+  background: transparent;
+  border-bottom: 2px solid var(--color-brand-orange);
 }
 
 .custom-tab-button i,
@@ -2439,6 +2468,209 @@ body.admin-page .header .container {
   .custom-tab-button i {
     display: none;
   }
+}
+
+/* ============================================================
+   ADMIN DATA TABLE - Cortex Glass Design
+   ============================================================ */
+
+/* Glass container for the data table */
+.admin-data-table-container {
+  background: var(--bg-cortex-glass);
+  border: 1px solid var(--border-cortex-glass);
+  border-radius: 12px;
+  backdrop-filter: blur(var(--backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--backdrop-blur));
+  overflow: hidden;
+}
+
+.admin-data-table {
+  margin-bottom: 0;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.admin-data-table th,
+.admin-data-table td {
+  padding: 1.25rem 1.5rem;
+  vertical-align: middle;
+}
+
+/* Title column */
+.admin-data-table td.col-title {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+/* Table Headers - Uppercase, tracked-out grey */
+.admin-data-table th {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-cortex-glass);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* Header alignment matches column alignment */
+.admin-data-table th.col-type,
+.admin-data-table th.col-status {
+  text-align: center;
+}
+
+.admin-data-table th.col-metric {
+  text-align: right;
+}
+
+.admin-data-table th.col-actions {
+  text-align: center;
+}
+
+/* ============================================================
+   TABLE COLUMN DISCIPLINE - Explicit Width Assignments
+   ============================================================ */
+
+/* Column 1: Title - generous space for title + description */
+.admin-data-table .col-title {
+  width: 32%;
+  min-width: 320px;
+}
+
+/* Column 2: Type - centered lozenges */
+.admin-data-table .col-type {
+  width: 14%;
+  min-width: 140px;
+  text-align: center;
+}
+
+/* Type column - vertically centered */
+.admin-data-table td.col-type {
+  padding: 1.5rem 1rem;
+  vertical-align: middle;
+}
+
+.admin-data-table td.col-type .lozenge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem 0.625rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* Column 3: Status - centered badges */
+.admin-data-table .col-status {
+  width: 9%;
+  min-width: 100px;
+  text-align: center;
+}
+
+.admin-data-table td.col-status {
+  padding: 1.5rem 1rem;
+  vertical-align: middle;
+}
+
+/* Columns 4, 5, 6: Metrics (Clicks, Capacity, Booked) */
+.admin-data-table .col-metric {
+  width: 9%;
+  min-width: 90px;
+  text-align: right;
+}
+
+.admin-data-table td.col-metric {
+  padding: 1.5rem 1.5rem;
+  vertical-align: middle;
+}
+
+/* Column 7: Created Date */
+.admin-data-table .col-date {
+  width: 11%;
+  min-width: 110px;
+}
+
+.admin-data-table td.col-date {
+  padding: 1.5rem 1.5rem;
+  vertical-align: middle;
+}
+
+/* Column 8: Actions - compact */
+.admin-data-table .col-actions {
+  width: 70px;
+  min-width: 70px;
+  text-align: center;
+}
+
+.admin-data-table td.col-actions {
+  padding: 1.5rem 1rem;
+  vertical-align: middle;
+}
+
+/* Numeric column alignment */
+.admin-data-table th.col-numeric,
+.admin-data-table td.col-numeric {
+  text-align: right;
+}
+
+/* Legacy support for existing classes */
+.admin-data-table th.admin-th-type,
+.admin-data-table td.admin-cell-type {
+  min-width: 200px;
+}
+
+.row-title {
+  color: #FFFFFF;
+  font-weight: 600;
+  display: block;
+}
+
+.row-desc {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.875rem;
+  margin-top: 4px;
+  display: block;
+}
+
+.col-numeric {
+  text-align: right;
+}
+
+/* ============================================================
+   PROGRESS BAR MINI - Cortex Slots Display
+   ============================================================ */
+
+.progress-mini {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  overflow: hidden;
+  width: 60px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 10px;
+}
+
+.progress-mini__fill {
+  height: 100%;
+  background: var(--color-cortex-orange);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+/* ============================================================
+   ADMIN CONTAINER WIDE - Cortex Layout (Expanded Canvas)
+   ============================================================ */
+
+.admin-container-wide {
+  max-width: 2736px; /* 20% wider again */
+  width: 100%;
+  margin: 0 auto;
+  padding-left: 2rem;
+  padding-right: 2rem;
 }
 
 /* ============================================================
@@ -2477,8 +2709,28 @@ body.admin-page .header .container {
    ADMIN DASHBOARD - STAT CARDS
    ============================================================ */
 
+/* Cortex Brand Title - "Cortex Admin" Header */
+.cortex-brand-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: var(--color-cortex-orange);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.cortex-brand-title .cortex-admin-suffix {
+  color: #FFFFFF;
+  font-weight: 300;
+  margin-left: 0.25em;
+}
+
+/* Glass Cards - Premium Cortex Aesthetic */
 .admin-stat-card {
-  border-radius: var(--card-radius);
+  background: var(--bg-cortex-glass);
+  border: 1px solid var(--border-cortex-glass);
+  border-radius: 12px;
+  backdrop-filter: blur(var(--backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--backdrop-blur));
 }
 
 /* Stat card element base styles */
@@ -2490,7 +2742,7 @@ body.admin-page .header .container {
 }
 
 .stat-value {
-  font-size: 2.5rem;
+  font-size: 3rem;
   font-weight: 700;
   line-height: 1.1;
   color: var(--text-primary);
@@ -2502,9 +2754,24 @@ body.admin-page .header .container {
 }
 
 .stat-icon {
-  font-size: 1.75rem;
-  color: var(--brand-headline);
-  opacity: 0.8;
+  font-size: 1.25rem;
+  color: var(--color-brand-orange);
+}
+
+/* Icon with circular glow background */
+.stat-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 9999px;
+  background: rgba(255, 122, 51, 0.15);
+}
+
+.stat-icon-wrapper .stat-icon {
+  color: var(--color-brand-orange);
+  opacity: 1;
 }
 
 @media (max-width: 991px) {
@@ -3770,8 +4037,17 @@ body.theme-dark .calendar-day-title {
   font-size: 0.75rem !important; /* text-xs */
   text-transform: uppercase;
   letter-spacing: 0.05em; /* tracking-wider */
-  transform: translateY(-50%); /* Center on grid line */
   line-height: 1 !important;
+}
+
+/* Calendar time markers container - needs overflow visible for edge labels */
+.calendar-time-markers {
+  overflow: visible !important;
+}
+
+/* Calendar time column needs extra top space for 7am label */
+.calendar-time-column {
+  padding-top: 8px;
 }
 
 /* Controls row spacing */
@@ -3963,6 +4239,172 @@ body.theme-dark .calendar-slot-selected {
 }
 
 /* ============================================================
+   ADMIN CALENDAR SLOT STATES
+   Matches user calendar styling for consistency
+   ============================================================ */
+
+/* Admin: Available slot (same as user ghost) */
+.calendar-slot-admin-available {
+  background: #ecfdf5 !important; /* emerald-50 */
+  border: 2px solid #a7f3d0 !important; /* emerald-200 */
+  border-radius: 8px !important;
+  cursor: pointer !important;
+}
+
+.calendar-slot-admin-available .timeslot-label {
+  color: #065f46 !important; /* emerald-800 */
+  font-weight: 600 !important;
+}
+
+.calendar-slot-admin-available:hover {
+  background: #d1fae5 !important; /* emerald-100 */
+  border-color: #6ee7b7 !important; /* emerald-300 */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+  transform: translateY(-1px);
+}
+
+body.theme-dark .calendar-slot-admin-available {
+  background: rgba(16, 185, 129, 0.1) !important;
+  border: 2px solid #34d399 !important;
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.2) !important;
+}
+
+body.theme-dark .calendar-slot-admin-available .timeslot-label {
+  color: #6ee7b7 !important;
+}
+
+body.theme-dark .calendar-slot-admin-available:hover {
+  background: rgba(16, 185, 129, 0.2) !important;
+  border-color: #6ee7b7 !important;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Admin: Selected slot (pending creation) */
+.calendar-slot-admin-selected {
+  background: rgba(25, 135, 84, 0.25) !important;
+  border: 2px solid #198754 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+}
+
+.calendar-slot-admin-selected .timeslot-label {
+  color: #198754 !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .calendar-slot-admin-selected {
+  background: rgba(52, 211, 153, 0.2) !important;
+  border: 2px solid #34d399 !important;
+}
+
+body.theme-dark .calendar-slot-admin-selected .timeslot-label {
+  color: #6ee7b7 !important;
+}
+
+/* Admin: Confirmed/Existing session slot */
+.calendar-slot-admin-confirmed {
+  background: #28a745 !important;
+  border: 2px solid #28a745 !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+}
+
+.calendar-slot-admin-confirmed .timeslot-label {
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+}
+
+body.theme-dark .calendar-slot-admin-confirmed {
+  background: #28a745 !important;
+  border: 2px solid #34d399 !important;
+  box-shadow: 0 0 10px rgba(40, 167, 69, 0.3) !important;
+}
+
+/* Admin: Busy/Calendar conflict slot */
+.calendar-slot-admin-busy {
+  background: rgba(108, 117, 125, 0.15) !important;
+  border: 1px solid rgba(108, 117, 125, 0.4) !important;
+  border-radius: 8px !important;
+  cursor: not-allowed !important;
+  opacity: 0.7 !important;
+}
+
+.calendar-slot-admin-busy .timeslot-label {
+  color: #6c757d !important;
+}
+
+body.theme-dark .calendar-slot-admin-busy {
+  background: rgba(75, 85, 99, 0.3) !important;
+  border: 1px solid rgba(156, 163, 175, 0.4) !important;
+}
+
+body.theme-dark .calendar-slot-admin-busy .timeslot-label {
+  color: #9ca3af !important;
+}
+
+/* Admin: Allocated to another opportunity */
+.calendar-slot-admin-allocated {
+  background: rgba(255, 193, 7, 0.15) !important;
+  border: 1px solid rgba(255, 193, 7, 0.4) !important;
+  border-radius: 8px !important;
+  cursor: not-allowed !important;
+  opacity: 0.8 !important;
+}
+
+.calendar-slot-admin-allocated .timeslot-label {
+  color: #d97706 !important;
+}
+
+body.theme-dark .calendar-slot-admin-allocated {
+  background: rgba(234, 179, 8, 0.15) !important;
+  border: 1px solid rgba(250, 204, 21, 0.4) !important;
+}
+
+body.theme-dark .calendar-slot-admin-allocated .timeslot-label {
+  color: #fbbf24 !important;
+}
+
+/* ============================================================
+   ADMIN CALENDAR LAYOUT - Match User Calendar
+   ============================================================ */
+
+.admin-calendar-view {
+  position: relative;
+}
+
+.admin-calendar-view .calendar-time-label {
+  text-align: right !important;
+  padding-right: 16px !important;
+  color: var(--text-secondary, #9ca3af) !important;
+  font-size: 0.75rem !important;
+  font-weight: 600 !important;
+}
+
+.admin-calendar-view .calendar-day-header-cell {
+  text-align: center;
+  padding: 8px;
+}
+
+.admin-calendar-view .calendar-day-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #6b7280);
+  margin: 0;
+  margin-bottom: 4px;
+}
+
+.admin-calendar-view .calendar-day-sessions {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+body.theme-dark .admin-calendar-view .calendar-day-title {
+  color: #9ca3af;
+}
+
+/* ============================================================
    BOOKING CONFIRMATION POPOVER - Enhanced UI
    ============================================================ */
 
@@ -4000,7 +4442,7 @@ body.theme-dark .booking-popover {
     0 8px 10px -6px rgba(0, 0, 0, 0.3);
 }
 
-/* The Arrow pointing down */
+/* The Arrow pointing down (default: popover above slot) */
 .booking-popover::after {
   content: '';
   position: absolute;
@@ -4014,6 +4456,25 @@ body.theme-dark .booking-popover {
 /* CRITICAL: The arrow triangle must also turn dark to match */
 body.theme-dark .booking-popover::after {
   border-top-color: #1F2937 !important;
+}
+
+/* Flipped popover - appears BELOW the slot instead of above */
+.booking-popover.booking-popover-below {
+  bottom: auto !important;
+  top: calc(100% + 12px);
+}
+
+/* Arrow points UP when popover is below */
+.booking-popover.booking-popover-below::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #FFFFFF;
+}
+
+body.theme-dark .booking-popover.booking-popover-below::after {
+  border-top-color: transparent !important;
+  border-bottom-color: #1F2937 !important;
 }
 
 /* Header Typography */
@@ -4481,10 +4942,11 @@ body.theme-dark .legend-label-booked {
   margin-bottom: -0.25rem;
 }
 
-/* Filters Row - Flex wrap container */
+/* Filters Row - Flex wrap container with bottom alignment */
 .filters-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   gap: 1rem;
   margin-bottom: 1.5rem;
 }
@@ -4498,6 +4960,44 @@ body.theme-dark .legend-label-booked {
 .filter-field-sm {
   flex: 1 1 150px;
   min-width: 150px;
+}
+
+/* ============================================================
+   ADMIN FILTER INPUTS - Accessible Touch Targets
+   ============================================================ */
+
+/* Consistent input heights for admin filters */
+.filters-row .form-control,
+.filters-row .form-select,
+.admin-search-input,
+.admin-filter-select {
+  height: 48px;
+  line-height: normal;
+  font-size: 0.95rem;
+  min-width: 180px;
+  border-radius: 8px;
+}
+
+/* Search input styling */
+.filters-row .form-control,
+.admin-search-input {
+  padding: 0 1rem;
+}
+
+/* Dropdown select - CRITICAL: Extra right padding for arrow icon */
+.filters-row .form-select,
+.admin-filter-select {
+  padding: 0 3rem 0 1rem;
+  background-position: right 1rem center;
+}
+
+.filters-row .form-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
 }
 
 /* Opportunity Card Body - Flex column layout */
@@ -5982,6 +6482,11 @@ body.theme-dark .calendar-living-interface [style*="border"] {
 .calendar-days-container {
   position: relative;
   z-index: 2;
+}
+
+/* Day columns need matching top padding with time column for 7am alignment */
+.calendar-days-container {
+  padding-top: 8px;
 }
 
 /* Subtle inner shadow on timeline containers for depth */

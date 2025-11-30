@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
 import AdminSessionManager from '../components/AdminSessionManager';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
@@ -13,6 +15,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const isEdit = Boolean(id);
   
   const [formData, setFormData] = useState({
@@ -574,17 +578,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   }
 
   return (
-    <div className="container-fluid py-4 opportunity-form" style={{ minHeight: '100vh' }}>
-      <div className="row justify-content-center">
-        <div className="col-12 col-xl-10">
-          {/* Back button */}
-          <button 
-            className="btn btn-outline-secondary mb-3"
-            onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
-          >
-            <ArrowLeft size={16} className="me-1" />
-            {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
-          </button>
+    <div className="admin-page-bg">
+      {/* Theme-aware Background: Dark Mode gets neural particles */}
+      {isDark && <SlowNeuralBackground />}
+      
+      <div className="container-fluid py-4 opportunity-form" style={{ minHeight: '100vh' }}>
+        <div className="row justify-content-center">
+          <div className="col-12 col-xl-10">
+            {/* Back button */}
+            <button 
+              className="btn btn-outline-secondary mb-3"
+              onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
+            >
+              <ArrowLeft size={16} className="me-1" />
+              {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
+            </button>
           
           <div className="card shadow-sm border-0">
             <div className="card-header border-0 py-4">
@@ -978,6 +986,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   )}
                 </div>
               </form>
+              </div>
             </div>
           </div>
         </div>

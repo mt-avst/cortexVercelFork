@@ -452,12 +452,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const timelineHeight = '900px'; // Fixed height ensures consistent display
 
     return (
-      <div style={{ 
+      <div className="admin-calendar-view calendar-living-interface" style={{ 
         display: 'flex',
-        gap: '8px',
+        gap: '24px',
         width: '100%',
-        overflowX: 'hidden', /* Removed scrollbar */
-        overflowY: 'hidden' /* Removed scrollbar */
+        overflowX: 'hidden',
+        overflowY: 'hidden'
       }}>
           {/* Time Column (Left) */}
           <div style={{
@@ -498,21 +498,13 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               return (
                 <div
                   key={`${marker.time}-${index}`}
+                  className="calendar-time-label"
                   style={{
                     position: 'absolute',
                     top: `${position}%`,
                     left: 0,
                     right: 0,
-                    borderTop: '1.5px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
-                    paddingTop: '2px', // Small padding to push text below border line
-                    fontSize: '0.9rem',
-                    fontWeight: '700',
-                    color: 'var(--brand-headline)', /* Electric Coral red text */
-                    textAlign: 'center', /* Center time labels within their cells */
-                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                    // Remove translateY(-50%) so border line aligns exactly with time position
                     pointerEvents: 'none',
-                    lineHeight: '1.3',
                     backgroundColor: 'transparent'
                   }}
                 >
@@ -543,20 +535,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
               {!column.isEmpty ? (
                 <>
                   {/* Day Header */}
-                  <div className="text-center p-2" style={{ 
-                    backgroundColor: 'var(--bg-app)', /* Black/near-black background */
-                    borderRadius: '8px 8px 0 0',
-                    border: 'none',
-                    borderBottom: '1px solid rgba(255, 78, 80, 0.3)', /* Red border with transparency */
+                  <div className="calendar-day-header-cell" style={{ 
                     height: '60px',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'center'
                   }}>
-                    <h6 className="mb-1 fw-bold" style={{ fontSize: '0.9rem', margin: 0, color: 'var(--brand-headline)' }}>
+                    <h6 className="calendar-day-title">
                       {formatDate(column.date)}
                     </h6>
-                    <small style={{ fontSize: '0.7rem', color: 'var(--brand-headline)', fontWeight: '500' }}>
+                    <small className="calendar-day-sessions">
                       {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
                     </small>
                   </div>
@@ -679,70 +667,43 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         // The height should match exactly the time difference, not be fixed
                         
                         // Determine slot styling based on session status
-                        let slotClass = '';
-                        let slotStyle: React.CSSProperties = {};
+                        // Use CSS classes for consistent styling with user calendar
+                        let slotClass = 'calendar-slot';
                         
-                        if (isConfirmed) {
-                          slotClass = 'calendar-slot-available';
-                          slotStyle = { 
-                            backgroundColor: '#28a745',
-                            color: 'white',
-                            borderColor: '#28a745'
-                          };
+                        if (isConfirmed || (session && session.remaining > 0)) {
+                          slotClass += ' calendar-slot-admin-confirmed';
                         } else if (isSelected) {
-                          slotClass = 'text-dark';
-                          slotStyle = { backgroundColor: 'rgba(25, 135, 84, 0.3)', borderColor: '#198754' };
-                        } else if (session) {
-                          if (session.remaining > 0) {
-                            slotClass = 'calendar-slot-available';
-                            slotStyle = { backgroundColor: '#28a745', color: 'white', borderColor: '#28a745' };
-                          } else {
-                            slotClass = 'bg-danger text-white';
-                            slotStyle = { backgroundColor: '#dc3545', color: 'white', borderColor: '#dc3545' };
-                          }
+                          slotClass += ' calendar-slot-admin-selected';
+                        } else if (session && session.remaining <= 0) {
+                          slotClass += ' calendar-slot-full';
                         } else if (isAllocated) {
-                          slotClass = 'text-dark';
-                          slotStyle = { backgroundColor: 'rgba(255, 193, 7, 0.2)', borderColor: '#ffc107' };
+                          slotClass += ' calendar-slot-admin-allocated';
                         } else if (isBusy) {
-                          slotClass = 'bg-secondary text-white';
-                          slotStyle = { backgroundColor: '#6c757d', color: 'white', borderColor: '#6c757d' };
+                          slotClass += ' calendar-slot-admin-busy';
                         } else {
-                          // Available slot - make it clearly visible with solid border
-                          slotClass = 'border-success';
-                          slotStyle = { 
-                            backgroundColor: 'rgba(40, 167, 69, 0.15)', // Light green background
-                            borderColor: '#28a745', // Green border
-                            borderStyle: 'solid', // Solid border for distinct cells
-                            borderWidth: '2px'
-                          };
+                          // Available slot - matches user calendar ghost style
+                          slotClass += ' calendar-slot-admin-available';
                         }
 
                         return (
                           <div
                             key={uniqueKey}
-                            className={`calendar-slot calendar-slot-btn border cursor-pointer position-absolute ${slotClass}`}
+                            className={`${slotClass} position-absolute`}
                             style={{ 
-                              ...slotStyle,
                               width: 'calc(100% - 16px)',
                               left: '8px',
                               top: `${roundedTop}%`,
                               height: `${roundedHeight}%`,
-                              maxHeight: `${roundedHeight}%`, // Strict max height - no overflow
-                              minHeight: '0', // No minimum to prevent forced overlap
-                              boxSizing: 'border-box', // Include border in height calculation
-                              position: 'absolute', // Ensure absolute positioning
-                              cursor: isBusy || (session && session.remaining <= 0) || isAllocated ? 'not-allowed' : 'pointer',
-                              opacity: isBusy || (session && session.remaining <= 0) || isAllocated ? 0.8 : 1,
+                              maxHeight: `${roundedHeight}%`,
+                              minHeight: '0',
+                              boxSizing: 'border-box',
+                              position: 'absolute',
                               transition: 'all 0.2s ease',
-                              borderWidth: isSelected ? '2px' : '1px',
-                              borderRadius: '0',
                               fontSize: '0.7rem',
                               padding: '2px 4px',
                               overflow: 'hidden',
                               zIndex: isSelected || isConfirmed ? 5 : 1,
-                              marginTop: '0px',
-                              marginBottom: '0px',
-                              pointerEvents: 'auto' // Ensure tooltip can be triggered
+                              pointerEvents: 'auto'
                             }}
                         title={(() => {
                           try {
@@ -803,44 +764,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           }
                         }}
                         onMouseEnter={(e) => {
-                          // Show time label on hover
+                          // Show time label on hover (CSS handles visual hover states)
                           const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
                           if (labelElement) {
                             labelElement.style.opacity = '1';
-                          }
-                          
-                          if (isBusy) {
-                            e.currentTarget.style.backgroundColor = 'rgba(108, 117, 125, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(108, 117, 125, 0.3)';
-                            e.currentTarget.style.cursor = 'not-allowed';
-                          } else if (session && session.remaining <= 0) {
-                            e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(220, 53, 69, 0.3)';
-                            e.currentTarget.style.cursor = 'not-allowed';
-                          } else if (isAllocated) {
-                            e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.1)';
-                            e.currentTarget.style.borderColor = 'rgba(255, 193, 7, 0.3)';
-                            e.currentTarget.style.cursor = 'not-allowed';
-                          } else if (isSelected) {
-                            // Selected state hover effect - darker green
-                            e.currentTarget.style.backgroundColor = 'rgba(25, 135, 84, 0.5)';
-                            e.currentTarget.style.borderColor = '#198754';
-                            e.currentTarget.style.transform = 'scale(1.02)';
-                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(25, 135, 84, 0.3)';
-                          } else if (isConfirmed || session) {
-                            // Existing session or confirmed slot hover - make it look toggleable like selected slots
-                            e.currentTarget.style.backgroundColor = 'rgba(25, 135, 84, 0.4)';
-                            e.currentTarget.style.borderColor = '#198754';
-                            e.currentTarget.style.transform = 'scale(1.02)';
-                            e.currentTarget.style.boxShadow = '0 4px 8px rgba(25, 135, 84, 0.3)';
-                            e.currentTarget.style.cursor = 'pointer';
-                          } else {
-                            // Available slot hover - brighten it
-                            e.currentTarget.style.backgroundColor = 'rgba(40, 167, 69, 0.3)';
-                            e.currentTarget.style.borderColor = '#28a745';
-                            e.currentTarget.style.borderStyle = 'solid'; // Keep solid border
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 2px 4px rgba(40, 167, 69, 0.3)';
                           }
                         }}
                         onMouseLeave={(e) => {
@@ -849,30 +776,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           if (labelElement && !isSelected && !isConfirmed && !session) {
                             labelElement.style.opacity = '0';
                           }
-                          
-                          // Reset styles but preserve selected state
-                          if (isSelected) {
-                            // Restore selected state styling
-                            e.currentTarget.style.backgroundColor = 'rgba(25, 135, 84, 0.3)';
-                            e.currentTarget.style.borderColor = '#198754';
-                          } else if (isConfirmed || session) {
-                            // Restore existing session/confirmed state styling (green background)
-                            e.currentTarget.style.backgroundColor = '#28a745';
-                            e.currentTarget.style.borderColor = '#28a745';
-                            e.currentTarget.style.color = 'white';
-                          } else if (isAllocated) {
-                            // Restore allocated state styling (yellow background)
-                            e.currentTarget.style.backgroundColor = 'rgba(255, 193, 7, 0.2)';
-                            e.currentTarget.style.borderColor = '#ffc107';
-                          } else {
-                            // Reset available slot to default
-                            e.currentTarget.style.backgroundColor = 'rgba(40, 167, 69, 0.15)';
-                            e.currentTarget.style.borderColor = '#28a745';
-                            e.currentTarget.style.borderStyle = 'solid'; // Keep solid border
-                          }
-                          e.currentTarget.style.transform = '';
-                          e.currentTarget.style.boxShadow = '';
-                          e.currentTarget.style.cursor = '';
                         }}
                           >
                             {/* Display time span label on the cell - show on hover or when selected */}
@@ -891,9 +794,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                       left: '0',
                                       right: '0',
                                       transform: 'translateY(-50%)',
-                                      fontSize: '0.65rem',
-                                      fontWeight: '600',
-                                      color: (isConfirmed || session) ? 'white' : (isSelected ? '#198754' : '#495057'),
                                       whiteSpace: 'nowrap',
                                       overflow: 'hidden',
                                       textOverflow: 'ellipsis',

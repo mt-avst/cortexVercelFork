@@ -44,6 +44,50 @@
   --brand-secondary: #FF7A33;
   --brand-gradient: linear-gradient(135deg, #FF4E50 0%, #FF7A33 100%);
 
+  /* Cortex Brand Identity */
+  --color-cortex-orange: #FF7A33;
+  --color-brand-orange: #FF7A33;
+  --bg-cortex-glass: rgba(18, 18, 18, 0.7);
+  --bg-glass-panel: rgba(18, 18, 18, 0.7);
+  --bg-glass-panel-hover: rgba(25, 25, 25, 0.75);
+  --border-cortex-glass: rgba(255, 255, 255, 0.08);
+  --backdrop-blur: 12px;
+
+  /* Study Type Badges (Extracted from Cortex Screenshot) */
+  /* App Testing / Test (Cyan) */
+  --badge-app-text: #4DD0E1;
+  --badge-app-bg: rgba(77, 208, 225, 0.15);
+  --color-badge-test: #4DD0E1;
+  --color-badge-test-bg: rgba(77, 208, 225, 0.15);
+
+  /* Unmoderated (Purple) */
+  --badge-unmod-text: #CE93D8;
+  --badge-unmod-bg: rgba(206, 147, 216, 0.15);
+
+  /* Question (Gold) */
+  --badge-quest-text: #FFD54F;
+  --badge-quest-bg: rgba(255, 213, 79, 0.15);
+  --color-badge-question: #FFD54F;
+  --color-badge-question-bg: rgba(255, 213, 79, 0.15);
+
+  /* Poll (Pink/Red) */
+  --badge-poll-text: #E57373;
+  --badge-poll-bg: rgba(229, 115, 115, 0.15);
+  --color-badge-poll: #E57373;
+  --color-badge-poll-bg: rgba(229, 115, 115, 0.15);
+
+  /* Survey (Green) */
+  --badge-srvy-text: #81C784;
+  --badge-srvy-bg: rgba(129, 199, 132, 0.15);
+  --color-badge-survey: #81C784;
+  --color-badge-survey-bg: rgba(129, 199, 132, 0.15);
+
+  /* Interview (Pink) */
+  --badge-interview-text: #F48FB1;
+  --badge-interview-bg: rgba(244, 143, 177, 0.15);
+  --color-badge-interview: #F48FB1;
+  --color-badge-interview-bg: rgba(244, 143, 177, 0.15);
+
   /* CTA (Call to Action) Colors */
   --cta-bg: #FF4E50;
   --cta-bg-hover: #ff6264;

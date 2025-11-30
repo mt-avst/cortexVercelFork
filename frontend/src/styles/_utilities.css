@@ -565,24 +565,32 @@
 @media (min-width: 576px) {
   .d-sm-none { display: none; }
   .d-sm-block { display: block; }
+  .d-sm-inline { display: inline; }
+  .d-sm-inline-block { display: inline-block; }
   .d-sm-flex { display: flex; }
 }
 
 @media (min-width: 768px) {
   .d-md-none { display: none; }
   .d-md-block { display: block; }
+  .d-md-inline { display: inline; }
+  .d-md-inline-block { display: inline-block; }
   .d-md-flex { display: flex; }
 }
 
 @media (min-width: 992px) {
   .d-lg-none { display: none; }
   .d-lg-block { display: block; }
+  .d-lg-inline { display: inline; }
+  .d-lg-inline-block { display: inline-block; }
   .d-lg-flex { display: flex; }
 }
 
 @media (min-width: 1200px) {
   .d-xl-none { display: none; }
   .d-xl-block { display: block; }
+  .d-xl-inline { display: inline; }
+  .d-xl-inline-block { display: inline-block; }
   .d-xl-flex { display: flex; }
 }
 

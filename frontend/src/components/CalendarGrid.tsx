@@ -333,12 +333,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     });
   }, [sessionsByDate, currentTime]);
 
-  const handleSlotClick = (session: Session) => {
+  const handleSlotClick = (session: Session, slotElement: HTMLElement) => {
     const isBooked = bookedSlots.has(session.id);
     const hasConflict = hasCalendarConflict(session);
     const isAvailable = session.remaining > 0 && new Date(session.end_time) >= new Date();
     
     if (!isBooked && !hasConflict && isAvailable && !bookingLoading) {
+      checkPopoverPosition(slotElement);
       setConfirmingSlot(session.id);
     }
   };
@@ -363,6 +364,20 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   };
 
   const popoverRef = useRef<HTMLDivElement>(null);
+  const [popoverFlipped, setPopoverFlipped] = useState(false);
+  
+  // Check if popover should flip to below when slot is near top of viewport
+  const checkPopoverPosition = useCallback((slotElement: HTMLElement | null) => {
+    if (!slotElement) {
+      setPopoverFlipped(false);
+      return;
+    }
+    const rect = slotElement.getBoundingClientRect();
+    // Popover is ~150px tall, plus 12px gap. Flip if there's not enough space above.
+    // Also account for header height (~70px)
+    const minSpaceAbove = 180;
+    setPopoverFlipped(rect.top < minSpaceAbove);
+  }, []);
 
   useEffect(() => {
     if (!confirmingSlot) return;
@@ -899,7 +914,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               if (isSessionPast) return `Past: ${startTime} - ${endTime}`;
                               return `Available: ${startTime} - ${endTime} (${session.remaining} remaining)`;
                             })()}
-                            onClick={() => canClick && handleSlotClick(session)}
+                            onClick={(e) => canClick && handleSlotClick(session, e.currentTarget as HTMLElement)}
                           >
                             {/* Time label - vertically centered */}
                             <div 
@@ -934,7 +949,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                               {isConfirming && (
                                 <motion.div 
                                   ref={popoverRef}
-                                  className="booking-popover" 
+                                  className={`booking-popover ${popoverFlipped ? 'booking-popover-below' : ''}`}
                                   initial={{ opacity: 0 }}
                                   animate={{ opacity: 1 }}
                                   exit={{ opacity: 0 }}

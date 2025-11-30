@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, NotificationPreference } from '../api/client';
 import AdminManagement from '../components/AdminManagement';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, UserCog, Bell, UserCircle, AlertTriangle, CheckCircle, MailCheck, MailX } from 'lucide-react';
 
 const Settings: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'account' | 'notifications'>('account');
 
@@ -89,11 +93,15 @@ const Settings: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid settings-container admin-page-container">
-      <div className="row settings-page">
-        <div className={`col-12 ${user.role === 'superadmin' ? 'col-lg-12 col-xl-10' : 'col-lg-8 col-xl-6'} mx-auto`}>
-          <Card>
-            <CardHeader className="flex justify-between items-center">
+    <div className="admin-page-bg">
+      {/* Theme-aware Background: Dark Mode gets neural particles */}
+      {isDark && <SlowNeuralBackground />}
+      
+      <div className="container-fluid settings-container admin-page-container">
+        <div className="row settings-page">
+          <div className={`col-12 ${user.role === 'superadmin' ? 'col-lg-12 col-xl-10' : 'col-lg-8 col-xl-6'} mx-auto`}>
+            <Card>
+              <CardHeader className="flex justify-between items-center">
               <div>
                 <button 
                   className="btn btn-link text-decoration-none p-0 mb-2"
@@ -263,8 +271,9 @@ const Settings: React.FC = () => {
                   </div>
                 )}
               </div>
-            </CardBody>
-          </Card>
+              </CardBody>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

@@ -745,6 +745,58 @@ body.theme-light .hero-value-list li::before {
 }
 
 /* ============================================================
+   ADMIN PAGE - Background Theme Overrides
+   Matches study-listing-page for visual consistency
+   ============================================================ */
+
+/* Dark Mode - Admin Page Background */
+body.theme-dark .admin-page-bg {
+  background: #030305;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Light Mode - Admin Page with Technical Grid Background */
+body.theme-light .admin-page-bg {
+  background: #FFFFFF;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Override ALL backgrounds when admin page is active (light mode) */
+body.theme-light:has(.admin-page-bg),
+body.theme-light:has(.admin-page-bg) .App,
+body.theme-light:has(.admin-page-bg) .main,
+body.theme-light:has(.admin-page-bg) .main > .container {
+  background: #FFFFFF !important;
+}
+
+/* Full-screen fixed grid overlay for light mode admin pages */
+body.theme-light .admin-page-bg::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  /* Orange grid pattern matching login/study pages (24px grid, 5% opacity) */
+  background-image: 
+    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Ensure admin content sits above grid overlay */
+body.theme-light .admin-page-bg > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
    ADMIN DASHBOARD - Dark Theme (Explicit)
    ============================================================ */
 
@@ -828,10 +880,37 @@ body.theme-dark .admin-tabs .nav-link.active {
   background: rgba(255, 78, 80, 0.1);
 }
 
-/* Admin stat cards - dark mode */
+/* Admin stat cards - dark mode ("Void" aesthetic - deep glass) */
 body.theme-dark .admin-stat-card {
-  background: rgba(30, 30, 50, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 12, 12, 0.85);
+  border: 1px solid var(--border-cortex-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Admin data table - Cyan accent border (matches Booking engine) */
+body.theme-dark .admin-data-table-container {
+  background: rgba(12, 12, 12, 0.85);
+  border: 1px solid var(--border-cortex-glass);
+  border-top: 2px solid #4DD0E1;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Settings button - dark mode (transparent with border) */
+body.theme-dark .admin-settings-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+body.theme-dark .admin-settings-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 body.theme-dark .admin-stat-card .stat-value {
@@ -839,15 +918,45 @@ body.theme-dark .admin-stat-card .stat-value {
 }
 
 body.theme-dark .admin-stat-card .stat-label {
-  color: rgba(224, 224, 224, 0.9);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 body.theme-dark .admin-stat-card .stat-subtitle {
-  color: rgba(224, 224, 224, 0.85);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 body.theme-dark .admin-stat-card .stat-icon {
-  color: var(--brand-headline);
+  color: var(--color-cortex-orange);
+}
+
+body.theme-dark .admin-stat-card .stat-icon-wrapper {
+  background: rgba(255, 122, 51, 0.15);
+}
+
+/* Cortex Brand Title - Dark Mode */
+body.theme-dark .cortex-brand-title {
+  color: var(--color-cortex-orange);
+}
+
+body.theme-dark .cortex-brand-title .cortex-admin-suffix {
+  color: #FFFFFF;
+}
+
+/* (Dark mode table container defined above with cyan accent) */
+
+/* Admin table text hierarchy - dark mode */
+body.theme-dark .row-title {
+  color: #FFFFFF;
+}
+
+body.theme-dark .row-desc {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Admin table headers - dark mode */
+body.theme-dark .admin-data-table th {
+  color: rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid var(--border-cortex-glass);
 }
 
 /* Admin buttons - dark mode */
@@ -1184,23 +1293,23 @@ body.theme-dark .admin-empty-text {
   color: rgba(224, 224, 224, 0.7);
 }
 
-/* Admin tab buttons - dark mode */
+/* Admin tab buttons - dark mode (Cortex Underline Style) */
 body.theme-dark .custom-tab-button {
-  color: rgba(224, 224, 224, 0.9);
-  background-color: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
 }
 
 body.theme-dark .custom-tab-button:hover {
-  color: #FFFFFF;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: var(--brand-headline);
+  color: var(--text-primary);
+  background: transparent;
 }
 
 body.theme-dark .custom-tab-button.active {
   color: #FFFFFF;
-  background-color: var(--brand-headline);
-  border-color: var(--brand-headline);
+  background: transparent;
+  border-bottom: 2px solid var(--color-brand-orange);
 }
 
 body.theme-dark .custom-tab-button i,
@@ -1285,23 +1394,23 @@ body.theme-light .admin-tabs .nav-link.active {
   background: rgba(232, 108, 36, 0.05);
 }
 
-/* Admin tab buttons - light mode */
+/* Admin tab buttons - light mode (Cortex Underline Style) */
 body.theme-light .custom-tab-button {
-  color: #374151;
-  background-color: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.12);
+  color: #6B7280;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
 }
 
 body.theme-light .custom-tab-button:hover {
   color: #1A1A1A;
-  background-color: rgba(0, 0, 0, 0.06);
-  border-color: var(--brand-headline);
+  background: transparent;
 }
 
 body.theme-light .custom-tab-button.active {
-  color: #FFFFFF;
-  background-color: var(--brand-headline);
-  border-color: var(--brand-headline);
+  color: #1A1A1A;
+  background: transparent;
+  border-bottom: 2px solid var(--brand-headline);
 }
 
 body.theme-light .custom-tab-button i,
@@ -1309,10 +1418,26 @@ body.theme-light .custom-tab-button span {
   color: inherit;
 }
 
-/* Admin stat cards - light mode */
+/* Admin stat cards - light mode ("Lab" aesthetic - premium elevation) */
 body.theme-light .admin-stat-card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Admin container - light mode elevation */
+body.theme-light .admin-container-wide {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Table row hover - warm grey */
+body.theme-light .admin-data-table tbody tr:hover {
+  background-color: #F9FAFB;
 }
 
 body.theme-light .admin-stat-card .stat-value {
@@ -1329,6 +1454,100 @@ body.theme-light .admin-stat-card .stat-subtitle {
 
 body.theme-light .admin-stat-card .stat-icon {
   color: var(--brand-headline);
+}
+
+body.theme-light .admin-stat-card .stat-icon-wrapper {
+  background: rgba(232, 108, 36, 0.12);
+}
+
+/* Cortex Brand Title - Light Mode */
+body.theme-light .cortex-brand-title {
+  color: var(--brand-headline);
+}
+
+body.theme-light .cortex-brand-title .cortex-admin-suffix {
+  color: #374151;
+}
+
+/* Admin table glass container - light mode ("Lab" aesthetic) */
+body.theme-light .admin-data-table-container {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  border-radius: 12px;
+}
+
+/* Settings button - light mode (matches Calendar toggle) */
+body.theme-light .admin-settings-btn {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  color: #374151;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+body.theme-light .admin-settings-btn:hover {
+  background: #F9FAFB;
+  border-color: #D1D5DB;
+}
+
+/* Admin table text hierarchy - light mode */
+body.theme-light .row-title {
+  color: #1A1A1A;
+}
+
+body.theme-light .row-desc {
+  color: #6B7280;
+}
+
+/* Admin table headers - light mode */
+body.theme-light .admin-data-table th {
+  color: #6B7280;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* Admin badge type modifiers - light mode (more saturated for visibility) */
+body.theme-light .badge--poll {
+  background: rgba(229, 115, 115, 0.15);
+  color: #c62828;
+}
+
+body.theme-light .badge--interview {
+  background: rgba(244, 143, 177, 0.15);
+  color: #ad1457;
+}
+
+body.theme-light .badge--survey {
+  background: rgba(129, 199, 132, 0.15);
+  color: #2e7d32;
+}
+
+body.theme-light .badge--test {
+  background: rgba(77, 208, 225, 0.15);
+  color: #00838f;
+}
+
+body.theme-light .badge--question {
+  background: rgba(255, 213, 79, 0.15);
+  color: #f57f17;
+}
+
+body.theme-light .badge--unmoderated {
+  background: rgba(206, 147, 216, 0.15);
+  color: #7b1fa2;
+}
+
+/* Progress bar - light mode */
+body.theme-light .progress-mini {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+body.theme-light .progress-mini__fill {
+  background: var(--brand-headline);
 }
 
 /* Admin buttons - light mode */

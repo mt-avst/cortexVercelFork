@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-// Theme is applied automatically via CSS custom properties - no JS needed
+import { useTheme } from '../contexts/ThemeContext';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats } from '../api/client';
 import { Opportunity } from '../api/types';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
@@ -13,6 +14,8 @@ import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, Me
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -226,14 +229,18 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="container-fluid admin-page-container admin-page-fullheight">
-      <div className="row admin-dashboard">
+    <div className="admin-page-bg">
+      {/* Theme-aware Background: Dark Mode gets neural particles */}
+      {isDark && <SlowNeuralBackground />}
+      
+      <div className="container-fluid admin-page-container admin-page-fullheight admin-container-wide">
+        <div className="row admin-dashboard">
         <div className="col-12" style={{ paddingLeft: '0.5rem', paddingRight: '0.5rem' }}>
           <div className="card admin-card admin-card-main">
             <div className="card-header card-header-transparent">
               {/* Padding matches the column padding from row.g-2 to align header with stat pods */}
               <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3" style={{ flexWrap: 'wrap', minWidth: 0, paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
-                <h1 className="mb-0 admin-dashboard-title">{user?.role === 'superadmin' ? 'Superadmin Dashboard' : 'Admin Dashboard'}</h1>
+                <h1 className="mb-0 cortex-brand-title" style={{ letterSpacing: '-0.02em' }}>Cortex <span style={{ fontWeight: 300, opacity: 0.7 }}>Admin</span></h1>
                 <div className="d-flex flex-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
                   <button 
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
@@ -263,7 +270,9 @@ const Admin: React.FC = () => {
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
                         <span className="text-uppercase stat-label">Studies</span>
-                        <ClipboardList size={20} className="stat-icon" />
+                        <div className="stat-icon-wrapper">
+                          <ClipboardList size={20} className="stat-icon" />
+                        </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.total_opportunities}</h2>
                       <small className="stat-subtitle">
@@ -277,7 +286,9 @@ const Admin: React.FC = () => {
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
                         <span className="text-uppercase stat-label">Bookings</span>
-                        <CalendarCheck size={20} className="stat-icon" />
+                        <div className="stat-icon-wrapper">
+                          <CalendarCheck size={20} className="stat-icon" />
+                        </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.total_bookings}</h2>
                       <small className="stat-subtitle">
@@ -291,7 +302,9 @@ const Admin: React.FC = () => {
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
                         <span className="text-uppercase stat-label">Users</span>
-                        <Users size={20} className="stat-icon" />
+                        <div className="stat-icon-wrapper">
+                          <Users size={20} className="stat-icon" />
+                        </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
                       <small className="stat-subtitle">
@@ -305,7 +318,9 @@ const Admin: React.FC = () => {
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
                         <span className="text-uppercase stat-label">Slots</span>
-                        <Clock size={20} className="stat-icon" />
+                        <div className="stat-icon-wrapper">
+                          <Clock size={20} className="stat-icon" />
+                        </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
                       <small className="stat-subtitle">
@@ -465,25 +480,25 @@ const Admin: React.FC = () => {
                       overflowX: 'auto', 
                       width: '100%'
                     }}>
-                      <table className="table table-hover">
+                      <table className="table table-hover admin-data-table">
                         <thead>
                           <tr>
-                            <th className="admin-th-title" onClick={() => handleSort('title')}>
+                            <th className="admin-th col-title" onClick={() => handleSort('title')}>
                               Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th className="admin-th" onClick={() => handleSort('type')}>
+                            <th className="admin-th col-type" onClick={() => handleSort('type')}>
                               Type {sortField === 'type' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th className="admin-th admin-th-nowrap" onClick={() => handleSort('status')}>
+                            <th className="admin-th col-status" onClick={() => handleSort('status')}>
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th className="admin-th admin-th-nowrap">Clicks</th>
-                            <th className="admin-th">Total Slots</th>
-                            <th className="admin-th">Slots<br />to Fill</th>
-                            <th className="admin-th" onClick={() => handleSort('created_at')}>
+                            <th className="admin-th col-metric col-numeric">Clicks</th>
+                            <th className="admin-th col-metric col-numeric">Capacity</th>
+                            <th className="admin-th col-metric col-numeric">Booked</th>
+                            <th className="admin-th col-date" onClick={() => handleSort('created_at')}>
                               Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
-                            <th className="admin-th">Actions</th>
+                            <th className="admin-th col-actions">Actions</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -524,19 +539,19 @@ const Admin: React.FC = () => {
                                 e.currentTarget.blur();
                               }}
                             >
-                              <td className="admin-cell-title-col">
+                              <td className="col-title">
                                 <div>
-                                  <strong className="admin-cell-title">{opportunity.title}</strong>
+                                  <strong className="row-title">{opportunity.title}</strong>
                                   <br />
-                                  <small className="admin-cell-description">{opportunity.purpose_one_liner}</small>
+                                  <small className="row-desc">{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>
-                              <td className="admin-cell-center">
-                                <span className={getTypeBadgeClass(opportunity.type)}>
+                              <td className="col-type">
+                                <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
                                   {formatOpportunityType(opportunity.type)}
                                 </span>
                               </td>
-                              <td className="admin-cell-center">
+                              <td className="col-status">
                                 <span className={getStatusBadgeClass(opportunity.status)}>
                                   {opportunity.status === 'published' ? 'live' : opportunity.status}
                                 </span>
@@ -544,19 +559,17 @@ const Admin: React.FC = () => {
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
                                 )}
                               </td>
-                              <td className="admin-cell-center admin-cell-metadata">
+                              <td className="col-metric col-numeric">
                                 {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') ? (
                                   opportunity.clicks_total ?? 0
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td className="admin-cell-center">
+                              <td className="col-metric col-numeric">
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
                                   opportunity.sessions && opportunity.sessions.length > 0 ? (
-                                    <span className="badge bg-success text-white">
-                                      {opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0)}
-                                    </span>
+                                    opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0)
                                   ) : (
                                     ''
                                   )
@@ -564,19 +577,34 @@ const Admin: React.FC = () => {
                                   ''
                                 )}
                               </td>
-                              <td className="admin-cell-center">
-                                {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
-                                  ''
+                              <td className="col-metric col-numeric">
+                                {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 ? (
+                                  (() => {
+                                    const totalSlots = opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0);
+                                    const bookedSlots = opportunity.sessions.reduce((sum, s) => sum + (s.booked_count || 0), 0);
+                                    const percentage = totalSlots > 0 ? (bookedSlots / totalSlots) * 100 : 0;
+                                    return (
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+                                        <span>{bookedSlots} / {totalSlots}</span>
+                                        <div className="progress-mini">
+                                          <div 
+                                            className="progress-mini__fill" 
+                                            style={{ width: `${percentage}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    );
+                                  })()
                                 ) : (
                                   ''
                                 )}
                               </td>
-                              <td className="admin-cell-center">
+                              <td className="col-date">
                                 <small className="admin-cell-metadata">
                                   {new Date(opportunity.created_at).toLocaleDateString()}
                                 </small>
                               </td>
-                              <td className="admin-cell-center">
+                              <td className="col-actions">
                                                 <div className="dropdown">
                                                   <button
                                                     className="btn btn-outline-secondary btn-sm admin-action-btn admin-action-btn-kebab"
@@ -707,6 +735,7 @@ const Admin: React.FC = () => {
         onConfirm={confirmDelete}
         onCancel={cancelDelete}
       />
+      </div>
     </div>
   );
 };
