@@ -46,9 +46,13 @@ body.theme-light .study-listing-page {
   min-height: 100vh;
 }
 
-/* Override body background when study listing page is active (light mode) */
-body.theme-light:has(.study-listing-page) {
-  background: #FFFFFF; /* Pure white - no grey gradient */
+/* Override ALL backgrounds when study listing page is active (light mode) 
+   This eliminates any grey layers or frames */
+body.theme-light:has(.study-listing-page),
+body.theme-light:has(.study-listing-page) .App,
+body.theme-light:has(.study-listing-page) .main,
+body.theme-light:has(.study-listing-page) .main > .container {
+  background: #FFFFFF !important; /* Pure white - no grey gradient */
 }
 
 /* Full-screen fixed grid overlay for light mode study listing */
