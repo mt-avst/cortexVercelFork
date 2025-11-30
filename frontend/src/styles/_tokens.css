@@ -129,19 +129,19 @@
   --tag-bg: #222222;
   --tag-text: #FFFFFF;
 
-  /* Lozenge Colors - Dark Mode (Technical Labels - subtle 10% opacity) */
-  --lozenge-usertest-text: #4DD0E1;
-  --lozenge-usertest-bg: rgba(77, 208, 225, 0.12);
-  --lozenge-unmoderated-text: #CE93D8;
-  --lozenge-unmoderated-bg: rgba(206, 147, 216, 0.12);
-  --lozenge-survey-text: #69F0AE;
-  --lozenge-survey-bg: rgba(105, 240, 174, 0.12);
-  --lozenge-poll-text: #FFAB91;
-  --lozenge-poll-bg: rgba(255, 171, 145, 0.12);
-  --lozenge-interview-text: #F48FB1;
-  --lozenge-interview-bg: rgba(244, 143, 177, 0.12);
-  --lozenge-question-text: #FFE082;
-  --lozenge-question-bg: rgba(255, 224, 130, 0.12);
+  /* Lozenge Colors - Dark Mode (TASK 4: Brighter text, increased bg opacity) */
+  --lozenge-usertest-text: #FFFFFF;
+  --lozenge-usertest-bg: rgba(77, 208, 225, 0.2);
+  --lozenge-unmoderated-text: #FFFFFF;
+  --lozenge-unmoderated-bg: rgba(206, 147, 216, 0.2);
+  --lozenge-survey-text: #FFFFFF;
+  --lozenge-survey-bg: rgba(105, 240, 174, 0.2);
+  --lozenge-poll-text: #FFFFFF;
+  --lozenge-poll-bg: rgba(255, 171, 145, 0.2);
+  --lozenge-interview-text: #FFFFFF;
+  --lozenge-interview-bg: rgba(244, 143, 177, 0.2);
+  --lozenge-question-text: #FFFFFF;
+  --lozenge-question-bg: rgba(255, 224, 130, 0.2);
 
   /* Focus & Accessibility */
   --focus-ring: #FF4E50;

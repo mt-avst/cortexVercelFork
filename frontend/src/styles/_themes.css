@@ -151,19 +151,19 @@ body.theme-light {
   --tag-poll: #F3F4F6;
   --tag-test: #F3F4F6;
 
-  /* Lozenge Colors - Light Theme (Technical Labels - subtle 10% tint) */
-  --lozenge-usertest-text: #0891b2; /* cyan-600 */
-  --lozenge-usertest-bg: rgba(8, 145, 178, 0.1);
-  --lozenge-unmoderated-text: #9333ea; /* purple-600 */
-  --lozenge-unmoderated-bg: rgba(147, 51, 234, 0.1);
-  --lozenge-survey-text: #059669; /* emerald-600 */
-  --lozenge-survey-bg: rgba(5, 150, 105, 0.1);
-  --lozenge-poll-text: #ea580c; /* orange-600 */
-  --lozenge-poll-bg: rgba(234, 88, 12, 0.1);
-  --lozenge-interview-text: #db2777; /* pink-600 */
-  --lozenge-interview-bg: rgba(219, 39, 119, 0.1);
-  --lozenge-question-text: #d97706; /* amber-600 */
-  --lozenge-question-bg: rgba(217, 119, 6, 0.1);
+  /* Lozenge Colors - Light Theme (TASK 4: Bolder colors, increased bg opacity) */
+  --lozenge-usertest-text: #0369a1; /* cyan-700 - darker for contrast */
+  --lozenge-usertest-bg: rgba(8, 145, 178, 0.15);
+  --lozenge-unmoderated-text: #7c3aed; /* violet-600 - bolder */
+  --lozenge-unmoderated-bg: rgba(147, 51, 234, 0.15);
+  --lozenge-survey-text: #047857; /* emerald-700 - darker for contrast */
+  --lozenge-survey-bg: rgba(5, 150, 105, 0.15);
+  --lozenge-poll-text: #c2410c; /* orange-700 - darker for contrast */
+  --lozenge-poll-bg: rgba(234, 88, 12, 0.15);
+  --lozenge-interview-text: #be185d; /* pink-700 - darker for contrast */
+  --lozenge-interview-bg: rgba(219, 39, 119, 0.15);
+  --lozenge-question-text: #b45309; /* amber-700 - darker for contrast */
+  --lozenge-question-bg: rgba(217, 119, 6, 0.15);
 
   /* Shadows - Softer for light theme */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
@@ -213,12 +213,12 @@ body.theme-light .study-listing-page .bento-grid .card,
 body.theme-light .spotlight-card {
   /* FORCED pure white background - Lab aesthetic (no category tints) */
   background: #FFFFFF !important;
-  /* Crisp grey border (gray-200) for defined edges */
-  border: 1px solid #e5e7eb;
-  /* Tight shadow - physical lift feel (not soft/diffuse) */
+  /* Subtle border - let the shadow do the work */
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  /* Professional "Elevation" shadow - cards float above grid background */
   box-shadow: 
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 2px 4px rgba(0, 0, 0, 0.04);
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
   /* No blur needed for solid cards */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -363,9 +363,11 @@ body.theme-light .landing-page .header {
   box-shadow: none;
 }
 
-/* Header - Light Mode (match page background) */
+/* Header - Light Mode (match page background with subtle separation) */
 body.theme-light .header {
   background: var(--bg-app-gradient-top);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 body.theme-light .header .logo {
@@ -1337,9 +1339,18 @@ body.theme-dark .custom-tab-button span {
 
 body.theme-light .admin-dashboard .card,
 body.theme-light .admin-dashboard .admin-card {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Admin dashboard card header - pure white, no grey tint */
+body.theme-light .admin-dashboard .card-header,
+body.theme-light .admin-dashboard .card-header-transparent {
+  background: transparent;
+  border-bottom: none;
 }
 
 body.theme-light .admin-dashboard h1,
@@ -1435,18 +1446,20 @@ body.theme-light .custom-tab-button span {
 /* Admin stat cards - light mode ("Lab" aesthetic - premium elevation) */
 body.theme-light .admin-stat-card {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  /* Professional "Elevation" shadow - consistent with card system */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Admin container - light mode elevation */
 body.theme-light .admin-container-wide {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   border-radius: 12px;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  /* Professional "Elevation" shadow - consistent with card system */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Table row hover - warm grey */
@@ -1486,10 +1499,11 @@ body.theme-light .cortex-brand-title .cortex-admin-suffix {
 /* Admin table glass container - light mode ("Lab" aesthetic) */
 body.theme-light .admin-data-table-container {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(0, 0, 0, 0.04);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  /* Professional "Elevation" shadow - consistent with card system */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
   border-radius: 12px;
 }
 
@@ -2374,14 +2388,16 @@ body.theme-light .validation-error {
 /* Leaderboard Card Container - Light Mode */
 body.theme-light .leaderboard-card {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  /* Professional "Elevation" shadow - subtle lift off background */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Leaderboard List Container - Light Mode */
 body.theme-light .leaderboard-list {
   background: #FAFAFA;
-  border: 1px solid #E5E7EB;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Base Row - Light Mode */
@@ -2412,37 +2428,38 @@ body.theme-light .leaderboard-row-score--zero {
   color: #9CA3AF;
 }
 
-/* Rank 1 - Gold Row - Light Mode */
+/* Rank 1 - Gold Row - Light Mode (Champagne Tone - Warm Orange-Gold) */
 body.theme-light .leaderboard-row.rank-gold {
+  /* Champagne gradient: warm amber/orange-gold, not yellow */
   background: linear-gradient(
     90deg,
-    rgba(255, 193, 7, 0.18) 0%,
-    rgba(255, 193, 7, 0.10) 40%,
-    rgba(255, 193, 7, 0.04) 70%,
-    #FFFDF5 100%
+    rgba(245, 158, 11, 0.15) 0%,
+    rgba(245, 158, 11, 0.08) 40%,
+    rgba(245, 158, 11, 0.05) 70%,
+    #FFFBF5 100%
   ) !important;
-  border-left: 4px solid #D4AF37 !important;
+  border-left: 4px solid #D97706 !important; /* amber-600 - warm gold */
   box-shadow: none;
 }
 
 body.theme-light .leaderboard-row.rank-gold:hover {
   background: linear-gradient(
     90deg,
-    rgba(255, 193, 7, 0.25) 0%,
-    rgba(255, 193, 7, 0.14) 40%,
-    rgba(255, 193, 7, 0.06) 70%,
-    #FFFDF5 100%
+    rgba(245, 158, 11, 0.22) 0%,
+    rgba(245, 158, 11, 0.12) 40%,
+    rgba(245, 158, 11, 0.06) 70%,
+    #FFFBF5 100%
   ) !important;
 }
 
 body.theme-light .leaderboard-row.rank-gold .leaderboard-row-name {
-  color: #1A1A1A;
+  color: #1F2937; /* Dark charcoal - not pure black */
   font-weight: 700;
   text-shadow: none;
 }
 
 body.theme-light .leaderboard-row.rank-gold .leaderboard-row-score {
-  color: #5C4000 !important; /* Very dark gold/brown - WCAG AAA compliant */
+  color: #92400E !important; /* amber-800 - Dark warm brown for contrast */
   text-shadow: none;
   font-weight: 700;
 }
@@ -2530,8 +2547,9 @@ body.theme-light .leaderboard-row.rank-bronze .leaderboard-row-medal {
 /* Stat HUD Cards - Light Mode */
 body.theme-light .stat-hud {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  /* Professional "Elevation" shadow - consistent with card system */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 body.theme-light .stat-hud .stat-value {
@@ -2545,8 +2563,9 @@ body.theme-light .stat-hud .stat-label {
 /* Prize Card - Light Mode */
 body.theme-light .prize-card {
   background: #FFFFFF;
-  border: 1px solid #E5E7EB;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  /* Professional "Elevation" shadow - consistent with card system */
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 body.theme-light .prize-card-title {

@@ -10,7 +10,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, Search, AlertTriangle } from 'lucide-react';
+import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, AlertTriangle } from 'lucide-react';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -394,7 +394,7 @@ const Admin: React.FC = () => {
                   <div className="filters-row">
                     <div className="filter-field">
                       <label htmlFor="searchFilter" className="form-label mb-2">
-                        <Search size={14} className="me-1" />Search Studies
+                        Search Studies
                       </label>
                       <input
                         ref={searchInputRef}

@@ -613,12 +613,14 @@
   font-size: 1rem;
   font-weight: 500;
   font-family: var(--font-family-base);
-  color: var(--btn-glass-text);
-  background: var(--btn-glass-bg);
-  border: 1px solid var(--btn-glass-border);
+  color: #FF5A1F; /* Adaptavist Orange */
+  background: transparent;
+  border: 2px solid #FF5A1F; /* Adaptavist Orange */
   border-radius: 100px;
   cursor: pointer;
   backdrop-filter: blur(12px);
+  box-shadow: none;
+  transition: all 0.2s ease;
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--btn-glass-shadow);
   transition: all 0.3s ease;
@@ -626,10 +628,12 @@
 }
 
 .btn-glass:hover {
-  background: var(--btn-glass-bg-hover);
-  border-color: var(--btn-glass-border-hover);
-  box-shadow: var(--btn-glass-shadow-hover);
-  color: var(--btn-glass-text);
+  /* Solid Adaptavist Orange fill on hover */
+  background: #FF5A1F;
+  border-color: #FF5A1F;
+  color: #FFFFFF;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 90, 31, 0.4);
   text-decoration: none;
 }
 
@@ -650,10 +654,16 @@ body.theme-light .btn-glass {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   font-weight: 500;
+  color: #FF5A1F; /* Adaptavist Orange */
+  background: transparent;
+  border-color: #FF5A1F; /* Adaptavist Orange */
 }
 
 body.theme-light .btn-glass:hover {
-  color: var(--brand-primary);
+  /* Solid Adaptavist Orange fill on hover */
+  background: #FF5A1F;
+  border-color: #FF5A1F;
+  color: #FFFFFF;
 }
 
 /* Button Sizes */
@@ -3953,6 +3963,52 @@ body:has(.opportunity-detail-page) .mesh-gradient-background {
 }
 
 /* ============================================================
+   TASK 1: GLASSMORPHISM BOOKING PAGE CONTAINERS
+   "Weightless" glass aesthetic for detail/booking views
+   ============================================================ */
+
+/* Main detail card - glass effect */
+.opportunity-detail-card,
+.opportunity-detail-page .card {
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+}
+
+/* Calendar/Scheduler container - glass effect */
+.mission-scheduler,
+.calendar-hud {
+  background: rgba(15, 23, 42, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37) !important;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+/* Light Mode: Crisp white glass for booking containers */
+body.theme-light .opportunity-detail-card,
+body.theme-light .opportunity-detail-page .card {
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+body.theme-light .mission-scheduler,
+body.theme-light .calendar-hud {
+  background: rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08) !important;
+}
+
+/* ============================================================
    OPPORTUNITY HERO SECTION
    ============================================================ */
 
@@ -5073,12 +5129,22 @@ body.theme-light .study-summary-line {
   margin-bottom: 0.5rem;
 }
 
-/* Opportunity Card Body - Flex column layout */
+/* Opportunity Card Body - Flex column layout for aligned footers */
 .opportunity-card-body {
   display: flex;
   flex-direction: column;
   flex: 1;
   height: 100%;
+}
+
+/* Description area grows to push footer to bottom - ensures aligned rows in grid */
+.opportunity-card-body > .card-text:last-of-type:not(.small) {
+  flex-grow: 1;
+}
+
+/* When optional description exists, it should grow instead */
+.opportunity-card-body > .card-text.small {
+  flex-grow: 1;
 }
 
 /* Study Card Typography - Cortex Design System */
@@ -5146,6 +5212,7 @@ body.theme-light .card.card-clickable:hover {
   border-radius: var(--card-radius);
   overflow: hidden;
   isolation: isolate;
+  height: 100%; /* Fill grid cell for aligned footers */
   
   /* CSS variables for mouse tracking */
   --spotlight-x: 0px;
@@ -5214,11 +5281,21 @@ body.theme-light .card.card-clickable:hover {
   z-index: 0;
 }
 
-/* Spotlight Card Content */
+/* Spotlight Card Content - Flex container for vertical rhythm */
 .spotlight-card-content {
   position: relative;
   z-index: 2;
   height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1; /* Fill parent flex container */
+}
+
+/* Card body inside spotlight cards - fill available space */
+.spotlight-card-content > .card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Spotlight Card Hover State */
@@ -7634,31 +7711,35 @@ body.theme-light .mission-scheduler h5 {
   position: relative;
 }
 
-/* Grid line styling - increased visibility */
+/* ============================================================
+   TASK 2: CALENDAR UI POLISH - Subtle Grid & Block Slots
+   ============================================================ */
+
+/* Grid line styling - extremely subtle for glass aesthetic */
 .calendar-grid-line {
   transition: opacity 0.2s ease;
 }
 
-/* Dark Mode: Visible grid lines (border-gray-700) */
+/* Dark Mode: Ghost grid lines (barely visible) */
 body.theme-dark .calendar-hud .calendar-grid-line {
-  background-color: #374151 !important; /* gray-700 - visible */
+  background-color: rgba(255, 255, 255, 0.02) !important; /* Almost invisible */
 }
 
 body.theme-dark .calendar-hud .calendar-timeline-container {
-  border-color: #374151 !important; /* gray-700 */
+  border-color: rgba(255, 255, 255, 0.02) !important;
 }
 
 body.theme-dark .calendar-hud .calendar-days-container > div[style*="border"] {
-  border-color: #374151 !important;
+  border-color: rgba(255, 255, 255, 0.02) !important;
 }
 
-/* Light Mode: More visible grid lines (darker for better visibility on white) */
+/* Light Mode: Ghost grid lines */
 body.theme-light .calendar-hud .calendar-grid-line {
-  background-color: rgba(0, 0, 0, 0.08) !important; /* Slightly darker for visibility */
+  background-color: rgba(0, 0, 0, 0.03) !important; /* Almost invisible */
 }
 
 body.theme-light .calendar-hud .calendar-timeline-container {
-  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-color: rgba(0, 0, 0, 0.03) !important;
 }
 
 /* Vertical column separators for structure */
@@ -7707,62 +7788,81 @@ body.theme-light .calendar-day-header-cell {
   width: auto !important;
 }
 
-/* DARK MODE: Transparent bg, Emerald border, Emerald text (Available = Green "Go" signal) */
+/* ============================================================
+   TASK 2: BLOCK BUTTON TIME SLOTS - Tactile & Clickable
+   ============================================================ */
+
+/* Base slot - Block button styling */
+.mission-scheduler .calendar-slot,
+.calendar-hud .calendar-slot {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 44px !important; /* Touch-friendly height */
+  padding: 12px 8px !important;
+  cursor: pointer !important;
+}
+
+/* DARK MODE: Block button style - Emerald tinted glass */
 body.theme-dark .mission-scheduler .calendar-slot-ghost,
 body.theme-dark .calendar-hud .calendar-slot-ghost {
-  background: transparent !important;
-  border: 1.5px solid rgba(52, 211, 153, 0.5) !important; /* emerald-400/50 */
-  border-radius: 6px !important;
+  background: rgba(16, 185, 129, 0.15) !important; /* emerald-500/15 */
+  border: 1px solid rgba(16, 185, 129, 0.3) !important; /* emerald-500/30 */
+  border-radius: 8px !important;
   box-shadow: none !important;
-  transition: all 0.2s ease !important;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
 body.theme-dark .mission-scheduler .calendar-slot-ghost .timeslot-label,
 body.theme-dark .calendar-hud .calendar-slot-ghost .timeslot-label {
-  color: #34D399 !important; /* emerald-400 */
-  font-weight: 600 !important;
+  color: #FFFFFF !important; /* Pure white for visibility */
+  font-weight: 700 !important;
   text-shadow: none;
+  text-align: center !important;
 }
 
-/* DARK MODE: Hover - bg-emerald-500/10 with subtle glow */
+/* DARK MODE: Hover - Brighten and lift */
 body.theme-dark .mission-scheduler .calendar-slot-ghost:hover,
 body.theme-dark .calendar-hud .calendar-slot-ghost:hover {
-  background: rgba(16, 185, 129, 0.1) !important; /* emerald-500/10 */
-  border-color: #34D399 !important; /* emerald-400 */
+  background: rgba(16, 185, 129, 0.25) !important; /* emerald-500/25 */
+  border-color: rgba(16, 185, 129, 0.5) !important; /* emerald-500/50 */
+  transform: translateY(-1px);
   box-shadow: 
-    0 0 12px rgba(52, 211, 153, 0.3),
-    0 0 20px rgba(52, 211, 153, 0.15) !important;
+    0 4px 12px rgba(16, 185, 129, 0.3),
+    0 0 20px rgba(16, 185, 129, 0.15) !important;
 }
 
 body.theme-dark .mission-scheduler .calendar-slot-ghost:hover .timeslot-label,
 body.theme-dark .calendar-hud .calendar-slot-ghost:hover .timeslot-label {
-  color: #6EE7B7 !important; /* emerald-300 */
+  color: #FFFFFF !important;
 }
 
-/* LIGHT MODE: White bg with emerald border (Available = Green "Go" signal) */
+/* LIGHT MODE: Block button style - Clean emerald */
 body.theme-light .mission-scheduler .calendar-slot-ghost,
 body.theme-light .calendar-hud .calendar-slot-ghost {
-  background: #ECFDF5 !important; /* emerald-50 - subtle green tint */
-  border: 1px solid #10B981 !important; /* emerald-500 */
-  border-radius: 6px !important;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important; /* shadow-sm */
+  background: rgba(16, 185, 129, 0.1) !important; /* emerald-500/10 */
+  border: 1px solid rgba(16, 185, 129, 0.3) !important; /* emerald-500/30 */
+  border-radius: 8px !important;
+  box-shadow: none !important;
   transition: all 0.15s ease !important;
 }
 
 body.theme-light .mission-scheduler .calendar-slot-ghost .timeslot-label,
 body.theme-light .calendar-hud .calendar-slot-ghost .timeslot-label {
   color: #065F46 !important; /* emerald-800 - dark green text */
-  font-weight: 600 !important;
+  font-weight: 700 !important;
+  text-align: center !important;
 }
 
-/* LIGHT MODE: Hover - Emerald tint with lift */
+/* LIGHT MODE: Hover - Brighten and lift */
 body.theme-light .mission-scheduler .calendar-slot-ghost:hover,
 body.theme-light .calendar-hud .calendar-slot-ghost:hover {
-  background: #D1FAE5 !important; /* emerald-100 - stronger green tint */
-  border-color: #059669 !important; /* emerald-600 */
+  background: rgba(16, 185, 129, 0.2) !important; /* emerald-500/20 */
+  border-color: rgba(16, 185, 129, 0.5) !important; /* emerald-500/50 */
+  transform: translateY(-1px);
   box-shadow: 
-    0 4px 6px -1px rgba(16, 185, 129, 0.15),
-    0 2px 4px -1px rgba(16, 185, 129, 0.1) !important; /* green-tinted shadow */
+    0 4px 12px rgba(16, 185, 129, 0.2),
+    0 2px 4px rgba(0, 0, 0, 0.05) !important;
 }
 
 body.theme-light .mission-scheduler .calendar-slot-ghost:hover .timeslot-label,
@@ -8113,8 +8213,35 @@ body.theme-light .landing-tagline {
   align-items: center;
   gap: 0.75rem;
   margin-bottom: 1rem;
-  opacity: 0.8;
+  opacity: 0.9;
   transition: opacity 0.2s ease;
+  /* Shadow shielding for visibility */
+  padding: 1.5rem 3rem;
+  position: relative;
+}
+
+/* Dark Mode: Shadow shield with seamless feathered edges */
+body.theme-dark .landing-demo-footer {
+  background: transparent;
+}
+
+body.theme-dark .landing-demo-footer::before {
+  content: '';
+  position: absolute;
+  inset: -100px -200px -60px -200px;
+  background: radial-gradient(
+    ellipse 80% 80% at 50% 60%,
+    rgba(0, 0, 0, 0.65) 0%,
+    rgba(0, 0, 0, 0.5) 15%,
+    rgba(0, 0, 0, 0.35) 30%,
+    rgba(0, 0, 0, 0.2) 45%,
+    rgba(0, 0, 0, 0.1) 60%,
+    rgba(0, 0, 0, 0.04) 75%,
+    rgba(0, 0, 0, 0.01) 88%,
+    transparent 100%
+  );
+  z-index: -1;
+  pointer-events: none;
 }
 
 .landing-demo-footer:hover {
@@ -8130,7 +8257,7 @@ body.theme-light .landing-tagline {
 }
 
 body.theme-dark .landing-demo-label {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 body.theme-light .landing-demo-label {
