@@ -99,10 +99,10 @@ const Header: React.FC = memo(() => {
     <header className="header">
       <div className="container">
         <div className="header-content">
-          <Link to={logoLink} className="logo" aria-label="AdaptaLabs home">
+          <Link to={logoLink} className="logo" aria-label="Cortex home">
             <img 
               src="/images/adaptalogo.png" 
-              alt="Adaptalabs Logo" 
+              alt="Cortex Logo" 
               className="logo-image"
             />
           </Link>
@@ -140,7 +140,7 @@ const Header: React.FC = memo(() => {
                       to="/my-bookings" 
                       className="btn btn-outline-secondary"
                     >
-                      My Bookings
+                      My bookings
                     </Link>
                   </>
                 )}

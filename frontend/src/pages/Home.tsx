@@ -234,12 +234,18 @@ const Home: React.FC = memo(() => {
                 </p>
               </div>
               
-              {/* Study type filter chips */}
+              {/* Study summary and type filter chips */}
               {!loading && !error && opportunities.length > 0 && (
-                <StudyFilters 
-                  currentFilter={selectedType} 
-                  onFilterChange={setSelectedType} 
-                />
+                <>
+                  <p className="study-summary-line">
+                    {opportunities.length} active {opportunities.length === 1 ? 'study' : 'studies'}
+                    {selectedType !== 'all' && ` · Showing ${selectedType}`}
+                  </p>
+                  <StudyFilters 
+                    currentFilter={selectedType} 
+                    onFilterChange={setSelectedType} 
+                  />
+                </>
               )}
               
               {error && (

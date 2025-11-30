@@ -153,7 +153,7 @@ const Feedback: React.FC = () => {
                   <CheckCircle size={48} className="text-success" />
                   <h2 className="mt-3">Thank You!</h2>
                   <p className="lead">Your feedback has been submitted successfully.</p>
-                  <p>We appreciate you taking the time to help us improve AdaptaLabs.</p>
+                  <p>We appreciate you taking the time to help us improve Cortex.</p>
                   <button 
                     className="btn btn-primary mt-3"
                     onClick={() => {
@@ -187,7 +187,7 @@ const Feedback: React.FC = () => {
               </div>
               <div className="card-body">
                 <p className="text-muted">
-                  Help us improve AdaptaLabs by sharing your feedback, reporting bugs, or suggesting features.
+                  Help us improve Cortex by sharing your feedback, reporting bugs, or suggesting features.
                 </p>
                 
                 {error && (

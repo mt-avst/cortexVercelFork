@@ -91,6 +91,20 @@ body.theme-light {
   --bg-input-focus: rgba(255, 255, 255, 1);
   --bg-glass: rgba(255, 255, 255, 0.85);
 
+  /* Glass Button - Light Mode */
+  --btn-glass-bg: #FFFFFF;
+  --btn-glass-bg-hover: #fff7ed;
+  --btn-glass-border: var(--brand-primary);
+  --btn-glass-border-hover: var(--brand-primary);
+  --btn-glass-text: var(--brand-primary);
+  --btn-glass-shadow: var(--shadow-sm);
+  --btn-glass-shadow-hover: 0 0 15px rgba(232, 108, 36, 0.25);
+  
+  /* Surface Elevation System - Light Mode */
+  --surface-base: #FFFFFF;
+  --surface-raised: #FFFFFF;
+  --surface-overlay: #FFFFFF;
+
   /* Border Colors */
   --border-card: rgba(0, 0, 0, 0.12);
   --border-table-row: rgba(0, 0, 0, 0.06);
@@ -802,9 +816,9 @@ body.theme-light .admin-page-bg > * {
 
 body.theme-dark .admin-dashboard .card,
 body.theme-dark .admin-dashboard .admin-card {
-  background: rgba(30, 30, 50, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: rgba(12, 12, 14, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
@@ -986,9 +1000,9 @@ body.theme-dark .admin-dashboard .form-control,
 body.theme-dark .admin-dashboard .form-select,
 body.theme-dark .admin-dashboard input[type="text"],
 body.theme-dark .admin-dashboard select {
-  background-color: rgba(30, 30, 50, 0.95);
-  background: rgba(30, 30, 50, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background-color: rgba(18, 18, 20, 0.95);
+  background: rgba(18, 18, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   color: #E0E0E0;
 }
 
@@ -996,8 +1010,8 @@ body.theme-dark .admin-dashboard .form-control:focus,
 body.theme-dark .admin-dashboard .form-select:focus,
 body.theme-dark .admin-dashboard input[type="text"]:focus,
 body.theme-dark .admin-dashboard select:focus {
-  background-color: rgba(40, 40, 60, 0.95);
-  background: rgba(40, 40, 60, 0.95);
+  background-color: rgba(24, 24, 26, 0.98);
+  background: rgba(24, 24, 26, 0.98);
   border-color: var(--brand-headline);
   box-shadow: 0 0 0 3px rgba(255, 78, 80, 0.15);
   color: #FFFFFF;
@@ -1015,7 +1029,7 @@ body.theme-dark .admin-dashboard .form-select {
 }
 
 body.theme-dark .admin-dashboard .form-select option {
-  background-color: #1e1e32 !important;
+  background-color: #121214 !important;
   color: #E0E0E0 !important;
 }
 
@@ -1057,10 +1071,10 @@ body.theme-dark .admin-dashboard .dropdown .dropdown-menu,
 body.theme-dark .admin-dashboard table .dropdown-menu,
 body.theme-dark .admin-dashboard td .dropdown-menu,
 body.theme-dark .dropdown-menu {
-  background: #1e1e32 !important;
-  background-color: #1e1e32 !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+  background: #121214 !important;
+  background-color: #121214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
@@ -1107,9 +1121,9 @@ body.theme-dark .dropdown-menu button.dropdown-item.text-danger:hover {
 
 /* Admin action dropdown - ALWAYS apply these styles (base) */
 .admin-action-dropdown {
-  background: #1e1e32 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+  background: #121214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
 }
 
 .admin-action-dropdown button {
@@ -1140,9 +1154,9 @@ body.theme-light .admin-action-dropdown button:hover {
 
 /* Admin action dropdown - dark mode (explicit) */
 body.theme-dark .admin-action-dropdown {
-  background: #1e1e32 !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6) !important;
+  background: #121214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7) !important;
 }
 
 body.theme-dark .admin-action-dropdown button {
@@ -1216,9 +1230,9 @@ body.theme-light .admin-dropdown-item-danger:hover {
 .admin-dropdown-dark,
 body.theme-dark .admin-dropdown-dark,
 body.theme-dark .dropdown-menu.admin-dropdown-dark {
-  background: #1e1e32 !important;
-  background-color: #1e1e32 !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  background: #121214 !important;
+  background-color: #121214 !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   color: #E0E0E0 !important;
 }
 
@@ -1833,9 +1847,9 @@ body.theme-dark .card-header .mb-0 {
    ============================================================ */
 
 body.theme-dark .gamification-page .card {
-  background: rgba(30, 30, 50, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: rgba(12, 12, 14, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 body.theme-dark .gamification-page .card .card-header {
@@ -1875,9 +1889,9 @@ body.theme-dark .gamification-page small.text-muted {
    ============================================================ */
 
 body.theme-dark .my-bookings-page .card {
-  background: rgba(30, 30, 50, 0.95);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+  background: rgba(12, 12, 14, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 body.theme-dark .my-bookings-page .card-header {
@@ -1960,10 +1974,10 @@ body.theme-dark .opportunity-form {
 }
 
 body.theme-dark .opportunity-form .card {
-  background: rgba(30, 30, 50, 0.95);
+  background: rgba(12, 12, 14, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
 }
 
@@ -2351,5 +2365,213 @@ body.theme-light .validation-error {
     --border-card: rgba(0, 0, 0, 0.3);
     --text-muted: #4B5563;
   }
+}
+
+/* ============================================================
+   ADAPTABITS LEADERBOARD - Light Mode Overrides
+   ============================================================ */
+
+/* Leaderboard Card Container - Light Mode */
+body.theme-light .leaderboard-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+}
+
+/* Leaderboard List Container - Light Mode */
+body.theme-light .leaderboard-list {
+  background: #FAFAFA;
+  border: 1px solid #E5E7EB;
+}
+
+/* Base Row - Light Mode */
+body.theme-light .leaderboard-row {
+  background: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+  border-left: 3px solid transparent;
+}
+
+body.theme-light .leaderboard-row:hover {
+  background: #F9FAFB;
+  border-left-color: var(--brand-primary);
+}
+
+body.theme-light .leaderboard-row-name {
+  color: #1A1A1A;
+}
+
+body.theme-light .leaderboard-row-number {
+  color: #6B7280;
+}
+
+body.theme-light .leaderboard-row-score {
+  color: var(--brand-primary);
+}
+
+body.theme-light .leaderboard-row-score--zero {
+  color: #9CA3AF;
+}
+
+/* Rank 1 - Gold Row - Light Mode */
+body.theme-light .leaderboard-row.rank-gold {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 193, 7, 0.18) 0%,
+    rgba(255, 193, 7, 0.10) 40%,
+    rgba(255, 193, 7, 0.04) 70%,
+    #FFFDF5 100%
+  ) !important;
+  border-left: 4px solid #D4AF37 !important;
+  box-shadow: none;
+}
+
+body.theme-light .leaderboard-row.rank-gold:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 193, 7, 0.25) 0%,
+    rgba(255, 193, 7, 0.14) 40%,
+    rgba(255, 193, 7, 0.06) 70%,
+    #FFFDF5 100%
+  ) !important;
+}
+
+body.theme-light .leaderboard-row.rank-gold .leaderboard-row-name {
+  color: #1A1A1A;
+  font-weight: 700;
+  text-shadow: none;
+}
+
+body.theme-light .leaderboard-row.rank-gold .leaderboard-row-score {
+  color: #5C4000 !important; /* Very dark gold/brown - WCAG AAA compliant */
+  text-shadow: none;
+  font-weight: 700;
+}
+
+body.theme-light .leaderboard-row.rank-gold .leaderboard-row-medal {
+  filter: none;
+}
+
+/* Rank 2 - Silver Row - Light Mode */
+body.theme-light .leaderboard-row.rank-silver {
+  background: linear-gradient(
+    90deg,
+    rgba(169, 169, 169, 0.15) 0%,
+    rgba(169, 169, 169, 0.08) 40%,
+    rgba(169, 169, 169, 0.03) 70%,
+    #FAFAFA 100%
+  ) !important;
+  border-left: 4px solid #6B6B6B !important;
+  box-shadow: none;
+}
+
+body.theme-light .leaderboard-row.rank-silver:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(169, 169, 169, 0.22) 0%,
+    rgba(169, 169, 169, 0.12) 40%,
+    rgba(169, 169, 169, 0.05) 70%,
+    #FAFAFA 100%
+  ) !important;
+}
+
+body.theme-light .leaderboard-row.rank-silver .leaderboard-row-name {
+  color: #1A1A1A;
+  font-weight: 600;
+}
+
+body.theme-light .leaderboard-row.rank-silver .leaderboard-row-score,
+body.theme-light .leaderboard-row.rank-silver .leaderboard-row-score.leaderboard-row-score--silver {
+  color: #1A1A1A !important; /* Near-black for maximum contrast */
+  text-shadow: none !important;
+  font-weight: 600 !important;
+}
+
+body.theme-light .leaderboard-row.rank-silver .leaderboard-row-medal {
+  filter: none;
+}
+
+/* Rank 3 - Bronze Row - Light Mode */
+body.theme-light .leaderboard-row.rank-bronze {
+  background: linear-gradient(
+    90deg,
+    rgba(205, 127, 50, 0.15) 0%,
+    rgba(205, 127, 50, 0.08) 40%,
+    rgba(205, 127, 50, 0.03) 70%,
+    #FFFAF5 100%
+  ) !important;
+  border-left: 4px solid #B87333 !important;
+  box-shadow: none;
+}
+
+body.theme-light .leaderboard-row.rank-bronze:hover {
+  background: linear-gradient(
+    90deg,
+    rgba(205, 127, 50, 0.22) 0%,
+    rgba(205, 127, 50, 0.12) 40%,
+    rgba(205, 127, 50, 0.05) 70%,
+    #FFFAF5 100%
+  ) !important;
+}
+
+body.theme-light .leaderboard-row.rank-bronze .leaderboard-row-name {
+  color: #1A1A1A;
+  font-weight: 600;
+}
+
+body.theme-light .leaderboard-row.rank-bronze .leaderboard-row-score {
+  color: #7A4A1A !important; /* Dark bronze - WCAG AA compliant */
+  text-shadow: none;
+}
+
+body.theme-light .leaderboard-row.rank-bronze .leaderboard-row-medal {
+  filter: none;
+}
+
+/* Stat HUD Cards - Light Mode */
+body.theme-light .stat-hud {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .stat-hud .stat-value {
+  color: #1A1A1A;
+}
+
+body.theme-light .stat-hud .stat-label {
+  color: #6B7280;
+}
+
+/* Prize Card - Light Mode */
+body.theme-light .prize-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .prize-card-title {
+  color: #1A1A1A;
+}
+
+body.theme-light .prize-card-cta {
+  color: #15803D;
+}
+
+/* Leaderboard Tabs - Light Mode */
+body.theme-light .leaderboard-tab {
+  background: #F3F4F6;
+  color: #6B7280;
+  border: 1px solid #E5E7EB;
+}
+
+body.theme-light .leaderboard-tab:hover {
+  background: #E5E7EB;
+  color: #374151;
+}
+
+body.theme-light .leaderboard-tab--active {
+  background: var(--brand-primary);
+  color: #FFFFFF;
+  border-color: var(--brand-primary);
 }
 

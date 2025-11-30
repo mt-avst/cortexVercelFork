@@ -237,13 +237,13 @@ const MyBookings: React.FC = () => {
                 variant="outline-secondary"
                 className="mb-3"
                 onClick={() => navigate('/')}
-                title="Back to AdaptaLabs"
+                title="Back to studies"
               >
                 <ArrowLeft size={16} className="me-1" />
-                Back to AdaptaLabs
+                Back to studies
               </Button>
-              <h2>My Bookings</h2>
-              <p className="text-muted">Manage your AdaptaLabs activity bookings</p>
+              <h2>My bookings</h2>
+              <p className="text-muted">Manage your Cortex study bookings</p>
             </div>
             <Button
               variant="outline-primary"
@@ -271,19 +271,19 @@ const MyBookings: React.FC = () => {
       {/* Upcoming Bookings */}
       <div className="row mt-4">
         <div className="col">
-          <h4>Upcoming Bookings</h4>
+          <h4>Upcoming bookings</h4>
           {bookings.upcoming.length === 0 ? (
             <Card>
               <CardBody className="empty-state-container">
                 <CalendarX size={48} className="empty-state-icon" />
                 <h5 className="empty-state-title">No upcoming sessions</h5>
-                <p className="empty-state-subtitle">Check the dashboard to find new activities.</p>
+                <p className="empty-state-subtitle">Browse the Cortex dashboard to find studies to participate in.</p>
                 <Button
                   variant="primary"
                   onClick={() => navigate('/')}
                   className="mt-3"
                 >
-                  Browse Activities
+                  Browse studies
                 </Button>
               </CardBody>
             </Card>
@@ -324,20 +324,34 @@ const MyBookings: React.FC = () => {
                     </div>
                   </CardBody>
                   <CardFooter>
-                    <div className="flex gap-2">
+                    <div className="booking-actions">
+                      {/* Primary action: Join meeting link (if available) */}
+                      {booking.session_location && isUrl(booking.session_location) && (
+                        <a 
+                          href={booking.session_location} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="btn-booking-join"
+                        >
+                          {getMeetingPlatform(booking.session_location)}
+                          <ExternalLink size={14} />
+                        </a>
+                      )}
+                      {/* Secondary action: Reschedule */}
+                      <button
+                        className="btn-booking-reschedule"
+                        disabled
+                        title="Reschedule functionality coming soon"
+                      >
+                        Reschedule
+                      </button>
+                      {/* Tertiary action: Cancel */}
                       <button
                         className="btn-booking-cancel"
                         onClick={() => handleCancelBooking(booking.id)}
                         disabled={actionLoading === booking.id}
                       >
                         {actionLoading === booking.id ? 'Cancelling...' : 'Cancel'}
-                      </button>
-                      {/* Reschedule functionality will be implemented in a future release */}
-                      <button
-                        className="btn-booking-reschedule"
-                        disabled
-                      >
-                        Reschedule
                       </button>
                     </div>
                   </CardFooter>
@@ -351,7 +365,7 @@ const MyBookings: React.FC = () => {
       {/* Past Bookings */}
       <div className="row mt-12">
         <div className="col">
-          <h4>Past Bookings</h4>
+          <h4>Past bookings</h4>
           {bookings.past.length === 0 ? (
             <Card>
               <CardBody className="text-center text-muted">

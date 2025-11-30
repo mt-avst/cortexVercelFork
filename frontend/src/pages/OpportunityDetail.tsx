@@ -314,9 +314,9 @@ const OpportunityDetail: React.FC = () => {
           <button 
             className="btn btn-outline-secondary mb-4 mission-back-btn"
             onClick={() => navigate('/')}
-            aria-label="Navigate back to AdaptaLabs home"
+            aria-label="Navigate back to Cortex home"
           >
-            ← Back to AdaptaLabs
+            ← Back to Cortex
           </button>
 
 
@@ -450,10 +450,10 @@ const OpportunityDetail: React.FC = () => {
                         <button 
                           className="btn btn-sm btn-outline-success ms-3"
                           onClick={() => navigate('/my-bookings')}
-                          aria-label="Navigate to My Bookings page"
+                          aria-label="Navigate to My bookings page"
                         >
                           <CalendarCheck size={14} className="me-1" aria-hidden="true" />
-                          View My Bookings
+                          View my bookings
                         </button>
                       </div>
                       <button 

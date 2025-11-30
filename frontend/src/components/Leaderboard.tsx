@@ -7,7 +7,7 @@ interface LeaderboardProps {
   limit?: number;
 }
 
-const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
+const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [monthlyLeaderboard, setMonthlyLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [activeTab, setActiveTab] = useState<'total' | 'monthly'>('monthly');
@@ -42,90 +42,77 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
     }
   };
 
-  const getRankIcon = (rank: number): string => {
-    switch (rank) {
-      case 1:
-        return '🥇';
-      case 2:
-        return '🥈';
-      case 3:
-        return '🥉';
-      default:
-        return `#${rank}`;
-    }
+  const getPoints = (entry: LeaderboardEntry) => {
+    return activeTab === 'total' ? entry.total_points : entry.monthly_points;
   };
 
-  const getRankColor = (rank: number): string => {
-    switch (rank) {
-      case 1:
-        return '#ffd700'; // Gold
-      case 2:
-        return '#c0c0c0'; // Silver
-      case 3:
-        return '#cd7f32'; // Bronze
-      default:
-        return '#6c757d'; // Gray
-    }
+  // Get row class based on rank (ensure number comparison)
+  const getRowClass = (rank: number): string => {
+    const numRank = Number(rank);
+    if (numRank === 1) return 'leaderboard-row rank-gold';
+    if (numRank === 2) return 'leaderboard-row rank-silver';
+    if (numRank === 3) return 'leaderboard-row rank-bronze';
+    return 'leaderboard-row';
   };
 
-  const renderLeaderboardEntry = (entry: LeaderboardEntry, index: number) => {
-    const points = activeTab === 'total' ? entry.total_points : entry.monthly_points;
-    const isTopThree = entry.rank <= 3;
+  // Get medal icon for top 3 (ensure number comparison)
+  const getMedalIcon = (rank: number): string | null => {
+    const numRank = Number(rank);
+    if (numRank === 1) return '🥇';
+    if (numRank === 2) return '🥈';
+    if (numRank === 3) return '🥉';
+    return null;
+  };
 
+  // Get score class based on rank and points (ensure number comparison)
+  const getScoreClass = (rank: number, points: number): string => {
+    if (points === 0) return 'leaderboard-row-score--zero';
+    const numRank = Number(rank);
+    if (numRank === 1) return 'leaderboard-row-score--gold';
+    if (numRank === 2) return 'leaderboard-row-score--silver';
+    if (numRank === 3) return 'leaderboard-row-score--bronze';
+    return '';
+  };
+
+  // Format score display - handle 0 points edge case for top ranks
+  const formatScoreDisplay = (points: number, rank: number): string => {
+    const numRank = Number(rank);
+    if (points === 0 && numRank === 1) {
+      return 'New Leader';
+    }
+    if (points === 0 && numRank <= 3) {
+      return 'Starting';
+    }
+    return gamificationUtils.formatPoints(points);
+  };
+
+  const renderRow = (entry: LeaderboardEntry) => {
+    const points = getPoints(entry);
+    const medal = getMedalIcon(entry.rank);
+    const isTopThree = Number(entry.rank) <= 3;
+    const scoreDisplay = formatScoreDisplay(points, entry.rank);
+    const showPtsLabel = isTopThree && points > 0;
+    
     return (
-      <div 
-        key={entry.user_id} 
-        className="d-flex align-items-center p-3 border rounded mb-2"
-        style={{ 
-          backgroundColor: isTopThree ? 'rgba(255, 78, 80, 0.1)' : 'transparent',
-          borderColor: isTopThree ? 'var(--brand-headline)' : 'var(--border-card)',
-          borderWidth: isTopThree ? '2px' : '1px',
-          borderRadius: 'var(--card-radius)',
-          transition: 'all var(--transition-card)'
-        }}
-      >
+      <div key={entry.user_id} className={getRowClass(entry.rank)}>
         {/* Rank */}
-        <div className="me-3 text-center" style={{ minWidth: '50px' }}>
-          <div 
-            className="fw-bold fs-5"
-            style={{ 
-              color: isTopThree ? 'var(--brand-headline)' : 'var(--text-primary)',
-              fontSize: 'var(--font-size-h3)',
-              fontWeight: 'var(--font-weight-h3)'
-            }}
-          >
-            {getRankIcon(entry.rank)}
-          </div>
+        <div className="leaderboard-row-rank">
+          {medal ? (
+            <span className="leaderboard-row-medal">{medal}</span>
+          ) : (
+            <span className="leaderboard-row-number">#{entry.rank}</span>
+          )}
         </div>
 
-        {/* User Info */}
-        <div className="flex-grow-1">
-          <div className="d-flex justify-content-between align-items-center">
-            <div>
-              <h6 className="mb-1 fw-bold" style={{ 
-                color: 'var(--text-primary)', 
-                fontSize: 'var(--font-size-body)',
-                fontWeight: 'var(--font-weight-card-title)'
-              }}>{entry.name}</h6>
-              <div className="d-flex align-items-center">
-              </div>
-            </div>
-            <div className="text-end">
-              <div className="fw-bold fs-5" style={{ 
-                color: 'var(--brand-headline)', 
-                fontSize: 'var(--font-size-h3)',
-                fontWeight: 'var(--font-weight-h3)'
-              }}>
-                {gamificationUtils.formatPoints(points)}
-              </div>
-              <small style={{ 
-                color: 'var(--text-muted)', 
-                fontSize: 'var(--font-size-metadata)'
-              }}>
-                {activeTab === 'total' ? 'Total AdaptaBits' : 'Monthly AdaptaBits'}
-              </small>
-            </div>
-          </div>
+        {/* Name with optional medal for mobile */}
+        <div className="leaderboard-row-name" title={entry.name}>
+          {entry.name}
+        </div>
+
+        {/* Score */}
+        <div className={`leaderboard-row-score ${getScoreClass(entry.rank, points)}`}>
+          {scoreDisplay}
+          {showPtsLabel && <span className="leaderboard-row-unit">pts</span>}
         </div>
       </div>
     );
@@ -157,82 +144,47 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 10 }) => {
   const currentLeaderboard = activeTab === 'total' ? leaderboard : monthlyLeaderboard;
 
   return (
-    <div className="card">
-      <div className="card-header">
-        <div className="d-flex justify-content-between align-items-center">
-          <h5 className="mb-0 d-flex align-items-center">
-            <Trophy size={20} className="me-2" />
-            AdaptaBits Leaderboard
-          </h5>
-          <div className="btn-group" role="group">
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === 'monthly' ? 'btn-primary' : 'btn-outline-primary'}`}
-              onClick={() => setActiveTab('monthly')}
-            >
-              <Calendar size={14} className="me-1" />
-              This Month
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${activeTab === 'total' ? 'btn-primary' : 'btn-outline-primary'}`}
-              onClick={() => setActiveTab('total')}
-            >
-              <CalendarRange size={14} className="me-1" />
-              All Time
-            </button>
-          </div>
+    <div className="leaderboard-card">
+      {/* Header with Tabs */}
+      <div className="leaderboard-header">
+        <h3 className="leaderboard-title">
+          <Trophy size={24} style={{ color: 'var(--color-brand-orange)' }} />
+          Leaderboard
+        </h3>
+        <div className="leaderboard-tabs">
+          <button
+            type="button"
+            className={`leaderboard-tab ${activeTab === 'monthly' ? 'leaderboard-tab--active' : ''}`}
+            onClick={() => setActiveTab('monthly')}
+          >
+            <Calendar size={14} />
+            This Month
+          </button>
+          <button
+            type="button"
+            className={`leaderboard-tab ${activeTab === 'total' ? 'leaderboard-tab--active' : ''}`}
+            onClick={() => setActiveTab('total')}
+          >
+            <CalendarRange size={14} />
+            All Time
+          </button>
         </div>
       </div>
-      <div className="card-body">
-        {currentLeaderboard.length === 0 ? (
-          <div className="text-center py-4" style={{ color: 'var(--text-muted)' }}>
-            <Trophy size={48} className="mb-3 d-block" style={{ color: 'var(--text-muted)' }} />
-            <p style={{ color: 'var(--text-body)', fontSize: 'var(--font-size-body)' }}>No participants yet!</p>
-            <small style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>Be the first to complete a session and appear on the leaderboard.</small>
-          </div>
-        ) : (
-          <div>
-            {/* Top 3 Podium */}
-            {currentLeaderboard.length >= 3 && (
-              <div className="row mb-5">
-                <div className="col-4 text-center">
-                  <div className="podium-place" style={{ height: '80px', paddingBottom: '20px' }}>
-                    <div className="fs-1">🥇</div>
-                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[0]?.name}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                      {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[0]?.total_points : currentLeaderboard[0]?.monthly_points)}
-                    </div>
-                  </div>
-                </div>
-                <div className="col-4 text-center">
-                  <div className="podium-place" style={{ height: '60px', paddingBottom: '20px' }}>
-                    <div className="fs-1">🥈</div>
-                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[1]?.name}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                      {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[1]?.total_points : currentLeaderboard[1]?.monthly_points)}
-                    </div>
-                  </div>
-                </div>
-                <div className="col-4 text-center">
-                  <div className="podium-place" style={{ height: '40px', paddingBottom: '20px' }}>
-                    <div className="fs-1">🥉</div>
-                    <div className="fw-bold" style={{ color: 'var(--text-primary)', fontSize: 'var(--font-size-body)', fontWeight: 'var(--font-weight-card-title)' }}>{currentLeaderboard[2]?.name}</div>
-                    <div style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-metadata)' }}>
-                      {gamificationUtils.formatPoints(activeTab === 'total' ? currentLeaderboard[2]?.total_points : currentLeaderboard[2]?.monthly_points)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Full Leaderboard */}
-            <div className="leaderboard-list">
-              {currentLeaderboard.map((entry, index) => renderLeaderboardEntry(entry, index))}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Content - Unified List */}
+      {currentLeaderboard.length === 0 ? (
+        <div className="leaderboard-empty">
+          <Trophy size={48} className="leaderboard-empty-icon" />
+          <p className="leaderboard-empty-title">No participants yet!</p>
+          <p className="leaderboard-empty-text">
+            Be the first to complete a session and appear on the leaderboard.
+          </p>
+        </div>
+      ) : (
+        <div className="leaderboard-list">
+          {currentLeaderboard.map(entry => renderRow(entry))}
+        </div>
+      )}
     </div>
   );
 };

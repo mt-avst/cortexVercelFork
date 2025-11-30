@@ -21,6 +21,11 @@
   --bg-input: rgba(255, 255, 255, 0.05);
   --bg-input-focus: rgba(255, 255, 255, 0.08);
   --bg-glass: rgba(17, 24, 39, 0.85);
+  
+  /* Surface Elevation System - Dark Mode */
+  --surface-base: #0A091A;
+  --surface-raised: rgba(30, 30, 50, 0.95);
+  --surface-overlay: rgba(40, 40, 60, 0.98);
 
   /* Border Colors */
   --border-card: rgba(255, 255, 255, 0.1);
@@ -52,6 +57,15 @@
   --bg-glass-panel-hover: rgba(25, 25, 25, 0.75);
   --border-cortex-glass: rgba(255, 255, 255, 0.08);
   --backdrop-blur: 12px;
+
+  /* Glass Button - Dark Mode (Default) */
+  --btn-glass-bg: rgba(255, 255, 255, 0.05);
+  --btn-glass-bg-hover: rgba(255, 85, 0, 0.15);
+  --btn-glass-border: rgba(255, 85, 0, 0.5);
+  --btn-glass-border-hover: rgba(255, 85, 0, 0.7);
+  --btn-glass-text: #FFFFFF;
+  --btn-glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --btn-glass-shadow-hover: 0 0 30px rgba(255, 85, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 
   /* Study Type Badges (Extracted from Cortex Screenshot) */
   /* App Testing / Test (Cyan) */

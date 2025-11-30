@@ -235,13 +235,15 @@ const Admin: React.FC = () => {
       
       <div className="container-fluid admin-page-container admin-page-fullheight admin-container-wide">
         <div className="row admin-dashboard">
-        <div className="col-12" style={{ paddingLeft: '0.5rem', paddingRight: '0.5rem' }}>
+        <div className="col-12 admin-content-wrapper">
           <div className="card admin-card admin-card-main">
             <div className="card-header card-header-transparent">
-              {/* Padding matches the column padding from row.g-2 to align header with stat pods */}
-              <div className="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3" style={{ flexWrap: 'wrap', minWidth: 0, paddingLeft: '0.25rem', paddingRight: '0.25rem' }}>
-                <h1 className="mb-0 cortex-brand-title" style={{ letterSpacing: '-0.02em' }}>Cortex <span style={{ fontWeight: 300, opacity: 0.7 }}>Admin</span></h1>
-                <div className="d-flex flex-row gap-2" style={{ flexShrink: 0, minWidth: 0, flexWrap: 'nowrap' }}>
+              <div className="admin-header-section">
+                <div>
+                  <h1 className="mb-1 cortex-brand-title">Cortex <span className="cortex-admin-suffix">Admin</span></h1>
+                  <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
+                </div>
+                <div className="admin-table-actions">
                   <button 
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
                     onClick={() => navigate('/admin/settings')}

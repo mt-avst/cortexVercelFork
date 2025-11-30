@@ -602,7 +602,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
                   <p className="mb-0 form-subtitle" style={{ fontSize: '1rem' }}>
-                    {isEdit ? 'Update opportunity details and sessions' : 'Set up a new AdaptaLabs activity'}
+                    {isEdit ? 'Update study details and sessions' : 'Set up a new Cortex research study'}
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">

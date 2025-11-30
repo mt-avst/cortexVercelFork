@@ -9,7 +9,8 @@ export type ButtonVariant =
   | 'danger' 
   | 'success' 
   | 'warning'
-  | 'link';
+  | 'link'
+  | 'glass';
 
 export type ButtonSize = 'sm' | 'md' | 'lg';
 
@@ -32,6 +33,7 @@ const variantClasses: Record<ButtonVariant, string> = {
   success: 'btn-success',
   warning: 'btn-warning',
   link: 'btn-link',
+  glass: 'btn-glass',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
