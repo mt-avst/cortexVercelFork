@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 
 export interface DropdownProps {
   trigger: React.ReactNode;
@@ -26,6 +27,12 @@ export const Dropdown: React.FC<DropdownProps> = ({
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const location = useLocation();
+
+  // Close on route change (e.g., when clicking a Link inside the dropdown)
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location.pathname]);
 
   // Close on outside click
   useEffect(() => {
