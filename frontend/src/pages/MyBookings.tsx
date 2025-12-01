@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { getMyBookings, cancelBooking, rescheduleBooking } from '../api/client';
 import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import ConfirmationModal from '../components/ConfirmationModal';
+import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX } from 'lucide-react';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [bookings, setBookings] = useState<{ upcoming: BookingWithDetails[]; past: BookingWithDetails[] }>({ upcoming: [], past: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -228,7 +232,11 @@ const MyBookings: React.FC = () => {
   }
 
   return (
-    <div className="container mt-4 relative z-10 my-bookings-page">
+    <div className="my-bookings-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
+      {/* Theme-aware Background: Dark Mode gets neural particles on black */}
+      {isDark && <SlowNeuralBackground />}
+      
+      <div className="container mt-4 relative z-10 my-bookings-page">
       <div className="row">
         <div className="col">
           <div className="flex justify-between items-start">
@@ -442,6 +450,7 @@ const MyBookings: React.FC = () => {
         onConfirm={confirmRescheduleBooking}
         onCancel={cancelRescheduleBooking}
       />
+      </div>
     </div>
   );
 };

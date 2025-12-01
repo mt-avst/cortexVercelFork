@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { AppError } from '../utils/errorHandler';
-import { AlertTriangle, MessageSquare, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 
 const AdminFeedback: React.FC = () => {
   const { user } = useAuth();
@@ -329,7 +329,6 @@ const AdminFeedback: React.FC = () => {
 
       <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
         <h3 className="feedback-heading mb-0">
-          <MessageSquare size={18} className="me-2" />
           Feedback Inbox
           {feedback.length > 0 && (
             <span className="badge bg-secondary ms-2" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>

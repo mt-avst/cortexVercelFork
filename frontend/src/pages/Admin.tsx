@@ -240,7 +240,7 @@ const Admin: React.FC = () => {
             <div className="card-header card-header-transparent">
               <div className="admin-header-section">
                 <div>
-                  <h1 className="mb-1 cortex-brand-title">Cortex <span className="cortex-admin-suffix">Admin</span></h1>
+                  <h1 className="mb-1 cortex-brand-title">Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Admin</span></h1>
                   <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">
@@ -479,7 +479,7 @@ const Admin: React.FC = () => {
                   {!loadingOpportunities && !error && sortedOpportunities.length > 0 && (
                     <div className="table-responsive" style={{ 
                       minHeight: '400px', 
-                      overflowX: 'auto', 
+                      overflow: 'visible', 
                       width: '100%'
                     }}>
                       <table className="table table-hover admin-data-table">
@@ -544,7 +544,6 @@ const Admin: React.FC = () => {
                               <td className="col-title">
                                 <div>
                                   <strong className="row-title">{opportunity.title}</strong>
-                                  <br />
                                   <small className="row-desc">{opportunity.purpose_one_liner}</small>
                                 </div>
                               </td>

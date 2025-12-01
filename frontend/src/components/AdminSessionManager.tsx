@@ -2134,23 +2134,24 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   fontSize: '0.7rem',
                   fontWeight: '500',
                   marginLeft: 'auto',
-                  border: '1px solid rgba(220, 53, 69, 0.3)',
+                  border: '1px solid rgba(156, 163, 175, 0.3)',
                   borderRadius: '4px',
                   cursor: disabled || loading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s ease',
+                  transition: 'all 0.2s ease',
                   backgroundColor: 'transparent',
-                  color: 'var(--status-danger)',
+                  color: '#9CA3AF',
                   opacity: disabled || loading ? 0.5 : 1
                 }}
                 onMouseEnter={(e) => {
                   if (!disabled && !loading) {
-                    e.currentTarget.style.backgroundColor = 'rgba(220, 53, 69, 0.1)';
-                    e.currentTarget.style.borderColor = 'rgba(220, 53, 69, 0.5)';
+                    e.currentTarget.style.borderColor = '#EF4444';
+                    e.currentTarget.style.color = '#EF4444';
                   }
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = 'rgba(220, 53, 69, 0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(156, 163, 175, 0.3)';
+                  e.currentTarget.style.color = '#9CA3AF';
                 }}
               >
                 <Trash2 size={11} />

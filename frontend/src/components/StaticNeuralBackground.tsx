@@ -25,19 +25,27 @@ interface Node {
 }
 
 /**
- * StaticNeuralBackground - Light Mode "Blueprint Halo"
+ * StaticNeuralBackground - Light Mode "Blueprint" Aesthetic
  * 
- * A structured ring of nodes that frames the center content:
+ * A sophisticated, technical visualization for light mode:
+ * 
+ * VISUAL DESIGN:
+ * - Links (Lines): Slate-500 (#64748B) at 0.4 opacity, 1px width
+ *   Creates a crisp, technical structure like architectural blueprints
+ * - Particles (Dots): Brand Orange (#F97316) at 0.8 opacity, 3-4px
+ *   Represents "active data" or "energy" flowing through the system
+ * 
+ * STRUCTURE:
  * - Donut/Ring shape: particles only in outer 30% of screen
  * - Center is 100% clear for the "CORTEX" text
  * - Ring positioned 7% higher to clear footer buttons
  * - Dense connectivity within the ring (continuous circuit)
- * - Size variation with gentle pulsing animation (breathing)
+ * 
+ * ANIMATION:
  * - ORGANIC FLOW: Speed variance creates parallax (particles overtake each other)
- * - SPARKLE: Asynchronous opacity animation (living light/energy feel)
+ * - SUBTLE SPARKLE: Gentle opacity animation for living feel
  * - WOBBLE: Brownian micro-motion for biological feel
  * - Mouse repulse interaction for "clean" feeling
- * - Orange accent nodes evenly distributed
  */
 const StaticNeuralBackground: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -46,46 +54,50 @@ const StaticNeuralBackground: React.FC = () => {
   const animationRef = useRef<number>(0);
   const centerRef = useRef({ x: 0, y: 0 }); // Store center for orbit calculations
 
-  // Configuration - "Blueprint Halo" with Organic Flow
+  // Configuration - "Blueprint" Aesthetic for Light Mode
+  // Creates a crisp, technical structure with orange "active data" points
   const CONFIG = {
-    // Ring structure
+    // Ring structure - "Moat" design keeps particles away from center text
     nodeCount: 180, // Dense ring of nodes
-    innerRingRadius: 0.32, // Inner edge of ring (as % of min dimension)
-    outerRingRadius: 0.48, // Outer edge of ring (as % of min dimension)
+    innerRingRadius: 0.38, // Inner edge - INCREASED for larger exclusion zone ("moat")
+    outerRingRadius: 0.52, // Outer edge - slightly larger to maintain ring width
     ringLayers: 3, // Number of concentric layers in the ring
-    verticalOffset: -0.07, // Shift ring UP by 7% of height to clear footer
+    verticalOffset: -0.05, // Shift ring UP by 5% of height for optical centering
     
     // Connectivity
     connectionDistance: 65, // Tight connections within ring
     maxConnections: 6, // Max connections per node
     
-    // Visual styling - with size variation
-    nodeRadiusMin: 1.5, // Minimum node size
-    nodeRadiusMax: 3.5, // Maximum node size (random variation)
-    lineWidth: 0.5, // Very thin, sharp lines
-    lineColor: 'rgb(148, 163, 184)', // Slate-400, not transparent
-    greyNodeColor: '#94a3b8', // Slate-400
-    orangeNodeColor: '#FF5500', // Adaptavist Orange
-    orangeDistribution: 0.12, // 12% orange nodes, evenly distributed
+    // === BLUEPRINT AESTHETIC ===
+    // Lines: Slate-500, crisp technical structure
+    lineWidth: 1, // 1px - crisp, technical lines
+    lineColor: '#64748B', // Slate-500 - technical blueprint feel
+    lineOpacity: 0.4, // Visible but subtle
+    
+    // Particles: Brand Orange - represents "active data/energy"
+    nodeRadiusMin: 3, // 3px minimum - larger, more visible
+    nodeRadiusMax: 4, // 4px maximum - uniform, deliberate sizing
+    nodeColor: '#F97316', // Brand Orange - ALL particles are orange
+    nodeOpacity: 0.8, // High visibility
     
     // Size pulsing animation (breathing effect)
-    pulseAmount: 0.4, // How much size varies (±40% of base)
+    pulseAmount: 0.15, // Subtle size variation (±15%)
     pulseSpeed: 0.0008, // Slow, organic breathing
     
     // Orbital rotation - BASE speed (individual nodes vary)
     orbitSpeed: 0.00004, // Base orbital speed
     
-    // NEW: Speed Variance (Parallax Effect)
+    // Speed Variance (Parallax Effect)
     orbitSpeedMin: 0.5, // Slowest particles at 50% of base speed
     orbitSpeedMax: 1.5, // Fastest particles at 150% of base speed
     
-    // NEW: Opacity Animation (Sparkle Effect)
-    opacityMin: 0.15, // Minimum opacity (don't disappear, just dim)
-    opacityMax: 1.0, // Maximum opacity (full brightness)
+    // Subtle opacity variation (sparkle - but maintaining high base visibility)
+    opacityMin: 0.65, // Minimum opacity (always visible)
+    opacityMax: 0.95, // Maximum opacity (peak brightness)
     opacitySpeedMin: 0.0003, // Slowest fade speed
     opacitySpeedMax: 0.0012, // Fastest fade speed
     
-    // NEW: Wobble (Brownian Micro-Motion)
+    // Wobble (Brownian Micro-Motion)
     wobbleAmount: 1.5, // Max wobble distance in pixels (1-2px range)
     wobbleSpeedMin: 0.002, // Slowest wobble
     wobbleSpeedMax: 0.006, // Fastest wobble
@@ -141,9 +153,8 @@ const StaticNeuralBackground: React.FC = () => {
         const x = centerX + Math.cos(angle) * nodeRadius;
         const y = centerY + Math.sin(angle) * nodeRadius;
         
-        // Evenly distribute orange nodes (every ~8th node)
-        const orangeInterval = Math.floor(1 / CONFIG.orangeDistribution);
-        const isOrange = (nodes.length % orangeInterval) === Math.floor(orangeInterval / 2);
+        // Blueprint aesthetic: ALL particles are Brand Orange (active data points)
+        const isOrange = true; // All nodes are now orange
         
         // Random size variation for organic depth
         const baseNodeRadius = CONFIG.nodeRadiusMin + 
@@ -227,11 +238,11 @@ const StaticNeuralBackground: React.FC = () => {
         radius: baseNodeRadius,
         baseNodeRadius,
         pulsePhase: Math.random() * Math.PI * 2,
-        isOrange: false, // Edge nodes are always grey
+        isOrange: true, // Blueprint: all nodes are orange (active data points)
         angle: Math.atan2(y - centerY, x - centerX),
         // Organic flow properties (edge nodes have slower, subtler animation)
         orbitSpeedMultiplier: 0.3 + Math.random() * 0.4, // Slower for edge nodes
-        opacity: 0.4 + Math.random() * 0.4, // Dimmer for edge nodes
+        opacity: CONFIG.opacityMin + Math.random() * (CONFIG.opacityMax - CONFIG.opacityMin) * 0.7, // Slightly dimmer but still visible
         opacityPhase: Math.random() * Math.PI * 2,
         opacitySpeed: CONFIG.opacitySpeedMin + Math.random() * (CONFIG.opacitySpeedMax - CONFIG.opacitySpeedMin) * 0.5,
         wobblePhaseX: Math.random() * Math.PI * 2,
@@ -343,9 +354,8 @@ const StaticNeuralBackground: React.FC = () => {
         const distance = Math.sqrt(dx * dx + dy * dy);
         
         if (distance < CONFIG.connectionDistance) {
-          // Line opacity is the average of the two connected nodes
-          const lineOpacity = (nodeA.opacity + nodeB.opacity) / 2;
-          ctx.strokeStyle = `rgba(148, 163, 184, ${lineOpacity * 0.8})`; // Slightly dimmer than nodes
+          // Blueprint aesthetic: Slate-500 lines with fixed opacity
+          ctx.strokeStyle = `rgba(100, 116, 139, ${CONFIG.lineOpacity})`; // #64748B at 0.4 opacity
           
           ctx.beginPath();
           ctx.moveTo(nodeA.x, nodeA.y);
@@ -358,17 +368,13 @@ const StaticNeuralBackground: React.FC = () => {
       }
     }
     
-    // Draw nodes on top with individual opacity (sparkle effect)
+    // Draw nodes on top - Blueprint aesthetic: Brand Orange "active data" points
     for (const node of nodes) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
       
-      // Apply node's individual opacity for sparkle effect
-      if (node.isOrange) {
-        ctx.fillStyle = hexToRgba(CONFIG.orangeNodeColor, node.opacity);
-      } else {
-        ctx.fillStyle = hexToRgba(CONFIG.greyNodeColor, node.opacity);
-      }
+      // Blueprint aesthetic: All nodes are Brand Orange with subtle opacity variation
+      ctx.fillStyle = hexToRgba(CONFIG.nodeColor, node.opacity);
       
       ctx.fill();
     }

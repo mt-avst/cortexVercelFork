@@ -79,14 +79,14 @@ body.theme-light .study-listing-page::before {
    ============================================================ */
 
 body.theme-light {
-  /* Background Colors - Clean white */
+  /* Background Colors - Pure white (no grey tints) */
   --bg-app: #FFFFFF;
-  --bg-app-gradient-top: #F8F9FA;
+  --bg-app-gradient-top: #FFFFFF;
   --bg-app-gradient-bottom: #FFFFFF;
   --bg-card: #FFFFFF;
   --bg-hover: rgba(0, 0, 0, 0.04);
   --bg-tab: rgba(0, 0, 0, 0.03);
-  --bg-table-header: rgba(0, 0, 0, 0.03);
+  --bg-table-header: #FFFFFF;
   --bg-input: rgba(255, 255, 255, 0.9);
   --bg-input-focus: rgba(255, 255, 255, 1);
   --bg-glass: rgba(255, 255, 255, 0.85);
@@ -185,8 +185,27 @@ body.theme-light {
 
 /* Body */
 body.theme-light {
-  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
+  background: #FFFFFF;
   color: var(--text-body);
+}
+
+/* Full-viewport grid overlay for light mode (covers header and all content) */
+body.theme-light::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  /* Orange grid pattern (24px grid, 5% opacity) */
+  background-image: 
+    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Cards - Glass effect */
@@ -363,11 +382,11 @@ body.theme-light .landing-page .header {
   box-shadow: none;
 }
 
-/* Header - Light Mode (match page background with subtle separation) */
+/* Header - Light Mode (transparent so grid shows through) */
 body.theme-light .header {
-  background: var(--bg-app-gradient-top);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  background: transparent;
+  border-bottom: none;
+  box-shadow: none;
 }
 
 body.theme-light .header .logo {
@@ -401,8 +420,8 @@ body.theme-light .dropdown-item {
 }
 
 body.theme-light .dropdown-item:hover {
-  background: rgba(232, 108, 36, 0.1);
-  color: var(--text-primary);
+  background: var(--color-slate-50);
+  color: #F97316;
 }
 
 body.theme-light .dropdown-item i {
@@ -422,8 +441,8 @@ body.theme-light a.dropdown-item {
 }
 
 body.theme-light a.dropdown-item:hover {
-  background: rgba(232, 108, 36, 0.1);
-  color: var(--text-primary);
+  background: var(--color-slate-50);
+  color: #F97316;
 }
 
 /* Buttons */
@@ -441,9 +460,9 @@ body.theme-light .btn-outline-secondary:hover {
 /* Forms - Glass effect */
 body.theme-light .form-control,
 body.theme-light .form-select {
-  background: rgba(255, 255, 255, 0.8);
-  border-color: rgba(0, 0, 0, 0.12);
-  color: var(--text-body);
+  background: #F8FAFC !important; /* Light slate fill for visibility against white card */
+  border: 1px solid #CBD5E1 !important; /* Defined edge for clarity */
+  color: #334155 !important;
 }
 
 body.theme-light .form-control:focus,
@@ -506,9 +525,9 @@ body.theme-light .table {
 }
 
 body.theme-light .table thead th {
-  background: rgba(255, 255, 255, 0.5);
-  color: var(--text-primary);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: #FFFFFF;
+  color: #64748B; /* Slate-500 */
+  border-color: rgba(148, 163, 184, 0.2);
 }
 
 body.theme-light .table tbody td {
@@ -825,9 +844,18 @@ body.theme-dark .admin-dashboard .admin-card {
   -webkit-backdrop-filter: blur(12px);
 }
 
+/* Remove main wrapper frame - content floats on global background (Glass Cockpit) */
+body.theme-dark .admin-dashboard .admin-card-main {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 body.theme-dark .admin-dashboard .card-header {
   background: transparent;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
 }
 
 body.theme-dark .admin-dashboard h1,
@@ -870,8 +898,15 @@ body.theme-dark .admin-dashboard table {
 
 body.theme-dark .admin-dashboard table th {
   color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.05);
+  background: transparent;
   border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Dark Mode: Transparent table header row (matches Light Mode) */
+body.theme-dark .admin-dashboard table thead,
+body.theme-dark .admin-dashboard table thead tr {
+  background: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 body.theme-dark .admin-dashboard table td {
@@ -941,21 +976,34 @@ body.theme-dark .admin-stat-card .stat-subtitle {
   color: rgba(255, 255, 255, 0.6);
 }
 
+/* STRICT MONOCHROME - No colored icons in Dark Mode */
 body.theme-dark .admin-stat-card .stat-icon {
-  color: var(--color-cortex-orange);
+  color: var(--color-slate-400) !important;
+  filter: grayscale(100%) !important;
+  -webkit-filter: grayscale(100%) !important;
+  opacity: 0.5;
 }
 
 body.theme-dark .admin-stat-card .stat-icon-wrapper {
-  background: rgba(255, 122, 51, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.theme-dark .admin-stat-card:hover .stat-icon {
+  opacity: 0.9;
 }
 
 /* Cortex Brand Title - Dark Mode */
 body.theme-dark .cortex-brand-title {
-  color: var(--color-cortex-orange);
+  color: #FFFFFF; /* Cortex in bright white */
 }
 
 body.theme-dark .cortex-brand-title .cortex-admin-suffix {
-  color: #FFFFFF;
+  color: rgba(255, 255, 255, 0.6); /* Admin/Analytics in muted grey */
+}
+
+body.theme-dark .cortex-brand-title .cortex-admin-separator {
+  color: rgba(255, 255, 255, 0.3);
 }
 
 /* (Dark mode table container defined above with cyan accent) */
@@ -1150,8 +1198,8 @@ body.theme-light .admin-action-dropdown button {
 }
 
 body.theme-light .admin-action-dropdown button:hover {
-  background: rgba(232, 108, 36, 0.1) !important;
-  color: #1A1A1A !important;
+  background: var(--color-slate-50) !important;
+  color: #F97316 !important;
 }
 
 /* Admin action dropdown - dark mode (explicit) */
@@ -1211,8 +1259,8 @@ body.theme-light .admin-dropdown-item {
 }
 
 body.theme-light .admin-dropdown-item:hover {
-  background: rgba(232, 108, 36, 0.1) !important;
-  color: #1A1A1A !important;
+  background: var(--color-slate-50) !important;
+  color: #F97316 !important;
 }
 
 body.theme-light .admin-dropdown-divider {
@@ -1346,6 +1394,14 @@ body.theme-light .admin-dashboard .admin-card {
   -webkit-backdrop-filter: none;
 }
 
+/* Remove inner frame - make main admin card transparent so only outer page bg shows */
+body.theme-light .admin-dashboard .admin-card-main {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+}
+
 /* Admin dashboard card header - pure white, no grey tint */
 body.theme-light .admin-dashboard .card-header,
 body.theme-light .admin-dashboard .card-header-transparent {
@@ -1391,10 +1447,36 @@ body.theme-light .admin-dashboard table {
   color: #374151;
 }
 
-body.theme-light .admin-dashboard table th {
-  color: #1A1A1A;
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.08);
+body.theme-light .admin-dashboard table thead,
+body.theme-light .admin-data-table thead,
+body.theme-light .admin-dashboard table.table-hover thead,
+body.theme-light .admin-dashboard table.table-striped thead,
+body.theme-light .admin-dashboard table thead tr,
+body.theme-light .admin-data-table thead tr,
+body.theme-light .table thead,
+body.theme-light .table thead tr {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+}
+
+body.theme-light .admin-dashboard table th,
+body.theme-light .admin-dashboard table thead th,
+body.theme-light .admin-dashboard table.table-hover thead th,
+body.theme-light .admin-dashboard table.table-striped thead th,
+body.theme-light .admin-data-table th,
+body.theme-light .admin-data-table thead th,
+body.theme-light .table thead th,
+body.theme-light .table.table-hover thead th {
+  color: #64748B !important; /* Slate-500 for readable but muted headers */
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+  border-color: transparent !important;
+  border-top: none !important;
+  border-left: none !important;
+  border-right: none !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2) !important;
+  padding-top: 16px;
+  padding-bottom: 16px;
 }
 
 body.theme-light .admin-dashboard table td {
@@ -1453,13 +1535,12 @@ body.theme-light .admin-stat-card {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
-/* Admin container - light mode elevation */
+/* Admin container - light mode: transparent for Glass Cockpit aesthetic */
 body.theme-light .admin-container-wide {
-  background: #FFFFFF;
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  border-radius: 12px;
-  /* Professional "Elevation" shadow - consistent with card system */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 /* Table row hover - warm grey */
@@ -1479,21 +1560,34 @@ body.theme-light .admin-stat-card .stat-subtitle {
   color: #6B7280;
 }
 
+/* STRICT MONOCHROME - No colored icons in Light Mode */
 body.theme-light .admin-stat-card .stat-icon {
-  color: var(--brand-headline);
+  color: var(--color-slate-400) !important;
+  filter: grayscale(100%) !important;
+  -webkit-filter: grayscale(100%) !important;
+  opacity: 0.5;
 }
 
 body.theme-light .admin-stat-card .stat-icon-wrapper {
-  background: rgba(232, 108, 36, 0.12);
+  background: var(--color-slate-100);
+  border: 1px solid var(--color-slate-200);
+}
+
+body.theme-light .admin-stat-card:hover .stat-icon {
+  opacity: 0.9;
 }
 
 /* Cortex Brand Title - Light Mode */
 body.theme-light .cortex-brand-title {
-  color: var(--brand-headline);
+  color: #1A1A1A; /* Cortex in near-black */
 }
 
 body.theme-light .cortex-brand-title .cortex-admin-suffix {
-  color: #374151;
+  color: #6B7280; /* Admin/Analytics in muted grey */
+}
+
+body.theme-light .cortex-brand-title .cortex-admin-separator {
+  color: rgba(0, 0, 0, 0.25);
 }
 
 /* Admin table glass container - light mode ("Lab" aesthetic) */
@@ -1532,10 +1626,29 @@ body.theme-light .row-desc {
   color: #6B7280;
 }
 
-/* Admin table headers - light mode */
+/* Admin table headers - light mode - FORCE WHITE BACKGROUND */
+body.theme-light .admin-data-table,
+body.theme-light .admin-data-table thead,
+body.theme-light .admin-data-table thead tr,
+body.theme-light .admin-data-table th,
+body.theme-light .admin-dashboard .table-responsive,
+body.theme-light .admin-dashboard table,
+body.theme-light .admin-dashboard table thead,
+body.theme-light .admin-dashboard table thead tr,
+body.theme-light .admin-dashboard table th,
+body.theme-light .admin-dashboard .table,
+body.theme-light .admin-dashboard .table thead,
+body.theme-light .admin-dashboard .table thead tr,
+body.theme-light .admin-dashboard .table th {
+  background: #FFFFFF !important;
+  background-color: #FFFFFF !important;
+}
+
 body.theme-light .admin-data-table th {
-  color: #6B7280;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  color: #64748B; /* Slate-500 */
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding-top: 16px;
+  padding-bottom: 20px;
 }
 
 /* Admin badge type modifiers - light mode (more saturated for visibility) */
@@ -1608,6 +1721,351 @@ body.theme-light .admin-empty-title {
 
 body.theme-light .admin-empty-text {
   color: #6B7280;
+}
+
+/* ============================================================
+   CORTEX ANALYTICS DASHBOARD - Theme Overrides
+   Dark Mode: "Sci-Fi Glassmorphism" - Translucent, frosted glass
+   Light Mode: "Technical Blueprint" - Crisp borders, sharp shadows
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   DARK MODE - Sci-Fi Glassmorphism
+   Background grid MUST be visible through the cards
+   ---------------------------------------------------------- */
+
+body.theme-dark .analytics-container {
+  background: transparent;
+}
+
+/* Dark Mode Card - Glass with enhanced edge definition & max readability */
+body.theme-dark .cortex-analytics-card {
+  background: rgba(255, 255, 255, 0.05); /* Increased from 0.02 for better text separation */
+  backdrop-filter: blur(16px); /* Stronger blur to soften background pattern */
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12); /* Increased contrast */
+  border-radius: 12px;
+  /* Inner glow to catch the light on edges */
+  box-shadow: 
+    0 4px 24px -1px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+body.theme-dark .cortex-analytics-card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 
+    0 8px 32px -1px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+/* Dark Mode Typography - Enforced neutral colors */
+body.theme-dark .cortex-analytics-card-title {
+  color: var(--color-slate-400);
+}
+
+body.theme-dark .cortex-analytics-card-icon {
+  color: var(--color-slate-400);
+  opacity: 0.7;
+}
+
+/* ENFORCED: All stat values are white by default */
+body.theme-dark .cortex-stat-value {
+  color: #FFFFFF !important;
+}
+
+/* Only conversion/action metrics get accent color */
+body.theme-dark .cortex-stat-value--accent {
+  color: var(--color-analytics-orange) !important;
+}
+
+body.theme-dark .cortex-stat-subtitle {
+  color: var(--color-slate-400);
+}
+
+body.theme-dark .cortex-stat-metrics {
+  color: var(--color-slate-500);
+}
+
+body.theme-dark .cortex-stat-metrics strong {
+  color: var(--color-slate-300);
+}
+
+body.theme-dark .cortex-chart-title {
+  color: #FFFFFF;
+}
+
+body.theme-dark .cortex-chart-subtitle {
+  color: var(--color-slate-500);
+}
+
+/* Dark Mode Empty States - Diagonal stripes visible */
+body.theme-dark .no-data,
+body.theme-dark .cortex-no-data {
+  border: 1px dashed var(--color-slate-600);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(255, 255, 255, 0.02) 8px,
+    rgba(255, 255, 255, 0.02) 16px
+  );
+  opacity: 0.5;
+}
+
+body.theme-dark .no-data p,
+body.theme-dark .cortex-no-data p {
+  color: var(--color-slate-500);
+}
+
+/* Dark Mode Period Selector */
+body.theme-dark .cortex-period-selector {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+body.theme-dark .cortex-period-btn {
+  color: var(--color-slate-400);
+}
+
+body.theme-dark .cortex-period-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+body.theme-dark .cortex-period-btn--active {
+  background: var(--brand-primary);
+  color: #FFFFFF;
+}
+
+/* Dark Mode Badges - Subtle with slight border glow */
+body.theme-dark .cortex-badge--peak {
+  background: rgba(250, 204, 21, 0.08);
+  color: #FACC15;
+  border: 1px solid rgba(250, 204, 21, 0.25);
+}
+
+body.theme-dark .cortex-badge--best {
+  background: rgba(16, 185, 129, 0.08);
+  color: #34D399;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* Info badge - transparent with slate border (neutral) */
+body.theme-dark .cortex-badge--info {
+  background: transparent;
+  color: var(--color-slate-300);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+body.theme-dark .cortex-badge--negative {
+  background: rgba(239, 68, 68, 0.08);
+  color: #F87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ----------------------------------------------------------
+   LIGHT MODE - Technical Blueprint
+   Sharp corners, hard unblurred shadows
+   ---------------------------------------------------------- */
+
+body.theme-light .analytics-container {
+  background: transparent;
+}
+
+/* Light Mode Text Main color override */
+body.theme-light {
+  --color-text-main: var(--color-slate-900);
+}
+
+/* Light Mode Card - "Blueprint" / Stacked Paper aesthetic */
+body.theme-light .cortex-analytics-card {
+  background: #FFFFFF;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid #CBD5E1; /* Slate-300 - crisp edge */
+  border-radius: 4px; /* Sharper corners */
+  /* Hard shadow - NO blur (0px), stacked paper effect */
+  box-shadow: 3px 3px 0px 0px #E2E8F0; /* Slate-200 */
+}
+
+body.theme-light .cortex-analytics-card:hover {
+  border-color: #94A3B8; /* Slate-400 */
+  box-shadow: 4px 4px 0px 0px #CBD5E1; /* Slate-300 */
+  transform: translateY(-1px);
+}
+
+/* Light Mode Typography - High contrast slate */
+body.theme-light .cortex-analytics-card-title {
+  color: var(--color-slate-500);
+}
+
+body.theme-light .cortex-analytics-card-icon {
+  color: var(--color-slate-400);
+  opacity: 0.7;
+}
+
+/* ENFORCED: All stat values are slate-900 by default */
+body.theme-light .cortex-stat-value {
+  color: var(--color-slate-900) !important;
+}
+
+/* Only conversion/action metrics get accent color */
+body.theme-light .cortex-stat-value--accent {
+  color: var(--color-analytics-orange) !important;
+}
+
+body.theme-light .cortex-stat-subtitle {
+  color: var(--color-slate-500);
+}
+
+body.theme-light .cortex-stat-metrics {
+  color: var(--color-slate-500);
+}
+
+body.theme-light .cortex-stat-metrics strong {
+  color: var(--color-slate-700);
+}
+
+body.theme-light .cortex-chart-title {
+  color: var(--color-slate-900);
+}
+
+body.theme-light .cortex-chart-subtitle {
+  color: var(--color-slate-500);
+}
+
+/* Light Mode Empty States - Dashed border with subtle stripe */
+body.theme-light .no-data,
+body.theme-light .cortex-no-data {
+  border: 1px dashed var(--color-slate-300);
+  background-color: var(--color-slate-50);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(0, 0, 0, 0.02) 8px,
+    rgba(0, 0, 0, 0.02) 16px
+  );
+  opacity: 0.5;
+}
+
+body.theme-light .no-data p,
+body.theme-light .cortex-no-data p {
+  color: var(--color-slate-400);
+}
+
+/* Light Mode Period Selector */
+body.theme-light .cortex-period-selector {
+  background: var(--color-slate-100);
+  border: 1px solid var(--color-slate-200);
+}
+
+body.theme-light .cortex-period-btn {
+  color: var(--color-slate-600);
+}
+
+body.theme-light .cortex-period-btn:hover {
+  color: var(--color-slate-900);
+  background: var(--color-slate-200);
+}
+
+body.theme-light .cortex-period-btn--active {
+  background: var(--brand-primary);
+  color: #FFFFFF;
+}
+
+/* Light Mode Badges - Subtle, professional look */
+body.theme-light .cortex-badge--peak {
+  background: rgba(245, 158, 11, 0.1);
+  color: #B45309;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+body.theme-light .cortex-badge--best {
+  background: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+/* Info badge - NO solid blue, transparent with slate border */
+body.theme-light .cortex-badge--info {
+  background: transparent;
+  color: var(--color-slate-600);
+  border: 1px solid #CBD5E1; /* Slate-300 */
+}
+
+body.theme-light .cortex-badge--negative {
+  background: rgba(239, 68, 68, 0.1);
+  color: #DC2626;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* ----------------------------------------------------------
+   ANALYTICS PAGE CARDS (Existing .card elements)
+   Apply Cortex styling to existing card components
+   ---------------------------------------------------------- */
+
+/* Dark Mode - Analytics page cards - Glass with inner glow */
+body.theme-dark .analytics-container .card {
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 24px -1px rgba(0, 0, 0, 0.2),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+body.theme-dark .analytics-container .card:hover {
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 
+    0 8px 32px -1px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+body.theme-dark .analytics-container .card h2,
+body.theme-dark .analytics-container .card h5,
+body.theme-dark .analytics-container .card h6 {
+  color: #FFFFFF;
+}
+
+body.theme-dark .analytics-container .card .text-muted {
+  color: var(--color-slate-400) !important;
+}
+
+body.theme-dark .analytics-container .card p {
+  color: var(--color-slate-300);
+}
+
+/* Light Mode - Analytics page cards - Blueprint / Stacked Paper */
+body.theme-light .analytics-container .card {
+  background: #FFFFFF;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid #CBD5E1; /* Slate-300 */
+  border-radius: 4px;
+  /* Hard shadow - NO blur, stacked paper effect */
+  box-shadow: 3px 3px 0px 0px #E2E8F0; /* Slate-200 */
+}
+
+body.theme-light .analytics-container .card:hover {
+  border-color: #94A3B8; /* Slate-400 */
+  box-shadow: 4px 4px 0px 0px #CBD5E1; /* Slate-300 */
+}
+
+body.theme-light .analytics-container .card h2,
+body.theme-light .analytics-container .card h5,
+body.theme-light .analytics-container .card h6 {
+  color: var(--color-slate-900);
+}
+
+body.theme-light .analytics-container .card .text-muted {
+  color: var(--color-slate-500) !important;
+}
+
+body.theme-light .analytics-container .card p {
+  color: var(--color-slate-700);
 }
 
 /* ============================================================
@@ -1790,7 +2248,7 @@ body.theme-light .card-body .fs-3 {
 
 /* Card header styling for light mode */
 body.theme-light .card-header {
-  background: rgba(0, 0, 0, 0.03);
+  background: transparent;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
@@ -1948,7 +2406,7 @@ body.theme-light .my-bookings-page .card {
 }
 
 body.theme-light .my-bookings-page .card-header {
-  background: rgba(0, 0, 0, 0.03);
+  background: transparent;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
@@ -2074,9 +2532,9 @@ body.theme-dark .opportunity-form .opportunity-form-tab {
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab.active {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-bottom: 2px solid #FF4E50;
-  color: #FF4E50;
+  background-color: rgba(255, 122, 51, 0.05);
+  border-bottom: 2px solid var(--color-brand-orange);
+  color: var(--color-brand-orange);
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab .tab-title {
@@ -2088,7 +2546,12 @@ body.theme-dark .opportunity-form .opportunity-form-tab .tab-description {
 }
 
 body.theme-dark .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: rgba(255, 78, 80, 0.8);
+  color: rgba(255, 122, 51, 0.8);
+}
+
+body.theme-dark .opportunity-form .opportunity-form-tab:hover:not(.active) {
+  color: #fff;
+  border-bottom: 2px solid rgba(255,255,255,0.2);
 }
 
 body.theme-dark .opportunity-form .border-top,
@@ -2097,14 +2560,14 @@ body.theme-dark .opportunity-form .border-bottom {
 }
 
 body.theme-dark .opportunity-form .btn-primary {
-  background-color: #FF4E50;
-  border-color: #FF4E50;
+  background-color: var(--color-brand-orange);
+  border-color: var(--color-brand-orange);
   color: #FFFFFF;
 }
 
 body.theme-dark .opportunity-form .btn-primary:hover {
-  background-color: #ff5e60;
-  border-color: #ff5e60;
+  background-color: #FF8F4D;
+  border-color: #FF8F4D;
 }
 
 body.theme-dark .opportunity-form .btn-success {
@@ -2264,9 +2727,10 @@ body.theme-light .opportunity-form .opportunity-form-tab:hover {
 }
 
 body.theme-light .opportunity-form .opportunity-form-tab.active {
-  background-color: rgba(232, 108, 36, 0.05);
-  border-bottom: 2px solid #E86C24;
-  color: #E86C24;
+  background-color: rgba(255, 122, 51, 0.05);
+  border-bottom: 2px solid var(--color-brand-orange);
+  color: var(--color-brand-orange);
+  font-weight: 600;
 }
 
 body.theme-light .opportunity-form .opportunity-form-tab .tab-title {
@@ -2278,7 +2742,7 @@ body.theme-light .opportunity-form .opportunity-form-tab .tab-description {
 }
 
 body.theme-light .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: rgba(232, 108, 36, 0.8);
+  color: rgba(255, 122, 51, 0.8);
 }
 
 body.theme-light .opportunity-form .border-top,

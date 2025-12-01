@@ -38,15 +38,18 @@
   --text-body: #E0E0E0;
   --text-secondary: rgba(224, 224, 224, 0.7);
   --text-tertiary: rgba(224, 224, 224, 0.5);
-  --text-muted: rgba(224, 224, 224, 0.85);
+  --text-muted: #94A3B8; /* Slate-400 for better legibility */
   --text-on-dark: #E0E0E0;
   --text-on-light: #1A1A1A;
   --text-inverse: #1A1A1A;
+  
+  /* Cortex Text Token - Main value color (neutral by default) */
+  --color-text-main: #FFFFFF; /* Dark mode: pure white */
 
-  /* Brand Colors - Electric Coral */
-  --brand-headline: #FF4E50;
-  --brand-primary: #FF4E50;
-  --brand-secondary: #FF7A33;
+  /* Brand Colors - Brand Orange (unified) */
+  --brand-headline: #FF7A33;
+  --brand-primary: #FF7A33;
+  --brand-secondary: #FF8F4D;
   --brand-gradient: linear-gradient(135deg, #FF4E50 0%, #FF7A33 100%);
 
   /* Cortex Brand Identity */
@@ -102,12 +105,12 @@
   --color-badge-interview: #F48FB1;
   --color-badge-interview-bg: rgba(244, 143, 177, 0.15);
 
-  /* CTA (Call to Action) Colors */
-  --cta-bg: #FF4E50;
-  --cta-bg-hover: #ff6264;
+  /* CTA (Call to Action) Colors - Brand Orange (not red) */
+  --cta-bg: #FF7A33;
+  --cta-bg-hover: #FF8F4D;
   --cta-text: #FFFFFF;
   --cta-text-hover: #FFFFFF;
-  --cta-border: #FF4E50;
+  --cta-border: #FF7A33;
 
   /* Link Colors */
   --link: #FF7A33;
@@ -284,6 +287,33 @@
 
   /* Grid Columns */
   --grid-columns: 12;
+
+  /* ============================================================
+     SLATE COLOR SCALE (Cortex Design System)
+     ============================================================ */
+  
+  --color-slate-50: #F8FAFC;
+  --color-slate-100: #F1F5F9;
+  --color-slate-200: #E2E8F0;
+  --color-slate-300: #CBD5E1;
+  --color-slate-400: #94A3B8;
+  --color-slate-500: #64748B;
+  --color-slate-600: #475569;
+  --color-slate-700: #334155;
+  --color-slate-800: #1E293B;
+  --color-slate-900: #0F172A;
+  --color-slate-950: #020617; /* Deepest void */
+  
+  /* Surface tokens for Cortex cards */
+  --color-surface-white: #FFFFFF;
+  --color-surface-ghost: rgba(255, 255, 255, 0.03);
+  --color-surface-glass-light: rgba(255, 255, 255, 0.8);
+  
+  /* Analytics accent colors */
+  --color-analytics-orange: #F97316;
+  --color-analytics-blue: #0EA5E9;
+  --color-analytics-green: #10B981;
+  --color-analytics-purple: #8B5CF6;
 
   /* ============================================================
      LEGACY / CALENDAR (for backward compatibility)

@@ -666,6 +666,78 @@ body.theme-light .btn-glass:hover {
   color: #FFFFFF;
 }
 
+/* ============================================================
+   "POWER" CTA BUTTON
+   Solid brand orange button for primary actions
+   ============================================================ */
+
+.btn-power {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-family-base);
+  color: #FFFFFF;
+  background: #F97316; /* Brand Orange */
+  border: none;
+  border-radius: 100px;
+  cursor: pointer;
+  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4); /* Orange glow */
+  transition: all 0.25s ease;
+  letter-spacing: 0.01em;
+}
+
+.btn-power:hover {
+  background: #EA580C; /* Slightly darker on hover */
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.5);
+  text-decoration: none;
+  color: #FFFFFF;
+}
+
+.btn-power:active {
+  transform: translateY(0);
+  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4);
+}
+
+.btn-power:focus-visible {
+  outline: 2px solid #FFFFFF;
+  outline-offset: 3px;
+}
+
+.btn-power:disabled,
+.btn-power.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Arrow icon inside power button */
+.btn-power .btn-arrow {
+  display: inline-flex;
+  align-items: center;
+  transition: transform 0.2s ease;
+}
+
+.btn-power:hover .btn-arrow {
+  transform: translateX(3px);
+}
+
+/* Light mode: same styling, works on light backgrounds */
+body.theme-light .btn-power {
+  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.35);
+}
+
+body.theme-light .btn-power:hover {
+  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.45);
+}
+
 /* Button Sizes */
 .btn-sm {
   padding: var(--spacing-1) var(--spacing-3);
@@ -1955,7 +2027,7 @@ body.landing-page .header .text-muted,
 
 .admin-page-container {
   min-height: 100vh;
-  padding: var(--spacing-8);
+  padding: var(--spacing-4) var(--spacing-8) var(--spacing-8); /* Reduced top padding */
 }
 
 body.admin-page .header .container {
@@ -2265,7 +2337,8 @@ body.admin-page .header .container {
   box-sizing: border-box;
 }
 
-/* Table header */
+/* Table header - background controlled by theme variable
+   Light mode sets --bg-table-header to transparent */
 .admin-dashboard table.table-hover thead,
 .admin-dashboard table thead,
 .admin-dashboard table.table-striped thead {
@@ -2273,12 +2346,14 @@ body.admin-page .header .container {
   background: var(--bg-table-header);
 }
 
+/* Light mode table header background - controlled by --bg-table-header variable in themes layer */
+/* No !important needed here - themes layer sets --bg-table-header: #FFFFFF for light mode */
+
 .admin-dashboard table.table-hover thead th,
 .admin-dashboard table thead th,
 .admin-dashboard table.table-striped thead th {
   color: var(--text-primary);
-  background-color: var(--bg-table-header);
-  background: var(--bg-table-header);
+  /* Background now controlled by theme - removed hardcoded value */
   border-bottom: 1px solid var(--border-card);
   border-top: none;
   border-left: none;
@@ -2345,10 +2420,9 @@ body.admin-page .header .container {
   background: transparent;
 }
 
-/* Ensure header cells maintain proper background */
+/* Header cells - background controlled by theme via --bg-table-header variable */
 .admin-dashboard table thead th {
-  background-color: var(--bg-table-header);
-  background: var(--bg-table-header);
+  /* Background inherited from thead, controlled by theme */
 }
 
 /* Table width and layout */
@@ -2557,6 +2631,9 @@ body.admin-page .header .container {
   margin-bottom: 0;
   width: 100%;
   table-layout: fixed;
+  /* Pixel-perfect: Hard left alignment */
+  margin-left: 0 !important;
+  margin-right: 0 !important;
 }
 
 .admin-data-table th,
@@ -2565,10 +2642,16 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
+/* Pixel-perfect: First column aligns with "Cortex" header text */
+.admin-data-table th:first-child,
+.admin-data-table td:first-child {
+  padding-left: 0 !important;
+}
+
 /* Title column */
 .admin-data-table td.col-title {
-  padding-top: 1.5rem;
-  padding-bottom: 1.5rem;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
 }
 
 /* Table Headers - Uppercase, tracked-out grey */
@@ -2695,17 +2778,72 @@ body.admin-page .header .container {
   color: #FFFFFF;
   font-weight: 600;
   display: block;
+  margin-bottom: 2px;
+  line-height: 1.3;
 }
 
 .row-desc {
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.875rem;
-  margin-top: 4px;
+  margin-top: 0;
   display: block;
+  line-height: 1.4;
 }
 
 .col-numeric {
   text-align: right;
+}
+
+/* ============================================================
+   TABLE READABILITY ENHANCEMENT - Dark Mode Glass Cockpit
+   Maximum legibility for dense data tables
+   ============================================================ */
+
+/* 1. Strengthen Table Wrapper Glass - Aggressive blur + higher opacity */
+body.theme-dark .admin-data-table-container {
+  background-color: rgba(255, 255, 255, 0.05); /* Up from 0.03 for better separation */
+  backdrop-filter: blur(16px); /* Stronger blur to soften background pattern */
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* 2. Table Row Text - Enforce brightest white for max contrast */
+body.theme-dark .admin-data-table tbody td {
+  color: #FFFFFF;
+}
+
+body.theme-dark .admin-data-table .row-title {
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+body.theme-dark .admin-data-table .row-desc {
+  color: rgba(255, 255, 255, 0.75); /* Slightly brighter for better readability */
+}
+
+/* 3. Zebra Striping - Subtle alternating rows for eye tracking */
+body.theme-dark .admin-data-table tbody tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02); /* Barely visible change */
+}
+
+body.theme-dark .admin-data-table tbody tr:nth-child(odd) {
+  background-color: transparent;
+}
+
+/* 4. Table Header - Clear separation */
+body.theme-dark .admin-data-table thead th {
+  color: #94A3B8; /* Slate-400 - muted but readable */
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 5. Metric Values - High visibility numbers */
+body.theme-dark .admin-data-table td.col-metric {
+  color: #FFFFFF;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 6. Date Column - Slightly muted but readable */
+body.theme-dark .admin-data-table td.col-date {
+  color: rgba(255, 255, 255, 0.85);
 }
 
 /* ============================================================
@@ -2787,10 +2925,29 @@ body.admin-page .header .container {
   line-height: 1.2;
 }
 
+.cortex-brand-title .cortex-admin-separator {
+  color: rgba(255, 255, 255, 0.3);
+  font-weight: 200;
+  margin: 0 0.35em;
+}
+
 .cortex-brand-title .cortex-admin-suffix {
   color: #FFFFFF;
   font-weight: 300;
-  margin-left: 0.25em;
+}
+
+/* Pixel-perfect: Neutralize Bootstrap row negative margins for stat cards */
+.admin-dashboard .row.mb-3 {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.admin-dashboard .row.mb-3 > [class*="col-"]:first-child {
+  padding-left: 0 !important;
+}
+
+.admin-dashboard .row.mb-3 > [class*="col-"]:last-child {
+  padding-right: 0 !important;
 }
 
 /* Glass Cards - Premium Cortex Aesthetic */
@@ -2823,12 +2980,17 @@ body.admin-page .header .container {
   color: var(--text-muted);
 }
 
+/* STRICT MONOCHROME DISCIPLINE - No colored icons */
 .stat-icon {
   font-size: 1.25rem;
-  color: var(--color-brand-orange);
+  color: var(--color-slate-400) !important;
+  opacity: 0.5;
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+  transition: opacity 0.2s ease;
 }
 
-/* Icon with circular glow background */
+/* Icon wrapper - neutral background instead of orange glow */
 .stat-icon-wrapper {
   display: flex;
   align-items: center;
@@ -2836,12 +2998,23 @@ body.admin-page .header .container {
   width: 40px;
   height: 40px;
   border-radius: 9999px;
-  background: rgba(255, 122, 51, 0.15);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .stat-icon-wrapper .stat-icon {
-  color: var(--color-brand-orange);
-  opacity: 1;
+  color: var(--color-slate-400) !important;
+  opacity: 0.6;
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+}
+
+/* Interactive: Icons "wake up" on card hover */
+.admin-stat-card:hover .stat-icon,
+.admin-stat-card:hover .stat-icon-wrapper .stat-icon {
+  opacity: 0.9;
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
 }
 
 @media (max-width: 991px) {
@@ -2918,18 +3091,13 @@ body.admin-page .header .container {
 
 .admin-dashboard .tab-content {
   background-color: transparent;
-  padding-top: clamp(1rem, 2vw, 1.5rem);
-  padding-bottom: clamp(1rem, 2vw, 1.5rem);
-  padding-left: 0;
-  padding-right: 0;
+  /* Pixel-perfect: Minimal top spacing, no side padding */
+  padding: 1rem 0 0 0 !important;
 }
 
 @media (max-width: 575px) {
   .admin-dashboard .tab-content {
-    padding-top: 0.75rem;
-    padding-bottom: 0.75rem;
-    padding-left: 0;
-    padding-right: 0;
+    padding: 0.75rem 0 0 0 !important;
   }
 }
 
@@ -4917,20 +5085,16 @@ body.theme-dark .legend-label-booked {
 /* Admin Page Full-Height Container */
 .admin-page-fullheight {
   min-height: 100vh;
-  padding: 0.5rem 0.75rem;
+  padding: 0.5rem 1.5rem 1.5rem; /* Reduced top padding */
   max-width: 100%;
   width: 100%;
 }
 
-/* Admin Main Card - Full height with responsive padding */
+/* Admin Main Card - Reduced top padding for tighter header spacing */
 .admin-card-main {
   min-height: calc(100vh - 4rem);
-  border-radius: 16px;
-  padding: 0;
-  padding-top: clamp(0.75rem, 2vw, 1.5rem);
-  padding-bottom: clamp(0.75rem, 2vw, 1.5rem);
-  padding-left: clamp(0.75rem, 2vw, 1.5rem);
-  padding-right: clamp(0.75rem, 2vw, 1.5rem);
+  border-radius: 0;
+  padding: 16px 40px 40px !important; /* Tighter top, uniform sides/bottom */
 }
 
 /* Dashboard/Page Title - Large heading style */
@@ -5078,6 +5242,12 @@ body.theme-light .study-summary-line {
   align-items: flex-end;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  /* Pixel-perfect: Hard left alignment with cards */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  width: 100%;
 }
 
 /* Filter Field - Flexible width */
@@ -5563,10 +5733,385 @@ body.theme-light .atmospheric-orb-secondary {
   margin-bottom: 0 !important;
 }
 
+/* ============================================================
+   CORTEX ANALYTICS DASHBOARD - Bento Grid Layout
+   "Sci-Fi Glassmorphism" (Dark) / "Technical Blueprint" (Light)
+   ============================================================ */
+
 /* Analytics Container - Constrained width */
 .analytics-container {
   max-width: 1400px;
-  padding: var(--spacing-4);
+  padding: var(--spacing-6);
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+}
+
+/* ----------------------------------------------------------
+   1. THE GRID LAYOUT (Bento Box)
+   ---------------------------------------------------------- */
+.cortex-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
+  margin-bottom: var(--spacing-6);
+}
+
+/* Spanning utilities for the Bento Grid */
+.cortex-analytics-grid > .span-1 {
+  grid-column: span 1;
+}
+
+.cortex-analytics-grid > .span-2 {
+  grid-column: span 2;
+}
+
+.cortex-analytics-grid > .span-3 {
+  grid-column: span 3;
+}
+
+.cortex-analytics-grid > .span-4 {
+  grid-column: span 4;
+}
+
+/* Responsive breakpoints for the Bento Grid */
+@media (max-width: 1200px) {
+  .cortex-analytics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .cortex-analytics-grid > .span-3,
+  .cortex-analytics-grid > .span-4 {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 768px) {
+  .cortex-analytics-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .cortex-analytics-grid > .span-1,
+  .cortex-analytics-grid > .span-2,
+  .cortex-analytics-grid > .span-3,
+  .cortex-analytics-grid > .span-4 {
+    grid-column: span 1;
+  }
+}
+
+/* ----------------------------------------------------------
+   2. THE CARD COMPONENT (.cortex-analytics-card)
+   Base styles - theme overrides in _themes.css
+   ---------------------------------------------------------- */
+.cortex-analytics-card {
+  position: relative;
+  padding: var(--spacing-5);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease;
+  overflow: hidden;
+  
+  /* Default (Dark Mode) - Sci-Fi Glass */
+  background: rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.2);
+}
+
+.cortex-analytics-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px -1px rgba(0, 0, 0, 0.3);
+}
+
+/* Card header area */
+.cortex-analytics-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: var(--spacing-4);
+}
+
+.cortex-analytics-card-title {
+  font-family: var(--font-family-base);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+  color: var(--color-slate-400);
+}
+
+/* Card header icons - STRICT MONOCHROME DISCIPLINE */
+.cortex-analytics-card-icon {
+  font-size: 1.125rem;
+  color: var(--color-slate-400) !important;
+  opacity: 0.4;
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+  transition: opacity 0.2s ease;
+}
+
+/* Force neutral on any SVG/icon child elements */
+.cortex-analytics-card-icon svg,
+.cortex-analytics-card-icon i,
+.cortex-analytics-card-icon span {
+  color: inherit !important;
+  fill: currentColor !important;
+}
+
+/* Interactive "waking up" effect - icons brighten on card hover */
+.cortex-analytics-card:hover .cortex-analytics-card-icon {
+  opacity: 0.8;
+  /* Keep grayscale - only opacity changes */
+  filter: grayscale(100%);
+  -webkit-filter: grayscale(100%);
+}
+
+/* Card content area */
+.cortex-analytics-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-2);
+}
+
+/* ----------------------------------------------------------
+   3. TYPOGRAPHY & STAT VALUES (.cortex-stat-value)
+   CORTEX COLOR DISCIPLINE:
+   - Default: var(--color-text-main) - Neutral (White/Slate-900)
+   - Accent: ONLY for actionable metrics (Conversion Rate)
+   ---------------------------------------------------------- */
+.cortex-stat-value {
+  font-family: 'Inter', var(--font-family-base);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' on, 'lnum' on;
+  font-size: 2.5rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  margin: 0;
+  
+  /* ENFORCED: Neutral color by default - no decorative colors */
+  color: var(--color-text-main) !important;
+}
+
+.cortex-stat-value--lg {
+  font-size: 3rem;
+}
+
+.cortex-stat-value--sm {
+  font-size: 1.75rem;
+}
+
+/* ONLY use for Conversion Rate / Primary Action metrics */
+.cortex-stat-value--accent {
+  color: var(--color-analytics-orange) !important;
+}
+
+/* Secondary metrics that need distinction (views, actions) */
+.cortex-stat-value--secondary {
+  color: var(--color-text-main) !important;
+  opacity: 0.9;
+}
+
+/* Stat subtitle / supporting text */
+.cortex-stat-subtitle {
+  font-family: var(--font-family-base);
+  font-size: 0.8125rem;
+  color: var(--color-slate-400);
+  margin: 0;
+}
+
+/* Stat inline metrics row (24h, 7d, etc.) */
+.cortex-stat-metrics {
+  display: flex;
+  gap: var(--spacing-4);
+  margin-top: var(--spacing-2);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-slate-400);
+  letter-spacing: 0.01em;
+}
+
+.cortex-stat-metrics strong {
+  font-weight: 600;
+  color: var(--color-slate-300);
+}
+
+/* Trend indicator (up/down arrows with color) */
+.cortex-stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.cortex-stat-trend--positive {
+  color: var(--color-analytics-green);
+}
+
+.cortex-stat-trend--negative {
+  color: var(--status-danger);
+}
+
+/* ----------------------------------------------------------
+   4. CHART CONTAINERS
+   ---------------------------------------------------------- */
+.cortex-chart-container {
+  position: relative;
+  width: 100%;
+  min-height: 180px;
+}
+
+.cortex-chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--spacing-4);
+}
+
+.cortex-chart-title {
+  font-family: var(--font-family-base);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--color-text-main);
+  margin: 0;
+}
+
+.cortex-chart-subtitle {
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-slate-400);
+  letter-spacing: 0.01em;
+}
+
+/* ----------------------------------------------------------
+   5. EMPTY STATES (.no-data)
+   Subtle diagonal stripe pattern with dashed border
+   ---------------------------------------------------------- */
+.no-data,
+.cortex-no-data {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: var(--spacing-6);
+  text-align: center;
+  border-radius: 4px;
+  opacity: 0.5;
+  
+  /* Dark mode default - dashed border with diagonal stripes */
+  border: 1px dashed var(--color-slate-600);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(255, 255, 255, 0.02) 8px,
+    rgba(255, 255, 255, 0.02) 16px
+  );
+  background-size: 22.63px 22.63px; /* sqrt(16^2 + 16^2) for 45deg alignment */
+}
+
+.no-data p,
+.cortex-no-data p {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-slate-500);
+  letter-spacing: 0.01em;
+}
+
+.no-data .empty-icon,
+.cortex-no-data .empty-icon {
+  font-size: 1.5rem;
+  opacity: 0.4;
+  margin-bottom: var(--spacing-2);
+  filter: grayscale(100%);
+}
+
+/* ----------------------------------------------------------
+   6. PERIOD SELECTOR BUTTONS
+   ---------------------------------------------------------- */
+.cortex-period-selector {
+  display: inline-flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.cortex-period-btn {
+  padding: 6px 14px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cortex-period-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cortex-period-btn--active {
+  color: var(--cta-text);
+  background: var(--cta-bg);
+}
+
+.cortex-period-btn--active:hover {
+  background: var(--cta-bg-hover);
+}
+
+/* ----------------------------------------------------------
+   7. BADGE / PILL INDICATORS
+   Refined for Cortex aesthetic - subtle, not distracting
+   ---------------------------------------------------------- */
+.cortex-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  border-radius: 100px;
+  letter-spacing: 0.01em;
+}
+
+/* Peak badge - Amber accent (subtle) */
+.cortex-badge--peak {
+  background: rgba(250, 204, 21, 0.1);
+  color: #D97706;
+  border: 1px solid rgba(250, 204, 21, 0.2);
+}
+
+/* Best/Success badge - Emerald (subtle, not solid) */
+.cortex-badge--best {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10B981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* Info/Neutral badge - NO solid blue, use transparent + border */
+.cortex-badge--info {
+  background: transparent;
+  color: var(--color-slate-600);
+  border: 1px solid var(--color-slate-200);
+}
+
+/* Negative/Danger badge */
+.cortex-badge--negative {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
 }
 
 /* Loading Container - Centered with min height */
@@ -5582,8 +6127,8 @@ body.theme-light .atmospheric-orb-secondary {
   background: transparent;
   border-bottom: none;
   margin: 0;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
   padding-left: 0;
   padding-right: 0;
   overflow: visible;
@@ -5593,13 +6138,20 @@ body.theme-light .atmospheric-orb-secondary {
 .tabs-container {
   margin-bottom: 1.5rem;
   margin-top: 0.5rem;
+  /* Pixel-perfect: Hard left alignment */
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.tabs-container .nav {
+  padding-left: 0 !important;
+  margin-left: 0 !important;
 }
 
 /* Tab Content Container */
 .tab-content-padded {
-  padding: clamp(1rem, 2vw, 1.5rem);
-  padding-left: 0;
-  padding-right: 0;
+  /* Pixel-perfect: No extra padding, content aligns with container edges */
+  padding: 0 !important;
 }
 
 /* Card Body Transparent */
@@ -8094,35 +8646,42 @@ body.theme-light .landing-page-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center; /* True center instead of space-between */
   min-height: 100vh;
+  min-height: 100dvh; /* Dynamic viewport height for mobile */
   width: 100%;
   padding: 4rem 1.5rem 2rem;
+  /* Optical centering: lifts content above mathematical center
+     to account for visual weight of browser chrome/taskbar */
+  padding-bottom: 10vh;
   overflow: hidden;
 }
 
-/* Hero stack - centered with flex-grow */
+/* Hero stack - optically centered content */
 .landing-hero-stack {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  flex-grow: 1;
   z-index: 10;
   text-align: center;
   width: 100%;
-  max-width: 90vw;
+  /* Constrain width to keep text well inside particle ring */
+  max-width: min(90vw, 600px);
+  /* Add some breathing room */
+  padding: 2rem 1rem;
 }
 
-/* Shadow shield - dark mode only */
+/* Shadow shield - dark mode only, fluid sizing */
 .landing-shadow-shield {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 800px;
-  height: 500px;
+  /* Fluid sizing: scales with viewport */
+  width: min(90vw, 700px);
+  height: min(60vh, 400px);
   max-width: 90vw;
   z-index: -1;
   pointer-events: none;
@@ -8142,8 +8701,9 @@ body.theme-dark .landing-shadow-shield {
 .landing-parent-brand {
   font-family: var(--font-family-base);
   font-weight: 600;
-  font-size: 0.9rem;
-  letter-spacing: 0.4em;
+  /* Fluid scaling: 0.75rem (mobile) → 1.4rem (4K) */
+  font-size: clamp(0.75rem, 1vw + 0.5rem, 1.4rem);
+  letter-spacing: 0.3em;
   color: var(--color-cortex-orange);
   margin-bottom: 0.5rem;
 }
@@ -8157,14 +8717,17 @@ body.theme-light .landing-parent-brand {
   letter-spacing: 0.2em;
 }
 
-/* Product name - CORTEX wordmark */
+/* Product name - CORTEX wordmark
+   Fluid typography: shrinks smoothly on smaller viewports
+   to maintain breathing room from particle ring */
 .landing-product-name {
   font-family: var(--font-family-base);
   font-weight: 900;
-  font-size: clamp(4rem, 18vw, 12rem);
+  /* clamp(min, preferred, max) - scales from 3rem (mobile) to 8rem (4K) */
+  font-size: clamp(3rem, 7vw, 8rem);
   line-height: 0.9;
   letter-spacing: -0.04em;
-  margin: 0 0 2rem 0;
+  margin: 0 0 1.5rem 0;
 }
 
 /* Dark mode: gradient text with glow */
@@ -8186,14 +8749,16 @@ body.theme-light .landing-product-name {
   filter: none;
 }
 
-/* Tagline */
+/* Tagline - fluid scaling with max-width */
 .landing-tagline {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-weight: 400;
-  font-size: 1rem;
+  /* Fluid scaling: 0.875rem (mobile) → 1.25rem (4K) */
+  font-size: clamp(0.875rem, 0.5vw + 0.75rem, 1.25rem);
   letter-spacing: 0.02em;
   margin: 0;
-  max-width: 320px;
+  /* Fluid max-width for readability */
+  max-width: clamp(280px, 40vw, 600px);
 }
 
 body.theme-dark .landing-tagline {
@@ -8202,179 +8767,127 @@ body.theme-dark .landing-tagline {
 }
 
 body.theme-light .landing-tagline {
-  color: #64748b;
+  color: #475569; /* Slate-600 - stronger contrast */
+  font-weight: 500; /* Medium weight for better readability */
+  letter-spacing: 0.02em;
   text-shadow: none;
 }
 
-/* Demo footer */
+/* Demo footer - Fixed position at bottom-right corner */
 .landing-demo-footer {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-  opacity: 0.9;
-  transition: opacity 0.2s ease;
-  /* Shadow shielding for visibility */
-  padding: 1.5rem 3rem;
-  position: relative;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 100px;
+  opacity: 0.6;
+  transition: all 0.25s ease;
+  z-index: 100;
 }
 
-/* Dark Mode: Shadow shield with seamless feathered edges */
+/* Dark Mode: Glass pill styling */
 body.theme-dark .landing-demo-footer {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-body.theme-dark .landing-demo-footer::before {
-  content: '';
-  position: absolute;
-  inset: -100px -200px -60px -200px;
-  background: radial-gradient(
-    ellipse 80% 80% at 50% 60%,
-    rgba(0, 0, 0, 0.65) 0%,
-    rgba(0, 0, 0, 0.5) 15%,
-    rgba(0, 0, 0, 0.35) 30%,
-    rgba(0, 0, 0, 0.2) 45%,
-    rgba(0, 0, 0, 0.1) 60%,
-    rgba(0, 0, 0, 0.04) 75%,
-    rgba(0, 0, 0, 0.01) 88%,
-    transparent 100%
-  );
-  z-index: -1;
-  pointer-events: none;
-}
-
-.landing-demo-footer:hover {
+body.theme-dark .landing-demo-footer:hover {
   opacity: 1;
+  background: rgba(255, 255, 255, 0.12);
 }
 
-/* Demo label */
+/* Light Mode: Subtle glass pill styling */
+body.theme-light .landing-demo-footer {
+  background: rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .landing-demo-footer:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* Demo label - hidden in new compact design */
 .landing-demo-label {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.15em;
-}
-
-body.theme-dark .landing-demo-label {
-  color: rgba(255, 255, 255, 0.6);
-}
-
-body.theme-light .landing-demo-label {
-  color: #94a3b8;
+  display: none; /* Hidden - label is now implicit */
 }
 
 /* Demo pills container */
 .landing-demo-pills {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.25rem;
 }
 
-/* Demo pill button */
+/* Demo pill button - compact, minimal design */
 .landing-demo-pill {
-  padding: 0.6rem 1.25rem;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 12px;
   font-weight: 500;
   font-family: var(--font-family-base);
   border-radius: 100px;
   cursor: pointer;
   transition: all 0.2s ease;
-  border: 1px solid;
+  border: none;
+  background: transparent;
 }
 
 body.theme-dark .landing-demo-pill {
-  color: rgba(255, 255, 255, 0.8);
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.6);
 }
 
 body.theme-dark .landing-demo-pill:hover {
-  background: rgba(255, 85, 0, 0.15);
-  border-color: rgba(255, 85, 0, 0.5);
-  color: var(--color-cortex-orange);
-  box-shadow: 0 0 20px rgba(255, 85, 0, 0.3);
+  color: rgba(255, 255, 255, 1);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 body.theme-light .landing-demo-pill {
-  color: #475569;
-  background: #f1f5f9;
-  border-color: #cbd5e1;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
+  color: #64748b; /* Slate-500 */
 }
 
 body.theme-light .landing-demo-pill:hover {
-  background: #fff7ed;
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  box-shadow: 0 0 15px rgba(232, 108, 36, 0.25);
+  color: #1e293b; /* Slate-800 */
+  background: rgba(0, 0, 0, 0.05);
 }
 
 .landing-demo-pill:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Active state for selected demo pill */
-body.theme-dark .landing-demo-pill.active {
-  background: rgba(255, 85, 0, 0.2);
-  border-color: var(--color-cortex-orange);
-  color: var(--color-cortex-orange);
-  box-shadow: 0 0 20px rgba(255, 85, 0, 0.3);
+/* Separator between pills */
+.landing-demo-pills .landing-demo-pill:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  right: -2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 12px;
+  background: currentColor;
+  opacity: 0.2;
 }
 
-body.theme-light .landing-demo-pill.active {
-  background: #fff7ed;
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-  box-shadow: 0 0 15px rgba(232, 108, 36, 0.25);
+.landing-demo-pill {
+  position: relative;
 }
 
-/* Responsive landing typography */
-@media (min-width: 640px) {
-  .landing-parent-brand {
-    font-size: 1.1rem;
-  }
-  
-  .landing-tagline {
-    font-size: 1.05rem;
-    max-width: 450px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .landing-parent-brand {
-    font-size: 1.4rem;
-  }
-  
-  .landing-tagline {
-    font-size: 1.2rem;
-    max-width: 600px;
-  }
-}
-
-@media (min-width: 1440px) {
-  .landing-parent-brand {
-    font-size: 1.6rem;
-  }
-  
-  .landing-tagline {
-    font-size: 1.35rem;
-    max-width: 700px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .landing-parent-brand {
-    font-size: 1.8rem;
-  }
-  
-  .landing-tagline {
-    font-size: 1.5rem;
+/* Responsive landing typography
+   Note: Most sizing is now handled by clamp() functions above.
+   These media queries handle layout adjustments only. */
+@media (max-width: 480px) {
+  /* Extra small screens: tighter spacing */
+  .landing-hero-stack {
+    padding: 0 1rem;
   }
 }
 
@@ -8404,7 +8917,7 @@ body.theme-light .landing-demo-pill.active {
   align-items: center;
   justify-content: space-between;
   gap: var(--spacing-4);
-  margin-bottom: var(--spacing-6);
+  margin-bottom: var(--spacing-3);
 }
 
 /* Admin stats grid */
@@ -8460,19 +8973,7 @@ body.theme-light .landing-demo-pill.active {
   flex-wrap: nowrap;
 }
 
-/* Cortex brand title */
-.cortex-brand-title {
-  font-size: var(--font-size-h1);
-  font-weight: var(--font-weight-bold);
-  letter-spacing: -0.02em;
-  color: var(--color-cortex-orange);
-  margin: 0;
-}
-
-.cortex-admin-suffix {
-  font-weight: 300;
-  opacity: 0.7;
-}
+/* Cortex brand title - styles defined in ADMIN DASHBOARD section above */
 
 /* Admin subtitle */
 .admin-subtitle {
@@ -9492,3 +9993,313 @@ body.theme-light .admin-subtitle {
   color: var(--text-muted);
 }
 
+/* =========================================
+   GLASSMORPHISM INPUTS (Admin Glass Aesthetic)
+   Subtle glass fill with orange focus glow
+   ========================================= */
+
+.form-control, 
+.form-select,
+textarea.form-control {
+  background: rgba(255, 255, 255, 0.03) !important; /* Subtle glass fill */
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #E2E8F0 !important; /* Off-white text */
+  transition: all 0.2s ease;
+  backdrop-filter: blur(5px); /* Optional: adds depth if browser supports */
+}
+
+.form-control:focus, 
+.form-select:focus,
+textarea.form-control:focus {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: var(--color-brand-orange) !important;
+  box-shadow: 0 0 0 2px rgba(255, 122, 51, 0.2) !important; /* Orange glow */
+  outline: none;
+}
+
+/* Fix for placeholder text color in glass inputs */
+.form-control::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* =========================================
+   ADMIN TABLE POLISH (Glass Aesthetic)
+   High-end Enterprise Table Styles
+   ========================================= */
+
+/* Table Headers - Uppercase & Muted */
+.admin-dashboard table thead th,
+.admin-data-table th {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  color: #94A3B8; /* Slate-400 */
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding-bottom: 20px;
+}
+
+/* First row "Soft Entrance" - Hero row gets breathing room */
+.admin-dashboard table tbody tr:first-child td,
+.admin-data-table tbody tr:first-child td {
+  padding-top: 24px;
+}
+
+/* Table Rows - Glass Hover Effect */
+.admin-dashboard table tbody tr,
+.admin-data-table tbody tr {
+  transition: all 0.2s ease;
+  border-left: 2px solid transparent; /* Prepare for hover */
+}
+
+.admin-dashboard table tbody tr:hover,
+.admin-data-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.03) 0%, transparent 100%);
+  border-left: 2px solid var(--color-brand-orange); /* The "Active Scan" look */
+}
+
+/* =========================================
+   CALENDAR SESSION MANAGER (Admin Glass Aesthetic)
+   Fixing the "Matrix" look and Contrast
+   ========================================= */
+
+/* Unselected Slots - Subtle & Clean */
+.calendar-slot-admin {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.1s ease;
+}
+
+/* Selected Slots - High Contrast (Green/Black) */
+.calendar-slot-admin-selected {
+  background: #22c55e !important; /* Bright Green */
+  border: 1px solid #16a34a !important;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3); /* Green Glow */
+}
+
+/* Ensure text inside selected slot is readable (Dark on Bright) */
+.calendar-slot-admin-selected .timeslot-label,
+.calendar-slot-admin-selected span {
+  color: #0f172a !important; /* Dark Slate / Black */
+  font-weight: 700 !important;
+}
+
+/* Clean up the heavy column backgrounds - Floating Look */
+.calendar-day-column {
+  background: transparent !important; /* Remove the heavy slate background */
+  border-right: 1px solid rgba(255, 255, 255, 0.05); /* Ghostly separator */
+}
+
+/* Unselected Admin Slots - Extremely subtle glass */
+.calendar-slot-admin {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.15s ease;
+}
+
+.calendar-slot-admin:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* =========================================
+   TEXT READABILITY - Admin Panel
+   Slate-400 (#94A3B8) for better legibility
+   ========================================= */
+
+.admin-dashboard .form-text,
+.admin-dashboard .text-muted,
+.opportunity-form .form-text,
+.opportunity-form .text-muted {
+  color: #94A3B8 !important;
+}
+
+.admin-dashboard .form-control::placeholder,
+.admin-dashboard .form-select::placeholder,
+.admin-dashboard textarea::placeholder,
+.opportunity-form .form-control::placeholder,
+.opportunity-form .form-select::placeholder,
+.opportunity-form textarea::placeholder {
+  color: #94A3B8 !important;
+  opacity: 0.7;
+}
+
+/* Section descriptions in opportunity form */
+.opportunity-form .section-description,
+.opportunity-form .tab-description {
+  color: #94A3B8 !important;
+}
+
+/* Helper text under form fields */
+.admin-dashboard small,
+.opportunity-form small:not(.badge) {
+  color: #94A3B8;
+}
+
+/* ============================================================
+   CORTEX CONTEXT MENU - Data Table Actions
+   Fix for dropdown clipping in admin tables
+   ============================================================ */
+
+/* Fix clipping: ALL parent containers must allow dropdown overflow */
+.admin-page-bg,
+.admin-page-container,
+.admin-page-fullheight,
+.admin-dashboard,
+.admin-content-wrapper,
+.admin-card,
+.admin-card-main,
+.admin-dashboard .card,
+.admin-dashboard .card-body,
+.admin-dashboard .card-header,
+.admin-dashboard .tab-content,
+.admin-dashboard .tab-pane,
+.admin-dashboard .tab-pane.active,
+.admin-dashboard .table-responsive,
+.admin-data-table-container,
+.tab-content-padded,
+.admin-tabs-container,
+.main,
+.col-12,
+.row {
+  overflow: visible !important;
+}
+
+/* Ensure admin table doesn't clip */
+.admin-data-table,
+.admin-data-table tbody,
+.admin-data-table tr {
+  overflow: visible !important;
+}
+
+/* Fix clipping: Action cell must allow overflow and be positioning context */
+.admin-data-table td.col-actions,
+.admin-data-table .col-actions {
+  overflow: visible !important;
+  position: relative;
+}
+
+/* Fix clipping: Dropdown container is the positioning context */
+.admin-data-table .dropdown,
+.col-actions .dropdown {
+  position: relative;
+}
+
+/* Action dropdown menu - Elevated floating surface */
+.admin-action-dropdown-menu,
+.admin-action-dropdown,
+.admin-data-table .dropdown-menu,
+.col-actions .dropdown-menu {
+  position: absolute !important;
+  right: 0 !important;
+  left: auto !important;
+  top: 100% !important;
+  z-index: 9999 !important;
+  min-width: 160px;
+  background: var(--color-surface-white);
+  border: 1px solid var(--color-slate-200);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  padding: var(--spacing-1) 0;
+}
+
+/* Menu Items - Base state (Light Mode) */
+body.theme-light .admin-action-dropdown-menu .dropdown-item,
+body.theme-light .admin-action-dropdown .dropdown-item,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item,
+body.theme-light .col-actions .dropdown-menu .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  width: 100%;
+  padding: var(--spacing-2) var(--spacing-3);
+  font-size: var(--font-size-small);
+  color: var(--color-slate-700);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+/* Menu Items - Hover: Brand Orange highlight (Light Mode) */
+body.theme-light .admin-action-dropdown-menu .dropdown-item:hover,
+body.theme-light .admin-action-dropdown .dropdown-item:hover,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item:hover,
+body.theme-light .col-actions .dropdown-menu .dropdown-item:hover,
+body.theme-light .admin-action-dropdown-menu .dropdown-item:focus,
+body.theme-light .admin-action-dropdown .dropdown-item:focus,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item:focus,
+body.theme-light .col-actions .dropdown-menu .dropdown-item:focus {
+  background: var(--color-slate-50) !important;
+  color: #F97316 !important;
+}
+
+/* Danger item styling (Light Mode) */
+body.theme-light .admin-action-dropdown-menu .dropdown-item.text-danger,
+body.theme-light .admin-action-dropdown .dropdown-item.text-danger,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item.text-danger,
+body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger {
+  color: #DC2626;
+}
+
+body.theme-light .admin-action-dropdown-menu .dropdown-item.text-danger:hover,
+body.theme-light .admin-action-dropdown .dropdown-item.text-danger:hover,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-item.text-danger:hover,
+body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:hover {
+  background: #FEF2F2 !important;
+  color: #DC2626 !important;
+}
+
+/* Menu Divider (Light Mode) */
+body.theme-light .admin-action-dropdown-menu .dropdown-divider,
+body.theme-light .admin-action-dropdown .dropdown-divider,
+body.theme-light .admin-data-table .dropdown-menu .dropdown-divider,
+body.theme-light .col-actions .dropdown-menu .dropdown-divider {
+  height: 1px;
+  margin: var(--spacing-1) 0;
+  background: var(--color-slate-200);
+  border: none;
+}
+
+/* ============================================================
+   CORTEX ANALYTICS PAGE HEADER
+   Provides proper vertical rhythm and control alignment
+   ============================================================ */
+
+/* Main header container - flex layout for title + selector alignment */
+.cortex-page-header {
+  display: flex;
+  justify-content: space-between; /* Pushes Title left, Selector right */
+  align-items: flex-end; /* Aligns items to the bottom line of the context text */
+  margin-bottom: var(--spacing-8); /* Clear space above the KPI grid */
+  flex-wrap: wrap;
+  gap: var(--spacing-4);
+}
+
+/* Title block wrapper */
+.cortex-title-block {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Primary title styling */
+.cortex-page-header h1 {
+  margin-top: 0;
+  margin-bottom: var(--spacing-2); /* 8px breathing room below the primary title */
+  font-size: var(--font-size-h1);
+  line-height: 1.2;
+}
+
+/* Context subtext styling */
+.cortex-page-header p {
+  margin-top: 0;
+  margin-bottom: 0; /* Handled by the header's margin-bottom */
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
+/* Date selector alignment - sits at flex-end of header */
+.cortex-date-selector {
+  flex-shrink: 0;
+}

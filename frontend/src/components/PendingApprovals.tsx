@@ -119,7 +119,6 @@ const PendingApprovals: React.FC = () => {
 
       {approvals.length === 0 ? (
         <div className="alert alert-info">
-          <CheckCircle size={18} className="me-2" />
           No sessions pending approval
         </div>
       ) : (

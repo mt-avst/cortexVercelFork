@@ -315,6 +315,12 @@
 .text-white { color: #FFFFFF; }
 .text-black { color: #000000; }
 
+/* Cortex Brand Accent - Used for contextual highlights */
+.cortex-highlight-orange {
+  color: var(--color-brand-orange); /* #F97316 */
+  font-weight: 500; /* Subtle emphasis */
+}
+
 /* Bootstrap compatibility */
 .fw-bold { font-weight: var(--font-weight-bold); }
 .fw-semibold { font-weight: var(--font-weight-semibold); }
@@ -638,7 +644,7 @@
    ============================================================ */
 
 .bg-dark { background-color: #212529; color: #FFFFFF; }
-.bg-light { background-color: #f8f9fa; color: #212529; }
+.bg-light { background-color: #FFFFFF; color: #212529; }
 .bg-primary { background-color: var(--brand-primary); color: #FFFFFF; }
 
 /* ============================================================

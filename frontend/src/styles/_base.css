@@ -19,12 +19,122 @@ body {
   font-weight: var(--font-weight-body);
   line-height: var(--line-height-body);
   color: var(--text-body);
-  background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
-  background-attachment: fixed;
   min-height: 100vh;
   /* Disable problematic ligatures that cause "st" rendering issues in some fonts */
   font-variant-ligatures: no-common-ligatures;
   font-feature-settings: "liga" 0, "clig" 0;
+}
+
+/* ============================================================
+   DARK MODE - "Sci-Fi Void" Layered Atmosphere
+   Using pseudo-elements for proper stacking:
+   - Body: Deep void base color
+   - .App::after: Grid pattern (z: -11)
+   - .App::before: Neural glow (z: -10)
+   - Content: Glass cards (z: 1+)
+   ============================================================ */
+
+body.theme-dark {
+  /* The Deep Void - Slate 950 */
+  background-color: #020617;
+}
+
+/* Main App Container - Establishes stacking context */
+body.theme-dark .App {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+/* --- ATMOSPHERE LAYER 1: The NEURAL GLOW (Behind Content) --- */
+body.theme-dark .App::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 50%;
+  width: 100vw;
+  height: 80vh;
+  transform: translateX(-50%);
+  pointer-events: none;
+  z-index: -10;
+  
+  /* Large, subtle radial gradient - center-top focus */
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 10%,
+    rgba(249, 115, 22, 0.10) 0%,   /* Brand Orange hint */
+    rgba(249, 115, 22, 0.05) 25%,
+    rgba(249, 115, 22, 0.02) 45%,
+    transparent 70%
+  );
+}
+
+/* --- ATMOSPHERE LAYER 2: The Grid (Sits behind the glow) --- */
+body.theme-dark .App::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: -11;
+  
+  /* Grid Pattern - subtle, low-contrast */
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  
+  /* Fade grid at bottom for depth */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.7) 50%,
+    rgba(0, 0, 0, 0.3) 75%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.7) 50%,
+    rgba(0, 0, 0, 0.3) 75%,
+    transparent 100%
+  );
+}
+
+/* ============================================================
+   LIGHT MODE - "Blueprint" Dot Pattern Background
+   Clean technical aesthetic with subtle dot grid
+   ============================================================ */
+
+body.theme-light {
+  /* Base: Pure white */
+  background-color: #FFFFFF;
+}
+
+body.theme-light .App {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+}
+
+/* Blueprint dot pattern overlay */
+body.theme-light .App::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: -10;
+  
+  /* Texture: Radial gradient dot pattern */
+  background-image: radial-gradient(
+    #CBD5E1 1px,    /* Slate-300 dots */
+    transparent 1px
+  );
+  background-size: 24px 24px;
 }
 
 /* ============================================================
