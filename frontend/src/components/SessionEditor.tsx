@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Session, CreateSessionRequest, UpdateSessionRequest, SessionFormData } from '../api/types';
 import { createSessions, updateSession, deleteSession } from '../api/client';
+import { SESSION_CAPACITY } from '../shared/constants';
 import ConfirmationModal from './ConfirmationModal';
 
 interface SessionEditorProps {
@@ -73,8 +74,8 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
       }
     }
     
-    if (session.capacity < 1 || session.capacity > 500) {
-      errors.push(`${prefix}Capacity must be between 1 and 500`);
+    if (session.capacity < SESSION_CAPACITY.MIN || session.capacity > SESSION_CAPACITY.MAX) {
+      errors.push(`${prefix}Capacity must be between ${SESSION_CAPACITY.MIN} and ${SESSION_CAPACITY.MAX}`);
     }
     
     return errors;

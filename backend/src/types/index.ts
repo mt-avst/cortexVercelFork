@@ -12,6 +12,15 @@ export interface AuthRequest extends Request {
   user?: SessionUser;
 }
 
+// Extend Express Request type globally
+declare global {
+  namespace Express {
+    interface Request {
+      user?: SessionUser;
+    }
+  }
+}
+
 // Extend Express session to include user property
 declare module 'express-session' {
   interface SessionData {

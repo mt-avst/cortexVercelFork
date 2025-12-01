@@ -8,25 +8,10 @@ import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError, asyncHandler } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
+import { isDatabaseAvailable } from '../utils/database';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
 
 const router: Router = Router();
-
-// Helper function to check if database is available
-const isDatabaseAvailable = async (): Promise<boolean> => {
-  try {
-    // Check if DATABASE_URL is set
-    if (!process.env.DATABASE_URL) {
-      logger.info('DATABASE_URL not set, using mock data');
-      return false;
-    }
-    await pool.query('SELECT 1');
-    return true;
-  } catch (error) {
-    logger.warn('Database not available, using mock data', { error: (error as Error).message });
-    return false;
-  }
-};
 
 // Helper function to check session ownership for admin operations
 const checkSessionOwnership = async (sessionId: string, userId: string): Promise<boolean> => {

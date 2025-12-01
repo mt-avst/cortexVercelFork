@@ -41,6 +41,8 @@ export const TIME_INTERVALS = {
 export const API_CONFIG = {
   /** Default API timeout in milliseconds */
   TIMEOUT_MS: 10000,
+  /** @deprecated Use TIMEOUT_MS instead. Alias for backwards compatibility */
+  TIMEOUT: 10000,
   /** Maximum retry attempts for failed requests */
   MAX_RETRIES: 3,
   /** Delay between retry attempts in milliseconds */
@@ -165,6 +167,20 @@ export const PAGINATION = {
   MAX_PAGE_SIZE: 100,
   /** Minimum page size */
   MIN_PAGE_SIZE: 1,
+} as const;
+
+// ============================================================================
+// SESSION CONSTANTS
+// ============================================================================
+
+/**
+ * Session capacity limits
+ */
+export const SESSION_CAPACITY = {
+  /** Minimum session capacity */
+  MIN: 1,
+  /** Maximum session capacity */
+  MAX: 500,
 } as const;
 
 // ============================================================================

@@ -178,6 +178,20 @@ export const PAGINATION = {
 } as const;
 
 // ============================================================================
+// SESSION CONSTANTS
+// ============================================================================
+
+/**
+ * Session capacity limits
+ */
+export const SESSION_CAPACITY = {
+  /** Minimum session capacity */
+  MIN: 1,
+  /** Maximum session capacity */
+  MAX: 500,
+} as const;
+
+// ============================================================================
 // LOGGING CONSTANTS
 // ============================================================================
 

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { CreateSessionRequest, UpdateSessionRequest } from '../types';
+import { SESSION_CAPACITY } from '../../../shared/constants';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
@@ -86,7 +88,7 @@ export const OpportunitySchema = z.object({
 export const CreateSessionSchema = z.object({
   start_time: z.string().datetime(),
   end_time: z.string().datetime(),
-  capacity: z.number().int().min(1),
+  capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX),
   location_or_meet_link_optional: z.string().optional(),
 }).refine(
   (data) => new Date(data.end_time) > new Date(data.start_time),
@@ -96,10 +98,16 @@ export const CreateSessionSchema = z.object({
   }
 );
 
+// Schema for batch session creation (used in POST /api/sessions)
+export const CreateSessionsSchema = z.object({
+  opportunity_id: UUIDSchema,
+  sessions: z.array(CreateSessionSchema).min(1, "At least one session is required"),
+});
+
 export const UpdateSessionSchema = z.object({
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
-  capacity: z.number().int().min(1).optional(),
+  capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX).optional(),
   location_or_meet_link_optional: z.string().optional(),
 }).refine(
   (data) => {
@@ -119,13 +127,54 @@ export const SessionSchema = z.object({
   opportunity_id: UUIDSchema,
   start_time: z.string().datetime(),
   end_time: z.string().datetime(),
-  capacity: z.number().int().min(1),
+  capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX),
   booked_count: z.number().int().min(0),
   location_or_meet_link_optional: z.string().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   remaining: z.number().int().optional(),
 });
+
+/**
+ * Validate session data without Zod (for legacy code paths)
+ * Returns array of error messages, empty if valid
+ */
+export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRequest): string[] => {
+  const errors: string[] = [];
+  
+  if ('start_time' in data && data.start_time !== undefined) {
+    const startTime = new Date(data.start_time);
+    if (isNaN(startTime.getTime())) {
+      errors.push('Start time must be a valid ISO date string');
+    }
+  }
+  
+  if ('end_time' in data && data.end_time !== undefined) {
+    const endTime = new Date(data.end_time);
+    if (isNaN(endTime.getTime())) {
+      errors.push('End time must be a valid ISO date string');
+    }
+  }
+  
+  if ('start_time' in data && 'end_time' in data && 
+      data.start_time !== undefined && data.end_time !== undefined) {
+    const startTime = new Date(data.start_time);
+    const endTime = new Date(data.end_time);
+    if (startTime >= endTime) {
+      errors.push('End time must be after start time');
+    }
+  }
+  
+  if ('capacity' in data && data.capacity !== undefined) {
+    if (!Number.isInteger(data.capacity) || 
+        data.capacity < SESSION_CAPACITY.MIN || 
+        data.capacity > SESSION_CAPACITY.MAX) {
+      errors.push(`Capacity must be an integer between ${SESSION_CAPACITY.MIN} and ${SESSION_CAPACITY.MAX}`);
+    }
+  }
+  
+  return errors;
+};
 
 // Booking schemas
 export const BookingStatusSchema = z.enum(['booked', 'cancelled']);

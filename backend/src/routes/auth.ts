@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import express, { Router } from 'express';
 import { Issuer, Client } from 'openid-client';
 import crypto from 'crypto';
 
@@ -527,6 +527,83 @@ router.get('/google-callback', async (req, res) => {
 
 // Demo routes for development
 if (process.env.NODE_ENV === 'development') {
+  /**
+   * Helper function to auto-connect calendar for demo users
+   * Extracts the repeated calendar token logic from demo login routes
+   */
+  const autoConnectDemoCalendar = async (userId: string, userLabel: string): Promise<void> => {
+    try {
+      const dbClient = await pool.connect();
+      try {
+        // Check if calendar tokens already exist
+        const existingTokens = await dbClient.query(
+          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
+          [userId]
+        );
+
+        if (existingTokens.rows.length === 0) {
+          // Generate mock calendar tokens
+          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
+          
+          // Encrypt tokens
+          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
+          const encryptedRefreshToken = refreshToken
+            ? userCalendarService.encrypt(refreshToken)
+            : null;
+
+          // Store mock calendar tokens
+          await dbClient.query(`
+            INSERT INTO user_calendar_tokens (
+              user_id, access_token, refresh_token, expires_at,
+              token_type, scope, connected_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, NOW())
+            ON CONFLICT (user_id) 
+            DO UPDATE SET
+              access_token = EXCLUDED.access_token,
+              refresh_token = EXCLUDED.refresh_token,
+              expires_at = EXCLUDED.expires_at
+          `, [
+            userId,
+            encryptedAccessToken,
+            encryptedRefreshToken,
+            expiryDate,
+            'Bearer',
+            'https://www.googleapis.com/auth/calendar.readonly'
+          ]);
+
+          logger.info(`Auto-connected calendar for ${userLabel}`);
+        }
+      } finally {
+        dbClient.release();
+      }
+    } catch (error) {
+      // Don't fail login if calendar connection fails
+      logger.warn(`Failed to auto-connect calendar for ${userLabel} (non-blocking)`, { error });
+    }
+  };
+
+  /**
+   * Helper function to handle demo login session creation and redirect
+   */
+  const handleDemoLogin = (
+    req: express.Request,
+    res: express.Response,
+    user: SessionUser,
+    redirectPath: string = '/'
+  ): void => {
+    req.session.user = user;
+    
+    req.session.save((err) => {
+      if (err) {
+        logger.error('Session save error', { error: err });
+        return res.status(500).json({ error: 'Session creation failed' });
+      }
+      const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+      res.redirect(`${corsOrigin}${redirectPath}`);
+    });
+  };
+
   // GET /auth/demo-login - Demo user login
   router.get('/demo-login', async (req, res) => {
     const demoUser: SessionUser = {
@@ -538,72 +615,14 @@ if (process.env.NODE_ENV === 'development') {
       role: 'employee',
     };
     
-    req.session.user = demoUser;
-    
-    // Auto-connect calendar for demo user
-    try {
-      const dbClient = await pool.connect();
-      try {
-        // Check if calendar tokens already exist
-        const existingTokens = await dbClient.query(
-          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
-          [demoUser.id]
-        );
-
-        if (existingTokens.rows.length === 0) {
-          // Generate mock calendar tokens
-          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
-          
-          // Encrypt tokens
-          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
-          const encryptedRefreshToken = refreshToken
-            ? userCalendarService.encrypt(refreshToken)
-            : null;
-
-          // Store mock calendar tokens
-          await dbClient.query(`
-            INSERT INTO user_calendar_tokens (
-              user_id, access_token, refresh_token, expires_at,
-              token_type, scope, connected_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (user_id) 
-            DO UPDATE SET
-              access_token = EXCLUDED.access_token,
-              refresh_token = EXCLUDED.refresh_token,
-              expires_at = EXCLUDED.expires_at
-          `, [
-            demoUser.id,
-            encryptedAccessToken,
-            encryptedRefreshToken,
-            expiryDate,
-            'Bearer',
-            'https://www.googleapis.com/auth/calendar.readonly'
-          ]);
-
-          logger.info('Auto-connected calendar for demo user');
-        }
-      } finally {
-        dbClient.release();
-      }
-    } catch (error) {
-      // Don't fail login if calendar connection fails
-      logger.warn('Failed to auto-connect calendar for demo user (non-blocking)', { error });
-    }
-    
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Session save error', { error: err });
-        return res.status(500).json({ error: 'Session creation failed' });
-      }
-      res.redirect(process.env.CORS_ORIGIN || 'http://localhost:3000');
-    });
+    await autoConnectDemoCalendar(demoUser.id, 'demo user');
+    handleDemoLogin(req, res, demoUser, '/');
   });
 
   // GET /auth/admin-login - Demo admin login
   router.get('/admin-login', async (req, res) => {
     const demoAdmin: SessionUser = {
-      id: '633608bc-4b0e-4d60-a498-e680ee97c252', // Use actual admin ID from database
+      id: '633608bc-4b0e-4d60-a498-e680ee97c252',
       name: 'Test Admin',
       email: 'admin@test.com',
       business_unit: 'Research',
@@ -611,68 +630,8 @@ if (process.env.NODE_ENV === 'development') {
       role: 'researcher_admin',
     };
     
-    req.session.user = demoAdmin;
-    
-    // Auto-connect calendar for demo admin
-    try {
-      const dbClient = await pool.connect();
-      try {
-        // Check if calendar tokens already exist
-        const existingTokens = await dbClient.query(
-          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
-          [demoAdmin.id]
-        );
-
-        if (existingTokens.rows.length === 0) {
-          // Generate mock calendar tokens
-          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
-          
-          // Encrypt tokens
-          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
-          const encryptedRefreshToken = refreshToken
-            ? userCalendarService.encrypt(refreshToken)
-            : null;
-
-          // Store mock calendar tokens
-          await dbClient.query(`
-            INSERT INTO user_calendar_tokens (
-              user_id, access_token, refresh_token, expires_at,
-              token_type, scope, connected_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (user_id) 
-            DO UPDATE SET
-              access_token = EXCLUDED.access_token,
-              refresh_token = EXCLUDED.refresh_token,
-              expires_at = EXCLUDED.expires_at
-          `, [
-            demoAdmin.id,
-            encryptedAccessToken,
-            encryptedRefreshToken,
-            expiryDate,
-            'Bearer',
-            'https://www.googleapis.com/auth/calendar.readonly'
-          ]);
-
-          logger.info('Auto-connected calendar for demo admin');
-        }
-      } finally {
-        dbClient.release();
-      }
-    } catch (error) {
-      // Don't fail login if calendar connection fails
-      logger.warn('Failed to auto-connect calendar for demo admin (non-blocking)', { error });
-    }
-    
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Session save error', { error: err });
-        return res.status(500).json({ error: 'Session creation failed' });
-      }
-      // Redirect admin users to admin dashboard
-      const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-      res.redirect(`${corsOrigin}/admin`);
-    });
+    await autoConnectDemoCalendar(demoAdmin.id, 'demo admin');
+    handleDemoLogin(req, res, demoAdmin, '/admin');
   });
 
   // GET /auth/superadmin-login - Demo superadmin login
@@ -686,68 +645,8 @@ if (process.env.NODE_ENV === 'development') {
       role: 'superadmin',
     };
     
-    req.session.user = demoSuperadmin;
-    
-    // Auto-connect calendar for demo superadmin
-    try {
-      const dbClient = await pool.connect();
-      try {
-        // Check if calendar tokens already exist
-        const existingTokens = await dbClient.query(
-          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
-          [demoSuperadmin.id]
-        );
-
-        if (existingTokens.rows.length === 0) {
-          // Generate mock calendar tokens
-          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
-          
-          // Encrypt tokens
-          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
-          const encryptedRefreshToken = refreshToken
-            ? userCalendarService.encrypt(refreshToken)
-            : null;
-
-          // Store mock calendar tokens
-          await dbClient.query(`
-            INSERT INTO user_calendar_tokens (
-              user_id, access_token, refresh_token, expires_at,
-              token_type, scope, connected_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (user_id) 
-            DO UPDATE SET
-              access_token = EXCLUDED.access_token,
-              refresh_token = EXCLUDED.refresh_token,
-              expires_at = EXCLUDED.expires_at
-          `, [
-            demoSuperadmin.id,
-            encryptedAccessToken,
-            encryptedRefreshToken,
-            expiryDate,
-            'Bearer',
-            'https://www.googleapis.com/auth/calendar.readonly'
-          ]);
-
-          logger.info('Auto-connected calendar for demo superadmin');
-        }
-      } finally {
-        dbClient.release();
-      }
-    } catch (error) {
-      // Don't fail login if calendar connection fails
-      logger.warn('Failed to auto-connect calendar for demo superadmin (non-blocking)', { error });
-    }
-    
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Session save error', { error: err });
-        return res.status(500).json({ error: 'Session creation failed' });
-      }
-      // Redirect superadmin users to admin dashboard
-      const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-      res.redirect(`${corsOrigin}/admin`);
-    });
+    await autoConnectDemoCalendar(demoSuperadmin.id, 'demo superadmin');
+    handleDemoLogin(req, res, demoSuperadmin, '/admin');
   });
 
   // GET /auth/demo-user-2-login - Demo User 2 login
@@ -761,66 +660,8 @@ if (process.env.NODE_ENV === 'development') {
       role: 'employee',
     };
     
-    req.session.user = demoUser2;
-    
-    // Auto-connect calendar for demo user 2
-    try {
-      const dbClient = await pool.connect();
-      try {
-        // Check if calendar tokens already exist
-        const existingTokens = await dbClient.query(
-          'SELECT id FROM user_calendar_tokens WHERE user_id = $1',
-          [demoUser2.id]
-        );
-
-        if (existingTokens.rows.length === 0) {
-          // Generate mock calendar tokens
-          const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens('demo-code');
-          
-          // Encrypt tokens
-          const encryptedAccessToken = userCalendarService.encrypt(accessToken);
-          const encryptedRefreshToken = refreshToken
-            ? userCalendarService.encrypt(refreshToken)
-            : null;
-
-          // Store mock calendar tokens
-          await dbClient.query(`
-            INSERT INTO user_calendar_tokens (
-              user_id, access_token, refresh_token, expires_at,
-              token_type, scope, connected_at
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, NOW())
-            ON CONFLICT (user_id) 
-            DO UPDATE SET
-              access_token = EXCLUDED.access_token,
-              refresh_token = EXCLUDED.refresh_token,
-              expires_at = EXCLUDED.expires_at
-          `, [
-            demoUser2.id,
-            encryptedAccessToken,
-            encryptedRefreshToken,
-            expiryDate,
-            'Bearer',
-            'https://www.googleapis.com/auth/calendar.readonly'
-          ]);
-
-          logger.info('Auto-connected calendar for demo user 2');
-        }
-      } finally {
-        dbClient.release();
-      }
-    } catch (error) {
-      // Don't fail login if calendar connection fails
-      logger.warn('Failed to auto-connect calendar for demo user 2 (non-blocking)', { error });
-    }
-    
-    req.session.save((err) => {
-      if (err) {
-        logger.error('Session save error', { error: err });
-        return res.status(500).json({ error: 'Session creation failed' });
-      }
-      res.redirect(process.env.CORS_ORIGIN || 'http://localhost:3000');
-    });
+    await autoConnectDemoCalendar(demoUser2.id, 'demo user 2');
+    handleDemoLogin(req, res, demoUser2, '/');
   });
 }
 

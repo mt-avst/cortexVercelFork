@@ -5,12 +5,13 @@ import { pool } from '../config';
 import { requireAdmin, optionalAuth } from '../middleware/authenticate';
 import { getMockOpportunities, getMockOpportunity, addMockOpportunity, updateMockOpportunity, deleteMockOpportunity, addMockSessions, getMockSessions } from '../../../demo/mock-data';
 import { logger } from '../utils/logger';
+import { isDatabaseAvailable } from '../utils/database';
 import { 
   CreateOpportunitySchema, 
   UpdateOpportunitySchema, 
-  OpportunityQuerySchema,
+  CreateSessionsSchema,
   validateRequest,
-  validateQuery 
+  validateSessionData
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 
@@ -18,24 +19,7 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
 
 const router: Router = Router();
 
-// Helper function to check if database is available
-const isDatabaseAvailable = async (): Promise<boolean> => {
-  try {
-    // Check if DATABASE_URL is set
-    if (!process.env.DATABASE_URL) {
-      logger.info('DATABASE_URL not set, using mock data');
-      return false;
-    }
-    // Test both connection and that the opportunities table exists
-    await pool.query('SELECT 1 FROM opportunities LIMIT 1');
-    return true;
-  } catch (error) {
-    logger.warn('Database not available, using mock data', { error: (error as Error).message });
-    return false;
-  }
-};
-
-// Validation helpers
+// Validation helper
 const validateUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
@@ -43,41 +27,6 @@ const validateUrl = (url: string): boolean => {
   } catch {
     return false;
   }
-};
-
-// Helper function to validate session data
-const validateSessionData = (data: CreateSessionRequest): string[] => {
-  const errors: string[] = [];
-  
-  if (data.start_time !== undefined) {
-    const startTime = new Date(data.start_time);
-    if (isNaN(startTime.getTime())) {
-      errors.push('Start time must be a valid ISO date string');
-    }
-  }
-  
-  if (data.end_time !== undefined) {
-    const endTime = new Date(data.end_time);
-    if (isNaN(endTime.getTime())) {
-      errors.push('End time must be a valid ISO date string');
-    }
-  }
-  
-  if (data.start_time && data.end_time) {
-    const startTime = new Date(data.start_time);
-    const endTime = new Date(data.end_time);
-    if (startTime >= endTime) {
-      errors.push('End time must be after start time');
-    }
-  }
-  
-  if (data.capacity !== undefined) {
-    if (data.capacity < 1 || data.capacity > 100) {
-      errors.push('Capacity must be between 1 and 100');
-    }
-  }
-  
-  return errors;
 };
 
 // GET /api/opportunities - List opportunities

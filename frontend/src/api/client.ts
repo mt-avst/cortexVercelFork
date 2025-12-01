@@ -1,17 +1,23 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 
 import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
-import { ApiClient, AppError, mapAxiosError } from '../utils/errorHandler';
+import { AppError, mapAxiosError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, redirectToAuth, AUTH_ENDPOINTS } from '../utils/navigation';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse, AdminRequest } from './types';
 
-// Create enhanced API client with error handling
-// Use getApiBaseUrl() directly for runtime evaluation instead of frozen API_CONFIG
-const apiClient = new ApiClient(getApiBaseUrl() + '/api');
-
-// Legacy axios instance for backward compatibility
+/**
+ * Primary API client for all frontend API requests
+ * 
+ * This axios instance includes:
+ * - Request ID generation for tracing
+ * - Response time logging
+ * - Automatic 401 handling with redirect to login
+ * - Cache-busting headers
+ * 
+ * All API calls should use this instance via the exported functions below.
+ */
 const api = axios.create({
   baseURL: getApiBaseUrl() + '/api',
   withCredentials: true,
@@ -131,7 +137,8 @@ api.interceptors.response.use(
  * @throws {AppError} For other API errors
  */
 export const getMe = async (): Promise<User> => {
-  return apiClient.get<User>('/me');
+  const response = await api.get('/me');
+  return response.data;
 };
 
 export const logout = async (): Promise<void> => {
@@ -184,7 +191,8 @@ export const getOpportunities = async (params?: {
   q?: string;
   status?: string;
 }): Promise<Opportunity[]> => {
-  return apiClient.get<Opportunity[]>('/opportunities', { params });
+  const response = await api.get('/opportunities', { params });
+  return response.data;
 };
 
 export const getOpportunity = async (id: string, params?: { _t?: number }): Promise<Opportunity> => {

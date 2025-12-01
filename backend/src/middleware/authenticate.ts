@@ -1,14 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
-import { SessionUser, AuthRequest } from '../types';
+import { SessionUser } from '../types';
 
-// Extend Express Request type to include user
-declare global {
-  namespace Express {
-    interface Request {
-      user?: SessionUser;
-    }
-  }
-}
+// Note: Express Request extension is defined in ../types/index.ts
 
 // Middleware to require authentication
 export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
