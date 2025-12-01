@@ -139,7 +139,7 @@ stop_services() {
     
     # Kill npm processes
     pkill -f "npm run dev:all" 2>/dev/null || true
-    pkill -f "react-scripts start" 2>/dev/null || true
+    pkill -f "vite" 2>/dev/null || true
     pkill -f "nodemon" 2>/dev/null || true
     
     # Kill processes on ports

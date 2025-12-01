@@ -4,6 +4,10 @@
 // These components are styled using the Momentum Design System CSS
 // and provide type-safe props interfaces.
 
+// ============================================
+// Custom Momentum Design System Components
+// ============================================
+
 export { Button, type ButtonProps, type ButtonVariant, type ButtonSize } from './Button';
 export { 
   Card, 
@@ -40,4 +44,41 @@ export {
   type DropdownDividerProps,
   type DropdownHeaderProps
 } from './Dropdown';
+
+// ============================================
+// shadcn/ui Components (Radix UI based)
+// ============================================
+
+// Avatar - User profile images with fallback
+export { Avatar, AvatarImage, AvatarFallback } from './avatar';
+
+// Tabs - Tabbed navigation component
+export { Tabs, TabsList, TabsTrigger, TabsContent } from './tabs';
+
+// Tooltip - Hover tooltips
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from './tooltip';
+
+// Sheet - Slide-out panel/drawer
+export {
+  Sheet,
+  SheetPortal,
+  SheetOverlay,
+  SheetTrigger,
+  SheetClose,
+  SheetContent,
+  SheetHeader,
+  SheetFooter,
+  SheetTitle,
+  SheetDescription,
+} from './sheet';
+
+// Carousel - Image/content carousel
+export {
+  type CarouselApi,
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from './carousel';
 
