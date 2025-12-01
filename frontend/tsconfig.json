@@ -24,5 +24,6 @@
     }
   },
   "include": ["src", "../shared"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/*", "src/shared/test-utils.ts", "../shared/test-utils/**/*"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
