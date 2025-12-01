@@ -1,5 +1,32 @@
 {
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
-  "installCommand": "npm install && cd frontend && npm install && cd ../backend && npm install"
+  "installCommand": "npm install && cd frontend && npm install && cd ../backend && npm install",
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/auth/google-login",
+      "destination": "/api/auth/google-login"
+    },
+    {
+      "source": "/auth/google-callback",
+      "destination": "/api/auth/google-callback"
+    },
+    {
+      "source": "/auth/demo-login",
+      "destination": "/api/auth/demo-login"
+    },
+    {
+      "source": "/auth/admin-login",
+      "destination": "/api/auth/admin-login"
+    },
+    {
+      "source": "/auth/logout",
+      "destination": "/api/auth/logout"
+    }
+  ]
 }
