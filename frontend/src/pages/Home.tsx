@@ -221,8 +221,7 @@ const Home: React.FC = memo(() => {
           <div className="container mt-4" style={{ position: 'relative', zIndex: 10 }}>
             <div className="row" style={{ marginBottom: 'var(--spacing-section)' }}>
               <div className="col-12">
-                <div className="eyebrow-label">Adaptavist</div>
-                <h1 className="mb-3 adaptalabs-home-title">Cortex</h1>
+                <h1 className="mb-3 cortex-brand-title" style={{ fontSize: '3.25rem' }}>Cortex</h1>
               
               {/* Welcome text */}
               <div className="home-intro-text">
