@@ -1,11 +1,14 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
 
+/** Form field value type for opportunity form handlers */
+type FormFieldValue = string | number | boolean | undefined;
+
 interface ContentDetailsTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
-  handleInputChange: (field: string, value: any) => void;
-  handleBlur?: (field: string, value: any) => void;
+  handleInputChange: (field: string, value: FormFieldValue) => void;
+  handleBlur?: (field: string, value: FormFieldValue) => void;
 }
 
 const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({

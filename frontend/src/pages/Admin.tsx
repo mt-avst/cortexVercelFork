@@ -65,15 +65,15 @@ const Admin: React.FC = () => {
   // Sort filtered opportunities (memoized for performance)
   const sortedOpportunities = useMemo(() => {
     return [...filteredOpportunities].sort((a, b) => {
-      let aValue: any = a[sortField];
-      let bValue: any = b[sortField];
+      let aValue: string | number = a[sortField];
+      let bValue: string | number = b[sortField];
       
       if (sortField === 'created_at') {
         aValue = new Date(a.created_at).getTime();
         bValue = new Date(b.created_at).getTime();
       }
       
-      if (typeof aValue === 'string') {
+      if (typeof aValue === 'string' && typeof bValue === 'string') {
         aValue = aValue.toLowerCase();
         bValue = bValue.toLowerCase();
       }
@@ -99,7 +99,7 @@ const Admin: React.FC = () => {
     try {
       setLoadingOpportunities(true);
       setError('');
-      const params: any = {};
+      const params: { status?: string; type?: string } = {};
       // If forceClearFilter is true, don't apply filters to ensure new items are visible
       if (!forceClearFilter) {
         if (statusFilter) params.status = statusFilter;
@@ -109,7 +109,7 @@ const Admin: React.FC = () => {
       const data = await getOpportunities(params);
       // Performance: debug logging disabled in production
       setOpportunities(data || []);
-    } catch (err) {
+    } catch (error: unknown) {
       // Performance: error logging kept but reduced verbosity
       setError('Failed to load research studies');
       setOpportunities([]);
@@ -123,7 +123,7 @@ const Admin: React.FC = () => {
       setLoadingStats(true);
       const stats = await getDashboardStats();
       setDashboardStats(stats);
-    } catch (err) {
+    } catch (error: unknown) {
       // Don't show error to user - dashboard stats are non-critical
     } finally {
       setLoadingStats(false);
@@ -176,7 +176,7 @@ const Admin: React.FC = () => {
       await deleteOpportunity(deleteConfirm.opportunity.id);
       await loadOpportunities();
       setDeleteConfirm({ show: false, opportunity: null });
-    } catch (err) {
+    } catch (error: unknown) {
       setError('Failed to delete research study');
     }
   };
@@ -189,7 +189,7 @@ const Admin: React.FC = () => {
     try {
       await duplicateOpportunity(id);
       await loadOpportunities();
-    } catch (err) {
+    } catch (error: unknown) {
       setError('Failed to duplicate research study');
     }
   };

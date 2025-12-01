@@ -2,11 +2,14 @@ import React from 'react';
 import { SESSION_DURATION } from '../../shared/constants';
 import { OpportunityFormData } from '../../api/types';
 
+/** Form field value type for opportunity form handlers */
+type FormFieldValue = string | number | boolean | undefined;
+
 interface BasicInfoTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
-  handleInputChange: (field: string, value: any) => void;
-  handleBlur?: (field: string, value: any) => void;
+  handleInputChange: (field: string, value: FormFieldValue) => void;
+  handleBlur?: (field: string, value: FormFieldValue) => void;
   allowUserSubmission?: boolean;
 }
 

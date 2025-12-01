@@ -3,6 +3,21 @@ import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
 import { getCalendarEvents, getAvailability } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
+import { navigation } from '../utils/navigation';
+import { logger } from '../utils/logger';
+
+/**
+ * Safely convert a potentially Date or string value to ISO string
+ * This handles runtime type inconsistencies from API responses
+ */
+const toISOString = (value: string | Date | unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value instanceof Date) return value.toISOString();
+  if (value && typeof value === 'object' && 'toISOString' in value && typeof (value as { toISOString: () => string }).toISOString === 'function') {
+    return (value as { toISOString: () => string }).toISOString();
+  }
+  return String(value);
+};
 import { 
   CalendarX, 
   Lock, 
@@ -89,9 +104,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   const isSlotConfirmed = (slot: AvailableSlot) => {
     // Slot times are ISO strings per type definition
-    // Convert to string safely (handles both string and Date at runtime)
-    const slotStart = typeof slot.start === 'string' ? slot.start : (slot.start as any)?.toISOString() || String(slot.start);
-    const slotEnd = typeof slot.end === 'string' ? slot.end : (slot.end as any)?.toISOString() || String(slot.end);
+    // Use toISOString helper to safely handle runtime type inconsistencies
+    const slotStart = toISOString(slot.start);
+    const slotEnd = toISOString(slot.end);
     const slotKey = `${slotStart}|${slotEnd}`;
     const isConfirmed = confirmedSlots.has(slotKey);
     
@@ -256,7 +271,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         const matchesDuration = Math.abs(slotDurationMinutes - durationMinutes) <= toleranceMinutes;
         
         if (!matchesDuration) {
-          console.log(`🔍 Filtered out slot with duration ${slotDurationMinutes.toFixed(2)}min (expected ${durationMinutes}min):`, {
+          logger.debug(`🔍 Filtered out slot with duration ${slotDurationMinutes.toFixed(2)}min (expected ${durationMinutes}min):`, {
             start: slot.start,
             end: slot.end,
             duration: slotDurationMinutes
@@ -412,7 +427,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           // Check both keys to catch any inconsistencies
           if (seen.has(slotKey) || seen.has(timeKey)) {
             duplicateKeys.add(slotKey);
-            console.warn(`🔍 DUPLICATE SLOT REMOVED:`, { 
+            logger.warn('Duplicate slot removed', { 
               slotKey, 
               timeKey,
               start: slot.start, 
@@ -429,7 +444,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         
         // Log if duplicates were found
         if (duplicateKeys.size > 0) {
-          console.warn(`⚠️ Found ${duplicateKeys.size} duplicate slot(s) for ${dateString}:`, Array.from(duplicateKeys));
+          logger.warn(`Found ${duplicateKeys.size} duplicate slot(s) for ${dateString}`, { duplicates: Array.from(duplicateKeys) });
         }
         
         // Sort by start time to ensure chronological order
@@ -578,7 +593,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         const slotsToRender = column.slots.filter((slot, idx) => {
                           const slotKey = `${slot.start}|${slot.end}`;
                           if (renderedKeys.has(slotKey)) {
-                            console.error(`🚨 CRITICAL: Filtering duplicate slot at render (index ${idx}):`, {
+                            logger.error(`Filtering duplicate slot at render (index ${idx})`, {
                               slotKey,
                               start: slot.start,
                               end: slot.end,
@@ -615,7 +630,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             return startDiff < 60000 && endDiff < 60000; // Within 1 minute
                           });
                           if (closeMatches.length > 0) {
-                            console.warn('⚠️ Found sessions close to slot but not matched:', {
+                            logger.debug('Found sessions close to slot but not matched', {
                               slot: { start: slot.start, end: slot.end },
                               closeMatches: closeMatches.map(s => ({
                                 id: s.id,
@@ -651,7 +666,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         
                         // Slot height calculation
                         if (roundedHeight > 5) {
-                          console.warn(`⚠️ UNUSUALLY LARGE SLOT HEIGHT: ${roundedHeight}% for slot ${slot.start} to ${slot.end}`, {
+                          logger.warn(`Unusually large slot height: ${roundedHeight}%`, {
                             slotStartHour,
                             slotEndHour,
                             topPosition,
@@ -728,12 +743,12 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             }
                             return tooltipText;
                           } catch (error) {
-                            console.error('Error formatting tooltip:', error, slot);
+                            logger.error('Error formatting tooltip', { errorMessage: String(error), slotStart: slot.start });
                             return `${slot.start} to ${slot.end}`;
                           }
                         })()}
                         onClick={() => {
-                          console.log('Slot clicked:', {
+                          logger.debug('Slot clicked:', {
                             slotKey: `${slot.start}|${slot.end}`,
                             slotIndex,
                             isSelected,
@@ -747,19 +762,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                           // Allow clicking on free slots, selected slots, confirmed slots, and existing sessions
                           // Prevent clicking on busy slots, full sessions, and allocated slots
                           if (isBusy || (session && session.remaining <= 0) || isAllocated) {
-                            console.log('Slot click blocked - busy, full, or allocated');
+                            logger.debug('Slot click blocked - busy, full, or allocated');
                             return; // Don't allow clicking on busy, full, or allocated slots
                           }
                           
                           if (isSelected) {
-                            console.log('Deselecting slot');
+                            logger.debug('Deselecting slot');
                             onSlotDeselect(slot);
                           } else if (isConfirmed || session) {
                             // Existing session or confirmed slot - deselect immediately in one click
-                            console.log(session ? 'Deselecting existing session slot' : 'Unassigning confirmed slot');
+                            logger.debug(session ? 'Deselecting existing session slot' : 'Unassigning confirmed slot');
                             onSlotDeselect(slot);
                           } else {
-                            console.log('Selecting free slot');
+                            logger.debug('Selecting free slot');
                             onSlotSelect(slot);
                           }
                         }}
@@ -907,7 +922,7 @@ const ListView: React.FC<{
   sessions: Session[];
   isTemporary: boolean;
 }> = ({ sessions, isTemporary }) => {
-  console.log('📋 ListView rendering with sessions:', {
+  logger.debug('📋 ListView rendering with sessions:', {
     sessionsCount: sessions.length,
     sessions: sessions.map(s => ({
       id: s.id,
@@ -1064,7 +1079,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     try {
       const key = getStorageKey('selected');
       const stored = sessionStorage.getItem(key);
-      console.log('Loading selected slots from storage:', { key, stored });
+      logger.debug('Loading selected slots from storage:', { key, stored });
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch {
       return new Set();
@@ -1075,7 +1090,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     try {
       const key = getStorageKey('confirmed');
       const stored = sessionStorage.getItem(key);
-      console.log('Loading confirmed slots from storage:', { key, stored });
+      logger.debug('Loading confirmed slots from storage:', { key, stored });
       return stored ? new Set(JSON.parse(stored)) : new Set();
     } catch {
       return new Set();
@@ -1095,7 +1110,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   // Debug component mount
   useEffect(() => {
-    console.log('🟢 AdminSessionManager mounted:', {
+    logger.debug('🟢 AdminSessionManager mounted:', {
       opportunityId,
       urlId,
       isTemporary,
@@ -1119,9 +1134,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       const key = getStorageKey('selected');
       const value = JSON.stringify(Array.from(slots));
       sessionStorage.setItem(key, value);
-      console.log('Persisted selected slots:', { key, value });
+      logger.debug('Persisted selected slots:', { key, value });
     } catch (error) {
-      console.warn('Failed to persist selected slots:', error);
+      logger.warn('Failed to persist selected slots', { errorMessage: String(error) });
     }
   };
 
@@ -1130,9 +1145,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       const key = getStorageKey('confirmed');
       const value = JSON.stringify(Array.from(slots));
       sessionStorage.setItem(key, value);
-      console.log('Persisted confirmed slots:', { key, value });
+      logger.debug('Persisted confirmed slots:', { key, value });
     } catch (error) {
-      console.warn('Failed to persist confirmed slots:', error);
+      logger.warn('Failed to persist confirmed slots', { errorMessage: String(error) });
     }
   };
   
@@ -1141,14 +1156,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     const date = new Date();
     date.setUTCDate(date.getUTCDate() + 1); // Start from tomorrow
     date.setUTCHours(0, 0, 0, 0); // Start at midnight UTC for consistent day boundaries
-    console.log('🗓️ Calendar startDate initialized:', date.toISOString());
+    logger.debug('Calendar startDate initialized', { date: date.toISOString() });
     return date;
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
     date.setUTCDate(date.getUTCDate() + 7); // 7 days from today (1 week)
     date.setUTCHours(23, 59, 59, 999); // End at end of day UTC
-    console.log('🗓️ Calendar endDate initialized:', date.toISOString());
+    logger.debug('Calendar endDate initialized', { date: date.toISOString() });
     return date;
   });
   const [durationMinutes, setDurationMinutes] = useState<number | undefined>(
@@ -1171,19 +1186,19 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         // For new/temporary opportunities, try to restore from sessionStorage
         const stored = getStoredConfirmedSlots();
         if (stored.size > 0) {
-          console.log('🔄 Restoring confirmed slots from storage for temporary opportunity:', {
+          logger.debug('🔄 Restoring confirmed slots from storage for temporary opportunity:', {
             storedCount: stored.size,
             stored: Array.from(stored).slice(0, 3)
           });
           setConfirmedSlots(stored);
         } else if (confirmedSlots.size > 0) {
-          console.log('🔄 Clearing confirmed slots (no sessions and no stored slots)');
+          logger.debug('🔄 Clearing confirmed slots (no sessions and no stored slots)');
           setConfirmedSlots(new Set());
           persistConfirmedSlots(new Set());
         }
       } else if (confirmedSlots.size > 0) {
         // For saved opportunities with no sessions, clear confirmed slots
-        console.log('🔄 Clearing confirmed slots (no sessions in saved opportunity)');
+        logger.debug('🔄 Clearing confirmed slots (no sessions in saved opportunity)');
         setConfirmedSlots(new Set());
         persistConfirmedSlots(new Set());
       }
@@ -1192,13 +1207,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
     const sessionSlots = new Set<string>();
     sessions.forEach(session => {
-          // Ensure start_time and end_time are ISO strings
-          const startTime = typeof session.start_time === 'string' 
-            ? session.start_time 
-            : (session.start_time as any)?.toISOString() || String(session.start_time);
-          const endTime = typeof session.end_time === 'string'
-            ? session.end_time
-            : (session.end_time as any)?.toISOString() || String(session.end_time);
+      // Ensure start_time and end_time are ISO strings using helper
+      const startTime = toISOString(session.start_time);
+      const endTime = toISOString(session.end_time);
       
       const slotKey = `${startTime}|${endTime}`;
       sessionSlots.add(slotKey);
@@ -1213,7 +1224,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                         !currentArray.every((slot, index) => slot === newArray[index]);
       
       if (hasChanged) {
-        console.log('🔄 Updating confirmed slots due to session changes:', {
+        logger.debug('🔄 Updating confirmed slots due to session changes:', {
           oldSlots: currentArray,
           newSlots: newArray,
           oldCount: currentArray.length,
@@ -1227,11 +1238,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     });
     
     // Process sessions and available slots
-    console.log('🔄 Syncing confirmed slots with sessions:', {
+    logger.debug('🔄 Syncing confirmed slots with sessions:', {
       sessionsCount: sessions.length,
             sessions: sessions.map(s => {
-              const startTime = typeof s.start_time === 'string' ? s.start_time : (s.start_time as any)?.toISOString() || String(s.start_time);
-              const endTime = typeof s.end_time === 'string' ? s.end_time : (s.end_time as any)?.toISOString() || String(s.end_time);
+              const startTime = toISOString(s.start_time);
+              const endTime = toISOString(s.end_time);
         return {
           id: s.id,
           start_time: startTime,
@@ -1244,8 +1255,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       confirmedSlotsCount: sessionSlots.size,
       confirmedSlotsArray: Array.from(sessionSlots),
       sampleAvailableSlots: availableSlots.slice(0, 5).map(slot => {
-        const start = typeof slot.start === 'string' ? slot.start : (slot.start as any)?.toISOString() || String(slot.start);
-        const end = typeof slot.end === 'string' ? slot.end : (slot.end as any)?.toISOString() || String(slot.end);
+        const start = toISOString(slot.start);
+        const end = toISOString(slot.end);
         const slotKey = `${start}|${end}`;
         return {
           start,
@@ -1265,7 +1276,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         sessionStorage.removeItem(getStorageKey('selected'));
         sessionStorage.removeItem(getStorageKey('confirmed'));
       } catch (error) {
-        console.warn('Failed to cleanup persisted slots:', error);
+        logger.warn('Failed to cleanup persisted slots', { errorMessage: String(error) });
       }
     };
   }, [urlId, opportunityId]);
@@ -1284,7 +1295,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       
       // Validate date range before making API calls
       if (startDate >= endDate) {
-        console.error('Invalid date range: start date is not before end date');
+        logger.error('Invalid date range: start date is not before end date');
         setError('Invalid date range: start date must be before end date');
         return;
       }
@@ -1304,7 +1315,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       setAvailableSlots(availabilityResult.available_slots);
       
       // Match available slots with sessions
-      console.log('📅 Calendar data loaded:', {
+      logger.debug('📅 Calendar data loaded:', {
         eventsCount: eventsResult.length,
         availableSlotsCount: availabilityResult.available_slots.length,
         sessionsCount: sessions.length,
@@ -1327,7 +1338,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         const sessionKeys = new Set(sessions.map(s => `${s.start_time}|${s.end_time}`));
         const slotKeys = new Set(availabilityResult.available_slots.map(s => `${s.start}|${s.end}`));
         const matchedKeys = Array.from(sessionKeys).filter(key => slotKeys.has(key));
-        console.log('🔍 Session/Slot matching:', {
+        logger.debug('🔍 Session/Slot matching:', {
           sessionKeysCount: sessionKeys.size,
           slotKeysCount: slotKeys.size,
           matchedCount: matchedKeys.length,
@@ -1370,11 +1381,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         setDaysPerPage(30); // Cap at maximum dropdown option
       }
       
-    } catch (err: any) {
-      console.error('Error loading calendar data:', err);
-      const errorMessage = err.response?.data?.error || 
-                          err.response?.statusText || 
-                          err.message || 
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string }; statusText?: string }; message?: string };
+      logger.error('Error loading calendar data', { 
+        error: err instanceof Error ? err : undefined,
+        errorMessage: err instanceof Error ? err.message : String(err) 
+      });
+      const errorMessage = axiosError.response?.data?.error || 
+                          axiosError.response?.statusText || 
+                          axiosError.message || 
                           'Failed to load calendar data';
       setError(errorMessage);
     } finally {
@@ -1404,7 +1419,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   const handleSlotSelect = useCallback((slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
-    console.log('🔵 SLOT SELECTED:', { 
+    logger.debug('🔵 SLOT SELECTED:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),
       opportunityId,
@@ -1413,7 +1428,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     });
     setSelectedSlots(prev => {
       const newSet = new Set([...prev, slotKey]);
-      console.log('🔵 New selected slots:', Array.from(newSet));
+      logger.debug('New selected slots', { slots: Array.from(newSet) });
       persistSelectedSlots(newSet);
       return newSet;
     });
@@ -1421,7 +1436,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
   const handleSlotDeselect = useCallback(async (slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
-    console.log('handleSlotDeselect called:', { 
+    logger.debug('handleSlotDeselect called:', { 
       slotKey, 
       currentSelectedSlots: Array.from(selectedSlots),
       currentConfirmedSlots: Array.from(confirmedSlots),
@@ -1444,16 +1459,16 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     // If slot has an actual session (not a temp one), delete it from database
     if (session && session.id && !session.id.startsWith('temp-session-')) {
       try {
-        console.log('🗑️ Deleting session from database:', session.id);
+        logger.debug('Deleting session from database', { sessionId: session.id });
         const { deleteSession } = await import('../api/client');
         await deleteSession(session.id);
         
         // Remove session from the sessions array
         const updatedSessions = sessions.filter(s => s.id !== session.id);
         onSessionsChange(updatedSessions);
-        console.log('✅ Session deleted successfully');
-      } catch (error) {
-        console.error('❌ Error deleting session:', error);
+        logger.debug('Session deleted successfully');
+      } catch (error: unknown) {
+        logger.error('Error deleting session', { error: error instanceof Error ? error : undefined, errorMessage: error instanceof Error ? error.message : String(error) });
         setError('Failed to delete session. Please try again.');
       }
     }
@@ -1462,7 +1477,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     setSelectedSlots(prev => {
       const newSet = new Set(prev);
       newSet.delete(slotKey);
-      console.log('New selected slots after deselect:', Array.from(newSet));
+      logger.debug('New selected slots after deselect', { slots: Array.from(newSet) });
       persistSelectedSlots(newSet);
       return newSet;
     });
@@ -1470,7 +1485,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     setConfirmedSlots(prev => {
       const newSet = new Set(prev);
       newSet.delete(slotKey);
-      console.log('New confirmed slots after deselect:', Array.from(newSet));
+      logger.debug('New confirmed slots after deselect', { slots: Array.from(newSet) });
       persistConfirmedSlots(newSet);
       return newSet;
     });
@@ -1531,14 +1546,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         
         // If we have an opportunity save callback, save the opportunity
         if (onOpportunitySave) {
-          console.log('🚀 Calling onOpportunitySave callback for temporary opportunity');
+          logger.debug('🚀 Calling onOpportunitySave callback for temporary opportunity');
           // Small delay to ensure state has propagated to parent component
           await new Promise(resolve => setTimeout(resolve, 100));
           try {
             // Get the opportunity ID before saving (it should be set by parent)
             const opportunityIdBeforeSave = opportunityId;
             const savedOpportunityId = await onOpportunitySave();
-            console.log('✅ onOpportunitySave completed successfully for temporary opportunity:', {
+            logger.debug('✅ onOpportunitySave completed successfully for temporary opportunity:', {
               returnedOpportunityId: savedOpportunityId,
               previousOpportunityId: opportunityIdBeforeSave
             });
@@ -1547,7 +1562,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             const opportunityIdToUse = savedOpportunityId || opportunityId || (urlId && urlId !== 'new' ? urlId : null);
             
             if (opportunityIdToUse && opportunityIdToUse !== opportunityIdBeforeSave) {
-              console.log('🔄 Creating sessions for saved opportunity:', {
+              logger.debug('🔄 Creating sessions for saved opportunity:', {
                 oldId: opportunityIdBeforeSave,
                 newId: opportunityIdToUse,
                 sessionCount: sessionData.length
@@ -1556,7 +1571,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               try {
                 const { createSessions } = await import('../api/client');
                 const createdSessions = await createSessions(opportunityIdToUse, sessionData);
-                console.log('✅ CREATE MODE - Sessions created directly:', {
+                logger.debug('✅ CREATE MODE - Sessions created directly:', {
                   createdCount: createdSessions.length,
                   createdSessions: createdSessions.map(s => ({
                     id: s.id,
@@ -1570,50 +1585,52 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 onSessionsChange(createdSessions);
                 
                 // After sessions are created, navigate to admin dashboard
-                console.log('✅ All sessions created, navigating to admin dashboard');
+                logger.info('All sessions created, navigating to admin dashboard');
                 // Use callback navigation to avoid full page reload (which clears session)
                 if (onNavigate) {
                   onNavigate('/admin');
                 } else {
-                  // Fallback to window.location if callback not provided
-                  window.location.href = '/admin';
+                  // Fallback to navigation utility if callback not provided
+                  navigation.toAdmin();
                 }
-              } catch (sessionError) {
-                console.error('❌ Error creating sessions after opportunity save:', sessionError);
+              } catch (sessionError: unknown) {
+                const errorMessage = sessionError instanceof Error ? sessionError.message : String(sessionError);
+                logger.error('Error creating sessions after opportunity save', { errorMessage });
                 setError('Opportunity saved but failed to create sessions. Please add them manually.');
                 // Navigate anyway so user can manually add sessions
                 if (onNavigate) {
                   onNavigate('/admin');
                 } else {
-                  window.location.href = '/admin';
+                  navigation.toAdmin();
                 }
               }
             } else if (!opportunityIdToUse) {
-              console.log('⚠️ Cannot create sessions: Opportunity ID not returned from save callback. Navigating to admin.');
+              logger.warn('Cannot create sessions: Opportunity ID not returned from save callback. Navigating to admin.');
               if (onNavigate) {
                 onNavigate('/admin');
               } else {
-                window.location.href = '/admin';
+                navigation.toAdmin();
               }
             } else {
-              console.log('⚠️ Opportunity ID unchanged, sessions may have been created by parent component. Navigating to admin.');
+              logger.warn('Opportunity ID unchanged, sessions may have been created by parent component. Navigating to admin.');
               if (onNavigate) {
                 onNavigate('/admin');
               } else {
-                window.location.href = '/admin';
+                navigation.toAdmin();
               }
             }
-          } catch (saveError) {
-            console.error('❌ Error saving temporary opportunity:', saveError);
+          } catch (saveError: unknown) {
+            const errorMessage = saveError instanceof Error ? saveError.message : String(saveError);
+            logger.error('Error saving temporary opportunity', { errorMessage });
             // Navigate to admin even on error
             if (onNavigate) {
               onNavigate('/admin');
             } else {
-              window.location.href = '/admin';
+              navigation.toAdmin();
             }
           }
         } else {
-          console.log('⚠️ onOpportunitySave callback not provided for temporary opportunity');
+          logger.debug('⚠️ onOpportunitySave callback not provided for temporary opportunity');
         }
         
         // Refresh calendar to show updated state immediately (before navigation)
@@ -1627,7 +1644,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       // Create sessions via API
       const createdSessions = await createSessions(opportunityId, sessionData);
-      console.log('✅ Sessions created successfully:', {
+      logger.debug('✅ Sessions created successfully:', {
         createdCount: createdSessions.length,
         createdSessions: createdSessions.map(s => ({
           id: s.id,
@@ -1642,17 +1659,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       
       // If we have an opportunity save callback, save the opportunity
       if (onOpportunitySave) {
-        console.log('🚀 Calling onOpportunitySave callback');
+        logger.debug('🚀 Calling onOpportunitySave callback');
         try {
           await onOpportunitySave();
-          console.log('✅ onOpportunitySave completed successfully');
+          logger.debug('✅ onOpportunitySave completed successfully');
         } catch (saveError) {
-          console.error('❌ Error saving opportunity:', saveError);
+          logger.error('Error saving opportunity', { error: saveError instanceof Error ? saveError : undefined, errorMessage: saveError instanceof Error ? saveError.message : String(saveError) });
           // Don't fail the entire operation if opportunity save fails
           // Sessions were already created successfully
         }
       } else {
-        console.log('⚠️ onOpportunitySave callback not provided');
+        logger.debug('⚠️ onOpportunitySave callback not provided');
       }
       
       // Mark selected slots as confirmed
@@ -1667,9 +1684,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // Refresh calendar to show updated state immediately
       await loadCalendarData();
       
-    } catch (err: any) {
-      console.error('Error creating sessions:', err);
-      setError(err.response?.data?.error || 'Failed to create sessions');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      logger.error('Error creating sessions', { 
+        error: err instanceof Error ? err : undefined,
+        errorMessage: err instanceof Error ? err.message : String(err) 
+      });
+      setError(axiosError.response?.data?.error || 'Failed to create sessions');
     } finally {
       setLoading(false);
     }
@@ -1695,7 +1716,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     // Always allow reset if there are any visual states or sessions
     if (sessions.length === 0 && selectedSlots.size === 0 && confirmedSlots.size === 0) {
       // Even if state shows zero, if there are visually assigned slots, allow reset
-      console.log('No state found, but allowing reset to clear visual state');
+      logger.debug('No state found, but allowing reset to clear visual state');
     }
 
     // Check if any sessions have bookings
@@ -1716,7 +1737,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // If there are actual sessions, delete them from the backend
       if (sessions.length > 0) {
         const result = await deleteAllSessions(opportunityId);
-        console.log(result.message);
+        logger.debug(result.message);
       }
       
       // Update the sessions list to empty
@@ -1731,10 +1752,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // Refresh calendar to show updated state
       await loadCalendarData();
       
-    } catch (error: any) {
-      console.error('Error resetting sessions:', error);
-      if (error.response?.data?.error) {
-        setError(error.response.data.error);
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } }; message?: string };
+      logger.error('Error resetting sessions', { 
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error) 
+      });
+      if (axiosError.response?.data?.error) {
+        setError(axiosError.response.data.error);
       } else {
         setError('Failed to reset sessions');
       }
@@ -1916,7 +1941,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     if (newDate <= endDate) {
                       setStartDate(newDate);
                     } else {
-                      console.warn('Start date cannot be after end date');
+                      logger.warn('Start date cannot be after end date');
                     }
                   }}
                   disabled={disabled}
@@ -1938,7 +1963,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     if (newDate >= startDate) {
                       setEndDate(newDate);
                     } else {
-                      console.warn('End date cannot be before start date');
+                      logger.warn('End date cannot be before start date');
                     }
                   }}
                   disabled={disabled}
@@ -2115,7 +2140,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  console.log('Reset button clicked. Current state:', {
+                  logger.debug('Reset button clicked. Current state:', {
                     sessionsLength: sessions.length,
                     selectedSlotsSize: selectedSlots.size,
                     confirmedSlotsSize: confirmedSlots.size,

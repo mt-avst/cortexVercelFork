@@ -406,8 +406,13 @@ export interface LogContext {
   url?: string;
   statusCode?: number;
   responseTime?: number;
-  error?: Error;
-  [key: string]: any;
+  /** Error object - use errorMessage for string error messages */
+  error?: Error | unknown;
+  /** Human-readable error message string */
+  errorMessage?: string;
+  /** Additional error details */
+  errorDetails?: { name?: string; message?: string; stack?: string } | Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 // ============================================================================

@@ -154,9 +154,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
     try {
       const data = await getOpportunityAnalytics(id, period);
       setAnalytics(data);
-    } catch (err: any) {
-      console.error('Error loading analytics:', err);
-      if (err.response?.status === 403) {
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number } };
+      if (axiosError.response?.status === 403) {
         setError('You do not have permission to view analytics for this opportunity');
       }
     } finally {
@@ -176,11 +176,11 @@ const OpportunityAnalyticsPage: React.FC = () => {
       // Views = users who clicked to see details
       // Actions = users who clicked action button (open link for polls/surveys, booked session for tests/interviews)
       await loadAnalytics(selectedPeriod);
-    } catch (err: any) {
-      console.error('Error loading data:', err);
-      if (err.response?.status === 404) {
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number } };
+      if (axiosError.response?.status === 404) {
         setError('Opportunity not found');
-      } else if (err.response?.status === 403) {
+      } else if (axiosError.response?.status === 403) {
         setError('You do not have permission to view analytics for this opportunity');
       } else {
         setError('Failed to load analytics');

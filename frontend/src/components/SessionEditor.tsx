@@ -138,9 +138,9 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
         capacity: 1,
         location_or_meet_link_optional: ''
       });
-    } catch (err: any) {
-      console.error('Error creating session:', err);
-      setError(err.response?.data?.error || 'Failed to create session');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to create session');
     } finally {
       setSaving(false);
     }
@@ -164,9 +164,9 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
       onSessionsChange([...sessions, ...createdSessions]);
       setBatchSessions([]);
       setShowBatchAdd(false);
-    } catch (err: any) {
-      console.error('Error creating batch sessions:', err);
-      setError(err.response?.data?.error || 'Failed to create sessions');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to create sessions');
     } finally {
       setSaving(false);
     }
@@ -180,9 +180,9 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
       
       onSessionsChange(sessions.map(s => s.id === sessionId ? updatedSession : s));
       setEditingSession(null);
-    } catch (err: any) {
-      console.error('Error updating session:', err);
-      setError(err.response?.data?.error || 'Failed to update session');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to update session');
     } finally {
       setSaving(false);
     }
@@ -202,9 +202,9 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
       
       onSessionsChange(sessions.filter(s => s.id !== deleteConfirm.sessionId));
       setDeleteConfirm({ show: false, sessionId: null });
-    } catch (err: any) {
-      console.error('Error deleting session:', err);
-      setError(err.response?.data?.error || 'Failed to delete session');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to delete session');
     } finally {
       setSaving(false);
     }

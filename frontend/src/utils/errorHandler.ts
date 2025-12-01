@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosResponse } from 'axios';
 import { logger } from './logger';
+import { authNavigation } from './navigation';
 import { 
   AppError, 
   ValidationError, 
@@ -164,7 +165,7 @@ export class ApiClient {
         requestId: logger.getRequestId() || undefined,
         url: window.location.pathname,
       });
-      window.location.href = '/auth/login';
+      authNavigation.toGenericLogin();
     }
   }
 

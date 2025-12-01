@@ -57,8 +57,9 @@ const Header: React.FC = memo(() => {
       const result = await requestAdminAccess();
       setAdminRequestMessage({ type: 'success', text: result.message });
       setTimeout(() => setAdminRequestMessage(null), 5000);
-    } catch (error: any) {
-      const message = error.response?.data?.error || error.message || 'Failed to submit admin request';
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } }; message?: string };
+      const message = axiosError.response?.data?.error || axiosError.message || 'Failed to submit admin request';
       setAdminRequestMessage({ type: 'error', text: message });
       setTimeout(() => setAdminRequestMessage(null), 5000);
     } finally {

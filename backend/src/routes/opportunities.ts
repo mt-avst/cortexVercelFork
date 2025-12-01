@@ -83,7 +83,9 @@ const validateSessionData = (data: CreateSessionRequest): string[] => {
 // GET /api/opportunities - List opportunities
 router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    const { type, q, status } = req.query;
+    const type = req.query.type as string | undefined;
+    const q = req.query.q as string | undefined;
+    const status = req.query.status as string | undefined;
     const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
     
     // Check if database is available
@@ -556,7 +558,8 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
 router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: opportunityId } = req.params;
-    const { from, include_past } = req.query;
+    const from = req.query.from as string | undefined;
+    const include_past = req.query.include_past as string | undefined;
     
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();

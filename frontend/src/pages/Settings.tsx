@@ -41,8 +41,7 @@ const Settings: React.FC = () => {
       setError('');
       const prefs = await getNotificationPreferences();
       setPreferences(prefs);
-    } catch (err: any) {
-      console.error('Error loading notification preferences:', err);
+    } catch (err: unknown) {
       setError('Failed to load notification preferences');
     } finally {
       setLoadingPrefs(false);
@@ -70,8 +69,7 @@ const Settings: React.FC = () => {
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
-    } catch (err: any) {
-      console.error('Error updating notification preferences:', err);
+    } catch (err: unknown) {
       setError('Failed to save notification preferences');
     } finally {
       setSaving(false);

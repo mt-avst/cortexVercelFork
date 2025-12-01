@@ -1,3 +1,13 @@
+/**
+ * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
+ * 
+ * This file is automatically copied from the shared/ directory during the build process.
+ * Any changes should be made to the source file in the shared/ directory.
+ * 
+ * Source: See copy-shared-types.js for the source path
+ * Generated: 2025-12-01T11:43:17.469Z
+ */
+
 // Shared Test Utilities for Adaptalabs Application
 // This file contains common test utilities used by both frontend and backend tests
 
@@ -81,13 +91,14 @@ export const generateMockBooking = (overrides: Partial<any> = {}) => ({
 /**
  * Create a mock Express request object
  */
-export const createMockRequest = (overrides: Partial<Request> = {}): Partial<Request> => ({
+export const createMockRequest = (overrides: Partial<Request> = {}): any => ({
   method: 'GET',
   url: '/test',
   headers: {},
   body: {},
   params: {},
   query: {},
+  user: undefined,
   ...overrides,
 });
 

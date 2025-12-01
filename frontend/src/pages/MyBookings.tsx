@@ -4,6 +4,7 @@ import { getMyBookings, cancelBooking, rescheduleBooking } from '../api/client';
 import { BookingWithDetails } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { logger } from '../utils/logger';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
@@ -29,7 +30,7 @@ const MyBookings: React.FC = () => {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        console.log('Page became visible, refreshing bookings data');
+        logger.debug('Page became visible, refreshing bookings data');
         loadBookings();
       }
     };
@@ -45,14 +46,18 @@ const MyBookings: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Loading my bookings...');
+      logger.debug('Loading my bookings...');
       const data = await getMyBookings();
-      console.log('Loaded bookings data:', data);
-      console.log('Upcoming bookings:', data.upcoming?.length || 0);
-      console.log('Past bookings:', data.past?.length || 0);
+      logger.debug('Loaded bookings data', {
+        upcoming: data.upcoming?.length || 0,
+        past: data.past?.length || 0
+      });
       setBookings(data);
-    } catch (err) {
-      console.error('Error loading bookings:', err);
+    } catch (error: unknown) {
+      logger.error('Error loading bookings', {
+        error: error instanceof Error ? error : undefined,
+        errorDetails: error instanceof Error ? { message: error.message } : { message: String(error) }
+      });
       setError('Failed to load bookings');
     } finally {
       setLoading(false);
@@ -71,22 +76,22 @@ const MyBookings: React.FC = () => {
       await cancelBooking(cancelConfirm.bookingId);
       await loadBookings(); // Reload to update the list
       setCancelConfirm({ show: false, bookingId: null });
-    } catch (err: any) {
-      console.error('Error cancelling booking:', err);
-      // Show more specific error message if available
+    } catch (err: unknown) {
+      // Type-safe error extraction
+      const axiosError = err as { response?: { data?: { error?: string | { message?: string }; details?: string }; statusText?: string }; message?: string };
       let errorMessage = 'Failed to cancel booking';
-      if (err?.response?.data?.error) {
-        errorMessage = typeof err.response.data.error === 'string' 
-          ? err.response.data.error 
-          : err.response.data.error?.message || errorMessage;
-      } else if (err?.response?.data?.details) {
-        errorMessage = typeof err.response.data.details === 'string'
-          ? err.response.data.details
+      if (axiosError?.response?.data?.error) {
+        errorMessage = typeof axiosError.response.data.error === 'string' 
+          ? axiosError.response.data.error 
+          : axiosError.response.data.error?.message || errorMessage;
+      } else if (axiosError?.response?.data?.details) {
+        errorMessage = typeof axiosError.response.data.details === 'string'
+          ? axiosError.response.data.details
           : errorMessage;
-      } else if (err?.message) {
-        errorMessage = typeof err.message === 'string' ? err.message : errorMessage;
-      } else if (err?.response?.statusText) {
-        errorMessage = err.response.statusText;
+      } else if (axiosError?.message) {
+        errorMessage = typeof axiosError.message === 'string' ? axiosError.message : errorMessage;
+      } else if (axiosError?.response?.statusText) {
+        errorMessage = axiosError.response.statusText;
       }
       setError(`Failed to cancel booking: ${errorMessage}`);
     } finally {
@@ -110,10 +115,9 @@ const MyBookings: React.FC = () => {
       await rescheduleBooking(rescheduleConfirm.bookingId, { target_session_id: rescheduleConfirm.targetSessionId });
       await loadBookings(); // Reload to update the list
       setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
-    } catch (err: any) {
-      console.error('Error rescheduling booking:', err);
-      // Show more specific error message if available
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to reschedule booking';
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      const errorMessage = axiosError?.response?.data?.error || axiosError?.message || 'Failed to reschedule booking';
       setError(`Failed to reschedule booking: ${errorMessage}`);
     } finally {
       setActionLoading(null);

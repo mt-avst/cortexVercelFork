@@ -35,9 +35,9 @@ const PendingApprovals: React.FC = () => {
       setLoading(true);
       const data = await getPendingApprovals();
       setApprovals(data);
-    } catch (err) {
-      console.error('Failed to load pending approvals:', err);
-      setError(err instanceof AppError ? err.message : 'Failed to load pending approvals');
+    } catch (error: unknown) {
+      console.error('Failed to load pending approvals:', error);
+      setError(error instanceof AppError ? error.message : 'Failed to load pending approvals');
     } finally {
       setLoading(false);
     }
@@ -57,9 +57,9 @@ const PendingApprovals: React.FC = () => {
       
       // Clear notes
       setAdminNotes(prev => ({ ...prev, [bookingId]: '' }));
-    } catch (err) {
-      console.error('Failed to approve session:', err);
-      alert(err instanceof AppError ? err.message : 'Failed to approve session');
+    } catch (error: unknown) {
+      console.error('Failed to approve session:', error);
+      alert(error instanceof AppError ? error.message : 'Failed to approve session');
     } finally {
       setProcessing(null);
     }
@@ -79,9 +79,9 @@ const PendingApprovals: React.FC = () => {
       
       // Clear notes
       setAdminNotes(prev => ({ ...prev, [bookingId]: '' }));
-    } catch (err) {
-      console.error('Failed to reject session:', err);
-      alert(err instanceof AppError ? err.message : 'Failed to reject session');
+    } catch (error: unknown) {
+      console.error('Failed to reject session:', error);
+      alert(error instanceof AppError ? error.message : 'Failed to reject session');
     } finally {
       setProcessing(null);
     }

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, IRouter } from 'express';
 import { requireAuth } from '../middleware/authenticate';
 import { asyncHandler } from '../utils/errorHandler';
 import { pool } from '../config';
@@ -6,7 +6,7 @@ import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import { logger } from '../utils/logger';
 
-const router = Router();
+const router: IRouter = Router();
 
 // NOTE: /auth/connect route removed - calendar is now automatically connected during login
 // If manual connection is needed in the future, this route can be restored

@@ -31,9 +31,9 @@ const AdminFeedback: React.FC = () => {
       setError(null);
       const data = await getFeedback();
       setFeedback(data);
-    } catch (err) {
-      console.error('Failed to load feedback:', err);
-      setError(err instanceof AppError ? err.message : 'Failed to load feedback');
+    } catch (error: unknown) {
+      console.error('Failed to load feedback:', error);
+      setError(error instanceof AppError ? error.message : 'Failed to load feedback');
     } finally {
       setLoading(false);
     }
@@ -63,9 +63,9 @@ const AdminFeedback: React.FC = () => {
           }
         }
       }
-    } catch (err) {
-      console.error('Failed to delete feedback:', err);
-      alert(err instanceof AppError ? err.message : 'Failed to delete feedback');
+    } catch (error: unknown) {
+      console.error('Failed to delete feedback:', error);
+      alert(error instanceof AppError ? error.message : 'Failed to delete feedback');
     } finally {
       setDeleting(false);
     }
@@ -89,18 +89,21 @@ const AdminFeedback: React.FC = () => {
   };
 
   const sortedFeedback = [...feedback].sort((a, b) => {
-    let aValue: any = a[sortField];
-    let bValue: any = b[sortField];
+    let aValue: string | number | null = a[sortField];
+    let bValue: string | number | null = b[sortField];
     
     if (sortField === 'created_at') {
       aValue = new Date(a.created_at).getTime();
       bValue = new Date(b.created_at).getTime();
     }
     
-    if (typeof aValue === 'string') {
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
       aValue = aValue.toLowerCase();
       bValue = bValue.toLowerCase();
     }
+    
+    if (aValue === null) return 1;
+    if (bValue === null) return -1;
     
     if (sortDirection === 'asc') {
       return aValue > bValue ? 1 : -1;

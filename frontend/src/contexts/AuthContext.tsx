@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 
 import { getMe, logout } from '../api/client';
-import { getAuthUrl, API_CONFIG, getApiBaseUrl } from '../config/api';
+import { getApiBaseUrl } from '../config/api';
 import { logger } from '../utils/logger';
+import { authNavigation, isAdminRoute, isProductionEnvironment, navigation } from '../utils/navigation';
 
 import { User } from '../api/types';
 
@@ -76,32 +77,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const userData = await getMe();
       logger.log('AuthProvider: User data received:', userData);
       setUser(userData);
-    } catch (err) {
-      logger.log('AuthProvider: Auth error caught:', err);
+    } catch (error: unknown) {
+      logger.log('AuthProvider: Auth error caught:', error);
       // Don't set error for 401 - that's expected when not logged in
-      if (err && typeof err === 'object' && 'response' in err) {
-        const axiosError = err as { response?: { status?: number } };
+      if (error && typeof error === 'object' && 'response' in error) {
+        const axiosError = error as { response?: { status?: number } };
         logger.log('AuthProvider: Axios error status:', axiosError.response?.status);
         if (axiosError.response?.status !== 401) {
           logger.error('AuthProvider: Auth error', {
-            error: err instanceof Error ? err : undefined,
-            errorDetails: err instanceof Error ? {
-              name: err.name,
-              message: err.message,
-              stack: err.stack,
-            } : { message: String(err) },
+            error: error instanceof Error ? error : undefined,
+            errorDetails: error instanceof Error ? {
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+            } : { message: String(error) },
             requestId: logger.getRequestId() || undefined,
           });
           setError('Failed to fetch user data');
         }
       } else {
         logger.error('AuthProvider: Auth error', {
-          error: err instanceof Error ? err : undefined,
-          errorDetails: err instanceof Error ? {
-            name: err.name,
-            message: err.message,
-            stack: err.stack,
-          } : { message: String(err) },
+          error: error instanceof Error ? error : undefined,
+          errorDetails: error instanceof Error ? {
+            name: error.name,
+            message: error.message,
+            stack: error.stack,
+          } : { message: String(error) },
           requestId: logger.getRequestId() || undefined,
         });
         setError('Failed to fetch user data');
@@ -127,33 +128,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const login = () => {
-    // Set a flag to detect when we return from login
-    sessionStorage.setItem('loginRedirect', 'true');
-    
     // Determine appropriate login route based on current context
-    const isAdminRoute = window.location.pathname.includes('/admin') || 
-                        window.location.pathname.includes('/opportunities') ||
-                        window.location.pathname.includes('/sessions');
+    const isAdmin = isAdminRoute();
+    const isProduction = isProductionEnvironment();
     
-    // Determine if we're in production (not localhost)
-    const isProduction = typeof window !== 'undefined' && 
-                       !window.location.hostname.includes('localhost') &&
-                       !window.location.hostname.includes('127.0.0.1');
-    
-    // Use Google OAuth in production, demo login in development
-    let loginRoute: string;
-    if (isAdminRoute) {
-      loginRoute = '/api/auth/admin-login';
-    } else if (isProduction) {
-      // Production: Use Google OAuth for real authentication
-      loginRoute = '/api/auth/google-login';
-    } else {
-      // Development: Use demo login
-      loginRoute = '/api/auth/demo-login';
-    }
-    
-    console.log('🔐 Redirecting to login:', loginRoute, { isProduction, isAdminRoute });
-    window.location.href = getAuthUrl(loginRoute);
+    logger.info('Redirecting to login', { isProduction, isAdminRoute: isAdmin });
+    authNavigation.toLogin(isAdmin, isProduction);
   };
 
   const handleLogout = async () => {
@@ -163,19 +143,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setError(null);
       
       // Redirect to homepage after logout
-      window.location.href = '/';
-    } catch (err) {
+      navigation.toHome();
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
       logger.error('Logout failed', {
-        error: err instanceof Error ? err : undefined,
-        errorDetails: err instanceof Error ? {
-          name: err.name,
-          message: err.message,
-          stack: err.stack,
-        } : { message: String(err) },
+        error,
+        errorDetails: {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        },
         requestId: logger.getRequestId() || undefined,
       });
       // Still redirect even if logout fails
-      window.location.href = '/';
+      navigation.toHome();
     }
   };
 

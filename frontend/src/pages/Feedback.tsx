@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { submitFeedback } from '../api/client';
+import { logger } from '../utils/logger';
 import { CheckCircle, MessageSquare, AlertTriangle, Send, X } from 'lucide-react';
 
 const Feedback: React.FC = () => {
@@ -31,8 +32,11 @@ const Feedback: React.FC = () => {
       });
 
       setSubmitted(true);
-    } catch (err) {
-      console.error('Error submitting feedback:', err);
+    } catch (error: unknown) {
+      logger.error('Error submitting feedback', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
       setError('Failed to submit feedback. Please try again later or email nfine@adaptavist.com directly.');
     } finally {
       setIsSubmitting(false);

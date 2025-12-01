@@ -24,31 +24,32 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
 
       const profileData = await gamificationApi.getProfile();
       setProfile(profileData);
-    } catch (err: any) {
-      console.error('Error loading profile data:', err);
+    } catch (err: unknown) {
+      type AxiosErrorType = { response?: { data?: string | { error?: string | { message?: string }; message?: string }; statusText?: string }; message?: string; code?: string };
+      const axiosError = err as AxiosErrorType;
       
       // Extract error message from various possible locations
       let errorMessage = 'Failed to load profile data';
       
-      if (err?.response?.data) {
+      if (axiosError?.response?.data) {
         // Check for error message in response data
-        if (typeof err.response.data === 'string') {
-          errorMessage = err.response.data;
-        } else if (err.response.data.error) {
-          errorMessage = typeof err.response.data.error === 'string' 
-            ? err.response.data.error 
-            : err.response.data.error?.message || errorMessage;
-        } else if (err.response.data.message) {
-          errorMessage = err.response.data.message;
+        if (typeof axiosError.response.data === 'string') {
+          errorMessage = axiosError.response.data;
+        } else if (axiosError.response.data.error) {
+          errorMessage = typeof axiosError.response.data.error === 'string' 
+            ? axiosError.response.data.error 
+            : axiosError.response.data.error?.message || errorMessage;
+        } else if (axiosError.response.data.message) {
+          errorMessage = axiosError.response.data.message;
         }
-      } else if (err?.response?.statusText) {
-        errorMessage = err.response.statusText;
-      } else if (err?.message) {
-        errorMessage = err.message;
+      } else if (axiosError?.response?.statusText) {
+        errorMessage = axiosError.response.statusText;
+      } else if (axiosError?.message) {
+        errorMessage = axiosError.message;
       }
       
       // If it's a network error or database unavailable, provide a more helpful message
-      if (err?.code === 'ECONNREFUSED' || err?.code === 'ERR_NETWORK' || 
+      if (axiosError?.code === 'ECONNREFUSED' || axiosError?.code === 'ERR_NETWORK' || 
           errorMessage.toLowerCase().includes('database') || 
           errorMessage.toLowerCase().includes('connection')) {
         errorMessage = 'Unable to connect to the server. Please check your connection and try again.';

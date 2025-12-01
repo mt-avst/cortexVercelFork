@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../AuthContext';
-import { generateMockUser } from '../../../../shared/test-utils';
+import { generateMockUser } from '../../shared/test-utils';
 
 // Mock the API client
 jest.mock('../../api/client', () => ({

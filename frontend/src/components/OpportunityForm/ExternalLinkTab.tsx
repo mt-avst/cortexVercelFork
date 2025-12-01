@@ -1,10 +1,13 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
 
+/** Form field value type for opportunity form handlers */
+type FormFieldValue = string | number | boolean | undefined;
+
 interface ExternalLinkTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
-  handleInputChange: (field: string, value: any) => void;
+  handleInputChange: (field: string, value: FormFieldValue) => void;
 }
 
 const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({

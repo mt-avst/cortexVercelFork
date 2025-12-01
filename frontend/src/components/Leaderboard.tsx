@@ -30,11 +30,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
 
       setLeaderboard(totalData);
       setMonthlyLeaderboard(monthlyData);
-    } catch (err: any) {
-      console.error('Error loading leaderboards:', err);
-      const errorMessage = err?.response?.data?.error || 
-                           err?.response?.statusText || 
-                           err?.message || 
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string }; statusText?: string }; message?: string };
+      const errorMessage = axiosError?.response?.data?.error || 
+                           axiosError?.response?.statusText || 
+                           axiosError?.message || 
                            'Failed to load leaderboards';
       setError(errorMessage);
     } finally {

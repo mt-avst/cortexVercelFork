@@ -1,13 +1,11 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 
-import { API_CONFIG, getAuthUrl } from '../config/api';
+import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
 import { ApiClient, AppError, mapAxiosError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
+import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, redirectToAuth, AUTH_ENDPOINTS } from '../utils/navigation';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse, AdminRequest } from './types';
-
-// Import the getter functions to ensure dynamic evaluation
-import { getApiBaseUrl } from '../config/api';
 
 // Create enhanced API client with error handling
 // Use getApiBaseUrl() directly for runtime evaluation instead of frozen API_CONFIG
@@ -106,35 +104,17 @@ api.interceptors.response.use(
         window.location.pathname !== '/' && 
         !window.location.pathname.includes('/auth/')) {
       
-      // Determine appropriate login route based on current context
-      const isAdminRoute = window.location.pathname.includes('/admin') || 
-                          window.location.pathname.includes('/opportunities') ||
-                          window.location.pathname.includes('/sessions');
-      
-      // Determine if we're in production (not localhost)
-      const isProduction = typeof window !== 'undefined' && 
-                         !window.location.hostname.includes('localhost') &&
-                         !window.location.hostname.includes('127.0.0.1');
-      
-      // Use Google OAuth in production, demo login in development
-      let loginRoute: string;
-      if (isAdminRoute) {
-        loginRoute = '/api/auth/admin-login';
-      } else if (isProduction) {
-        // Production: Use Google OAuth for real authentication
-        loginRoute = '/api/auth/google-login';
-      } else {
-        // Development: Use demo login
-        loginRoute = '/api/auth/demo-login';
-      }
+      const isAdmin = isAdminRoute();
+      const isProduction = isProductionEnvironment();
       
       logger.info('Redirecting to login due to 401 error', {
         requestId: requestId || undefined,
         url: window.location.pathname,
-        loginRoute,
+        isAdminRoute: isAdmin,
         isProduction,
       });
-      window.location.href = getAuthUrl(loginRoute);
+      
+      authNavigation.toLogin(isAdmin, isProduction);
     }
     return Promise.reject(error);
   }
@@ -164,36 +144,26 @@ export const logout = async (): Promise<void> => {
 
 // Demo functions for testing
 export const demoLogin = async (): Promise<void> => {
-  // Set a flag to detect when we return from login
-  sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/demo-login');
+  authNavigation.toDemoLogin();
 };
 
 export const demoUser2Login = async (): Promise<void> => {
-  // Set a flag to detect when we return from login
-  sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/demo-user-2-login');
+  authNavigation.toDemoUser2Login();
 };
 
 export const demoAdminLogin = async (): Promise<void> => {
-  // Set a flag to detect when we return from login
-  sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/admin-login');
+  authNavigation.toAdminLogin();
 };
 
 export const demoSuperadminLogin = async (): Promise<void> => {
-  // Set a flag to detect when we return from login
-  sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/superadmin-login');
+  authNavigation.toSuperadminLogin();
 };
 
 /**
  * Google OAuth login - redirects to Google OAuth flow
  */
 export const googleLogin = async (): Promise<void> => {
-  // Set a flag to detect when we return from login
-  sessionStorage.setItem('loginRedirect', 'true');
-  window.location.href = getAuthUrl('/api/auth/google-login');
+  authNavigation.toGoogleLogin();
 };
 
 /**
@@ -659,7 +629,7 @@ export const deleteFeedback = async (id: string): Promise<{ success: boolean }> 
  */
 export const exportFeedbackCsv = async (): Promise<void> => {
   // Trigger a download by opening the export URL
-  window.location.href = `${getApiBaseUrl()}/api/feedback/export`;
+  redirectTo(`${getApiBaseUrl()}/api/feedback/export`);
 };
 
 export default api;

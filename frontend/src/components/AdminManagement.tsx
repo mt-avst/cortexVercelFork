@@ -28,9 +28,9 @@ const AdminManagement: React.FC = () => {
       ]);
       setAdmins(adminsResult.admins);
       setRequests(requestsResult.requests);
-    } catch (err: any) {
-      console.error('Error loading admin data:', err);
-      setError(err.response?.data?.error || err.message || 'Failed to load admin data');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(axiosError.response?.data?.error || axiosError.message || 'Failed to load admin data');
     } finally {
       setLoading(false);
     }
@@ -42,9 +42,9 @@ const AdminManagement: React.FC = () => {
       await approveAdminRequest(requestId);
       await loadData();
       setActiveTab('admins'); // Switch to admins tab to see the newly approved admin
-    } catch (err: any) {
-      console.error('Error approving request:', err);
-      alert(err.response?.data?.error || err.message || 'Failed to approve request');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      alert(axiosError.response?.data?.error || axiosError.message || 'Failed to approve request');
     } finally {
       setProcessing(null);
     }
@@ -55,9 +55,9 @@ const AdminManagement: React.FC = () => {
       setProcessing(requestId);
       await denyAdminRequest(requestId, notes);
       await loadData();
-    } catch (err: any) {
-      console.error('Error denying request:', err);
-      alert(err.response?.data?.error || err.message || 'Failed to deny request');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      alert(axiosError.response?.data?.error || axiosError.message || 'Failed to deny request');
     } finally {
       setProcessing(null);
       setDenyConfirm({ show: false, request: null, notes: '' });
@@ -69,9 +69,9 @@ const AdminManagement: React.FC = () => {
       setProcessing(adminId);
       await revokeAdminAccess(adminId);
       await loadData();
-    } catch (err: any) {
-      console.error('Error revoking admin:', err);
-      alert(err.response?.data?.error || err.message || 'Failed to revoke admin access');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
+      alert(axiosError.response?.data?.error || axiosError.message || 'Failed to revoke admin access');
     } finally {
       setProcessing(null);
       setRevokeConfirm({ show: false, admin: null });

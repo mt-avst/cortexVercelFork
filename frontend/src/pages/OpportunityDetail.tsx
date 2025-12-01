@@ -39,19 +39,19 @@ const OpportunityDetail: React.FC = () => {
       const data = await getOpportunity(id, params);
       
       setOpportunity(data);
-    } catch (err: any) {
-      console.error('Error loading opportunity:', err);
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number; data?: { error?: string } }; message?: string };
       
       // Provide more specific error messages
-      if (err.response?.status === 404) {
+      if (axiosError.response?.status === 404) {
         // Could be: opportunity doesn't exist, or it's a draft and user is not admin
         setError('Opportunity not found. It may have been deleted or you may not have permission to view it.');
-      } else if (err.response?.status === 401) {
+      } else if (axiosError.response?.status === 401) {
         setError('Please log in to view this opportunity.');
-      } else if (err.response?.status === 403) {
+      } else if (axiosError.response?.status === 403) {
         setError('You do not have permission to view this opportunity.');
       } else {
-        const errorMessage = err.response?.data?.error || err.message || 'Failed to load opportunity';
+        const errorMessage = axiosError.response?.data?.error || axiosError.message || 'Failed to load opportunity';
         setError(`Failed to load opportunity: ${errorMessage}`);
       }
     } finally {
@@ -76,14 +76,16 @@ const OpportunityDetail: React.FC = () => {
 
   // Fetch calendar events when sessions are available
   useEffect(() => {
+    let isMounted = true;
+    
     const loadCalendarEvents = async () => {
       if (!opportunity?.sessions || opportunity.sessions.length === 0) {
-        setUserCalendarEvents([]);
+        if (isMounted) setUserCalendarEvents([]);
         return;
       }
 
       try {
-        setLoadingCalendar(true);
+        if (isMounted) setLoadingCalendar(true);
         
         // Get date range from sessions
         const dates = opportunity.sessions
@@ -104,17 +106,20 @@ const OpportunityDetail: React.FC = () => {
           endTime.toISOString()
         );
         
-        setUserCalendarEvents(events);
-      } catch (error: any) {
-        console.error('Error fetching calendar events:', error);
+        if (isMounted) setUserCalendarEvents(events);
+      } catch (error: unknown) {
         // Don't show error to user, just log it
-        setUserCalendarEvents([]);
+        if (isMounted) setUserCalendarEvents([]);
       } finally {
-        setLoadingCalendar(false);
+        if (isMounted) setLoadingCalendar(false);
       }
     };
 
     loadCalendarEvents();
+    
+    return () => {
+      isMounted = false;
+    };
   }, [opportunity?.sessions]);
 
   // Check if a session conflicts with user's calendar
@@ -210,35 +215,35 @@ const OpportunityDetail: React.FC = () => {
       
       // Reload opportunity to update remaining slots with cache busting
       await loadOpportunity(true);
-    } catch (err: any) {
-      // Performance: verbose error logging disabled in production
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number; data?: { error?: string } }; code?: string; message?: string };
       
-      if (err.response?.status === 409) {
+      if (axiosError.response?.status === 409) {
         // Use the specific error message from the backend
-        const errorMessage = err.response?.data?.error || 'Session is full or you are already booked';
+        const errorMessage = axiosError.response?.data?.error || 'Session is full or you are already booked';
         setError(errorMessage);
         
         // If it's a capacity issue, refresh the opportunity data to get latest info
         if (errorMessage.includes('full') || errorMessage.includes('capacity')) {
           await loadOpportunity(true);
         }
-      } else if (err.response?.status === 401) {
+      } else if (axiosError.response?.status === 401) {
         setError('Please log in to book sessions');
-      } else if (err.response?.status === 404) {
+      } else if (axiosError.response?.status === 404) {
         setError('Session not found or opportunity not published');
-      } else if (err.response?.status === 400) {
+      } else if (axiosError.response?.status === 400) {
         setError('Cannot book past sessions');
-      } else if (err.response?.status === 503) {
+      } else if (axiosError.response?.status === 503) {
         setError('Database not available. Please try again later.');
-      } else if (err.response?.status === 500) {
+      } else if (axiosError.response?.status === 500) {
         setError('Server error occurred. Please try again.');
-      } else if (err.code === 'NETWORK_ERROR' || err.message === 'Network Error') {
+      } else if (axiosError.code === 'NETWORK_ERROR' || axiosError.message === 'Network Error') {
         setError('Network error. Please check your connection and try again.');
-      } else if (err.code === 'ECONNABORTED' || err.message.includes('timeout')) {
+      } else if (axiosError.code === 'ECONNABORTED' || axiosError.message?.includes('timeout')) {
         setError('Request timed out. Please try again.');
       } else {
         // Show more detailed error information
-        const errorMessage = err.response?.data?.error || err.message || 'Failed to book session';
+        const errorMessage = axiosError.response?.data?.error || axiosError.message || 'Failed to book session';
         setError(`Failed to book session: ${errorMessage}`);
       }
     } finally {

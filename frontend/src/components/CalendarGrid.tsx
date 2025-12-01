@@ -115,7 +115,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           const status = await getCalendarConnectionStatus();
           calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
-        } catch (error: any) {
+        } catch (error: unknown) {
           setCalendarConnected(false);
         }
 
@@ -137,11 +137,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         );
         
         setUserCalendarEvents(events);
-      } catch (error: any) {
-        if (error.response?.status === 404) {
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 404) {
           setCalendarConnected(false);
         } else {
-          console.error('Error fetching user calendar:', error);
           setCalendarConnected(false);
         }
       } finally {

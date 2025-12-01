@@ -4,6 +4,7 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
+import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
@@ -147,7 +148,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // Load sessions - always try to load fresh sessions from API when editing
       // The opportunity object might have stale session data
       try {
-        console.log('🔍 EDIT MODE - Loading sessions for opportunity:', {
+        logger.debug('EDIT MODE - Loading sessions for opportunity', {
           opportunityId: opportunity.id,
           opportunitySessionsCount: opportunity.sessions?.length || 0,
           willCallAPI: true
@@ -156,7 +157,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // IMPORTANT: Always request ALL sessions including past ones when editing
         const sessions = await getSessions(opportunity.id, { include_past: true });
         
-        console.log('🔍 EDIT MODE - Loaded opportunity sessions from API:', {
+        logger.debug('EDIT MODE - Loaded opportunity sessions from API', {
           opportunityId: opportunity.id,
           sessionsCount: sessions.length,
           sessions: sessions.map(s => ({
@@ -174,26 +175,27 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           setSessions(sessions);
         } else if (opportunity.sessions && opportunity.sessions.length > 0) {
           // Fallback to sessions from opportunity object if API returns empty but opportunity has sessions
-          console.log('⚠️ API returned no sessions, using sessions from opportunity object:', {
+          logger.debug('API returned no sessions, using sessions from opportunity object', {
             opportunityId: opportunity.id,
             sessionsCount: opportunity.sessions.length
           });
           setSessions(opportunity.sessions);
         } else {
-          console.log('⚠️ No sessions found for opportunity:', opportunity.id);
+          logger.debug('No sessions found for opportunity', { opportunityId: opportunity.id });
           setSessions([]);
         }
-      } catch (sessionError: any) {
-        console.error('Error loading sessions:', sessionError);
-        console.error('Session error details:', {
-          message: sessionError.message,
-          response: sessionError.response?.data,
-          status: sessionError.response?.status
+      } catch (sessionError: unknown) {
+        const axiosError = sessionError as { response?: { data?: unknown; status?: number } };
+        logger.error('Error loading sessions', {
+          error: sessionError instanceof Error ? sessionError : undefined,
+          errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError),
+          response: axiosError.response?.data,
+          status: axiosError.response?.status
         });
         
         // Fallback to sessions from opportunity object if API fails
         if (opportunity.sessions && opportunity.sessions.length > 0) {
-          console.log('⚠️ Using sessions from opportunity object as fallback:', {
+          logger.debug('Using sessions from opportunity object as fallback', {
             opportunityId: opportunity.id,
             sessionsCount: opportunity.sessions.length
           });
@@ -202,9 +204,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           setSessions([]);
         }
       }
-    } catch (err: any) {
-      console.error('Error loading opportunity:', err);
-      if (err.response?.status === 404) {
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { status?: number; data?: { error?: string } } };
+      if (axiosError.response?.status === 404) {
         setError('Opportunity not found. It may have been deleted or you may not have permission to edit it.');
       } else {
         setError('Failed to load opportunity');
@@ -275,34 +277,36 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   };
 
   // Validate single field
-  const validateField = (fieldName: string, value: any) => {
+  const validateField = (fieldName: string, value: string | number | boolean | undefined) => {
     const fieldErrors: Record<string, string> = { ...validationErrors };
+    const stringValue = typeof value === 'string' ? value : '';
+    const numValue = typeof value === 'number' ? value : 0;
     
     switch (fieldName) {
       case 'title':
-        if (!value.trim()) {
+        if (!stringValue.trim()) {
           fieldErrors.title = 'Title is required';
-        } else if (value.trim().length < 4) {
+        } else if (stringValue.trim().length < 4) {
           fieldErrors.title = 'Title must be at least 4 characters';
-        } else if (value.trim().length > 140) {
+        } else if (stringValue.trim().length > 140) {
           fieldErrors.title = 'Title must be no more than 140 characters';
         } else {
           delete fieldErrors.title;
         }
         break;
       case 'purpose_one_liner':
-        if (!value.trim()) {
+        if (!stringValue.trim()) {
           fieldErrors.purpose_one_liner = 'Purpose is required';
-        } else if (value.trim().length < 10) {
+        } else if (stringValue.trim().length < 10) {
           fieldErrors.purpose_one_liner = 'Purpose must be at least 10 characters';
-        } else if (value.trim().length > 180) {
+        } else if (stringValue.trim().length > 180) {
           fieldErrors.purpose_one_liner = 'Purpose must be no more than 180 characters';
         } else {
           delete fieldErrors.purpose_one_liner;
         }
         break;
       case 'meeting_location_optional':
-        if (!value || !value.trim()) {
+        if (!stringValue.trim()) {
           fieldErrors.meeting_location_optional = 'Meeting location is required';
         } else {
           delete fieldErrors.meeting_location_optional;
@@ -310,7 +314,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         break;
       case 'default_duration_minutes':
         if (formData.type === 'test' || formData.type === 'interview') {
-          if (value < 5 || value > 240) {
+          if (numValue < 5 || numValue > 240) {
             fieldErrors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
           } else {
             delete fieldErrors.default_duration_minutes;
@@ -319,11 +323,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         break;
       case 'external_link_optional':
         if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-          if (!value.trim()) {
+          if (!stringValue.trim()) {
             fieldErrors.external_link_optional = 'External link is required for published polls, surveys, questions, and unmoderated tests';
           } else {
             try {
-              new URL(value);
+              new URL(stringValue);
               delete fieldErrors.external_link_optional;
             } catch {
               fieldErrors.external_link_optional = 'External link must be a valid URL';
@@ -335,9 +339,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         break;
       case 'participant_type_specific_details':
         if (formData.participant_type_required === 'specific') {
-          if (!value.trim()) {
+          if (!stringValue.trim()) {
             fieldErrors.participant_type_specific_details = 'Specific participant criteria is required when "Specific" is selected';
-          } else if (value.trim().length < 10) {
+          } else if (stringValue.trim().length < 10) {
             fieldErrors.participant_type_specific_details = 'Specific participant criteria must be at least 10 characters';
           } else {
             delete fieldErrors.participant_type_specific_details;
@@ -373,7 +377,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   };
 
   const handleSubmit = async (e?: React.FormEvent, skipNavigation = false): Promise<string | undefined> => {
-    console.log('🚀 handleSubmit called', { isEdit, opportunityId, formData, skipNavigation });
+    logger.debug('handleSubmit called', { isEdit, opportunityId, skipNavigation });
     
     if (e) {
       e.preventDefault();
@@ -381,12 +385,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     
     // Prevent double-clicks - return early if already saving
     if (saving) {
-      console.log('⏳ Already saving, ignoring duplicate click');
+      logger.debug('Already saving, ignoring duplicate click');
       return undefined;
     }
     
     if (!validateForm()) {
-      console.error('Validation errors:', validationErrors);
+      logger.error('Validation errors', { validationErrors });
       return undefined;
     }
     
@@ -395,8 +399,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setError('');
       setSuccessMessage('');
       
-      const data: any = {
-        type: formData.type,
+      const data: Partial<CreateOpportunityRequest & { display_width?: 'single' | 'double' }> = {
+        type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
         purpose_one_liner: formData.purpose_one_liner.trim(),
         description_optional: formData.description_optional.trim() || undefined,
@@ -432,7 +436,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // Save any temporary sessions that were created during editing (only for test and interview types)
         if (formData.type === 'test' || formData.type === 'interview') {
           const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
-          console.log('🟡 EDIT MODE - Checking for temporary sessions:', {
+          logger.debug('EDIT MODE - Checking for temporary sessions', {
             totalSessions: sessions.length,
             tempSessions: tempSessions.length,
             tempSessionIds: tempSessions.map(s => s.id),
@@ -448,27 +452,30 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 location_or_meet_link_optional: session.location_or_meet_link_optional || ''
               }));
               
-              console.log('🟡 EDIT MODE - Creating sessions:', sessionData);
+              logger.debug('EDIT MODE - Creating sessions', { count: sessionData.length });
               const { createSessions } = await import('../api/client');
               await createSessions(savedOpportunity.id, sessionData);
               
               // Reload sessions to get the real IDs
               const updatedOpportunity = await getOpportunity(savedOpportunity.id);
-              console.log('🟡 EDIT MODE - Updated opportunity sessions:', updatedOpportunity.sessions?.length || 0);
+              logger.debug('EDIT MODE - Updated opportunity sessions', { count: updatedOpportunity.sessions?.length || 0 });
               setSessions(updatedOpportunity.sessions || []);
-            } catch (sessionError) {
-              console.error('Error saving sessions:', sessionError);
+            } catch (sessionError: unknown) {
+              logger.error('Error saving sessions', { 
+                error: sessionError instanceof Error ? sessionError : undefined,
+                errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError)
+              });
               setError('Opportunity updated but failed to save sessions. Please add them manually.');
             }
           } else {
-            console.log('🟡 EDIT MODE - No temporary sessions to save');
+            logger.debug('EDIT MODE - No temporary sessions to save');
           }
         }
       } else {
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
         
-        console.log('✅ CREATE MODE - Opportunity created');
+        logger.debug('CREATE MODE - Opportunity created');
         
         // For types that use external links (no sessions), show success message
         // User will click "Return to Dashboard" button to navigate
@@ -512,15 +519,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       
       return savedOpportunity?.id;
       
-    } catch (err: any) {
-      console.error('Error saving opportunity:', err);
-      setError(err.response?.data?.error || 'Failed to save opportunity');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Failed to save opportunity');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -536,7 +543,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
   };
 
-  const handleBlur = (field: string, value: any) => {
+  const handleBlur = (field: string, value: string | number | boolean | undefined) => {
     // Validate field on blur
     validateField(field, value);
   };

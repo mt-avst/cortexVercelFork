@@ -1,3 +1,13 @@
+/**
+ * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
+ * 
+ * This file is automatically copied from the shared/ directory during the build process.
+ * Any changes should be made to the source file in the shared/ directory.
+ * 
+ * Source: See copy-shared-types.js for the source path
+ * Generated: 2025-12-01T11:43:17.469Z
+ */
+
 // Shared Type Definitions for Adaptalabs Application
 // This file contains all common interfaces used by both frontend and backend
 
@@ -406,8 +416,13 @@ export interface LogContext {
   url?: string;
   statusCode?: number;
   responseTime?: number;
-  error?: Error;
-  [key: string]: any;
+  /** Error object - use errorMessage for string error messages */
+  error?: Error | unknown;
+  /** Human-readable error message string */
+  errorMessage?: string;
+  /** Additional error details */
+  errorDetails?: { name?: string; message?: string; stack?: string } | Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 // ============================================================================

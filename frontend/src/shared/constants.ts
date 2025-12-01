@@ -1,3 +1,13 @@
+/**
+ * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
+ * 
+ * This file is automatically copied from the shared/ directory during the build process.
+ * Any changes should be made to the source file in the shared/ directory.
+ * 
+ * Source: See copy-shared-types.js for the source path
+ * Generated: 2025-12-01T11:43:17.469Z
+ */
+
 // Shared Constants for Adaptalabs Application
 // This file contains all application constants used by both frontend and backend
 

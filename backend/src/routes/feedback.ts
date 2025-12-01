@@ -1,11 +1,11 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, IRouter } from 'express';
 import { asyncHandler } from '../utils/errorHandler';
 import emailService, { EmailService } from '../services/email';
 import { logger } from '../utils/logger';
 import { pool } from '../config/index';
 import { requireAdmin, requireSuperadmin } from '../middleware/authenticate';
 
-const router = Router();
+const router: IRouter = Router();
 
 // POST /api/feedback - Submit feedback (saves to database, optionally sends email)
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
@@ -27,7 +27,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
     );
     logger.info('✅ Feedback saved to database');
   } catch (dbError) {
-    logger.error('Failed to save feedback to database', dbError);
+    logger.error('Failed to save feedback to database', { error: dbError instanceof Error ? dbError : undefined, errorMessage: String(dbError) });
     return res.status(500).json({ error: 'Failed to save feedback' });
   }
 
@@ -51,7 +51,7 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
       logger.warn('Email notification failed, but feedback was saved to database');
     }
   } catch (emailError) {
-    logger.warn('Email notification failed, but feedback was saved to database', emailError);
+    logger.warn('Email notification failed, but feedback was saved to database', { error: emailError instanceof Error ? emailError : undefined, errorMessage: String(emailError) });
   }
 
   res.json({ success: true });

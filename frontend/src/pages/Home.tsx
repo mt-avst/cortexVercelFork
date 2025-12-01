@@ -54,7 +54,7 @@ const Home: React.FC = memo(() => {
       } else {
         setOpportunities(data);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError('Failed to load opportunities - backend not available in production demo');
       setOpportunities([]); // Set empty array on error
     } finally {
