@@ -8991,8 +8991,8 @@ body.theme-light .landing-product-name {
 .landing-tagline {
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   font-weight: 400;
-  /* Fluid scaling: 0.875rem (mobile) → 1.25rem (4K) */
-  font-size: clamp(0.875rem, 0.5vw + 0.75rem, 1.25rem);
+  /* Fluid scaling: 1.1rem (mobile) → 1.5rem (4K) - increased by 25% */
+  font-size: clamp(1.1rem, 0.5vw + 0.95rem, 1.5rem);
   letter-spacing: 0.02em;
   margin: 0;
   /* Fluid max-width for readability */

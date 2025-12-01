@@ -74,7 +74,7 @@ const Landing: React.FC = memo(() => {
           <h1 className="landing-product-name">CORTEX</h1>
           
           {/* Tagline */}
-          <p className="landing-tagline">All our collective thinking and experience, together</p>
+          <p className="landing-tagline">Collective Intelligence</p>
 
           {/* CTA Button - "Power" solid orange variant */}
           <button 
