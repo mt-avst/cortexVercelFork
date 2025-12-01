@@ -107,13 +107,14 @@ export const validateBackendEnvironment = (): BackendEnvironment => {
 };
 
 /**
- * Validate frontend environment variables (uses import.meta.env for Vite)
+ * Validate frontend environment variables
+ * Note: This function is only called from the frontend (Vite) context
+ * The actual import.meta.env access happens in the frontend's local copy
  */
 export const validateFrontendEnvironment = (): FrontendEnvironment => {
   try {
-    // In Vite, use import.meta.env instead of process.env
-    const env = typeof import.meta !== 'undefined' ? import.meta.env : process.env;
-    return frontendEnvSchema.parse(env);
+    // Use process.env as fallback - frontend has its own copy with import.meta.env
+    return frontendEnvSchema.parse(process.env);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorMessages = error.issues.map((err: any) => 
