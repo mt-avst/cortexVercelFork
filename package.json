@@ -14,7 +14,7 @@
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
     "build:all": "cd backend && npm run build && cd ../frontend && npm run build",
     "dev:backend": "cd backend && npm run dev",
-    "dev:frontend": "cd frontend && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
     "dev:all": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
     "start": "./start-dev.sh npm",
     "start:docker": "./start-dev.sh docker",

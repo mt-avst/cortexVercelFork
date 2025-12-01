@@ -8,7 +8,7 @@ const config: FrontendEnvironment = getFrontendConfig();
 export const getApiBaseUrl = () => {
   // IMPORTANT: Detect production at RUNTIME, not build time
   // Check runtime environment variables first (these work in Vercel)
-  const runtimeEnv = process.env.REACT_APP_ENVIRONMENT || process.env.NODE_ENV;
+  const runtimeEnv = import.meta.env.VITE_ENVIRONMENT || import.meta.env.MODE;
   const isProductionBuild = runtimeEnv === 'production';
   
   // Check hostname at runtime - this is the most reliable indicator
@@ -23,11 +23,11 @@ export const getApiBaseUrl = () => {
     isProduction, 
     isProductionBuild,
     isProductionRuntime,
-    NODE_ENV: process.env.NODE_ENV, 
-    REACT_APP_ENVIRONMENT: process.env.REACT_APP_ENVIRONMENT,
+    MODE: import.meta.env.MODE, 
+    VITE_ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT,
     hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A',
-    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-    REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL
+    VITE_API_URL: import.meta.env.VITE_API_URL,
+    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL
   });
   
   if (isProduction) {
@@ -35,17 +35,17 @@ export const getApiBaseUrl = () => {
   }
   
   // Check for explicit environment variables (runtime check)
-  if (process.env.REACT_APP_API_BASE_URL) {
-    return process.env.REACT_APP_API_BASE_URL;
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
   }
   
   // Check config object (fallback for development)
-  if (config.REACT_APP_API_BASE_URL) {
-    return config.REACT_APP_API_BASE_URL;
+  if (config.VITE_API_BASE_URL) {
+    return config.VITE_API_BASE_URL;
   }
   
   // Fallback to legacy environment variable (only in development)
-  const devApiUrl = process.env.REACT_APP_API_URL || config.REACT_APP_API_URL;
+  const devApiUrl = import.meta.env.VITE_API_URL || config.VITE_API_URL;
   if (devApiUrl && !devApiUrl.includes('localhost')) {
     return devApiUrl;
   }
@@ -64,13 +64,13 @@ export const getApiBaseUrl = () => {
 
 export const getAuthBaseUrl = () => {
   // Check runtime environment variables first
-  if (process.env.REACT_APP_AUTH_BASE_URL) {
-    return process.env.REACT_APP_AUTH_BASE_URL;
+  if (import.meta.env.VITE_AUTH_BASE_URL) {
+    return import.meta.env.VITE_AUTH_BASE_URL;
   }
   
   // Check config object (fallback)
-  if (config.REACT_APP_AUTH_BASE_URL) {
-    return config.REACT_APP_AUTH_BASE_URL;
+  if (config.VITE_AUTH_BASE_URL) {
+    return config.VITE_AUTH_BASE_URL;
   }
   
   // Fallback to API base URL
@@ -88,13 +88,13 @@ export const API_CONFIG = {
 // Helper function to get full auth URL
 export const getAuthUrl = (path: string) => {
   // Check runtime environment variables first
-  if (process.env.REACT_APP_AUTH_BASE_URL) {
-    return `${process.env.REACT_APP_AUTH_BASE_URL}${path}`;
+  if (import.meta.env.VITE_AUTH_BASE_URL) {
+    return `${import.meta.env.VITE_AUTH_BASE_URL}${path}`;
   }
   
   // Check config object (fallback)
-  if (config.REACT_APP_AUTH_BASE_URL) {
-    return `${config.REACT_APP_AUTH_BASE_URL}${path}`;
+  if (config.VITE_AUTH_BASE_URL) {
+    return `${config.VITE_AUTH_BASE_URL}${path}`;
   }
   
   // Use dynamic calculation

@@ -1,20 +1,25 @@
 /**
  * Momentum Design System - Main CSS Entry Point
  * 
- * This file orchestrates the CSS layer architecture, ensuring proper
- * specificity ordering without the need for !important declarations.
+ * CRITICAL: Tailwind comes FIRST (lowest priority in layer order)
+ * Your layers come AFTER (higher priority = always win conflicts)
  * 
  * Layer order (lowest to highest specificity):
- * 1. reset    - CSS normalization
- * 2. tokens   - CSS custom properties (design tokens)
- * 3. base     - Base element styling (typography, links, etc.)
- * 4. components - Component styles (cards, buttons, badges, etc.)
- * 5. utilities - Utility classes (flexbox, spacing, etc.)
- * 6. themes   - Theme-specific overrides (light/dark)
+ * 1. tailwind         - Tailwind CSS (base, components, utilities)
+ * 2. reset            - Our CSS normalization
+ * 3. tokens           - CSS custom properties (design tokens)
+ * 4. base             - Base element styling (typography, links, etc.)
+ * 5. components       - Component styles (cards, buttons, badges, etc.)
+ * 6. utilities        - Utility classes (flexbox, spacing, etc.)
+ * 7. themes           - Theme-specific overrides (light/dark) - HIGHEST PRIORITY
  */
 
-@layer reset, tokens, base, components, utilities, themes;
+@layer tailwind, reset, tokens, base, components, utilities, themes;
 
+/* Tailwind v4 - import into its own layer (lowest priority) */
+@import "tailwindcss" layer(tailwind);
+
+/* Your existing layers — now win every conflict */
 @import './_reset.css' layer(reset);
 @import './_tokens.css' layer(tokens);
 @import './_base.css' layer(base);
@@ -22,3 +27,31 @@
 @import './_utilities.css' layer(utilities);
 @import './_themes.css' layer(themes);
 
+/* shadcn/ui theme variables - these use your existing token values via tailwind.config.js */
+@theme inline {
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--bg-card);
+  --color-card-foreground: var(--text-primary);
+  --color-popover: var(--bg-card);
+  --color-popover-foreground: var(--text-primary);
+  --color-primary: var(--accent-primary);
+  --color-primary-foreground: var(--text-inverse);
+  --color-secondary: var(--accent-secondary);
+  --color-secondary-foreground: var(--text-primary);
+  --color-muted: var(--bg-secondary);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--accent-primary);
+  --color-accent-foreground: var(--text-inverse);
+  --color-destructive: var(--status-error);
+  --color-border: var(--border-primary);
+  --color-input: var(--border-primary);
+  --color-ring: var(--accent-primary);
+}
+
+/* Dark mode variant for shadcn components */
+@custom-variant dark (&:is(.dark *, .theme-dark *));

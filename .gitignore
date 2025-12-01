@@ -14,7 +14,15 @@ yarn-error.log*
 
 # Production builds
 /frontend/build
+/frontend/dist
 /backend/dist
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Vite generated config files
+frontend/vite.config.js
+frontend/vite.config.d.ts
 
 # IDE
 .vscode/

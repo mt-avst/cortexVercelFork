@@ -61,20 +61,20 @@ export const backendEnvSchema = z.object({
 });
 
 /**
- * Frontend environment variables schema
+ * Frontend environment variables schema (Vite uses VITE_ prefix)
  */
 export const frontendEnvSchema = z.object({
   // API Configuration
-  REACT_APP_API_URL: z.string().url('API URL must be a valid URL').catch(() => 'http://localhost:3001'),
-  REACT_APP_API_BASE_URL: z.string().url('API base URL must be a valid URL').optional(),
-  REACT_APP_AUTH_BASE_URL: z.string().url('Auth base URL must be a valid URL').optional(),
+  VITE_API_URL: z.string().url('API URL must be a valid URL').catch(() => 'http://localhost:3001'),
+  VITE_API_BASE_URL: z.string().url('API base URL must be a valid URL').optional(),
+  VITE_AUTH_BASE_URL: z.string().url('Auth base URL must be a valid URL').optional(),
   
   // Environment
-  REACT_APP_ENVIRONMENT: z.enum(['development', 'production', 'test']).catch(() => 'development' as const),
+  VITE_ENVIRONMENT: z.enum(['development', 'production', 'test']).catch(() => 'development' as const),
   
   // Feature Flags
-  REACT_APP_ENABLE_ANALYTICS: z.string().transform(val => val === 'true').catch(() => false),
-  REACT_APP_ENABLE_DEBUG: z.string().transform(val => val === 'true').catch(() => false),
+  VITE_ENABLE_ANALYTICS: z.string().transform(val => val === 'true').catch(() => false),
+  VITE_ENABLE_DEBUG: z.string().transform(val => val === 'true').catch(() => false),
 });
 
 // ============================================================================
@@ -107,11 +107,13 @@ export const validateBackendEnvironment = (): BackendEnvironment => {
 };
 
 /**
- * Validate frontend environment variables
+ * Validate frontend environment variables (uses import.meta.env for Vite)
  */
 export const validateFrontendEnvironment = (): FrontendEnvironment => {
   try {
-    return frontendEnvSchema.parse(process.env);
+    // In Vite, use import.meta.env instead of process.env
+    const env = typeof import.meta !== 'undefined' ? import.meta.env : process.env;
+    return frontendEnvSchema.parse(env);
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorMessages = error.issues.map((err: any) => 
@@ -232,12 +234,12 @@ export const ENVIRONMENT_DOCS = {
     FRONTEND_URL: 'Frontend application URL',
   },
   frontend: {
-    REACT_APP_API_URL: 'Backend API URL',
-    REACT_APP_API_BASE_URL: 'Backend API base URL (optional)',
-    REACT_APP_AUTH_BASE_URL: 'Backend auth base URL (optional)',
-    REACT_APP_ENVIRONMENT: 'Frontend environment (development, production, test)',
-    REACT_APP_ENABLE_ANALYTICS: 'Enable analytics tracking (true/false)',
-    REACT_APP_ENABLE_DEBUG: 'Enable debug mode (true/false)',
+    VITE_API_URL: 'Backend API URL',
+    VITE_API_BASE_URL: 'Backend API base URL (optional)',
+    VITE_AUTH_BASE_URL: 'Backend auth base URL (optional)',
+    VITE_ENVIRONMENT: 'Frontend environment (development, production, test)',
+    VITE_ENABLE_ANALYTICS: 'Enable analytics tracking (true/false)',
+    VITE_ENABLE_DEBUG: 'Enable debug mode (true/false)',
   },
 };
 
@@ -290,12 +292,12 @@ FRONTEND_URL=https://yourdomain.com`,
   },
   
   frontend: {
-    development: `REACT_APP_API_URL=http://localhost:3001
-REACT_APP_ENVIRONMENT=development
-REACT_APP_ENABLE_DEBUG=true`,
+    development: `VITE_API_URL=http://localhost:3001
+VITE_ENVIRONMENT=development
+VITE_ENABLE_DEBUG=true`,
     
-    production: `REACT_APP_API_URL=https://api.yourdomain.com
-REACT_APP_ENVIRONMENT=production
-REACT_APP_ENABLE_ANALYTICS=true`,
+    production: `VITE_API_URL=https://api.yourdomain.com
+VITE_ENVIRONMENT=production
+VITE_ENABLE_ANALYTICS=true`,
   },
 };
