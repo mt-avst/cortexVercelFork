@@ -9,6 +9,7 @@ import gamificationRouter from './gamification';
 import adminRouter from './admin';
 import notificationPreferencesRouter from './notificationPreferences';
 import feedbackRouter from './feedback';
+import statsRouter from './stats';
 
 const router: Router = Router();
 
@@ -43,5 +44,8 @@ router.use('/notification-preferences', notificationPreferencesRouter);
 
 // Mount feedback routes
 router.use('/feedback', feedbackRouter);
+
+// Mount stats routes (public, no auth required)
+router.use('/stats', statsRouter);
 
 export default router;

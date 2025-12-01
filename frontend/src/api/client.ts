@@ -593,6 +593,23 @@ export const submitFeedback = async (data: {
 };
 
 /**
+ * Platform Stats for Homepage KPIs
+ */
+export interface PlatformStats {
+  activeStudies: number;
+  participantsRegistered: number;
+  rewardsDistributed: number;
+}
+
+/**
+ * Get platform-wide statistics for homepage KPI display
+ */
+export const getPlatformStats = async (): Promise<PlatformStats> => {
+  const response = await api.get('/stats/platform');
+  return response.data;
+};
+
+/**
  * Feedback item type
  */
 export interface FeedbackItem {
