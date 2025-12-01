@@ -2357,66 +2357,143 @@ body.theme-dark .gamification-page small.text-muted {
 }
 
 /* ============================================================
-   MY BOOKINGS PAGE - Card Backgrounds (Dark Mode)
+   MY BOOKINGS PAGE - Dark Mode (Glassmorphism)
    ============================================================ */
 
-body.theme-dark .my-bookings-page .card {
+/* Page Background - Inherit from admin-page-bg */
+body.theme-dark .my-bookings-page {
+  background: #030305;
+}
+
+/* Booking Cards - Glassmorphism */
+body.theme-dark .my-bookings-page .booking-card {
   background: rgba(12, 12, 14, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-body.theme-dark .my-bookings-page .card-header {
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+body.theme-dark .my-bookings-page .booking-card:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-body.theme-dark .my-bookings-page .card-body p,
-body.theme-dark .my-bookings-page .card p {
-  color: rgba(224, 224, 224, 0.85);
+/* Upcoming Cards - Brand accent border */
+body.theme-dark .my-bookings-page .booking-card-upcoming {
+  border-color: rgba(255, 122, 51, 0.4);
+  box-shadow: 0 0 16px rgba(255, 122, 51, 0.1), 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
-body.theme-dark .my-bookings-page .card h6,
-body.theme-dark .my-bookings-page .card-title {
-  color: #FFFFFF;
+body.theme-dark .my-bookings-page .booking-card-upcoming:hover {
+  border-color: rgba(255, 122, 51, 0.6);
+  box-shadow: 0 0 24px rgba(255, 122, 51, 0.15), 0 6px 16px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
 }
 
-body.theme-dark .my-bookings-page .text-muted {
-  color: rgba(224, 224, 224, 0.7);
+/* Past Cards - Muted state */
+body.theme-dark .my-bookings-page .booking-card-past {
+  opacity: 0.7;
+  filter: saturate(0.7);
 }
 
-body.theme-dark .my-bookings-page h2,
-body.theme-dark .my-bookings-page h4 {
-  color: #FFFFFF;
+body.theme-dark .my-bookings-page .booking-card-past:hover {
+  opacity: 0.85;
+  filter: saturate(0.8);
 }
 
-/* Booking metadata labels in dark mode */
-body.theme-dark .my-bookings-page .card strong,
-body.theme-dark .my-bookings-page .card label {
-  color: #FFFFFF;
+/* Card Footer */
+body.theme-dark .my-bookings-page .booking-card-footer {
+  background: rgba(0, 0, 0, 0.2);
+  border-top-color: rgba(255, 255, 255, 0.06);
 }
 
-/* My Bookings Page - Light Mode */
-body.theme-light .my-bookings-page .card {
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(0, 0, 0, 0.15);
+/* Empty Card */
+body.theme-dark .my-bookings-page .booking-card-empty {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(12, 12, 14, 0.6);
+}
+
+/* ============================================================
+   MY BOOKINGS PAGE - Light Mode (Lab Aesthetic)
+   ============================================================ */
+
+/* Page Background - Pure white with grid */
+body.theme-light .my-bookings-page {
+  background: #FFFFFF;
+}
+
+/* Full-screen grid overlay for light mode */
+body.theme-light .my-bookings-page::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  /* Orange grid pattern (24px grid, 5% opacity) */
+  background-image: 
+    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Booking Cards - Elevated white cards */
+body.theme-light .my-bookings-page .booking-card {
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow: 
-    0 1px 3px rgba(0, 0, 0, 0.06),
-    0 4px 12px rgba(0, 0, 0, 0.08);
+    0 4px 6px -1px rgba(0, 0, 0, 0.05),
+    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
-body.theme-light .my-bookings-page .card-header {
-  background: transparent;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+body.theme-light .my-bookings-page .booking-card:hover {
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 
+    0 4px 6px rgba(0, 0, 0, 0.07),
+    0 8px 15px rgba(0, 0, 0, 0.05),
+    0 12px 24px rgba(0, 0, 0, 0.04);
 }
 
-body.theme-light .my-bookings-page .card h6,
-body.theme-light .my-bookings-page .card-title {
-  color: #1A1A1A;
+/* Upcoming Cards - Brand accent on hover */
+body.theme-light .my-bookings-page .booking-card-upcoming {
+  border-color: rgba(232, 108, 36, 0.3);
 }
 
-body.theme-light .my-bookings-page .card p {
-  color: #374151;
+body.theme-light .my-bookings-page .booking-card-upcoming:hover {
+  border-color: rgba(232, 108, 36, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Past Cards - Archival state */
+body.theme-light .my-bookings-page .booking-card-past {
+  opacity: 0.75;
+  filter: grayscale(80%);
+}
+
+body.theme-light .my-bookings-page .booking-card-past:hover {
+  opacity: 0.9;
+  filter: grayscale(60%);
+}
+
+/* Card Footer - Light mode */
+body.theme-light .my-bookings-page .booking-card-footer {
+  background: #F8FAFC;
+  border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+/* Empty Card - Light mode */
+body.theme-light .my-bookings-page .booking-card-empty {
+  border-style: dashed;
+  border-color: rgba(0, 0, 0, 0.12);
+  background: rgba(248, 250, 252, 0.5);
 }
 
 /* Leaderboard entries in dark mode */

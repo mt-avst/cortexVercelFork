@@ -232,106 +232,107 @@ const MyBookings: React.FC = () => {
   }
 
   return (
-    <div className="my-bookings-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
+    <div className="admin-page-bg my-bookings-page">
       {/* Theme-aware Background: Dark Mode gets neural particles on black */}
       {isDark && <SlowNeuralBackground />}
       
-      <div className="container mt-4 relative z-10 my-bookings-page">
-      <div className="row">
-        <div className="col">
-          <div className="flex justify-between items-start">
-            <div>
+      <div className="container-fluid my-bookings-container">
+        {/* Page Header */}
+        <header className="my-bookings-header">
+          <Button
+            variant="outline-secondary"
+            className="my-bookings-back-btn"
+            onClick={() => navigate('/')}
+            title="Back to studies"
+          >
+            <ArrowLeft size={16} />
+            Back to studies
+          </Button>
+          <div className="my-bookings-header-content">
+            <div className="my-bookings-title-row">
+              <h1 className="my-bookings-title cortex-brand-title">Cortex<span className="cortex-admin-separator">|</span><span className="cortex-admin-suffix">Bookings</span></h1>
               <Button
-                variant="outline-secondary"
-                className="mb-3"
-                onClick={() => navigate('/')}
-                title="Back to studies"
+                variant="outline-primary"
+                className="my-bookings-refresh-btn"
+                onClick={loadBookings}
+                disabled={loading}
+                title="Refresh bookings"
               >
-                <ArrowLeft size={16} className="me-1" />
-                Back to studies
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Refresh
               </Button>
-              <h2>My bookings</h2>
-              <p className="text-muted">Manage your Cortex study bookings</p>
             </div>
-            <Button
-              variant="outline-primary"
-              onClick={loadBookings}
-              disabled={loading}
-              title="Refresh bookings"
-            >
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-              Refresh
-            </Button>
+            <p className="my-bookings-subtitle">Manage your Cortex study bookings</p>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {error && (
-        <div className="row mt-3">
-          <div className="col">
+        {/* Error Alert */}
+        {error && (
+          <div className="my-bookings-alert-container">
             <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
               {error}
             </Alert>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Upcoming Bookings */}
-      <div className="row mt-4">
-        <div className="col">
-          <h4>Upcoming bookings</h4>
+        {/* Upcoming Bookings Section */}
+        <section className="my-bookings-section">
+          <h2 className="my-bookings-section-title">Upcoming bookings</h2>
           {bookings.upcoming.length === 0 ? (
-            <Card>
+            <Card className="booking-card booking-card-empty">
               <CardBody className="empty-state-container">
                 <CalendarX size={48} className="empty-state-icon" />
-                <h5 className="empty-state-title">No upcoming sessions</h5>
+                <h3 className="empty-state-title">No upcoming sessions</h3>
                 <p className="empty-state-subtitle">Browse the Cortex dashboard to find studies to participate in.</p>
                 <Button
                   variant="primary"
                   onClick={() => navigate('/')}
-                  className="mt-3"
+                  className="mt-4"
                 >
                   Browse studies
                 </Button>
               </CardBody>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="booking-cards-grid">
               {bookings.upcoming.map((booking) => (
-                <Card key={booking.id} className="booking-card-upcoming">
-                  <CardHeader className="flex justify-between items-center">
-                    <div>
+                <Card key={booking.id} className="booking-card booking-card-upcoming">
+                  <CardBody className="booking-card-body">
+                    {/* Badge Row */}
+                    <div className="booking-card-badges">
                       {getStatusBadge(booking.status)}
                       {getTypeBadge(booking.opportunity_type)}
                     </div>
-                  </CardHeader>
-                  <CardBody>
-                    <CardTitle as="h6" className="font-bold">{booking.opportunity_title}</CardTitle>
-                    <p className="text-sm text-muted">
-                      {booking.opportunity_purpose}
-                    </p>
-                    <div className="booking-details">
-                      <div className="booking-details-row">
-                        <span className="booking-label">Date:</span>
-                        <span className="booking-value">{formatDate(booking.session_start_time)}</span>
+                    
+                    {/* Title & Description */}
+                    <h3 className="booking-card-title">{booking.opportunity_title}</h3>
+                    <p className="booking-card-description">{booking.opportunity_purpose}</p>
+                    
+                    {/* Metadata Grid */}
+                    <dl className="booking-metadata">
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Date</dt>
+                        <dd className="booking-metadata-value">{formatDate(booking.session_start_time)}</dd>
                       </div>
-                      <div className="booking-details-row">
-                        <span className="booking-label">Time:</span>
-                        <span className="booking-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</span>
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Time</dt>
+                        <dd className="booking-metadata-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</dd>
                       </div>
                       {booking.session_location && (
-                        <div className="booking-details-row">
-                          <span className="booking-label">Location:</span>
-                          {renderLocation(booking.session_location)}
+                        <div className="booking-metadata-row">
+                          <dt className="booking-metadata-label">Location</dt>
+                          <dd className="booking-metadata-value">
+                            {renderLocation(booking.session_location)}
+                          </dd>
                         </div>
                       )}
-                      <div className="booking-details-row">
-                        <span className="booking-label">Owner:</span>
-                        <span className="booking-value">{booking.owner_name}</span>
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Owner</dt>
+                        <dd className="booking-metadata-value">{booking.owner_name}</dd>
                       </div>
-                    </div>
+                    </dl>
                   </CardBody>
-                  <CardFooter>
+                  <CardFooter className="booking-card-footer">
                     <div className="booking-actions">
                       {/* Primary action: Join meeting link (if available) */}
                       {booking.session_location && isUrl(booking.session_location) && (
@@ -367,89 +368,90 @@ const MyBookings: React.FC = () => {
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </section>
 
-      {/* Past Bookings */}
-      <div className="row mt-12">
-        <div className="col">
-          <h4>Past bookings</h4>
+        {/* Past Bookings Section */}
+        <section className="my-bookings-section my-bookings-section-past">
+          <h2 className="my-bookings-section-title">Past bookings</h2>
           {bookings.past.length === 0 ? (
-            <Card>
-              <CardBody className="text-center text-muted">
-                <p>No past bookings</p>
+            <Card className="booking-card booking-card-empty">
+              <CardBody className="empty-state-container">
+                <p className="empty-state-subtitle">No past bookings</p>
               </CardBody>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="booking-cards-grid">
               {bookings.past.map((booking) => (
-                <Card key={booking.id} className="booking-card-past">
-                  <CardHeader className="flex justify-between items-center">
-                    <div>
+                <Card key={booking.id} className="booking-card booking-card-past">
+                  <CardBody className="booking-card-body">
+                    {/* Badge Row */}
+                    <div className="booking-card-badges">
                       {getStatusBadge(booking.status)}
                       {getTypeBadge(booking.opportunity_type)}
                     </div>
-                  </CardHeader>
-                  <CardBody>
-                    <CardTitle as="h6" className="font-bold">{booking.opportunity_title}</CardTitle>
-                    <p className="text-sm text-muted">
-                      {booking.opportunity_purpose}
-                    </p>
-                    <div className="booking-details">
-                      <div className="booking-details-row">
-                        <span className="booking-label">Date:</span>
-                        <span className="booking-value">{formatDate(booking.session_start_time)}</span>
+                    
+                    {/* Title & Description */}
+                    <h3 className="booking-card-title">{booking.opportunity_title}</h3>
+                    <p className="booking-card-description">{booking.opportunity_purpose}</p>
+                    
+                    {/* Metadata Grid */}
+                    <dl className="booking-metadata">
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Date</dt>
+                        <dd className="booking-metadata-value">{formatDate(booking.session_start_time)}</dd>
                       </div>
-                      <div className="booking-details-row">
-                        <span className="booking-label">Time:</span>
-                        <span className="booking-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</span>
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Time</dt>
+                        <dd className="booking-metadata-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</dd>
                       </div>
                       {booking.session_location && (
-                        <div className="booking-details-row">
-                          <span className="booking-label">Location:</span>
-                          {renderLocation(booking.session_location)}
+                        <div className="booking-metadata-row">
+                          <dt className="booking-metadata-label">Location</dt>
+                          <dd className="booking-metadata-value">
+                            {renderLocation(booking.session_location)}
+                          </dd>
                         </div>
                       )}
-                      <div className="booking-details-row">
-                        <span className="booking-label">Owner:</span>
-                        <span className="booking-value">{booking.owner_name}</span>
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Owner</dt>
+                        <dd className="booking-metadata-value">{booking.owner_name}</dd>
                       </div>
                       {booking.cancelled_at && (
-                        <div className="booking-details-row">
-                          <span className="booking-label">Cancelled:</span>
-                          <span className="booking-value">{formatHumanDate(booking.cancelled_at)}</span>
+                        <div className="booking-metadata-row">
+                          <dt className="booking-metadata-label">Cancelled</dt>
+                          <dd className="booking-metadata-value">{formatHumanDate(booking.cancelled_at)}</dd>
                         </div>
                       )}
-                    </div>
+                    </dl>
                   </CardBody>
                 </Card>
               ))}
             </div>
           )}
-        </div>
-      </div>
+        </section>
 
-      <ConfirmationModal
-        show={cancelConfirm.show}
-        title="Cancel Booking"
-        message="Are you sure you want to cancel this booking? This action will free up the slot for other participants and cannot be undone."
-        confirmLabel="Yes, Cancel Booking"
-        cancelLabel="Keep My Booking"
-        variant="danger"
-        onConfirm={confirmCancelBooking}
-        onCancel={cancelCancelBooking}
-      />
+        {/* Modals */}
+        <ConfirmationModal
+          show={cancelConfirm.show}
+          title="Cancel Booking"
+          message="Are you sure you want to cancel this booking? This action will free up the slot for other participants and cannot be undone."
+          confirmLabel="Yes, Cancel Booking"
+          cancelLabel="Keep My Booking"
+          variant="danger"
+          onConfirm={confirmCancelBooking}
+          onCancel={cancelCancelBooking}
+        />
 
-      <ConfirmationModal
-        show={rescheduleConfirm.show}
-        title="Reschedule Booking"
-        message="Are you sure you want to reschedule this booking? This action will move your booking to the selected time slot, free up your current slot, and cannot be undone."
-        confirmLabel="Yes, Reschedule"
-        cancelLabel="Cancel"
-        variant="warning"
-        onConfirm={confirmRescheduleBooking}
-        onCancel={cancelRescheduleBooking}
-      />
+        <ConfirmationModal
+          show={rescheduleConfirm.show}
+          title="Reschedule Booking"
+          message="Are you sure you want to reschedule this booking? This action will move your booking to the selected time slot, free up your current slot, and cannot be undone."
+          confirmLabel="Yes, Reschedule"
+          cancelLabel="Cancel"
+          variant="warning"
+          onConfirm={confirmRescheduleBooking}
+          onCancel={cancelRescheduleBooking}
+        />
       </div>
     </div>
   );
