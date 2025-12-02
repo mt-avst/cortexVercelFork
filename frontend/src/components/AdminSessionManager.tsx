@@ -877,14 +877,14 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   return (
-    <div className="calendar-view" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden' }}>
+    <div className="calendar-view calendar-container-clipped">
       <div className="row">
         <div className="col-12">
           <div className="d-flex justify-content-between align-items-center mb-3">
-            <h6 className="mb-0" style={{ color: 'var(--brand-headline)' }}>
+            <h6 className="mb-0 text-brand-headline">
               Available Time Slots
               {needsMultiRow && (
-                <span className="badge bg-info ms-2" style={{ fontSize: '0.7rem' }}>
+                <span className="badge bg-info ms-2 calendar-info-badge">
                   Multi-Row Layout ({currentDays.length} days)
                 </span>
               )}
@@ -892,7 +892,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
           </div>
 
           {/* Multi-Row Day Layout */}
-          <div className="calendar-timeline" style={{ overflow: 'hidden', overflowX: 'hidden', overflowY: 'hidden', maxHeight: 'calc(100vh - 300px)' }}>
+          <div className="calendar-timeline calendar-timeline-scroll">
             
             {/* First Row - Up to 5 days */}
             {renderDayColumns(firstRowSlots, firstRowDays, maxColumnsPerRow)}
@@ -901,7 +901,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
             {needsMultiRow && secondRowDays.length > 0 && (
               <div className="mt-4">
                 <div className="mb-2">
-                  <small style={{ color: 'var(--brand-headline)' }}>
+                  <small className="text-brand-headline">
                     <CalendarDays size={14} className="me-1" />
                     Additional Days ({secondRowDays.length} more)
                   </small>
@@ -1778,7 +1778,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   };
 
   return (
-    <div className="admin-session-manager" style={{ border: 'none' }}>
+    <div className="admin-session-manager border-none">
       <style>
         {`
           .admin-session-manager .form-control,
@@ -1831,7 +1831,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
       {/* Reset Confirmation Modal */}
       {showResetConfirmation && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal show d-block modal-backdrop-overlay">
           <div className="modal-dialog">
             <div className="modal-content">
               <div className="modal-header">
@@ -1907,26 +1907,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       <div className="calendar-mode">
 
           {/* Calendar Controls */}
-          <div style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '12px',
-            padding: '10px 0',
-            marginBottom: '12px',
-            width: '100%'
-          }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'flex-end',
-              gap: '15px',
-              flexWrap: 'wrap',
-              padding: '0 15px'
-            }}>
-              <div style={{ minWidth: '130px' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
+          <div className="calendar-control-panel">
+            <div className="control-panel-row">
+              <div className="form-field-compact">
+                <label className="form-label-compact">
                   Start Date
                 </label>
                 <input
@@ -1947,8 +1931,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   disabled={disabled}
                 />
               </div>
-              <div style={{ minWidth: '130px' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
+              <div className="form-field-compact">
+                <label className="form-label-compact">
                   End Date
                 </label>
                 <input
@@ -1969,8 +1953,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   disabled={disabled}
                 />
               </div>
-              <div style={{ minWidth: '110px' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
+              <div className="form-field-compact-sm">
+                <label className="form-label-compact">
                   Timeslot (mins)
                 </label>
                 <select
@@ -1989,8 +1973,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <option value="60">60 minutes</option>
                 </select>
               </div>
-              <div style={{ minWidth: '70px' }}>
-                <label style={{ fontSize: '0.7rem', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '2px', display: 'block' }}>
+              <div className="form-field-compact-xs">
+                <label className="form-label-compact">
                   Days/Page
                 </label>
                 <select
@@ -2012,7 +1996,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <option value={30}>30</option>
                 </select>
               </div>
-              <div style={{ minWidth: '130px', display: 'flex', alignItems: 'center', paddingTop: '16px' }}>
+              <div className="form-field-compact d-flex align-items-center pt-4">
                 <div className="form-check">
                   <input
                     className="form-check-input"
@@ -2022,13 +2006,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     onChange={(e) => setExcludeWeekends(!e.target.checked)}
                     disabled={disabled}
                   />
-                  <label className="form-check-label" style={{ fontSize: '0.75rem', color: 'var(--text-primary)' }} htmlFor="includeWeekends">
+                  <label className="form-check-label form-check-label-compact" htmlFor="includeWeekends">
                     Include weekends
                   </label>
                 </div>
               </div>
-              <div style={{ marginLeft: 'auto', paddingTop: '16px' }}>
-                <small style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+              <div className="control-panel-end">
+                <small className="control-panel-counter">
                   {(availableSlots || []).length} slots available
                 </small>
               </div>
@@ -2036,39 +2020,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           </div>
 
           {/* View Switcher */}
-          <div className="mb-2" style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.03)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-            borderRadius: '10px',
-            padding: '6px 12px'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="control-panel-subtle mb-2">
+            <div className="d-flex align-items-center gap-3">
               {/* Segmented Control for View Mode */}
-              <div style={{
-                display: 'inline-flex',
-                backgroundColor: 'rgba(255, 255, 255, 0.08)',
-                borderRadius: '6px',
-                padding: '3px'
-              }}>
+              <div className="segmented-control">
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
                   disabled={disabled}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 10px',
-                    fontSize: '0.75rem',
-                    fontWeight: viewMode === 'grid' ? '600' : '500',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
-                    backgroundColor: viewMode === 'grid' ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-                    color: viewMode === 'grid' ? 'var(--text-primary)' : 'var(--text-muted)',
-                    boxShadow: viewMode === 'grid' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
-                  }}
+                  className={`segmented-control-btn ${viewMode === 'grid' ? 'active' : ''}`}
                 >
                   <LayoutGrid size={12} />
                   Calendar
@@ -2077,21 +2037,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   type="button"
                   onClick={() => setViewMode('list')}
                   disabled={disabled}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    padding: '4px 10px',
-                    fontSize: '0.75rem',
-                    fontWeight: viewMode === 'list' ? '600' : '500',
-                    border: 'none',
-                    borderRadius: '4px',
-                    cursor: disabled ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.15s ease',
-                    backgroundColor: viewMode === 'list' ? 'rgba(255, 255, 255, 0.15)' : 'transparent',
-                    color: viewMode === 'list' ? 'var(--text-primary)' : 'var(--text-muted)',
-                    boxShadow: viewMode === 'list' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
-                  }}
+                  className={`segmented-control-btn ${viewMode === 'list' ? 'active' : ''}`}
                 >
                   <List size={12} />
                   Table
@@ -2104,33 +2050,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 onClick={loadCalendarData}
                 disabled={disabled || loading}
                 title="Refresh calendar to see latest booking status"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  fontSize: '0.7rem',
-                  fontWeight: '500',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '4px',
-                  cursor: disabled || loading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.15s ease',
-                  backgroundColor: 'transparent',
-                  color: 'var(--text-muted)',
-                  opacity: disabled || loading ? 0.5 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (!disabled && !loading) {
-                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
-                    e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                    e.currentTarget.style.color = 'var(--text-primary)';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-                  e.currentTarget.style.color = 'var(--text-muted)';
-                }}
+                className="btn-ghost"
               >
                 <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
                 Refresh
@@ -2151,33 +2071,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 }}
                 disabled={disabled || loading}
                 title="Delete all sessions (only if no bookings exist)"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '4px 8px',
-                  fontSize: '0.7rem',
-                  fontWeight: '500',
-                  marginLeft: 'auto',
-                  border: '1px solid rgba(156, 163, 175, 0.3)',
-                  borderRadius: '4px',
-                  cursor: disabled || loading ? 'not-allowed' : 'pointer',
-                  transition: 'all 0.2s ease',
-                  backgroundColor: 'transparent',
-                  color: '#9CA3AF',
-                  opacity: disabled || loading ? 0.5 : 1
-                }}
-                onMouseEnter={(e) => {
-                  if (!disabled && !loading) {
-                    e.currentTarget.style.borderColor = '#EF4444';
-                    e.currentTarget.style.color = '#EF4444';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = 'rgba(156, 163, 175, 0.3)';
-                  e.currentTarget.style.color = '#9CA3AF';
-                }}
+                className="btn-ghost-danger ms-auto"
               >
                 <Trash2 size={11} />
                 Reset All
@@ -2186,20 +2080,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           </div>
 
           {/* Calendar View */}
-          <div className="card mb-3" style={{
-            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            borderRadius: '16px'
-          }}>
-            <div className="card-body" style={{ backgroundColor: 'transparent' }}>
+          <div className="card card-glass mb-3">
+            <div className="card-body">
               {loading || isUpdating ? (
                 <div className="text-center py-4">
                   <div className="spinner-border text-primary" role="status">
                     <span className="visually-hidden">Loading calendar...</span>
                   </div>
-                  <div className="mt-2" style={{ color: 'var(--text-muted)' }}>Fetching calendar data...</div>
+                  <div className="mt-2 text-muted">Fetching calendar data...</div>
                 </div>
               ) : viewMode === 'grid' ? (
                 <div>
@@ -2240,73 +2128,46 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           {/* Selected Slots Actions */}
           {selectedSlots.size > 0 && (
             <div className="mb-3">
-              <div>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  padding: '1.5rem 0',
-                  textAlign: 'center'
-                }}>
-                  {/* Slots selected indicator */}
-                  <div style={{ fontSize: '1rem', color: 'var(--text-primary)' }}>
-                    <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
-                  </div>
-                  
-                  {/* Create Opportunity Button */}
-                  <button
-                    type="button"
-                    className="btn btn-success btn-sm"
-                    onClick={handleCreateSessionsFromSelected}
-                    disabled={disabled || loading}
-                    style={{
-                      minWidth: '180px'
-                    }}
-                  >
-                    {loading ? 'Creating...' : 'Create Opportunity'}
-                  </button>
-                  
-                  {/* Clear Selection and Back buttons on same row */}
-                  <div style={{
-                    display: 'flex',
-                    width: '100%',
-                    position: 'relative'
-                  }}>
-                    {/* Back button - left aligned */}
-                    {onBack && (
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary btn-sm"
-                        onClick={onBack}
-                        disabled={disabled || loading}
-                      >
-                        <ArrowLeft size={16} className="me-2" />
-                        Back
-                      </button>
-                    )}
-                    {/* Clear Selection - centered */}
-                    <div style={{
-                      flex: '1',
-                      display: 'flex',
-                      justifyContent: 'center',
-                      position: 'absolute',
-                      left: '0',
-                      right: '0',
-                      top: '0',
-                      bottom: '0',
-                      alignItems: 'center'
-                    }}>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary btn-sm"
-                        onClick={handleClearSelected}
-                        disabled={disabled}
-                      >
-                        Clear Selection
-                      </button>
-                    </div>
+              <div className="selection-actions-panel">
+                {/* Slots selected indicator */}
+                <div className="selection-summary-count">
+                  <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
+                </div>
+                
+                {/* Create Opportunity Button */}
+                <button
+                  type="button"
+                  className="btn btn-success btn-sm min-w-180"
+                  onClick={handleCreateSessionsFromSelected}
+                  disabled={disabled || loading}
+                >
+                  {loading ? 'Creating...' : 'Create Opportunity'}
+                </button>
+                
+                {/* Clear Selection and Back buttons on same row */}
+                <div className="selection-actions-row">
+                  {/* Back button - left aligned */}
+                  {onBack && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={onBack}
+                      disabled={disabled || loading}
+                    >
+                      <ArrowLeft size={16} className="me-2" />
+                      Back
+                    </button>
+                  )}
+                  {/* Clear Selection - centered */}
+                  <div className="selection-actions-center">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={handleClearSelected}
+                      disabled={disabled}
+                    >
+                      Clear Selection
+                    </button>
                   </div>
                 </div>
               </div>
@@ -2315,13 +2176,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
 
           {/* Back button when no slots selected - left-aligned */}
           {!selectedSlots.size && onBack && (
-            <div className="mt-4" style={{ textAlign: 'left' }}>
+            <div className="mt-4 text-start">
               <button
                 type="button"
                 className="btn btn-outline-secondary px-5 py-2 fw-semibold"
                 onClick={onBack}
                 disabled={disabled || loading}
-                style={{ fontSize: '0.95rem' }}
               >
                 <ArrowLeft size={16} className="me-2" />
                 Back

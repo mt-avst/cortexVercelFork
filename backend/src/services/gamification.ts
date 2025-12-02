@@ -1,4 +1,5 @@
 import { pool } from '../config';
+import { logger } from '../utils/logger';
 
 export interface UserProfile {
   id: string;
@@ -639,7 +640,7 @@ export async function awardPointsAfterApproval(
             'INSERT INTO user_achievements (user_id, achievement_id) VALUES ($1, $2)',
             [userId, achievement.id]
           );
-          console.log(`🎉 User ${userId} earned achievement: ${achievement.name}`);
+          logger.info('User earned achievement', { userId, achievementName: achievement.name });
         }
       }
     }

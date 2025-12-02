@@ -23,7 +23,7 @@ export class CalendarService {
 
   private initializeAuth() {
     // Always use demo mode for now - calendar not configured
-    console.log('📅 Calendar service initialized in demo mode');
+    logger.info('Calendar service initialized in demo mode');
     this.auth = null;
     this.calendar = null;
   }
@@ -33,7 +33,7 @@ export class CalendarService {
       if (!this.calendar) {
         // Demo mode - return mock success
         const mockEventId = `demo-event-${Date.now()}`;
-        console.log(`📅 Demo: Created calendar event "${event.title}" for ${event.startTime.toISOString()}`);
+        logger.debug('Demo: Created calendar event', { title: event.title, startTime: event.startTime.toISOString() });
         return { success: true, eventId: mockEventId };
       }
 
@@ -87,7 +87,7 @@ export class CalendarService {
     try {
       if (!this.calendar) {
         // Demo mode - return mock success
-        console.log(`📅 Demo: Updated calendar event ${eventId} "${event.title}"`);
+        logger.debug('Demo: Updated calendar event', { eventId, title: event.title });
         return { success: true };
       }
 
@@ -133,7 +133,7 @@ export class CalendarService {
     try {
       if (!this.calendar) {
         // Demo mode - return mock success
-        console.log(`📅 Demo: Deleted calendar event ${eventId}`);
+        logger.debug('Demo: Deleted calendar event', { eventId });
         return { success: true };
       }
 
@@ -181,7 +181,7 @@ export class CalendarService {
     calendarId?: string
   ): Promise<{ success: boolean; events?: any[]; error?: string }> {
     // Always return demo mode since calendar is not configured
-    console.log(`📅 Demo mode: Returning empty events (calendar not configured)`);
+    logger.debug('Demo mode: Returning empty events (calendar not configured)');
     const mockEvents: any[] = [];
     return { success: true, events: mockEvents };
   }

@@ -18,18 +18,21 @@ This guide documents the CSS architecture for the AdaptaLabs frontend, built on 
 The CSS is organized using CSS Layers for predictable specificity:
 
 ```css
-@layer reset, tokens, base, components, utilities, themes;
+@layer tailwind, reset, tokens, base, components, utilities, themes;
 ```
 
 **Layer Order (lowest to highest specificity):**
-1. `reset` - Browser reset and normalization
-2. `tokens` - CSS custom properties (design tokens)
-3. `base` - Raw HTML element styling
-4. `components` - Reusable UI component styles
-5. `utilities` - Single-purpose utility classes
-6. `themes` - Theme-specific overrides (light/dark)
+1. `tailwind` - Tailwind CSS utilities (lowest priority, always overridable)
+2. `reset` - Browser reset and normalization
+3. `tokens` - CSS custom properties (design tokens)
+4. `base` - Raw HTML element styling
+5. `components` - Reusable UI component styles
+6. `utilities` - Single-purpose utility classes
+7. `themes` - Theme-specific overrides (light/dark) - **HIGHEST PRIORITY**
 
 **Entry Point:** `main.css` imports all layers in order.
+
+> **Note:** Tailwind is imported at the lowest layer priority, ensuring our custom styles always win conflicts.
 
 ---
 
@@ -380,7 +383,7 @@ Inline styles are acceptable for:
 
 ---
 
-*Last updated: November 2025*
+*Last updated: December 2025*
 
 
 

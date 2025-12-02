@@ -1,4 +1,5 @@
 import { CalendarEvent } from '../../../shared/types';
+import { logger } from '../utils/logger';
 
 /**
  * User Calendar Service
@@ -15,9 +16,9 @@ export class UserCalendarService {
                       !process.env.GOOGLE_OAUTH_CLIENT_SECRET;
     
     if (this.isDemoMode) {
-      console.log('📅 User Calendar service initialized in DEMO mode');
+      logger.info('User Calendar service initialized in DEMO mode');
     } else {
-      console.log('📅 User Calendar service initialized in PRODUCTION mode');
+      logger.info('User Calendar service initialized in PRODUCTION mode');
     }
   }
 
@@ -66,7 +67,7 @@ export class UserCalendarService {
     expiryDate: Date | null;
   }> {
     if (this.isDemoMode) {
-      console.log('📅 Demo mode: Returning mock tokens');
+      logger.debug('Demo mode: Returning mock tokens');
       return {
         accessToken: `demo-access-token-${Date.now()}`,
         refreshToken: `demo-refresh-token-${Date.now()}`,
@@ -124,7 +125,7 @@ export class UserCalendarService {
     expiryDate: Date | null;
   }> {
     if (this.isDemoMode) {
-      console.log('📅 Demo mode: Returning refreshed mock token');
+      logger.debug('Demo mode: Returning refreshed mock token');
       return {
         accessToken: `demo-access-token-refreshed-${Date.now()}`,
         expiryDate: new Date(Date.now() + 3600 * 1000), // 1 hour from now
@@ -177,7 +178,7 @@ export class UserCalendarService {
     userId?: string
   ): Promise<CalendarEvent[]> {
     if (this.isDemoMode) {
-      console.log('📅 Demo mode: Returning mock calendar events');
+      logger.debug('Demo mode: Returning mock calendar events');
       return this.generateMockEvents(startTime, endTime, userId);
     }
 
@@ -256,7 +257,7 @@ export class UserCalendarService {
           };
         });
 
-      console.log(`📅 Fetched ${events.length} calendar events from Google Calendar`);
+      logger.debug('Fetched calendar events from Google Calendar', { count: events.length });
       return events;
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -275,7 +276,7 @@ export class UserCalendarService {
     event: CalendarEvent
   ): Promise<{ success: boolean; eventId?: string; error?: string }> {
     if (this.isDemoMode) {
-      console.log(`📅 Demo: Created calendar event "${event.title}" in user's calendar for ${event.startTime.toISOString()}`);
+      logger.debug('Demo: Created calendar event in user calendar', { title: event.title, startTime: event.startTime.toISOString() });
       const mockEventId = `demo-user-event-${Date.now()}`;
       return { success: true, eventId: mockEventId };
     }
@@ -337,7 +338,7 @@ export class UserCalendarService {
       }
 
       const data = await response.json() as { id: string };
-      console.log(`📅 Created calendar event "${event.title}" in user's calendar: ${data.id}`);
+      logger.debug('Created calendar event in user calendar', { title: event.title, eventId: data.id });
       return { success: true, eventId: data.id };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -357,7 +358,7 @@ export class UserCalendarService {
     event: CalendarEvent
   ): Promise<{ success: boolean; error?: string }> {
     if (this.isDemoMode) {
-      console.log(`📅 Demo: Updated calendar event "${event.title}" in user's calendar: ${eventId}`);
+      logger.debug('Demo: Updated calendar event in user calendar', { title: event.title, eventId });
       return { success: true };
     }
 
@@ -420,7 +421,7 @@ export class UserCalendarService {
         throw new Error(`Failed to update calendar event: ${response.status} ${response.statusText}`);
       }
 
-      console.log(`📅 Updated calendar event "${event.title}" in user's calendar: ${eventId}`);
+      logger.debug('Updated calendar event in user calendar', { title: event.title, eventId });
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -517,7 +518,7 @@ export class UserCalendarService {
     eventId: string
   ): Promise<{ success: boolean; error?: string }> {
     if (this.isDemoMode) {
-      console.log(`📅 Demo: Deleted calendar event from user's calendar: ${eventId}`);
+      logger.debug('Demo: Deleted calendar event from user calendar', { eventId });
       return { success: true };
     }
 
@@ -539,7 +540,7 @@ export class UserCalendarService {
         }
         // 404 is acceptable - event might already be deleted
         if (response.status === 404) {
-          console.log(`📅 Calendar event not found in user calendar (already deleted): ${eventId}`);
+          logger.debug('Calendar event not found in user calendar (already deleted)', { eventId });
           return { success: true };
         }
         const errorData = await response.text();
@@ -547,7 +548,7 @@ export class UserCalendarService {
         throw new Error(`Failed to delete calendar event: ${response.status} ${response.statusText}`);
       }
 
-      console.log(`📅 Deleted calendar event from user's calendar: ${eventId}`);
+      logger.debug('Deleted calendar event from user calendar', { eventId });
       return { success: true };
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -704,7 +705,7 @@ export class UserCalendarService {
       }
     }
     
-    console.log(`📅 Generated ${events.length} mock calendar events${isDemoUser1 ? ' with specific conflicts for Demo User 1' : ''}`);
+    logger.debug('Generated mock calendar events', { count: events.length, isDemoUser1 });
 
     return events;
   }

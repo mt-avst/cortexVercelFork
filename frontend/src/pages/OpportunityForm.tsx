@@ -555,7 +555,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // Show loading spinner while checking authentication
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }} aria-busy="true" aria-live="polite">
+      <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
         <div className="spinner-border text-primary" role="status" aria-label="Loading">
           <span className="visually-hidden">Loading...</span>
         </div>
@@ -576,7 +576,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // Show loading spinner while loading opportunity for edit
   if (isEdit && loadingOpportunity) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '50vh' }} aria-busy="true" aria-live="polite">
+      <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
         <div className="spinner-border text-primary" role="status" aria-label="Loading opportunity">
           <span className="visually-hidden">Loading opportunity...</span>
         </div>
@@ -589,7 +589,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       {/* Theme-aware Background: Dark Mode gets neural particles */}
       {isDark && <SlowNeuralBackground />}
       
-      <div className="container-fluid py-4 opportunity-form" style={{ minHeight: '100vh' }}>
+      <div className="container-fluid py-4 opportunity-form min-h-100vh">
         <div className="row justify-content-center">
           <div className="col-12 col-xl-10">
             {/* Back button */}
@@ -605,10 +605,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between">
                 <div>
-                  <h1 className="mb-1 form-title" style={{ fontSize: '1.75rem', fontWeight: '600' }}>
+                  <h1 className="mb-1 form-title form-title-lg">
                     {isEdit ? 'Edit Opportunity' : 'Create New Opportunity'}
                   </h1>
-                  <p className="mb-0 form-subtitle" style={{ fontSize: '1rem' }}>
+                  <p className="mb-0 form-subtitle form-subtitle-md">
                     {isEdit ? 'Update study details and sessions' : 'Set up a new Cortex research study'}
                   </p>
                 </div>
@@ -616,15 +616,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   {/* Analytics button - only for polls, surveys, and unmoderated tests in edit mode */}
                   {isEdit && id && (formData.type === 'poll' || formData.type === 'survey' || formData.type === 'unmoderated') && (
                     <button
-                      className="btn btn-outline-primary btn-sm"
+                      className="btn btn-outline-primary btn-sm text-sm"
                       onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}
-                      style={{ fontSize: '0.875rem' }}
                     >
                       <TrendingUp size={14} className="me-1" />
                       Analytics
                     </button>
                   )}
-                  <div className="form-user-info" style={{ fontSize: '0.9rem' }}>
+                  <div className="form-user-info form-user-info-text">
                     <UserCircle size={16} className="me-1" />
                     {user?.name || 'Unknown User'}
                   </div>
@@ -659,7 +658,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               <form onSubmit={handleSubmit}>
                 {/* Tab Navigation */}
                 <div className="border-bottom">
-                  <nav className="nav nav-tabs border-0" style={{ marginBottom: '-1px', display: 'flex' }}>
+                  <nav className="nav nav-tabs border-0 nav-tabs-form">
                     {tabs.map((tab) => (
                       <button
                         key={tab.id}
@@ -667,28 +666,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         className={`nav-link border-0 py-3 px-4 opportunity-form-tab ${
                           activeTab === tab.id ? 'active fw-bold' : 'fw-semibold'
                         }`}
-                        style={{
-                          fontSize: activeTab === tab.id ? '1.1rem' : '0.95rem',
-                          flex: '1',
-                          width: '100%',
-                          transition: 'all 0.2s ease-in-out'
-                        }}
                         onClick={() => setActiveTab(tab.id)}
                       >
                         <div className="text-center">
-                          <div className="tab-title" style={{ 
-                            fontSize: activeTab === tab.id ? '1.1rem' : 'inherit',
-                            fontWeight: activeTab === tab.id ? '600' : '500'
-                          }}>
+                          <div className={`tab-title tab-title-dynamic ${activeTab === tab.id ? 'active' : ''}`}>
                             {tab.title}
                           </div>
-                          <small 
-                            className="tab-description"
-                            style={{ 
-                              fontSize: activeTab === tab.id ? '0.9rem' : '0.8rem',
-                              fontWeight: '400'
-                            }}
-                          >
+                          <small className={`tab-description tab-description-dynamic ${activeTab === tab.id ? 'active' : ''}`}>
                             {tab.description}
                           </small>
                         </div>
