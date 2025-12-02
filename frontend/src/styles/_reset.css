@@ -132,7 +132,7 @@ textarea {
 
 /* Ensure consistent focus outlines */
 :focus-visible {
-  outline: 2px solid var(--focus-ring, #FF4E50);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 

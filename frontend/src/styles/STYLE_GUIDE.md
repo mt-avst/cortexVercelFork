@@ -51,16 +51,24 @@ Design tokens are CSS custom properties defined in `_tokens.css`. Always use tok
 --text-body: rgba(224, 224, 224, 0.8); /* Body text */
 --text-muted: rgba(224, 224, 224, 0.6); /* Secondary text */
 
-/* Brand Colors */
---brand-headline: #FF4E50;            /* Brand coral (dark mode) */
---brand-primary: #FF4E50;
---brand-secondary: #FC913A;
+/* Brand Orange Scale (Unified) */
+--brand-orange-300: #FFB380;          /* Lightest - highlights */
+--brand-orange-400: #FF8F4D;          /* Light - hover states */
+--brand-orange-500: #FF7A33;          /* Primary - main brand */
+--brand-orange-600: #E86C24;          /* Medium - light mode primary */
+--brand-orange-700: #D35F1D;          /* Dark - light mode hover */
+--brand-orange-800: #C54E12;          /* Darkest - deep accents */
+
+/* Brand Aliases (use these) */
+--brand-headline: var(--brand-orange-500);
+--brand-primary: var(--brand-orange-500);
+--brand-secondary: var(--brand-orange-400);
 
 /* CTA Colors */
---cta-bg: #FF4E50;
---cta-bg-hover: #ff5e60;
+--cta-bg: var(--brand-orange-500);
+--cta-bg-hover: var(--brand-orange-400);
 --cta-text: #FFFFFF;
---cta-border: #FF4E50;
+--cta-border: var(--brand-orange-500);
 ```
 
 ### Spacing
@@ -295,7 +303,9 @@ All display, flex, and spacing utilities have responsive variants:
 | `--bg-app` | #0A091A | #FFFFFF |
 | `--bg-card` | rgba(255,255,255,0.05) | #FFFFFF |
 | `--text-primary` | #E0E0E0 | #1A1A1A |
-| `--brand-headline` | #FF4E50 | #E86C24 |
+| `--brand-headline` | var(--brand-orange-500) | var(--brand-orange-600) |
+| `--brand-primary` | var(--brand-orange-500) | var(--brand-orange-600) |
+| `--cta-bg` | var(--brand-orange-500) | var(--brand-orange-600) |
 
 ### Theme-Specific Styles
 
@@ -371,6 +381,7 @@ Inline styles are acceptable for:
 ---
 
 *Last updated: November 2025*
+
 
 
 

@@ -1,8 +1,9 @@
-import React, { useState, memo, useEffect } from 'react';
+import React, { useState, memo, useEffect, useRef } from 'react';
 import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
 import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
 import StaticNeuralBackground from '../components/StaticNeuralBackground';
 import { useTheme } from '../contexts/ThemeContext';
+import SalesSections from '../components/SalesSections';
 
 /**
  * Landing Page Component - Adaptavist Cortex
@@ -18,6 +19,7 @@ import { useTheme } from '../contexts/ThemeContext';
 const Landing: React.FC = memo(() => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const salesRef = useRef<HTMLDivElement>(null);
   
   // Add landing-page class to body for header transparency
   useEffect(() => {
@@ -29,6 +31,17 @@ const Landing: React.FC = memo(() => {
 
   const [loginLoading, setLoginLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+
+  // Scroll to sales sections with motion preference support
+  const handleScrollToSales = () => {
+    if (salesRef.current) {
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      salesRef.current.scrollIntoView({ 
+        behavior: prefersReducedMotion ? 'auto' : 'smooth', 
+        block: 'start' 
+      });
+    }
+  };
 
   const handleDemoLogin = () => {
     setLoginLoading(true);
@@ -102,7 +115,20 @@ const Landing: React.FC = memo(() => {
               </>
             )}
           </button>
+
         </div>
+
+        {/* Hero Scroll Tab - Bottom-anchored scroll hint */}
+        <button
+          type="button"
+          className="hero-scroll-tab"
+          onClick={handleScrollToSales}
+          aria-label="Scroll to learn how Cortex works"
+        >
+          <span className="hero-scroll-tab__label">New to Cortex?</span>
+          <span className="hero-scroll-tab__action">See how it works</span>
+          <span className="hero-scroll-tab__arrow" aria-hidden="true">↓</span>
+        </button>
 
         {/* Demo Footer - Pinned Bottom */}
         <div className="landing-demo-footer">
@@ -131,6 +157,11 @@ const Landing: React.FC = memo(() => {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Sales Sections - Below the fold */}
+      <div id="cortex-sales" ref={salesRef}>
+        <SalesSections onAccessCortex={handleGoogleLogin} isLoading={isLoading} />
       </div>
     </div>
   );

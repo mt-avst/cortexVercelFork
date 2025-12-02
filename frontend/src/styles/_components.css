@@ -212,6 +212,40 @@
   }
 }
 
+/* ============================================================
+   UNIFIED SURFACE SHELLS - Carbon Glass Design System
+   These classes handle surface, border, shadow, and radius only.
+   Layout and typography are handled separately.
+   ============================================================ */
+
+/* Large panels (hero blocks, full-width sections, major containers) */
+.panel-shell {
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  box-shadow: var(--shadow-panel-current);
+  border-radius: var(--radius-panel);
+}
+
+/* Inner cards / tiles (stat cards, feature tiles, study cards) */
+.card-shell {
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
+  border-radius: var(--radius-card);
+}
+
+/* Hover state modifiers for interactive cards */
+.card-shell--interactive {
+  transition: transform var(--transition-card), 
+              box-shadow var(--transition-card),
+              border-color var(--transition-card);
+}
+
+.card-shell--interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong-current);
+}
+
 .placeholder-wave {
   mask-image: linear-gradient(130deg, #000 55%, rgba(0, 0, 0, 0.8) 75%, #000 95%);
   mask-size: 200% 100%;
@@ -295,6 +329,40 @@
   min-height: 0;
 }
 
+/* Staggered entrance animation for bento grid cards */
+.bento-grid .card {
+  animation: bento-card-entrance var(--duration-slow) var(--ease-out-expo) backwards;
+}
+
+.bento-grid .card:nth-child(1) { animation-delay: 0ms; }
+.bento-grid .card:nth-child(2) { animation-delay: 50ms; }
+.bento-grid .card:nth-child(3) { animation-delay: 100ms; }
+.bento-grid .card:nth-child(4) { animation-delay: 150ms; }
+.bento-grid .card:nth-child(5) { animation-delay: 200ms; }
+.bento-grid .card:nth-child(6) { animation-delay: 250ms; }
+.bento-grid .card:nth-child(7) { animation-delay: 300ms; }
+.bento-grid .card:nth-child(8) { animation-delay: 350ms; }
+.bento-grid .card:nth-child(9) { animation-delay: 400ms; }
+.bento-grid .card:nth-child(n+10) { animation-delay: 450ms; }
+
+@keyframes bento-card-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Disable staggered animations for reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .bento-grid .card {
+    animation: none;
+  }
+}
+
 .bento-grid-item {
   grid-column: span 1;
 }
@@ -342,12 +410,18 @@
   padding: var(--card-padding);
   margin-bottom: var(--spacing-vertical-rhythm);
   box-shadow: var(--shadow-card);
-  transition: border-color var(--transition-card), transform var(--transition-card), box-shadow var(--transition-card);
+  /* Enhanced transitions using new easing tokens */
+  transition: 
+    border-color var(--transition-card),
+    transform var(--transition-lift),
+    box-shadow var(--transition-card),
+    background var(--transition-card);
 }
 
 .card:hover {
   border-color: var(--brand-headline);
-  transform: translateY(-2px);
+  /* Enhanced lift with subtle scale */
+  transform: translateY(-3px) scale(1.01);
   box-shadow: var(--shadow-card-hover);
 }
 
@@ -421,7 +495,13 @@
   border: 1px solid transparent;
   border-radius: var(--button-radius);
   min-height: var(--min-click-area);
-  transition: all var(--transition-button);
+  /* Enhanced transitions using custom easing */
+  transition: 
+    background-color var(--transition-button),
+    color var(--transition-button),
+    border-color var(--transition-button),
+    box-shadow var(--transition-button),
+    transform var(--transition-scale);
 }
 
 .btn:focus-visible {
@@ -448,12 +528,19 @@
 .btn-primary:hover {
   background: var(--cta-bg-hover);
   color: var(--cta-text-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-button-hover);
+  /* Magnetic effect: lift + subtle scale + glow */
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 
+    var(--shadow-button-hover),
+    0 0 20px rgba(255, 122, 51, 0.25);
+}
+
+.btn-primary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .btn-primary:focus-visible {
-  box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
 }
 
 /* Secondary Button */
@@ -466,6 +553,11 @@
 .btn-secondary:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.btn-secondary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 /* Outline Buttons */
@@ -478,6 +570,11 @@
 .btn-outline-primary:hover {
   background: var(--brand-primary);
   color: var(--cta-text-hover);
+  transform: translateY(-1px) scale(1.01);
+}
+
+.btn-outline-primary:active {
+  transform: translateY(0) scale(0.98);
 }
 
 .btn-outline-secondary {
@@ -2617,11 +2714,12 @@ body.admin-page .header .container {
    ADMIN DATA TABLE - Cortex Glass Design
    ============================================================ */
 
-/* Glass container for the data table */
+/* Glass container for the data table (unified surface system) */
 .admin-data-table-container {
-  background: var(--bg-cortex-glass);
-  border: 1px solid var(--border-cortex-glass);
-  border-radius: 12px;
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel-current);
   backdrop-filter: blur(var(--backdrop-blur));
   -webkit-backdrop-filter: blur(var(--backdrop-blur));
   overflow: hidden;
@@ -2950,11 +3048,14 @@ body.theme-dark .admin-data-table td.col-date {
   padding-right: 0 !important;
 }
 
-/* Glass Cards - Premium Cortex Aesthetic */
+/* Glass Cards - Premium Cortex Aesthetic (unified surface system) */
 .admin-stat-card {
-  background: var(--bg-cortex-glass);
-  border: 1px solid var(--border-cortex-glass);
-  border-radius: 12px;
+  /* Unified card surface system */
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-current);
+  /* Glass effect for dark mode depth */
   backdrop-filter: blur(var(--backdrop-blur));
   -webkit-backdrop-filter: blur(var(--backdrop-blur));
 }
@@ -2990,7 +3091,7 @@ body.theme-dark .admin-data-table td.col-date {
   transition: opacity 0.2s ease;
 }
 
-/* Icon wrapper - neutral background instead of orange glow */
+/* Icon wrapper - neutral background using glass surface */
 .stat-icon-wrapper {
   display: flex;
   align-items: center;
@@ -2998,8 +3099,8 @@ body.theme-dark .admin-data-table td.col-date {
   width: 40px;
   height: 40px;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-glass-current);
+  border: 1px solid var(--border-subtle-current);
 }
 
 .stat-icon-wrapper .stat-icon {
@@ -3705,7 +3806,7 @@ body.theme-dark .admin-data-table td.col-date {
 
 .coral-dot {
   position: absolute;
-  background-color: #FF4E50;
+  background-color: var(--brand-orange-500);
   border-radius: 1px;
   z-index: 3;
   pointer-events: none;
@@ -3900,7 +4001,7 @@ body.theme-light .hero-value-heading {
   top: 0.55em;
   width: 6px;
   height: 6px;
-  background-color: #FF4E50;
+  background-color: var(--brand-orange-500);
   border-radius: 50%;
 }
 
@@ -3945,7 +4046,7 @@ body.theme-light .hero-value-heading {
 }
 
 .hero-cta-primary:focus {
-  outline: 2px solid #FF4E50;
+  outline: 2px solid var(--brand-orange-500);
   outline-offset: 2px;
 }
 
@@ -7800,7 +7901,7 @@ body:has(.cortex-landing) #root {
 }
 
 .logo-labs {
-  background: linear-gradient(135deg, #FF4E50 0%, #FF5A1F 50%, #E86C24 100%);
+  background: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-400) 50%, var(--brand-orange-600) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -7933,7 +8034,7 @@ body:has(.cortex-landing) #root {
   transform: translate(-50%, -50%);
   width: 110%;
   height: 140%;
-  background: linear-gradient(135deg, #FF4E50 0%, #FF5A1F 40%, #E86C24 100%);
+  background: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-400) 40%, var(--brand-orange-600) 100%);
   border-radius: 60% 40% 50% 45% / 50% 60% 40% 55%;
   animation: blob-morph 8s ease-in-out infinite;
   z-index: -2;
@@ -8854,11 +8955,11 @@ body.theme-light .mission-scheduler .legend-label-available {
 
 /* Full-screen wrapper */
 .landing-page-wrapper {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
   z-index: 50;
   background: var(--bg-app);
 }
@@ -8868,9 +8969,9 @@ body.theme-dark .landing-page-wrapper {
   background: #030305;
 }
 
-/* Light mode: orange grid pattern */
+/* Light mode: orange grid pattern on pure white */
 body.theme-light .landing-page-wrapper {
-  background: #f8fafc;
+  background: #FFFFFF;
   background-image: 
     linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
@@ -9117,6 +9218,402 @@ body.theme-light .landing-demo-pill:hover {
 
 .landing-demo-pill {
   position: relative;
+}
+
+/* ============================================================
+   HERO SCROLL TAB
+   Bottom-anchored scroll hint for landing page
+   ============================================================ */
+
+.hero-scroll-tab {
+  /* Reset button styles */
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  
+  /* Layout - column for stacked content + arrow */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  
+  /* Sizing - taller to accommodate arrow on new line */
+  height: auto;
+  padding: 10px 20px 12px;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  
+  /* Positioning - raised for dark mode (avoid clipping) */
+  position: absolute;
+  bottom: 160px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  
+  /* Allow neural pulse sparks to be visible on the border */
+  overflow: visible;
+  
+  /* Dark mode default styling */
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: rgba(255, 255, 255, 0.88);
+  
+  /* Transitions */
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+/* Neural pulse - dual paths from top-left converging at bottom-right */
+
+/* Shared styles for both pulse paths */
+.hero-scroll-tab::before,
+.hero-scroll-tab::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(252, 211, 77, 1) 20%,
+    rgba(249, 115, 22, 0.8) 50%,
+    transparent 80%
+  );
+  transition: opacity 0.3s ease;
+}
+
+/* Path 1: Top edge → Right edge */
+.hero-scroll-tab::before {
+  animation: neural-path-top-right 3s ease-in-out infinite;
+}
+
+/* Path 2: Left edge → Bottom edge */
+.hero-scroll-tab::after {
+  animation: neural-path-left-bottom 3s ease-in-out infinite;
+}
+
+/* Intensify on hover/focus */
+.hero-scroll-tab:hover::before {
+  animation: neural-path-top-right-hover 1.8s ease-in-out infinite;
+}
+
+.hero-scroll-tab:hover::after {
+  animation: neural-path-left-bottom-hover 1.8s ease-in-out infinite;
+}
+
+.hero-scroll-tab:focus-visible::before {
+  animation: neural-path-top-right-hover 1.8s ease-in-out infinite;
+}
+
+.hero-scroll-tab:focus-visible::after {
+  animation: neural-path-left-bottom-hover 1.8s ease-in-out infinite;
+}
+
+/* Path along top edge, then down right edge */
+@keyframes neural-path-top-right {
+  0%, 2% {
+    /* Start: top-left corner, on the border */
+    width: 12px;
+    height: 12px;
+    top: -6px;
+    left: -6px;
+    right: auto;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  42% {
+    /* End of top edge: top-right corner */
+    width: 12px;
+    height: 12px;
+    top: -6px;
+    left: calc(100% - 6px);
+    right: auto;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  58% {
+    /* After corner turn: starting down right edge */
+    width: 12px;
+    height: 12px;
+    top: -6px;
+    left: auto;
+    right: -6px;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  88% {
+    /* Approaching end, still visible */
+    width: 12px;
+    height: 12px;
+    top: calc(100% - 10px);
+    left: auto;
+    right: -6px;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  98%, 100% {
+    /* End: fade out at bottom-right corner */
+    width: 12px;
+    height: 12px;
+    top: calc(100% - 6px);
+    left: auto;
+    right: -6px;
+    bottom: auto;
+    opacity: 0;
+  }
+}
+
+/* Path along left edge, then along bottom edge */
+@keyframes neural-path-left-bottom {
+  0%, 2% {
+    /* Start: top-left corner, on the border */
+    width: 12px;
+    height: 12px;
+    top: -6px;
+    left: -6px;
+    right: auto;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  42% {
+    /* End of left edge: bottom-left corner */
+    width: 12px;
+    height: 12px;
+    top: calc(100% - 6px);
+    left: -6px;
+    right: auto;
+    bottom: auto;
+    opacity: 0.85;
+  }
+  58% {
+    /* After corner turn: starting along bottom edge */
+    width: 12px;
+    height: 12px;
+    top: auto;
+    left: -6px;
+    right: auto;
+    bottom: -6px;
+    opacity: 0.85;
+  }
+  88% {
+    /* Approaching end, still visible */
+    width: 12px;
+    height: 12px;
+    top: auto;
+    left: calc(100% - 10px);
+    right: auto;
+    bottom: -6px;
+    opacity: 0.85;
+  }
+  98%, 100% {
+    /* End: fade out at bottom-right corner */
+    width: 12px;
+    height: 12px;
+    top: auto;
+    left: calc(100% - 6px);
+    right: auto;
+    bottom: -6px;
+    opacity: 0;
+  }
+}
+
+/* Hover versions - bigger, brighter and faster */
+@keyframes neural-path-top-right-hover {
+  0%, 2% {
+    width: 16px;
+    height: 16px;
+    top: -8px;
+    left: -8px;
+    right: auto;
+    bottom: auto;
+    opacity: 1;
+  }
+  42% {
+    width: 16px;
+    height: 16px;
+    top: -8px;
+    left: calc(100% - 8px);
+    right: auto;
+    bottom: auto;
+    opacity: 1;
+  }
+  58% {
+    width: 16px;
+    height: 16px;
+    top: -8px;
+    left: auto;
+    right: -8px;
+    bottom: auto;
+    opacity: 1;
+  }
+  88% {
+    width: 16px;
+    height: 16px;
+    top: calc(100% - 12px);
+    left: auto;
+    right: -8px;
+    bottom: auto;
+    opacity: 1;
+  }
+  98%, 100% {
+    width: 16px;
+    height: 16px;
+    top: calc(100% - 8px);
+    left: auto;
+    right: -8px;
+    bottom: auto;
+    opacity: 0;
+  }
+}
+
+@keyframes neural-path-left-bottom-hover {
+  0%, 2% {
+    width: 16px;
+    height: 16px;
+    top: -8px;
+    left: -8px;
+    right: auto;
+    bottom: auto;
+    opacity: 1;
+  }
+  42% {
+    width: 16px;
+    height: 16px;
+    top: calc(100% - 8px);
+    left: -8px;
+    right: auto;
+    bottom: auto;
+    opacity: 1;
+  }
+  58% {
+    width: 16px;
+    height: 16px;
+    top: auto;
+    left: -8px;
+    right: auto;
+    bottom: -8px;
+    opacity: 1;
+  }
+  88% {
+    width: 16px;
+    height: 16px;
+    top: auto;
+    left: calc(100% - 12px);
+    right: auto;
+    bottom: -8px;
+    opacity: 1;
+  }
+  98%, 100% {
+    width: 16px;
+    height: 16px;
+    top: auto;
+    left: calc(100% - 8px);
+    right: auto;
+    bottom: -8px;
+    opacity: 0;
+  }
+}
+
+/* Text hierarchy */
+.hero-scroll-tab__label {
+  font-weight: 400;
+  opacity: 0.85;
+  line-height: 1.2;
+}
+
+.hero-scroll-tab__action {
+  font-weight: 500;
+  display: block;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Arrow - separate line, centered */
+.hero-scroll-tab__arrow {
+  display: block;
+  text-align: center;
+  font-size: 1em;
+  line-height: 1;
+  margin-top: 2px;
+  animation: hero-scroll-arrow 2.5s ease-in-out infinite;
+}
+
+@keyframes hero-scroll-arrow {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(5px);
+    opacity: 0.75;
+  }
+}
+
+/* Hover state - subtle, no competing with btn-power */
+.hero-scroll-tab:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Focus state */
+.hero-scroll-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+/* Light mode variant - positioned higher within the ring */
+/* Hide neural pulse animation in light mode */
+body.theme-light .hero-scroll-tab::before,
+body.theme-light .hero-scroll-tab::after {
+  display: none;
+}
+
+body.theme-light .hero-scroll-tab {
+  /* Position within the clear circle area, well above the footer */
+  bottom: 28vh;
+  
+  /* Styling */
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  color: rgba(0, 0, 0, 0.75);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+body.theme-light .hero-scroll-tab:hover {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .hero-scroll-tab__arrow {
+    animation: none;
+    opacity: 0.6;
+  }
+  
+  /* Disable neural pulse animation */
+  .hero-scroll-tab::before,
+  .hero-scroll-tab::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* Mobile: static positioning */
+@media (max-width: 640px) {
+  .hero-scroll-tab {
+    position: static;
+    transform: none;
+    margin-top: var(--spacing-6);
+  }
+  
+  .landing-hero-stack {
+    padding-bottom: var(--spacing-8);
+  }
 }
 
 /* Responsive landing typography
@@ -10540,4 +11037,542 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 /* Date selector alignment - sits at flex-end of header */
 .cortex-date-selector {
   flex-shrink: 0;
+}
+
+/* ============================================================
+   SALES PAGE SECTIONS
+   Mode-neutral layout classes with token-based colors
+   ============================================================ */
+
+/* Sales sections wrapper - contains all below-fold content */
+.sales-sections-wrapper {
+  position: relative;
+  z-index: 1;
+}
+
+/* Base section - structure only */
+.sales-section {
+  padding: 96px var(--spacing-4);
+  position: relative;
+}
+
+/* First section gets extra top spacing for hero-to-content transition */
+.sales-section:first-child {
+  padding-top: 136px; /* 96px + 40px for luxurious scroll transition */
+}
+
+/* Section separator - subtle top border for visual rhythm */
+.sales-section + .sales-section {
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* Section inner - width constraint and center alignment */
+.sales-section-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-4);
+}
+
+/* Dimmed overlay modifier - uses unified panel surface system */
+/* No gradients, no warm tints - pure neutral surface */
+.sales-section--dim {
+  /* Unified panel surface system */
+  background: var(--surface-panel-current);
+  /* No border-radius for full-width sections */
+  border-radius: 0;
+  margin: 0;
+  /* Subtle top/bottom borders using token system */
+  border-top: 1px solid var(--border-subtle-current);
+  border-bottom: 1px solid var(--border-subtle-current);
+  /* Relative positioning for optional overlay effects */
+  position: relative;
+  overflow: hidden;
+}
+
+/* Optional radial glow overlay for sales sections */
+.sales-section--dim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    circle at top,
+    var(--surface-glass-current),
+    transparent 55%
+  );
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+/* ============================================================
+   SALES SPACING UTILITIES
+   ============================================================ */
+
+.sales-stack-sm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+}
+
+.sales-stack-md {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-4);
+}
+
+.sales-stack-lg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-6);
+}
+
+/* ============================================================
+   SALES GRID LAYOUTS - Mobile first
+   ============================================================ */
+
+/* Two-column grid */
+.sales-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-8);
+}
+
+@media (min-width: 768px) {
+  .sales-grid-2 {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-10);
+  }
+}
+
+/* Role cards - 4 columns */
+.sales-roles-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-4);
+}
+
+@media (min-width: 768px) {
+  .sales-roles-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .sales-roles-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+/* Features grid - 3 columns */
+.sales-features-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-4);
+}
+
+@media (min-width: 768px) {
+  .sales-features-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .sales-features-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Steps row - horizontal on desktop */
+.sales-steps-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-6); /* Increased breathing room between steps */
+}
+
+@media (min-width: 768px) {
+  .sales-steps-row {
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-8); /* Even more space on desktop for balance */
+  }
+}
+
+/* ============================================================
+   GENERIC CARD HOVER UTILITY
+   Reusable translateY + shadow lift
+   ============================================================ */
+
+.card-raise-hover {
+  transition: transform var(--transition-card), box-shadow var(--transition-card);
+}
+
+.card-raise-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* ============================================================
+   SALES TYPOGRAPHY
+   ============================================================ */
+
+.sales-heading-xl {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.sales-heading-l {
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.sales-heading-center {
+  text-align: center;
+}
+
+.sales-body {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.sales-body-muted {
+  font-size: var(--font-size-body);
+  line-height: var(--line-height-body);
+  color: var(--text-muted);
+  margin: 0 0 var(--spacing-4) 0;
+}
+
+.sales-body-center {
+  text-align: center;
+}
+
+.sales-micro-copy {
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  text-align: center;
+  margin-top: var(--spacing-6);
+  font-style: italic;
+}
+
+/* ============================================================
+   SALES COPY BLOCK (Pitch section left column)
+   ============================================================ */
+
+.sales-copy-block {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.sales-bullets {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sales-bullets li {
+  position: relative;
+  padding-left: var(--spacing-6);
+  margin-bottom: var(--spacing-3);
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+}
+
+.sales-bullets li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.5em;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--brand-primary);
+}
+
+/* ============================================================
+   SALES CARDS - Pitch, Step, Role, Feature
+   Uses unified surface token system via card-shell pattern
+   ============================================================ */
+
+/* Shared sales card base - inherits from card-shell token system */
+.sales-pitch-card,
+.sales-step-card,
+.sales-role-card,
+.sales-feature-tile,
+.sales-quote {
+  /* Unified surface system */
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-current);
+  /* Transition for hover effects */
+  transition: transform var(--transition-card), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+/* Hover state - subtle lift */
+.sales-pitch-card:hover,
+.sales-step-card:hover,
+.sales-role-card:hover,
+.sales-feature-tile:hover,
+.sales-quote:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong-current);
+}
+
+/* Pitch cards - stacked mini-cards (admin padding: 24px) */
+.sales-pitch-card {
+  padding: var(--card-padding);
+}
+
+.sales-pitch-badge {
+  margin-bottom: var(--spacing-2);
+}
+
+/* Step cards with index number (admin padding: 24px) */
+.sales-step-card {
+  text-align: center;
+  padding: var(--card-padding);
+}
+
+.sales-step-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-primary);
+  background: var(--bg-card);
+  border: 2px solid var(--brand-primary);
+  border-radius: 50%;
+  margin-bottom: var(--spacing-4);
+}
+
+/* Role cards (admin padding: 24px) */
+.sales-role-card {
+  padding: var(--card-padding);
+  height: 100%;
+}
+
+/* Feature tiles (admin padding: 24px) */
+.sales-feature-tile {
+  padding: var(--card-padding);
+}
+
+/* Card typography */
+.sales-card-title {
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-2) 0;
+}
+
+.sales-card-text {
+  font-size: var(--font-size-small);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+  margin: 0;
+}
+
+/* ============================================================
+   SOCIAL PROOF SECTION
+   ============================================================ */
+
+.sales-proof-metrics {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.sales-metrics-list {
+  list-style: none;
+  padding: 0;
+  margin: var(--spacing-6) 0 0 0;
+}
+
+.sales-metric-item {
+  display: flex;
+  align-items: baseline;
+  gap: var(--spacing-3);
+  margin-bottom: var(--spacing-4);
+}
+
+.sales-proof-metric-number {
+  font-size: clamp(2rem, 5vw, 3rem);
+  font-weight: var(--font-weight-bold);
+  color: var(--brand-primary);
+  line-height: 1;
+}
+
+.sales-proof-metric-label {
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+}
+
+/* Quote cards (admin padding: 24px) */
+.sales-quote {
+  padding: var(--card-padding);
+}
+
+.sales-quote-text {
+  font-size: var(--font-size-body);
+  font-style: italic;
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+  margin: 0;
+}
+
+/* ============================================================
+   FAQ SECTION
+   Native details/summary accordion
+   ============================================================ */
+
+.sales-faq-list {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.sales-faq-item {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: var(--spacing-4) 0;
+}
+
+.sales-faq-item:last-child {
+  border-bottom: none;
+}
+
+.sales-faq-question {
+  font-size: var(--font-size-h4);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-3);
+  line-height: 1.5;
+  padding: 12px 0;
+}
+
+.sales-faq-question::-webkit-details-marker {
+  display: none;
+}
+
+.sales-faq-question::after {
+  content: '+';
+  font-size: 1.5rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-muted);
+  transition: transform var(--transition-base);
+}
+
+.sales-faq-item[open] .sales-faq-question::after {
+  content: '−';
+}
+
+.sales-faq-question:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
+  border-radius: var(--radius-sm);
+}
+
+.sales-faq-answer {
+  font-size: var(--font-size-body);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+  margin: var(--spacing-3) 0 0 0;
+  padding-right: var(--spacing-8);
+}
+
+/* ============================================================
+   FINAL CTA STRIPE
+   ============================================================ */
+
+/* CTA stripe - uses unified panel surface system */
+.sales-cta-stripe {
+  padding: var(--spacing-12) var(--spacing-4);
+  /* Unified panel surface system */
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel-current);
+  /* Margin for the rounded corners to show */
+  margin: var(--spacing-8) auto;
+  max-width: 1200px;
+}
+
+.sales-cta-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--spacing-6);
+}
+
+@media (min-width: 768px) {
+  .sales-cta-inner {
+    flex-direction: row;
+    justify-content: space-between;
+    text-align: left;
+  }
+}
+
+.sales-cta-copy {
+  flex: 1;
+}
+
+.sales-cta-copy .sales-heading-l {
+  margin-bottom: var(--spacing-2);
+}
+
+.sales-cta-copy .sales-body-muted {
+  margin-bottom: 0;
+}
+
+.sales-cta-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-3);
+  flex-shrink: 0;
+}
+
+@media (min-width: 480px) {
+  .sales-cta-buttons {
+    flex-direction: row;
+  }
+}
+
+/* Walkthrough button - outline style */
+.sales-walkthrough-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: transparent;
+  border: 2px solid var(--border-card);
+  border-radius: 100px;
+  text-decoration: none;
+  transition: all var(--transition-base);
+}
+
+.sales-walkthrough-btn:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+  text-decoration: none;
+}
+
+.sales-walkthrough-btn:focus-visible {
+  outline: var(--focus-outline);
+  outline-offset: var(--focus-outline-offset);
 }

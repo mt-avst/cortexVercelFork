@@ -19,9 +19,9 @@ body.theme-light .adaptalabs-home-title {
   /* Light mode gradient: bright orange → deep orange */
   background: linear-gradient(
     to right,
-    #E86C24 0%,
-    #D35F1D 50%,
-    #C54E12 100%
+    var(--brand-orange-600) 0%,
+    var(--brand-orange-700) 50%,
+    var(--brand-orange-800) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -65,10 +65,10 @@ body.theme-light .study-listing-page::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Orange grid pattern matching login page (24px grid, 5% opacity) */
+  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
   background-image: 
-    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -100,47 +100,59 @@ body.theme-light {
   --btn-glass-shadow: var(--shadow-sm);
   --btn-glass-shadow-hover: 0 0 15px rgba(232, 108, 36, 0.25);
   
-  /* Surface Elevation System - Light Mode */
+  /* Surface Elevation System - Light Mode (legacy aliases) */
   --surface-base: #FFFFFF;
   --surface-raised: #FFFFFF;
   --surface-overlay: #FFFFFF;
+  
+  /* Unified Surface System - *-current indirection */
+  --surface-page-current: var(--surface-page-light);
+  --surface-panel-current: var(--surface-panel-light);
+  --surface-card-current: var(--surface-card-light);
+  --surface-glass-current: var(--surface-glass-light);
+  
+  --border-subtle-current: var(--border-subtle-light);
+  --border-strong-current: var(--border-strong-light);
+  
+  --shadow-panel-current: var(--shadow-panel-light);
+  --shadow-card-current: var(--shadow-card-light);
 
   /* Border Colors */
   --border-card: rgba(0, 0, 0, 0.12);
   --border-table-row: rgba(0, 0, 0, 0.06);
   --divider: #E5E7EB;
 
-  /* Text Colors - Dark for readability */
-  --text-primary: #1A1A1A;
-  --text-body: #374151;
-  --text-secondary: #546E7A;
-  --text-tertiary: #78909C;
-  --text-muted: #6B7280;
+  /* Text Colors - WCAG AA Compliant (min 4.5:1 contrast on white bg) */
+  --text-primary: #1A1A1A;        /* Primary - 16:1 contrast on #FFFFFF */
+  --text-body: #374151;           /* Body (Gray-700) - 9:1 contrast on #FFFFFF */
+  --text-secondary: #4B5563;      /* Secondary (Gray-600) - 7:1 contrast on #FFFFFF */
+  --text-tertiary: #6B7280;       /* Tertiary (Gray-500) - 5:1 contrast on #FFFFFF */
+  --text-muted: #6B7280;          /* Muted - 5:1 contrast on #FFFFFF */
   --text-on-dark: #1A1A1A;
 
   /* Brand Colors - Adaptavist Orange for light backgrounds */
-  --brand-headline: #E86C24;
-  --brand-primary: #E86C24;
-  --brand-secondary: #D35F1D;
-  --brand-gradient: linear-gradient(135deg, #E86C24 0%, #D35F1D 100%);
+  --brand-headline: var(--brand-orange-600);
+  --brand-primary: var(--brand-orange-600);
+  --brand-secondary: var(--brand-orange-700);
+  --brand-gradient: linear-gradient(135deg, var(--brand-orange-600) 0%, var(--brand-orange-700) 100%);
 
   /* CTA Colors */
-  --cta-bg: #E86C24;
-  --cta-bg-hover: #D35F1D;
+  --cta-bg: var(--brand-orange-600);
+  --cta-bg-hover: var(--brand-orange-700);
   --cta-text: #FFFFFF;
   --cta-text-hover: #FFFFFF;
-  --cta-border: #E86C24;
+  --cta-border: var(--brand-orange-600);
 
   /* Link Colors */
-  --link: #E86C24;
-  --link-hover: #D35F1D;
+  --link: var(--brand-orange-600);
+  --link-hover: var(--brand-orange-700);
 
   /* Focus */
-  --focus-ring: #E86C24;
+  --focus-ring: var(--brand-orange-600);
   --focus-ring-color: rgba(232, 108, 36, 0.25);
 
   /* Accent Colors */
-  --accent-coral: #E86C24;
+  --accent-coral: var(--brand-orange-600);
   --accent-amber: #D97706;
   --accent-teal: #0D9488;
 
@@ -199,10 +211,10 @@ body.theme-light::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Orange grid pattern (24px grid, 5% opacity) */
+  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
   background-image: 
-    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -225,19 +237,16 @@ body.theme-light .card:hover {
 
 /* ============================================================
    STUDY CARDS - Light Mode: "Tactile Precision" Interface
-   Clean, physical cards with crisp edges and tight shadows
+   Uses unified surface token system with card-shell pattern
    ============================================================ */
 body.theme-light .bento-grid .card,
 body.theme-light .study-listing-page .bento-grid .card,
 body.theme-light .spotlight-card {
-  /* FORCED pure white background - Lab aesthetic (no category tints) */
-  background: #FFFFFF !important;
-  /* Subtle border - let the shadow do the work */
-  border: 1px solid rgba(0, 0, 0, 0.04);
-  /* Professional "Elevation" shadow - cards float above grid background */
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  /* Unified surface token system */
+  background: var(--surface-card-current) !important;
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
+  border-radius: var(--radius-card);
   /* No blur needed for solid cards */
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
@@ -250,10 +259,10 @@ body.theme-light .study-listing-page .bento-grid .card:hover,
 body.theme-light .spotlight-card:hover {
   /* Physical lift - translate up */
   transform: translateY(-4px);
-  /* Category color accent on hover border (via --dynamic-hover-color) */
-  border-color: var(--dynamic-hover-color, #d1d5db);
-  /* Keep pure white background on hover */
-  background: #FFFFFF !important;
+  /* Stronger border on hover */
+  border-color: var(--dynamic-hover-color, var(--border-strong-current));
+  /* Keep surface background on hover */
+  background: var(--surface-card-current) !important;
   /* Sharpened shadow - card "lifts" off surface */
   box-shadow: 
     0 4px 6px rgba(0, 0, 0, 0.07),
@@ -263,42 +272,45 @@ body.theme-light .spotlight-card:hover {
 
 /* ============================================================
    STUDY CARDS - Dark Mode: "Cinematic Glass" Interface
-   Glassmorphism with backdrop blur - neural background visible
+   Uses unified surface tokens with enhanced glassmorphism depth
    ============================================================ */
 body.theme-dark .bento-grid .card,
 body.theme-dark .study-listing-page .bento-grid .card,
 body.theme-dark .spotlight-card {
-  /* Dark charcoal with 60% opacity - neural bg shows through */
-  background: rgba(17, 17, 27, 0.6);
-  /* Subtle white border (white/10) to define glass edge */
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* Enhanced glass surface with increased opacity for better hierarchy */
+  background: rgba(255, 255, 255, var(--glass-opacity-card));
+  /* Stronger border for card definition */
+  border: 1px solid var(--border-strength-strong);
+  border-radius: var(--radius-card);
   /* Backdrop blur - the key to glassmorphism */
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  /* Subtle depth shadow */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  /* Depth-1 shadow with inner highlight for edge definition */
   box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.25),
-    0 8px 24px rgba(0, 0, 0, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  /* Smooth transition for hover effects */
-  transition: transform 0.2s ease, box-shadow 0.25s ease, border-color 0.2s ease, background 0.2s ease;
+    var(--depth-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  /* Smooth transition using new easing */
+  transition: 
+    transform var(--transition-lift),
+    box-shadow var(--transition-card),
+    border-color var(--transition-card),
+    background var(--transition-card);
 }
 
 body.theme-dark .bento-grid .card:hover,
 body.theme-dark .study-listing-page .bento-grid .card:hover,
 body.theme-dark .spotlight-card:hover {
-  /* Lift effect */
-  transform: translateY(-4px);
-  /* Increase border opacity on hover (white/20) */
-  border-color: rgba(255, 255, 255, 0.2);
-  /* Slightly more opaque on hover */
-  background: rgba(20, 20, 32, 0.7);
-  /* Add faint orange glow on hover */
+  /* Lift effect with subtle scale */
+  transform: translateY(-4px) scale(1.01);
+  /* Emphasis border on hover */
+  border-color: var(--border-strength-emphasis);
+  /* Elevated glass surface */
+  background: rgba(255, 255, 255, var(--glass-opacity-elevated));
+  /* Depth-2 shadow with brand glow accent */
   box-shadow: 
-    0 4px 12px rgba(0, 0, 0, 0.3),
-    0 12px 32px rgba(0, 0, 0, 0.25),
-    0 0 24px rgba(255, 85, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    var(--depth-2),
+    0 0 24px rgba(255, 122, 51, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 /* Bento Grid Card text - Dark theme */
@@ -338,7 +350,7 @@ body.theme-dark .bento-grid .card .timing-info,
 body.theme-dark .timing-info {
   background-color: transparent;
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--border-subtle-current);
   padding-top: 1rem;
   margin-top: 1rem;
 }
@@ -352,7 +364,7 @@ body.theme-light .bento-grid .card .timing-info,
 body.theme-light .timing-info {
   background-color: transparent;
   border: none;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid var(--border-subtle-current);
   padding-top: 1rem;
   margin-top: 1rem;
 }
@@ -601,9 +613,9 @@ body.theme-light .filter-chip--all:hover {
 }
 
 body.theme-light .filter-chip--all.is-active {
-  background-color: #E86C24;
+  background-color: var(--brand-orange-600);
   color: #FFFFFF;
-  border-color: #E86C24;
+  border-color: var(--brand-orange-600);
 }
 
 /* Home Intro Text - Light Mode */
@@ -616,7 +628,7 @@ body.theme-light .home-intro-tagline {
 }
 
 body.theme-light .home-intro-tagline em {
-  color: #E86C24;
+  color: var(--brand-orange-600);
 }
 
 /* Spinner */
@@ -733,16 +745,16 @@ body.theme-light .hero-subtitle-centered {
 }
 
 body.theme-light .hero-subtitle-centered .subtitle-emphasis {
-  color: #E86C24; /* Brand Orange */
+  color: var(--brand-orange-600); /* Brand Orange */
 }
 
 body.theme-light .hero-title-large {
   /* Premium gradient effect: deep orange → dark orange (light mode) */
   background: linear-gradient(
     to right,
-    #E86C24 0%,
-    #D35F1D 50%,
-    #C54E12 100%
+    var(--brand-orange-600) 0%,
+    var(--brand-orange-700) 50%,
+    var(--brand-orange-800) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -768,7 +780,7 @@ body.theme-light .hero-demo-link {
 }
 
 body.theme-light .hero-demo-link:hover {
-  color: #E86C24;
+  color: var(--brand-orange-600);
 }
 
 body.theme-light .hero-demo-divider {
@@ -816,10 +828,10 @@ body.theme-light .admin-page-bg::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Orange grid pattern matching login/study pages (24px grid, 5% opacity) */
+  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
   background-image: 
-    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -931,21 +943,30 @@ body.theme-dark .admin-tabs .nav-link.active {
   background: rgba(255, 78, 80, 0.1);
 }
 
-/* Admin stat cards - dark mode ("Void" aesthetic - deep glass) */
+/* Admin stat cards - dark mode (enhanced depth system) */
 body.theme-dark .admin-stat-card {
-  background: rgba(12, 12, 12, 0.85);
-  border: 1px solid var(--border-cortex-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(255, 255, 255, var(--glass-opacity-card));
+  border: 1px solid var(--border-strength-medium);
+  box-shadow: var(--depth-1), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  transition: transform var(--transition-lift), box-shadow var(--transition-card), border-color var(--transition-card);
 }
 
-/* Admin data table - Cyan accent border (matches Booking engine) */
+body.theme-dark .admin-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strength-strong);
+  box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Admin data table - uses panel surface system with enhanced depth */
 body.theme-dark .admin-data-table-container {
-  background: rgba(12, 12, 12, 0.85);
-  border: 1px solid var(--border-cortex-glass);
+  background: rgba(255, 255, 255, var(--glass-opacity-panel));
+  border: 1px solid var(--border-strength-medium);
+  box-shadow: var(--depth-2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
   border-top: 2px solid #4DD0E1;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 /* Settings button - dark mode (transparent with border) */
@@ -985,8 +1006,8 @@ body.theme-dark .admin-stat-card .stat-icon {
 }
 
 body.theme-dark .admin-stat-card .stat-icon-wrapper {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface-glass-current);
+  border: 1px solid var(--border-subtle-current);
 }
 
 body.theme-dark .admin-stat-card:hover .stat-icon {
@@ -1525,14 +1546,13 @@ body.theme-light .custom-tab-button span {
   color: inherit;
 }
 
-/* Admin stat cards - light mode ("Lab" aesthetic - premium elevation) */
+/* Admin stat cards - light mode (uses unified surface system) */
 body.theme-light .admin-stat-card {
-  background: #FFFFFF;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  box-shadow: var(--shadow-card-current);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* Professional "Elevation" shadow - consistent with card system */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
 }
 
 /* Admin container - light mode: transparent for Glass Cockpit aesthetic */
@@ -1569,8 +1589,8 @@ body.theme-light .admin-stat-card .stat-icon {
 }
 
 body.theme-light .admin-stat-card .stat-icon-wrapper {
-  background: var(--color-slate-100);
-  border: 1px solid var(--color-slate-200);
+  background: var(--surface-glass-current);
+  border: 1px solid var(--border-subtle-current);
 }
 
 body.theme-light .admin-stat-card:hover .stat-icon {
@@ -1590,15 +1610,14 @@ body.theme-light .cortex-brand-title .cortex-admin-separator {
   color: rgba(0, 0, 0, 0.25);
 }
 
-/* Admin table glass container - light mode ("Lab" aesthetic) */
+/* Admin table glass container - light mode (uses panel surface system) */
 body.theme-light .admin-data-table-container {
-  background: #FFFFFF;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  box-shadow: var(--shadow-panel-current);
+  border-radius: var(--radius-panel);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  /* Professional "Elevation" shadow - consistent with card system */
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-  border-radius: 12px;
 }
 
 /* Settings button - light mode (matches Calendar toggle) */
@@ -1738,24 +1757,30 @@ body.theme-dark .analytics-container {
   background: transparent;
 }
 
-/* Dark Mode Card - Glass with enhanced edge definition & max readability */
+/* Dark Mode Card - Glass with enhanced depth system */
 body.theme-dark .cortex-analytics-card {
-  background: rgba(255, 255, 255, 0.05); /* Increased from 0.02 for better text separation */
-  backdrop-filter: blur(16px); /* Stronger blur to soften background pattern */
+  background: rgba(255, 255, 255, var(--glass-opacity-card));
+  backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12); /* Increased contrast */
+  border: 1px solid var(--border-strength-strong);
   border-radius: 12px;
-  /* Inner glow to catch the light on edges */
+  /* Depth-1 with inner highlight */
   box-shadow: 
-    0 4px 24px -1px rgba(0, 0, 0, 0.2),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+    var(--depth-1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: 
+    transform var(--transition-lift),
+    box-shadow var(--transition-card),
+    border-color var(--transition-card);
 }
 
 body.theme-dark .cortex-analytics-card:hover {
-  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-2px);
+  border-color: var(--border-strength-emphasis);
+  /* Depth-2 on hover */
   box-shadow: 
-    0 8px 32px -1px rgba(0, 0, 0, 0.3),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+    var(--depth-2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 /* Dark Mode Typography - Enforced neutral colors */
@@ -2243,7 +2268,7 @@ body.theme-light .card-body .fw-bold {
 /* Numbers/stats in gamification - keep orange brand color */
 body.theme-light .card .fs-3,
 body.theme-light .card-body .fs-3 {
-  color: #E86C24;
+  color: var(--brand-orange-600);
 }
 
 /* Card header styling for light mode */
@@ -2299,7 +2324,7 @@ body.theme-dark .card-body .fw-bold {
 /* Numbers/stats in gamification - keep coral brand color */
 body.theme-dark .card .fs-3,
 body.theme-dark .card-body .fs-3 {
-  color: #FF4E50;
+  color: var(--brand-orange-500);
 }
 
 /* Card header styling for dark mode */
@@ -2434,10 +2459,10 @@ body.theme-light .my-bookings-page::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Orange grid pattern (24px grid, 5% opacity) */
+  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
   background-image: 
-    linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
   z-index: 0;
@@ -2511,7 +2536,17 @@ body.theme-dark .leaderboard-list .fw-bold {
 
 /* Dark theme is the default via :root, but explicit class can be used */
 body.theme-dark {
-  /* Uses default :root variables */
+  /* Unified Surface System - *-current indirection (dark mode defaults) */
+  --surface-page-current: var(--surface-page);
+  --surface-panel-current: var(--surface-panel);
+  --surface-card-current: var(--surface-card);
+  --surface-glass-current: var(--surface-glass);
+  
+  --border-subtle-current: var(--border-subtle-dark);
+  --border-strong-current: var(--border-strong-dark);
+  
+  --shadow-panel-current: var(--shadow-panel-dark);
+  --shadow-card-current: var(--shadow-card-dark);
 }
 
 /* ============================================================
@@ -2567,7 +2602,7 @@ body.theme-dark .opportunity-form .section-title {
 }
 
 body.theme-dark .opportunity-form .section-icon {
-  color: #FF4E50;
+  color: var(--brand-orange-500);
 }
 
 body.theme-dark .opportunity-form .display-settings-section {
@@ -2588,9 +2623,9 @@ body.theme-dark .opportunity-form .form-select {
 body.theme-dark .opportunity-form .form-control:focus,
 body.theme-dark .opportunity-form .form-select:focus {
   background-color: rgba(255, 255, 255, 0.08);
-  border-color: #FF4E50;
+  border-color: var(--brand-orange-500);
   color: #E0E0E0;
-  box-shadow: 0 0 0 0.2rem rgba(255, 78, 80, 0.25);
+  box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
 }
 
 body.theme-dark .opportunity-form .form-control::placeholder {
@@ -2664,12 +2699,12 @@ body.theme-dark .opportunity-form .btn-outline-secondary:hover {
 }
 
 body.theme-dark .opportunity-form .btn-outline-primary {
-  border-color: #FF4E50;
-  color: #FF4E50;
+  border-color: var(--brand-orange-500);
+  color: var(--brand-orange-500);
 }
 
 body.theme-dark .opportunity-form .btn-outline-primary:hover {
-  background-color: #FF4E50;
+  background-color: var(--brand-orange-500);
   color: #FFFFFF;
 }
 
@@ -2733,7 +2768,7 @@ body.theme-light .opportunity-form .section-title {
 }
 
 body.theme-light .opportunity-form .section-icon {
-  color: #E86C24;
+  color: var(--brand-orange-600);
 }
 
 body.theme-light .opportunity-form .display-settings-section {
@@ -2765,17 +2800,17 @@ body.theme-light .opportunity-form .form-select {
 body.theme-light .opportunity-form .form-control:focus {
   background: #FFFFFF;
   background-color: #FFFFFF;
-  border-color: #E86C24;
+  border-color: var(--brand-orange-600);
   color: #1A1A1A;
-  box-shadow: 0 0 0 0.2rem rgba(232, 108, 36, 0.2);
+  box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
 }
 
 body.theme-light .opportunity-form .form-select:focus {
   background: #FFFFFF;
   background-color: #FFFFFF;
-  border-color: #E86C24;
+  border-color: var(--brand-orange-600);
   color: #1A1A1A;
-  box-shadow: 0 0 0 0.2rem rgba(232, 108, 36, 0.2);
+  box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
   background-position: right 0.75rem center !important;
@@ -2828,14 +2863,14 @@ body.theme-light .opportunity-form .border-bottom {
 }
 
 body.theme-light .opportunity-form .btn-primary {
-  background-color: #E86C24;
-  border-color: #E86C24;
+  background-color: var(--brand-orange-600);
+  border-color: var(--brand-orange-600);
   color: #FFFFFF;
 }
 
 body.theme-light .opportunity-form .btn-primary:hover {
-  background-color: #D35F1D;
-  border-color: #D35F1D;
+  background-color: var(--brand-orange-700);
+  border-color: var(--brand-orange-700);
 }
 
 body.theme-light .opportunity-form .btn-success {
@@ -2856,12 +2891,12 @@ body.theme-light .opportunity-form .btn-outline-secondary:hover {
 }
 
 body.theme-light .opportunity-form .btn-outline-primary {
-  border-color: #E86C24;
-  color: #E86C24;
+  border-color: var(--brand-orange-600);
+  color: var(--brand-orange-600);
 }
 
 body.theme-light .opportunity-form .btn-outline-primary:hover {
-  background-color: #E86C24;
+  background-color: var(--brand-orange-600);
   color: #FFFFFF;
 }
 
@@ -2884,7 +2919,7 @@ body.theme-light .opportunity-form .alert-danger {
 /* Validation errors - both themes */
 body.theme-dark .opportunity-form .validation-error,
 body.theme-dark .validation-error {
-  color: #FF4E50;
+  color: var(--brand-orange-500);
 }
 
 body.theme-light .opportunity-form .validation-error,
@@ -3133,5 +3168,281 @@ body.theme-light .leaderboard-tab--active {
   background: var(--brand-primary);
   color: #FFFFFF;
   border-color: var(--brand-primary);
+}
+
+/* ============================================================
+   SALES PAGE SECTIONS - Light Mode Overrides
+   Uses unified surface token system
+   ============================================================ */
+
+/* Section background - Light Mode: uses panel tokens */
+body.theme-light .sales-section--dim {
+  background: var(--surface-panel-current);
+  border-top: 1px solid var(--border-subtle-current);
+  border-bottom: 1px solid var(--border-subtle-current);
+}
+
+/* All sales cards - uses card token system */
+/* Higher specificity with .card to override momentum-card styles */
+body.theme-light .card.sales-pitch-card,
+body.theme-light .card.sales-step-card,
+body.theme-light .card.sales-role-card,
+body.theme-light .card.sales-feature-tile,
+body.theme-light .card.sales-quote {
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--shadow-card-current);
+}
+
+/* Hover states - lift effect */
+body.theme-light .card.sales-pitch-card:hover,
+body.theme-light .card.sales-step-card:hover,
+body.theme-light .card.sales-role-card:hover,
+body.theme-light .card.sales-feature-tile:hover,
+body.theme-light .card.sales-quote:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong-current);
+}
+
+/* CTA stripe - uses panel tokens */
+body.theme-light .sales-cta-stripe {
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-panel);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--shadow-panel-current);
+}
+
+/* Section separators - subtle */
+body.theme-light .sales-section + .sales-section {
+  border-top-color: var(--border-subtle-current);
+}
+
+/* Step index - uses glass surface */
+body.theme-light .sales-step-index {
+  background: var(--surface-glass-current);
+  border-color: var(--brand-primary);
+}
+
+/* FAQ borders */
+body.theme-light .sales-faq-item {
+  border-color: var(--border-subtle-current);
+}
+
+/* Walkthrough button */
+body.theme-light .sales-walkthrough-btn {
+  color: #374151;
+  border-color: var(--border-strong-current);
+}
+
+body.theme-light .sales-walkthrough-btn:hover {
+  border-color: var(--brand-primary);
+  color: var(--brand-primary);
+}
+
+/* ============================================================
+   SALES PAGE SECTIONS - Dark Mode Overrides
+   Uses unified surface token system
+   ============================================================ */
+
+/* Section background - Dark Mode: uses panel tokens */
+body.theme-dark .sales-section--dim {
+  background: var(--surface-panel-current);
+  border-top: 1px solid var(--border-subtle-current);
+  border-bottom: 1px solid var(--border-subtle-current);
+}
+
+/* All sales cards - uses card token system */
+/* Higher specificity with .card to override momentum-card styles */
+body.theme-dark .card.sales-pitch-card,
+body.theme-dark .card.sales-step-card,
+body.theme-dark .card.sales-role-card,
+body.theme-dark .card.sales-feature-tile,
+body.theme-dark .card.sales-quote {
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-current);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Hover states - lift effect */
+body.theme-dark .card.sales-pitch-card:hover,
+body.theme-dark .card.sales-step-card:hover,
+body.theme-dark .card.sales-role-card:hover,
+body.theme-dark .card.sales-feature-tile:hover,
+body.theme-dark .card.sales-quote:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong-current);
+}
+
+/* CTA stripe - uses panel tokens */
+body.theme-dark .sales-cta-stripe {
+  background: var(--surface-panel-current);
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel-current);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* Section separators - subtle border */
+body.theme-dark .sales-section + .sales-section {
+  border-top-color: var(--border-subtle-current);
+}
+
+/* FAQ items - uses border token */
+body.theme-dark .sales-faq-item {
+  border-color: var(--border-subtle-current);
+}
+
+/* Step index - uses glass surface */
+body.theme-dark .sales-step-index {
+  background: var(--surface-glass-current);
+  border-color: var(--brand-primary);
+}
+
+/* ============================================================
+   HIGH CONTRAST MODE
+   Respects user's high contrast preference for enhanced accessibility
+   WCAG AAA standards: 7:1 contrast ratio for all text
+   ============================================================ */
+
+@media (prefers-contrast: high) {
+  /* ========== DARK MODE HIGH CONTRAST ========== */
+  :root {
+    /* Text - Maximum contrast */
+    --text-primary: #FFFFFF;
+    --text-body: #FFFFFF;
+    --text-secondary: #F0F0F0;
+    --text-tertiary: #E0E0E0;
+    --text-muted: #D0D0D0;
+    
+    /* Backgrounds - Deeper black */
+    --bg-app: #000000;
+    --bg-card: rgba(255, 255, 255, 0.12);
+    --bg-hover: rgba(255, 255, 255, 0.15);
+    
+    /* Borders - More visible */
+    --border-card: rgba(255, 255, 255, 0.3);
+    --border-subtle: rgba(255, 255, 255, 0.2);
+    --divider: rgba(255, 255, 255, 0.3);
+    
+    /* Enhanced depth for borders */
+    --border-strength-subtle: rgba(255, 255, 255, 0.15);
+    --border-strength-medium: rgba(255, 255, 255, 0.25);
+    --border-strength-strong: rgba(255, 255, 255, 0.35);
+    --border-strength-emphasis: rgba(255, 255, 255, 0.45);
+    
+    /* Focus ring - High visibility */
+    --focus-ring: #FFFFFF;
+    --focus-ring-color: rgba(255, 255, 255, 0.5);
+    --focus-outline: 3px solid #FFFFFF;
+  }
+  
+  /* High contrast cards */
+  .card {
+    border-width: 2px;
+  }
+  
+  /* High contrast buttons */
+  .btn {
+    border-width: 2px;
+    font-weight: 600;
+  }
+  
+  .btn-primary {
+    background: var(--brand-orange-500);
+    border-color: #FFFFFF;
+  }
+  
+  .btn-primary:hover {
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5);
+  }
+  
+  /* High contrast focus states */
+  :focus-visible {
+    outline: 3px solid #FFFFFF;
+    outline-offset: 3px;
+  }
+  
+  /* High contrast links */
+  a {
+    text-decoration: underline;
+  }
+  
+  a:hover {
+    text-decoration-thickness: 2px;
+  }
+  
+  /* ========== LIGHT MODE HIGH CONTRAST ========== */
+  body.theme-light {
+    /* Text - Maximum contrast */
+    --text-primary: #000000;
+    --text-body: #000000;
+    --text-secondary: #1A1A1A;
+    --text-tertiary: #333333;
+    --text-muted: #4A4A4A;
+    
+    /* Backgrounds - Pure white */
+    --bg-app: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-hover: #F0F0F0;
+    
+    /* Borders - More visible */
+    --border-card: rgba(0, 0, 0, 0.4);
+    --border-subtle: rgba(0, 0, 0, 0.25);
+    --divider: rgba(0, 0, 0, 0.4);
+    
+    /* Enhanced depth for borders */
+    --border-strength-subtle-light: rgba(0, 0, 0, 0.15);
+    --border-strength-medium-light: rgba(0, 0, 0, 0.25);
+    --border-strength-strong-light: rgba(0, 0, 0, 0.35);
+    --border-strength-emphasis-light: rgba(0, 0, 0, 0.45);
+    
+    /* Focus ring - High visibility */
+    --focus-ring: #000000;
+    --focus-ring-color: rgba(0, 0, 0, 0.5);
+    --focus-outline: 3px solid #000000;
+  }
+  
+  /* Light mode high contrast cards */
+  body.theme-light .card {
+    border-width: 2px;
+    border-color: rgba(0, 0, 0, 0.3);
+    box-shadow: none;
+  }
+  
+  /* Light mode high contrast buttons */
+  body.theme-light .btn-primary {
+    background: var(--brand-orange-700);
+    border-color: #000000;
+  }
+  
+  /* Light mode high contrast focus */
+  body.theme-light :focus-visible {
+    outline: 3px solid #000000;
+    outline-offset: 3px;
+  }
+  
+  /* Disable glassmorphism in high contrast mode */
+  .card,
+  body.theme-light .card {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  
+  /* Hide decorative grid in high contrast mode */
+  body.theme-light::before,
+  body.theme-light .study-listing-page::before,
+  body.theme-light .admin-page-bg::before,
+  body.theme-light .my-bookings-page::before {
+    display: none;
+  }
 }
 

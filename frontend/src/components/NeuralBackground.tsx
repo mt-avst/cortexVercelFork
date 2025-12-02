@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 
 interface Node {
   x: number;
@@ -34,6 +34,11 @@ interface Pulse {
  * - Mouse influence field (repulsion/excitation)
  * - Synapse pulse signals traveling between nodes
  * - Slow, organic "floating in heavy liquid" movement
+ * 
+ * Performance Features:
+ * - Respects prefers-reduced-motion preference
+ * - Frame-rate throttling for low-end devices
+ * - Reduced node count when reduced motion is preferred
  */
 const NeuralBackground: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -42,6 +47,14 @@ const NeuralBackground: React.FC = () => {
   const mouseRef = useRef({ x: -1000, y: -1000, active: false });
   const animationRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const frameCountRef = useRef<number>(0);
+  
+  // Performance: Detect reduced motion preference
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  
+  // Performance: Frame-rate throttling (target 30fps for reduced motion)
+  const TARGET_FPS_REDUCED = 30;
+  const FRAME_INTERVAL_REDUCED = 1000 / TARGET_FPS_REDUCED;
 
   // Color palette
   const COLORS = {
@@ -54,15 +67,15 @@ const NeuralBackground: React.FC = () => {
     violetGlow: '#9945FF',
   };
 
-  // Configuration
+  // Configuration - adjusted for reduced motion
   const CONFIG = {
-    nodeCount: 120,
+    nodeCount: prefersReducedMotion ? 40 : 120,
     connectionDistance: 180,
     mouseInfluenceRadius: 200,
-    mouseRepulsionStrength: 0.8,
-    baseDriftSpeed: 0.15,
+    mouseRepulsionStrength: prefersReducedMotion ? 0 : 0.8,
+    baseDriftSpeed: prefersReducedMotion ? 0.02 : 0.15,
     dampening: 0.98,
-    pulseChance: 0.008,
+    pulseChance: prefersReducedMotion ? 0 : 0.008,
     pulseSpeed: 0.015,
     violetChance: 0.08,
   };
@@ -348,7 +361,7 @@ const NeuralBackground: React.FC = () => {
     return `rgba(${parseInt(result[1], 16)}, ${parseInt(result[2], 16)}, ${parseInt(result[3], 16)}, ${alpha})`;
   };
 
-  // Animation loop
+  // Animation loop with frame-rate throttling
   const animate = useCallback((timestamp: number) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -357,7 +370,15 @@ const NeuralBackground: React.FC = () => {
     if (!ctx) return;
 
     const deltaTime = timestamp - lastTimeRef.current;
+    
+    // Frame-rate throttling for reduced motion preference
+    if (prefersReducedMotion && deltaTime < FRAME_INTERVAL_REDUCED) {
+      animationRef.current = requestAnimationFrame(animate);
+      return;
+    }
+    
     lastTimeRef.current = timestamp;
+    frameCountRef.current++;
 
     const width = canvas.width;
     const height = canvas.height;
@@ -367,7 +388,20 @@ const NeuralBackground: React.FC = () => {
     draw(ctx, width, height);
 
     animationRef.current = requestAnimationFrame(animate);
-  }, [updateNodes, updatePulses, draw]);
+  }, [updateNodes, updatePulses, draw, prefersReducedMotion]);
+
+  // Detect and respond to reduced motion preference
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   // Setup and event handlers
   useEffect(() => {
@@ -376,14 +410,16 @@ const NeuralBackground: React.FC = () => {
 
     const handleResize = () => {
       const dpr = window.devicePixelRatio || 1;
-      canvas.width = window.innerWidth * dpr;
-      canvas.height = window.innerHeight * dpr;
+      // Performance: Reduce resolution for reduced motion
+      const scale = prefersReducedMotion ? 0.75 : 1;
+      canvas.width = window.innerWidth * dpr * scale;
+      canvas.height = window.innerHeight * dpr * scale;
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
       
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.scale(dpr, dpr);
+        ctx.scale(dpr * scale, dpr * scale);
       }
       
       initNodes(window.innerWidth, window.innerHeight);
@@ -429,7 +465,7 @@ const NeuralBackground: React.FC = () => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [initNodes, animate]);
+  }, [initNodes, animate, prefersReducedMotion]);
 
   return (
     <canvas
@@ -442,6 +478,7 @@ const NeuralBackground: React.FC = () => {
 };
 
 export default NeuralBackground;
+
 
 
 

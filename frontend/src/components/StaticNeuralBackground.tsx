@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 
 interface Node {
   x: number;
@@ -53,15 +53,24 @@ const StaticNeuralBackground: React.FC = () => {
   const mouseRef = useRef({ x: -1000, y: -1000, active: false });
   const animationRef = useRef<number>(0);
   const centerRef = useRef({ x: 0, y: 0 }); // Store center for orbit calculations
+  const lastFrameTimeRef = useRef<number>(0);
+  
+  // Performance: Detect reduced motion preference
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  
+  // Performance: Frame-rate throttling targets
+  const TARGET_FPS_REDUCED = 30;
+  const FRAME_INTERVAL_REDUCED = 1000 / TARGET_FPS_REDUCED;
 
   // Configuration - "Blueprint" Aesthetic for Light Mode
   // Creates a crisp, technical structure with orange "active data" points
+  // Adjusted for reduced motion preference
   const CONFIG = {
     // Ring structure - "Moat" design keeps particles away from center text
-    nodeCount: 180, // Dense ring of nodes
+    nodeCount: prefersReducedMotion ? 60 : 180, // Reduced node count for reduced motion
     innerRingRadius: 0.38, // Inner edge - INCREASED for larger exclusion zone ("moat")
     outerRingRadius: 0.52, // Outer edge - slightly larger to maintain ring width
-    ringLayers: 3, // Number of concentric layers in the ring
+    ringLayers: prefersReducedMotion ? 2 : 3, // Fewer layers for reduced motion
     verticalOffset: -0.05, // Shift ring UP by 5% of height for optical centering
     
     // Connectivity
@@ -85,22 +94,23 @@ const StaticNeuralBackground: React.FC = () => {
     pulseSpeed: 0.0008, // Slow, organic breathing
     
     // Orbital rotation - BASE speed (individual nodes vary)
-    orbitSpeed: 0.00004, // Base orbital speed
+    // Reduced motion: Much slower, almost static
+    orbitSpeed: prefersReducedMotion ? 0.000005 : 0.00004,
     
-    // Speed Variance (Parallax Effect)
-    orbitSpeedMin: 0.5, // Slowest particles at 50% of base speed
-    orbitSpeedMax: 1.5, // Fastest particles at 150% of base speed
+    // Speed Variance (Parallax Effect) - disabled for reduced motion
+    orbitSpeedMin: prefersReducedMotion ? 0.9 : 0.5, // Minimal variance for reduced motion
+    orbitSpeedMax: prefersReducedMotion ? 1.1 : 1.5, // Minimal variance for reduced motion
     
-    // Subtle opacity variation (sparkle - but maintaining high base visibility)
-    opacityMin: 0.65, // Minimum opacity (always visible)
-    opacityMax: 0.95, // Maximum opacity (peak brightness)
-    opacitySpeedMin: 0.0003, // Slowest fade speed
-    opacitySpeedMax: 0.0012, // Fastest fade speed
+    // Subtle opacity variation (sparkle - stronger visibility for light mode)
+    opacityMin: 0.75, // Minimum opacity (always clearly visible)
+    opacityMax: 1.0, // Maximum opacity (full brightness)
+    opacitySpeedMin: prefersReducedMotion ? 0.00005 : 0.0003, // Much slower for reduced motion
+    opacitySpeedMax: prefersReducedMotion ? 0.0002 : 0.0012, // Much slower for reduced motion
     
-    // Wobble (Brownian Micro-Motion)
-    wobbleAmount: 1.5, // Max wobble distance in pixels (1-2px range)
-    wobbleSpeedMin: 0.002, // Slowest wobble
-    wobbleSpeedMax: 0.006, // Fastest wobble
+    // Wobble (Brownian Micro-Motion) - minimal for reduced motion
+    wobbleAmount: prefersReducedMotion ? 0.3 : 1.5, // Almost no wobble for reduced motion
+    wobbleSpeedMin: prefersReducedMotion ? 0.0005 : 0.002,
+    wobbleSpeedMax: prefersReducedMotion ? 0.001 : 0.006,
     
     // Interaction
     repulseRadius: 100, // Mouse influence radius
@@ -242,7 +252,7 @@ const StaticNeuralBackground: React.FC = () => {
         angle: Math.atan2(y - centerY, x - centerX),
         // Organic flow properties (edge nodes have slower, subtler animation)
         orbitSpeedMultiplier: 0.3 + Math.random() * 0.4, // Slower for edge nodes
-        opacity: CONFIG.opacityMin + Math.random() * (CONFIG.opacityMax - CONFIG.opacityMin) * 0.7, // Slightly dimmer but still visible
+        opacity: CONFIG.opacityMin + Math.random() * (CONFIG.opacityMax - CONFIG.opacityMin) * 0.85, // Visible but slightly softer
         opacityPhase: Math.random() * Math.PI * 2,
         opacitySpeed: CONFIG.opacitySpeedMin + Math.random() * (CONFIG.opacitySpeedMax - CONFIG.opacitySpeedMin) * 0.5,
         wobblePhaseX: Math.random() * Math.PI * 2,
@@ -380,7 +390,7 @@ const StaticNeuralBackground: React.FC = () => {
     }
   }, []);
 
-  // Animation loop
+  // Animation loop with frame-rate throttling for reduced motion
   const animate = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -390,11 +400,31 @@ const StaticNeuralBackground: React.FC = () => {
     
     const time = performance.now();
     
+    // Frame-rate throttling for reduced motion preference
+    if (prefersReducedMotion && time - lastFrameTimeRef.current < FRAME_INTERVAL_REDUCED) {
+      animationRef.current = requestAnimationFrame(animate);
+      return;
+    }
+    lastFrameTimeRef.current = time;
+    
     updateNodes(time);
     draw(ctx, canvas.width, canvas.height);
     
     animationRef.current = requestAnimationFrame(animate);
-  }, [updateNodes, draw]);
+  }, [updateNodes, draw, prefersReducedMotion]);
+
+  // Detect and respond to reduced motion preference
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+    
+    const handleChange = (e: MediaQueryListEvent) => {
+      setPrefersReducedMotion(e.matches);
+    };
+    
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
 
   // Setup and event handlers
   useEffect(() => {
@@ -443,7 +473,7 @@ const StaticNeuralBackground: React.FC = () => {
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [initNodes, animate]);
+  }, [initNodes, animate, prefersReducedMotion]);
 
   return (
     <div

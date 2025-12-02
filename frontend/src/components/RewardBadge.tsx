@@ -31,3 +31,4 @@ const RewardBadge: React.FC<RewardBadgeProps> = ({ reward, className = '' }) => 
 export default RewardBadge;
 
 
+
