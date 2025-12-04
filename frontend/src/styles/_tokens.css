@@ -33,11 +33,11 @@
   --surface-glass: rgba(255, 255, 255, 0.08);
   
   /* Light Mode Surfaces */
-  --surface-page-light: #FFFFFF;
+  --surface-page-light: #F9FAFB;
   --surface-panel-light: #FFFFFF;
   --surface-card-light: #FFFFFF;
   --surface-glass-light: rgba(255, 255, 255, 0.85);
-  
+
   /* Dark Mode Borders */
   --border-subtle-dark: rgba(255, 255, 255, 0.06);
   --border-strong-dark: rgba(255, 255, 255, 0.10);
@@ -52,8 +52,9 @@
   
   /* Light Mode Shadows */
   --shadow-panel-light: 0 12px 30px rgba(15, 23, 42, 0.04);
-  --shadow-card-light: 0 6px 18px rgba(15, 23, 42, 0.03);
-  
+  --shadow-card-light: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.05);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1), 0 12px 24px rgba(0, 0, 0, 0.06);
+
   /* Legacy Surface Aliases (for backward compatibility) */
   --surface-base: var(--surface-page);
   --surface-raised: var(--surface-panel);
@@ -122,13 +123,14 @@
   --brand-orange-300: #FFB380; /* Lightest - highlights */
   --brand-orange-400: #FF8F4D; /* Light - hover states */
   --brand-orange-500: #FF7A33; /* Primary - main brand color */
+  --brand-orange-vibrant: #FF6B2B; /* Punchier orange for primary CTAs */
   --brand-orange-600: #E86C24; /* Medium - light mode primary */
   --brand-orange-700: #D35F1D; /* Dark - light mode hover */
   --brand-orange-800: #C54E12; /* Darkest - deep accents */
   
   /* Semantic Brand Aliases (use these in components) */
   --brand-headline: var(--brand-orange-500);
-  --brand-primary: var(--brand-orange-500);
+  --brand-primary: var(--brand-orange-vibrant);
   --brand-secondary: var(--brand-orange-400);
   --brand-gradient: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-600) 100%);
 
@@ -342,8 +344,13 @@
   --ease-smooth: cubic-bezier(0.25, 0.46, 0.45, 0.94);
   --ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-elastic: cubic-bezier(0.5, 1.75, 0.75, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-circ: cubic-bezier(0.85, 0, 0.15, 1);
+  
+  /* Scale Factors */
+  --scale-button-active: 0.98;
+  --scale-card-hover: 1.02;
   
   /* Duration Scale */
   --duration-instant: 50ms;

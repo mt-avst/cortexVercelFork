@@ -536,7 +536,7 @@
 }
 
 .btn-primary:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(var(--scale-button-active));
 }
 
 .btn-primary:focus-visible {
@@ -557,7 +557,7 @@
 }
 
 .btn-secondary:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(var(--scale-button-active));
 }
 
 /* Outline Buttons */
@@ -574,7 +574,7 @@
 }
 
 .btn-outline-primary:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(var(--scale-button-active));
 }
 
 .btn-outline-secondary {
@@ -797,7 +797,7 @@ body.theme-light .btn-glass:hover {
 }
 
 .btn-power:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(var(--scale-button-active));
   box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4);
 }
 
@@ -945,40 +945,40 @@ body.theme-light .btn-power:hover {
   line-height: 1;
 }
 
-/* App Testing / Test (Cyan) */
+/* App Testing / Test (Brand) */
 .badge--test {
-  background: var(--badge-app-bg);
-  color: var(--badge-app-text);
+  background: rgba(255, 122, 51, 0.15);
+  color: var(--brand-orange-500);
 }
 
-/* Unmoderated (Purple) */
+/* Unmoderated (Neutral) */
 .badge--unmoderated {
-  background: var(--badge-unmod-bg);
-  color: var(--badge-unmod-text);
+  background: rgba(148, 163, 184, 0.15);
+  color: #94A3B8;
 }
 
-/* Question (Gold) */
+/* Question (Neutral) */
 .badge--question {
-  background: var(--badge-quest-bg);
-  color: var(--badge-quest-text);
+  background: rgba(148, 163, 184, 0.15);
+  color: #94A3B8;
 }
 
-/* Poll (Pink/Red) */
+/* Poll (Brand) */
 .badge--poll {
-  background: var(--badge-poll-bg);
-  color: var(--badge-poll-text);
+  background: rgba(255, 122, 51, 0.15);
+  color: var(--brand-orange-500);
 }
 
-/* Survey (Green) */
+/* Survey (Success) */
 .badge--survey {
-  background: var(--badge-srvy-bg);
-  color: var(--badge-srvy-text);
+  background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
 }
 
-/* Interview (Pink) */
+/* Interview (Brand) */
 .badge--interview {
-  background: var(--badge-interview-bg);
-  color: var(--badge-interview-text);
+  background: rgba(255, 122, 51, 0.15);
+  color: var(--brand-orange-500);
 }
 
 /* Lozenge variant (soft rectangle for modern look) */
@@ -11427,6 +11427,8 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 
 .sales-pitch-badge {
   margin-bottom: var(--spacing-2);
+  background-color: var(--brand-orange-500) !important;
+  color: #FFFFFF !important;
 }
 
 /* Step cards with index number (admin padding: 24px) */

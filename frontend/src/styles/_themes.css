@@ -40,9 +40,9 @@ body.theme-dark .study-listing-page {
   background: #030305;
 }
 
-/* Light Mode - Study Listing with Technical Grid Background */
+/* Light Mode - Study Listing with Premium Gradient Background */
 body.theme-light .study-listing-page {
-  background: #FFFFFF; /* Pure white - matches login page */
+  background: var(--surface-page-light);
   min-height: 100vh;
 }
 
@@ -52,10 +52,10 @@ body.theme-light:has(.study-listing-page),
 body.theme-light:has(.study-listing-page) .App,
 body.theme-light:has(.study-listing-page) .main,
 body.theme-light:has(.study-listing-page) .main > .container {
-  background: #FFFFFF !important; /* Pure white - no grey gradient */
+  background: var(--surface-page-light) !important;
 }
 
-/* Full-screen fixed grid overlay for light mode study listing */
+/* Full-screen fixed gradient overlay for light mode */
 body.theme-light .study-listing-page::before {
   content: '';
   position: fixed;
@@ -65,11 +65,9 @@ body.theme-light .study-listing-page::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
-  background-image: 
-    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
-  background-size: 24px 24px;
+  /* Premium subtle gradient (Stripe-like) */
+  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
+              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -211,11 +209,9 @@ body.theme-light::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
-  background-image: 
-    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
-  background-size: 24px 24px;
+  /* Premium subtle gradient (Stripe-like) */
+  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
+              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -803,9 +799,9 @@ body.theme-dark .admin-page-bg {
   position: relative;
 }
 
-/* Light Mode - Admin Page with Technical Grid Background */
+/* Light Mode - Admin Page with Premium Gradient Background */
 body.theme-light .admin-page-bg {
-  background: #FFFFFF;
+  background: var(--surface-page-light);
   min-height: 100vh;
   position: relative;
 }
@@ -815,10 +811,10 @@ body.theme-light:has(.admin-page-bg),
 body.theme-light:has(.admin-page-bg) .App,
 body.theme-light:has(.admin-page-bg) .main,
 body.theme-light:has(.admin-page-bg) .main > .container {
-  background: #FFFFFF !important;
+  background: var(--surface-page-light) !important;
 }
 
-/* Full-screen fixed grid overlay for light mode admin pages */
+/* Full-screen fixed gradient overlay for light mode admin pages */
 body.theme-light .admin-page-bg::before {
   content: '';
   position: fixed;
@@ -828,11 +824,9 @@ body.theme-light .admin-page-bg::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Subtle orange grid pattern (24px grid, 3% opacity for refinement) */
-  background-image: 
-    linear-gradient(to right, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(var(--grid-line-color), var(--grid-line-opacity)) 1px, transparent 1px);
-  background-size: 24px 24px;
+  /* Premium subtle gradient */
+  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
+              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -1670,35 +1664,26 @@ body.theme-light .admin-data-table th {
   padding-bottom: 20px;
 }
 
-/* Admin badge type modifiers - light mode (more saturated for visibility) */
-body.theme-light .badge--poll {
-  background: rgba(229, 115, 115, 0.15);
-  color: #c62828;
-}
-
-body.theme-light .badge--interview {
-  background: rgba(244, 143, 177, 0.15);
-  color: #ad1457;
-}
-
-body.theme-light .badge--survey {
-  background: rgba(129, 199, 132, 0.15);
-  color: #2e7d32;
-}
-
+/* Admin badge type modifiers - light mode (Semantic Simplification) */
+/* Brand (Orange) */
+body.theme-light .badge--poll,
+body.theme-light .badge--interview,
 body.theme-light .badge--test {
-  background: rgba(77, 208, 225, 0.15);
-  color: #00838f;
+  background: rgba(255, 122, 51, 0.1);
+  color: var(--brand-orange-600);
 }
 
-body.theme-light .badge--question {
-  background: rgba(255, 213, 79, 0.15);
-  color: #f57f17;
+/* Success (Green) */
+body.theme-light .badge--survey {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
 }
 
+/* Neutral (Slate) */
+body.theme-light .badge--question,
 body.theme-light .badge--unmoderated {
-  background: rgba(206, 147, 216, 0.15);
-  color: #7b1fa2;
+  background: #F1F5F9;
+  color: #64748B;
 }
 
 /* Progress bar - light mode */
@@ -1759,15 +1744,15 @@ body.theme-dark .analytics-container {
 
 /* Dark Mode Card - Glass with enhanced depth system */
 body.theme-dark .cortex-analytics-card {
-  background: rgba(255, 255, 255, var(--glass-opacity-card));
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-strength-strong);
-  border-radius: 12px;
+  background: rgba(10, 10, 12, 0.95); /* Deep opaque background for contrast */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08); /* Thinner, refined border */
+  border-radius: 16px; /* Larger radius for modern feel */
   /* Depth-1 with inner highlight */
   box-shadow: 
-    var(--depth-1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    0 4px 20px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   transition: 
     transform var(--transition-lift),
     box-shadow var(--transition-card),
@@ -1775,12 +1760,12 @@ body.theme-dark .cortex-analytics-card {
 }
 
 body.theme-dark .cortex-analytics-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strength-emphasis);
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.15);
   /* Depth-2 on hover */
   box-shadow: 
-    var(--depth-2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    0 12px 32px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 /* Dark Mode Typography - Enforced neutral colors */
@@ -1889,8 +1874,8 @@ body.theme-dark .cortex-badge--negative {
 }
 
 /* ----------------------------------------------------------
-   LIGHT MODE - Technical Blueprint
-   Sharp corners, hard unblurred shadows
+   LIGHT MODE - Premium Clean
+   Soft shadows, rounded corners, unified elevation
    ---------------------------------------------------------- */
 
 body.theme-light .analytics-container {
@@ -1902,21 +1887,26 @@ body.theme-light {
   --color-text-main: var(--color-slate-900);
 }
 
-/* Light Mode Card - "Blueprint" / Stacked Paper aesthetic */
+/* Light Mode Card - Soft Lift Aesthetic */
 body.theme-light .cortex-analytics-card {
   background: #FFFFFF;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid #CBD5E1; /* Slate-300 - crisp edge */
-  border-radius: 4px; /* Sharper corners */
-  /* Hard shadow - NO blur (0px), stacked paper effect */
-  box-shadow: 3px 3px 0px 0px #E2E8F0; /* Slate-200 */
+  border: 1px solid rgba(0,0,0,0.06); /* Very subtle border */
+  border-radius: 16px; /* Modern curvature */
+  /* Soft, multi-layered shadow (Stripe/Notion style) */
+  box-shadow: 
+    0 1px 2px rgba(0,0,0,0.04), 
+    0 4px 16px rgba(0,0,0,0.04);
+  transition: transform 0.2s var(--ease-smooth), box-shadow 0.2s var(--ease-smooth);
 }
 
 body.theme-light .cortex-analytics-card:hover {
-  border-color: #94A3B8; /* Slate-400 */
-  box-shadow: 4px 4px 0px 0px #CBD5E1; /* Slate-300 */
-  transform: translateY(-1px);
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 
+    0 4px 12px rgba(0,0,0,0.08), 
+    0 12px 32px rgba(0,0,0,0.06);
+  transform: translateY(-4px);
 }
 
 /* Light Mode Typography - High contrast slate */
@@ -1959,19 +1949,14 @@ body.theme-light .cortex-chart-subtitle {
   color: var(--color-slate-500);
 }
 
-/* Light Mode Empty States - Dashed border with subtle stripe */
+/* Light Mode Empty States - Clean dashed border */
 body.theme-light .no-data,
 body.theme-light .cortex-no-data {
-  border: 1px dashed var(--color-slate-300);
-  background-color: var(--color-slate-50);
-  background-image: repeating-linear-gradient(
-    -45deg,
-    transparent,
-    transparent 8px,
-    rgba(0, 0, 0, 0.02) 8px,
-    rgba(0, 0, 0, 0.02) 16px
-  );
-  opacity: 0.5;
+  border: 1px dashed rgba(0,0,0,0.15);
+  background-color: #FAFAFA;
+  border-radius: 12px;
+  background-image: none; /* Remove diagonal stripes */
+  opacity: 0.8;
 }
 
 body.theme-light .no-data p,
@@ -2063,20 +2048,24 @@ body.theme-dark .analytics-container .card p {
   color: var(--color-slate-300);
 }
 
-/* Light Mode - Analytics page cards - Blueprint / Stacked Paper */
+/* Light Mode - Analytics page cards - Soft Lift Aesthetic */
 body.theme-light .analytics-container .card {
   background: #FFFFFF;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-  border: 1px solid #CBD5E1; /* Slate-300 */
-  border-radius: 4px;
-  /* Hard shadow - NO blur, stacked paper effect */
-  box-shadow: 3px 3px 0px 0px #E2E8F0; /* Slate-200 */
+  border: 1px solid rgba(0,0,0,0.06);
+  border-radius: 16px;
+  box-shadow: 
+    0 1px 2px rgba(0,0,0,0.04), 
+    0 4px 16px rgba(0,0,0,0.04);
 }
 
 body.theme-light .analytics-container .card:hover {
-  border-color: #94A3B8; /* Slate-400 */
-  box-shadow: 4px 4px 0px 0px #CBD5E1; /* Slate-300 */
+  border-color: rgba(0,0,0,0.08);
+  box-shadow: 
+    0 4px 12px rgba(0,0,0,0.08), 
+    0 12px 32px rgba(0,0,0,0.06);
+  transform: translateY(-4px);
 }
 
 body.theme-light .analytics-container .card h2,

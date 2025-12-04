@@ -6,44 +6,46 @@ interface LoadingSpinnerProps {
 }
 
 const SIZE_MAP = {
-  small: '20px',
-  medium: '30px',
-  large: '40px'
+  small: 'sm',
+  medium: '',
+  large: 'lg' // Custom class if needed, or inline style
 } as const;
 
 /**
  * LoadingSpinner Component
- * Displays an accessible loading indicator with optional text.
- * Wrapped in React.memo for performance optimization.
+ * Displays a premium, accessible loading indicator using brand tokens.
+ * "Breathing" animation via CSS classes.
  */
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = memo(({ 
-  size = 'small', 
+  size = 'medium', 
   text = 'Loading...' 
 }) => {
+  // Map size prop to bootstrap-compatible or custom classes
+  const spinnerClass = size === 'small' ? 'spinner-border-sm' : '';
+  const containerStyle = size === 'large' ? { transform: 'scale(1.5)' } : {};
+
   return (
     <div 
-      style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '8px',
-        opacity: 0.7 
-      }}
-      aria-busy="true"
+      className="d-flex align-items-center gap-3 opacity-75"
+      role="status"
       aria-live="polite"
     >
       <div 
-        role="status"
-        aria-label={text}
-        style={{
-          width: SIZE_MAP[size],
-          height: SIZE_MAP[size],
-          border: '2px solid #f3f3f3',
-          borderTop: '2px solid #007bff',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite'
+        className={`spinner-border text-primary ${spinnerClass}`} 
+        style={{ 
+          ...containerStyle, 
+          borderColor: 'var(--border-subtle)', 
+          borderRightColor: 'var(--brand-primary)' 
         }}
-      />
-      <span>{text}</span>
+      >
+        <span className="visually-hidden">{text}</span>
+      </div>
+      
+      {text && (
+        <span className="text-muted small font-monospace text-uppercase tracking-wider">
+          {text}
+        </span>
+      )}
     </div>
   );
 });
