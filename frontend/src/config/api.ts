@@ -1,5 +1,6 @@
 import { getFrontendConfig, FrontendEnvironment } from '../shared/config/environment';
 import { API_CONFIG as SHARED_API_CONFIG } from '../shared/constants';
+import { logger } from '../utils/logger';
 
 // Validate environment variables
 const config: FrontendEnvironment = getFrontendConfig();
@@ -19,7 +20,7 @@ export const getApiBaseUrl = () => {
   
   const isProduction = isProductionBuild || isProductionRuntime;
   
-  console.log('Environment detection:', { 
+  logger.debug('Environment detection', { 
     isProduction, 
     isProductionBuild,
     isProductionRuntime,
@@ -27,7 +28,7 @@ export const getApiBaseUrl = () => {
     VITE_ENVIRONMENT: import.meta.env.VITE_ENVIRONMENT,
     hostname: typeof window !== 'undefined' ? window.location.hostname : 'N/A',
     VITE_API_URL: import.meta.env.VITE_API_URL,
-    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL
+    VITE_API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
   });
   
   if (isProduction) {

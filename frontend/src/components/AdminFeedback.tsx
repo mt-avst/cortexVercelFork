@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 import ConfirmationModal from './ConfirmationModal';
 import { AppError } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 
 const AdminFeedback: React.FC = () => {
@@ -32,7 +33,10 @@ const AdminFeedback: React.FC = () => {
       const data = await getFeedback();
       setFeedback(data);
     } catch (error: unknown) {
-      console.error('Failed to load feedback:', error);
+      logger.error('Failed to load feedback', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       setError(error instanceof AppError ? error.message : 'Failed to load feedback');
     } finally {
       setLoading(false);
@@ -64,7 +68,11 @@ const AdminFeedback: React.FC = () => {
         }
       }
     } catch (error: unknown) {
-      console.error('Failed to delete feedback:', error);
+      logger.error('Failed to delete feedback', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        feedbackId: deleteConfirm.item?.id,
+      });
       alert(error instanceof AppError ? error.message : 'Failed to delete feedback');
     } finally {
       setDeleting(false);

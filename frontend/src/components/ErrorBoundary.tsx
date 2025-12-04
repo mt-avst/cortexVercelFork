@@ -1,4 +1,5 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { logger } from '../utils/logger';
 
 interface Props {
   children: ReactNode;
@@ -22,12 +23,18 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Log the error to console in development
-    if (process.env.NODE_ENV === 'development') {
-      console.error('ErrorBoundary caught an error:', error, errorInfo);
-    }
+    // Log the error using structured logger
+    logger.error('ErrorBoundary caught an error', {
+      error,
+      errorDetails: {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        componentStack: errorInfo.componentStack,
+      },
+    });
     
-    // In production, you would send this to an error reporting service
+    // In production, you would also send this to an error reporting service
     // Example: errorReportingService.captureException(error, { extra: errorInfo });
   }
 

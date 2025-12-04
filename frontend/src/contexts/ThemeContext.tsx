@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useLayoutEffect } from 'react';
+import { logger } from '../utils/logger';
 
 export type Theme = 'dark' | 'light';
 
@@ -18,7 +19,10 @@ const getInitialTheme = (): Theme => {
     // Only use saved preference if it's explicitly 'light', otherwise default to dark
     return saved === 'light' ? 'light' : 'dark';
   } catch (error) {
-    console.warn('localStorage not available, defaulting to dark theme:', error);
+    logger.warn('localStorage not available, defaulting to dark theme', {
+      error: error instanceof Error ? error : undefined,
+      errorMessage: error instanceof Error ? error.message : String(error),
+    });
     return 'dark';
   }
 };
@@ -41,7 +45,10 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       // Clean up old animation preference key
       localStorage.removeItem('animationsEnabled');
     } catch (error) {
-      console.warn('Could not save theme preference to localStorage:', error);
+      logger.warn('Could not save theme preference to localStorage', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
     }
   }, [theme]);
 
@@ -87,6 +94,4 @@ export const useAnimation = () => {
     toggleAnimations: toggleTheme
   };
 };
-
-
 

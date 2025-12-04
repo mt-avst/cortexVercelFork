@@ -1,5 +1,6 @@
 import React, { useEffect, useState, memo } from 'react';
 import { getPlatformStats } from '../api/client';
+import { logger } from '../utils/logger';
 import { TrendingUp, Users, DollarSign } from 'lucide-react';
 
 /**
@@ -36,7 +37,10 @@ const KpiStats: React.FC = memo(() => {
         setStats(data);
         setError(false);
       } catch (err) {
-        console.error('Failed to fetch platform stats:', err);
+        logger.error('Failed to fetch platform stats', {
+          error: err instanceof Error ? err : undefined,
+          errorMessage: err instanceof Error ? err.message : String(err),
+        });
         setError(true);
         // Use placeholder values on error
         setStats({
@@ -107,10 +111,6 @@ const KpiStats: React.FC = memo(() => {
 KpiStats.displayName = 'KpiStats';
 
 export default KpiStats;
-
-
-
-
 
 
 

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, memo, useRef } from '
 import { useNavigate } from 'react-router-dom';
 import { Session, CalendarEvent } from '../api/types';
 import { getMyCalendarEvents, getCalendarConnectionStatus, getMyBookings } from '../api/client';
+import { logger } from '../utils/logger';
 import { Info } from 'lucide-react';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 
@@ -126,7 +127,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         
         setBookedSlots(new Set(bookedSessionIds));
       } catch (error) {
-        console.error('Error loading user bookings:', error);
+        logger.error('Error loading user bookings', {
+          error: error instanceof Error ? error : undefined,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         setBookedSlots(new Set());
       }
     };

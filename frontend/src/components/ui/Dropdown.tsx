@@ -82,13 +82,13 @@ export const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div ref={dropdownRef} className={`dropdown ${className}`}>
       {React.isValidElement(trigger) ? (
-        React.cloneElement(trigger as React.ReactElement<any>, {
+        React.cloneElement(trigger as React.ReactElement<{ className?: string; onClick?: () => void; onKeyDown?: (e: React.KeyboardEvent) => void }>, {
           ref: triggerRef,
           onClick: handleToggle,
           onKeyDown: handleKeyDown,
           'aria-expanded': isOpen,
           'aria-haspopup': 'true',
-          className: `${(trigger as React.ReactElement<any>).props.className || ''} dropdown-toggle`.trim(),
+          className: `${(trigger as React.ReactElement<{ className?: string }>).props.className || ''} dropdown-toggle`.trim(),
         })
       ) : (
         <button
@@ -112,9 +112,10 @@ export const Dropdown: React.FC<DropdownProps> = ({
           {React.Children.map(children, child => {
             if (React.isValidElement(child)) {
               // Pass close handler to items
-              return React.cloneElement(child as React.ReactElement<any>, {
+              const childElement = child as React.ReactElement<{ onClick?: (e: React.MouseEvent) => void }>;
+              return React.cloneElement(childElement, {
                 onClick: (e: React.MouseEvent) => {
-                  const originalOnClick = (child as React.ReactElement<any>).props.onClick;
+                  const originalOnClick = childElement.props.onClick;
                   if (originalOnClick) {
                     originalOnClick(e);
                   }
@@ -143,7 +144,7 @@ export const DropdownItem = React.forwardRef<HTMLButtonElement, DropdownItemProp
           href={href} 
           className={classes} 
           role="menuitem"
-          onClick={onClick as any}
+          onClick={onClick as unknown as React.MouseEventHandler<HTMLAnchorElement>}
         >
           {icon && <span className="me-2">{icon}</span>}
           {children}
@@ -189,4 +190,3 @@ export const DropdownHeader: React.FC<DropdownHeaderProps> = ({
 };
 
 export default Dropdown;
-

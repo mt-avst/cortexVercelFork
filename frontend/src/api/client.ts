@@ -423,7 +423,12 @@ export const trackOpportunityClick = async (
     return response.data;
   } catch (error) {
     // Don't fail the navigation if tracking fails - just log it
-    console.warn('Click tracking failed:', error);
+    logger.warn('Click tracking failed', {
+      error: error instanceof Error ? error : undefined,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      opportunityId,
+      clickType,
+    });
     return { ok: false };
   }
 };
@@ -508,7 +513,9 @@ export const getDashboardStats = async (): Promise<DashboardStats> => {
   return response.data.data;
 };
 
-export interface NotificationPreference {
+// NotificationPreference is imported from shared types
+// Extended version with nullable id for API responses
+export interface NotificationPreferenceResponse {
   id: string | null;
   user_id: string;
   on_book_email: boolean;
@@ -518,7 +525,7 @@ export interface NotificationPreference {
 /**
  * Get user's notification preferences
  */
-export const getNotificationPreferences = async (): Promise<NotificationPreference> => {
+export const getNotificationPreferences = async (): Promise<NotificationPreferenceResponse> => {
   const response = await api.get('/notification-preferences');
   return response.data.data;
 };
@@ -529,7 +536,7 @@ export const getNotificationPreferences = async (): Promise<NotificationPreferen
 export const updateNotificationPreferences = async (preferences: {
   on_book_email: boolean;
   on_cancel_email: boolean;
-}): Promise<NotificationPreference> => {
+}): Promise<NotificationPreferenceResponse> => {
   const response = await api.patch('/notification-preferences', preferences);
   return response.data.data;
 };

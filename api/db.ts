@@ -77,4 +77,3 @@ export async function query(text: string, params?: unknown[]): Promise<{ rows: u
     }
   }
 }
-

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getPendingApprovals, approveSession, rejectSession } from '../api/client';
 import LoadingSpinner from './LoadingSpinner';
 import { AppError } from '../utils/errorHandler';
+import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 
 interface PendingApproval {
@@ -36,7 +37,10 @@ const PendingApprovals: React.FC = () => {
       const data = await getPendingApprovals();
       setApprovals(data);
     } catch (error: unknown) {
-      console.error('Failed to load pending approvals:', error);
+      logger.error('Failed to load pending approvals', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       setError(error instanceof AppError ? error.message : 'Failed to load pending approvals');
     } finally {
       setLoading(false);
@@ -58,7 +62,11 @@ const PendingApprovals: React.FC = () => {
       // Clear notes
       setAdminNotes(prev => ({ ...prev, [bookingId]: '' }));
     } catch (error: unknown) {
-      console.error('Failed to approve session:', error);
+      logger.error('Failed to approve session', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        bookingId,
+      });
       alert(error instanceof AppError ? error.message : 'Failed to approve session');
     } finally {
       setProcessing(null);
@@ -80,7 +88,11 @@ const PendingApprovals: React.FC = () => {
       // Clear notes
       setAdminNotes(prev => ({ ...prev, [bookingId]: '' }));
     } catch (error: unknown) {
-      console.error('Failed to reject session:', error);
+      logger.error('Failed to reject session', {
+        error: error instanceof Error ? error : undefined,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        bookingId,
+      });
       alert(error instanceof AppError ? error.message : 'Failed to reject session');
     } finally {
       setProcessing(null);
