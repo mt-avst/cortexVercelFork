@@ -93,7 +93,7 @@ const Landing: React.FC = memo(() => {
           <button 
             onClick={handleGoogleLogin}
             className={`btn-power ${isLoading ? 'disabled' : ''}`}
-            style={{ marginTop: '2.5rem', marginBottom: 0 }}
+            style={{ marginTop: '2.5rem' }}
             disabled={isLoading}
             aria-busy={isLoading}
             aria-label={googleLoading ? "Connecting..." : "Access Cortex"}
@@ -116,19 +116,19 @@ const Landing: React.FC = memo(() => {
             )}
           </button>
 
-        </div>
+          {/* Hero Scroll Tab - Inside hero stack for flow layout on smaller screens */}
+          <button
+            type="button"
+            className="hero-scroll-tab hero-scroll-tab--inline"
+            onClick={handleScrollToSales}
+            aria-label="Scroll to learn how Cortex works"
+          >
+            <span className="hero-scroll-tab__label">New to Cortex?</span>
+            <span className="hero-scroll-tab__action">See how it works</span>
+            <span className="hero-scroll-tab__arrow" aria-hidden="true">↓</span>
+          </button>
 
-        {/* Hero Scroll Tab - Bottom-anchored scroll hint */}
-        <button
-          type="button"
-          className="hero-scroll-tab"
-          onClick={handleScrollToSales}
-          aria-label="Scroll to learn how Cortex works"
-        >
-          <span className="hero-scroll-tab__label">New to Cortex?</span>
-          <span className="hero-scroll-tab__action">See how it works</span>
-          <span className="hero-scroll-tab__arrow" aria-hidden="true">↓</span>
-        </button>
+        </div>
 
         {/* Demo Footer - Pinned Bottom */}
         <div className="landing-demo-footer">

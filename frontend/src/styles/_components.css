@@ -4448,23 +4448,26 @@ body.theme-dark .calendar-day-title {
 /* Base slot styling - centered inside column */
 .calendar-slot {
   border-radius: 8px !important; /* rounded-lg for friendlier feel */
-  /* Positioning handled by more specific .calendar-hud/.mission-scheduler rules */
-}
-
-/* Slot text readability - bold for emphasis */
-.calendar-slot .timeslot-label {
-  font-size: 0.75rem !important;
-  font-weight: 600 !important;
-  /* Vertical centering */
-  position: absolute !important;
-  top: 50% !important;
-  left: 0 !important;
-  right: 0 !important;
-  transform: translateY(-50%) !important;
+  /* Flex centering for label */
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  text-align: center !important;
+  overflow: hidden !important;
+}
+
+/* Slot text readability - uses flexbox of parent for centering */
+.calendar-slot .timeslot-label {
+  /* Typography - explicit font settings to prevent rendering issues */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: nowrap;
+  
+  /* Prevent interaction */
+  pointer-events: none;
 }
 
 /* ============================================================
@@ -4495,27 +4498,28 @@ body.theme-dark .calendar-day-title {
 }
 
 /* ============================================================
-   DARK MODE: "GLOW" STYLE - High Contrast Available Slots
+   DARK MODE: "SOLID" STYLE - High Visibility Available Slots
    ============================================================ */
 body.theme-dark .calendar-slot-ghost {
-  background: rgba(16, 185, 129, 0.1) !important; /* emerald-500/10 */
+  background: rgba(16, 185, 129, 0.8) !important; /* emerald-500/80 - SOLID visible */
   border: 1px solid #34d399 !important; /* emerald-400 - bright glow border */
-  box-shadow: 0 0 8px rgba(52, 211, 153, 0.2) !important; /* subtle glow */
+  box-shadow: 0 2px 8px rgba(52, 211, 153, 0.3) !important; /* visible glow */
 }
 
 body.theme-dark .calendar-slot-ghost .timeslot-label {
-  color: #6ee7b7 !important; /* emerald-300 - bright text */
-  font-weight: 600 !important;
+  color: #FFFFFF !important; /* Pure white for maximum contrast */
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
 }
 
 body.theme-dark .calendar-slot-ghost:hover {
-  background: rgba(16, 185, 129, 0.2) !important;
+  background: rgba(16, 185, 129, 0.95) !important;
   border-color: #6ee7b7 !important; /* emerald-300 */
-  box-shadow: 0 0 12px rgba(52, 211, 153, 0.3), 0 4px 6px rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 0 16px rgba(52, 211, 153, 0.4), 0 4px 8px rgba(0, 0, 0, 0.3) !important;
 }
 
 body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
-  color: #a7f3d0 !important; /* emerald-200 */
+  color: #FFFFFF !important; /* Keep white */
 }
 
 /* ============================================================
@@ -7145,24 +7149,26 @@ body.theme-dark .calendar-day-past::after {
 
 /* Past slot styling */
 .calendar-slot-past {
-  background: rgba(156, 163, 175, 0.1) !important;
-  border: 1px dashed rgba(156, 163, 175, 0.3) !important;
+  background: rgba(156, 163, 175, 0.4) !important; /* More visible gray */
+  border: 1px dashed rgba(156, 163, 175, 0.5) !important;
   border-radius: 8px !important;
-  opacity: 0.5 !important;
+  /* Removed opacity: 0.5 - parent container already handles dimming */
 }
 
 .calendar-slot-past .timeslot-label {
-  color: #9ca3af !important;
+  color: #6b7280 !important; /* Darker gray for readability */
   text-decoration: line-through;
+  font-weight: 600 !important;
 }
 
 body.theme-dark .calendar-slot-past {
-  background: rgba(75, 85, 99, 0.2) !important;
-  border: 1px dashed rgba(75, 85, 99, 0.4) !important;
+  background: rgba(107, 114, 128, 0.6) !important; /* Visible gray-500 */
+  border: 1px dashed rgba(107, 114, 128, 0.7) !important;
 }
 
 body.theme-dark .calendar-slot-past .timeslot-label {
-  color: #6b7280 !important;
+  color: #d1d5db !important; /* Lighter gray-300 for contrast */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
 }
 
 /* ============================================================
@@ -7219,10 +7225,24 @@ body.theme-dark .calendar-day-today .calendar-timeline-container {
 }
 
 body.theme-dark .calendar-living-interface .calendar-slot-ghost {
+  background: rgba(16, 185, 129, 0.85) !important; /* High visibility emerald */
+  border: 1px solid #34d399 !important;
   box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(52, 211, 153, 0.2),
-    0 0 12px rgba(52, 211, 153, 0.1);
+    0 2px 10px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(52, 211, 153, 0.4),
+    0 0 16px rgba(52, 211, 153, 0.2) !important;
+}
+
+/* Past slot styling for living interface calendar */
+body.theme-dark .calendar-living-interface .calendar-slot-past {
+  background: rgba(107, 114, 128, 0.7) !important; /* gray-500/70 - highly visible */
+  border: 1px dashed rgba(156, 163, 175, 0.8) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2) !important;
+}
+
+body.theme-dark .calendar-living-interface .calendar-slot-past .timeslot-label {
+  color: #e5e7eb !important; /* gray-200 */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* ============================================================
@@ -8670,13 +8690,17 @@ body.theme-light .calendar-day-header-cell {
    ============================================================ */
 
 /* Base slot styling - TILES not pills */
+/* Fix: Calendar slots must have explicit width - left+right+auto doesn't work */
 .calendar-hud .calendar-slot,
-.mission-scheduler .calendar-slot {
-  border-radius: 6px !important; /* rounded-md - tile shape */
-  /* Horizontal centering - equal padding on both sides */
+.mission-scheduler .calendar-slot,
+.calendar-hud .calendar-timeline-container .calendar-slot,
+.calendar-view .calendar-slot {
+  border-radius: 6px !important;
   left: 6px !important;
   right: 6px !important;
-  width: auto !important;
+  width: calc(100% - 12px) !important;
+  min-width: 80px !important;
+  overflow: hidden;
 }
 
 /* ============================================================
@@ -8694,13 +8718,13 @@ body.theme-light .calendar-day-header-cell {
   cursor: pointer !important;
 }
 
-/* DARK MODE: Block button style - Emerald tinted glass */
+/* DARK MODE: Block button style - High visibility emerald solid */
 body.theme-dark .mission-scheduler .calendar-slot-ghost,
 body.theme-dark .calendar-hud .calendar-slot-ghost {
-  background: rgba(16, 185, 129, 0.15) !important; /* emerald-500/15 */
-  border: 1px solid rgba(16, 185, 129, 0.3) !important; /* emerald-500/30 */
+  background: rgba(16, 185, 129, 0.85) !important; /* emerald-500/85 - SOLID for visibility */
+  border: 1px solid #34d399 !important; /* emerald-400 solid */
   border-radius: 8px !important;
-  box-shadow: none !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3) !important;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -8708,24 +8732,25 @@ body.theme-dark .mission-scheduler .calendar-slot-ghost .timeslot-label,
 body.theme-dark .calendar-hud .calendar-slot-ghost .timeslot-label {
   color: #FFFFFF !important; /* Pure white for visibility */
   font-weight: 700 !important;
-  text-shadow: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important; /* Text shadow for readability */
   text-align: center !important;
 }
 
 /* DARK MODE: Hover - Brighten and lift */
 body.theme-dark .mission-scheduler .calendar-slot-ghost:hover,
 body.theme-dark .calendar-hud .calendar-slot-ghost:hover {
-  background: rgba(16, 185, 129, 0.25) !important; /* emerald-500/25 */
-  border-color: rgba(16, 185, 129, 0.5) !important; /* emerald-500/50 */
+  background: rgba(16, 185, 129, 0.95) !important; /* emerald-500/95 - even brighter */
+  border-color: #6ee7b7 !important; /* emerald-300 */
   transform: translateY(-1px);
   box-shadow: 
-    0 4px 12px rgba(16, 185, 129, 0.3),
-    0 0 20px rgba(16, 185, 129, 0.15) !important;
+    0 4px 16px rgba(16, 185, 129, 0.4),
+    0 0 24px rgba(16, 185, 129, 0.25) !important;
 }
 
 body.theme-dark .mission-scheduler .calendar-slot-ghost:hover .timeslot-label,
 body.theme-dark .calendar-hud .calendar-slot-ghost:hover .timeslot-label {
   color: #FFFFFF !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4) !important;
 }
 
 /* LIGHT MODE: Block button style - Clean emerald */
@@ -8778,6 +8803,36 @@ body.theme-dark .mission-scheduler .calendar-slot-selected .timeslot-label,
 body.theme-dark .calendar-hud .calendar-slot-selected .timeslot-label {
   color: #FFFFFF !important;
   font-weight: 700 !important;
+}
+
+/* PAST SLOT STATE: High visibility for past sessions */
+body.theme-dark .mission-scheduler .calendar-slot-past,
+body.theme-dark .calendar-hud .calendar-slot-past {
+  background: rgba(107, 114, 128, 0.7) !important; /* gray-500/70 - highly visible */
+  border: 1px dashed rgba(156, 163, 175, 0.8) !important; /* gray-400 dashed border */
+  border-radius: 8px !important;
+}
+
+body.theme-dark .mission-scheduler .calendar-slot-past .timeslot-label,
+body.theme-dark .calendar-hud .calendar-slot-past .timeslot-label {
+  color: #e5e7eb !important; /* gray-200 - bright text */
+  font-weight: 600 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4) !important;
+  text-decoration: line-through;
+}
+
+body.theme-light .mission-scheduler .calendar-slot-past,
+body.theme-light .calendar-hud .calendar-slot-past {
+  background: rgba(156, 163, 175, 0.5) !important; /* gray-400/50 */
+  border: 1px dashed rgba(107, 114, 128, 0.6) !important; /* gray-500 */
+  border-radius: 8px !important;
+}
+
+body.theme-light .mission-scheduler .calendar-slot-past .timeslot-label,
+body.theme-light .calendar-hud .calendar-slot-past .timeslot-label {
+  color: #374151 !important; /* gray-700 - dark text */
+  font-weight: 600 !important;
+  text-decoration: line-through;
 }
 
 /* ============================================================
@@ -9608,11 +9663,51 @@ body.theme-light .hero-scroll-tab:hover {
   .hero-scroll-tab {
     position: static;
     transform: none;
-    margin-top: var(--spacing-6);
+    margin-top: 1.5rem;
   }
   
   .landing-hero-stack {
     padding-bottom: var(--spacing-8);
+  }
+}
+
+/* ============================================================
+   RESPONSIVE: Scroll-tab inline variant
+   When inside the hero-stack, uses flow layout to prevent CTA overlap.
+   On large screens with enough height, positions at bottom as before.
+   ============================================================ */
+
+/* Inline variant - default to static flow positioning */
+/* Use high specificity to override base absolute positioning */
+.hero-scroll-tab.hero-scroll-tab--inline {
+  position: static !important;
+  transform: none !important;
+  margin-top: 1.5rem !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+body.theme-light .hero-scroll-tab.hero-scroll-tab--inline,
+body.theme-dark .hero-scroll-tab.hero-scroll-tab--inline {
+  position: static !important;
+  transform: none !important;
+  margin-top: 1.5rem !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+/* On very large screens with sufficient height, optionally reposition to bottom */
+@media (min-width: 1400px) and (min-height: 1000px) {
+  .hero-scroll-tab.hero-scroll-tab--inline {
+    position: absolute !important;
+    transform: translateX(-50%) !important;
+    margin-top: 0 !important;
+    bottom: 160px !important;
+    left: 50% !important;
+  }
+  
+  body.theme-light .hero-scroll-tab.hero-scroll-tab--inline {
+    bottom: 28vh !important;
   }
 }
 

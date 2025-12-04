@@ -340,7 +340,7 @@ const Nodes: React.FC<NodesProps> = ({ nodeData }) => {
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, count]}>
       <sphereGeometry args={[1, 6, 6]} />
-      <meshBasicMaterial toneMapped={false} transparent opacity={0.6} />
+      <meshBasicMaterial toneMapped={false} transparent opacity={0.5} />
     </instancedMesh>
   );
 };
@@ -366,7 +366,7 @@ const Connections: React.FC<ConnectionsProps> = ({ connectionData }) => {
       <lineBasicMaterial 
         vertexColors 
         transparent 
-        opacity={0.25}
+        opacity={0.18}
         blending={THREE.AdditiveBlending}
         toneMapped={false}
       />
@@ -566,7 +566,7 @@ const OrganicNeuralBackground: React.FC = () => {
       <div 
         className="absolute inset-0 pointer-events-none z-10"
         style={{
-          background: 'radial-gradient(circle at center, transparent 35%, rgba(3,3,5,0.5) 65%, #030305 100%)',
+          background: 'radial-gradient(circle at center, transparent 30%, rgba(3,3,5,0.6) 55%, rgba(3,3,5,0.85) 75%, #030305 100%)',
         }}
       />
       <Canvas
@@ -590,10 +590,10 @@ const OrganicNeuralBackground: React.FC = () => {
 
         <EffectComposer>
           <Bloom
-            intensity={2.2}
-            luminanceThreshold={0.12}
+            intensity={1.6}
+            luminanceThreshold={0.15}
             luminanceSmoothing={0.9}
-            radius={0.75}
+            radius={0.65}
             mipmapBlur
           />
         </EffectComposer>

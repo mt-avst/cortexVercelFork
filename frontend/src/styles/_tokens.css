@@ -48,7 +48,7 @@
   
   /* Dark Mode Shadows */
   --shadow-panel-dark: 0 18px 45px rgba(0, 0, 0, 0.72);
-  --shadow-card-dark: 0 4px 24px rgba(0, 0, 0, 0.50);
+  --shadow-card-dark: 0 2px 12px rgba(0, 0, 0, 0.25);
   
   /* Light Mode Shadows */
   --shadow-panel-light: 0 12px 30px rgba(15, 23, 42, 0.04);

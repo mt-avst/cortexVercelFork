@@ -26,6 +26,38 @@ export const CALENDAR_LEGEND_ITEMS = [
 // current time indicator, glassmorphic headers
 // ============================================================
 
+// ============================================================
+// BUG FIX HISTORY - GARBLED TEXT IN CALENDAR SLOTS (Dec 2024)
+// ============================================================
+// SYMPTOM: Calendar slot text appeared garbled/overlapping, showing
+//          scrambled characters like "9:00 3:002. 001:0845. 4" instead
+//          of clean time labels like "10:00 - 10:45 AM".
+//
+// ROOT CAUSE: The grid container div (around line 765) was missing
+//             `width: '100%'` in its inline styles. This caused:
+//             1. Grid columns to not expand properly within the flex parent
+//             2. All session slots collapsed into a narrow vertical space
+//             3. Multiple text elements overlapping, creating garbled appearance
+//
+// THE FIX (two parts):
+//   1. Added `width: '100%'` to the Day Columns Grid div's inline styles
+//      This ensures the CSS grid expands to fill the available space
+//      within the .calendar-days-container (which has display: flex from CSS)
+//
+//   2. Updated slot styles to use explicit width: 'calc(100% - 12px)'
+//      with proper left/right margins, boxSizing, and flexbox centering
+//
+// KEY INSIGHT: The parent .calendar-days-container has `display: flex`
+//              from CSS (_components.css line ~11816). The grid child needs
+//              explicit width to expand properly within a flex container.
+//              The header row worked because it had `flex: 1` on its grid div.
+//
+// IF THIS ISSUE RECURS, check:
+//   1. The grid div has `width: '100%'` in inline styles
+//   2. Slot positioning uses absolute + left/right/width properly
+//   3. No CSS rules overriding inline grid/width styles
+// ============================================================
+
 const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSession, bookingLoading, hideLegend = false }) => {
   const navigate = useNavigate();
   const [confirmingSlot, setConfirmingSlot] = useState<string | null>(null);
@@ -421,14 +453,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     })
   };
 
-  // Tactile slot interaction variants
+  // Tactile slot interaction variants (no scale to prevent text artifacts)
   const slotVariants = {
     idle: { 
-      scale: 1,
       boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
     },
     hover: { 
-      scale: 1.03,
       boxShadow: '0 8px 25px rgba(0,0,0,0.12)',
       transition: {
         type: 'spring' as const,
@@ -437,7 +467,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       }
     },
     tap: { 
-      scale: 0.97,
+      opacity: 0.9,
       transition: {
         type: 'spring' as const,
         stiffness: 600,
@@ -661,24 +691,6 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               overflow: 'hidden'
             }}
           >
-            {/* Cursor Spotlight Effect - Radial glow that follows the mouse within grid */}
-            <motion.div
-              className="cursor-spotlight"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: isMouseInGrid ? 1 : 0 }}
-              transition={{ duration: 0.2 }}
-              style={{
-                position: 'absolute',
-                width: 400,
-                height: 400,
-                borderRadius: '50%',
-                background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, rgba(16, 185, 129, 0.02) 40%, transparent 70%)',
-                pointerEvents: 'none',
-                zIndex: 0,
-                x: spotlightX,
-                y: spotlightY,
-              }}
-            />
             {/* Horizontal hour dividers - HUD style grid lines */}
             <div 
               className="calendar-grid-lines"
@@ -787,7 +799,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
               gap: '24px',
               position: 'relative',
-              zIndex: 3
+              zIndex: 3,
+              width: '100%',
             }}>
               {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
                 const isToday = columnIndex === todayColumnIndex;
@@ -817,27 +830,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                       border: 'none',
                       overflow: 'visible',
                       zIndex: 1,
-                      opacity: isPast ? 0.5 : 1,
-                      filter: isPast ? 'grayscale(30%)' : 'none',
+                      opacity: isPast ? 0.7 : 1,
+                      filter: isPast ? 'grayscale(15%)' : 'none',
                       transition: 'opacity 0.3s ease, filter 0.3s ease'
                     }}>
-                      {/* Ghost Hover Cells - Visible faint highlight on empty space hover */}
-                      {timeMarkers.filter(m => m.isHour && m.time < 23).map((marker, index) => {
-                        const topPos = getTimePosition(marker.time);
-                        const nextPos = getTimePosition(marker.time + 1);
-                        const height = nextPos - topPos;
-                        return (
-                          <div
-                            key={`ghost-${marker.time}-${index}`}
-                            className="calendar-ghost-cell"
-                            style={{
-                              top: `${topPos}%`,
-                              height: `${height}%`,
-                            }}
-                            aria-hidden="true"
-                          />
-                        );
-                      })}
                       
                       {dateSessions.map((session, slotIndex) => {
                         const isBooked = bookedSlots.has(session.id);
@@ -878,32 +874,24 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         }
 
                         return (
-                          <motion.div
+                          <div
                             key={session.id}
                             className={slotClass}
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: isSessionPast ? 0.4 : 1, scale: 1 }}
-                            transition={{ 
-                              delay: 0.3 + columnIndex * 0.1 + slotIndex * 0.05,
-                              duration: 0.3
-                            }}
-                            variants={canClick ? slotVariants : undefined}
-                            whileHover={canClick ? 'hover' : undefined}
-                            whileTap={canClick ? 'tap' : undefined}
                             style={{ 
-                              top: `${roundedTop}%`,
-                              height: `${roundedHeight}%`,
-                              maxHeight: `${roundedHeight}%`,
-                              minHeight: '0',
-                              boxSizing: 'border-box',
                               position: 'absolute',
-                              // left/right/width controlled by CSS
+                              top: `${roundedTop}%`,
+                              height: `max(${roundedHeight}%, 40px)`,
+                              left: '6px',
+                              right: '6px',
+                              width: 'calc(100% - 12px)',
+                              boxSizing: 'border-box',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
                               cursor: canClick ? 'pointer' : 'not-allowed',
-                              fontSize: '0.7rem',
-                              padding: '2px 4px',
-                              overflow: isConfirming ? 'visible' : 'hidden',
                               zIndex: isConfirming ? 9999 : (isBooked ? 5 : 2),
-                              pointerEvents: canClick || isBooked ? 'auto' : 'none'
+                              pointerEvents: canClick || isBooked ? 'auto' : 'none',
+                              opacity: isSessionPast ? 0.65 : 1,
                             }}
                             title={(() => {
                               const startTime = formatTime(session.start_time);
@@ -916,33 +904,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             })()}
                             onClick={(e) => canClick && handleSlotClick(session, e.currentTarget as HTMLElement)}
                           >
-                            {/* Time label - vertically centered */}
-                            <div 
-                              className="timeslot-label"
-                              style={{
-                                position: 'absolute',
-                                top: '50%',
-                                left: '0',
-                                right: '0',
-                                transform: 'translateY(-50%)',
-                                width: '100%',
-                                height: 'auto',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                fontSize: '11px',
-                                fontWeight: '600',
-                                letterSpacing: '-0.025em',
-                                lineHeight: '1.25',
-                                textAlign: 'center',
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                padding: '0 2px',
-                                pointerEvents: 'none'
-                              }}>
+                            <span className="timeslot-label">
                               {formatTimeRange(session.start_time, session.end_time)}
-                            </div>
+                            </span>
 
                             {/* Booking confirmation popover */}
                             <AnimatePresence>
@@ -997,9 +961,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
                             {/* Loading indicator */}
                             {bookingLoading === session.id && (
-                              <motion.div 
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
+                              <div 
                                 style={{ 
                                   position: 'absolute',
                                   top: '50%',
@@ -1011,9 +973,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                 <div className="spinner-border spinner-border-sm" role="status" aria-label="Booking session" aria-busy="true">
                                   <span className="visually-hidden">Booking...</span>
                                 </div>
-                              </motion.div>
+                              </div>
                             )}
-                          </motion.div>
+                          </div>
                         );
                       })}
                     </div>
