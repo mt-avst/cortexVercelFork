@@ -82,8 +82,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   return (
     <div ref={dropdownRef} className={`dropdown ${className}`}>
       {React.isValidElement(trigger) ? (
-        React.cloneElement(trigger as React.ReactElement<{ className?: string; onClick?: () => void; onKeyDown?: (e: React.KeyboardEvent) => void }>, {
-          ref: triggerRef,
+        React.cloneElement(trigger as React.ReactElement<Record<string, unknown>>, {
           onClick: handleToggle,
           onKeyDown: handleKeyDown,
           'aria-expanded': isOpen,

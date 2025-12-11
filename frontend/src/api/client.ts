@@ -522,6 +522,9 @@ export interface NotificationPreferenceResponse {
   on_cancel_email: boolean;
 }
 
+// Alias for backwards compatibility
+export type NotificationPreference = NotificationPreferenceResponse;
+
 /**
  * Get user's notification preferences
  */
