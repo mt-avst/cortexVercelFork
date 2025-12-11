@@ -4,6 +4,20 @@ import { createErrorResponse, getErrorMessage } from '../utils/errors';
 import { parseSessionCookie } from '../utils/auth';
 import { logger } from '../utils/logger';
 
+// Type for opportunity rows from database
+interface OpportunityRow {
+  id: string;
+  owner_user_id: string;
+  title?: string;
+  description?: string;
+  status?: string;
+  created_at?: Date;
+  updated_at?: Date;
+  start_date?: Date | string | null;
+  end_date?: Date | string | null;
+  [key: string]: unknown;
+}
+
 /**
  * GET /api/opportunities/[id]
  * Get opportunity detail
@@ -212,7 +226,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Authorization: user must be owner, researcher_admin, or superadmin
-      const opportunity = checkResult.rows[0];
+      const opportunity = checkResult.rows[0] as OpportunityRow;
       const isOwner = opportunity.owner_user_id === user.id;
       const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
       
@@ -306,7 +320,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const result = await query(sql, params);
       
-      const opportunity = result.rows[0];
+      const opportunity = result.rows[0] as OpportunityRow;
 
       // Get owner info
       const ownerResult = await query(
@@ -358,7 +372,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Authorization: user must be owner, researcher_admin, or superadmin
-      const opportunity = checkResult.rows[0];
+      const opportunity = checkResult.rows[0] as OpportunityRow;
       const isOwner = opportunity.owner_user_id === user.id;
       const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
       
