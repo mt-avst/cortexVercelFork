@@ -3,6 +3,7 @@ import { createErrorResponse } from '../utils/errors';
 import { getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
 import { setSessionCookie } from '../utils/auth';
+import { authRateLimit } from '../utils/rateLimit';
 import { SessionUser } from '../../shared/types';
 
 /**
@@ -13,6 +14,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+
+    // Rate limit: 10 login attempts per 15 minutes per IP
+    if (await authRateLimit(req, res)) {
+      return; // Response already sent by rate limiter
     }
 
     const demoUser2: SessionUser = {

@@ -7,6 +7,7 @@ import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
 import { setSessionCookieForOAuth, verifySignedData } from '../utils/auth';
 import { encrypt as encryptToken } from '../utils/encryption';
+import { authRateLimit } from '../utils/rateLimit';
 
 // State expiry time: 10 minutes (prevents replay attacks)
 const STATE_EXPIRY_MS = 10 * 60 * 1000;
@@ -69,6 +70,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+
+    // Rate limit: 10 login attempts per 15 minutes per IP
+    if (await authRateLimit(req, res)) {
+      return; // Response already sent by rate limiter
     }
 
     const { code, state, error } = req.query;

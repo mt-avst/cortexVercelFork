@@ -5,6 +5,7 @@ import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { signData } from '../utils/auth';
+import { authRateLimit } from '../utils/rateLimit';
 
 /**
  * Generate a signed OAuth state parameter.
@@ -26,6 +27,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+
+    // Rate limit: 10 login attempts per 15 minutes per IP
+    if (await authRateLimit(req, res)) {
+      return; // Response already sent by rate limiter
     }
 
     const isDemoMode = isGoogleOAuthDemoMode();

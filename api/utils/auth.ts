@@ -132,38 +132,24 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
   }
 
   try {
-    // First, try to verify as a signed cookie (new format: encodedData.signature)
-    let decodedData: string | null = null;
-    
-    if (sessionData.includes('.')) {
-      // New signed format - verify signature first
-      const verifiedData = verifySignedData(sessionData);
-      if (verifiedData) {
-        try {
-          decodedData = decodeURIComponent(verifiedData);
-        } catch {
-          decodedData = verifiedData;
-        }
-      } else {
-        logger.warn('Session cookie signature verification failed');
-        return null;
-      }
-    } else {
-      // Legacy unsigned format - still accept but log warning
-      // TODO: Remove this fallback after migration period
-      logger.warn('Unsigned session cookie detected - this format is deprecated');
-      try {
-        decodedData = decodeURIComponent(sessionData);
-        if (decodedData === sessionData && sessionData.startsWith('{')) {
-          decodedData = sessionData;
-        }
-      } catch {
-        decodedData = sessionData;
-      }
+    // Verify signed cookie (format: encodedData.signature)
+    // Legacy unsigned cookies are no longer accepted for security
+    if (!sessionData.includes('.')) {
+      logger.warn('Unsigned session cookie rejected - please re-login');
+      return null;
     }
 
-    if (!decodedData) {
+    const verifiedData = verifySignedData(sessionData);
+    if (!verifiedData) {
+      logger.warn('Session cookie signature verification failed');
       return null;
+    }
+
+    let decodedData: string;
+    try {
+      decodedData = decodeURIComponent(verifiedData);
+    } catch {
+      decodedData = verifiedData;
     }
 
     const user = JSON.parse(decodedData);
