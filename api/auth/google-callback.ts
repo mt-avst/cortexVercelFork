@@ -5,32 +5,44 @@ import { createErrorResponse } from '../utils/errors';
 import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
 import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
+import { setSessionCookieForOAuth, verifySignedData } from '../utils/auth';
+import { encrypt as encryptToken } from '../utils/encryption';
+
+// State expiry time: 10 minutes (prevents replay attacks)
+const STATE_EXPIRY_MS = 10 * 60 * 1000;
 
 /**
- * Encrypt sensitive token data
- * Uses the same encryption method as backend userCalendar service
+ * Verify the OAuth state parameter.
+ * Checks HMAC signature and expiry timestamp.
  */
-function encryptToken(text: string): string {
-  const isDemoMode = isGoogleOAuthDemoMode();
-  
-  // If no encryption key set and in demo mode, use simple encoding
-  if (isDemoMode && !process.env.ENCRYPTION_KEY) {
-    return Buffer.from(`demo:${text}`).toString('base64');
+function verifyOAuthState(state: string | undefined): { valid: boolean; error?: string } {
+  if (!state || typeof state !== 'string') {
+    return { valid: false, error: 'State parameter missing' };
   }
 
-  // Production mode: Full encryption
-  const encryptionKey = process.env.ENCRYPTION_KEY || 'demo-key';
-  if (encryptionKey.length < 32) {
-    logger.warn('ENCRYPTION_KEY should be at least 32 characters for production');
+  // Verify signature
+  const verifiedData = verifySignedData(state);
+  if (!verifiedData) {
+    return { valid: false, error: 'Invalid state signature' };
   }
-  
-  // Simple XOR encryption (same as backend)
-  const key = encryptionKey.padEnd(32, '0').substring(0, 32);
-  let encrypted = '';
-  for (let i = 0; i < text.length; i++) {
-    encrypted += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+
+  // Parse and check timestamp
+  const parts = verifiedData.split('.');
+  if (parts.length !== 2) {
+    return { valid: false, error: 'Malformed state data' };
   }
-  return Buffer.from(encrypted).toString('base64');
+
+  const timestamp = parseInt(parts[1], 10);
+  if (isNaN(timestamp)) {
+    return { valid: false, error: 'Invalid state timestamp' };
+  }
+
+  // Check expiry
+  if (Date.now() - timestamp > STATE_EXPIRY_MS) {
+    return { valid: false, error: 'State expired' };
+  }
+
+  return { valid: true };
 }
 
 /**
@@ -94,6 +106,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!code) {
       return res.status(400).json(createErrorResponse('Authorization code missing'));
+    }
+
+    // Verify OAuth state parameter (CSRF protection)
+    const stateVerification = verifyOAuthState(state as string | undefined);
+    if (!stateVerification.valid) {
+      logger.warn('OAuth state validation failed', {
+        error: stateVerification.error,
+        hasState: !!state,
+      });
+      // In demo mode, be more lenient with state validation for testing
+      const isDemoRequest = code === 'demo-code';
+      if (!isDemoRequest) {
+        return res.status(400).json(createErrorResponse(
+          'Invalid or expired state parameter',
+          stateVerification.error
+        ));
+      }
     }
 
     const isDemoMode = isGoogleOAuthDemoMode();
@@ -282,13 +311,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: userRole as 'employee' | 'researcher_admin',
       };
 
-      // Set session cookie with proper encoding
-      // CRITICAL: JSON must be URL encoded for cookie value
-      const sessionCookie = encodeURIComponent(JSON.stringify(sessionUser));
-      // Set cookie WITHOUT domain attribute - works for the exact domain
-      // Using SameSite=None with Secure is required for cross-origin redirects from Google
-      // Max-Age=86400 = 24 hours (same as session max age)
-      res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
+      // Set signed session cookie (HMAC-SHA256 signed to prevent tampering)
+      // Uses SameSite=None for OAuth cross-origin redirects
+      setSessionCookieForOAuth(res, sessionUser);
 
       // Redirect to frontend
       const config = getApiConfig();

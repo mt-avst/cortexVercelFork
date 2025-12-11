@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse } from '../utils/errors';
 import { getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
+import { setSessionCookie } from '../utils/auth';
+import { SessionUser } from '../../shared/types';
 
 /**
  * GET /api/auth/demo-user-2-login
@@ -13,23 +15,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
 
-  const demoUser2 = {
-    id: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
-    name: 'Demo User 2',
-    email: 'demo2@example.com',
-    business_unit: 'Product',
-    role_title: 'Product Manager',
-    role: 'employee', // CRITICAL: Must be 'employee', NOT 'researcher_admin'
-  };
+    const demoUser2: SessionUser = {
+      id: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
+      name: 'Demo User 2',
+      email: 'demo2@example.com',
+      business_unit: 'Product',
+      role_title: 'Product Manager',
+      role: 'employee',
+    };
 
-  // Set session cookie with proper encoding
-  // CRITICAL: JSON must be URL encoded for cookie value
-  // Vercel serverless functions require a single Set-Cookie header string, not an array
-  // Setting a new cookie with the same name will replace any existing cookie
-  const sessionCookie = encodeURIComponent(JSON.stringify(demoUser2));
-  // Max-Age=86400 = 24 hours (same as session max age in google-callback)
-  // Using SameSite=None with Secure is required for cross-origin redirects
-  res.setHeader('Set-Cookie', `adaptalabs_session=${sessionCookie}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=86400`);
+    // Set signed session cookie (HMAC-SHA256 signed to prevent tampering)
+    setSessionCookie(res, demoUser2);
   
     // Redirect to frontend
     // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)

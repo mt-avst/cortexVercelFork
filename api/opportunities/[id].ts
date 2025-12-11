@@ -178,7 +178,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PATCH') {
-      // Update opportunity
+      // Update opportunity - requires authentication and authorization
+      const user = parseSessionCookie(req);
+      if (!user) {
+        return res.status(401).json(createErrorResponse('Authentication required'));
+      }
+
       const {
         type,
         title,
@@ -196,14 +201,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         end_date,
       } = req.body;
 
-      // Check if opportunity exists
+      // Check if opportunity exists and get owner
       const checkResult = await query(
-        `SELECT id FROM opportunities WHERE id = $1`,
+        `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
       
       if (checkResult.rows.length === 0) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
+      }
+
+      // Authorization: user must be owner, researcher_admin, or superadmin
+      const opportunity = checkResult.rows[0];
+      const isOwner = opportunity.owner_user_id === user.id;
+      const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
+      
+      if (!isOwner && !isAdmin) {
+        logger.warn('Unauthorized opportunity update attempt', {
+          userId: user.id,
+          opportunityId,
+          ownerId: opportunity.owner_user_id,
+        });
+        return res.status(403).json(createErrorResponse('Not authorized to update this opportunity'));
       }
 
       // Build dynamic update query based on provided fields
@@ -265,12 +284,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       
       // Only superadmins can update display_width
-      if (display_width !== undefined) {
-        const user = parseSessionCookie(req);
-        if (user?.role === 'superadmin') {
-          updates.push(`display_width = $${paramIndex++}`);
-          params.push(display_width);
-        }
+      if (display_width !== undefined && user.role === 'superadmin') {
+        updates.push(`display_width = $${paramIndex++}`);
+        params.push(display_width);
       }
 
       if (updates.length === 0) {
@@ -325,9 +341,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      // Check if opportunity exists
+      // Delete opportunity - requires authentication and authorization
+      const user = parseSessionCookie(req);
+      if (!user) {
+        return res.status(401).json(createErrorResponse('Authentication required'));
+      }
+
+      // Check if opportunity exists and get owner
       const checkResult = await query(
-        `SELECT id FROM opportunities WHERE id = $1`,
+        `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
       
@@ -335,11 +357,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
 
+      // Authorization: user must be owner, researcher_admin, or superadmin
+      const opportunity = checkResult.rows[0];
+      const isOwner = opportunity.owner_user_id === user.id;
+      const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
+      
+      if (!isOwner && !isAdmin) {
+        logger.warn('Unauthorized opportunity delete attempt', {
+          userId: user.id,
+          opportunityId,
+          ownerId: opportunity.owner_user_id,
+        });
+        return res.status(403).json(createErrorResponse('Not authorized to delete this opportunity'));
+      }
+
       // Delete opportunity (cascading will delete related sessions and bookings)
       await query(
         `DELETE FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
+
+      logger.info('Opportunity deleted', {
+        opportunityId,
+        deletedBy: user.id,
+        userRole: user.role,
+      });
 
       return res.status(200).json({ message: 'Opportunity deleted successfully' });
     }

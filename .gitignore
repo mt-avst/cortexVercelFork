@@ -1,10 +1,15 @@
-# Environment files
+# Environment files (all variants)
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.production
+.env.*
+!.env.example
+!.env.*.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+!backend/.env.*.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 
 # Dependencies
 node_modules/
@@ -76,5 +81,6 @@ jspm_packages/
 client_secret_*.json
 *.json.encrypted
 
-# OAuth credential files
-backend/.env.google-oauth
+# Cookie/session secrets (never commit)
+*_cookies.txt
+cookies.txt

@@ -2,6 +2,20 @@ import nodemailer from 'nodemailer';
 import { getEmailConfig } from '../utils/env';
 import { logger } from '../utils/logger';
 
+/**
+ * Escape HTML special characters to prevent XSS in email content.
+ * While email clients have limited XSS risk, this is still good practice.
+ */
+function escapeHtml(unsafe: string | undefined | null): string {
+  if (!unsafe) return '';
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 export interface EmailTemplate {
   subject: string;
   html: string;
@@ -236,27 +250,34 @@ export class EmailService {
     // Encode ICS content for data URI (for download link)
     const icsDataUri = `data:text/calendar;charset=utf-8,${encodeURIComponent(icsContent)}`;
     
+    // Escape user-provided values for HTML safety
+    const safeTitle = escapeHtml(opportunityTitle);
+    const safeName = escapeHtml(participantName);
+    const safeLocation = escapeHtml(sessionLocation);
+    const safeOwnerName = escapeHtml(ownerName);
+    const safeOwnerEmail = escapeHtml(ownerEmail);
+    
     const subject = `Booking confirmed: ${opportunityTitle}`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2c3e50;">Booking Confirmed</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${safeName},</p>
         
         <p>Your booking has been confirmed for the following research session:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date:</strong> ${dateStr}</p>
-          <p><strong>Time:</strong> ${startTimeStr} - ${endTimeStr}</p>
+          <h3 style="margin-top: 0; color: #495057;">${safeTitle}</h3>
+          <p><strong>Date:</strong> ${escapeHtml(dateStr)}</p>
+          <p><strong>Time:</strong> ${escapeHtml(startTimeStr)} - ${escapeHtml(endTimeStr)}</p>
           <p><strong>Duration:</strong> ${duration} minutes</p>
-          ${sessionLocation ? `<p><strong>Location:</strong> ${sessionLocation}</p>` : ''}
-          ${ownerName ? `<p><strong>Researcher:</strong> ${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''}</p>` : ''}
+          ${safeLocation ? `<p><strong>Location:</strong> ${safeLocation}</p>` : ''}
+          ${safeOwnerName ? `<p><strong>Researcher:</strong> ${safeOwnerName}${safeOwnerEmail ? ` (${safeOwnerEmail})` : ''}</p>` : ''}
         </div>
         
         <div style="text-align: center; margin: 25px 0;">
-          <a href="${googleCalendarLink}" 
+          <a href="${escapeHtml(googleCalendarLink)}" 
              target="_blank"
              style="background-color: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; margin: 5px;">
             📅 Add to Google Calendar
@@ -312,20 +333,25 @@ This is an automated message from AdaptaLabs.
     const startTime = sessionStartTime.toLocaleString();
     const endTime = sessionEndTime.toLocaleString();
     
+    // Escape user-provided values for HTML safety
+    const safeTitle = escapeHtml(opportunityTitle);
+    const safeName = escapeHtml(participantName);
+    const safeCancelledBy = escapeHtml(cancelledBy);
+    
     const subject = `Booking cancelled: ${opportunityTitle}`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #dc3545;">Booking Cancelled</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${safeName},</p>
         
         <p>Your booking for the following research session has been cancelled:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
-          <p><strong>Cancelled by:</strong> ${cancelledBy}</p>
+          <h3 style="margin-top: 0; color: #495057;">${safeTitle}</h3>
+          <p><strong>Date & Time:</strong> ${escapeHtml(startTime)} - ${escapeHtml(endTime)}</p>
+          <p><strong>Cancelled by:</strong> ${safeCancelledBy}</p>
         </div>
         
         <p>If you have any questions about this cancellation, please contact the researcher directly.</p>
@@ -374,22 +400,28 @@ This is an automated message from AdaptaLabs.
     const endTime = sessionEndTime.toLocaleString();
     const hoursUntil = Math.round((sessionStartTime.getTime() - new Date().getTime()) / (1000 * 60 * 60));
     
+    // Escape user-provided values for HTML safety
+    const safeTitle = escapeHtml(opportunityTitle);
+    const safeName = escapeHtml(participantName);
+    const safeLocation = escapeHtml(sessionLocation);
+    const safeOwnerName = escapeHtml(ownerName);
+    
     const subject = `Reminder: ${opportunityTitle} in ${hoursUntil} hours`;
     
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #ffc107;">Session Reminder</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${safeName},</p>
         
         <p>This is a reminder that you have a research session coming up:</p>
         
         <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-          <h3 style="margin-top: 0; color: #856404;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
+          <h3 style="margin-top: 0; color: #856404;">${safeTitle}</h3>
+          <p><strong>Date & Time:</strong> ${escapeHtml(startTime)} - ${escapeHtml(endTime)}</p>
           <p><strong>Starting in:</strong> ${hoursUntil} hours</p>
-          ${sessionLocation ? `<p><strong>Location:</strong> ${sessionLocation}</p>` : ''}
-          ${ownerName ? `<p><strong>Researcher:</strong> ${ownerName}</p>` : ''}
+          ${safeLocation ? `<p><strong>Location:</strong> ${safeLocation}</p>` : ''}
+          ${safeOwnerName ? `<p><strong>Researcher:</strong> ${safeOwnerName}</p>` : ''}
         </div>
         
         <p>Please make sure you're prepared and ready for the session.</p>
@@ -439,6 +471,11 @@ This is an automated reminder from AdaptaLabs.
     const startTime = sessionStartTime.toLocaleString();
     const endTime = sessionEndTime.toLocaleString();
     
+    // Escape user-provided values for HTML safety
+    const safeTitle = escapeHtml(opportunityTitle);
+    const safeName = escapeHtml(participantName);
+    const safeEmail = escapeHtml(participantEmail);
+    
     const subject = `Participant ${action}: ${opportunityTitle}`;
     
     const html = `
@@ -448,9 +485,9 @@ This is an automated reminder from AdaptaLabs.
         <p>A participant has ${action} your research session:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
-          <p><strong>Participant:</strong> ${participantName} (${participantEmail})</p>
+          <h3 style="margin-top: 0; color: #495057;">${safeTitle}</h3>
+          <p><strong>Date & Time:</strong> ${escapeHtml(startTime)} - ${escapeHtml(endTime)}</p>
+          <p><strong>Participant:</strong> ${safeName} (${safeEmail})</p>
           <p><strong>Action:</strong> ${action === 'booked' ? 'Booked' : 'Cancelled'}</p>
         </div>
         

@@ -1,5 +1,6 @@
 import { CalendarEvent } from '../../../shared/types';
 import { logger } from '../utils/logger';
+import { encrypt as secureEncrypt, decryptAuto as secureDecrypt } from '../utils/encryption';
 
 /**
  * User Calendar Service
@@ -711,58 +712,19 @@ export class UserCalendarService {
   }
 
   /**
-   * Encrypt sensitive token data
-   * Demo mode: Simple encoding
-   * Production: Full AES-256-GCM encryption
+   * Encrypt sensitive token data using AES-256-GCM.
+   * Uses the secure encryption module.
    */
   encrypt(text: string): string {
-    // If no encryption key set and in demo mode, use simple encoding
-    if (this.isDemoMode && !process.env.ENCRYPTION_KEY) {
-      return Buffer.from(`demo:${text}`).toString('base64');
-    }
-
-    // Production mode: Full encryption
-    // For now, if ENCRYPTION_KEY is set, we'll use a simple approach
-    // Full AES-256-GCM can be added when needed
-    const encryptionKey = process.env.ENCRYPTION_KEY || 'demo-key';
-    if (encryptionKey.length < 32) {
-      console.warn('⚠️ ENCRYPTION_KEY should be at least 32 characters for production');
-    }
-    
-    // Simple XOR encryption for demo (not secure, but sufficient for development)
-    // In production, replace with proper AES-256-GCM
-    const key = encryptionKey.padEnd(32, '0').substring(0, 32);
-    let encrypted = '';
-    for (let i = 0; i < text.length; i++) {
-      encrypted += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-    }
-    return Buffer.from(encrypted).toString('base64');
+    return secureEncrypt(text);
   }
 
   /**
-   * Decrypt sensitive token data
-   * Demo mode: Simple decoding
-   * Production: Full AES-256-GCM decryption
+   * Decrypt sensitive token data.
+   * Automatically handles both legacy XOR and new AES-256-GCM formats.
    */
   decrypt(encryptedData: string): string {
-    // If no encryption key and starts with demo:, use simple decoding
-    if (this.isDemoMode && !process.env.ENCRYPTION_KEY) {
-      const decoded = Buffer.from(encryptedData, 'base64').toString();
-      if (decoded.startsWith('demo:')) {
-        return decoded.replace('demo:', '');
-      }
-    }
-
-    // Production mode: Full decryption
-    const encryptionKey = process.env.ENCRYPTION_KEY || 'demo-key';
-    const key = encryptionKey.padEnd(32, '0').substring(0, 32);
-    
-    const encrypted = Buffer.from(encryptedData, 'base64').toString();
-    let decrypted = '';
-    for (let i = 0; i < encrypted.length; i++) {
-      decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % key.length));
-    }
-    return decrypted;
+    return secureDecrypt(encryptedData);
   }
 
   /**

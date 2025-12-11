@@ -226,11 +226,35 @@ export const isValidISODate = (dateString: string): boolean => {
 // ============================================================================
 
 /**
+ * Whitelist of valid table names for test cleanup.
+ * Prevents SQL injection in test utilities.
+ */
+const VALID_TEST_TABLES = new Set([
+  'bookings',
+  'sessions',
+  'opportunities',
+  'users',
+  'feedback',
+  'notification_preferences',
+  'user_calendar_tokens',
+  'opportunity_clicks',
+  'admin_requests',
+]);
+
+/**
  * Clean up test data after tests
+ * SECURITY: Table name is validated against whitelist to prevent SQL injection
  */
 export const cleanupTestData = async (dbClient: any, tableName: string, testId: string) => {
+  // Validate table name against whitelist
+  if (!VALID_TEST_TABLES.has(tableName.toLowerCase())) {
+    console.warn(`Invalid table name for cleanup: ${tableName}`);
+    return;
+  }
+  
   try {
-    await dbClient.query(`DELETE FROM ${tableName} WHERE id LIKE $1`, [`${testId}%`]);
+    // Use the validated table name (still use parameterized query for testId)
+    await dbClient.query(`DELETE FROM ${tableName.toLowerCase()} WHERE id LIKE $1`, [`${testId}%`]);
   } catch (error) {
     console.warn(`Failed to cleanup test data from ${tableName}:`, error);
   }
