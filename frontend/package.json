@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-frontend",
-  "version": "7.1.6",
+  "version": "7.1.7",
   "description": "Adaptalabs recruitment app frontend",
   "private": true,
   "type": "module",
