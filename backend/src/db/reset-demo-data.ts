@@ -9,7 +9,7 @@ import { pool } from '../config';
  * - 1 question opportunity (external link)
  * - 1 unmoderated opportunity (external link)
  * 
- * All opportunities have sessions scheduled for December 2025
+ * All opportunities have sessions scheduled dynamically from today
  */
 export async function resetDemoData() {
   const client = await pool.connect();
@@ -259,7 +259,7 @@ export async function resetDemoData() {
     console.log('   📊 POLL: Feature Priority Poll');
     console.log('   ❓ QUESTION: Quick Feedback: Dashboard Redesign');
     console.log('   🖥️  UNMODERATED: Self-Guided Checkout Flow Test');
-    console.log('\n📅 Sessions scheduled for the next 4 weeks (Dec 2025)');
+    console.log('\n📅 Sessions scheduled for the next 4 weeks (starting from today)');
     console.log('   - TEST: Mon-Fri, 3 sessions/day');
     console.log('   - INTERVIEW: Tue & Thu, 3 sessions/day');
     console.log('   - Other types: External links (no sessions needed)');
