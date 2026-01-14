@@ -226,15 +226,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Authorization: user must be owner, researcher_admin, or superadmin
-      const opportunity = checkResult.rows[0] as OpportunityRow;
-      const isOwner = opportunity.owner_user_id === user.id;
+      const existingOpportunity = checkResult.rows[0] as OpportunityRow;
+      const isOwner = existingOpportunity.owner_user_id === user.id;
       const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
       
       if (!isOwner && !isAdmin) {
         logger.warn('Unauthorized opportunity update attempt', {
           userId: user.id,
           opportunityId,
-          ownerId: opportunity.owner_user_id,
+          ownerId: existingOpportunity.owner_user_id,
         });
         return res.status(403).json(createErrorResponse('Not authorized to update this opportunity'));
       }
@@ -372,15 +372,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Authorization: user must be owner, researcher_admin, or superadmin
-      const opportunity = checkResult.rows[0] as OpportunityRow;
-      const isOwner = opportunity.owner_user_id === user.id;
+      const existingOpportunity = checkResult.rows[0] as OpportunityRow;
+      const isOwner = existingOpportunity.owner_user_id === user.id;
       const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
       
       if (!isOwner && !isAdmin) {
         logger.warn('Unauthorized opportunity delete attempt', {
           userId: user.id,
           opportunityId,
-          ownerId: opportunity.owner_user_id,
+          ownerId: existingOpportunity.owner_user_id,
         });
         return res.status(403).json(createErrorResponse('Not authorized to delete this opportunity'));
       }
