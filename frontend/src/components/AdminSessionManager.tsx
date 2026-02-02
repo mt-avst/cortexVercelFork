@@ -556,9 +556,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     flexDirection: 'column',
                     justifyContent: 'center'
                   }}>
-                    <h6 className="calendar-day-title">
+                    <div className="calendar-day-title" style={{ fontSize: 'var(--font-size-small, 0.875rem)', fontWeight: 600 }}>
                       {formatDate(column.date)}
-                    </h6>
+                    </div>
                     <small className="calendar-day-sessions">
                       {column.slots.length} slot{column.slots.length !== 1 ? 's' : ''}
                     </small>

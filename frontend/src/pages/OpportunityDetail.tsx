@@ -475,7 +475,7 @@ const OpportunityDetail: React.FC = () => {
                     <div className="d-flex justify-content-between align-items-center mb-2">
                       {/* Header with inline hint */}
                       <div className="d-flex align-items-center gap-2">
-                        <h5 className="mb-0">Available Sessions</h5>
+                        <h2 className="mb-0 h5">Available Sessions</h2>
                         {/* Inline Legend */}
                         <span className="calendar-hint-divider ms-2" aria-hidden="true">|</span>
                         <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
@@ -558,7 +558,7 @@ const OpportunityDetail: React.FC = () => {
                               borderRadius: '4px',
                               cursor: 'pointer',
                               transition: 'all 0.15s ease',
-                              backgroundColor: viewMode === 'calendar' ? 'var(--brand-primary)' : 'transparent',
+                              backgroundColor: viewMode === 'calendar' ? 'var(--brand-orange-700)' : 'transparent',
                               color: viewMode === 'calendar' ? '#FFFFFF' : 'var(--text-muted)',
                               boxShadow: viewMode === 'calendar' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
                             }}

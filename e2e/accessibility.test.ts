@@ -65,8 +65,9 @@ test.describe('Accessibility Tests', () => {
   test('Home page should be accessible', async ({ page }) => {
     await page.goto(BASE_URL);
     
-    // Wait for page to load
-    await page.waitForLoadState('networkidle');
+    // Wait for page to load (use 'load' not 'networkidle' - production often has ongoing requests)
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Run accessibility check
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -87,7 +88,8 @@ test.describe('Accessibility Tests', () => {
     }]);
     
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -122,7 +124,8 @@ test.describe('Accessibility Tests', () => {
     });
 
     await page.goto(`${BASE_URL}/opportunities/opp-1`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -160,7 +163,8 @@ test.describe('Accessibility Tests', () => {
     });
 
     await page.goto(`${BASE_URL}/admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
     
@@ -183,7 +187,8 @@ test.describe('Accessibility Tests', () => {
     });
 
     await page.goto(`${BASE_URL}/admin/opportunities/new`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Test form accessibility
     const accessibilityScanResults = await new AxeBuilder({ page }).analyze();
@@ -193,7 +198,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Header navigation should be accessible', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Test header specifically
     const header = page.locator('header');
@@ -217,7 +223,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Skip link should be functional', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Check if skip link exists
     const skipLink = page.locator('a.skip-link');
@@ -254,7 +261,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Keyboard navigation should work', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Tab through interactive elements
     await page.keyboard.press('Tab');
@@ -267,7 +275,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Color contrast should meet WCAG AA standards', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Check accessibility with color contrast rules
     const accessibilityScanResults = await new AxeBuilder({ page })
@@ -279,7 +288,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Images should have alt text', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Check image accessibility
     const images = page.locator('img');
@@ -295,7 +305,8 @@ test.describe('Accessibility Tests', () => {
 
   test('Form inputs should have labels', async ({ page }) => {
     await page.goto(BASE_URL);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     
     // Check form accessibility
     const inputs = page.locator('input[type="text"], input[type="email"], input[type="number"], select, textarea');
@@ -336,7 +347,8 @@ test.describe('Accessibility Tests', () => {
     await page.goto(BASE_URL);
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto(`${BASE_URL}/my-bookings`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -357,7 +369,8 @@ test.describe('Accessibility Tests', () => {
     await page.goto(BASE_URL);
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto(`${BASE_URL}/feedback`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });
@@ -385,7 +398,8 @@ test.describe('Accessibility Tests', () => {
     await page.goto(BASE_URL);
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto(`${BASE_URL}/admin/settings`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();
     expect(results.violations).toEqual([]);
   });

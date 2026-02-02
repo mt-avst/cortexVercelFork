@@ -592,11 +592,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                     padding: '8px'
                   }}
                 >
-                  <h6 
+                  <div 
                     className="calendar-day-title mb-1" 
                     style={{ 
                       margin: 0,
                       marginBottom: '4px',
+                      fontSize: 'var(--font-size-small, 0.875rem)',
+                      fontWeight: 600,
                       color: isToday ? 'var(--color-emerald-500, #10b981)' : undefined
                     }}
                   >
@@ -621,7 +623,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         Today
                       </motion.span>
                     )}
-                  </h6>
+                  </div>
                   <small className="calendar-day-sessions">
                     {dateSessions.length} session{dateSessions.length !== 1 ? 's' : ''}
                   </small>

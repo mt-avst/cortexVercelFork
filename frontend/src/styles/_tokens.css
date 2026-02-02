@@ -128,9 +128,9 @@
   --brand-orange-700: #D35F1D; /* Dark - light mode hover */
   --brand-orange-800: #C54E12; /* Darkest - deep accents */
   
-  /* Semantic Brand Aliases (use these in components) */
+  /* Semantic Brand Aliases - WCAG AA where used with white text */
   --brand-headline: var(--brand-orange-500);
-  --brand-primary: var(--brand-orange-vibrant);
+  --brand-primary: var(--brand-orange-700);
   --brand-secondary: var(--brand-orange-400);
   --brand-gradient: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-600) 100%);
 
@@ -188,12 +188,12 @@
   --color-badge-interview: #F48FB1;
   --color-badge-interview-bg: rgba(244, 143, 177, 0.15);
 
-  /* CTA (Call to Action) Colors - Brand Orange */
-  --cta-bg: var(--brand-orange-500);
-  --cta-bg-hover: var(--brand-orange-400);
+  /* CTA (Call to Action) Colors - WCAG AA (4.5:1 with white) */
+  --cta-bg: var(--brand-orange-700);
+  --cta-bg-hover: var(--brand-orange-800);
   --cta-text: #FFFFFF;
   --cta-text-hover: #FFFFFF;
-  --cta-border: var(--brand-orange-500);
+  --cta-border: var(--brand-orange-700);
 
   /* Link Colors */
   --link: var(--brand-orange-500);

@@ -3,6 +3,7 @@ import { getPool } from './db';
 import { createErrorResponse, getErrorMessage } from './utils/errors';
 import { requireAuth, parseSessionCookie } from './utils/auth';
 import { logger } from './utils/logger';
+import { feedbackRateLimit } from './utils/rateLimit';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
@@ -16,6 +17,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // POST /api/feedback - Submit feedback (public, optionally authenticated)
 async function handlePost(req: VercelRequest, res: VercelResponse) {
+  if (await feedbackRateLimit(req, res)) {
+    return; // 429 already sent
+  }
   try {
     const { feedback, category, userAgent, url } = req.body;
     

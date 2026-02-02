@@ -928,26 +928,26 @@ body.theme-light .btn-glass:hover {
   font-weight: 600;
   font-family: var(--font-family-base);
   color: #FFFFFF;
-  background: #F97316; /* Brand Orange */
+  background: #C2410C; /* Orange-700: WCAG AA contrast 4.5:1+ with white */
   border: none;
   border-radius: 100px;
   cursor: pointer;
-  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4); /* Orange glow */
+  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.4);
   transition: all 0.25s ease;
   letter-spacing: 0.01em;
 }
 
 .btn-power:hover {
-  background: #EA580C; /* Slightly darker on hover */
+  background: #9A3412; /* Darker on hover, maintains contrast */
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.5);
+  box-shadow: 0 8px 25px rgba(194, 65, 12, 0.5);
   text-decoration: none;
   color: #FFFFFF;
 }
 
 .btn-power:active {
   transform: translateY(0) scale(var(--scale-button-active));
-  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.4);
+  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.4);
 }
 
 .btn-power:focus-visible {
@@ -977,11 +977,11 @@ body.theme-light .btn-glass:hover {
 
 /* Light mode: same styling, works on light backgrounds */
 body.theme-light .btn-power {
-  box-shadow: 0 4px 14px 0 rgba(249, 115, 22, 0.35);
+  box-shadow: 0 4px 14px 0 rgba(194, 65, 12, 0.35);
 }
 
 body.theme-light .btn-power:hover {
-  box-shadow: 0 8px 25px rgba(249, 115, 22, 0.45);
+  box-shadow: 0 8px 25px rgba(194, 65, 12, 0.45);
 }
 
 /* Button Sizes */
@@ -2244,8 +2244,8 @@ body.landing-page .header .text-muted,
 }
 
 .settings-page .nav-link.active {
-  color: var(--brand-headline);
-  border-bottom-color: var(--brand-headline);
+  color: var(--brand-orange-800);
+  border-bottom-color: var(--brand-orange-800);
   background-color: transparent;
   font-weight: var(--font-weight-semibold);
 }

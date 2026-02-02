@@ -72,13 +72,12 @@ _None currently known. All critical bugs have been resolved._
 ---
 
 #### 5. Accessibility Compliance
-**Status**: Tested with axe-core  
+**Status**: WCAG 2.2 AA targeted; axe-core tests on key routes  
 **Impact**: Low (for alpha)  
-**Description**: Automated accessibility tests (axe-core) run on key routes: Home, Opportunity detail, Admin dashboard, Create opportunity form, Header/skip link, My Bookings, Feedback, Settings. Light-mode form contrast was fixed (WCAG AA). Skip link and keyboard navigation are tested.
+**Description**: M8 fixes applied: CTA/primary button contrast (orange-700/800), power button contrast, Settings tab active color, heading order (Available Sessions h2; calendar day titles as divs), page h1 (Feedback, form loading). Run: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts` (start frontend first). Use `load` not `networkidle` when testing production.
 
 **Known Issues**:
 - Screen reader optimization is basic
-- Run full audit locally: start dev server, then `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`
 
 **Workaround**: 
 - Use keyboard navigation (Tab, Enter, Escape)

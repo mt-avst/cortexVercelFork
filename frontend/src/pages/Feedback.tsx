@@ -158,6 +158,7 @@ const Feedback: React.FC = () => {
       <>
         <style>{styles}</style>
         <div className="container mt-5" style={{ position: 'relative', zIndex: 10 }}>
+          <h1 className="visually-hidden">Feedback</h1>
           <div className="row justify-content-center">
             <div className="col-md-8">
               <div className="card feedback-card" style={{ position: 'relative' }}>
@@ -218,6 +219,7 @@ const Feedback: React.FC = () => {
     <>
       <style>{styles}</style>
       <div className="container mt-5" style={{ position: 'relative', zIndex: 10 }}>
+        <h1 className="visually-hidden">Feedback</h1>
         <div className="row justify-content-center">
           <div className="col-md-8">
             <div className="card feedback-card">

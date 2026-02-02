@@ -10,6 +10,14 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 - ✅ `/api/me` endpoint for user information
 - ✅ Admin role seeding from environment variables
 
+## M6 - Polls, Surveys & Analytics
+
+- **Opportunity types**: `poll`, `survey`, `unmoderated` (external links); `test`, `interview` (bookable sessions). Admins create and publish; employees see and click.
+- **Click tracking**: Two levels — **view** (opened study details) and **action** (clicked "Open Poll/Survey" or "Book Session"). IP is hashed for privacy.
+- **Analytics API** (admin/owner only):
+  - `GET /api/opportunities/[id]/analytics?period=7|14|30` — Returns views/actions counts and time-series for the given period (default 30 days).
+  - `POST /api/opportunities/[id]/click` — Body: `{ "click_type": "view" | "action" }`. Optional auth; used by frontend when user views or clicks the action button.
+
 ## Project Structure
 
 ```
@@ -268,7 +276,7 @@ Ensure these are set in production:
 
 ## Current Status
 
-**Version**: 4.5.0  
+**Version**: 7.3.0  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
 **Deployment**: https://adapta-labs-p62q.vercel.app
 
@@ -280,11 +288,9 @@ Ensure these are set in production:
 - ✅ **M5**: Calendar
 - ✅ **M6**: Polls and Surveys
 - ✅ **M7**: Dashboard and Settings
-- ⏳ **M8**: Branding and Accessibility (Partial)
+- ✅ **M8**: Branding and Accessibility (WCAG 2.2 AA)
 
 ## Next Milestones
-
-- **M8**: Complete WCAG 2.2 AA compliance audit
 - **Future**: Advanced analytics, export functionality, enhanced reporting
 
 ## Troubleshooting
@@ -371,6 +377,6 @@ AdaptaLabs is currently in **alpha testing phase**.
 - Use the **"Send Feedback"** link in the app to report issues
 
 ### Feedback & Support
-- **Feedback Form**: Available in-app (header dropdown → "Send Feedback")
+- **Feedback Form**: Header dropdown → "Send Feedback"; or use the feedback footer on every page.
 - **Service Desk**: https://adaptavistlabs.atlassian.net/servicedesk/customer/portal/80
 - **Email**: nfine@adaptavist.com

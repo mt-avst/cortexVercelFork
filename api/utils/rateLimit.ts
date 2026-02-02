@@ -183,3 +183,10 @@ export const apiRateLimit = (req: VercelRequest, res: VercelResponse) =>
     maxRequests: 100,         // 100 requests per minute
     keyPrefix: 'api',
   });
+
+export const feedbackRateLimit = (req: VercelRequest, res: VercelResponse) =>
+  rateLimit(req, res, {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 20,          // 20 submissions per 15 min per IP
+    keyPrefix: 'feedback',
+  });

@@ -556,6 +556,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   if (loading) {
     return (
       <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
+        <h1 className="visually-hidden">Create Opportunity</h1>
         <div className="spinner-border text-primary" role="status" aria-label="Loading">
           <span className="visually-hidden">Loading...</span>
         </div>
@@ -577,6 +578,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   if (isEdit && loadingOpportunity) {
     return (
       <div className="d-flex justify-content-center align-items-center min-h-50vh" aria-busy="true" aria-live="polite">
+        <h1 className="visually-hidden">Edit Opportunity</h1>
         <div className="spinner-border text-primary" role="status" aria-label="Loading opportunity">
           <span className="visually-hidden">Loading opportunity...</span>
         </div>
