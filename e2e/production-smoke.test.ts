@@ -131,4 +131,15 @@ test.describe('Production Smoke Tests', () => {
     }
     expect(body).toHaveProperty('ok', true);
   });
+
+  // v7.1.9+: Demo Access pills are hidden in production (shown only in dev or when VITE_SHOW_DEMO_LOGIN=true)
+  test('demo access hidden on production landing', async ({ page }) => {
+    await page.goto(PRODUCTION_URL, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(WAIT_AFTER_LOAD_MS);
+
+    const footer = page.locator('.landing-demo-footer');
+    await expect(footer).toHaveCount(0);
+    const bodyText = (await page.textContent('body')) || '';
+    expect(bodyText).not.toContain('DEMO ACCESS');
+  });
 });
