@@ -1,5 +1,9 @@
 # Environment Variables Needed in Vercel
 
+## Deployment: Root Directory
+
+**Root Directory must be the repo root** (empty or `.`). In Vercel Dashboard: Project → Settings → General → **Root Directory**. If this is set to `frontend`, only the frontend is deployed and `/api/*` will serve the SPA (index.html) instead of the API. Set it to the repo root so both `frontend/` and `api/` are deployed.
+
 ## Problem
 The backend redirects to `CORS_ORIGIN` after login. If this isn't set, it defaults to `http://localhost:3000`, causing a blank screen.
 
@@ -14,22 +18,17 @@ You need to set environment variables in your Vercel project:
 
 **For Production Environment (REQUIRED):**
 
-**Core Configuration:**
-- `CORS_ORIGIN` = `https://adapta-labs-p62q.vercel.app`
-- `FRONTEND_URL` = `https://adapta-labs-p62q.vercel.app`
+| Variable | Purpose | Notes |
+|----------|---------|--------|
+| `DATABASE_URL` or `POSTGRES_URL` | Postgres connection string | **Required.** API throws without it. See `setup-neon-postgres.md` or `VERCEL_POSTGRES_SETUP.md`. |
+| `SESSION_SECRET` | Session signing | Min 32 characters. |
+| `CORS_ORIGIN` | Allowed origin | e.g. `https://adapta-labs-p62q.vercel.app` |
+| `FRONTEND_URL` | Post-login redirect base | Same as CORS_ORIGIN for same-origin. |
 
-**Google OAuth (CRITICAL for login):**
-- `GOOGLE_OAUTH_CLIENT_ID` = `your_google_oauth_client_id` (from Google Cloud Console)
-- `GOOGLE_OAUTH_CLIENT_SECRET` = `your_google_oauth_client_secret` (from Google Cloud Console)
-- `GOOGLE_OAUTH_REDIRECT_URI` = `https://adapta-labs-p62q.vercel.app/api/auth/google-callback`
+**Optional but recommended:**
 
-**Database (CRITICAL - Required for login to work):**
-- `DATABASE_URL` = `your_production_database_url` (PostgreSQL connection string)
-  - **Required!** Without this, Google OAuth login will fail with a 500 error
-  - See `DATABASE_URL_FIX.md` or `setup-neon-postgres.md` for setup instructions
-
-**Other Required Variables:**
-- `SESSION_SECRET` = `your_secure_random_secret_minimum_32_characters`
+- **Google OAuth**: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (e.g. `https://adapta-labs-p62q.vercel.app/api/auth/google-callback`) for production login. See `GOOGLE_OAUTH_PRODUCTION_SETUP.md`.
+- **Email**: `EMAIL_*` if you use email notifications.
 
 **Important Steps:**
 1. After adding environment variables, you **MUST redeploy**:
@@ -37,7 +36,12 @@ You need to set environment variables in your Vercel project:
    - Click the three dots (⋯) on latest deployment
    - Click "Redeploy"
 
-2. Verify Google OAuth redirect URI matches:
+2. **Run database migrations** (once, after DATABASE_URL is set):
+   - Call `GET https://adapta-labs-p62q.vercel.app/api/run-migrations` after deploy, **or**
+   - Run locally: `vercel env pull .env.production` then from repo root use backend or a script with that `DATABASE_URL` (see `VERCEL_POSTGRES_SETUP.md`).
+   - **Seed (optional):** If you need demo data, run seed once via admin endpoint or locally with production `DATABASE_URL`.
+
+3. Verify Google OAuth redirect URI matches:
    - The redirect URI in Google Cloud Console must exactly match `GOOGLE_OAUTH_REDIRECT_URI`
    - See `GOOGLE_OAUTH_PRODUCTION_SETUP.md` for detailed setup instructions
 

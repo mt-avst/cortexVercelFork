@@ -1468,8 +1468,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         onSessionsChange(updatedSessions);
         logger.debug('Session deleted successfully');
       } catch (error: unknown) {
-        logger.error('Error deleting session', { error: error instanceof Error ? error : undefined, errorMessage: error instanceof Error ? error.message : String(error) });
-        setError('Failed to delete session. Please try again.');
+        const err = error as { response?: { data?: { error?: string }; status?: number } };
+        const message = err.response?.data?.error ?? (error instanceof Error ? error.message : 'Failed to delete session. Please try again.');
+        logger.error('Error deleting session', { error: err, statusCode: err.response?.status, message });
+        setError(message);
       }
     }
     

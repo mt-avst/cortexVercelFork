@@ -797,13 +797,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
               </motion.div>
             )}
 
-            {/* Day Columns Grid - Content scrolls under sticky header */}
+            {/* Day Columns Grid - Content scrolls under sticky header; raise above sticky when confirm popover is open */}
             <div style={{ 
               display: 'grid',
               gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
               gap: '24px',
               position: 'relative',
-              zIndex: 3,
+              zIndex: confirmingSlot ? 101 : 3,
               width: '100%',
             }}>
               {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
@@ -816,6 +816,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                   return sessionDate < today;
                 })();
 
+                const isColumnWithPopover = Boolean(confirmingSlot && dateSessions.some(s => s.id === confirmingSlot));
+
                 return (
                   <motion.div 
                     key={date} 
@@ -824,7 +826,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                     initial="hidden"
                     animate="visible"
                     variants={columnVariants}
-                    style={{ position: 'relative', width: '100%' }}
+                    style={{ position: 'relative', width: '100%', zIndex: isColumnWithPopover ? 101 : undefined }}
                   >
                     {/* Timeline Container with Ghost Hover Effect */}
                     <div className="calendar-timeline-container calendar-timeline-interactive" style={{ 

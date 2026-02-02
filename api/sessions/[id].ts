@@ -21,7 +21,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Check if user is admin
     if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
-      return res.status(403).json(createErrorResponse('Admin access required'));
+      return res.status(403).json(createErrorResponse('Admin access required', undefined, 'ADMIN_REQUIRED'));
     }
 
     // Get session ID from query params (Vercel dynamic routes)
@@ -44,9 +44,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Session not found'));
     }
 
-    // Check if user owns the opportunity
-    if (ownershipCheck.rows[0].owner_user_id !== user.id) {
-      return res.status(403).json(createErrorResponse('Only the owner can delete this session'));
+    // Only the opportunity owner (or superadmin) can delete the session
+    const ownerId = ownershipCheck.rows[0].owner_user_id as string;
+    if (ownerId !== user.id && user.role !== 'superadmin') {
+      return res.status(403).json(createErrorResponse('Only the owner can delete this session', undefined, 'OWNER_ONLY'));
     }
 
     // Check if session has bookings
