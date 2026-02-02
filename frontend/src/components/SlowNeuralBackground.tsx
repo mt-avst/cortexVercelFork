@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -9,8 +9,8 @@ import * as THREE from 'three';
 // ============================================================================
 
 const CONFIG = {
-  // Volumetric cloud topology - full screen random distribution
-  nodeCount: 350, // Reduced for subtler effect
+  // Volumetric cloud topology - reduced for performance (was 350)
+  nodeCount: 180,
   innerRadius: 28,
   outerRadius: 55,
   
@@ -24,12 +24,12 @@ const CONFIG = {
   maxConnectionsPerNode: 4,
   
   // Signal packets - very subtle
-  signalCount: 15, // Fewer signals
-  signalSpeed: 0.003, // 75% slower than original (25% speed)
+  signalCount: 10,
+  signalSpeed: 0.003,
   
   // Animation - very slow, ambient wallpaper feel
-  rotationSpeed: 0.003, // 25% of original speed
-  breatheSpeed: 0.045,  // 25% of original speed
+  rotationSpeed: 0.003,
+  breatheSpeed: 0.045,
   breatheAmount: 0.25,
   
   // Camera
@@ -530,24 +530,47 @@ const AmbientGlow: React.FC = () => {
 // ============================================================================
 
 const SlowNeuralBackground: React.FC = () => {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mq.matches);
+    const handler = (): void => setReducedMotion(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const containerStyle: React.CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 0,
+    background: '#030305',
+    pointerEvents: 'none',
+  };
+
+  if (reducedMotion) {
+    return (
+      <div className="slow-neural-background" style={containerStyle}>
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            zIndex: 10,
+            background: 'radial-gradient(circle at center, transparent 60%, rgba(3,3,5,0.3) 85%, rgba(3,3,5,0.5) 100%)',
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div 
-      className="slow-neural-background"
-      style={{ 
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        width: '100%',
-        height: '100%',
-        zIndex: 0,
-        background: '#030305',
-        pointerEvents: 'none',
-      }}
-    >
-      {/* Subtle vignette - very light edge darkening for depth */}
-      <div 
+    <div className="slow-neural-background" style={containerStyle}>
+      <div
         style={{
           position: 'absolute',
           inset: 0,
@@ -563,7 +586,7 @@ const SlowNeuralBackground: React.FC = () => {
           near: 0.1,
           far: 300,
         }}
-        dpr={[1, 1.5]}
+        dpr={[1, 1.25]}
         gl={{ 
           antialias: true,
           alpha: false,
@@ -577,10 +600,10 @@ const SlowNeuralBackground: React.FC = () => {
 
         <EffectComposer>
           <Bloom
-            intensity={0.9}
-            luminanceThreshold={0.2}
+            intensity={0.6}
+            luminanceThreshold={0.25}
             luminanceSmoothing={0.9}
-            radius={0.6}
+            radius={0.4}
             mipmapBlur
           />
         </EffectComposer>

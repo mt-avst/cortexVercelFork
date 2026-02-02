@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import * as THREE from 'three';
@@ -8,12 +8,12 @@ import * as THREE from 'three';
 // ============================================================================
 
 const CONFIG = {
-  // Volumetric cloud topology
-  nodeCount: 500,
+  // Volumetric cloud topology - reduced for performance (was 500)
+  nodeCount: 250,
   innerRadius: 28,
   outerRadius: 55,
   
-  // Node sizing - REDUCED by 50%
+  // Node sizing
   hotspotPercentage: 0.04,
   hotspotScale: { min: 0.15, max: 0.3 },
   nodeScale: { min: 0.04, max: 0.09 },
@@ -22,11 +22,11 @@ const CONFIG = {
   connectionThreshold: 14,
   maxConnectionsPerNode: 5,
   
-  // Signal packets - the stars of the show
-  signalCount: 35,
+  // Signal packets - reduced for performance (was 35)
+  signalCount: 20,
   signalSpeed: 0.012,
   
-  // Animation - slowed 30% for controlled enterprise feel
+  // Animation
   rotationSpeed: 0.012,
   breatheSpeed: 0.18,
   breatheAmount: 0.45,
@@ -576,7 +576,7 @@ const OrganicNeuralBackground: React.FC = () => {
           near: 0.1,
           far: 300,
         }}
-        dpr={[1, 1.5]}
+        dpr={[1, 1.25]}
         gl={{ 
           antialias: true,
           alpha: false,
@@ -590,10 +590,10 @@ const OrganicNeuralBackground: React.FC = () => {
 
         <EffectComposer>
           <Bloom
-            intensity={1.6}
-            luminanceThreshold={0.15}
+            intensity={1.0}
+            luminanceThreshold={0.2}
             luminanceSmoothing={0.9}
-            radius={0.65}
+            radius={0.45}
             mipmapBlur
           />
         </EffectComposer>
@@ -602,4 +602,30 @@ const OrganicNeuralBackground: React.FC = () => {
   );
 };
 
-export default OrganicNeuralBackground;
+const OrganicNeuralBackgroundWrapper: React.FC = () => {
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReducedMotion(mq.matches);
+    const handler = (): void => setReducedMotion(mq.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  if (reducedMotion) {
+    return (
+      <div className="fixed inset-0 w-full h-full -z-10" style={{ background: '#030305' }}>
+        <div
+          className="absolute inset-0 pointer-events-none z-10"
+          style={{
+            background: 'radial-gradient(circle at center, transparent 30%, rgba(3,3,5,0.6) 55%, rgba(3,3,5,0.85) 75%, #030305 100%)',
+          }}
+        />
+      </div>
+    );
+  }
+
+  return <OrganicNeuralBackground />;
+};
+
+export default OrganicNeuralBackgroundWrapper;

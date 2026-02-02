@@ -50,20 +50,35 @@ export const SpotlightCard = memo<SpotlightCardProps>(({
   isFeatured = false
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
+  const pendingRef = useRef<{ x: number; y: number } | null>(null);
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
-    
     const rect = cardRef.current.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    
-    cardRef.current.style.setProperty('--spotlight-x', `${x}px`);
-    cardRef.current.style.setProperty('--spotlight-y', `${y}px`);
-    cardRef.current.style.setProperty('--spotlight-opacity', '1');
+    pendingRef.current = { x, y };
+    if (rafRef.current !== null) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const el = cardRef.current;
+      const pending = pendingRef.current;
+      if (el && pending) {
+        el.style.setProperty('--spotlight-x', `${pending.x}px`);
+        el.style.setProperty('--spotlight-y', `${pending.y}px`);
+        el.style.setProperty('--spotlight-opacity', '1');
+        pendingRef.current = null;
+      }
+    });
   }, []);
 
   const handleMouseLeave = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingRef.current = null;
     if (!cardRef.current) return;
     cardRef.current.style.setProperty('--spotlight-opacity', '0');
   }, []);
