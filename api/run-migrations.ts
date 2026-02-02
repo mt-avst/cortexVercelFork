@@ -140,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         user_id UUID REFERENCES users(id) ON DELETE SET NULL,
         user_name TEXT,
         user_email TEXT,
-        category TEXT NOT NULL CHECK (category IN ('bug', 'feature', 'question', 'other')),
+        category TEXT NOT NULL CHECK (category IN ('bug', 'feature', 'question', 'other', 'footer')),
         feedback TEXT NOT NULL,
         url TEXT,
         user_agent TEXT,
@@ -148,6 +148,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
     `);
     log('✅ Created feedback table');
+
+    // Allow 'footer' category for feedback footer submissions (existing DBs may have old CHECK)
+    try {
+      await client.query(`
+        ALTER TABLE feedback DROP CONSTRAINT IF EXISTS feedback_category_check;
+        ALTER TABLE feedback ADD CONSTRAINT feedback_category_check
+          CHECK (category IN ('bug', 'feature', 'question', 'other', 'footer'));
+      `);
+      log('✅ Updated feedback category constraint to allow footer');
+    } catch (error: unknown) {
+      const err = error as Error;
+      log('ℹ️  feedback category constraint may already be updated: ' + err.message);
+    }
 
     // Create indexes for feedback table
     await client.query(`
