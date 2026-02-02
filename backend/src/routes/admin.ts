@@ -90,17 +90,17 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
   `, [filterOwnerId]);
 
-  // M7: Recent bookings list (with session times)
+  // M7: Recent bookings list (with session times) — bookings table uses created_at, not booked_at
   const recentBookingsResult = await pool.query(`
     SELECT b.id, o.id as opportunity_id, o.title as opportunity_title,
            s.start_time as session_start, u.name as participant_name, u.email as participant_email,
-           b.status, b.booked_at
+           b.status, b.created_at as booked_at
     FROM bookings b
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     JOIN users u ON b.user_id = u.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-    ORDER BY b.booked_at DESC
+    ORDER BY b.created_at DESC
     LIMIT 15
   `, [filterOwnerId]);
 
