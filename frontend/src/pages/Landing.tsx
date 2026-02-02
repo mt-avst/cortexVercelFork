@@ -130,33 +130,35 @@ const Landing: React.FC = memo(() => {
 
         </div>
 
-        {/* Demo Footer - Pinned Bottom */}
-        <div className="landing-demo-footer">
-          <span className="landing-demo-label">DEMO ACCESS</span>
-          <div className="landing-demo-pills">
-            <button 
-              onClick={handleDemoLogin}
-              className="landing-demo-pill"
-              disabled={isLoading}
-            >
-              User
-            </button>
-            <button 
-              onClick={handleDemoAdminLogin}
-              className="landing-demo-pill"
-              disabled={isLoading}
-            >
-              Admin
-            </button>
-            <button 
-              onClick={handleDemoSuperadminLogin}
-              className="landing-demo-pill"
-              disabled={isLoading}
-            >
-              Superadmin
-            </button>
+        {/* Demo Footer - only when VITE_SHOW_DEMO_LOGIN=true or in development */}
+        {(import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGIN === 'true') && (
+          <div className="landing-demo-footer">
+            <span className="landing-demo-label">DEMO ACCESS</span>
+            <div className="landing-demo-pills">
+              <button 
+                onClick={handleDemoLogin}
+                className="landing-demo-pill"
+                disabled={isLoading}
+              >
+                User
+              </button>
+              <button 
+                onClick={handleDemoAdminLogin}
+                className="landing-demo-pill"
+                disabled={isLoading}
+              >
+                Admin
+              </button>
+              <button 
+                onClick={handleDemoSuperadminLogin}
+                className="landing-demo-pill"
+                disabled={isLoading}
+              >
+                Superadmin
+              </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Sales Sections - Below the fold */}
