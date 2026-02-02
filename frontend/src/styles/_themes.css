@@ -465,12 +465,15 @@ body.theme-light .btn-outline-secondary:hover {
   color: #FFFFFF;
 }
 
-/* Forms - Glass effect */
+/* Forms - Light mode: input/select value text must be dark (WCAG AA) */
 body.theme-light .form-control,
-body.theme-light .form-select {
+body.theme-light .form-select,
+body.theme-light input.form-control,
+body.theme-light select.form-select,
+body.theme-light textarea.form-control {
   background: #F8FAFC !important; /* Light slate fill for visibility against white card */
   border: 1px solid #CBD5E1 !important; /* Defined edge for clarity */
-  color: #334155 !important;
+  color: #334155 !important; /* Entered/typed text and selected value - dark on white */
 }
 
 body.theme-light .form-control:focus,
@@ -2768,14 +2771,17 @@ body.theme-light .opportunity-form .form-text {
   color: #6B7280;
 }
 
-body.theme-light .opportunity-form .form-control {
+body.theme-light .opportunity-form .form-control,
+body.theme-light .opportunity-form input.form-control,
+body.theme-light .opportunity-form textarea.form-control {
   background: rgba(255, 255, 255, 0.95);
   background-color: rgba(255, 255, 255, 0.95);
   border: 1px solid rgba(0, 0, 0, 0.15);
-  color: #374151;
+  color: #374151 !important; /* WCAG AA: entered/typed text must be dark on white */
 }
 
-body.theme-light .opportunity-form .form-select {
+body.theme-light .opportunity-form .form-select,
+body.theme-light .opportunity-form select.form-select {
   background: rgba(255, 255, 255, 0.95) !important;
   background-color: rgba(255, 255, 255, 0.95) !important;
   border: 1px solid rgba(0, 0, 0, 0.15) !important;
@@ -2786,19 +2792,21 @@ body.theme-light .opportunity-form .form-select {
   background-size: 16px 12px !important;
 }
 
-body.theme-light .opportunity-form .form-control:focus {
+body.theme-light .opportunity-form .form-control:focus,
+body.theme-light .opportunity-form input.form-control:focus {
   background: #FFFFFF;
   background-color: #FFFFFF;
   border-color: var(--brand-orange-600);
-  color: #1A1A1A;
+  color: #1A1A1A !important;
   box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
 }
 
-body.theme-light .opportunity-form .form-select:focus {
+body.theme-light .opportunity-form .form-select:focus,
+body.theme-light .opportunity-form select.form-select:focus {
   background: #FFFFFF;
   background-color: #FFFFFF;
   border-color: var(--brand-orange-600);
-  color: #1A1A1A;
+  color: #1A1A1A !important;
   box-shadow: 0 0 0 0.2rem var(--focus-ring-color);
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23374151' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
   background-repeat: no-repeat !important;
@@ -2806,11 +2814,13 @@ body.theme-light .opportunity-form .form-select:focus {
   background-size: 16px 12px !important;
 }
 
-body.theme-light .opportunity-form .form-control::placeholder {
-  color: #6B7280; /* Gray-500, 4.5:1+ contrast on white */
+body.theme-light .opportunity-form .form-control::placeholder,
+body.theme-light .opportunity-form input.form-control::placeholder {
+  color: #6B7280 !important; /* Gray-500, 4.5:1+ contrast on white */
 }
 
-body.theme-light .opportunity-form .form-select option {
+body.theme-light .opportunity-form .form-select option,
+body.theme-light .opportunity-form select.form-select option {
   background: #FFFFFF !important;
   background-color: #FFFFFF !important;
   color: #374151 !important;
