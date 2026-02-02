@@ -438,7 +438,7 @@ const MyBookings: React.FC = () => {
         <ConfirmationModal
           show={cancelConfirm.show}
           title="Cancel Booking"
-          message="Are you sure you want to cancel this booking? This action will free up the slot for other participants and cannot be undone."
+          message="Are you sure you want to cancel this booking? This action will free up the slot for other participants and cannot be undone. If you added this session to your own calendar, please remove it there after cancelling."
           confirmLabel="Yes, Cancel Booking"
           cancelLabel="Keep My Booking"
           variant="danger"

@@ -157,6 +157,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     `);
     log('✅ Created feedback indexes');
 
+    // Add reminder_sent_at to bookings for email reminder automation
+    const bookingsExists = await client.query(`
+      SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'bookings')
+    `);
+    if (bookingsExists.rows[0]?.exists) {
+      try {
+        await client.query(`
+          ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+        `);
+        log('✅ Added reminder_sent_at column to bookings table');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  reminder_sent_at column may already exist: ' + err.message);
+      }
+    }
+
     // Add 'unmoderated' to opportunity_type enum if it doesn't exist
     try {
       // Check if 'unmoderated' value exists in the enum

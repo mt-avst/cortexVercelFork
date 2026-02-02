@@ -490,6 +490,17 @@ export const getOpportunityAnalytics = async (
 
 // M7: Dashboard and Settings
 
+export interface RecentBookingItem {
+  id: string;
+  opportunity_id: string;
+  opportunity_title: string;
+  session_start: string;
+  participant_name: string;
+  participant_email: string;
+  status: string;
+  booked_at: string;
+}
+
 export interface DashboardStats {
   total_opportunities: number;
   published_opportunities: number;
@@ -503,6 +514,7 @@ export interface DashboardStats {
   total_slots: number;
   booked_slots: number;
   available_slots: number;
+  recent_bookings?: RecentBookingItem[];
 }
 
 /**

@@ -227,6 +227,10 @@ Control when you receive email notifications:
 2. Toggle notification preferences
 3. Changes save automatically
 
+### Session Reminder Emails
+
+Participants receive an automatic reminder email ~24 hours before their session. This is handled by a daily cron job (Vercel Cron) that runs at 9:00 AM UTC. In production, set the **CRON_SECRET** environment variable in Vercel so only the cron invoker can call the reminder endpoint. Run **GET /api/run-migrations** after deploy to add the `reminder_sent_at` column to bookings. To test reminders locally, call **GET /api/cron/send-reminders** with header `Authorization: Bearer <your-CRON_SECRET>` (only works for bookings whose session starts in the 23–25 hour window).
+
 ---
 
 ## Managing Bookings

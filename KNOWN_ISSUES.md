@@ -20,78 +20,69 @@ _None currently known. All critical bugs have been resolved._
 
 ### Medium Priority Issues
 
-#### 1. Email Reminders Not Fully Automated
-**Status**: Partial Implementation  
-**Impact**: Medium  
-**Description**: Email reminder functionality is implemented but may not be fully automated. Reminders may need to be sent manually or may not be sent at all.
+#### 1. Email Reminders
+**Status**: Automated (Vercel Cron)  
+**Impact**: Low  
+**Description**: Session reminder emails are sent automatically for bookings whose session starts in ~24 hours. A daily cron job (GET /api/cron/send-reminders) runs at 9:00 AM UTC. Requires CRON_SECRET in Vercel env and migrations run (adds reminder_sent_at to bookings).
 
-**Workaround**: 
-- Check your calendar for session times
-- Set your own calendar reminders
-- Contact the researcher if you need a reminder
-
-**Planned Fix**: Full automation in future release
+**Workaround**: If reminders are not received, check CRON_SECRET is set, run GET /api/run-migrations, and ensure SMTP/email is configured. Participants can set their own calendar reminders.
 
 ---
 
 #### 2. Mobile Responsiveness
-**Status**: Limited Testing  
+**Status**: Tested on mobile viewports  
 **Impact**: Low-Medium  
-**Description**: The application is responsive but has been primarily tested on desktop browsers. Some features may not be optimized for mobile devices.
+**Description**: The application is responsive and production smoke tests run on Mobile Chrome (Pixel 5 viewport) and Mobile Safari (iPhone 12 viewport) in the Playwright matrix. Manual testing on real devices is still recommended for layout and touch targets.
 
 **Workaround**: 
-- Use desktop browser for best experience
-- Mobile features are functional but may have layout issues
+- Use desktop browser for most complex admin flows if preferred
 - Report any mobile-specific issues via feedback form
 
-**Planned Fix**: Enhanced mobile testing and optimization
+**Note**: To run Mobile Safari E2E locally, run `npx playwright install webkit`.
 
 ---
 
 #### 3. Calendar Event Cancellation
 **Status**: Known Limitation  
 **Impact**: Low  
-**Description**: When you cancel a booking, the calendar event may not be automatically deleted from your Google Calendar. You may need to manually delete it.
+**Description**: When you cancel a booking, the event is removed from the **researcher's** calendar only (if calendar is configured). If you added the session to **your own** calendar (e.g. via the link in the confirmation email or an .ics attachment), you need to remove it yourself—the app does not delete events from participants' personal calendars.
 
 **Workaround**: 
-- Manually delete the calendar event after cancelling
+- After cancelling, if you had added the session to your own calendar, remove it manually from your calendar app
 - Or keep the event as a reminder of the cancellation
 
-**Planned Fix**: Automatic calendar event deletion in future release
+**Planned Fix**: Participant calendar event deletion would require creating events on the participant's calendar at book time (via their OAuth) and storing that event ID; planned as a future enhancement
 
 ---
 
 ### Low Priority Issues
 
 #### 4. Browser Compatibility
-**Status**: Limited Testing  
+**Status**: Tested  
 **Impact**: Low  
-**Description**: Application has been tested primarily on:
+**Description**: Application is tested on:
 - ✅ Chrome (latest)
 - ✅ Firefox (latest)
 - ✅ Safari (latest)
-- ⚠️ Edge (limited testing)
+- ✅ Microsoft Edge (latest; included in Playwright E2E matrix)
 - ❓ Other browsers (untested)
 
-**Workaround**: Use Chrome, Firefox, or Safari for best experience
+**Workaround**: Use Chrome, Firefox, Safari, or Edge for best experience
 
 ---
 
 #### 5. Accessibility Compliance
-**Status**: Partial  
+**Status**: Tested with axe-core  
 **Impact**: Low (for alpha)  
-**Description**: Basic accessibility features are implemented, but full WCAG 2.2 AA compliance audit is pending.
+**Description**: Automated accessibility tests (axe-core) run on key routes: Home, Opportunity detail, Admin dashboard, Create opportunity form, Header/skip link, My Bookings, Feedback, Settings. Light-mode form contrast was fixed (WCAG AA). Skip link and keyboard navigation are tested.
 
 **Known Issues**:
-- Some color contrast ratios may not meet AA standards
-- Skip navigation links may need improvement
 - Screen reader optimization is basic
+- Run full audit locally: start dev server, then `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`
 
 **Workaround**: 
 - Use keyboard navigation (Tab, Enter, Escape)
 - Report accessibility issues via feedback form
-
-**Planned Fix**: Full accessibility audit and fixes in M8
 
 ---
 
@@ -102,7 +93,7 @@ _None currently known. All critical bugs have been resolved._
 **Current State**:
 - ✅ Booking confirmation emails are sent
 - ✅ Cancellation emails are sent
-- ⚠️ Reminder emails may not be fully automated
+- ✅ Reminder emails are sent automatically (Vercel Cron, daily; ~24h before session)
 - ⚠️ Email templates are basic
 
 **Limitations**:
@@ -117,18 +108,19 @@ _None currently known. All critical bugs have been resolved._
 ### 2. Calendar Integration
 
 **Current State**:
-- ✅ Google Calendar events are created on booking
-- ⚠️ Calendar events may not be deleted on cancellation
+- ✅ Google Calendar events are created on booking (researcher's calendar)
+- ✅ On cancellation, the event is deleted from the researcher's calendar (when calendar is configured)
+- ⚠️ The **participant's** copy (if they added the session to their own calendar via email link/.ics) is not deleted by the app
 - ⚠️ Reschedule may not update calendar event automatically
 
 **Limitations**:
 - Only Google Calendar is supported
-- Calendar events are created on researcher's calendar
-- Participants receive calendar invite via email
+- Calendar events are created on researcher's calendar; participants receive calendar invite via email
+- Participants who add the session to their own calendar must remove it manually after cancelling
 
 **Workaround**: 
-- Manually manage calendar events if needed
-- Use email calendar links (.ics files)
+- If you cancel a booking and had added the session to your own calendar, remove it there manually
+- Use email calendar links (.ics files) as needed
 
 ---
 
@@ -275,9 +267,10 @@ When reporting issues, please include:
 ## 📅 Planned Improvements
 
 ### Short Term (Next Release)
-- [ ] Full email reminder automation
-- [ ] Calendar event deletion on cancellation
-- [ ] Enhanced mobile responsiveness
+- [x] Full email reminder automation (Vercel Cron + reminder_sent_at)
+- [x] Calendar event cancellation docs and UI note
+- [x] Mobile viewport E2E (Mobile Chrome/Safari in Playwright)
+- [x] Edge and accessibility coverage
 - [ ] Improved error messages
 
 ### Medium Term

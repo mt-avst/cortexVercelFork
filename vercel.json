@@ -2,6 +2,12 @@
   "buildCommand": "cd frontend && npm install && npm run build",
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd api && npm install && cd ../frontend && npm install && cd ../backend && npm install",
+  "crons": [
+    {
+      "path": "/api/cron/send-reminders",
+      "schedule": "0 9 * * *"
+    }
+  ],
   "functions": {
     "api/**/*.ts": {
       "maxDuration": 30,

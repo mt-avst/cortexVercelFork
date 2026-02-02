@@ -313,8 +313,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         name: userInfo.name,
         email: userInfo.email,
         business_unit: 'Engineering', // Default, can be updated from Google profile if available
-        role_title: userRole === 'researcher_admin' ? 'Research Manager' : 'Software Engineer',
-        role: userRole as 'employee' | 'researcher_admin',
+        role_title: userRole === 'researcher_admin' || userRole === 'superadmin' ? 'Research Manager' : 'Software Engineer',
+        role: userRole as 'employee' | 'researcher_admin' | 'superadmin',
       };
 
       // Set signed session cookie (HMAC-SHA256 signed to prevent tampering)

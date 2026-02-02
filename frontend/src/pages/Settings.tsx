@@ -143,23 +143,37 @@ const Settings: React.FC = () => {
 
               {/* Tab Content */}
               <div className="tab-content">
-                {/* Account Management Tab */}
+                {/* Account Management Tab — M7: Profile for all users + Admin Management for superadmin */}
                 {activeTab === 'account' && (
                   <div className="tab-pane active">
-                    {user.role === 'superadmin' ? (
+                    {/* Profile (read-only) — all authenticated users */}
+                    <div className="mb-4">
+                      <h2 className="h5 mb-3">Profile</h2>
+                      <p className="text-muted mb-3">
+                        Your account details. Contact your administrator to change name or role.
+                      </p>
+                      <dl className="row mb-0">
+                        <dt className="col-sm-3 text-muted">Name</dt>
+                        <dd className="col-sm-9">{user.name || '—'}</dd>
+                        <dt className="col-sm-3 text-muted">Email</dt>
+                        <dd className="col-sm-9">{user.email || '—'}</dd>
+                        <dt className="col-sm-3 text-muted">Role</dt>
+                        <dd className="col-sm-9">
+                          <span className="badge bg-secondary">
+                            {user.role === 'superadmin' ? 'Superadmin' : user.role === 'researcher_admin' ? 'Researcher admin' : 'Employee'}
+                          </span>
+                        </dd>
+                      </dl>
+                    </div>
+
+                    {/* Admin Management — superadmin only */}
+                    {user.role === 'superadmin' && (
                       <div>
                         <h2 className="h5 mb-3">Admin Management</h2>
                         <p className="text-muted mb-4">
                           Manage admin access requests and existing admins. Approve or deny requests, and revoke admin access when needed.
                         </p>
                         <AdminManagement />
-                      </div>
-                    ) : (
-                      <div className="text-center py-5">
-                        <UserCircle size={48} className="text-muted mb-4" style={{ display: 'block' }} />
-                        <p className="text-muted mb-0">
-                          Account management features are available for superadmin users.
-                        </p>
                       </div>
                     )}
                   </div>

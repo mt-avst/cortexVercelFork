@@ -10,7 +10,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, AlertTriangle, Calendar } from 'lucide-react';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -328,6 +328,58 @@ const Admin: React.FC = () => {
                       <small className="stat-subtitle">
                         {dashboardStats.booked_slots}/{dashboardStats.total_slots} booked
                       </small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* M7: Recent bookings list (with session times) */}
+            {dashboardStats && dashboardStats.recent_bookings && dashboardStats.recent_bookings.length > 0 && (
+              <div className="row mb-3">
+                <div className="col-12">
+                  <div className="card border-0 shadow-sm">
+                    <div className="card-header bg-transparent border-bottom d-flex align-items-center">
+                      <Calendar size={18} className="me-2" aria-hidden />
+                      <h2 className="h6 mb-0">Recent bookings</h2>
+                    </div>
+                    <div className="card-body p-0">
+                      <div className="table-responsive">
+                        <table className="table table-hover mb-0">
+                          <thead>
+                            <tr>
+                              <th scope="col">Study</th>
+                              <th scope="col">Session</th>
+                              <th scope="col">Participant</th>
+                              <th scope="col">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {dashboardStats.recent_bookings.map((b) => (
+                              <tr key={b.id}>
+                                <td>
+                                  <button
+                                    type="button"
+                                    className="btn btn-link p-0 text-start text-decoration-none"
+                                    onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
+                                  >
+                                    {b.opportunity_title}
+                                  </button>
+                                </td>
+                                <td>{b.session_start ? new Date(b.session_start).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
+                                <td>
+                                  <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
+                                </td>
+                                <td>
+                                  <span className={`badge ${b.status === 'booked' ? 'bg-success' : 'bg-secondary'}`}>
+                                    {b.status === 'booked' ? 'Booked' : b.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>

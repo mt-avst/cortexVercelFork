@@ -6,6 +6,17 @@ import { logger } from '../utils/logger';
 
 const router: Router = Router();
 
+interface RecentBookingItem {
+  id: string;
+  opportunity_id: string;
+  opportunity_title: string;
+  session_start: string;
+  participant_name: string;
+  participant_email: string;
+  status: string;
+  booked_at: string;
+}
+
 interface DashboardStats {
   total_opportunities: number;
   published_opportunities: number;
@@ -19,20 +30,23 @@ interface DashboardStats {
   total_slots: number;
   booked_slots: number;
   available_slots: number;
+  recent_bookings: RecentBookingItem[];
 }
 
-// GET /api/admin/dashboard - Get dashboard statistics
+// GET /api/admin/dashboard - Get dashboard statistics (M7: recent_bookings, superadmin global stats)
 router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
-  
+
   // Check admin role
   if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Forbidden: Admin access required' });
   }
 
   const userId = user.id;
-  
-  // Get opportunity counts
+  // Superadmin sees global stats; researcher_admin sees only their opportunities
+  const filterOwnerId = user.role === 'superadmin' ? null : userId;
+
+  // Get opportunity counts (filter by owner unless superadmin)
   const oppCounts = await pool.query(`
     SELECT 
       COUNT(*) as total,
@@ -40,8 +54,8 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
       COUNT(*) FILTER (WHERE status = 'draft') as draft,
       COUNT(*) FILTER (WHERE status = 'closed') as closed
     FROM opportunities
-    WHERE owner_user_id = $1
-  `, [userId]);
+    WHERE ($1::uuid IS NULL OR owner_user_id = $1)
+  `, [filterOwnerId]);
 
   // Get booking counts
   const now = new Date();
@@ -53,8 +67,8 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     FROM bookings b
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
-    WHERE o.owner_user_id = $2
-  `, [now, userId]);
+    WHERE ($2::uuid IS NULL OR o.owner_user_id = $2)
+  `, [now, filterOwnerId]);
 
   // Get unique participants count
   const participantsCount = await pool.query(`
@@ -62,8 +76,8 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     FROM bookings b
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
-    WHERE o.owner_user_id = $1 AND b.status = 'booked'
-  `, [userId]);
+    WHERE ($1::uuid IS NULL OR o.owner_user_id = $1) AND b.status = 'booked'
+  `, [filterOwnerId]);
 
   // Get session and slot statistics
   const sessionStats = await pool.query(`
@@ -73,8 +87,22 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
       SUM(s.booked_count) as booked_slots
     FROM sessions s
     JOIN opportunities o ON s.opportunity_id = o.id
-    WHERE o.owner_user_id = $1
-  `, [userId]);
+    WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
+  `, [filterOwnerId]);
+
+  // M7: Recent bookings list (with session times)
+  const recentBookingsResult = await pool.query(`
+    SELECT b.id, o.id as opportunity_id, o.title as opportunity_title,
+           s.start_time as session_start, u.name as participant_name, u.email as participant_email,
+           b.status, b.booked_at
+    FROM bookings b
+    JOIN sessions s ON b.session_id = s.id
+    JOIN opportunities o ON s.opportunity_id = o.id
+    JOIN users u ON b.user_id = u.id
+    WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
+    ORDER BY b.booked_at DESC
+    LIMIT 15
+  `, [filterOwnerId]);
 
   const oppRow = oppCounts.rows[0] || {};
   const bookingRow = bookingCounts.rows[0] || {};
@@ -83,6 +111,17 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
 
   const totalSlots = parseInt(String(sessionRow.total_slots || '0')) || 0;
   const bookedSlots = parseInt(String(sessionRow.booked_slots || '0')) || 0;
+
+  const recent_bookings: RecentBookingItem[] = (recentBookingsResult.rows || []).map((row: Record<string, unknown>) => ({
+    id: String(row.id),
+    opportunity_id: String(row.opportunity_id),
+    opportunity_title: String(row.opportunity_title || ''),
+    session_start: row.session_start ? new Date(row.session_start as Date).toISOString() : '',
+    participant_name: String(row.participant_name || ''),
+    participant_email: String(row.participant_email || ''),
+    status: String(row.status || 'booked'),
+    booked_at: row.booked_at ? new Date(row.booked_at as Date).toISOString() : '',
+  }));
 
   const stats: DashboardStats = {
     total_opportunities: parseInt(String(oppRow.total || '0')) || 0,
@@ -96,7 +135,8 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     total_sessions: parseInt(String(sessionRow.total_sessions || '0')) || 0,
     total_slots: totalSlots,
     booked_slots: bookedSlots,
-    available_slots: totalSlots - bookedSlots
+    available_slots: totalSlots - bookedSlots,
+    recent_bookings,
   };
 
   return res.status(200).json({

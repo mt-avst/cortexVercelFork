@@ -170,6 +170,7 @@ export interface Booking {
   status: 'booked' | 'cancelled';
   gcal_event_id?: string;
   cancelled_at?: string;
+  reminder_sent_at?: string; // ISO timestamp when reminder email was sent
   created_at: string;
   updated_at: string;
 }

@@ -312,5 +312,82 @@ test.describe('Accessibility Tests', () => {
       expect(hasLabel).toBeTruthy();
     }
   });
+
+  test('My Bookings page should be accessible', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'user-1',
+          name: 'Demo User',
+          email: 'demo@example.com',
+          role: 'employee',
+        }),
+      });
+    });
+    await page.route('**/api/bookings/me**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ upcoming: [], past: [] }),
+      });
+    });
+    await page.goto(BASE_URL);
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto(`${BASE_URL}/my-bookings`);
+    await page.waitForLoadState('networkidle');
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test('Feedback page should be accessible', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'user-1',
+          name: 'Demo User',
+          email: 'demo@example.com',
+          role: 'employee',
+        }),
+      });
+    });
+    await page.goto(BASE_URL);
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto(`${BASE_URL}/feedback`);
+    await page.waitForLoadState('networkidle');
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test('Settings page should be accessible', async ({ page }) => {
+    await page.route('**/api/me', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 'admin-1',
+          name: 'Admin User',
+          email: 'admin@example.com',
+          role: 'researcher_admin',
+        }),
+      });
+    });
+    await page.route('**/api/notification-preferences**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ on_book_email: true, on_cancel_email: true }),
+      });
+    });
+    await page.goto(BASE_URL);
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto(`${BASE_URL}/admin/settings`);
+    await page.waitForLoadState('networkidle');
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
 });
 

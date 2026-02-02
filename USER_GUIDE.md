@@ -108,12 +108,10 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 ### Calendar Integration
 
-- When you book, a Google Calendar event is automatically created
-- The event includes:
-  - Session title
-  - Date and time
-  - Location or meeting link (if provided)
-  - Researcher contact information
+- When you book, a Google Calendar event is automatically created on the researcher's calendar
+- You receive a confirmation email that may include a calendar link or .ics attachment so you can add the session to **your own** calendar
+- The event includes: session title, date and time, location or meeting link (if provided), researcher contact information
+- **When you cancel**: The event is removed from the researcher's calendar. If you added the session to your own calendar (via the email link or .ics), you need to remove it yourself from your calendar app
 
 ### Conflict Detection
 
@@ -141,7 +139,7 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 5. You'll receive a cancellation email
 6. The slot becomes available for others
 
-**Note**: You cannot cancel past bookings.
+**Note**: You cannot cancel past bookings. If you added this session to your own calendar (e.g. via the confirmation email link), remove it from your calendar after cancelling—the app only removes the event from the researcher's calendar.
 
 ### Rescheduling a Booking
 
