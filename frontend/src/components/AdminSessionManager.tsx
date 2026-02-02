@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
-import { getCalendarEvents, getAvailability } from '../api/client';
+import { getMyCalendarEvents, getAvailability } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
 import { navigation } from '../utils/navigation';
 import { logger } from '../utils/logger';
@@ -1307,7 +1307,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         : Promise.resolve({ available_slots: [], total_slots: 0, duration_minutes: 0, time_range: { start: '', end: '' } });
       
       const [eventsResult, availabilityResult] = await Promise.all([
-        getCalendarEvents(startTime, actualEndTime),
+        getMyCalendarEvents(startTime, actualEndTime),
         availabilityPromise
       ]);
       
