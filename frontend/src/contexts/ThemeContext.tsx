@@ -16,14 +16,14 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const getInitialTheme = (): Theme => {
   try {
     const saved = localStorage.getItem('theme');
-    // Only use saved preference if it's explicitly 'light', otherwise default to dark
-    return saved === 'light' ? 'light' : 'dark';
+    // Use saved preference if valid; otherwise default to light for all users
+    return saved === 'light' || saved === 'dark' ? saved : 'light';
   } catch (error) {
-    logger.warn('localStorage not available, defaulting to dark theme', {
+    logger.warn('localStorage not available, defaulting to light theme', {
       error: error instanceof Error ? error : undefined,
       errorMessage: error instanceof Error ? error.message : String(error),
     });
-    return 'dark';
+    return 'light';
   }
 };
 
