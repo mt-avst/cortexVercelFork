@@ -6,7 +6,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ## Project overview
 
-- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.2.0
+- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.2.2
 - **Purpose**: Internal recruitment app — researchers post opportunities (studies/sessions), employees browse and book sessions. Includes polls/surveys, dashboard, feedback, notifications.
 - **Production**: https://adapta-labs-p62q.vercel.app  
 - **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E doc: `E2E_PLAYWRIGHT_RUN_2026-02-02.md`.
@@ -97,6 +97,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Vercel root directory**: If set to `frontend`, `/api/*` serves the SPA and API calls get HTML; set Root Directory to repo root.
 - **Migrations**: Must run `GET /api/run-migrations` after first deploy (or when schema changes); not automatic.
 - **Demo login visibility**: Demo Access pills (User / Admin / Superadmin) on the landing page are **hidden** in production builds unless `VITE_SHOW_DEMO_LOGIN=true` is set. They are shown in development (`import.meta.env.DEV`). To show them in production (e.g. staging), add `VITE_SHOW_DEMO_LOGIN=true` in Vercel env vars and redeploy. The API routes (`/api/auth/demo-login`, etc.) remain; only the UI is conditional.
+- **Reset DB to two users and blank studies**: `POST /api/admin/reset-keep-two-users` (superadmin only) deletes all bookings, sessions, and opportunities, then deletes all users except those named "Nick Fine" or "Greta Baisch". Or run locally: `DATABASE_URL="..." node scripts/reset-keep-two-users.js`.
 
 ---
 
