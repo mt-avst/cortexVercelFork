@@ -957,10 +957,20 @@ body.theme-light .btn-power:hover {
   color: #94A3B8;
 }
 
+body.theme-light .badge--unmoderated {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6B7280; /* Gray-500 - WCAG AA on white */
+}
+
 /* Question (Neutral) */
 .badge--question {
   background: rgba(148, 163, 184, 0.15);
   color: #94A3B8;
+}
+
+body.theme-light .badge--question {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6B7280; /* Gray-500 - WCAG AA on white */
 }
 
 /* Poll (Brand) */
@@ -8908,7 +8918,7 @@ body.theme-dark .mission-scheduler .calendar-hint-inline {
 }
 
 body.theme-light .mission-scheduler .calendar-hint-inline {
-  color: #9CA3AF;
+  color: #6B7280; /* Gray-500 - WCAG AA on white */
 }
 
 body.theme-dark .mission-scheduler .calendar-hint-divider {
@@ -10830,13 +10840,14 @@ body.theme-light .admin-subtitle {
 }
 
 /* =========================================
-   GLASSMORPHISM INPUTS (Admin Glass Aesthetic)
-   Subtle glass fill with orange focus glow
+   GLASSMORPHISM INPUTS (Admin Glass Aesthetic) - DARK THEME ONLY
+   Subtle glass fill with orange focus glow.
+   Scoped to theme-dark so light theme keeps WCAG AA input text color.
    ========================================= */
 
-.form-control, 
-.form-select,
-textarea.form-control {
+body.theme-dark .form-control,
+body.theme-dark .form-select,
+body.theme-dark textarea.form-control {
   background: rgba(255, 255, 255, 0.03) !important; /* Subtle glass fill */
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
   color: #E2E8F0 !important; /* Off-white text */
@@ -10844,17 +10855,17 @@ textarea.form-control {
   backdrop-filter: blur(5px); /* Optional: adds depth if browser supports */
 }
 
-.form-control:focus, 
-.form-select:focus,
-textarea.form-control:focus {
+body.theme-dark .form-control:focus,
+body.theme-dark .form-select:focus,
+body.theme-dark textarea.form-control:focus {
   background: rgba(255, 255, 255, 0.05) !important;
   border-color: var(--color-brand-orange) !important;
   box-shadow: 0 0 0 2px rgba(255, 122, 51, 0.2) !important; /* Orange glow */
   outline: none;
 }
 
-/* Fix for placeholder text color in glass inputs */
-.form-control::placeholder {
+/* Fix for placeholder text color in glass inputs (dark only) */
+body.theme-dark .form-control::placeholder {
   color: rgba(255, 255, 255, 0.3);
 }
 
@@ -10939,36 +10950,35 @@ textarea.form-control:focus {
 }
 
 /* =========================================
-   TEXT READABILITY - Admin Panel
-   Slate-400 (#94A3B8) for better legibility
+   TEXT READABILITY - Admin Panel (dark theme only)
+   Slate-400 (#94A3B8) for legibility on dark bg.
+   Light theme uses _themes.css (--text-muted #6B7280) for WCAG AA.
    ========================================= */
 
-.admin-dashboard .form-text,
-.admin-dashboard .text-muted,
-.opportunity-form .form-text,
-.opportunity-form .text-muted {
+body.theme-dark .admin-dashboard .form-text,
+body.theme-dark .admin-dashboard .text-muted,
+body.theme-dark .opportunity-form .form-text,
+body.theme-dark .opportunity-form .text-muted {
   color: #94A3B8 !important;
 }
 
-.admin-dashboard .form-control::placeholder,
-.admin-dashboard .form-select::placeholder,
-.admin-dashboard textarea::placeholder,
-.opportunity-form .form-control::placeholder,
-.opportunity-form .form-select::placeholder,
-.opportunity-form textarea::placeholder {
+body.theme-dark .admin-dashboard .form-control::placeholder,
+body.theme-dark .admin-dashboard .form-select::placeholder,
+body.theme-dark .admin-dashboard textarea::placeholder,
+body.theme-dark .opportunity-form .form-control::placeholder,
+body.theme-dark .opportunity-form .form-select::placeholder,
+body.theme-dark .opportunity-form textarea::placeholder {
   color: #94A3B8 !important;
   opacity: 0.7;
 }
 
-/* Section descriptions in opportunity form */
-.opportunity-form .section-description,
-.opportunity-form .tab-description {
+body.theme-dark .opportunity-form .section-description,
+body.theme-dark .opportunity-form .tab-description {
   color: #94A3B8 !important;
 }
 
-/* Helper text under form fields */
-.admin-dashboard small,
-.opportunity-form small:not(.badge) {
+body.theme-dark .admin-dashboard small,
+body.theme-dark .opportunity-form small:not(.badge) {
   color: #94A3B8;
 }
 
@@ -12030,6 +12040,10 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   transition: all 0.2s ease;
   background-color: transparent;
   color: #9CA3AF;
+}
+
+body.theme-light .btn-ghost-danger {
+  color: #6B7280; /* Gray-500 - WCAG AA on white */
 }
 
 .btn-ghost-danger:hover:not(:disabled) {

@@ -2807,7 +2807,7 @@ body.theme-light .opportunity-form .form-select:focus {
 }
 
 body.theme-light .opportunity-form .form-control::placeholder {
-  color: #9CA3AF;
+  color: #6B7280; /* Gray-500, 4.5:1+ contrast on white */
 }
 
 body.theme-light .opportunity-form .form-select option {
@@ -2990,7 +2990,7 @@ body.theme-light .leaderboard-row-score {
 }
 
 body.theme-light .leaderboard-row-score--zero {
-  color: #9CA3AF;
+  color: #6B7280; /* Gray-500 - WCAG AA on white */
 }
 
 /* Rank 1 - Gold Row - Light Mode (Champagne Tone - Warm Orange-Gold) */
