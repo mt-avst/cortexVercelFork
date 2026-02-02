@@ -36,7 +36,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
        VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [userId, userName, userEmail, category, feedback, url || 'Unknown', userAgent || req.headers['user-agent'] || 'Unknown']
     );
-    
+
     logger.info('Feedback saved to database');
 
     return res.status(200).json({ success: true });

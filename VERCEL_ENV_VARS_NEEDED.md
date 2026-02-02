@@ -28,7 +28,7 @@ You need to set environment variables in your Vercel project:
 **Optional but recommended:**
 
 - **Google OAuth**: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (e.g. `https://adapta-labs-p62q.vercel.app/api/auth/google-callback`) for production login. See `GOOGLE_OAUTH_PRODUCTION_SETUP.md`.
-- **Email**: `EMAIL_*` if you use email notifications.
+- **Email**: `EMAIL_*` if you use email notifications (booking confirmations, session reminders). Feedback is saved to the DB only and shown in the Feedback tab; no email is sent for feedback.
 - **CRON_SECRET**: Required for automated session reminder emails. Set a random string (e.g. `openssl rand -hex 32`). Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>` when invoking `/api/cron/send-reminders`. Without it, reminder cron returns 401.
 
 **Important Steps:**
