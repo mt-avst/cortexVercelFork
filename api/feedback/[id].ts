@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
 import { requireAuth } from '../utils/auth';
+import { logger } from '../utils/logger';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'DELETE') {
@@ -39,7 +40,7 @@ async function handleDelete(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json(createErrorResponse('Feedback not found'));
     }
 
-    console.log('🗑️ Feedback deleted', { id });
+    logger.info('Feedback deleted', { id });
     return res.status(200).json({ success: true });
   } catch (error: unknown) {
     // Handle auth errors
@@ -51,7 +52,11 @@ async function handleDelete(req: VercelRequest, res: VercelResponse) {
       ));
     }
     
-    console.error('Error deleting feedback:', error);
+    logger.error('Error deleting feedback', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      id: req.query.id,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(createErrorResponse('Failed to delete feedback', errorMessage));
   }

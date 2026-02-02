@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from './db';
 import { createErrorResponse, getErrorMessage } from './utils/errors';
 import { requireAuth, parseSessionCookie } from './utils/auth';
+import { logger } from './utils/logger';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'POST') {
@@ -25,7 +26,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
     const userEmail = user?.email || 'Not logged in';
     const userId = user?.id || null;
 
-    console.log('📝 Saving feedback to database', { category, userEmail });
+    logger.info('Saving feedback to database', { category, userEmail });
 
     const pool = getPool();
     
@@ -36,11 +37,14 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       [userId, userName, userEmail, category, feedback, url || 'Unknown', userAgent || req.headers['user-agent'] || 'Unknown']
     );
     
-    console.log('✅ Feedback saved to database');
+    logger.info('Feedback saved to database');
 
     return res.status(200).json({ success: true });
   } catch (error: unknown) {
-    console.error('Failed to save feedback:', error);
+    logger.error('Failed to save feedback', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(createErrorResponse('Failed to save feedback', errorMessage));
   }
@@ -76,7 +80,10 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
       ));
     }
     
-    console.error('Error fetching feedback:', error);
+    logger.error('Error fetching feedback', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(createErrorResponse('Failed to fetch feedback', errorMessage));
   }

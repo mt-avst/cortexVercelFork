@@ -8,22 +8,11 @@
 
 ## Priority 1: Fix Known Issues 🔧
 
-### 1. Fix Edit Opportunity GET Handler (Quick Fix - 15 min)
-**Issue**: Edit page shows "Failed to load opportunity"  
-**Root Cause**: The GET handler might need admin-only override for drafts  
-**Fix Needed**: 
-```typescript
-// In api/opportunities/[id].ts GET handler
-// Ensure admins can access drafts for editing
-if (!isAdmin && opportunity.status !== 'published') {
-  return res.status(404).json(createErrorResponse('Opportunity not found'));
-}
-```
-**Action**: Verify admin session is being parsed correctly for edit route
+### 1. Fix Edit Opportunity GET Handler ✅ Verified
+**Status**: Already correct. `api/opportunities/[id].ts` GET handler allows admins (`isAdmin = researcher_admin || superadmin`) to load any opportunity including drafts; non-admins get 404 for non-published. No change needed.
 
-### 2. Fix Logout Endpoint (Quick Fix - 5 min)
-**Issue**: 404 error on `/api/auth/logout`  
-**Action**: Verify logout endpoint exists in Vercel serverless functions
+### 2. Fix Logout Endpoint ✅ Done
+**Status**: `api/auth/logout.ts` exists; vercel.json rewrites `/auth/logout` → `/api/auth/logout`. Handler now accepts both GET and POST so redirects/links to logout URL work; frontend continues to use POST.
 
 ## Priority 2: Complete M6 Testing 📊
 
@@ -56,8 +45,8 @@ if (!isAdmin && opportunity.status !== 'published') {
 - [ ] Test poll/survey validation (external link required)
 
 ### 6. Code Cleanup
-- [ ] Remove console.log statements from production code
-- [ ] Add error boundaries for API failures
+- [x] Replace console with logger in main API routes (feedback, sessions, click, feedback export/delete); admin/reset scripts left as-is for operational visibility
+- [x] Error boundary already present (frontend App wrapped in ErrorBoundary)
 - [ ] Verify all environment variables are set in Vercel
 
 ### 7. Documentation
@@ -88,10 +77,10 @@ if (!isAdmin && opportunity.status !== 'published') {
 ## Recommended Immediate Action Plan
 
 **This Week:**
-1. ✅ Fix edit opportunity GET handler (15 min)
-2. ✅ Fix logout endpoint (5 min)
-3. ✅ Complete M6 end-to-end testing (30 min)
-4. ✅ Verify analytics dashboard (15 min)
+1. ✅ Fix edit opportunity GET handler — verified correct
+2. ✅ Fix logout endpoint — GET support added
+3. ✅ Complete M6 end-to-end testing (see E2E_PLAYWRIGHT_RUN_2026-02-02.md)
+4. ✅ Verify analytics dashboard (passed in E2E)
 
 **Next Week:**
 5. Production hardening

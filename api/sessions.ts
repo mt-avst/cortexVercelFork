@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
 import { createErrorResponse, getErrorMessage } from './utils/errors';
+import { logger } from './utils/logger';
 
 /**
  * POST /api/sessions
@@ -26,12 +27,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { opportunity_id, sessions } = req.body;
     
     if (!opportunity_id) {
-      console.error('Missing opportunity_id in request body');
+      logger.error('Missing opportunity_id in request body');
       return res.status(400).json(createErrorResponse('opportunity_id is required'));
     }
     
     if (!Array.isArray(sessions) || sessions.length === 0) {
-      console.error('Invalid sessions array:', sessions);
+      logger.error('Invalid sessions array', { sessionsType: typeof sessions });
       return res.status(400).json(createErrorResponse('sessions array is required and must not be empty'));
     }
 
@@ -42,7 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     
     if (oppCheck.rows.length === 0) {
-      console.error('Opportunity not found:', opportunity_id);
+      logger.error('Opportunity not found', { opportunity_id });
       return res.status(404).json(createErrorResponse('Opportunity not found'));
     }
     
@@ -87,14 +88,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           remaining: created.capacity - created.booked_count,
         });
       } catch (dbError: unknown) {
-        console.error('Database error inserting session:', dbError);
+        logger.error('Database error inserting session', {
+          errorMessage: dbError instanceof Error ? dbError.message : String(dbError),
+          opportunity_id,
+        });
         throw dbError;
       }
     }
     
     return res.status(201).json(createdSessions);
   } catch (error: unknown) {
-    console.error('Error creating sessions:', error);
+    logger.error('Error creating sessions', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     const errorMessage = getErrorMessage(error);
     return res.status(500).json(
       createErrorResponse('Internal server error', errorMessage)

@@ -3,15 +3,13 @@ import { createErrorResponse } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 /**
- * POST /api/auth/logout
- * Logout endpoint - clears session cookie
- * 
- * In Vercel serverless functions, we clear the session cookie.
- * The frontend will handle redirecting the user.
+ * GET/POST /api/auth/logout
+ * Logout endpoint - clears session cookie.
+ * GET supported so redirects/links to /auth/logout work; frontend uses POST.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
-    if (req.method !== 'POST') {
+    if (req.method !== 'GET' && req.method !== 'POST') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
 

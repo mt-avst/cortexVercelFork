@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
 import { createErrorResponse, getErrorMessage } from '../../utils/errors';
 import { parseSessionCookie } from '../../utils/auth';
+import { logger } from '../../utils/logger';
 import * as crypto from 'crypto';
 
 /**
@@ -97,7 +98,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ ok: true, click_type: clickType });
   } catch (error: unknown) {
-    console.error('Error in click tracking handler:', error);
+    logger.error('Error in click tracking handler', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+      opportunityId: req.query.id,
+    });
     return res.status(500).json(createErrorResponse(getErrorMessage(error)));
   }
 }
