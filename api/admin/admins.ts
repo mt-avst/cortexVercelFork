@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { parseSessionCookie } from '../utils/auth';
 import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { logger } from '../utils/logger';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -63,7 +64,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
   } catch (error: unknown) {
-    console.error('Error managing admins:', error);
+    logger.error('Error managing admins', {
+      errorMessage: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     return res.status(500).json(createErrorResponse('Failed to manage admins', getErrorMessage(error)));
   }
 }
