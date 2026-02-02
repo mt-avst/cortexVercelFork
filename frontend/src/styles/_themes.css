@@ -409,6 +409,27 @@ body.theme-light .header .nav-link:hover {
   color: var(--brand-headline);
 }
 
+/* Feedback Footer - Dark Mode (distinct strip so prompt + textarea + button are visible) */
+body.theme-dark .feedback-footer {
+  background: rgba(0, 0, 0, 0.5);
+  border-top-color: rgba(255, 255, 255, 0.25);
+  color: var(--text-body);
+}
+
+body.theme-dark .feedback-footer .feedback-footer__prompt {
+  color: #FFFFFF;
+}
+
+body.theme-dark .feedback-footer .feedback-footer__textarea {
+  background-color: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+body.theme-dark .feedback-footer .feedback-footer__textarea::placeholder {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* Dropdown Menu - Glass effect */
 body.theme-light .dropdown-menu {
   background: rgba(255, 255, 255, 0.95);

@@ -25,9 +25,11 @@
   padding-right: var(--container-padding);
 }
 
-/* App Wrapper */
+/* App Wrapper - flex column so feedback footer is always at bottom of viewport or after content */
 .App {
   position: relative;
+  display: flex;
+  flex-direction: column;
   background: linear-gradient(180deg, var(--bg-app-gradient-top) 0%, var(--bg-app-gradient-bottom) 100%);
   background-attachment: fixed;
   min-height: 100vh;
@@ -36,6 +38,7 @@
 
 /* Main Content Area */
 .main {
+  flex: 1 0 auto;
   padding: var(--spacing-8) 0;
   background: transparent;
   min-height: calc(100vh - var(--header-height));
@@ -457,6 +460,152 @@
   color: var(--text-body);
   font-size: var(--font-size-body);
   line-height: var(--line-height-body);
+}
+
+/* ============================================================
+   FEEDBACK FOOTER (slim strip on every page, centred, responsive)
+   ============================================================ */
+
+.feedback-footer {
+  flex-shrink: 0;
+  background: var(--bg-card);
+  border-top: 2px solid var(--border-card);
+  color: var(--text-body);
+  padding: var(--spacing-4) var(--spacing-3);
+  margin-top: auto;
+}
+
+.feedback-footer__container {
+  max-width: var(--container-max-width, 1140px);
+  margin: 0 auto;
+  padding-left: var(--container-padding);
+  padding-right: var(--container-padding);
+  width: 100%;
+}
+
+.feedback-footer__form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-3);
+  width: 100%;
+}
+
+.feedback-footer__prompt {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  line-height: 1.3;
+  text-align: center;
+  width: 100%;
+}
+
+.feedback-footer__field-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-2);
+  width: 100%;
+  max-width: 50%;
+}
+
+.feedback-footer__textarea {
+  background-color: var(--bg-input, var(--bg-card));
+  border: 1px solid var(--border-card);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: var(--font-size-body);
+  font-family: inherit;
+  min-height: 4.5em;
+  resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.feedback-footer__textarea:focus {
+  outline: none;
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 3px var(--focus-ring-color);
+}
+
+.feedback-footer__textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.feedback-footer__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--spacing-2);
+}
+
+.feedback-footer__submit {
+  flex-shrink: 0;
+}
+
+.feedback-footer__success,
+.feedback-footer__error {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  margin: 0;
+  font-size: var(--font-size-small);
+}
+
+.feedback-footer__success {
+  color: var(--success, #198754);
+}
+
+.feedback-footer__error {
+  color: var(--danger, #dc3545);
+}
+
+/* Responsive: tablet and below – field block full width */
+@media (max-width: 767px) {
+  .feedback-footer {
+    padding: var(--spacing-3) var(--spacing-2);
+  }
+
+  .feedback-footer__form {
+    gap: var(--spacing-2);
+  }
+
+  .feedback-footer__prompt {
+    font-size: 1.125rem;
+  }
+
+  .feedback-footer__field-wrap {
+    max-width: 100%;
+  }
+
+  .feedback-footer__textarea {
+    min-height: 4em;
+  }
+}
+
+/* Responsive: small phones – compact footer */
+@media (max-width: 480px) {
+  .feedback-footer {
+    padding: var(--spacing-2) var(--spacing-2);
+  }
+
+  .feedback-footer__prompt {
+    font-size: 1rem;
+  }
+
+  .feedback-footer__field-wrap {
+    align-items: stretch;
+  }
+
+  .feedback-footer__actions {
+    align-items: stretch;
+  }
+
+  .feedback-footer__submit {
+    width: 100%;
+  }
 }
 
 /* Opportunity Card variant */

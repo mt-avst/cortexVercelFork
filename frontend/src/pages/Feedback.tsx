@@ -20,13 +20,15 @@ const Feedback: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const trimmed = feedback.trim();
+    if (!trimmed) return;
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
       await submitFeedback({
         category,
-        feedback,
+        feedback: trimmed,
         userAgent: navigator.userAgent,
         url: window.location.href,
       });

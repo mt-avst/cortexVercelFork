@@ -7,6 +7,7 @@ import SkipLink from './components/SkipLink';
 import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import BackgroundAnimation from './components/BackgroundAnimation';
+import FeedbackFooter from './components/FeedbackFooter';
 
 // Eagerly load the home page for fast initial load
 import Home from './pages/Home';
@@ -60,6 +61,7 @@ function App() {
                   </Suspense>
                 </div>
               </main>
+              <FeedbackFooter />
             </div>
           </Router>
         </ThemeProvider>

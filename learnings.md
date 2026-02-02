@@ -64,6 +64,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Accessibility**: Axe tests in `e2e/accessibility.test.ts` cover Home, Opportunity detail, Admin, Create opportunity, My Bookings, Feedback, Settings. Run with dev server up: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`.
 - **E2E checklist**: `END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `E2E_PLAYWRIGHT_RUN_2026-02-02.md`.
 - **API health**: `GET /api/health` returns `{"ok":true}` when API is deployed.
+- **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
 
 ---
 
