@@ -321,18 +321,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Uses SameSite=None for OAuth cross-origin redirects
       setSessionCookieForOAuth(res, sessionUser);
 
-      // Redirect to frontend
+      // Redirect to frontend (all users to home; admins can use header "Admin" to reach dashboard)
       const config = getApiConfig();
       // Ensure URL is properly formatted (trim whitespace, remove trailing slashes)
       let frontendUrl = (config.FRONTEND_URL || config.CORS_ORIGIN || 'https://adapta-labs-p62q.vercel.app').trim();
       // Remove trailing slash if present
       frontendUrl = frontendUrl.replace(/\/$/, '');
-      
-      if (sessionUser.role === 'researcher_admin' || sessionUser.role === 'superadmin') {
-        res.redirect(`${frontendUrl}/admin`);
-      } else {
-        res.redirect(frontendUrl);
-      }
+      res.redirect(frontendUrl);
     } finally {
       client.release();
     }

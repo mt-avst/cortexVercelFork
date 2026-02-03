@@ -246,14 +246,6 @@ const Admin: React.FC = () => {
                 <div className="admin-table-actions">
                   <button 
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
-                    onClick={() => navigate('/')}
-                    aria-label="Browse Studies"
-                  >
-                    <List size={16} className="me-2" />
-                    <span>Browse Studies</span>
-                  </button>
-                  <button 
-                    className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
                     onClick={() => navigate('/admin/settings')}
                     aria-label="Settings"
                   >

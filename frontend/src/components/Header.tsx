@@ -17,7 +17,8 @@ import {
   CheckCircle, 
   AlertCircle, 
   MessageSquare, 
-  LogOut 
+  LogOut,
+  List 
 } from 'lucide-react';
 
 /**
@@ -148,6 +149,12 @@ const Header: React.FC = memo(() => {
                 {(user.role === 'researcher_admin' || user.role === 'superadmin') && !isOnAdminPage && (
                   <Link to="/admin" className="btn btn-secondary">
                     Admin
+                  </Link>
+                )}
+                {(user.role === 'researcher_admin' || user.role === 'superadmin') && isOnAdminPage && (
+                  <Link to="/" className="btn btn-secondary">
+                    <List size={18} className="me-1" aria-hidden="true" />
+                    Browse Studies
                   </Link>
                 )}
                 

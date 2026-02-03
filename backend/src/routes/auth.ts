@@ -500,11 +500,7 @@ router.get('/google-callback', async (req, res) => {
           }
           
           const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
-          if (sessionUser.role === 'researcher_admin') {
-            res.redirect(`${corsOrigin}/admin`);
-          } else {
-            res.redirect(corsOrigin);
-          }
+          res.redirect(corsOrigin);
         });
       });
     } finally {
