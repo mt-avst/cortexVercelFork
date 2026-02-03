@@ -58,11 +58,11 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
       return;
     }
     
-    // Use database
+    // Use database - LEFT JOIN so opportunities show even when owner not in users (e.g. demo/session-only)
     let query = `
       SELECT o.*, u.name as owner_name, u.email as owner_email
       FROM opportunities o
-      JOIN users u ON o.owner_user_id = u.id
+      LEFT JOIN users u ON o.owner_user_id = u.id
     `;
     const params: (string | number)[] = [];
     const conditions: string[] = [];
@@ -164,6 +164,8 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
 
       return {
         ...opportunity,
+        owner_name: opportunity.owner_name || 'Unknown',
+        owner_email: opportunity.owner_email || 'unknown@example.com',
         created_at: opportunity.created_at.toISOString(),
         updated_at: opportunity.updated_at.toISOString(),
         start_date: opportunity.start_date ? opportunity.start_date.toISOString() : null,
@@ -204,11 +206,11 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     return;
   }
   
-  // Use database
+  // Use database - LEFT JOIN so opportunities show even when owner not in users (e.g. demo/session-only)
   let query = `
     SELECT o.*, u.name as owner_name, u.email as owner_email
     FROM opportunities o
-    JOIN users u ON o.owner_user_id = u.id
+    LEFT JOIN users u ON o.owner_user_id = u.id
     WHERE o.id = $1
   `;
   const params = [id];
@@ -232,12 +234,15 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     ORDER BY start_time ASC
   `, [id]);
   
+  const row = result.rows[0];
   const opportunity = {
-    ...result.rows[0],
-    created_at: result.rows[0].created_at.toISOString(),
-    updated_at: result.rows[0].updated_at.toISOString(),
-    start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
-    end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
+    ...row,
+    owner_name: row.owner_name || 'Unknown',
+    owner_email: row.owner_email || 'unknown@example.com',
+    created_at: row.created_at.toISOString(),
+    updated_at: row.updated_at.toISOString(),
+    start_date: row.start_date ? row.start_date.toISOString() : null,
+    end_date: row.end_date ? row.end_date.toISOString() : null,
     sessions: sessionsResult.rows.map(session => ({
       ...session,
       start_time: session.start_time.toISOString(),
@@ -297,7 +302,23 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests');
     }
   }
-  
+
+  // Ensure session user exists in DB (demo/session-only users may not be persisted)
+  await pool.query(
+    `INSERT INTO users (id, name, email, business_unit, role_title, role)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email,
+       business_unit = EXCLUDED.business_unit, role_title = EXCLUDED.role_title, role = EXCLUDED.role`,
+    [
+      req.user!.id,
+      req.user!.name,
+      req.user!.email,
+      req.user!.business_unit || null,
+      req.user!.role_title || null,
+      req.user!.role,
+    ]
+  );
+
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional, 
@@ -556,11 +577,11 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
       return res.json(filteredSessions);
     }
     
-    // Check if opportunity exists and user has access
+    // Check if opportunity exists and user has access - LEFT JOIN for demo/session-only owners
     const opportunityCheck = await pool.query(`
       SELECT o.*, u.name as owner_name, u.email as owner_email
       FROM opportunities o
-      JOIN users u ON o.owner_user_id = u.id
+      LEFT JOIN users u ON o.owner_user_id = u.id
       WHERE o.id = $1
     `, [opportunityId]);
     

@@ -139,7 +139,7 @@ const Admin: React.FC = () => {
 
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
-    if (location.state?.refresh && user?.role === 'researcher_admin') {
+    if (location.state?.refresh && (user?.role === 'researcher_admin' || user?.role === 'superadmin')) {
       // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
       // Force refresh without filters to ensure new items are visible

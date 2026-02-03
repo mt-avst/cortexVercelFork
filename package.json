@@ -9,6 +9,7 @@
     "test:e2e": "playwright test",
     "test:e2e:prod": "playwright test --config=playwright.prod.config.ts",
     "test:smoke": "playwright test e2e/production-smoke.test.ts --config=playwright.prod.config.ts",
+    "test:admin-create-study": "playwright test e2e/superadmin-create-study.test.ts --config=playwright.superadmin.config.ts",
     "test:all": "npm run test:backend && npm run test:frontend && npm run test:e2e",
     "test:coverage": "cd backend && npm run test -- --coverage && cd ../frontend && npm run test -- --coverage",
     "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",

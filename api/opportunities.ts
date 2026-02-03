@@ -230,12 +230,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json(createErrorResponse('Type, title, and purpose are required'));
       }
       
-      // For demo purposes, use a default owner if not provided
-      // In production, this should come from the authenticated user
-      const finalOwnerId = owner_user_id || '633608bc-4b0e-4d60-a498-e680ee97c252'; // Demo admin ID
+      // Use authenticated user as owner when available; fallback to body or demo admin
+      const user = parseSessionCookie(req);
+      const finalOwnerId = owner_user_id || user?.id || '633608bc-4b0e-4d60-a498-e680ee97c252'; // Demo admin ID
       
       // Only superadmins can set display_width - default to 'single' otherwise
-      const user = parseSessionCookie(req);
       const isSuperadmin = user?.role === 'superadmin';
       const finalDisplayWidth = isSuperadmin && display_width ? display_width : 'single';
       

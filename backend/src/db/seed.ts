@@ -60,6 +60,26 @@ export async function seedDatabase() {
       'employee'
     ]);
     console.log('✅ Demo user 2 inserted/updated');
+
+    // Insert demo superadmin (matches backend auth superadmin-login)
+    await client.query(`
+      INSERT INTO users (id, email, name, business_unit, role_title, role) 
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (id) DO UPDATE SET
+        name = EXCLUDED.name,
+        email = EXCLUDED.email,
+        business_unit = EXCLUDED.business_unit,
+        role_title = EXCLUDED.role_title,
+        role = EXCLUDED.role
+    `, [
+      'c3d4e5f6-a7b8-9012-cdef-123456789012',
+      'superadmin@test.com',
+      'Demo Superadmin',
+      'Administration',
+      'System Administrator',
+      'superadmin'
+    ]);
+    console.log('✅ Demo superadmin user inserted/updated');
     
     // Mark admin emails as researcher admins
     for (const email of config.ADMIN_EMAILS) {
