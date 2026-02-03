@@ -170,6 +170,17 @@ npm test             # Run tests
 docker-compose exec frontend npm test
 ```
 
+### E2E Tests (Playwright)
+
+```bash
+# From project root - start dev servers first
+npm run dev:all      # In one terminal
+npm run test:admin-create-study   # In another - admin create study flow
+npm run test:e2e     # Full E2E suite (starts its own servers)
+```
+
+The **admin create study** test verifies: login → create poll study → submit → study appears in list. Uses `admin-login` (seeded researcher_admin). Run `npm run seed` in backend to ensure admin/superadmin users exist.
+
 ## API Endpoints
 
 ### Authentication
@@ -276,7 +287,7 @@ Ensure these are set in production:
 
 ## Current Status
 
-**Version**: 7.3.0  
+**Version**: 7.3.1  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
 **Deployment**: https://adapta-labs-p62q.vercel.app
 

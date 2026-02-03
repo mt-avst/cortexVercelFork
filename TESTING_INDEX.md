@@ -39,9 +39,9 @@ This index helps locate testing-related documentation for the AdaptaLabs applica
 
 ## 🔍 Quick Reference
 
-### Test Status (Latest: 2025-01-27)
-- **Backend Tests**: 50/80 passing ✅⚠️
-- **TypeScript**: False positives (non-blocking)
+### Test Status (Latest: 2026-02-03)
+- **Backend Tests**: Some failures (pre-existing: auth mocking, race-condition)
+- **Admin Create Study E2E**: ✅ Passing (`npm run test:admin-create-study`)
 - **Production Ready**: Yes ✅
 
 ### Key Issues
@@ -70,7 +70,15 @@ When resuming testing or bug fixing:
 
 ---
 
-*Last Updated: 2025-01-27*
+### Admin Create Study E2E Test
+- **File**: `e2e/superadmin-create-study.test.ts`
+- **Config**: `playwright.superadmin.config.ts`
+- **Run**: `npm run test:admin-create-study` (from project root; dev servers must be running)
+- **Details**: See `SUPERADMIN_CREATE_STUDY_TEST_RESULTS.md`
+
+---
+
+*Last Updated: 2026-02-03*
 
 
 

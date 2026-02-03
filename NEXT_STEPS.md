@@ -76,6 +76,10 @@
 
 ## Recommended Immediate Action Plan
 
+**Completed (2026-02-03):**
+- ✅ Admin create study flow fixes (diary, visibility, LEFT JOIN, session user upsert)
+- ✅ E2E test for admin create study (`npm run test:admin-create-study`)
+
 **This Week:**
 1. ✅ Fix edit opportunity GET handler — verified correct
 2. ✅ Fix logout endpoint — GET support added
