@@ -63,6 +63,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Browsers**: E2E runs on Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari, and Microsoft Edge. To run Edge tests, install Microsoft Edge or run `npx playwright install msedge`.
 - **Accessibility**: Axe tests in `e2e/accessibility.test.ts` cover Home, Opportunity detail, Admin, Create opportunity, My Bookings, Feedback, Settings. Run with dev server up: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`.
 - **E2E checklist**: `END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `E2E_PLAYWRIGHT_RUN_2026-02-02.md`.
+- **M6 E2E**: `e2e/m6-poll-click-tracking.test.ts` — publish poll → click "Open Poll" → verify click tracked and analytics shows action. Run with ports 3000/3001 free.
 - **API health**: `GET /api/health` returns `{"ok":true}` when API is deployed.
 - **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
 
@@ -81,6 +82,9 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 | `USER_GUIDE.md` / `ADMIN_GUIDE.md` | User and admin docs |
 | `DATABASE_SETUP.md`, `VERCEL_POSTGRES_SETUP.md` | DB setup |
 | `GOOGLE_OAUTH_PRODUCTION_SETUP.md` | Google OAuth in prod |
+| `CONTINUATION_PROMPT.md` | Copy-paste prompt for new sessions (MCPs, follow-ups) |
+| `README_M6.md` | M6 polls/surveys: click tracking, analytics, E2E, env, error handling |
+| `NEXT_MILESTONES.md` | Roadmap: M7 enhancements, production hardening, features (pick a track) |
 
 ---
 
@@ -110,6 +114,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 ## What we learned
 
 - **Light-mode contrast**: Avoid #94A3B8 / #9CA3AF (Slate-400 / Gray-400) for body text, descriptions, placeholders, or selected values on white backgrounds—they fall below WCAG AA. Use #6B7280 (Gray-500) or darker for muted text in light theme; reserve lighter grays for dark theme only.
+- **M6 E2E**: Playwright starts backend (3001) and frontend (3000) by default. If either port is in use, use `PLAYWRIGHT_NO_WEBSERVER=1` and run backend + frontend yourself, then run the test.
 
 ---
 
@@ -117,3 +122,45 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 - Production: https://adapta-labs-p62q.vercel.app  
 - Vercel project: (see VERCEL_ENV_VARS_NEEDED.md for dashboard link)
+
+---
+
+## Continuation (for new sessions)
+
+When continuing work on this project, use the following in new chats.
+
+**MCPs available**
+
+| MCP | Use |
+|-----|-----|
+| **cursor-ide-browser** | Navigate and interact with the app for frontend dev and manual testing |
+| **cursor-browser-extension** | Similar browser automation; prefer for frontend/webapp work |
+| **user-chrome-devtools** | Inspect browser console, network, and DOM |
+| **user-playwright** | Playwright-based E2E tests |
+| **user-vercel** | Vercel deployment and config |
+| **user-figma** | Figma design integration |
+| **user-clerk** | Clerk auth (if used) |
+| **user-convex** | Convex backend (if used) |
+| **user-supabase** | Supabase backend (if used) |
+| **user-atlassian** | Atlassian (Jira, etc.) |
+| **user-forge-knowledge** | Forge Knowledge base queries |
+
+**Learnings**
+
+- Use `learnings.md` (this file) in the project root as a reference for prior discoveries, gotchas, and conventions.
+- When you find something reusable (fixes, patterns, pitfalls), add it to `learnings.md` with a short, actionable note.
+
+**Suggested follow-ups**
+
+- **M6 End-to-End Click Tracking Test** – Publish poll → click "Open Poll" → verify click is tracked.
+- **Analytics Dashboard Verification** – Confirm analytics for published polls.
+- **Production readiness (M6)** – Error handling, env vars, README for M6.
+
+**Short continuation prompt (copy for future sessions)**
+
+```
+When continuing work on this project:
+MCPs available: cursor-ide-browser, cursor-browser-extension, user-chrome-devtools, user-playwright, user-vercel, user-figma, user-clerk, user-convex, user-supabase, user-atlassian, user-forge-knowledge
+Learnings: Use learnings.md in the project root as a reference for prior discoveries, gotchas, and conventions. When you find something reusable (fixes, patterns, pitfalls), add it to learnings.md with a short, actionable note.
+Suggested follow-ups: M6 End-to-End Click Tracking Test (publish poll → click "Open Poll" → verify click tracked); Analytics Dashboard Verification (confirm analytics for published polls); Production readiness for M6 (error handling, env vars, README for M6).
+```

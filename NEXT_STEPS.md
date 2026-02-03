@@ -56,23 +56,16 @@
 
 ## Priority 4: Next Milestones 🎯
 
+**See `NEXT_MILESTONES.md`** for the full roadmap with concrete tasks and quick starts.
+
 ### Option A: M7 - Dashboard & Settings
-- Enhanced user dashboard
-- Profile settings
-- Notification preferences
-- Usage statistics
+- Enhanced user dashboard, profile settings, notification preferences, usage statistics
 
 ### Option B: Production Hardening
-- Performance optimization
-- Security audit
-- Load testing
-- Backup strategy
+- Performance optimization, security pass, load testing, backup strategy
 
 ### Option C: Feature Enhancements
-- Email notifications
-- Reminder system
-- Advanced analytics (export data)
-- Multi-language support
+- Email reminders, analytics export, i18n
 
 ## Recommended Immediate Action Plan
 

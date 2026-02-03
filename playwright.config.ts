@@ -62,17 +62,20 @@ export default defineConfig({
     // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: [
-    {
-      command: 'cd backend && npm run dev',
-      url: 'http://localhost:3001',
-      reuseExistingServer: !process.env.CI,
-    },
-    {
-      command: 'cd frontend && npm start',
-      url: 'http://localhost:3000',
-      reuseExistingServer: !process.env.CI,
-    },
-  ],
+  /* Run your local dev server before starting the tests.
+   * Set PLAYWRIGHT_NO_WEBSERVER=1 to skip (use your already-running backend + frontend). */
+  webServer: process.env.PLAYWRIGHT_NO_WEBSERVER
+    ? undefined
+    : [
+        {
+          command: 'cd backend && npm run dev',
+          url: 'http://localhost:3001',
+          reuseExistingServer: !process.env.CI,
+        },
+        {
+          command: 'cd frontend && npm start',
+          url: 'http://localhost:3000',
+          reuseExistingServer: !process.env.CI,
+        },
+      ],
 });

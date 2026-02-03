@@ -17,6 +17,7 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 - **Analytics API** (admin/owner only):
   - `GET /api/opportunities/[id]/analytics?period=7|14|30` — Returns views/actions counts and time-series for the given period (default 30 days).
   - `POST /api/opportunities/[id]/click` — Body: `{ "click_type": "view" | "action" }`. Optional auth; used by frontend when user views or clicks the action button.
+- **E2E**: `e2e/m6-poll-click-tracking.test.ts` — full flow and optional analytics check. See **README_M6.md** for env, error handling, and verification steps.
 
 ## Project Structure
 
