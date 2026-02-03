@@ -411,23 +411,24 @@ body.theme-light .header .nav-link:hover {
 
 /* Feedback Footer - Dark Mode (distinct strip so prompt + textarea + button are visible) */
 body.theme-dark .feedback-footer {
-  background: rgba(0, 0, 0, 0.5);
-  border-top-color: rgba(255, 255, 255, 0.25);
-  color: var(--text-body);
+  background: #020617; /* solid dark panel */
+  border-top-color: rgba(148, 163, 184, 0.6);
+  color: #e5e7eb;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
 }
 
 body.theme-dark .feedback-footer .feedback-footer__prompt {
-  color: #FFFFFF;
+  color: #f9fafb;
 }
 
 body.theme-dark .feedback-footer .feedback-footer__textarea {
-  background-color: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.25);
-  color: #FFFFFF;
+  background-color: #020617;
+  border-color: rgba(148, 163, 184, 0.8);
+  color: #f9fafb;
 }
 
 body.theme-dark .feedback-footer .feedback-footer__textarea::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(148, 163, 184, 0.8);
 }
 
 /* Dropdown Menu - Glass effect */
