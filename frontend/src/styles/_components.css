@@ -468,6 +468,8 @@
 
 .feedback-footer {
   flex-shrink: 0;
+  position: relative;
+  z-index: 10;
   background: var(--bg-card);
   border-top: 2px solid var(--border-card);
   color: var(--text-body);
