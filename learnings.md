@@ -66,6 +66,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **M6 E2E**: `e2e/m6-poll-click-tracking.test.ts` — publish poll → click "Open Poll" → verify click tracked and analytics shows action. Run with ports 3000/3001 free.
 - **API health**: `GET /api/health` returns `{"ok":true}` when API is deployed.
 - **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
+- **Admin / User view toggle (Playwright MCP, 2026-02-03)**: Admins and superadmins can switch between Admin Dashboard (`/admin`) and User View (`/`) without auto-redirect. Admin dashboard has "Browse Studies" button (navigates to `/`); when on user view, header shows "Admin" link (navigates to `/admin`). Verified with user-playwright MCP: Admin login → /admin → "Browse Studies" → / (study cards) → "Admin" → /admin.
 
 ---
 

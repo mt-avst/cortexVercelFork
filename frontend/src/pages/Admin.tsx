@@ -10,7 +10,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, AlertTriangle, Calendar } from 'lucide-react';
+import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, Calendar } from 'lucide-react';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -244,6 +244,14 @@ const Admin: React.FC = () => {
                   <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">
+                  <button 
+                    className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
+                    onClick={() => navigate('/')}
+                    aria-label="Browse Studies"
+                  >
+                    <List size={16} className="me-2" />
+                    <span>Browse Studies</span>
+                  </button>
                   <button 
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
                     onClick={() => navigate('/admin/settings')}

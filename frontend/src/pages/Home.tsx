@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
-import { useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
@@ -11,7 +11,6 @@ import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
 import { SpotlightCard } from '../components/SpotlightGrid';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import StaticNeuralBackground from '../components/StaticNeuralBackground';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
 /**
@@ -29,12 +28,7 @@ const Home: React.FC = memo(() => {
   const [showBookingSuccess, setShowBookingSuccess] = useState(false);
   const [selectedType, setSelectedType] = useState<string>('all');
   
-  const { user, loading: authLoading, initialAuthCheck } = useAuth();
-
-  // Memoized check for admin redirect
-  const shouldRedirectToAdmin = useMemo(() => {
-    return !authLoading && initialAuthCheck && (user?.role === 'researcher_admin' || user?.role === 'superadmin');
-  }, [authLoading, initialAuthCheck, user?.role]);
+  const { user } = useAuth();
 
   // Load opportunities function - memoized to prevent recreation
   const loadOpportunities = useCallback(async () => {
@@ -180,11 +174,6 @@ const Home: React.FC = memo(() => {
     
     return result;
   }, [opportunities, selectedType]);
-
-  // Admin redirect - placed after all hooks to comply with React's rules
-  if (shouldRedirectToAdmin) {
-    return <Navigate to="/admin" replace />;
-  }
 
   return (
     <>
