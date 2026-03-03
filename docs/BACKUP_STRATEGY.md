@@ -30,6 +30,8 @@ Connection is via `DATABASE_URL` (or `POSTGRES_URL`) set in Vercel environment v
 - [ ] **Retention noted** – In the same place, note the retention window (e.g. 7 days PITR on Pro). Record it in your runbook or team doc.
 - [ ] **Recovery path** – Know how to restore: Neon dashboard → Restore to a point in time or branch. After restore, run `GET https://<your-domain>/api/run-migrations` if schema might differ.
 
+**Current setup (as of 2026-03):** Retention is **6 hours** (Neon Free plan; longer retention incurs cost). To extend the restore window, use **Configure** on the Backup & Restore page or Project Settings → Instant restore; upgrading the Neon plan allows up to 7–30 days depending on tier.
+
 ## Responsibilities and verification
 
 | Item | Responsibility | How to verify |
