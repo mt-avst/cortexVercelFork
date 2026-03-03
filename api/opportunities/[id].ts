@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from '../utils/errors';
 import { parseSessionCookie } from '../utils/auth';
 import { logger } from '../utils/logger';
 
@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           opportunityId
         });
         return res.status(500).json(
-          createErrorResponse('Failed to load opportunity', error.message || 'Database error')
+          createSafeErrorResponse(error, { userMessage: 'Failed to load opportunity' })
         );
       }
 
@@ -412,9 +412,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       method: req.method,
       opportunityId: req.query.id
     });
-    const errorMessage = getErrorMessage(error);
     return res.status(500).json(
-      createErrorResponse('Internal server error', errorMessage)
+      createSafeErrorResponse(error, { userMessage: 'Internal server error' })
     );
   }
 }

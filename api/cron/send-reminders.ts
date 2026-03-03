@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import emailService, { EmailService } from '../services/email';
 import { logger } from '../utils/logger';
+import { createSafeErrorResponse } from '../utils/errors';
 
 /**
  * GET /api/cron/send-reminders
@@ -110,10 +111,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errors,
       total: rows.length,
     });
-  } catch (err) {
+  } catch (err: unknown) {
     logger.error('Cron send-reminders failed', { error: err });
-    return res.status(500).json({
-      error: err instanceof Error ? err.message : 'Send reminders failed',
-    });
+    const safe = createSafeErrorResponse(err, { userMessage: 'Send reminders failed' });
+    return res.status(500).json({ error: safe.error });
   }
 }

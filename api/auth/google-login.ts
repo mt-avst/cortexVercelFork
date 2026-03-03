@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { isGoogleOAuthDemoMode } from '../../shared/utils/demoMode';
 import { getGoogleOAuthConfig, getApiConfig } from '../utils/env';
 import crypto from 'crypto';
@@ -84,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: err.message,
       stack: err.stack,
     });
-    res.status(500).json(createErrorResponse('Google login initiation failed'));
+    res.status(500).json(createSafeErrorResponse(err, { userMessage: 'Google login initiation failed' }));
   }
 }
 

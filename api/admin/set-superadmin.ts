@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { parseSessionCookie } from '../utils/auth';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
+import { adminRateLimit } from '../utils/rateLimit';
 
 /**
  * One-time endpoint to set superadmin role
@@ -13,6 +14,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method !== 'POST') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
+
+    if (await adminRateLimit(req, res)) return;
 
     const user = parseSessionCookie(req);
     const targetEmail = req.body?.email || 'nfine@adaptavist.com';
@@ -73,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: unknown) {
     console.error('Error setting superadmin role:', error);
-    return res.status(500).json(createErrorResponse('Failed to set superadmin role', getErrorMessage(error)));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to set superadmin role' }));
   }
 }
 

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 /**
@@ -19,9 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    const errorMessage = getErrorMessage(error);
     return res.status(500).json(
-      createErrorResponse('Internal server error', errorMessage)
+      createSafeErrorResponse(error, { userMessage: 'Internal server error' })
     );
   }
 }

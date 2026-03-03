@@ -274,5 +274,30 @@ Alpha testing can proceed if:
 
 ---
 
+## Load testing
+
+A minimal API load test runs against `/api/health` and `/api/opportunities` using [k6](https://k6.io/docs/get-started/installation/).
+
+**Prerequisites:** Install k6 (e.g. `brew install k6` on macOS).
+
+**Run against production (default URL, 10 VUs, 30s):**
+```bash
+k6 run load-test/api-smoke.js
+```
+
+**Custom base URL:**
+```bash
+k6 run -e BASE_URL=https://your-app.vercel.app load-test/api-smoke.js
+```
+
+**Shorter run (10s, 5 VUs):**
+```bash
+k6 run -e DURATION=10s -e VUS=5 load-test/api-smoke.js
+```
+
+Thresholds: &lt;5% failed requests, p95 latency &lt;3s. See `load-test/api-smoke.js` for details.
+
+---
+
 **Last Updated**: 2025-01-27
 

@@ -190,3 +190,11 @@ export const feedbackRateLimit = (req: VercelRequest, res: VercelResponse) =>
     maxRequests: 20,          // 20 submissions per 15 min per IP
     keyPrefix: 'feedback',
   });
+
+/** Stricter limit for destructive admin actions (reset DB, set-superadmin, etc.) */
+export const adminRateLimit = (req: VercelRequest, res: VercelResponse) =>
+  rateLimit(req, res, {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 5,           // 5 attempts per 15 min per IP
+    keyPrefix: 'admin',
+  });

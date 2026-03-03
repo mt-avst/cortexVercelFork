@@ -52,6 +52,23 @@ export function getErrorMessage(error: unknown): string {
   return 'An unknown error occurred';
 }
 
+/**
+ * Create a 500 error response that does not leak internal details in production.
+ * Callers should log the real error (e.g. logger.error) before returning this.
+ * In production, the response body uses userMessage or a generic message only.
+ */
+export function createSafeErrorResponse(
+  error: unknown,
+  options?: { userMessage?: string; code?: string; requestId?: string }
+): ErrorResponse {
+  const isProduction =
+    process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production';
+  const userMessage =
+    options?.userMessage ??
+    (isProduction ? 'Something went wrong' : getErrorMessage(error));
+  return createErrorResponse(userMessage, undefined, options?.code, options?.requestId);
+}
+
 
 
 

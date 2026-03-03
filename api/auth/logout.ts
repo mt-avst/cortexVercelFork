@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 /**
@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return res.status(500).json(createErrorResponse('Logout failed'));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Logout failed' }));
   }
 }
 

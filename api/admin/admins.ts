@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { parseSessionCookie } from '../utils/auth';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -68,7 +68,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return res.status(500).json(createErrorResponse('Failed to manage admins', getErrorMessage(error)));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to manage admins' }));
   }
 }
 

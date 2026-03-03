@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { requireAuth } from '../utils/auth';
 import { logger } from '../utils/logger';
 
@@ -25,6 +25,7 @@ interface DashboardStats {
   past_bookings: number;
   total_participants: number;
   total_sessions: number;
+  sessions_completed: number; // sessions that have already run (start_time in the past)
   total_slots: number;
   booked_slots: number;
   available_slots: number;
@@ -87,12 +88,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sessionStats = await pool.query(`
       SELECT 
         COUNT(DISTINCT s.id) as total_sessions,
+        COUNT(DISTINCT s.id) FILTER (WHERE s.start_time <= $2) as sessions_completed,
         SUM(s.capacity) as total_slots,
         SUM(s.booked_count) as booked_slots
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-    `, [filterOwnerId]);
+    `, [filterOwnerId, now]);
 
     // M7: Recent bookings list (with session times) — bookings table uses created_at, not booked_at
     const recentBookingsResult = await pool.query(`
@@ -137,6 +139,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       past_bookings: parseInt(String(bookingRow.past || '0')) || 0,
       total_participants: parseInt(String(participantRow.total || '0')) || 0,
       total_sessions: parseInt(String(sessionRow.total_sessions || '0')) || 0,
+      sessions_completed: parseInt(String(sessionRow.sessions_completed || '0')) || 0,
       total_slots: totalSlots,
       booked_slots: bookedSlots,
       available_slots: totalSlots - bookedSlots,
@@ -161,9 +164,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    const errorMessage = getErrorMessage(error);
     return res.status(500).json(
-      createErrorResponse('Failed to fetch dashboard statistics', errorMessage)
+      createSafeErrorResponse(error, { userMessage: 'Failed to fetch dashboard statistics' })
     );
   }
 }

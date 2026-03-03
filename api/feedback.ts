@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from './db';
-import { createErrorResponse, getErrorMessage } from './utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from './utils/errors';
 import { requireAuth, parseSessionCookie } from './utils/auth';
 import { logger } from './utils/logger';
 import { feedbackRateLimit } from './utils/rateLimit';
@@ -49,8 +49,7 @@ async function handlePost(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    const errorMessage = getErrorMessage(error);
-    return res.status(500).json(createErrorResponse('Failed to save feedback', errorMessage));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to save feedback' }));
   }
 }
 
@@ -88,8 +87,7 @@ async function handleGet(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    const errorMessage = getErrorMessage(error);
-    return res.status(500).json(createErrorResponse('Failed to fetch feedback', errorMessage));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to fetch feedback' }));
   }
 }
 

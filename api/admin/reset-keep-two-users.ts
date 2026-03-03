@@ -1,7 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { parseSessionCookie } from '../utils/auth';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
+import { adminRateLimit } from '../utils/rateLimit';
 
 /** Names to keep (case-insensitive match). All other users are deleted. */
 const KEEP_USER_NAMES = ['Nick Fine', 'Greta Baisch'];
@@ -16,6 +17,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json(createErrorResponse('Method not allowed'));
   }
+
+  if (await adminRateLimit(req, res)) return;
 
   try {
     const user = parseSessionCookie(req);
@@ -84,8 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client.release();
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
     console.error('Reset keep-two-users failed:', error);
-    return res.status(500).json(createErrorResponse('Reset failed', message));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Reset failed' }));
   }
 }

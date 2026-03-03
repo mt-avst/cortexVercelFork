@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 
 /**
  * GET /api/calendar/events
@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json([]);
   } catch (error: unknown) {
     console.error('Error in calendar events handler:', error);
-    return res.status(500).json(createErrorResponse('Internal server error'));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Internal server error' }));
   }
 }
 

@@ -511,6 +511,7 @@ export interface DashboardStats {
   past_bookings: number;
   total_participants: number;
   total_sessions: number;
+  sessions_completed: number;
   total_slots: number;
   booked_slots: number;
   available_slots: number;
@@ -671,12 +672,17 @@ export const deleteFeedback = async (id: string): Promise<{ success: boolean }> 
 };
 
 /**
- * Export feedback as CSV (superadmin only)
- * Returns the download URL
+ * Export feedback as CSV (admin only)
  */
 export const exportFeedbackCsv = async (): Promise<void> => {
-  // Trigger a download by opening the export URL
   redirectTo(`${getApiBaseUrl()}/api/feedback/export`);
+};
+
+/**
+ * Export bookings as CSV (admin only). researcher_admin sees only their opportunities.
+ */
+export const exportBookingsCsv = async (): Promise<void> => {
+  redirectTo(`${getApiBaseUrl()}/api/admin/export/bookings`);
 };
 
 export default api;

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from '../utils/errors';
 import { logger } from '../utils/logger';
 
 /**
@@ -217,9 +217,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         errorMessage: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
-      const errorMessage = getErrorMessage(error);
       return res.status(500).json(
-        createErrorResponse('Internal server error', errorMessage)
+        createSafeErrorResponse(error, { userMessage: 'Internal server error' })
       );
     }
   }
@@ -274,7 +273,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
         // For Demo User 1, continue even if query fails
         if (!isDemoUser1) {
-          return res.status(500).json(createErrorResponse('Database error', getErrorMessage(dbError)));
+          return res.status(500).json(createSafeErrorResponse(dbError, { userMessage: 'Database error' }));
         }
         tokenResult = { rows: [] };
       }
@@ -443,9 +442,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         errorMessage: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
-      const errorMessage = getErrorMessage(error);
       return res.status(500).json(
-        createErrorResponse('Failed to fetch calendar events', errorMessage)
+        createSafeErrorResponse(error, { userMessage: 'Failed to fetch calendar events' })
       );
     }
   }

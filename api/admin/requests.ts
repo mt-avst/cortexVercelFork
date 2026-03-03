@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { parseSessionCookie } from '../utils/auth';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -48,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: unknown) {
     console.error('Error fetching admin requests:', error);
-    return res.status(500).json(createErrorResponse('Failed to fetch admin requests', getErrorMessage(error)));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to fetch admin requests' }));
   }
 }
 

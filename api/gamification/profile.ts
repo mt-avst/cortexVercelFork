@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { requireAuth } from '../utils/auth';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from '../utils/errors';
 import { parseIntSafe, serializeDate, serializeRow } from '../utils/helpers';
 import { logger } from '../utils/logger';
 
@@ -186,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     return res.status(500).json(
-      createErrorResponse(userFriendlyMessage, errorMessage)
+      createSafeErrorResponse(error, { userMessage: userFriendlyMessage })
     );
   }
 }

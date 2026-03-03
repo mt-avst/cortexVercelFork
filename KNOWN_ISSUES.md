@@ -270,7 +270,7 @@ When reporting issues, please include:
 - [x] Calendar event cancellation docs and UI note
 - [x] Mobile viewport E2E (Mobile Chrome/Safari in Playwright)
 - [x] Edge and accessibility coverage
-- [ ] Improved error messages
+- [x] Improved error messages (500 responses use safe user-facing messages in production; see api/utils/errors.ts createSafeErrorResponse)
 
 ### Medium Term
 - [ ] Full WCAG 2.2 AA compliance

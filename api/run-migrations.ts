@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Pool } from 'pg';
+import { createSafeErrorResponse } from './utils/errors';
 
 /**
  * GET /api/run-migrations
@@ -304,10 +305,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const err = error as Error;
     console.error('❌ Migration failed:', err);
     log('❌ Migration failed: ' + err.message);
-    
+    const safe = createSafeErrorResponse(error, { userMessage: 'Migration failed' });
     return res.status(500).json({
       success: false,
-      error: err.message,
+      error: safe.error,
       logs
     });
   } finally {

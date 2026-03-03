@@ -1,8 +1,15 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireSuperadmin } from '../middleware/authenticate';
+import { requireAuth, requireAdmin, requireSuperadmin } from '../middleware/authenticate';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
+
+function escapeCsvField(field: string | null | undefined): string {
+  if (field === null || field === undefined) return '';
+  const str = String(field);
+  if (str.includes(',') || str.includes('\n') || str.includes('"')) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
 
 const router: Router = Router();
 
@@ -27,6 +34,7 @@ interface DashboardStats {
   past_bookings: number;
   total_participants: number;
   total_sessions: number;
+  sessions_completed: number;
   total_slots: number;
   booked_slots: number;
   available_slots: number;
@@ -83,12 +91,13 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
   const sessionStats = await pool.query(`
     SELECT 
       COUNT(DISTINCT s.id) as total_sessions,
+      COUNT(DISTINCT s.id) FILTER (WHERE s.start_time <= $2) as sessions_completed,
       SUM(s.capacity) as total_slots,
       SUM(s.booked_count) as booked_slots
     FROM sessions s
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-  `, [filterOwnerId]);
+  `, [filterOwnerId, now]);
 
   // M7: Recent bookings list (with session times) — bookings table uses created_at, not booked_at
   const recentBookingsResult = await pool.query(`
@@ -133,6 +142,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     past_bookings: parseInt(String(bookingRow.past || '0')) || 0,
     total_participants: parseInt(String(participantRow.total || '0')) || 0,
     total_sessions: parseInt(String(sessionRow.total_sessions || '0')) || 0,
+    sessions_completed: parseInt(String(sessionRow.sessions_completed || '0')) || 0,
     total_slots: totalSlots,
     booked_slots: bookedSlots,
     available_slots: totalSlots - bookedSlots,
@@ -143,6 +153,51 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     success: true,
     data: stats
   });
+}));
+
+// GET /api/admin/export/bookings - Export bookings as CSV (admin only; researcher_admin sees own only)
+router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const user = req.user!;
+  const filterOwnerId = user.role === 'superadmin' ? null : user.id;
+
+  const result = await pool.query(
+    `SELECT
+      o.title AS opportunity_title,
+      o.type AS opportunity_type,
+      s.start_time AS session_start,
+      s.end_time AS session_end,
+      u.name AS participant_name,
+      u.email AS participant_email,
+      b.status AS booking_status,
+      b.created_at AS booked_at
+     FROM bookings b
+     JOIN sessions s ON b.session_id = s.id
+     JOIN opportunities o ON s.opportunity_id = o.id
+     JOIN users u ON b.user_id = u.id
+     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
+     ORDER BY s.start_time DESC, b.created_at DESC`,
+    [filterOwnerId]
+  );
+
+  const headers = [
+    'Opportunity', 'Type', 'Session start', 'Session end',
+    'Participant name', 'Participant email', 'Status', 'Booked at',
+  ];
+  const rows = (result.rows || []).map((row: Record<string, unknown>) => [
+    escapeCsvField(String(row.opportunity_title ?? '')),
+    escapeCsvField(String(row.opportunity_type ?? '')),
+    row.session_start ? new Date(row.session_start as Date).toISOString() : '',
+    row.session_end ? new Date(row.session_end as Date).toISOString() : '',
+    escapeCsvField(String(row.participant_name ?? '')),
+    escapeCsvField(String(row.participant_email ?? '')),
+    escapeCsvField(String(row.booking_status ?? '')),
+    row.booked_at ? new Date(row.booked_at as Date).toISOString() : '',
+  ]);
+
+  const csvContent = [headers.join(','), ...rows.map((r: string[]) => r.join(','))].join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="bookings-export-${new Date().toISOString().split('T')[0]}.csv"`);
+  res.send(csvContent);
 }));
 
 // ============================================================================

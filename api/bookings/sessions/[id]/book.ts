@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../../db';
 import { requireAuth } from '../../../utils/auth';
-import { createErrorResponse, getErrorMessage } from '../../../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../../../utils/errors';
 import emailService, { EmailService } from '../../../services/email';
 import { logger } from '../../../utils/logger';
 
@@ -206,9 +206,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ));
     }
 
-    const errorMessage = getErrorMessage(error);
     return res.status(500).json(
-      createErrorResponse('Failed to book session', errorMessage)
+      createSafeErrorResponse(error, { userMessage: 'Failed to book session' })
     );
   }
 }

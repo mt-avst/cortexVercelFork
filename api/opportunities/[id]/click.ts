@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
-import { createErrorResponse, getErrorMessage } from '../../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../../utils/errors';
 import { parseSessionCookie } from '../../utils/auth';
 import { logger } from '../../utils/logger';
 import * as crypto from 'crypto';
@@ -103,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stack: error instanceof Error ? error.stack : undefined,
       opportunityId: req.query.id,
     });
-    return res.status(500).json(createErrorResponse(getErrorMessage(error)));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Failed to record click' }));
   }
 }
 

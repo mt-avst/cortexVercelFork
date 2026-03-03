@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
 import { parseSessionCookie } from '../utils/auth';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 
 /**
  * POST /api/admin/reset-production-db
@@ -213,13 +213,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (error: any) {
       await client.query('ROLLBACK');
       console.error('❌ Error resetting database:', error);
-      return res.status(500).json(createErrorResponse(`Database reset failed: ${error.message}`));
+      return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Database reset failed' }));
     } finally {
       client.release();
     }
   } catch (error: any) {
     console.error('❌ Error:', error);
-    return res.status(500).json(createErrorResponse(error.message || 'Internal server error'));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Internal server error' }));
   }
 }
 

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createErrorResponse } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
 import { setSessionCookie } from '../utils/auth';
@@ -44,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    return res.status(500).json(createErrorResponse('Internal server error'));
+    return res.status(500).json(createSafeErrorResponse(error, { userMessage: 'Internal server error' }));
   }
 }
 

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
+import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 
 /**
  * POST /api/admin/seed-demo-user-2
@@ -43,9 +43,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (error: unknown) {
     console.error('Error seeding Demo User 2:', error);
-    const errorMessage = getErrorMessage(error);
     return res.status(500).json(
-      createErrorResponse('Failed to seed Demo User 2', errorMessage)
+      createSafeErrorResponse(error, { userMessage: 'Failed to seed Demo User 2' })
     );
   }
 }

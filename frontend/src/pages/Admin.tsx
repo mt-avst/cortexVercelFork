@@ -3,14 +3,14 @@ import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats } from '../api/client';
+import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv } from '../api/client';
 import { Opportunity } from '../api/types';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
 import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, List, History, MessageSquare, Calendar } from 'lucide-react';
+import { Settings, ClipboardList, CalendarCheck, Users, Clock, CheckCircle, List, History, MessageSquare, Calendar, Download } from 'lucide-react';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -331,17 +331,44 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                <div className="col-6 col-sm-3">
+                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
+                    <div className="card-body stat-card-body">
+                      <div className="stat-card-header">
+                        <span className="text-uppercase stat-label">Sessions completed</span>
+                        <div className="stat-icon-wrapper">
+                          <CheckCircle size={20} className="stat-icon" />
+                        </div>
+                      </div>
+                      <h2 className="mb-0 stat-value">{dashboardStats.sessions_completed}</h2>
+                      <small className="stat-subtitle">
+                        already run
+                      </small>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
             {/* M7: Recent bookings list (with session times) */}
-            {dashboardStats && dashboardStats.recent_bookings && dashboardStats.recent_bookings.length > 0 && (
+            {dashboardStats && (
               <div className="row mb-3">
                 <div className="col-12">
                   <div className="card border-0 shadow-sm">
-                    <div className="card-header bg-transparent border-bottom d-flex align-items-center">
-                      <Calendar size={18} className="me-2" aria-hidden />
-                      <h2 className="h6 mb-0">Recent bookings</h2>
+                    <div className="card-header bg-transparent border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
+                      <div className="d-flex align-items-center">
+                        <Calendar size={18} className="me-2" aria-hidden />
+                        <h2 className="h6 mb-0">Recent bookings</h2>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-outline-secondary btn-sm"
+                        onClick={() => exportBookingsCsv()}
+                        aria-label="Export all bookings as CSV"
+                      >
+                        <Download size={16} className="me-1" />
+                        Export CSV
+                      </button>
                     </div>
                     <div className="card-body p-0">
                       <div className="table-responsive">
@@ -355,7 +382,11 @@ const Admin: React.FC = () => {
                             </tr>
                           </thead>
                           <tbody>
-                            {dashboardStats.recent_bookings.map((b) => (
+                            {(dashboardStats.recent_bookings || []).length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="text-muted text-center py-3">No recent bookings</td>
+                              </tr>
+                            ) : (dashboardStats.recent_bookings || []).map((b) => (
                               <tr key={b.id}>
                                 <td>
                                   <button
