@@ -17,7 +17,7 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 - **Analytics API** (admin/owner only):
   - `GET /api/opportunities/[id]/analytics?period=7|14|30` — Returns views/actions counts and time-series for the given period (default 30 days).
   - `POST /api/opportunities/[id]/click` — Body: `{ "click_type": "view" | "action" }`. Optional auth; used by frontend when user views or clicks the action button.
-- **E2E**: `e2e/m6-poll-click-tracking.test.ts` — full flow and optional analytics check. See **README_M6.md** for env, error handling, and verification steps.
+- **E2E**: `e2e/m6-poll-click-tracking.test.ts` — full flow and optional analytics check. See **TESTING_GUIDE.md** and `archive/summaries-and-fixes/README_M6.md` for env, error handling, and verification steps.
 
 ## Project Structure
 
@@ -271,24 +271,23 @@ Ensure these are set in production:
 
 ### For Users
 - **[User Guide](USER_GUIDE.md)** - Complete guide for end users
-- **[Alpha Tester Quick Start](ALPHA_TESTER_QUICK_START.md)** - Quick start guide for alpha testers
+- **[Alpha Tester Quick Start](archive/deployment-and-status/ALPHA_TESTER_QUICK_START.md)** - Quick start for alpha testers
 
 ### For Admins
 - **[Admin Guide](ADMIN_GUIDE.md)** - Complete guide for researcher admins
 
 ### For Developers
-- **[Plan](plan.md)** - Original project plan and requirements
-- **[Core](core.md)** - Core architecture and data model
+- **[Plan](plan.md)** - Project plan, scope, and data model
 
-### Testing & Status
-- **[Alpha Testing Readiness](ALPHA_TESTING_READINESS.md)** - Comprehensive alpha readiness checklist
-- **[End-to-End Testing Checklist](END_TO_END_TESTING_CHECKLIST.md)** - Testing scenarios and checklist
-- **[Known Issues](KNOWN_ISSUES.md)** - Known issues, limitations, and workarounds
-- **[Plan Status Report](PLAN_STATUS_REPORT.md)** - Current milestone completion status
+### Testing & status
+- **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - How to run tests (E2E, smoke, accessibility)
+- **[Known Issues](KNOWN_ISSUES.md)** - Known limitations and workarounds
+- **archive/test-results/** - E2E checklists and test run results
+- **archive/deployment-and-status/** - Alpha readiness, deployment status
 
 ## Current Status
 
-**Version**: 7.3.1  
+**Version**: 7.3.8  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
 **Deployment**: https://adapta-labs-p62q.vercel.app
 

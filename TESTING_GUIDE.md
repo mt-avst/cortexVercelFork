@@ -25,7 +25,7 @@ PRODUCTION_URL=https://adapta-labs-p62q.vercel.app ./run-alpha-tests.sh
 
 ### Option 2: Manual Testing (Most Comprehensive)
 
-Follow the **`END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
+Follow the **`archive/test-results/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 
 ---
 

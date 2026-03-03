@@ -6,10 +6,10 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ## Project overview
 
-- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.2.6
+- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.3.8
 - **Purpose**: Internal recruitment app — researchers post opportunities (studies/sessions), employees browse and book sessions. Includes polls/surveys, dashboard, feedback, notifications.
 - **Production**: https://adapta-labs-p62q.vercel.app  
-- **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E doc: `E2E_PLAYWRIGHT_RUN_2026-02-02.md`.
+- **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E results in `archive/test-results/`.
 
 ---
 
@@ -50,7 +50,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 ## Deployment (Vercel)
 
 1. **Root Directory**: Project Settings → General → Root Directory = empty (repo root). If set to `frontend`, only the SPA deploys and `/api/*` returns HTML.
-2. **Env vars (required)**: `DATABASE_URL` (or `POSTGRES_URL`), `SESSION_SECRET`, `CORS_ORIGIN`, `FRONTEND_URL`. See `VERCEL_ENV_VARS_NEEDED.md`.
+2. **Env vars (required)**: `DATABASE_URL` (or `POSTGRES_URL`), `SESSION_SECRET`, `CORS_ORIGIN`, `FRONTEND_URL`. See `archive/deployment-and-status/VERCEL_ENV_VARS_NEEDED.md`.
 3. **Optional**: Google OAuth (`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI`), email vars.
 4. **After deploy**: Run migrations once: `GET https://<your-domain>/api/run-migrations`. Seed demo data if needed (admin/script).
 5. **Deploy command**: From repo root, `vercel --prod`. Install command in vercel.json runs `npm install` at root plus in `api`, `frontend`, `backend`.
@@ -62,7 +62,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Smoke**: `npm run test:smoke` (Playwright against production; config: `playwright.prod.config.ts`). Expect some tests skipped when no demo data (e.g. opportunity detail, demo login).
 - **Browsers**: E2E runs on Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari, and Microsoft Edge. To run Edge tests, install Microsoft Edge or run `npx playwright install msedge`.
 - **Accessibility**: Axe tests in `e2e/accessibility.test.ts` cover Home, Opportunity detail, Admin, Create opportunity, My Bookings, Feedback, Settings. Run with dev server up: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`.
-- **E2E checklist**: `END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `E2E_PLAYWRIGHT_RUN_2026-02-02.md`.
+- **E2E checklist**: `archive/test-results/END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `archive/test-results/`.
 - **M6 E2E**: `e2e/m6-poll-click-tracking.test.ts` — publish poll → click "Open Poll" → verify click tracked and analytics shows action. Run with ports 3000/3001 free.
 - **API health**: `GET /api/health` returns `{"ok":true}` when API is deployed.
 - **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
@@ -76,17 +76,14 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 | Doc | Purpose |
 |-----|---------|
 | `README.md` | Setup, Docker, local dev |
-| `VERCEL_ENV_VARS_NEEDED.md` | Env vars, root dir, migrations |
-| `DEPLOYMENT_STATUS_FINAL.md` | Deployment status |
-| `END_TO_END_TESTING_CHECKLIST.md` | E2E flow checklist |
-| `E2E_PLAYWRIGHT_RUN_2026-02-02.md` | Latest E2E results, issues fixed |
+| `TESTING_GUIDE.md` | How to run tests, E2E/smoke/accessibility |
 | `KNOWN_ISSUES.md` | Known limitations, workarounds |
 | `USER_GUIDE.md` / `ADMIN_GUIDE.md` | User and admin docs |
-| `DATABASE_SETUP.md`, `VERCEL_POSTGRES_SETUP.md` | DB setup |
-| `GOOGLE_OAUTH_PRODUCTION_SETUP.md` | Google OAuth in prod |
-| `CONTINUATION_PROMPT.md` | Copy-paste prompt for new sessions (MCPs, follow-ups) |
-| `README_M6.md` | M6 polls/surveys: click tracking, analytics, E2E, env, error handling |
-| `NEXT_MILESTONES.md` | Roadmap: M7 enhancements, production hardening, features (pick a track) |
+| `DATABASE_SETUP.md` | DB setup |
+| `plan.md` | Product scope, data model, booking rules |
+| `archive/deployment-and-status/` | Vercel env vars, deployment status, alpha readiness |
+| `archive/test-results/` | E2E checklists, test run results |
+| `archive/summaries-and-fixes/` | Runbooks (e.g. SET_SUPERADMIN), M6 README, continuation prompts |
 
 ---
 
@@ -123,7 +120,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 ## Links
 
 - Production: https://adapta-labs-p62q.vercel.app  
-- Vercel project: (see VERCEL_ENV_VARS_NEEDED.md for dashboard link)
+- Vercel project: (see `archive/deployment-and-status/VERCEL_ENV_VARS_NEEDED.md` for dashboard link)
 
 ---
 
