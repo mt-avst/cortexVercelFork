@@ -5571,16 +5571,32 @@ body.theme-light .study-summary-line {
   flex-direction: column;
   flex: 1;
   height: 100%;
+  align-items: flex-start; /* Ensure content aligns to start */
+  justify-content: flex-start; /* Ensure content aligns to top */
 }
 
-/* Description area grows to push footer to bottom - ensures aligned rows in grid */
+/* Description area - don't grow, let footer push down instead */
+/* This prevents the description from expanding and creating empty space */
 .opportunity-card-body > .card-text:last-of-type:not(.small) {
-  flex-grow: 1;
+  /* Remove flex-grow - footer will push itself down with margin-top: auto */
+  flex-grow: 0;
+  display: block;
 }
 
-/* When optional description exists, it should grow instead */
+/* When optional description exists */
 .opportunity-card-body > .card-text.small {
-  flex-grow: 1;
+  /* Remove flex-grow - footer will push itself down with margin-top: auto */
+  flex-grow: 0;
+  display: block;
+}
+
+/* Ensure content inside description stays at top and left-aligned */
+.opportunity-card-body > .card-text.small > p,
+.opportunity-card-body > .card-text.small > div,
+.opportunity-card-body > .card-text:last-of-type:not(.small) > p {
+  margin-top: 0;
+  margin-bottom: 0;
+  text-align: left;
 }
 
 /* Study Card Typography - Cortex Design System */
@@ -5732,6 +5748,8 @@ body.theme-light .card.card-clickable:hover {
   flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: flex-start; /* Ensure content aligns to start, not center */
+  justify-content: flex-start; /* Ensure content aligns to top */
 }
 
 /* Spotlight Card Hover State */

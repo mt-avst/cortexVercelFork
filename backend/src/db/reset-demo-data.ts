@@ -2,14 +2,15 @@ import { pool } from '../config';
 
 /**
  * Clean database and add demo opportunities for all study types
- * - 1 test opportunity (App Testing - requires sessions)
+ * All opportunities are themed around Atlassian Ecosystem and Forge development
+ * - 1 test opportunity (Forge App Testing - requires sessions)
  * - 1 interview opportunity (requires sessions)
  * - 1 survey opportunity (external link)
  * - 1 poll opportunity (external link)
  * - 1 question opportunity (external link)
  * - 1 unmoderated opportunity (external link)
  * 
- * All opportunities have sessions scheduled dynamically from today
+ * All opportunities have sessions scheduled dynamically starting from today for 1 month
  */
 export async function resetDemoData() {
   const client = await pool.connect();
@@ -42,11 +43,10 @@ export async function resetDemoData() {
     const adminUserId = adminResult.rows[0].id;
     console.log(`✅ Using admin user ID: ${adminUserId}`);
     
-    // Calculate dates for sessions - start from tomorrow and go through December
+    // Calculate dates for sessions - start from today and run for 1 month
     const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    tomorrow.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    const startDate = new Date(today);
     
     // Helper to create sessions for an opportunity across multiple weeks
     const createSessions = async (
@@ -56,45 +56,48 @@ export async function resetDemoData() {
       numWeeks: number = 4
     ) => {
       const sessions = [];
+      const now = new Date();
+      const weekdaySet = new Set(weekdayPattern);
+      const daysToCheck = numWeeks * 7; // 4 weeks = 28 days
       
-      // Find the next occurrence of the first day in pattern
-      const startDate = new Date(tomorrow);
-      
-      for (let week = 0; week < numWeeks; week++) {
-        for (const dayOffset of weekdayPattern) {
-          const sessionDate = new Date(startDate);
-          // Add weeks and calculate the specific weekday
-          sessionDate.setDate(startDate.getDate() + (week * 7) + dayOffset);
+      // Iterate through the next 28 days starting from today
+      for (let dayOffset = 0; dayOffset < daysToCheck; dayOffset++) {
+        const sessionDate = new Date(startDate);
+        sessionDate.setDate(startDate.getDate() + dayOffset);
+        
+        // Get weekday: 0=Sun, 1=Mon, ..., 6=Sat
+        const dayOfWeek = sessionDate.getDay();
+        // Convert to Mon=0, Tue=1, ..., Sun=6
+        const weekday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+        
+        // Skip if this day doesn't match the pattern
+        if (!weekdaySet.has(weekday)) continue;
+        
+        // Create 3 sessions per day: 10am, 2pm, 3pm
+        const times = [10, 14, 15];
+        for (const hour of times) {
+          const startTime = new Date(sessionDate);
+          startTime.setHours(hour, 0, 0, 0);
           
-          // Skip if the date is in the past
-          if (sessionDate < today) continue;
+          // Skip if this specific time is in the past
+          if (startTime < now) continue;
           
-          // Create 3 sessions per day: 10am, 2pm, 3pm
-          const times = [10, 14, 15];
-          for (const hour of times) {
-            const startTime = new Date(sessionDate);
-            startTime.setHours(hour, 0, 0, 0);
-            
-            // Skip if this specific time is in the past
-            if (startTime < today) continue;
-            
-            const endTime = new Date(startTime);
-            endTime.setMinutes(endTime.getMinutes() + defaultDuration);
-            
-            const result = await client.query(
-              `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional)
-               VALUES ($1, $2, $3, $4, $5)
-               RETURNING id`,
-              [
-                opportunityId,
-                startTime.toISOString(),
-                endTime.toISOString(),
-                5, // Capacity of 5
-                `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
-              ]
-            );
-            sessions.push(result.rows[0].id);
-          }
+          const endTime = new Date(startTime);
+          endTime.setMinutes(endTime.getMinutes() + defaultDuration);
+          
+          const result = await client.query(
+            `INSERT INTO sessions (opportunity_id, start_time, end_time, capacity, location_or_meet_link_optional)
+             VALUES ($1, $2, $3, $4, $5)
+             RETURNING id`,
+            [
+              opportunityId,
+              startTime.toISOString(),
+              endTime.toISOString(),
+              5, // Capacity of 5
+              `https://meet.google.com/${Math.random().toString(36).substring(2, 11)}`
+            ]
+          );
+          sessions.push(result.rows[0].id);
         }
       }
       console.log(`   📅 Created ${sessions.length} sessions`);
@@ -104,7 +107,7 @@ export async function resetDemoData() {
     console.log('📝 Creating demo opportunities for all study types...\n');
     
     // ==========================================
-    // 1. TEST (App Testing) - Requires sessions
+    // 1. TEST (Forge App Testing) - Requires sessions
     // ==========================================
     const testResult = await client.query(
       `INSERT INTO opportunities (
@@ -114,10 +117,10 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'test',
-        'Mobile App Usability Testing',
-        'Help us improve our mobile banking app through hands-on testing',
-        'We are looking for users to test our new mobile app interface. This will involve completing various tasks while we observe your interactions and gather feedback on the design and usability. Your feedback directly shapes our product roadmap.',
-        'Mobile Banking App v3.0',
+        'Forge UI Kit Component Testing',
+        'Help us improve the Forge UI Kit by testing new React components',
+        'We\'re building new components for the Forge UI Kit and need developers to test them in real-world scenarios. You\'ll be testing React components like Button, TextField, and Dialog in a Forge app context. Your feedback on component APIs, accessibility, and developer experience directly influences the next Forge release.',
+        'Forge UI Kit v3.0',
         45,
         'published',
         adminUserId,
@@ -126,7 +129,7 @@ export async function resetDemoData() {
     );
     const testId = testResult.rows[0].id;
     await createSessions(testId, 45, [0, 1, 2, 3, 4], 4); // Mon-Fri for 4 weeks
-    console.log('✅ Created TEST opportunity: Mobile App Usability Testing\n');
+    console.log('✅ Created TEST opportunity: Forge UI Kit Component Testing\n');
     
     // ==========================================
     // 2. INTERVIEW - Requires sessions
@@ -140,10 +143,10 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'interview',
-        'Customer Journey Research Interview',
-        'Share your experiences and help us understand customer needs',
-        'Join us for a 1-on-1 interview where we\'ll discuss your experience with our products and services. We want to understand your workflow, pain points, and what features would make your life easier. All feedback is confidential and used to improve our offerings.',
-        'Enterprise Platform',
+        'Forge Developer Experience Interview',
+        'Share your experience building apps with Forge and help shape the platform',
+        'We want to understand your journey as a Forge developer. Join us for a 1-on-1 interview where we\'ll discuss your experience building apps, using the Forge CLI, working with the UI Kit, and deploying to Atlassian Cloud. We\'re particularly interested in learning about pain points, workflow challenges, and what would make Forge development more enjoyable. Your insights directly influence our roadmap.',
+        'Forge Platform',
         60,
         'published',
         adminUserId,
@@ -153,7 +156,7 @@ export async function resetDemoData() {
     );
     const interviewId = interviewResult.rows[0].id;
     await createSessions(interviewId, 60, [1, 3], 4); // Tue, Thu for 4 weeks
-    console.log('✅ Created INTERVIEW opportunity: Customer Journey Research Interview\n');
+    console.log('✅ Created INTERVIEW opportunity: Forge Developer Experience Interview\n');
     
     // ==========================================
     // 3. SURVEY - External link
@@ -166,21 +169,21 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'survey',
-        'Annual Product Satisfaction Survey',
-        'Share your feedback on our products and services',
-        'Help us understand how well our products meet your needs. This comprehensive survey covers feature satisfaction, support quality, and future priorities. Your responses are anonymous and directly influence our 2025 roadmap.',
-        'All Products',
+        'Atlassian Design System Usage Survey',
+        'Tell us how you use the Atlassian Design System in your apps',
+        'Help us understand how developers and designers are using the Atlassian Design System (ADS) in their Forge apps, Jira customizations, and Confluence macros. This survey covers component usage patterns, design token adoption, documentation quality, and what\'s missing. Your anonymous responses help us prioritize improvements to ADS.',
+        'Atlassian Design System',
         15,
         'published',
         adminUserId,
-        'https://forms.google.com/product-satisfaction-2024',
+        'https://forms.google.com/atlassian-design-system-survey',
         'any'
       ]
     );
-    console.log('✅ Created SURVEY opportunity: Annual Product Satisfaction Survey\n');
+    console.log('✅ Created SURVEY opportunity: Atlassian Design System Usage Survey\n');
     
     // ==========================================
-    // 4. POLL - External link
+    // 4. POLL - External link with simple questions
     // ==========================================
     const pollResult = await client.query(
       `INSERT INTO opportunities (
@@ -190,17 +193,31 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'poll',
-        'Feature Priority Poll',
-        'Vote on which features we should build next',
-        'We have several exciting features in our backlog and want YOUR input on what to prioritize. This quick poll takes less than 5 minutes and helps us focus on what matters most to you.',
+        'Forge Platform Feature Priority Poll',
+        'Quick vote: Which Forge feature should we prioritize?',
+        `**Quick Poll - Takes 30 seconds!**
+
+Which Forge platform feature should we prioritize next?
+
+New UI Kit components (Button, TextField, Dialog)
+
+Enhanced backend capabilities (more storage, better APIs)
+
+Improved deployment workflows (faster builds, better errors)
+
+Better documentation and examples
+
+Confluence macro improvements
+
+Your vote directly influences our roadmap. Click below to submit your choice!`,
         5,
         'published',
         adminUserId,
-        'https://forms.google.com/feature-priority-poll',
+        'https://forms.google.com/forge-feature-priority-poll',
         'internal'
       ]
     );
-    console.log('✅ Created POLL opportunity: Feature Priority Poll\n');
+    console.log('✅ Created POLL opportunity: Forge Platform Feature Priority Poll\n');
     
     // ==========================================
     // 5. QUESTION - External link
@@ -213,17 +230,17 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'question',
-        'Quick Feedback: Dashboard Redesign',
-        'What do you think of our new dashboard design?',
-        'We recently redesigned our main dashboard and would love to hear your thoughts. What works well? What could be improved? Your candid feedback helps us iterate quickly.',
+        'Quick Feedback: Forge CLI Experience',
+        'What do you think of the new Forge CLI features?',
+        'We recently updated the Forge CLI with new commands, better error messages, and improved local development workflows. What works well? What could be improved? Your candid feedback helps us iterate quickly on the developer experience.',
         5,
         'published',
         adminUserId,
-        'https://forms.google.com/dashboard-feedback',
+        'https://forms.google.com/forge-cli-feedback',
         'any'
       ]
     );
-    console.log('✅ Created QUESTION opportunity: Quick Feedback: Dashboard Redesign\n');
+    console.log('✅ Created QUESTION opportunity: Quick Feedback: Forge CLI Experience\n');
     
     // ==========================================
     // 6. UNMODERATED - External link
@@ -236,32 +253,32 @@ export async function resetDemoData() {
       RETURNING id`,
       [
         'unmoderated',
-        'Self-Guided Checkout Flow Test',
-        'Complete a series of tasks on our new checkout experience',
-        'Test our redesigned checkout flow at your own pace. You\'ll be given specific tasks to complete while your screen is recorded. This unmoderated test typically takes 15-20 minutes and can be done anytime that works for you.',
-        'E-commerce Platform',
-        20,
+        'Self-Guided Confluence Macro Development Test',
+        'Complete a series of tasks building a Confluence macro with Forge',
+        'Test our new Confluence macro development workflow at your own pace. You\'ll be given specific tasks to build a macro using Forge, configure it, and deploy it to a test Confluence space. Your screen will be recorded while you work. This unmoderated test typically takes 20-30 minutes and can be done anytime that works for you.',
+        'Forge Confluence Macros',
+        25,
         'published',
         adminUserId,
-        'https://usertesting.com/checkout-flow-test',
+        'https://usertesting.com/forge-confluence-macro-test',
         'external'
       ]
     );
-    console.log('✅ Created UNMODERATED opportunity: Self-Guided Checkout Flow Test\n');
+    console.log('✅ Created UNMODERATED opportunity: Self-Guided Confluence Macro Development Test\n');
     
     console.log('═══════════════════════════════════════════════════════');
     console.log('✅ Database reset completed successfully!');
     console.log('═══════════════════════════════════════════════════════');
-    console.log('\n📊 Created 6 demo opportunities (one of each type):');
-    console.log('   🔬 TEST: Mobile App Usability Testing');
-    console.log('   🎤 INTERVIEW: Customer Journey Research Interview');
-    console.log('   📋 SURVEY: Annual Product Satisfaction Survey');
-    console.log('   📊 POLL: Feature Priority Poll');
-    console.log('   ❓ QUESTION: Quick Feedback: Dashboard Redesign');
-    console.log('   🖥️  UNMODERATED: Self-Guided Checkout Flow Test');
-    console.log('\n📅 Sessions scheduled for the next 4 weeks (starting from today)');
-    console.log('   - TEST: Mon-Fri, 3 sessions/day');
-    console.log('   - INTERVIEW: Tue & Thu, 3 sessions/day');
+    console.log('\n📊 Created 6 demo opportunities (Atlassian/Forge themed):');
+    console.log('   🔬 TEST: Forge UI Kit Component Testing');
+    console.log('   🎤 INTERVIEW: Forge Developer Experience Interview');
+    console.log('   📋 SURVEY: Atlassian Design System Usage Survey');
+    console.log('   📊 POLL: Forge Platform Feature Priority Poll');
+    console.log('   ❓ QUESTION: Quick Feedback: Forge CLI Experience');
+    console.log('   🖥️  UNMODERATED: Self-Guided Confluence Macro Development Test');
+    console.log('\n📅 Sessions scheduled for 1 month (starting from today)');
+    console.log('   - TEST: Mon-Fri, 3 sessions/day (10am, 2pm, 3pm)');
+    console.log('   - INTERVIEW: Tue & Thu, 3 sessions/day (10am, 2pm, 3pm)');
     console.log('   - Other types: External links (no sessions needed)');
     
   } catch (error) {

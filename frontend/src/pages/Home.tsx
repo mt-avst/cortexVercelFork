@@ -13,6 +13,96 @@ import { SpotlightCard } from '../components/SpotlightGrid';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
 
+// Helper function to render poll description with checkbox indicators
+const renderPollDescription = (description: string) => {
+  if (!description) return null;
+  
+  const lines = description.split('\n');
+  const result: React.ReactNode[] = [];
+  
+  // Patterns that indicate header/footer/question text, not options
+  const excludePatterns = [
+    '**',                    // Bold text (headers)
+    'Click below',           // Footer text
+    'Takes',                 // Time estimates
+    'should we prioritize',  // Question text
+    'Your vote',             // Footer text
+    'roadmap',               // Footer text
+    '?',                     // Question marks (questions)
+    'Which',                 // Question starters
+    'What',                  // Question starters
+    'How',                   // Question starters
+  ];
+  
+  // Find where the question ends (usually after first question mark or "next?")
+  let questionEndIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.includes('?') && (trimmed.includes('Which') || trimmed.includes('should'))) {
+      questionEndIndex = i;
+      break;
+    }
+  }
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmedLine = line.trim();
+    
+    // Skip empty lines but add spacing
+    if (!trimmedLine) {
+      result.push(<br key={`br-${i}`} />);
+      continue;
+    }
+    
+    // Check if this is excluded text (header, footer, or question)
+    const isExcluded = excludePatterns.some(pattern => 
+      trimmedLine.toLowerCase().includes(pattern.toLowerCase())
+    );
+    
+    // Check if this is before or at the question line
+    const isQuestion = i <= questionEndIndex;
+    
+    // This is a poll option if:
+    // 1. It's not excluded text
+    // 2. It comes after the question
+    // 3. It's reasonably long (more than just a few words)
+    // 4. It comes after an empty line (typical poll structure)
+    const isOption = !isExcluded && 
+                     !isQuestion &&
+                     trimmedLine.length > 15 &&
+                     (i > 0 && lines[i - 1]?.trim() === ''); // Must come after empty line
+    
+    if (isOption) {
+      // This is a poll option - render with checkbox
+      result.push(
+        <div key={`option-${i}`} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '6px' }}>
+          <div style={{
+            width: '16px',
+            height: '16px',
+            border: '2px solid currentColor',
+            borderRadius: '3px',
+            marginRight: '8px',
+            marginTop: '2px',
+            flexShrink: 0,
+            opacity: 0.6
+          }} />
+          <span style={{ fontSize: '0.875rem' }}>{trimmedLine}</span>
+        </div>
+      );
+    } else {
+      // Regular text line (header, question, footer)
+      result.push(
+        <span key={`text-${i}`} style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>{line}</span>
+      );
+      if (i < lines.length - 1) {
+        result.push(<br key={`br-after-${i}`} />);
+      }
+    }
+  }
+  
+  return <div>{result}</div>;
+};
+
 /**
  * Home Page Component
  * Displays the main landing page and opportunity listings.
@@ -364,7 +454,12 @@ const Home: React.FC = memo(() => {
                               <p className="card-text">{opportunity.purpose_one_liner}</p>
                               
                               {opportunity.description_optional && (
-                                <p className="card-text small">{opportunity.description_optional}</p>
+                                <div className="card-text small" style={{ alignSelf: 'stretch' }}>
+                                  {opportunity.type === 'poll' 
+                                    ? renderPollDescription(opportunity.description_optional)
+                                    : <p style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{opportunity.description_optional}</p>
+                                  }
+                                </div>
                               )}
                               
                               <div className="card-content-bottom">
