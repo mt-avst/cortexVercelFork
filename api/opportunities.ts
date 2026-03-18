@@ -95,8 +95,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const user = parseSessionCookie(req);
       const isAdmin = user?.role === 'researcher_admin' || user?.role === 'superadmin';
       
-      // Filter out drafts for non-admin users (unless they specifically requested draft status)
-      if (!isAdmin && (!status || status !== 'draft')) {
+      // Non-admins may only ever see published studies, regardless of any status query param
+      if (!isAdmin) {
         sql += ` AND o.status = 'published'`;
       }
       

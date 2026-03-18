@@ -477,10 +477,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         
         logger.debug('CREATE MODE - Opportunity created');
         
-        // For types that use external links (no sessions), show success message
-        // User will click "Return to Dashboard" button to navigate
+        // For types that use external links (no sessions), show success then auto-navigate
         if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
           setSuccessMessage('Opportunity created successfully!');
+          // Auto-navigate to admin dashboard after a brief delay so the user sees the success message
+          setTimeout(() => {
+            navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
+          }, 1500);
           return savedOpportunity.id;
         }
         

@@ -78,10 +78,12 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
       params.push(`%${q}%`);
     }
     
-    if (status) {
+    // Admins can filter by status; non-admins always get only published
+    if (isAdmin && status) {
       conditions.push(`o.status = $${params.length + 1}`);
       params.push(status);
     } else if (!isAdmin) {
+      // Non-admins may only ever see published studies, regardless of any status query param
       conditions.push(`o.status = 'published'`);
     }
     

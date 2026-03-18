@@ -42,13 +42,12 @@ test.describe('Superadmin Create Study Flow', () => {
 
     // 6. Submit form - click Create Opportunity button (on External Link tab for poll)
     await page.getByRole('button', { name: /Create Opportunity/i }).click();
-    await page.waitForTimeout(5000); // API call + success UI
 
-    // 7. Poll type shows "Return to Dashboard" after success - click to go back to admin list
-    await expect(page.getByRole('button', { name: /Return to Dashboard/i })).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: /Return to Dashboard/i }).click();
+    // 7. After submit, success message shows briefly then auto-navigates to /admin (1.5s delay)
+    await expect(page.getByText(/created successfully/i)).toBeVisible({ timeout: 10000 });
+    // Wait for auto-redirect to admin dashboard (happens after 1500ms)
     await page.waitForURL(/\/admin/, { timeout: 8000 });
-    await page.waitForTimeout(2000); // Allow list to refresh
+    await page.waitForTimeout(1000); // Allow list to refresh
 
     // 8. Verify our study appears in the list
     await expect(page).toHaveURL(/\/admin/);
