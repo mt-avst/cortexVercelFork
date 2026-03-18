@@ -47,3 +47,19 @@ filesystem:
       - path: /.npm
       - path: /tmp
       - path: /.local
+deployment:
+  livenessProbe:
+    httpGet:
+      path: '/health'
+      port: 3000
+      scheme: HTTP
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: '/health'
+      port: 3000
+      scheme: HTTP
+    initialDelaySeconds: 20
