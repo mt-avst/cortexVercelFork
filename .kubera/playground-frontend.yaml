@@ -29,3 +29,11 @@ resources:
     min: 1000m
     # -- Pod CPU limit
     max: 1000m
+filesystem:
+  writable:
+    enabled: true
+    directories:
+      - path: /var/cache/nginx
+      - path: /var/run
+      - path: /var/log/nginx
+      - path: /tmp

@@ -7,7 +7,6 @@ ingress:
 config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com
-    OIDC_CLIENT_ID: 0oau3homl1k9RYzlt4x7
     OIDC_REDIRECT_URL: https://adaptalabs.kubera-playground.adaptavist.net/auth/callback
 secret:
   enabled: true
@@ -41,3 +40,10 @@ database:
       autoMinorVersionUpgrade: false
       dbFamily: "postgres15"
       skipFinalSnapshot: false
+filesystem:
+  writable:
+    enabled: true
+    directories:
+      - path: /.npm
+      - path: /tmp
+      - path: /.local
