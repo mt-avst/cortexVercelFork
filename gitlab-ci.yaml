@@ -1,0 +1,56 @@
+include:
+  # Docker build component
+  - component: "$CI_SERVER_FQDN/to-be-continuous/docker/gitlab-ci-docker@6.1"
+
+  # semantic-release component
+  - component: "$CI_SERVER_FQDN/to-be-continuous/semantic-release/gitlab-ci-semrel@3.11"
+  
+  # Congigures the above components and retrieve the necessary credentials from Secrets Manager
+  - component: "$CI_SERVER_FQDN/to-be-continuous/kubera-init/gitlab-ci-kubera-init@1"
+
+  - component: "$CI_SERVER_FQDN/to-be-continuous/gitleaks/gitlab-ci-gitleaks@2.9"
+    
+  # Kubera component
+  - component: "$CI_SERVER_FQDN/to-be-continuous/kubera/gitlab-ci-kubera@1"
+    inputs:
+      # Optional. Defaults to the below example. Supported environments are playground and production.
+      environments: >-
+        [
+          {"name":"playground","deploy_strategy":"auto"}
+        ]
+      multi-app: >-
+        [
+          {"subfolder":"$APP_1","app_name":"adaptalabs-backend","app_namespace":"adaptalabs"},
+          {"subfolder":"$APP_2","app_name":"adaptalabs","app_namespace":"adaptalabs","depends_on":"$APP_1"}
+        ]
+
+      # Optional Branch Based Deployment input parameters
+      # 1. Enable branch based deployment every time a commit is pushed to feature branch
+      # defaults to false
+      feat-deploy-on-push: "false"
+      
+      # 2. Enable branch based deployment every time a commit is pushed to an open MR source branch only
+      # defaults to true
+      feat-deploy-on-merge-request: "true"
+      feat-deploy-on-push: "false"
+      
+      # 3. Enable cleanup of any leftover branch based deployments on merge
+      # defaults to true
+      feat-cleanup-on-merge: "true"
+
+variables:
+  APP_1: backend
+  APP_2: frontend
+
+.docker-base:
+  parallel:
+    matrix:
+      - APP: "$APP_1"
+        DOCKER_FILE: "$APP_1/Dockerfile"
+        DOCKER_SNAPSHOT_IMAGE: "$CI_REGISTRY_IMAGE/$APP_1/snapshot:$CI_COMMIT_REF_SLUG"
+        DOCKER_RELEASE_IMAGE: "$CI_REGISTRY_IMAGE/$APP_1:$CI_COMMIT_REF_NAME"
+      - APP: "$APP_2"
+        DOCKER_FILE: "$APP_2/Dockerfile"
+        DOCKER_SNAPSHOT_IMAGE: "$CI_REGISTRY_IMAGE/$APP_2/snapshot:$CI_COMMIT_REF_SLUG"
+        DOCKER_RELEASE_IMAGE: "$CI_REGISTRY_IMAGE/$APP_2:$CI_COMMIT_REF_NAME"
+

@@ -19,37 +19,58 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     ports:
       - "3001:3001"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - DATABASE_URL=postgresql://postgres:password@postgres:5432/adaptalabs_dev
       - PORT=3001
+      - SESSION_SECRET=b9a37fd3a606bcc2305a52dcc1ff8f6ce6b2897fc7cc15749d2fbee20273a082
+      - GOOGLE_OAUTH_CLIENT_ID=81181399275-9voffmbi33dk9ud4qik9rqs7sen6cuci.apps.googleusercontent.com
+      - GOOGLE_OAUTH_CLIENT_SECRET=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
+      - GOOGLE_OAUTH_REDIRECT_URI=http://localhost:3001/auth/google-callback
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - /app/node_modules
+      - ./backend:/app/backend
+      - /app/backend/node_modules
+      - ./shared:/app/shared
+      - ./demo:/app/demo
     networks:
       - adaptalabs-network
     restart: unless-stopped
 
   frontend:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     ports:
       - "3000:3000"
     environment:
       - REACT_APP_API_URL=http://localhost:3001
+      - VITE_API_URL=http://localhost:3001
     depends_on:
       - backend
     networks:
       - adaptalabs-network
     restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: sh -c "cd /app/backend && npm run migrate && npm run seed"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@postgres:5432/adaptalabs_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - adaptalabs-network
+    restart: "no" 
 
 volumes:
   postgres_data:

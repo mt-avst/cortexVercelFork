@@ -1,17 +1,21 @@
 # Use Node.js 18 LTS as base image
-FROM node:18-alpine
+FROM docker.adaptavist.net/node:18-alpine
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
-
-# Install all dependencies (including dev dependencies for build)
 RUN npm ci
+# Copy shared and demo folders (referenced by backend source)
+COPY shared/ ./shared/
+COPY demo/ ./demo/
 
-# Copy source code
-COPY . .
+WORKDIR /app/backend
+
+COPY backend/package*.json .
+RUN npm ci
+# Copy backend source
+COPY backend/ .
 
 # Build the application with increased memory
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
@@ -29,10 +33,6 @@ USER nodejs
 
 # Expose port
 EXPOSE 3001
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3001/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1) })"
 
 # Start the application
 CMD ["npm", "start"]

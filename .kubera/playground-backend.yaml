@@ -1,0 +1,43 @@
+teamName: platform #Mandatory field
+environment: playground
+service:
+  port: 3001
+ingress: 
+  enabled: false
+config:
+  data:
+    OIDC_ISSUER: https://adaptavist.okta.com
+    OIDC_CLIENT_ID: 0oau3homl1k9RYzlt4x7
+    OIDC_REDIRECT_URL: https://adaptalabs.kubera-playground.adaptavist.net/auth/callback
+secret:
+  enabled: true
+resources:
+  memory:
+    # -- Pod requested memory
+    min: 2Gi
+    # -- Pod memory limit
+    max: 2Gi
+  cpu:
+    # -- Pod requested CPU
+    min: 1000m
+    # -- Pod CPU limit
+    max: 1000m
+database:
+  postgresql:
+    enabled: true
+    local:
+      enabled: true
+      image:
+        repository: postgres
+        tag: '15'
+      port: '5432'
+      database: 'postgres'
+      user: 'postgres'
+    deploymentType: "rds"
+    rds:
+      deletionProtection: false
+      majorEngineVersion: "15"
+      engineVersion: "15.12"
+      autoMinorVersionUpgrade: false
+      dbFamily: "postgres15"
+      skipFinalSnapshot: false
