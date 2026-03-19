@@ -108,7 +108,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
               <div id="status-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
                 {formData.status === 'draft' ? (
-                  <strong style={{ color: '#d97706' }}>⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
+                  <strong className="text-warning">⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
                 ) : (
                   'Published opportunities are visible to all users'
                 )}

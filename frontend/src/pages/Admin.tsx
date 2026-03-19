@@ -49,8 +49,9 @@ const Admin: React.FC = () => {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
-  
-  
+  const [successMessage, setSuccessMessage] = useState<string>('');
+
+
   // Filter opportunities based on debounced search query (memoized for performance)
   const filteredOpportunities = useMemo(() => {
     if (!debouncedSearchQuery) return opportunities;
@@ -140,6 +141,13 @@ const Admin: React.FC = () => {
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
     if (location.state?.refresh && (user?.role === 'researcher_admin' || user?.role === 'superadmin')) {
+      // Show success message if provided
+      if (location.state?.message) {
+        setSuccessMessage(location.state.message);
+        // Clear success message after delay (longer for draft warnings)
+        const isDraftWarning = location.state.message.includes('DRAFT');
+        setTimeout(() => setSuccessMessage(''), isDraftWarning ? 5000 : 3000);
+      }
       // Clear the refresh state first to prevent duplicate calls
       navigate(location.pathname, { replace: true, state: {} });
       // Force refresh without filters to ensure new items are visible
@@ -263,6 +271,13 @@ const Admin: React.FC = () => {
                 </div>
               </div>
             </div>
+
+            {/* Success/Warning Message */}
+            {successMessage && (
+              <div className={`alert ${successMessage.includes('DRAFT') ? 'alert-warning' : 'alert-success'} mx-4 mt-4 mb-3`} role="alert">
+                {successMessage}
+              </div>
+            )}
 
             {/* Dashboard Statistics Cards */}
             {dashboardStats && (

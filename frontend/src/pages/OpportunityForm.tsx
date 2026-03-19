@@ -507,8 +507,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             ? '⚠️ Changes saved as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
             : 'Changes saved successfully!'
         );
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccessMessage(''), 3000);
+        // Clear success message after timeout (longer for draft warnings)
+        setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500);
       }
       
       // For edit mode, return the existing opportunity ID
@@ -524,11 +524,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         } else {
           // For admin, show success message briefly then navigate to admin dashboard
           const isDraft = formData.status === 'draft';
-          const baseMessage = isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!';
           setSuccessMessage(
             isDraft
-              ? `⚠️ ${baseMessage} Study is DRAFT - not visible to users yet.`
-              : baseMessage
+              ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
+              : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
           );
           // Brief delay to show success feedback before navigation (longer for draft warnings)
           await new Promise(resolve => setTimeout(resolve, isDraft ? 3000 : 1500));
@@ -998,7 +997,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             isTemporary={!isEdit || !opportunityId}
                             onOpportunitySave={() => handleSubmit(undefined, true)}
                             onBack={() => setActiveTab(2)}
-                            onNavigate={(path) => navigate(path, { state: { refresh: true, timestamp: Date.now() } })}
+                            onNavigate={(path) => {
+                              const isDraft = formData.status === 'draft';
+                              navigate(path, {
+                                state: {
+                                  refresh: true,
+                                  timestamp: Date.now(),
+                                  message: isDraft
+                                    ? '⚠️ Study created as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
+                                    : 'Opportunity created successfully!'
+                                }
+                              });
+                            }}
+                            isDraft={formData.status === 'draft'}
                           />
                         )}
                       </div>

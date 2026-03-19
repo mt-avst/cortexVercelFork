@@ -43,6 +43,7 @@ interface AdminSessionManagerProps {
   onOpportunitySave?: () => Promise<string | undefined>; // New prop for saving opportunity, returns opportunity ID
   onBack?: () => void; // Prop for back navigation
   onNavigate?: (path: string) => void; // Prop for navigation (avoids full page reload)
+  isDraft?: boolean; // Whether the opportunity is in draft status
 }
 
 interface CalendarViewProps {
@@ -1061,7 +1062,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   isTemporary = false,
   onOpportunitySave,
   onBack,
-  onNavigate
+  onNavigate,
+  isDraft = false
 }) => {
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
