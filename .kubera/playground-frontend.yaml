@@ -37,3 +37,4 @@ filesystem:
       - path: /var/run
       - path: /var/log/nginx
       - path: /tmp
+      - path: /etc/nginx/conf.d

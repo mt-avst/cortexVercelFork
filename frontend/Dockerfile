@@ -30,7 +30,7 @@ FROM docker.adaptavist.net/nginx:alpine
 COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # Copy custom nginx configuration
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY frontend/nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Change ownership
 RUN chown -R nginx:nginx /usr/share/nginx/html
