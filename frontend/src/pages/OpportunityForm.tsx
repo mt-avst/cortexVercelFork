@@ -479,11 +479,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         
         // For types that use external links (no sessions), show success then auto-navigate
         if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-          setSuccessMessage('Opportunity created successfully!');
+          const isDraft = formData.status === 'draft';
+          setSuccessMessage(
+            isDraft
+              ? '⚠️ Study created as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
+              : 'Opportunity created successfully!'
+          );
           // Auto-navigate to admin dashboard after a brief delay so the user sees the success message
           setTimeout(() => {
             navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
-          }, 1500);
+          }, isDraft ? 3000 : 1500); // Longer delay for draft warning
           return savedOpportunity.id;
         }
         
@@ -496,7 +501,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (isEdit) {
         setOriginalFormData({ ...formData });
         // Show success message for edit mode
-        setSuccessMessage('Changes saved successfully!');
+        const isDraft = formData.status === 'draft';
+        setSuccessMessage(
+          isDraft
+            ? '⚠️ Changes saved as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
+            : 'Changes saved successfully!'
+        );
         // Clear success message after 3 seconds
         setTimeout(() => setSuccessMessage(''), 3000);
       }
@@ -513,9 +523,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           navigate('/', { state: { message: 'Research request submitted successfully! It will be reviewed by an admin.' } });
         } else {
           // For admin, show success message briefly then navigate to admin dashboard
-          setSuccessMessage(isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!');
-          // Brief delay to show success feedback before navigation
-          await new Promise(resolve => setTimeout(resolve, 1500));
+          const isDraft = formData.status === 'draft';
+          const baseMessage = isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!';
+          setSuccessMessage(
+            isDraft
+              ? `⚠️ ${baseMessage} Study is DRAFT - not visible to users yet.`
+              : baseMessage
+          );
+          // Brief delay to show success feedback before navigation (longer for draft warnings)
+          await new Promise(resolve => setTimeout(resolve, isDraft ? 3000 : 1500));
           navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: isEdit ? 'Opportunity updated!' : 'Opportunity created!' } });
         }
       }
@@ -645,14 +661,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               )}
               
               {successMessage && (
-                <div className="alert alert-success d-flex justify-content-between align-items-center mx-4 mt-4 mb-0" role="alert" aria-live="polite">
+                <div
+                  className={`alert ${successMessage.includes('DRAFT') ? 'alert-warning' : 'alert-success'} d-flex justify-content-between align-items-center mx-4 mt-4 mb-0`}
+                  role="alert"
+                  aria-live="polite"
+                >
                   <div>
-                    <CheckCircle size={18} className="me-2" aria-hidden="true" />
+                    {successMessage.includes('DRAFT') ? (
+                      <AlertTriangle size={18} className="me-2" aria-hidden="true" />
+                    ) : (
+                      <CheckCircle size={18} className="me-2" aria-hidden="true" />
+                    )}
                     {successMessage}
                   </div>
                   <button
                     type="button"
-                    className="btn btn-sm btn-outline-success"
+                    className={`btn btn-sm ${successMessage.includes('DRAFT') ? 'btn-outline-warning' : 'btn-outline-success'}`}
                     onClick={() => navigate('/admin', { state: { refresh: true, timestamp: Date.now() } })}
                   >
                     Return to Dashboard

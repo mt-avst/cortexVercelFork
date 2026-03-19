@@ -107,7 +107,11 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
               <div id="status-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                Draft opportunities are only visible to admins
+                {formData.status === 'draft' ? (
+                  <strong style={{ color: '#d97706' }}>⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
+                ) : (
+                  'Published opportunities are visible to all users'
+                )}
               </div>
                 <select
                   id="status"
