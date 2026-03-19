@@ -17,6 +17,9 @@ RUN cd /app/frontend && npm ci
 # Copy frontend source
 COPY frontend/ ./frontend/
 
+ARG VITE_API_URL
+ENV VITE_API_URL=${VITE_API_URL}
+
 # Build the application
 RUN cd /app/frontend && npm run build
 
