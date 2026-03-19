@@ -15,7 +15,6 @@ auth:
 config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com
-    OIDC_REDIRECT_URL: https://adaptalabs.kubera-playground.adaptavist.net/auth/callback
 secret:
   enabled: true
 resources:
