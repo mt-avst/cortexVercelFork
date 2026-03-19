@@ -122,11 +122,11 @@ app.use(session({
 // CSRF protection (only for production or when explicitly enabled)
 if (config.NODE_ENV === 'production' || config.ENABLE_CSRF) {
   app.use((csurf as any)({
-    cookie: {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: config.NODE_ENV === 'production' ? 'strict' : 'lax',
-    },
+    // cookie: {
+    //   httpOnly: true,
+    //   secure: config.NODE_ENV === 'production',
+    //   sameSite: config.NODE_ENV === 'production' ? 'strict' : 'lax',
+    // },
     ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
   }));
 
