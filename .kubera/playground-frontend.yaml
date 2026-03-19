@@ -17,7 +17,7 @@ config:
     OIDC_ISSUER: https://adaptavist.okta.com
     OIDC_REDIRECT_URL: https://adaptalabs.kubera-playground.adaptavist.net/auth/callback
 secret:
-  enabled: false
+  enabled: true
 resources:
   memory:
     # -- Pod requested memory
