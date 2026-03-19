@@ -103,13 +103,18 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
     let allSessionsMap: Map<string, any[]> = new Map();
     try {
       const sessionsResult = await pool.query(
-        `SELECT *, (capacity - booked_count) as remaining, opportunity_id
-         FROM sessions 
-         WHERE opportunity_id = ANY($1::uuid[])
-         ORDER BY opportunity_id, start_time ASC`,
+        `SELECT s.*,
+                COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count,
+                s.opportunity_id
+         FROM sessions s
+         LEFT JOIN bookings b ON s.id = b.session_id
+         WHERE s.opportunity_id = ANY($1::uuid[])
+         GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
+                  s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+         ORDER BY s.opportunity_id, s.start_time ASC`,
         [opportunityIds]
       );
-      
+
       // Group sessions by opportunity_id
       for (const session of sessionsResult.rows) {
         const oppId = session.opportunity_id;
@@ -118,6 +123,8 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
         }
         allSessionsMap.get(oppId)!.push({
           ...session,
+          booked_count: session.actual_booked_count, // Use calculated value
+          remaining: session.capacity - (session.actual_booked_count || 0), // Calculate from actual bookings
           start_time: session.start_time.toISOString(),
           end_time: session.end_time.toISOString(),
           created_at: session.created_at.toISOString(),
@@ -228,14 +235,18 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     throw new NotFoundError('Opportunity');
   }
   
-  // Get sessions for this opportunity
+  // Get sessions for this opportunity with dynamic booked_count calculation
   const sessionsResult = await pool.query(`
-    SELECT *, (capacity - booked_count) as remaining
-    FROM sessions 
-    WHERE opportunity_id = $1
-    ORDER BY start_time ASC
+    SELECT s.*,
+           COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count
+    FROM sessions s
+    LEFT JOIN bookings b ON s.id = b.session_id
+    WHERE s.opportunity_id = $1
+    GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
+             s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
+    ORDER BY s.start_time ASC
   `, [id]);
-  
+
   const row = result.rows[0];
   const opportunity = {
     ...row,
@@ -247,6 +258,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     end_date: row.end_date ? row.end_date.toISOString() : null,
     sessions: sessionsResult.rows.map(session => ({
       ...session,
+      booked_count: session.actual_booked_count, // Use calculated value
+      remaining: session.capacity - (session.actual_booked_count || 0), // Calculate from actual bookings
       start_time: session.start_time.toISOString(),
       end_time: session.end_time.toISOString(),
       created_at: session.created_at.toISOString(),
@@ -321,16 +334,20 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     ]
   );
 
+  // Only superadmins can set display_width - default to 'single' otherwise
+  const isSuperadmin = req.user!.role === 'superadmin';
+  const finalDisplayWidth = isSuperadmin && (data as any).display_width ? (data as any).display_width : 'single';
+
   const query = `
     INSERT INTO opportunities (
-      type, title, purpose_one_liner, description_optional, 
-      product_optional, meeting_location_optional, default_duration_minutes, status, 
+      type, title, purpose_one_liner, description_optional,
+      product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
-      start_date, end_date
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      start_date, end_date, display_width
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
     RETURNING *
   `;
-  
+
   const values = [
     data.type,
     data.title.trim(),
@@ -345,7 +362,8 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.participant_type_required || 'any',
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
-    data.end_date || null
+    data.end_date || null,
+    finalDisplayWidth
   ];
   
   const result = await pool.query(query, values);
@@ -426,10 +444,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const existingLink = existingOpp.rows[0].external_link_optional;
   const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
   
-  // Additional validation for published polls/surveys (M6 requirement)
-  if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
+  // Additional validation for published polls/surveys/unmoderated (M6 requirement)
+  if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey' || existingType === 'unmoderated')) {
     if (!newLink || !validateUrl(newLink)) {
-      throw new ValidationError('External link is required for published polls and surveys');
+      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests');
     }
   }
   
@@ -599,34 +617,40 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
       return res.status(404).json({ error: 'Opportunity not found' });
     }
     
-    // Build query for sessions
+    // Build query for sessions with dynamic booked_count calculation
     let query = `
-      SELECT *, (capacity - booked_count) as remaining
-      FROM sessions 
-      WHERE opportunity_id = $1
+      SELECT s.*,
+             COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count
+      FROM sessions s
+      LEFT JOIN bookings b ON s.id = b.session_id
+      WHERE s.opportunity_id = $1
     `;
     const params: string[] = [opportunityId];
     let paramCount = 1;
-    
+
     // Filter by start time if provided
     if (from) {
       paramCount++;
-      query += ` AND start_time >= $${paramCount}`;
+      query += ` AND s.start_time >= $${paramCount}`;
       params.push(from);
     }
-    
+
     // Filter out past sessions unless explicitly requested
     if (include_past !== 'true') {
-      query += ` AND end_time >= NOW()`;
+      query += ` AND s.end_time >= NOW()`;
     }
-    
-    query += ` ORDER BY start_time ASC`;
-    
+
+    query += ` GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
+               s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count`;
+    query += ` ORDER BY s.start_time ASC`;
+
     const result = await pool.query(query, params);
-    
+
     // Serialize dates for API response
     const sessions = result.rows.map(session => ({
       ...session,
+      booked_count: session.actual_booked_count, // Use calculated value
+      remaining: session.capacity - (session.actual_booked_count || 0), // Calculate from actual bookings
       start_time: session.start_time.toISOString(),
       end_time: session.end_time.toISOString(),
       created_at: session.created_at.toISOString(),
@@ -895,9 +919,9 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
 
     const opportunity = opportunityResult.rows[0];
 
-    // Only allow click tracking for poll or survey types
-    if (opportunity.type !== 'poll' && opportunity.type !== 'survey') {
-      throw new ValidationError('Click tracking is only available for polls and surveys');
+    // Only allow click tracking for poll, survey, or unmoderated types
+    if (opportunity.type !== 'poll' && opportunity.type !== 'survey' && opportunity.type !== 'unmoderated') {
+      throw new ValidationError('Click tracking is only available for polls, surveys, and unmoderated tests');
     }
 
     // Only allow tracking for published opportunities
