@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-root",
-  "version": "7.3.13",
+  "version": "7.3.14",
   "description": "Adaptalabs recruitment app root package",
   "private": true,
   "scripts": {

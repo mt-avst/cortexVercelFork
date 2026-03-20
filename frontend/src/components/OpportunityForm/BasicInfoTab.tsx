@@ -13,28 +13,37 @@ interface BasicInfoTabProps {
   allowUserSubmission?: boolean;
 }
 
-// Helper to convert ISO string to date input value (YYYY-MM-DD)
+/**
+ * Date-only fields (study period): avoid timezone shifts.
+ * Parsing "YYYY-MM-DD" as local midnight then calling toISOString() shifts the calendar
+ * day for timezones ahead of UTC (e.g. APAC), so the picker appears to reject "future" dates.
+ * We store the chosen calendar day as noon UTC; display uses UTC Y/M/D.
+ */
 const formatDateForInput = (isoString: string | undefined): string => {
   if (!isoString) return '';
   try {
     const date = new Date(isoString);
     if (isNaN(date.getTime())) return '';
-    return date.toISOString().split('T')[0];
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(date.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   } catch {
     return '';
   }
 };
 
-// Helper to convert date input value to ISO string
+/** Parse YYYY-MM-DD from <input type="date"> as that calendar day at noon UTC (stable round-trip). */
 const formatDateToISO = (dateValue: string): string | undefined => {
   if (!dateValue) return undefined;
-  try {
-    const date = new Date(dateValue + 'T00:00:00');
-    if (isNaN(date.getTime())) return undefined;
-    return date.toISOString();
-  } catch {
-    return undefined;
-  }
+  const parts = dateValue.split('-').map((p) => parseInt(p, 10));
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return undefined;
+  const [year, month, day] = parts;
+  if (month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  const ms = Date.UTC(year, month - 1, day, 12, 0, 0);
+  const date = new Date(ms);
+  if (isNaN(date.getTime())) return undefined;
+  return date.toISOString();
 };
 
 const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
