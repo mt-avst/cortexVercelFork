@@ -158,10 +158,12 @@ export async function rateLimit(
   res.setHeader('X-RateLimit-Reset', result.resetAt.toISOString());
 
   if (!result.allowed) {
+    const retryAfterSec = Math.max(1, Math.ceil((result.resetAt.getTime() - Date.now()) / 1000));
+    res.setHeader('Retry-After', String(retryAfterSec));
     res.status(429).json({
       error: 'Too many requests',
       message: 'Please try again later',
-      retryAfter: Math.ceil((result.resetAt.getTime() - Date.now()) / 1000),
+      retryAfter: retryAfterSec,
     });
     return true; // Request blocked
   }
@@ -170,10 +172,18 @@ export async function rateLimit(
 }
 
 // Pre-configured rate limiters for common use cases
+// Auth: single shared bucket per IP for ALL /api/auth/* routes (admin-login, demo-login,
+// google-login, google-callback, superadmin-login, etc.). 10/15min was too easy to hit during
+// OAuth redirects, retries, and multi-tab testing — use env override in production if needed.
+const AUTH_RATE_LIMIT_MAX = Math.min(
+  200,
+  Math.max(5, parseInt(process.env.AUTH_RATE_LIMIT_MAX || '35', 10) || 35)
+);
+
 export const authRateLimit = (req: VercelRequest, res: VercelResponse) =>
   rateLimit(req, res, {
     windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 10,          // 10 attempts per 15 min
+    maxRequests: AUTH_RATE_LIMIT_MAX,
     keyPrefix: 'auth',
   });
 

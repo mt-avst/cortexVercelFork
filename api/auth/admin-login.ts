@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(405).json(createErrorResponse('Method not allowed'));
     }
 
-    // Rate limit: 10 login attempts per 15 minutes per IP
+    // Rate limit: shared auth bucket (see api/utils/rateLimit.ts authRateLimit)
     if (await authRateLimit(req, res)) {
       return; // Response already sent by rate limiter
     }

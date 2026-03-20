@@ -30,6 +30,7 @@ You need to set environment variables in your Vercel project:
 - **Google OAuth**: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `GOOGLE_OAUTH_REDIRECT_URI` (e.g. `https://adapta-labs-p62q.vercel.app/api/auth/google-callback`) for production login. See `GOOGLE_OAUTH_PRODUCTION_SETUP.md`.
 - **Email**: `EMAIL_*` if you use email notifications (booking confirmations, session reminders). Feedback is saved to the DB only and shown in the Feedback tab; no email is sent for feedback.
 - **CRON_SECRET**: Required for automated session reminder emails. Set a random string (e.g. `openssl rand -hex 32`). Vercel Cron sends it as `Authorization: Bearer <CRON_SECRET>` when invoking `/api/cron/send-reminders`. Without it, reminder cron returns 401.
+- **`AUTH_RATE_LIMIT_MAX`** (optional): Max requests per IP per 15 minutes for **all** `/api/auth/*` routes combined (admin-login, demo-login, Google OAuth steps, etc.). Default **35** in code (was 10 — too easy to hit `429` during OAuth + retries). Set lower in production if you need stricter limits; clamped 5–200.
 
 **Important Steps:**
 1. After adding environment variables, you **MUST redeploy**:
