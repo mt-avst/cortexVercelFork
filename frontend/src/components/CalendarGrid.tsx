@@ -351,7 +351,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   const sessionsByDate = useMemo(() => groupSessionsByDate(), [sessions]);
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
-  /** Fixed timeline height — use same px value for %→px slot layout */
+  /** Timeline column height — slots use top/height as % of .calendar-timeline-container (same reference as grid lines). */
   const TIMELINE_HEIGHT_PX = 900;
   const timelineHeight = `${TIMELINE_HEIGHT_PX}px`;
 
@@ -716,18 +716,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                 zIndex: 1
               }}
             >
-              {timeMarkers.filter(m => m.isHour).map((marker, index) => {
+              {timeMarkers.map((marker, index) => {
                 const position = getTimePosition(marker.time);
+                const isHour = marker.isHour;
                 return (
                   <div
                     key={`divider-${marker.time}-${index}`}
-                    className="calendar-grid-line"
+                    className={`calendar-grid-line ${isHour ? 'calendar-grid-line-hour' : 'calendar-grid-line-half'}`}
                     style={{
                       position: 'absolute',
                       top: `${position}%`,
                       left: 0,
-                      right: 0,
-                      height: '1px'
+                      right: 0
                     }}
                   />
                 );
@@ -866,15 +866,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         const height = Math.max(0.01, rawHeight);
                         
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
-                        const roundedHeight = Math.round(height * 10000) / 10000;
-                        /** Pixel layout avoids % height quirks with flex/min-height in some browsers */
-                        const topPx = (roundedTop / 100) * TIMELINE_HEIGHT_PX;
-                        const heightPx = Math.max(1, (roundedHeight / 100) * TIMELINE_HEIGHT_PX);
+                        /** Min ~0.02% so sub-pixel durations still render; % matches .calendar-grid-lines (same containing block). */
+                        const roundedHeight = Math.max(0.02, Math.round(height * 10000) / 10000);
 
                         const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading && !isSessionPast;
                         const isConfirming = confirmingSlot === session.id;
 
-                        let slotClass = 'calendar-slot calendar-slot-btn position-absolute ';
+                        let slotClass = 'calendar-slot calendar-slot-btn calendar-slot-booking-timeline position-absolute ';
                         
                         if (isConfirming) {
                           slotClass += 'calendar-slot-selected';
@@ -896,8 +894,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             className={slotClass}
                             style={{ 
                               position: 'absolute',
-                              top: `${topPx}px`,
-                              height: `${heightPx}px`,
+                              top: `${roundedTop}%`,
+                              height: `${roundedHeight}%`,
                               left: '6px',
                               right: '6px',
                               width: 'calc(100% - 12px)',
@@ -942,8 +940,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                                     {(() => {
                                       const startDate = new Date(session.start_time);
                                       const dayName = startDate.toLocaleDateString('en-US', { 
-                                        weekday: 'long',
-                                        timeZone: 'UTC'
+                                        weekday: 'long'
                                       });
                                       return `${dayName}, ${formatTimeRange(session.start_time, session.end_time)}`;
                                     })()}

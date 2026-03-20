@@ -8816,6 +8816,27 @@ body.theme-light .mission-scheduler h5 {
   transition: opacity 0.2s ease;
 }
 
+/* Solid hour lines vs dashed half-hour (booking grid — makes 30m slots readable) */
+.calendar-hud .calendar-grid-line-hour {
+  height: 1px;
+}
+
+.calendar-hud .calendar-grid-line-half {
+  height: 0 !important;
+  background: none !important;
+  background-color: transparent !important;
+  border-top: 1px dashed rgba(148, 163, 184, 0.4) !important;
+  opacity: 0.75;
+}
+
+body.theme-dark .calendar-hud .calendar-grid-line-half {
+  border-top-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+body.theme-light .calendar-hud .calendar-grid-line-half {
+  border-top-color: rgba(100, 116, 139, 0.45) !important;
+}
+
 /* Dark Mode: Ghost grid lines (barely visible) */
 body.theme-dark .calendar-hud .calendar-grid-line {
   background-color: rgba(255, 255, 255, 0.02) !important; /* Almost invisible */
@@ -8908,6 +8929,15 @@ body.theme-light .calendar-day-header-cell {
 .calendar-hud .calendar-timeline-container .calendar-slot {
   min-height: 0 !important;
   padding: 3px 6px !important;
+}
+
+/* Extra specificity: booking timeline slots must never use the 44px touch-target floor */
+body.theme-dark .calendar-view.calendar-hud .calendar-timeline-container .calendar-slot.calendar-slot-booking-timeline,
+body.theme-light .calendar-view.calendar-hud .calendar-timeline-container .calendar-slot.calendar-slot-booking-timeline {
+  min-height: 0 !important;
+  max-height: none !important;
+  padding: 3px 6px !important;
+  box-sizing: border-box !important;
 }
 
 /* DARK MODE: Block button style - High visibility emerald solid */
