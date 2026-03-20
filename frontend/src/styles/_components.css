@@ -8903,6 +8903,13 @@ body.theme-light .calendar-day-header-cell {
   cursor: pointer !important;
 }
 
+/* Opportunity booking calendar: height is set as % of the day column (duration-accurate).
+   The 44px min-height + padding above would inflate 15–30m slots to ~44px — visually ~1h tall. */
+.calendar-hud .calendar-timeline-container .calendar-slot {
+  min-height: 0 !important;
+  padding: 3px 6px !important;
+}
+
 /* DARK MODE: Block button style - High visibility emerald solid */
 body.theme-dark .mission-scheduler .calendar-slot-ghost,
 body.theme-dark .calendar-hud .calendar-slot-ghost {
