@@ -216,11 +216,11 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     return hasConflict;
   }, [userCalendarEvents]);
 
-  // Format time for display (condensed format)
+  // Format time for display (condensed format) — **local** wall clock (matches grid axis 7am–11pm)
   const formatTime = (dateString: string, includeAmPm: boolean = true) => {
     const date = new Date(dateString);
-    const hours = date.getUTCHours();
-    const minutes = date.getUTCMinutes();
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
     const isPM = hours >= 12;
     const displayHour = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours;
     const minuteStr = minutes.toString().padStart(2, '0');
@@ -235,8 +235,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   const formatTimeRange = (startTime: string, endTime: string) => {
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
-    const startIsPM = startDate.getUTCHours() >= 12;
-    const endIsPM = endDate.getUTCHours() >= 12;
+    const startIsPM = startDate.getHours() >= 12;
+    const endIsPM = endDate.getHours() >= 12;
     
     // If both are AM or both are PM, drop the first suffix
     if (startIsPM === endIsPM) {
@@ -254,10 +254,14 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     });
   };
 
-  // Helper function to get hour from time string
+  /**
+   * Local wall-clock time as decimal hours (e.g. 13.5 = 1:30 PM).
+   * Must match the left axis (7–23), which uses local time, and `getCurrentTimePosition` (local).
+   * Using UTC here previously shifted slots vs grid lines and made durations look wrong.
+   */
   const getHourFromSlot = (timeString: string): number => {
     const date = new Date(timeString);
-    return date.getUTCHours() + (date.getUTCMinutes() / 60);
+    return date.getHours() + date.getMinutes() / 60 + date.getSeconds() / 3600;
   };
 
   // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
@@ -305,16 +309,16 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       .sort((a, b) => a.getTime() - b.getTime());
     
     const startDate = new Date(dates[0]);
-    startDate.setUTCHours(0, 0, 0, 0);
+    startDate.setHours(0, 0, 0, 0);
     
     const endDate = new Date(dates[dates.length - 1]);
-    endDate.setUTCHours(23, 59, 59, 999);
+    endDate.setHours(23, 59, 59, 999);
 
     const sessionsByDateMap = new Map<string, Session[]>();
     
     sessions.forEach(session => {
       const date = new Date(session.start_time);
-      date.setUTCHours(0, 0, 0, 0);
+      date.setHours(0, 0, 0, 0);
       const dateKey = date.toDateString();
       
       if (!sessionsByDateMap.has(dateKey)) {
@@ -331,7 +335,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     const currentDate = new Date(startDate);
     
     while (currentDate <= endDate) {
-      const dayOfWeek = currentDate.getUTCDay();
+      const dayOfWeek = currentDate.getDay();
       
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
         const dateKey = currentDate.toDateString();
@@ -339,7 +343,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
         allDays.push([dateKey, dateSessions]);
       }
       
-      currentDate.setUTCDate(currentDate.getUTCDate() + 1);
+      currentDate.setDate(currentDate.getDate() + 1);
     }
 
     return allDays;
@@ -347,7 +351,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   const sessionsByDate = useMemo(() => groupSessionsByDate(), [sessions]);
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
-  const timelineHeight = '900px';
+  /** Fixed timeline height — use same px value for %→px slot layout */
+  const TIMELINE_HEIGHT_PX = 900;
+  const timelineHeight = `${TIMELINE_HEIGHT_PX}px`;
 
   // Calculate current time position for the "Now" indicator
   const getCurrentTimePosition = useMemo(() => {
@@ -737,7 +743,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                 transition={{ duration: 0.6, delay: 0.8, ease: 'easeOut' }}
                 style={{
                   position: 'absolute',
-                  top: `calc(${getCurrentTimePosition}% * 900 / 100)`,
+                  top: `${getCurrentTimePosition}%`,
                   left: 0,
                   right: 0,
                   zIndex: 10,
@@ -861,6 +867,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                         
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(height * 10000) / 10000;
+                        /** Pixel layout avoids % height quirks with flex/min-height in some browsers */
+                        const topPx = (roundedTop / 100) * TIMELINE_HEIGHT_PX;
+                        const heightPx = Math.max(1, (roundedHeight / 100) * TIMELINE_HEIGHT_PX);
 
                         const canClick = !isBooked && !hasConflict && isAvailable && !isFull && !bookingLoading && !isSessionPast;
                         const isConfirming = confirmingSlot === session.id;
@@ -887,10 +896,8 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             className={slotClass}
                             style={{ 
                               position: 'absolute',
-                              top: `${roundedTop}%`,
-                              // Use computed % height only — a min-height in px (previously 40px) made 30m slots
-                              // nearly as tall as 60m (~3% vs ~6% of timeline became max(~28px, 40px) vs ~56px).
-                              height: `${roundedHeight}%`,
+                              top: `${topPx}px`,
+                              height: `${heightPx}px`,
                               left: '6px',
                               right: '6px',
                               width: 'calc(100% - 12px)',
