@@ -888,7 +888,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
                             style={{ 
                               position: 'absolute',
                               top: `${roundedTop}%`,
-                              height: `max(${roundedHeight}%, 40px)`,
+                              // Use computed % height only — a min-height in px (previously 40px) made 30m slots
+                              // nearly as tall as 60m (~3% vs ~6% of timeline became max(~28px, 40px) vs ~56px).
+                              height: `${roundedHeight}%`,
                               left: '6px',
                               right: '6px',
                               width: 'calc(100% - 12px)',
