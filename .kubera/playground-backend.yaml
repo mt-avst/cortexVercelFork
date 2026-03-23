@@ -8,6 +8,7 @@ config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com
     NODE_ENV: production
+    SKIP_OIDC: true
 secret:
   enabled: true
 resources:
