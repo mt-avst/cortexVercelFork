@@ -54,7 +54,7 @@ deployment:
       path: '/health'
       port: 3001
       scheme: HTTP
-    initialDelaySeconds: 20
+    initialDelaySeconds: 21
     periodSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 10
