@@ -41,6 +41,7 @@ include:
 variables:
   APP_1: backend
   APP_2: frontend
+  DOCKER_BUILD_CACHE_DISABLED: "true"
 
 .docker-base:
   parallel:
