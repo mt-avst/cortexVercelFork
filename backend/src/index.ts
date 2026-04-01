@@ -120,7 +120,8 @@ app.use(session({
 }));
 
 // CSRF protection (only for production or when explicitly enabled)
-if (config.NODE_ENV === 'production' || config.ENABLE_CSRF) {
+// TODO: Does not work on production (on container based envs). Need to fix.
+if (config.NODE_ENV === 'production' && config.ENABLE_CSRF) {
   app.use((csurf as any)({
     cookie: {
       httpOnly: true,

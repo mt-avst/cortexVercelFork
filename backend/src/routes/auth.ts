@@ -37,6 +37,12 @@ async function initializeClient() {
       hasClientSecret: !!process.env.OIDC_CLIENT_SECRET,
       OIDC_REDIRECT_URL: process.env.OIDC_REDIRECT_URL
     });
+
+
+    if (process.env.SKIP_OIDC === 'true') {
+      logger.info('Skipping OIDC initialization - SKIP_OIDC is true');
+      return;
+    }
     
     // Skip OIDC initialization in development if issuer is not available or is a placeholder
     if (process.env.NODE_ENV === 'development' && 

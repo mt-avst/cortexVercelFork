@@ -9,11 +9,11 @@
     "start": "node dist/backend/src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "migrate": "tsx src/db/migrate.ts",
-    "seed": "tsx src/db/seed.ts",
-    "reset-demo": "tsx src/db/reset-demo-data.ts",
-    "reset-calendar": "tsx src/db/reset-calendar-bookings.ts",
-    "reset-calendar-full": "tsx src/db/reset-calendar-bookings.ts --cancel-all"
+    "migrate": "npx tsx src/db/migrate.ts",
+    "seed": "npx tsx src/db/seed.ts",
+    "reset-demo": "npx tsx src/db/reset-demo-data.ts",
+    "reset-calendar": "npx tsx src/db/reset-calendar-bookings.ts",
+    "reset-calendar-full": "npx tsx src/db/reset-calendar-bookings.ts --cancel-all"
   },
   "dependencies": {
     "cors": "^2.8.5",
