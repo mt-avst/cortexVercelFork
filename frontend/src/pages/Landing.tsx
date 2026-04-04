@@ -84,7 +84,7 @@ const Landing: React.FC = memo(() => {
           <span className="landing-parent-brand">ADAPTAVIST</span>
           
           {/* Hero Title */}
-          <h1 className="landing-product-name">CORTEX</h1>
+          <h1 className="landing-product-name">Cortex</h1>
           
           {/* Tagline */}
           <p className="landing-tagline">Collective Intelligence</p>
