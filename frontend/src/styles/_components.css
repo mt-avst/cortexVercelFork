@@ -9355,8 +9355,10 @@ body.theme-dark .landing-product-name {
   filter: drop-shadow(0 0 80px rgba(255, 85, 0, 0.4)) drop-shadow(0 0 40px rgba(255, 85, 0, 0.2));
 }
 
-/* Light mode: solid dark text */
+/* Light mode: Fraunces display font + solid dark text */
 body.theme-light .landing-product-name {
+  font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
+  font-optical-sizing: auto;
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
