@@ -9342,7 +9342,7 @@ body.theme-light .landing-parent-brand {
   /* clamp(min, preferred, max) - scales from 3rem (mobile) to 8rem (4K) */
   font-size: clamp(3rem, 7vw, 8rem);
   line-height: 0.9;
-  letter-spacing: -0.04em;
+  letter-spacing: normal;
   margin: 0 0 1.5rem 0;
 }
 
