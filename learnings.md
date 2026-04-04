@@ -114,6 +114,11 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ## What we learned
 
+- **Google Fonts variable font weight inconsistency (localhost vs prod, 2026-04-05)**: When using a variable font like Fraunces via Google Fonts, loading only discrete weights (e.g. `wght@400;700`) and then setting `font-weight: 900` in CSS causes the browser to synthesise the weight — which looks different depending on whether the font is cached (prod) or being fetched fresh (localhost). Two fixes required: (1) load the full weight axis range in the Google Fonts URL (`wght@300..900`); (2) always set an **explicit `font-weight`** in the scoped CSS rule rather than relying on cascade from a base rule — this guarantees identical rendering everywhere regardless of font cache state. If a Google Fonts external request doesn't appear at all in network logs on localhost, the font may be blocked by network conditions; fallback rendering will then differ from prod. Pin `font-weight` explicitly to eliminate the variable.
+- **`vercel deploy --prod --yes` from repo root deploys the current working tree directly** — does not require a git push. This means changes can be live on production before they're committed, so always commit first to keep git and prod in sync.
+
+
+
 - **Light-mode contrast**: Avoid #94A3B8 / #9CA3AF (Slate-400 / Gray-400) for body text, descriptions, placeholders, or selected values on white backgrounds—they fall below WCAG AA. Use #6B7280 (Gray-500) or darker for muted text in light theme; reserve lighter grays for dark theme only.
 - **Avoid hardcoded colors**: Always use Bootstrap utility classes (`text-warning`, `text-danger`, etc.) or CSS variables instead of hardcoded hex colors. Hardcoded colors break theme consistency, don't respond to accessibility settings, and create maintenance burden. Example: Use `className="text-warning"` instead of `style={{ color: '#d97706' }}`.
 - **UX fixes require comprehensive code review**: When fixing UX issues, check all code paths. In draft warning fix, initial implementation missed test/interview types because they use a different navigation flow (AdminSessionManager). Always trace through all possible user flows and consider how different opportunity types might behave differently.
