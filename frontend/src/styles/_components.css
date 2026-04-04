@@ -9338,7 +9338,7 @@ body.theme-light .landing-parent-brand {
    to maintain breathing room from particle ring */
 .landing-product-name {
   font-family: var(--font-family-base);
-  font-weight: 900;
+  font-weight: 700;
   /* clamp(min, preferred, max) - scales from 3rem (mobile) to 8rem (4K) */
   font-size: clamp(3rem, 7vw, 8rem);
   line-height: 0.9;
@@ -9358,6 +9358,7 @@ body.theme-dark .landing-product-name {
 /* Light mode: Fraunces display font + solid dark text */
 body.theme-light .landing-product-name {
   font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
+  font-weight: 700;
   font-optical-sizing: auto;
   background: none;
   -webkit-background-clip: unset;
