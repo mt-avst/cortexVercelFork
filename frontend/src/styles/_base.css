@@ -108,8 +108,8 @@ body.theme-dark .App::after {
    ============================================================ */
 
 body.theme-light {
-  /* Base: Pure white */
-  background-color: #FFFFFF;
+  /* FirstHand: soft paper field */
+  background-color: #f7f2ea;
 }
 
 body.theme-light .App {
@@ -118,7 +118,7 @@ body.theme-light .App {
   min-height: 100vh;
 }
 
-/* Blueprint dot pattern overlay */
+/* FirstHand light: layered radial wash + subtle paper grain (warm editorial) */
 body.theme-light .App::after {
   content: '';
   position: fixed;
@@ -128,13 +128,24 @@ body.theme-light .App::after {
   bottom: 0;
   pointer-events: none;
   z-index: -10;
-  
-  /* Texture: Radial gradient dot pattern */
-  background-image: radial-gradient(
-    #CBD5E1 1px,    /* Slate-300 dots */
-    transparent 1px
-  );
-  background-size: 24px 24px;
+
+  background-image:
+    radial-gradient(ellipse 120% 85% at 50% -15%, rgba(221, 110, 66, 0.09) 0%, transparent 58%),
+    radial-gradient(ellipse 70% 55% at 100% 15%, rgba(20, 33, 61, 0.04) 0%, transparent 52%),
+    radial-gradient(ellipse 55% 45% at 0% 60%, rgba(255, 251, 246, 0.85) 0%, transparent 55%),
+    radial-gradient(rgba(20, 33, 61, 0.045) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 100% 100%, 28px 28px;
+}
+
+/* FirstHand: Fraunces for display hierarchy; body uses Manrope via --font-family-base in theme */
+body.theme-light h1,
+body.theme-light .h1,
+body.theme-light h2,
+body.theme-light .h2,
+body.theme-light h3,
+body.theme-light .h3 {
+  font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
+  font-optical-sizing: auto;
 }
 
 /* ============================================================

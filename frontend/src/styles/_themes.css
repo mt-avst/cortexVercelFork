@@ -14,21 +14,20 @@
    Must be in themes layer to override base h1 color
    ============================================================ */
 
-/* Light Mode - AdaptaLabs Home Title Gradient Override */
+/* Light Mode - AdaptaLabs Home Title — FirstHand navy → terracotta */
 body.theme-light .adaptalabs-home-title {
-  /* Light mode gradient: bright orange → deep orange */
   background: linear-gradient(
     to right,
-    var(--brand-orange-600) 0%,
-    var(--brand-orange-700) 50%,
-    var(--brand-orange-800) 100%
+    var(--fs-ink) 0%,
+    var(--fs-accent) 52%,
+    var(--fs-accent-strong) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  /* Lighter glow for light backgrounds */
-  filter: drop-shadow(0 2px 12px rgba(232, 108, 36, 0.3));
+  font-family: var(--font-family-display, 'Fraunces', Georgia, serif);
+  filter: drop-shadow(0 2px 14px rgba(20, 33, 61, 0.12));
 }
 
 /* ============================================================
@@ -55,7 +54,7 @@ body.theme-light:has(.study-listing-page) .main > .container {
   background: var(--surface-page-light) !important;
 }
 
-/* Full-screen fixed gradient overlay for light mode */
+/* Full-screen fixed gradient overlay — FirstHand warm paper */
 body.theme-light .study-listing-page::before {
   content: '';
   position: fixed;
@@ -65,9 +64,9 @@ body.theme-light .study-listing-page::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Premium subtle gradient (Stripe-like) */
-  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(221, 110, 66, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 85% 30%, rgba(20, 33, 61, 0.035) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -77,89 +76,144 @@ body.theme-light .study-listing-page::before {
    ============================================================ */
 
 body.theme-light {
-  /* Background Colors - Pure white (no grey tints) */
-  --bg-app: #FFFFFF;
-  --bg-app-gradient-top: #FFFFFF;
-  --bg-app-gradient-bottom: #FFFFFF;
-  --bg-card: #FFFFFF;
-  --bg-hover: rgba(0, 0, 0, 0.04);
-  --bg-tab: rgba(0, 0, 0, 0.03);
-  --bg-table-header: #FFFFFF;
-  --bg-input: rgba(255, 255, 255, 0.9);
-  --bg-input-focus: rgba(255, 255, 255, 1);
-  --bg-glass: rgba(255, 255, 255, 0.85);
+  /* FirstHand Local — FS-DESIGN_SYSTEM.md (light mode only) */
+  --fs-bg: #f7f2ea;
+  --fs-card: rgba(255, 251, 246, 0.9);
+  --fs-ink: #14213d;
+  --fs-muted: #5f6b7a;
+  --fs-line: rgba(20, 33, 61, 0.12);
+  --fs-accent: #dd6e42;
+  --fs-accent-strong: #b9552d;
+  --fs-success: #2f6f5e;
+  --fs-danger: #a63d40;
+  --fs-shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
 
-  /* Glass Button - Light Mode */
-  --btn-glass-bg: #FFFFFF;
-  --btn-glass-bg-hover: #fff7ed;
-  --btn-glass-border: var(--brand-primary);
-  --btn-glass-border-hover: var(--brand-primary);
-  --btn-glass-text: var(--brand-primary);
+  /* Typography — Manrope UI, Fraunces display (see _base.css h1–h3) */
+  --font-family-base: 'Manrope', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+
+  /* Terracotta brand scale (aligned to FirstHand accent) */
+  --brand-orange-300: #f0b49a;
+  --brand-orange-400: #e89572;
+  --brand-orange-500: #dd6e42;
+  --brand-orange-vibrant: #d46032;
+  --brand-orange-600: #dd6e42;
+  --brand-orange-700: #b9552d;
+  --brand-orange-800: #9a4524;
+
+  /* Background Colors — warm paper field + translucent cards */
+  --bg-app: var(--fs-bg);
+  --bg-app-gradient-top: #fbf6f0;
+  --bg-app-gradient-bottom: #f0e8dc;
+  --bg-card: var(--fs-card);
+  --bg-hover: rgba(20, 33, 61, 0.05);
+  --bg-tab: rgba(20, 33, 61, 0.04);
+  --bg-table-header: rgba(255, 251, 246, 0.95);
+  --bg-input: rgba(255, 251, 246, 0.98);
+  --bg-input-focus: #fffefb;
+  --bg-glass: rgba(255, 251, 246, 0.88);
+
+  /* Glass Button — ink-friendly secondary; accent border */
+  --btn-glass-bg: rgba(255, 251, 246, 0.95);
+  --btn-glass-bg-hover: rgba(255, 251, 246, 1);
+  --btn-glass-border: var(--fs-accent);
+  --btn-glass-border-hover: var(--fs-accent-strong);
+  --btn-glass-text: var(--fs-ink);
   --btn-glass-shadow: var(--shadow-sm);
-  --btn-glass-shadow-hover: 0 0 15px rgba(232, 108, 36, 0.25);
-  
-  /* Surface Elevation System - Light Mode (legacy aliases) */
-  --surface-base: #FFFFFF;
-  --surface-raised: #FFFFFF;
-  --surface-overlay: #FFFFFF;
-  
+  --btn-glass-shadow-hover: 0 12px 40px rgba(20, 33, 61, 0.1);
+
+  /* Surface Elevation System — FirstHand paper + glass */
+  --surface-base: var(--fs-bg);
+  --surface-raised: var(--fs-card);
+  --surface-overlay: var(--fs-card);
+
+  --surface-page-light: #f7f2ea;
+  --surface-panel-light: rgba(255, 251, 246, 0.94);
+  --surface-card-light: rgba(255, 251, 246, 0.9);
+  --surface-glass-light: rgba(255, 251, 246, 0.88);
+
+  --border-subtle-light: var(--fs-line);
+  --border-strong-light: rgba(20, 33, 61, 0.18);
+
+  --shadow-panel-light: var(--fs-shadow);
+  --shadow-card-light: 0 24px 70px rgba(20, 33, 61, 0.07), 0 8px 24px rgba(20, 33, 61, 0.05);
+  --shadow-card-hover: 0 28px 80px rgba(20, 33, 61, 0.1), 0 12px 32px rgba(20, 33, 61, 0.06);
+
   /* Unified Surface System - *-current indirection */
   --surface-page-current: var(--surface-page-light);
   --surface-panel-current: var(--surface-panel-light);
   --surface-card-current: var(--surface-card-light);
   --surface-glass-current: var(--surface-glass-light);
-  
+
   --border-subtle-current: var(--border-subtle-light);
   --border-strong-current: var(--border-strong-light);
-  
+
   --shadow-panel-current: var(--shadow-panel-light);
   --shadow-card-current: var(--shadow-card-light);
 
-  /* Border Colors */
-  --border-card: rgba(0, 0, 0, 0.12);
-  --border-table-row: rgba(0, 0, 0, 0.06);
-  --divider: #E5E7EB;
+  /* Border Colors — navy-tinted lines */
+  --border-card: var(--fs-line);
+  --border-table-row: rgba(20, 33, 61, 0.08);
+  --divider: rgba(20, 33, 61, 0.12);
 
-  /* Text Colors - WCAG AA Compliant (min 4.5:1 contrast on white bg) */
-  --text-primary: #1A1A1A;        /* Primary - 16:1 contrast on #FFFFFF */
-  --text-body: #374151;           /* Body (Gray-700) - 9:1 contrast on #FFFFFF */
-  --text-secondary: #4B5563;      /* Secondary (Gray-600) - 7:1 contrast on #FFFFFF */
-  --text-tertiary: #6B7280;       /* Tertiary (Gray-500) - 5:1 contrast on #FFFFFF */
-  --text-muted: #6B7280;          /* Muted - 5:1 contrast on #FFFFFF */
-  --text-on-dark: #1A1A1A;
+  /* Text — dark navy + muted slate */
+  --text-primary: var(--fs-ink);
+  --text-body: #1a2a4a;
+  --text-secondary: #3d4a5c;
+  --text-tertiary: var(--fs-muted);
+  --text-muted: var(--fs-muted);
+  --text-on-dark: var(--fs-ink);
 
-  /* Brand Colors - Adaptavist Orange for light backgrounds */
-  --brand-headline: var(--brand-orange-600);
-  --brand-primary: var(--brand-orange-600);
-  --brand-secondary: var(--brand-orange-700);
-  --brand-gradient: linear-gradient(135deg, var(--brand-orange-600) 0%, var(--brand-orange-700) 100%);
+  /* Brand — headline navy; primary actions use ink; warm accent for emphasis */
+  --brand-headline: var(--fs-ink);
+  --brand-primary: var(--fs-accent);
+  --brand-secondary: var(--fs-accent-strong);
+  --brand-gradient: linear-gradient(135deg, var(--fs-accent) 0%, var(--fs-accent-strong) 100%);
 
-  /* CTA Colors */
-  --cta-bg: var(--brand-orange-600);
-  --cta-bg-hover: var(--brand-orange-700);
-  --cta-text: #FFFFFF;
-  --cta-text-hover: #FFFFFF;
-  --cta-border: var(--brand-orange-600);
+  /* CTA — FirstHand primary: ink fill, white label */
+  --cta-bg: var(--fs-ink);
+  --cta-bg-hover: #0f1729;
+  --cta-text: #ffffff;
+  --cta-text-hover: #ffffff;
+  --cta-border: var(--fs-ink);
 
-  /* Link Colors */
-  --link: var(--brand-orange-600);
-  --link-hover: var(--brand-orange-700);
+  /* Links — terracotta */
+  --link: var(--fs-accent);
+  --link-hover: var(--fs-accent-strong);
 
-  /* Focus */
-  --focus-ring: var(--brand-orange-600);
-  --focus-ring-color: rgba(232, 108, 36, 0.25);
+  /* Focus — terracotta ring on navy-friendly field */
+  --focus-ring: var(--fs-accent);
+  --focus-ring-color: rgba(221, 110, 66, 0.28);
 
-  /* Accent Colors */
-  --accent-coral: var(--brand-orange-600);
-  --accent-amber: #D97706;
-  --accent-teal: #0D9488;
+  /* Accent */
+  --accent-coral: var(--fs-accent);
+  --accent-amber: #c27a2d;
+  --accent-teal: #2f6f5e;
 
-  /* Tag Colors - Light theme */
-  --tag-bg: #F3F4F6;
-  --tag-text: #374151;
-  --tag-survey: #F3F4F6;
-  --tag-poll: #F3F4F6;
-  --tag-test: #F3F4F6;
+  /* Status — FirstHand success / danger */
+  --status-success: var(--fs-success);
+  --status-warning: #c27a2d;
+  --status-danger: var(--fs-danger);
+  --status-info: #1e5a8a;
+
+  /* Tag Colors */
+  --tag-bg: rgba(20, 33, 61, 0.06);
+  --tag-text: var(--fs-ink);
+  --tag-survey: rgba(20, 33, 61, 0.06);
+  --tag-poll: rgba(20, 33, 61, 0.06);
+  --tag-test: rgba(20, 33, 61, 0.06);
+
+  /* Light mode grid overlay — terracotta ink for subtle grid */
+  --grid-line-color: 221, 110, 66;
+  --grid-line-opacity: 0.045;
+
+  /* Large rounded containers (FirstHand ~28px) */
+  --radius-panel: 1.75rem;
+  --radius-card: 1.75rem;
+  --card-radius: 1.75rem;
+
+  /* Analytics / chrome */
+  --color-text-main: var(--fs-ink);
 
   /* Lozenge Colors - Light Theme (TASK 4: Bolder colors, increased bg opacity) */
   --lozenge-usertest-text: #0369a1; /* cyan-700 - darker for contrast */
@@ -175,15 +229,15 @@ body.theme-light {
   --lozenge-question-text: #b45309; /* amber-700 - darker for contrast */
   --lozenge-question-bg: rgba(217, 119, 6, 0.15);
 
-  /* Shadows - Softer for light theme */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 4px 12px rgba(0, 0, 0, 0.05);
-  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.1);
-  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-button-hover: 0 2px 4px rgba(0, 0, 0, 0.1);
-  --shadow-dropdown: 0 8px 32px rgba(0, 0, 0, 0.15);
+  /* Shadows — soft navy-tinted (FirstHand) */
+  --shadow-sm: 0 1px 2px rgba(20, 33, 61, 0.06);
+  --shadow-md: 0 4px 12px rgba(20, 33, 61, 0.08);
+  --shadow-lg: 0 12px 32px rgba(20, 33, 61, 0.1);
+  --shadow-card: var(--shadow-card-current);
+  --shadow-card-hover: 0 28px 80px rgba(20, 33, 61, 0.1), 0 12px 32px rgba(20, 33, 61, 0.06);
+  --shadow-button: 0 2px 8px rgba(20, 33, 61, 0.12);
+  --shadow-button-hover: 0 6px 20px rgba(20, 33, 61, 0.18);
+  --shadow-dropdown: 0 16px 48px rgba(20, 33, 61, 0.14);
 
   /* Filter (for icons) */
   --btn-close-filter: none;
@@ -193,13 +247,13 @@ body.theme-light {
    LIGHT THEME - Component Overrides
    ============================================================ */
 
-/* Body */
+/* Body — FirstHand paper field */
 body.theme-light {
-  background: #FFFFFF;
+  background: var(--fs-bg);
   color: var(--text-body);
 }
 
-/* Full-viewport grid overlay for light mode (covers header and all content) */
+/* Full-viewport wash — warm cream + terracotta air (no cool blue) */
 body.theme-light::before {
   content: '';
   position: fixed;
@@ -209,26 +263,27 @@ body.theme-light::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Premium subtle gradient (Stripe-like) */
-  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(221, 110, 66, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 90% 25%, rgba(20, 33, 61, 0.04) 0%, transparent 48%),
+    radial-gradient(circle at 10% 80%, rgba(255, 251, 246, 0.9) 0%, transparent 45%);
   pointer-events: none;
   z-index: 0;
 }
 
-/* Cards - Glass effect */
+/* Cards — translucent warm panels + glass */
 body.theme-light .card,
 body.theme-light .momentum-card {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: var(--fs-card);
+  border: 1px solid var(--fs-line);
+  box-shadow: var(--fs-shadow);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 body.theme-light .card:hover {
-  border-color: rgba(232, 108, 36, 0.25);
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.06), 0 12px 28px rgba(0, 0, 0, 0.08);
+  border-color: rgba(221, 110, 66, 0.35);
+  box-shadow: var(--shadow-card-hover);
 }
 
 /* ============================================================
@@ -770,20 +825,18 @@ body.theme-light .hero-subtitle-centered .subtitle-emphasis {
 }
 
 body.theme-light .hero-title-large {
-  /* Premium gradient effect: deep orange → dark orange (light mode) */
+  font-family: var(--font-family-display, 'Fraunces', Georgia, serif);
   background: linear-gradient(
     to right,
-    var(--brand-orange-600) 0%,
-    var(--brand-orange-700) 50%,
-    var(--brand-orange-800) 100%
+    var(--fs-ink) 0%,
+    var(--fs-accent) 48%,
+    var(--fs-accent-strong) 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  
-  /* Softer glow for light backgrounds */
-  filter: drop-shadow(0 2px 8px rgba(232, 108, 36, 0.25));
+  filter: drop-shadow(0 2px 10px rgba(20, 33, 61, 0.1));
 }
 
 body.theme-light .hero-cta-primary {
@@ -839,7 +892,7 @@ body.theme-light:has(.admin-page-bg) .main > .container {
   background: var(--surface-page-light) !important;
 }
 
-/* Full-screen fixed gradient overlay for light mode admin pages */
+/* Full-screen fixed gradient overlay — FirstHand warm paper */
 body.theme-light .admin-page-bg::before {
   content: '';
   position: fixed;
@@ -849,9 +902,9 @@ body.theme-light .admin-page-bg::before {
   bottom: 0;
   width: 100%;
   height: 100%;
-  /* Premium subtle gradient */
-  background: radial-gradient(circle at 50% 0%, rgba(255, 122, 51, 0.03) 0%, transparent 70%),
-              radial-gradient(circle at 85% 30%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(221, 110, 66, 0.06) 0%, transparent 72%),
+    radial-gradient(circle at 85% 30%, rgba(20, 33, 61, 0.035) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -1907,51 +1960,43 @@ body.theme-light .analytics-container {
   background: transparent;
 }
 
-/* Light Mode Text Main color override */
-body.theme-light {
-  --color-text-main: var(--color-slate-900);
-}
-
-/* Light Mode Card - Soft Lift Aesthetic */
+/* Light Mode Card - FirstHand paper lift */
 body.theme-light .cortex-analytics-card {
-  background: #FFFFFF;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: 1px solid rgba(0,0,0,0.06); /* Very subtle border */
-  border-radius: 16px; /* Modern curvature */
-  /* Soft, multi-layered shadow (Stripe/Notion style) */
-  box-shadow: 
-    0 1px 2px rgba(0,0,0,0.04), 
-    0 4px 16px rgba(0,0,0,0.04);
+  background: var(--fs-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--fs-line);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 1px 2px rgba(20, 33, 61, 0.05),
+    0 8px 28px rgba(20, 33, 61, 0.07);
   transition: transform 0.2s var(--ease-smooth), box-shadow 0.2s var(--ease-smooth);
 }
 
 body.theme-light .cortex-analytics-card:hover {
-  border-color: rgba(0,0,0,0.08);
-  box-shadow: 
-    0 4px 12px rgba(0,0,0,0.08), 
-    0 12px 32px rgba(0,0,0,0.06);
+  border-color: rgba(20, 33, 61, 0.14);
+  box-shadow:
+    0 4px 14px rgba(20, 33, 61, 0.08),
+    0 16px 40px rgba(20, 33, 61, 0.08);
   transform: translateY(-4px);
 }
 
-/* Light Mode Typography - High contrast slate */
+/* Light Mode Typography — FirstHand muted + ink */
 body.theme-light .cortex-analytics-card-title {
-  color: var(--color-slate-500);
+  color: var(--fs-muted);
 }
 
 body.theme-light .cortex-analytics-card-icon {
-  color: var(--color-slate-400);
-  opacity: 0.7;
+  color: var(--fs-muted);
+  opacity: 0.75;
 }
 
-/* ENFORCED: All stat values are slate-900 by default */
 body.theme-light .cortex-stat-value {
-  color: var(--color-slate-900) !important;
+  color: var(--fs-ink) !important;
 }
 
-/* Only conversion/action metrics get accent color */
 body.theme-light .cortex-stat-value--accent {
-  color: var(--color-analytics-orange) !important;
+  color: var(--fs-accent) !important;
 }
 
 body.theme-light .cortex-stat-subtitle {
@@ -1967,7 +2012,7 @@ body.theme-light .cortex-stat-metrics strong {
 }
 
 body.theme-light .cortex-chart-title {
-  color: var(--color-slate-900);
+  color: var(--fs-ink);
 }
 
 body.theme-light .cortex-chart-subtitle {
@@ -1977,11 +2022,11 @@ body.theme-light .cortex-chart-subtitle {
 /* Light Mode Empty States - Clean dashed border */
 body.theme-light .no-data,
 body.theme-light .cortex-no-data {
-  border: 1px dashed rgba(0,0,0,0.15);
-  background-color: #FAFAFA;
+  border: 1px dashed var(--fs-line);
+  background-color: rgba(255, 251, 246, 0.8);
   border-radius: 12px;
-  background-image: none; /* Remove diagonal stripes */
-  opacity: 0.8;
+  background-image: none;
+  opacity: 0.9;
 }
 
 body.theme-light .no-data p,
@@ -2073,38 +2118,39 @@ body.theme-dark .analytics-container .card p {
   color: var(--color-slate-300);
 }
 
-/* Light Mode - Analytics page cards - Soft Lift Aesthetic */
+/* Light Mode - Analytics page cards — FirstHand paper lift */
 body.theme-light .analytics-container .card {
-  background: #FFFFFF;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: 1px solid rgba(0,0,0,0.06);
-  border-radius: 16px;
-  box-shadow: 
-    0 1px 2px rgba(0,0,0,0.04), 
-    0 4px 16px rgba(0,0,0,0.04);
+  background: var(--fs-card);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--fs-line);
+  border-radius: var(--radius-card);
+  box-shadow:
+    0 1px 2px rgba(20, 33, 61, 0.05),
+    0 8px 28px rgba(20, 33, 61, 0.07);
 }
 
 body.theme-light .analytics-container .card:hover {
-  border-color: rgba(0,0,0,0.08);
-  box-shadow: 
-    0 4px 12px rgba(0,0,0,0.08), 
-    0 12px 32px rgba(0,0,0,0.06);
+  border-color: rgba(20, 33, 61, 0.12);
+  box-shadow:
+    0 4px 14px rgba(20, 33, 61, 0.08),
+    0 16px 40px rgba(20, 33, 61, 0.08);
   transform: translateY(-4px);
 }
 
 body.theme-light .analytics-container .card h2,
 body.theme-light .analytics-container .card h5,
 body.theme-light .analytics-container .card h6 {
-  color: var(--color-slate-900);
+  color: var(--fs-ink);
+  font-family: var(--font-family-display, 'Fraunces', Georgia, serif);
 }
 
 body.theme-light .analytics-container .card .text-muted {
-  color: var(--color-slate-500) !important;
+  color: var(--fs-muted) !important;
 }
 
 body.theme-light .analytics-container .card p {
-  color: var(--color-slate-700);
+  color: var(--text-body);
 }
 
 /* ============================================================
@@ -2458,9 +2504,9 @@ body.theme-dark .my-bookings-page .booking-card-empty {
    MY BOOKINGS PAGE - Light Mode (Lab Aesthetic)
    ============================================================ */
 
-/* Page Background - Pure white with grid */
+/* Page Background — FirstHand paper */
 body.theme-light .my-bookings-page {
-  background: #FFFFFF;
+  background: var(--fs-bg);
 }
 
 /* Full-screen grid overlay for light mode */

@@ -50,16 +50,20 @@ export const getApiBaseUrl = () => {
   if (devApiUrl && !devApiUrl.includes('localhost')) {
     return devApiUrl;
   }
-  
-  // Development default (only used when running locally)
-  // This will NEVER execute in production because isProduction check happens first
-  if (typeof window !== 'undefined' && 
-      (window.location.hostname === 'localhost' || 
-       window.location.hostname === '127.0.0.1')) {
+
+  // Local browser: Vite dev server proxies /api and /auth → backend (vite.config.ts).
+  // Use same-origin URLs so session cookies stay on the UI origin (localhost:3000) and
+  // login redirects (GET /api/auth/...) hit the proxy — direct :3001 calls break auth in dev.
+  if (
+    typeof window !== 'undefined' &&
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ) {
+    if (import.meta.env.DEV) {
+      return '';
+    }
     return 'http://localhost:3001';
   }
-  
-  // If we somehow get here in production, use relative paths
+
   return '';
 };
 
