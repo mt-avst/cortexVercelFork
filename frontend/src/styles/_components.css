@@ -9348,6 +9348,8 @@ body.theme-light .landing-parent-brand {
 
 /* Dark mode: gradient text with glow */
 body.theme-dark .landing-product-name {
+  font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
+  font-weight: 700;
   background: linear-gradient(180deg, #FFFFFF 0%, #F5F5F5 40%, #D4D4D4 100%);
   -webkit-background-clip: text;
   background-clip: text;
@@ -9359,7 +9361,6 @@ body.theme-dark .landing-product-name {
 body.theme-light .landing-product-name {
   font-family: var(--font-family-display, 'Fraunces', Georgia, 'Times New Roman', serif);
   font-weight: 700;
-  font-optical-sizing: auto;
   background: none;
   -webkit-background-clip: unset;
   background-clip: unset;
