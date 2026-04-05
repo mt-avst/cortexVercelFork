@@ -9339,6 +9339,9 @@ body.theme-light .landing-parent-brand {
 .landing-product-name {
   font-family: var(--font-family-base);
   font-weight: 700;
+  /* Disable auto optical sizing — at display sizes, auto opsz makes Fraunces
+     high-contrast (thin hairlines + thick stems) which looks like wrong weight */
+  font-optical-sizing: none;
   /* clamp(min, preferred, max) - scales from 3rem (mobile) to 8rem (4K) */
   font-size: clamp(3rem, 7vw, 8rem);
   line-height: 0.9;
