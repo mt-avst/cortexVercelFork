@@ -405,3 +405,29 @@ export const getCardHoverBgColor = (type: string | null | undefined): string => 
     default: return 'transparent';
   }
 };
+
+/**
+ * Strips app-testing and obvious automation/smoke studies from the home listing.
+ * Enable with `VITE_PRESENTATION_LISTING=true` in .env (local screenshots / demos).
+ */
+export function filterOpportunitiesForPresentationListing(
+  opportunities: Opportunity[]
+): Opportunity[] {
+  return opportunities.filter((opp) => !isOpportunityExcludedForPresentation(opp));
+}
+
+function isOpportunityExcludedForPresentation(opportunity: Opportunity): boolean {
+  const rawType = opportunity.type?.toLowerCase() || '';
+  const baseType = rawType.replace(/published|draft|closed$/, '');
+  if (baseType === 'test') return true;
+
+  const blob = `${opportunity.title}\n${opportunity.purpose_one_liner ?? ''}`.toLowerCase();
+  if (
+    /\[e2e\]|\(e2e\)|\be2e\b|smoke test|playwright|m6-poll|superadmin-create|test-draft-warnings/i.test(
+      blob
+    )
+  ) {
+    return true;
+  }
+  return false;
+}

@@ -5,7 +5,7 @@ import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHoverBgColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining } from '../utils/opportunityUtils';
+import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHoverBgColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining, filterOpportunitiesForPresentationListing } from '../utils/opportunityUtils';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
@@ -120,6 +120,9 @@ const Home: React.FC = memo(() => {
   
   const { user } = useAuth();
 
+  const presentationListing =
+    import.meta.env.VITE_PRESENTATION_LISTING === 'true';
+
   // Load opportunities function - memoized to prevent recreation
   const loadOpportunities = useCallback(async () => {
     try {
@@ -136,7 +139,10 @@ const Home: React.FC = memo(() => {
           setError('No backend available. This is a production demo with frontend only.');
         }
       } else {
-        setOpportunities(data);
+        const list = presentationListing
+          ? filterOpportunitiesForPresentationListing(data)
+          : data;
+        setOpportunities(list);
       }
     } catch (err: unknown) {
       setError('Failed to load opportunities - backend not available in production demo');
@@ -144,7 +150,14 @@ const Home: React.FC = memo(() => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [presentationListing]);
+
+  // Avoid empty "App Testing" view when presentation mode hides test-type studies
+  useEffect(() => {
+    if (presentationListing && selectedType === 'test') {
+      setSelectedType('all');
+    }
+  }, [presentationListing, selectedType]);
 
   // Consolidated effect to load opportunities - prevents duplicate API calls
   useEffect(() => {

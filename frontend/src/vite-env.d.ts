@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_ENABLE_DEBUG: string
   /** Set to 'true' to show Demo Access pills on landing (e.g. staging). Hidden in production when unset. */
   readonly VITE_SHOW_DEMO_LOGIN?: string
+  /** Set to 'true' to hide app-testing / smoke-style studies on the home listing (local screenshots). */
+  readonly VITE_PRESENTATION_LISTING?: string
 }
 
 interface ImportMeta {
