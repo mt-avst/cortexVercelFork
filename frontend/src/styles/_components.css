@@ -9230,15 +9230,22 @@ body.theme-light .mission-scheduler .legend-label-available {
    Refactored from inline styles for proper theming
    ============================================================ */
 
-/* Full-screen wrapper */
+/* Full-screen wrapper — full-bleed escapes App .container so light grid fills viewport */
 .landing-page-wrapper {
   position: relative;
-  width: 100%;
+  width: 100vw;
+  max-width: 100vw;
+  margin-left: calc(50% - 50vw);
   min-height: 100vh;
   overflow-x: hidden;
   overflow-y: auto;
   z-index: 50;
   background: var(--bg-app);
+}
+
+/* 100vw breakout can expose subpixel overflow; keep page from horizontal scroll */
+body.landing-page {
+  overflow-x: hidden;
 }
 
 /* Dark mode: solid dark background */
@@ -11392,6 +11399,8 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 
 /* Section inner - width constraint and center alignment */
 .sales-section-inner {
+  position: relative;
+  z-index: 1;
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 var(--spacing-4);

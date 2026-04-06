@@ -445,6 +445,31 @@ body.theme-light .landing-page .header {
   box-shadow: none;
 }
 
+/* Landing: main bottom padding left a transparent strip above the footer; fixed canvas showed through */
+body.landing-page .main {
+  padding-bottom: 0;
+}
+
+/*
+ * Feedback footer is a sibling of <main>, but .landing-page-wrapper is z-index 50 with a fixed
+ * canvas inside — at z-index 10 the footer painted *under* that layer and animation showed through.
+ * Stack the strip above the landing layer; use opaque fills (textarea used translucent --bg-input).
+ */
+body.landing-page .feedback-footer {
+  position: relative;
+  z-index: 60;
+}
+
+body.theme-light.landing-page .feedback-footer {
+  background: #fffefb;
+  border-top-color: var(--border-card);
+  box-shadow: 0 -4px 24px rgba(20, 33, 61, 0.06);
+}
+
+body.theme-light.landing-page .feedback-footer .feedback-footer__textarea {
+  background-color: #fffefb;
+}
+
 /* Header - Light Mode (transparent so grid shows through) */
 body.theme-light .header {
   background: transparent;
@@ -3242,6 +3267,16 @@ body.theme-light .leaderboard-tab--active {
    Uses unified surface token system
    ============================================================ */
 
+/* Continuous backdrop behind all below-fold sales content — mutes fixed canvas + grid */
+body.theme-light .sales-sections-wrapper {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(255, 251, 246, 0.98) 100px,
+    rgba(255, 251, 246, 0.98) 100%
+  );
+}
+
 /* Section background - Light Mode: uses panel tokens */
 body.theme-light .sales-section--dim {
   background: var(--surface-panel-current);
@@ -3315,6 +3350,16 @@ body.theme-light .sales-walkthrough-btn:hover {
    SALES PAGE SECTIONS - Dark Mode Overrides
    Uses unified surface token system
    ============================================================ */
+
+/* Continuous backdrop — matches landing wrapper; calms neural animation behind copy */
+body.theme-dark .sales-sections-wrapper {
+  background: linear-gradient(
+    to bottom,
+    rgba(3, 3, 5, 0.82) 0%,
+    #030305 100px,
+    #030305 100%
+  );
+}
 
 /* Section background - Dark Mode: uses panel tokens */
 body.theme-dark .sales-section--dim {
