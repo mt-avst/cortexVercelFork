@@ -6,7 +6,7 @@ ingress:
   enabled: true
   type: public
 auth:
-  okta_app:
+  okta_alb:
     enabled: true
     groups:
       - adaptavist-staff
