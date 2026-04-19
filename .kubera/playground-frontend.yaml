@@ -10,8 +10,6 @@ auth:
     enabled: true
     groups:
       - adaptavist-staff
-    grantTypes: "authorization_code,refresh_token"
-    redirectUriPath: "/auth/callback"
 config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com
