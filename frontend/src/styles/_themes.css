@@ -895,6 +895,12 @@ body.theme-dark .admin-page-bg {
   position: relative;
 }
 
+/* Ensure admin content sits above the fixed z-index:0 neural canvas */
+body.theme-dark .admin-page-bg > :not(.slow-neural-background) {
+  position: relative;
+  z-index: 1;
+}
+
 /* Light Mode - Admin Page with Premium Gradient Background */
 body.theme-light .admin-page-bg {
   background: var(--surface-page-light);
@@ -2641,6 +2647,12 @@ body.theme-dark .opportunity-form .card {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
+}
+
+/* Suppress lift transform for the form card - it's a large container, not an interactive card */
+body.theme-dark .opportunity-form .card:hover,
+body.theme-light .opportunity-form .card:hover {
+  transform: none;
 }
 
 body.theme-dark .opportunity-form .card-header {

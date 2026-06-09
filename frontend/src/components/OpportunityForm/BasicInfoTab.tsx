@@ -143,7 +143,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
-          <div className="col-md-6">
+          <div className={formData.type === 'test' || formData.type === 'interview' ? 'col-md-6' : 'col-md-12'}>
             <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
               <label htmlFor="title" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
                 Title *
@@ -169,33 +169,36 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               )}
             </div>
           </div>
-          
-          <div className="col-md-6">
-            <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-              <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
-                Meeting Location *
-              </label>
-              <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
-                Zoom, Google Meet, or other meeting link
+
+          {/* Meeting Location - only relevant for session-based types */}
+          {(formData.type === 'test' || formData.type === 'interview') && (
+            <div className="col-md-6">
+              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                <label htmlFor="meeting_location_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>
+                  Meeting Location *
+                </label>
+                <div id="meeting_location-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
+                  Zoom, Google Meet, or other meeting link
+                </div>
+                <input
+                  type="text"
+                  id="meeting_location_optional"
+                  className={`form-control ${validationErrors.meeting_location_optional ? 'is-invalid' : ''}`}
+                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
+                  value={formData.meeting_location_optional || ''}
+                  onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
+                  placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
+                  aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
+                  aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
+                  aria-required="true"
+                  required
+                />
+                {validationErrors.meeting_location_optional && (
+                  <div id="meeting_location-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.meeting_location_optional}</div>
+                )}
               </div>
-              <input
-                type="text"
-                id="meeting_location_optional"
-                className={`form-control ${validationErrors.meeting_location_optional ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
-                value={formData.meeting_location_optional || ''}
-                onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
-                placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
-                aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
-                aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
-                aria-required="true"
-                required
-              />
-              {validationErrors.meeting_location_optional && (
-                <div id="meeting_location-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.meeting_location_optional}</div>
-              )}
             </div>
-          </div>
+          )}
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>
