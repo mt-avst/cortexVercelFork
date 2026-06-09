@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getOpportunityAnalytics, getOpportunity, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
-import { Opportunity } from '../api/types';
+import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
+import { Opportunity, SessionEvent } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { ArrowLeft, Info } from 'lucide-react';
@@ -147,6 +147,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string>('');
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(30);
+  const [activeTab, setActiveTab] = useState<'overview' | 'sessions'>('overview');
+  const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
+  const [loadingSessionEvents, setLoadingSessionEvents] = useState(false);
 
   const loadAnalytics = useCallback(async (period: AnalyticsPeriod) => {
     if (!id) return;
@@ -164,6 +167,19 @@ const OpportunityAnalyticsPage: React.FC = () => {
     }
   }, [id]);
 
+  const loadSessionEvents = useCallback(async () => {
+    if (!id) return;
+    setLoadingSessionEvents(true);
+    try {
+      const events = await getOpportunitySessionEvents(id);
+      setSessionEvents(events);
+    } catch {
+      // Non-fatal: session events tab will show empty state
+    } finally {
+      setLoadingSessionEvents(false);
+    }
+  }, [id]);
+
   const loadData = useCallback(async () => {
     if (!id) return;
 
@@ -171,11 +187,15 @@ const OpportunityAnalyticsPage: React.FC = () => {
       setLoadingOpportunity(true);
       const opp = await getOpportunity(id);
       setOpportunity(opp);
-      
+
       // Analytics now available for all opportunity types
       // Views = users who clicked to see details
       // Actions = users who clicked action button (open link for polls/surveys, booked session for tests/interviews)
       await loadAnalytics(selectedPeriod);
+
+      if (opp.type === 'unmoderated' && opp.firsthand_study_id) {
+        void loadSessionEvents();
+      }
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number } };
       if (axiosError.response?.status === 404) {
@@ -188,7 +208,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
     } finally {
       setLoadingOpportunity(false);
     }
-  }, [id, loadAnalytics, selectedPeriod]);
+  }, [id, loadAnalytics, loadSessionEvents, selectedPeriod]);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -368,22 +388,61 @@ const OpportunityAnalyticsPage: React.FC = () => {
           </p>
         </div>
         
-        {/* Period Selector - Cortex Style */}
-        <div className="cortex-date-selector cortex-period-selector" role="group" aria-label="Time period">
-          {([7, 14, 30] as AnalyticsPeriod[]).map((period) => (
-            <button
-              key={period}
-              type="button"
-              className={`cortex-period-btn ${selectedPeriod === period ? 'cortex-period-btn--active' : ''}`}
-              onClick={() => handlePeriodChange(period)}
-            >
-              {period}d
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* Sessions tab - only for FirstHand-linked unmoderated opportunities */}
+          {opportunity.type === 'unmoderated' && opportunity.firsthand_study_id && (
+            <div className="cortex-date-selector" role="tablist" aria-label="Analytics section">
+              <button
+                role="tab"
+                type="button"
+                className={`cortex-period-btn ${activeTab === 'overview' ? 'cortex-period-btn--active' : ''}`}
+                aria-selected={activeTab === 'overview'}
+                onClick={() => setActiveTab('overview')}
+              >
+                Overview
+              </button>
+              <button
+                role="tab"
+                type="button"
+                className={`cortex-period-btn ${activeTab === 'sessions' ? 'cortex-period-btn--active' : ''}`}
+                aria-selected={activeTab === 'sessions'}
+                onClick={() => {
+                  setActiveTab('sessions');
+                  if (sessionEvents.length === 0) {
+                    void loadSessionEvents();
+                  }
+                }}
+              >
+                Sessions
+              </button>
+            </div>
+          )}
+
+          {/* Period Selector - only shown in overview tab */}
+          {activeTab === 'overview' && (
+            <div className="cortex-date-selector cortex-period-selector" role="group" aria-label="Time period">
+              {([7, 14, 30] as AnalyticsPeriod[]).map((period) => (
+                <button
+                  key={period}
+                  type="button"
+                  className={`cortex-period-btn ${selectedPeriod === period ? 'cortex-period-btn--active' : ''}`}
+                  onClick={() => handlePeriodChange(period)}
+                >
+                  {period}d
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {loadingAnalytics ? (
+      {activeTab === 'sessions' ? (
+        <SessionsTab
+          events={sessionEvents}
+          loading={loadingSessionEvents}
+          onRefresh={loadSessionEvents}
+        />
+      ) : loadingAnalytics ? (
         <div className="text-center py-5">
           <div className="spinner-border text-primary" role="status">
             <span className="visually-hidden">Loading analytics...</span>
@@ -705,6 +764,123 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
       )}
       </div>
+    </div>
+  );
+};
+
+const EVENT_TYPE_LABELS: Record<string, string> = {
+  session_started: 'Started',
+  session_completed: 'Completed',
+  session_abandoned: 'Abandoned',
+  session_failed: 'Failed'
+};
+
+const EVENT_TYPE_BADGE: Record<string, string> = {
+  session_started: 'cortex-badge--info',
+  session_completed: 'cortex-badge--best',
+  session_abandoned: 'cortex-badge--peak',
+  session_failed: ''
+};
+
+const SessionsTab: React.FC<{
+  events: SessionEvent[];
+  loading: boolean;
+  onRefresh: () => void;
+}> = ({ events, loading, onRefresh }) => {
+  if (loading) {
+    return (
+      <div className="text-center py-5">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading sessions...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
+      <div className="cortex-chart-header">
+        <h5 className="cortex-chart-title">FirstHand Sessions</h5>
+        <button
+          type="button"
+          className="cortex-period-btn"
+          onClick={onRefresh}
+          style={{ fontSize: '0.75rem' }}
+        >
+          Refresh
+        </button>
+      </div>
+
+      {events.length === 0 ? (
+        <div className="cortex-no-data" style={{ padding: '32px 0' }}>
+          <p>No session events recorded yet.</p>
+          <p className="cortex-stat-subtitle" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
+            Events are recorded when participants start, complete, or abandon sessions via FirstHand.
+          </p>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Participant</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Event</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Occurred</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr
+                  key={event.id}
+                  style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}
+                >
+                  <td style={{ padding: '10px 12px' }}>
+                    <span style={{ fontWeight: 500 }}>
+                      {event.participant_name ?? 'Unknown'}
+                    </span>
+                    {event.participant_email && (
+                      <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {event.participant_email}
+                      </span>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    <span className={`cortex-badge ${EVENT_TYPE_BADGE[event.event_type] ?? ''}`}>
+                      {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                    {new Date(event.occurred_at).toLocaleDateString('en-GB', {
+                      day: 'numeric',
+                      month: 'short',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </td>
+                  <td style={{ padding: '10px 12px' }}>
+                    {event.firsthand_review_url ? (
+                      <a
+                        href={event.firsthand_review_url}
+                        rel="noreferrer"
+                        style={{ color: 'var(--color-analytics-orange)', fontSize: '0.8rem' }}
+                        target="_blank"
+                      >
+                        Review in FirstHand
+                      </a>
+                    ) : (
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
+                        {event.firsthand_session_id.slice(0, 8)}…
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

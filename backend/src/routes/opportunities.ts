@@ -531,7 +531,7 @@ router.post('/:id/firsthand-handoff', asyncHandler(async (req: Request, res: Res
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-  const returnUrl = `${frontendUrl}/opportunities/${id}`;
+  const returnUrl = `${frontendUrl}/opportunities/${id}?completed=1`;
   const callbackUrl = `${backendUrl}/api/firsthand/callbacks`;
 
   const session = await firstHandPost<{ session_url: string }>('/api/sessions', {
@@ -547,6 +547,50 @@ router.post('/:id/firsthand-handoff', asyncHandler(async (req: Request, res: Res
   });
 
   res.json({ session_url: session.session_url });
+}));
+
+// GET /api/opportunities/:id/session-events - List FirstHand session events for an opportunity
+router.get('/:id/session-events', asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const { id } = req.params;
+  const dbAvailable = await isDatabaseAvailable();
+
+  if (!dbAvailable) {
+    return res.json([]);
+  }
+
+  const firsthandBaseUrl = process.env.FIRSTHAND_BASE_URL || '';
+
+  const result = await pool.query(
+    `SELECT
+       e.id,
+       e.opportunity_id,
+       e.participant_user_id,
+       e.firsthand_session_id,
+       e.event_type,
+       e.occurred_at,
+       e.payload,
+       e.received_at,
+       u.name AS participant_name,
+       u.email AS participant_email
+     FROM opportunity_session_events e
+     LEFT JOIN users u ON u.id = e.participant_user_id
+     WHERE e.opportunity_id = $1
+     ORDER BY e.occurred_at DESC`,
+    [id]
+  );
+
+  const events = result.rows.map((row) => ({
+    ...row,
+    firsthand_review_url: firsthandBaseUrl
+      ? `${firsthandBaseUrl}/review/session/${row.firsthand_session_id}`
+      : null
+  }));
+
+  res.json(events);
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity

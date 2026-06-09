@@ -240,6 +240,11 @@ export const getFirstHandStudies = async (): Promise<import('./types').FirstHand
   return response.data.studies ?? [];
 };
 
+export const getOpportunitySessionEvents = async (opportunityId: string): Promise<import('./types').SessionEvent[]> => {
+  const response = await api.get(`/opportunities/${opportunityId}/session-events`);
+  return response.data;
+};
+
 // Session API functions
 export const getSessions = async (opportunityId: string, params?: {
   from?: string;

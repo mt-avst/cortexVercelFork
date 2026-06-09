@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startFirstHandSession } from '../api/client';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -103,6 +103,8 @@ const renderPollDescription = (description: string) => {
 const OpportunityDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isSessionCompleted = searchParams.get('completed') === '1';
   const { user, login } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
@@ -415,6 +417,13 @@ const OpportunityDetail: React.FC = () => {
             ← Back to Cortex
           </button>
 
+
+          {/* Session completion banner - shown when returning from FirstHand */}
+          {isSessionCompleted && (
+            <div className="alert alert-success alert-dismissible fade show mission-alert mb-4" role="status" aria-live="polite">
+              <strong>Session complete.</strong> Your recording and responses have been saved. The research team will be in touch.
+            </div>
+          )}
 
           {/* Error message */}
           {error && (

@@ -434,6 +434,24 @@ export interface LogContext {
 }
 
 // ============================================================================
+// FIRSTHAND INTEGRATION TYPES
+// ============================================================================
+
+export interface SessionEvent {
+  id: string;
+  opportunity_id: string;
+  participant_user_id: string | null;
+  firsthand_session_id: string;
+  event_type: 'session_started' | 'session_completed' | 'session_abandoned' | 'session_failed';
+  occurred_at: string;
+  payload?: Record<string, unknown>;
+  received_at: string;
+  participant_name?: string;
+  participant_email?: string;
+  firsthand_review_url?: string | null;
+}
+
+// ============================================================================
 // UTILITY TYPES
 // ============================================================================
 
