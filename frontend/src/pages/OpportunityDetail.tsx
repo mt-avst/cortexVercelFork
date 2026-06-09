@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startFirstHandSession } from '../api/client';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -111,6 +111,7 @@ const OpportunityDetail: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
+  const [firstHandLoading, setFirstHandLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
@@ -820,26 +821,47 @@ const OpportunityDetail: React.FC = () => {
                   <div className="row">
                     <div className="col-md-4">
                       {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' ? (
-                        <button 
+                        <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {
-                            // Track action click before opening external link
-                            if (opportunity.external_link_optional) {
+                            if (opportunity.type === 'unmoderated' && opportunity.firsthand_study_id) {
+                              setFirstHandLoading(true);
+                              try {
+                                await trackOpportunityClick(opportunity.id, 'action');
+                                const { session_url } = await startFirstHandSession(opportunity.id);
+                                window.location.assign(session_url);
+                              } catch {
+                                setError('Failed to start session. Please try again.');
+                              } finally {
+                                setFirstHandLoading(false);
+                              }
+                            } else if (opportunity.external_link_optional) {
                               await trackOpportunityClick(opportunity.id, 'action');
                               window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
                             }
                           }}
-                          disabled={!opportunity.external_link_optional}
-                          aria-label={
-                            opportunity.type === 'poll' ? 'Open poll in new tab' : 
-                            opportunity.type === 'survey' ? 'Open survey in new tab' : 
-                            'Start unmoderated test in new tab'
+                          disabled={
+                            firstHandLoading ||
+                            (!opportunity.firsthand_study_id && !opportunity.external_link_optional)
                           }
-                          title={!opportunity.external_link_optional ? 'Link not available' : 'Opens in a new tab'}
+                          aria-label={
+                            opportunity.type === 'poll' ? 'Open poll in new tab' :
+                            opportunity.type === 'survey' ? 'Open survey in new tab' :
+                            'Start unmoderated test'
+                          }
+                          title={
+                            !opportunity.firsthand_study_id && !opportunity.external_link_optional
+                              ? 'Not available yet'
+                              : undefined
+                          }
                         >
-                          {opportunity.type === 'poll' ? 'Open Poll' : 
-                           opportunity.type === 'survey' ? 'Open Survey' : 
-                           'Start Test'}
+                          {firstHandLoading
+                            ? 'Starting session...'
+                            : opportunity.type === 'poll'
+                            ? 'Open Poll'
+                            : opportunity.type === 'survey'
+                            ? 'Open Survey'
+                            : 'Start Test'}
                         </button>
                       ) : (
                         <a 
@@ -857,7 +879,8 @@ const OpportunityDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') && (
+                  {(opportunity.type === 'poll' || opportunity.type === 'survey' ||
+                    (opportunity.type === 'unmoderated' && !opportunity.firsthand_study_id)) && (
                     <div className="row mt-2">
                       <div className="col-md-4">
                         <small className="text-muted d-flex align-items-center">

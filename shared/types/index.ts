@@ -71,6 +71,7 @@ export interface Opportunity {
   status: 'draft' | 'published' | 'closed';
   owner_user_id: string;
   external_link_optional?: string;
+  firsthand_study_id?: string;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
@@ -94,6 +95,7 @@ export interface CreateOpportunityRequest {
   product_optional?: string;
   default_duration_minutes?: number;
   external_link_optional?: string;
+  firsthand_study_id?: string;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
@@ -111,6 +113,7 @@ export interface UpdateOpportunityRequest {
   default_duration_minutes?: number;
   status?: 'draft' | 'published' | 'closed';
   external_link_optional?: string;
+  firsthand_study_id?: string;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
@@ -372,18 +375,32 @@ export interface OpportunityFormData {
   purpose_one_liner: string;
   default_duration_minutes: number;
   status: 'draft' | 'published';
-  
+
   // Content Details Tab
   description_optional?: string;
   product_optional?: string;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
-  
+
   // External Link Tab
   external_link_optional?: string;
   start_date?: string;
   end_date?: string;
+
+  // FirstHand Study Tab (unmoderated type)
+  firsthand_study_id?: string;
+}
+
+export interface FirstHandStudy {
+  study: {
+    id: string;
+    title: string;
+    status: 'draft' | 'launched' | 'archived';
+    estimated_duration_minutes?: number | null;
+    created_at?: string;
+  };
+  steps: { id: string }[];
 }
 
 export interface SessionFormData {

@@ -14,6 +14,7 @@ import {
   validateSessionData
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
+import { isFirstHandConfigured, firstHandPost } from '../utils/firsthand-client';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
@@ -311,10 +312,11 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   const data: CreateOpportunityRequest = req.body;
   // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
   
-  // Additional validation for published polls/surveys/unmoderated (M6 requirement)
+  // Additional validation for published polls/surveys/unmoderated
   if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey' || data.type === 'unmoderated')) {
-    if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
-      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests');
+    const isFirstHandBacked = data.type === 'unmoderated' && data.firsthand_study_id;
+    if (!isFirstHandBacked && (!data.external_link_optional || !validateUrl(data.external_link_optional))) {
+      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests without a FirstHand study');
     }
   }
 
@@ -342,9 +344,9 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
       product_optional, meeting_location_optional, default_duration_minutes, status,
-      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
-      start_date, end_date, display_width
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
+      participant_type_specific_details, start_date, end_date, display_width
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING *
   `;
 
@@ -359,6 +361,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.status || 'draft',
     req.user!.id,
     data.external_link_optional?.trim() || null,
+    data.firsthand_study_id?.trim() || null,
     data.participant_type_required || 'any',
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
@@ -437,17 +440,20 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   
   // Get existing opportunity to check type when status is being changed
   const existingOpp = await pool.query(
-    'SELECT type, external_link_optional FROM opportunities WHERE id = $1',
+    'SELECT type, external_link_optional, firsthand_study_id FROM opportunities WHERE id = $1',
     [id]
   );
   const existingType = data.type || existingOpp.rows[0].type;
   const existingLink = existingOpp.rows[0].external_link_optional;
+  const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
   const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
-  
-  // Additional validation for published polls/surveys/unmoderated (M6 requirement)
+  const newFirstHandStudyId = data.firsthand_study_id !== undefined ? data.firsthand_study_id : existingFirstHandStudyId;
+
+  // Additional validation for published polls/surveys/unmoderated
   if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey' || existingType === 'unmoderated')) {
-    if (!newLink || !validateUrl(newLink)) {
-      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests');
+    const isFirstHandBacked = existingType === 'unmoderated' && newFirstHandStudyId;
+    if (!isFirstHandBacked && (!newLink || !validateUrl(newLink))) {
+      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests without a FirstHand study');
     }
   }
   
@@ -489,6 +495,58 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   };
   
   res.json(opportunity);
+}));
+
+// POST /api/opportunities/:id/firsthand-handoff - Create a FirstHand session for this opportunity
+router.post('/:id/firsthand-handoff', asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  if (!isFirstHandConfigured()) {
+    return res.status(503).json({ error: 'FirstHand integration not configured' });
+  }
+
+  const { id } = req.params;
+  const dbAvailable = await isDatabaseAvailable();
+
+  let studyId: string | null = null;
+  if (dbAvailable) {
+    const result = await pool.query(
+      'SELECT firsthand_study_id, status FROM opportunities WHERE id = $1',
+      [id]
+    );
+    if (result.rows.length === 0) {
+      throw new NotFoundError('Opportunity');
+    }
+    if (result.rows[0].status !== 'published') {
+      return res.status(403).json({ error: 'Opportunity is not published' });
+    }
+    studyId = result.rows[0].firsthand_study_id;
+  }
+
+  if (!studyId) {
+    return res.status(400).json({ error: 'Opportunity has no FirstHand study linked' });
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+  const returnUrl = `${frontendUrl}/opportunities/${id}`;
+  const callbackUrl = `${backendUrl}/api/firsthand/callbacks`;
+
+  const session = await firstHandPost<{ session_url: string }>('/api/sessions', {
+    study_id: studyId,
+    participant: {
+      participant_id: req.user.id,
+      display_name: req.user.name,
+      email: req.user.email,
+      external_ref: id,
+    },
+    callback_url: callbackUrl,
+    return_url: returnUrl,
+  });
+
+  res.json({ session_url: session.session_url });
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity

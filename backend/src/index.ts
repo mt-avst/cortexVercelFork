@@ -152,8 +152,10 @@ if (config.NODE_ENV === 'production' || config.ENABLE_CSRF) {
   });
 }
 
-// Body parsing middleware
-app.use(express.json());
+// Body parsing middleware — capture raw body for webhook signature verification
+app.use(express.json({
+  verify: (req: any, _res, buf) => { req.rawBody = buf.toString('utf8'); }
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Routes

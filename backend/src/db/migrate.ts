@@ -747,6 +747,34 @@ export async function runMigrations() {
     `);
     console.log('✅ Created feedback indexes');
 
+    // Add firsthand_study_id column for Cortex↔FirstHand integration (Phase 5)
+    await client.query(`
+      ALTER TABLE opportunities
+      ADD COLUMN IF NOT EXISTS firsthand_study_id TEXT
+    `);
+
+    // Create opportunity_session_events table for FirstHand lifecycle callbacks (Phase 6)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_session_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
+        participant_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        firsthand_session_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        payload JSONB,
+        received_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_session_events_opportunity
+        ON opportunity_session_events(opportunity_id, occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_session_events_participant
+        ON opportunity_session_events(participant_user_id, occurred_at DESC);
+    `);
+    console.log('✅ Created opportunity_session_events table');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);

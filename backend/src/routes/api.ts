@@ -10,6 +10,7 @@ import adminRouter from './admin';
 import notificationPreferencesRouter from './notificationPreferences';
 import feedbackRouter from './feedback';
 import statsRouter from './stats';
+import firsthandRouter from './firsthand';
 
 const router: Router = Router();
 
@@ -47,5 +48,8 @@ router.use('/feedback', feedbackRouter);
 
 // Mount stats routes (public, no auth required)
 router.use('/stats', statsRouter);
+
+// Mount FirstHand integration routes
+router.use('/firsthand', firsthandRouter);
 
 export default router;

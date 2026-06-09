@@ -7,7 +7,7 @@ import { createOpportunity, updateOpportunity, getOpportunity, getSessions } fro
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
@@ -34,7 +34,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published',
     display_width: 'single' as 'single' | 'double',
     start_date: '' as string | undefined,
-    end_date: '' as string | undefined
+    end_date: '' as string | undefined,
+    firsthand_study_id: '' as string | undefined
   });
   
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -54,8 +55,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
     ];
 
-    if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+    if (['poll', 'survey', 'question'].includes(formData.type)) {
       tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
+    }
+
+    if (formData.type === 'unmoderated') {
+      tabs.push({ id: 3, title: 'FirstHand Study', description: 'Connect a FirstHand study' });
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
@@ -116,6 +121,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
+        firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
@@ -123,9 +129,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || ''
       });
-      
+
       setOpportunityId(opportunity.id);
-      
+
       // Store original form data for change detection
       const originalData = {
         type: opportunity.type,
@@ -136,6 +142,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         meeting_location_optional: opportunity.meeting_location_optional || '',
         default_duration_minutes: opportunity.default_duration_minutes,
         external_link_optional: opportunity.external_link_optional || '',
+        firsthand_study_id: opportunity.firsthand_study_id || '',
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
@@ -252,13 +259,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
     
     if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-      if (!formData.external_link_optional.trim()) {
-        errors.external_link_optional = 'External link is required for published polls, surveys, questions, and unmoderated tests';
-      } else {
-        try {
-          new URL(formData.external_link_optional);
-        } catch {
-          errors.external_link_optional = 'External link must be a valid URL';
+      const isFirstHandBacked = formData.type === 'unmoderated' && formData.firsthand_study_id?.trim();
+      if (!isFirstHandBacked) {
+        if (!formData.external_link_optional?.trim()) {
+          errors.external_link_optional = formData.type === 'unmoderated'
+            ? 'A FirstHand study or external link is required for published unmoderated tests'
+            : 'External link is required for published polls, surveys, and questions';
+        } else {
+          try {
+            new URL(formData.external_link_optional);
+          } catch {
+            errors.external_link_optional = 'External link must be a valid URL';
+          }
         }
       }
     }
@@ -321,10 +333,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           }
         }
         break;
-      case 'external_link_optional':
-        if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+      case 'external_link_optional': {
+        const isFirstHandBacked = formData.type === 'unmoderated' && formData.firsthand_study_id?.trim();
+        if (!isFirstHandBacked && formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
           if (!stringValue.trim()) {
-            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, questions, and unmoderated tests';
+            fieldErrors.external_link_optional = formData.type === 'unmoderated'
+              ? 'A FirstHand study or external link is required for published unmoderated tests'
+              : 'External link is required for published polls, surveys, and questions';
           } else {
             try {
               new URL(stringValue);
@@ -337,6 +352,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           delete fieldErrors.external_link_optional;
         }
         break;
+      }
       case 'participant_type_specific_details':
         if (formData.participant_type_required === 'specific') {
           if (!stringValue.trim()) {
@@ -368,6 +384,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       (formData.meeting_location_optional || '').trim() !== (originalFormData.meeting_location_optional || '').trim() ||
       formData.default_duration_minutes !== originalFormData.default_duration_minutes ||
       formData.external_link_optional.trim() !== originalFormData.external_link_optional.trim() ||
+      (formData.firsthand_study_id || '') !== (originalFormData.firsthand_study_id || '') ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
@@ -417,10 +434,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         data.default_duration_minutes = formData.default_duration_minutes;
       }
       
-      // Include start_date and end_date for external link types
+      // Include start_date, end_date, and firsthand_study_id for external link / unmoderated types
       if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
         data.start_date = formData.start_date || undefined;
         data.end_date = formData.end_date || undefined;
+      }
+
+      if (formData.type === 'unmoderated') {
+        data.firsthand_study_id = formData.firsthand_study_id?.trim() || undefined;
       }
       
       // Only superadmins can set display_width
@@ -891,9 +912,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             }}
                             style={{ fontSize: '0.95rem' }}
                           >
-                            {formData.type === 'test' || formData.type === 'interview' 
-                              ? 'Continue to Session Setup' 
-                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question' || formData.type === 'unmoderated'
+                            {formData.type === 'test' || formData.type === 'interview'
+                              ? 'Continue to Session Setup'
+                              : formData.type === 'unmoderated'
+                              ? 'Continue to Study Setup'
+                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
                               ? 'Continue to Link Setup'
                               : 'Continue'}
                             <ArrowRight size={16} className="ms-2" />
@@ -903,15 +926,81 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                     </>
                   )}
 
-                  {/* External Link Tab - Only for polls, surveys, and questions */}
-                  {activeTab === 3 && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type) && (
+                  {/* FirstHand Study Tab - only for unmoderated */}
+                  {activeTab === 3 && formData.type === 'unmoderated' && (
+                    <>
+                      <FirstHandStudyTab
+                        formData={formData}
+                        validationErrors={validationErrors}
+                        handleInputChange={handleInputChange}
+                      />
+                      
+                      {/* Navigation Buttons for External Link Tab */}
+                      <div className="border-top mt-4 pt-4">
+                        <div className="d-flex justify-content-between align-items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                            onClick={() => setActiveTab(2)}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            <ArrowLeft size={16} className="me-2" />
+                            Back
+                          </button>
+                          {isEdit && hasChanges() && (
+                            <button
+                              type="button"
+                              className="btn btn-success px-5 py-2 fw-semibold"
+                              onClick={() => handleSubmit()}
+                              disabled={saving || !!successMessage}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              {saving ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
+                                  Saving...
+                                </>
+                              ) : (
+                                <>
+                                  <Save size={16} className="me-2" />
+                                  Save Changes
+                                </>
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-success px-5 py-2 fw-semibold"
+                            onClick={() => handleSubmit()}
+                            disabled={saving || !!successMessage}
+                            style={{ fontSize: '0.95rem' }}
+                          >
+                            {saving ? (
+                              <>
+                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
+                                {isEdit ? 'Updating...' : 'Creating...'}
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle size={16} className="me-2" />
+                                {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* External Link Tab - for polls, surveys, and questions (not unmoderated) */}
+                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && (
                     <>
                       <ExternalLinkTab
                         formData={formData}
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                       />
-                      
+
                       {/* Navigation Buttons for External Link Tab */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">

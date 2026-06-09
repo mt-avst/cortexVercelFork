@@ -230,6 +230,16 @@ export const duplicateOpportunity = async (id: string): Promise<Opportunity> => 
   return response.data;
 };
 
+export const startFirstHandSession = async (opportunityId: string): Promise<{ session_url: string }> => {
+  const response = await api.post(`/opportunities/${opportunityId}/firsthand-handoff`);
+  return response.data;
+};
+
+export const getFirstHandStudies = async (): Promise<import('./types').FirstHandStudy[]> => {
+  const response = await api.get('/firsthand/studies');
+  return response.data.studies ?? [];
+};
+
 // Session API functions
 export const getSessions = async (opportunityId: string, params?: {
   from?: string;
