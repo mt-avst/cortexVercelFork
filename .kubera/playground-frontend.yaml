@@ -1,0 +1,52 @@
+teamName: platform #Mandatory field
+environment: playground
+service:
+  port: 3000
+ingress: 
+  enabled: true
+  type: public
+auth:
+  okta_alb:
+    enabled: true
+    groups:
+      - adaptavist-staff
+config:
+  data:
+    OIDC_ISSUER: https://adaptavist.okta.com
+secret:
+  enabled: true
+resources:
+  memory:
+    # -- Pod requested memory
+    min: 2Gi
+    # -- Pod memory limit
+    max: 2Gi
+  cpu:
+    # -- Pod requested CPU
+    min: 1000m
+    # -- Pod CPU limit
+    max: 1000m
+filesystem:
+  writable:
+    enabled: true
+    directories:
+      - path: /var/cache/nginx
+      - path: /var/run
+      - path: /var/log/nginx
+      - path: /tmp
+deployment:
+  livenessProbe:
+    httpGet:
+      path: '/health'
+      port: 3000
+      scheme: HTTP
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: '/health'
+      port: 3000
+      scheme: HTTP
+    initialDelaySeconds: 20

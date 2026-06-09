@@ -1,0 +1,72 @@
+teamName: platform #Mandatory field
+environment: playground
+service:
+  port: 3001
+ingress: 
+  enabled: false
+config:
+  data:
+    OIDC_ISSUER: https://adaptavist.okta.com
+    NODE_ENV: production
+    SKIP_OIDC: "true"
+    ENABLE_CSRF: "false"
+secret:
+  enabled: true
+resources:
+  memory:
+    # -- Pod requested memory
+    min: 2Gi
+    # -- Pod memory limit
+    max: 2Gi
+  cpu:
+    # -- Pod requested CPU
+    min: 1000m
+    # -- Pod CPU limit
+    max: 1000m
+database:
+  postgresql:
+    enabled: true
+    local:
+      enabled: true
+      image:
+        repository: postgres
+        tag: '17'
+      port: '5432'
+      database: 'postgres'
+      user: 'postgres'
+    deploymentType: "rds"
+    rds:
+      deletionProtection: false
+      majorEngineVersion: "17"
+      engineVersion: "17.6"
+      autoMinorVersionUpgrade: false
+      dbFamily: "postgres17"
+      skipFinalSnapshot: false
+filesystem:
+  writable:
+    enabled: true
+    directories:
+      - path: /.npm
+      - path: /tmp
+      - path: /.local
+deployment:
+  livenessProbe:
+    httpGet:
+      path: '/health'
+      port: 3001
+      scheme: HTTP
+    initialDelaySeconds: 20
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 10
+  readinessProbe:
+    httpGet:
+      path: '/health'
+      port: 3001
+      scheme: HTTP
+    initialDelaySeconds: 20
+initContainer:
+  enabled: true
+  command: [ "sh", "-c"]
+  args: [" npm run migrate && npm run seed"]
+  workingDir: "/app/backend"
