@@ -118,7 +118,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
  */
 export async function awardPoints(
   userId: string, 
-  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question',
+  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question' | 'unmoderated',
   opportunityId: string,
   sessionId: string
 ): Promise<{ points: number; newLevel: number; levelUp: boolean }> {
@@ -232,7 +232,7 @@ function calculateLevel(totalPoints: number): number {
 async function checkAndAwardAchievements(
   userId: string, 
   totalPoints: number, 
-  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question'
+  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question' | 'unmoderated'
 ): Promise<void> {
   const client = await pool.connect();
   try {
@@ -494,7 +494,7 @@ export async function getPointsHistory(userId: string, limit: number = 20): Prom
  */
 export async function awardPointsAfterApproval(
   userId: string,
-  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question',
+  opportunityType: 'test' | 'interview' | 'poll' | 'survey' | 'question' | 'unmoderated',
   opportunityId: string,
   sessionId: string,
   approvedBy: string
@@ -548,8 +548,10 @@ export async function awardPointsAfterApproval(
       userProfile = userProfileResult.rows[0];
     }
 
-    // Calculate AdaptaBits for this activity
-    let pointsAwarded = POINT_VALUES[opportunityType] || 0;
+    // Calculate AdaptaBits for this activity.
+    // Note: 'unmoderated' is intentionally absent from POINT_VALUES; it falls through to 0
+    // (no points awarded) until a points value is decided for that type.
+    let pointsAwarded = POINT_VALUES[opportunityType as keyof typeof POINT_VALUES] || 0;
     if (pointsAwarded === 0) {
       console.warn(`No AdaptaBits defined for opportunity type: ${opportunityType}`);
       await client.query('ROLLBACK');
