@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
 import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from '../utils/errors';
-import { parseSessionCookie } from '../utils/auth';
+import { parseSessionCookie, requireAdmin, assertOwnerOrSuperadmin, handleAuthError } from '../utils/auth';
 import { logger } from '../utils/logger';
 
 // Type for opportunity rows from database
@@ -192,10 +192,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'PATCH') {
-      // Update opportunity - requires authentication and authorization
-      const user = parseSessionCookie(req);
-      if (!user) {
-        return res.status(401).json(createErrorResponse('Authentication required'));
+      // Update opportunity - requires an authenticated admin
+      let user;
+      try {
+        user = requireAdmin(req);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
       }
 
       const {
@@ -225,18 +228,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
 
-      // Authorization: user must be owner, researcher_admin, or superadmin
+      // Authorization: only the owner (or a superadmin) may update the opportunity
       const existingOpportunity = checkResult.rows[0] as OpportunityRow;
-      const isOwner = existingOpportunity.owner_user_id === user.id;
-      const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
-      
-      if (!isOwner && !isAdmin) {
+      try {
+        assertOwnerOrSuperadmin(user, existingOpportunity.owner_user_id);
+      } catch (authErr) {
         logger.warn('Unauthorized opportunity update attempt', {
           userId: user.id,
           opportunityId,
           ownerId: existingOpportunity.owner_user_id,
         });
-        return res.status(403).json(createErrorResponse('Not authorized to update this opportunity'));
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
       }
 
       // Build dynamic update query based on provided fields
@@ -355,10 +358,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'DELETE') {
-      // Delete opportunity - requires authentication and authorization
-      const user = parseSessionCookie(req);
-      if (!user) {
-        return res.status(401).json(createErrorResponse('Authentication required'));
+      // Delete opportunity - requires an authenticated admin
+      let user;
+      try {
+        user = requireAdmin(req);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
       }
 
       // Check if opportunity exists and get owner
@@ -366,23 +372,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
-      
+
       if (checkResult.rows.length === 0) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
 
-      // Authorization: user must be owner, researcher_admin, or superadmin
+      // Authorization: only the owner (or a superadmin) may delete the opportunity
       const existingOpportunity = checkResult.rows[0] as OpportunityRow;
-      const isOwner = existingOpportunity.owner_user_id === user.id;
-      const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
-      
-      if (!isOwner && !isAdmin) {
+      try {
+        assertOwnerOrSuperadmin(user, existingOpportunity.owner_user_id);
+      } catch (authErr) {
         logger.warn('Unauthorized opportunity delete attempt', {
           userId: user.id,
           opportunityId,
           ownerId: existingOpportunity.owner_user_id,
         });
-        return res.status(403).json(createErrorResponse('Not authorized to delete this opportunity'));
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
       }
 
       // Delete opportunity (cascading will delete related sessions and bookings)

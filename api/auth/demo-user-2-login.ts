@@ -2,18 +2,24 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { getApiConfig } from '../utils/env';
 import { logger } from '../utils/logger';
-import { setSessionCookie } from '../utils/auth';
+import { setSessionCookie, isDemoLoginAllowed } from '../utils/auth';
 import { authRateLimit } from '../utils/rateLimit';
 import { SessionUser } from '../../shared/types';
 
 /**
  * GET /api/auth/demo-user-2-login
  * Second demo user login for testing multi-user scenarios
+ * (demo/test backdoor — disabled in production unless ALLOW_DEMO_LOGIN=true)
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'GET') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+
+    // Demo/test login backdoor: never available in production unless explicitly enabled.
+    if (!isDemoLoginAllowed()) {
+      return res.status(404).json(createErrorResponse('Not found'));
     }
 
     // Rate limit: 10 login attempts per 15 minutes per IP

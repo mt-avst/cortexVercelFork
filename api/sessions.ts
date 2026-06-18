@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
+import { requireAdmin, assertOwnerOrSuperadmin, handleAuthError } from './utils/auth';
 import { createErrorResponse, createSafeErrorResponse } from './utils/errors';
 import { logger } from './utils/logger';
 
@@ -24,29 +25,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // Creating sessions requires an authenticated admin who owns the opportunity.
+    let user;
+    try {
+      user = requireAdmin(req);
+    } catch (authErr) {
+      if (handleAuthError(res, authErr)) return;
+      throw authErr;
+    }
+
     const { opportunity_id, sessions } = req.body;
-    
+
     if (!opportunity_id) {
       logger.error('Missing opportunity_id in request body');
       return res.status(400).json(createErrorResponse('opportunity_id is required'));
     }
-    
+
     if (!Array.isArray(sessions) || sessions.length === 0) {
       logger.error('Invalid sessions array', { sessionsType: typeof sessions });
       return res.status(400).json(createErrorResponse('sessions array is required and must not be empty'));
     }
 
-    // Validate opportunity exists
+    // Validate opportunity exists and the caller owns it (or is superadmin)
     const oppCheck = await query(
-      `SELECT id FROM opportunities WHERE id = $1`,
+      `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
       [opportunity_id]
     );
-    
+
     if (oppCheck.rows.length === 0) {
       logger.error('Opportunity not found', { opportunity_id });
       return res.status(404).json(createErrorResponse('Opportunity not found'));
     }
-    
+
+    try {
+      const ownerId = (oppCheck.rows[0] as { owner_user_id: string }).owner_user_id;
+      assertOwnerOrSuperadmin(user, ownerId);
+    } catch (authErr) {
+      if (handleAuthError(res, authErr)) return;
+      throw authErr;
+    }
+
     // Validate session data
     for (const session of sessions) {
       if (!session.start_time || !session.end_time) {

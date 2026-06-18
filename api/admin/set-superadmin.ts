@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
-import { parseSessionCookie } from '../utils/auth';
+import { requireSetupAuthorization, handleAuthError } from '../utils/auth';
 import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 import { adminRateLimit } from '../utils/rateLimit';
 
 /**
- * One-time endpoint to set superadmin role
- * This endpoint allows setting superadmin for nfine@adaptavist.com
- * After first use, it should be disabled or protected
+ * Promote a user to superadmin.
+ * Requires an existing superadmin session, or ?secret=$SETUP_SECRET for first-run bootstrap.
+ * (Previously any researcher_admin could promote an arbitrary email — privilege escalation.)
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -17,21 +17,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (await adminRateLimit(req, res)) return;
 
-    const user = parseSessionCookie(req);
-    const targetEmail = req.body?.email || 'nfine@adaptavist.com';
-    
-    // Only allow if user is already admin or if setting for nfine@adaptavist.com
-    if (!user) {
-      return res.status(401).json(createErrorResponse('Authentication required'));
+    // Only a superadmin (or a caller holding the setup secret) may grant superadmin.
+    try {
+      requireSetupAuthorization(req);
+    } catch (authErr) {
+      if (handleAuthError(res, authErr)) return;
+      throw authErr;
     }
 
-    // Allow if user is admin, or if they're setting themselves and email matches
-    const isAdmin = user.role === 'researcher_admin' || user.role === 'superadmin';
-    const isSelf = user.email === targetEmail && user.email === 'nfine@adaptavist.com';
-    
-    if (!isAdmin && !isSelf) {
-      return res.status(403).json(createErrorResponse('Not authorized to set superadmin role'));
-    }
+    const targetEmail = req.body?.email || 'nfine@adaptavist.com';
 
     // Update role constraint first
     try {

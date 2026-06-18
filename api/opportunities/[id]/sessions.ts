@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../../db';
+import { parseSessionCookie, requireAdmin, assertOwnerOrSuperadmin, handleAuthError } from '../../utils/auth';
 import { createErrorResponse, createSafeErrorResponse } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 
@@ -41,16 +42,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === 'GET') {
-      // Check if opportunity exists
+      // Check the opportunity exists; non-admins may only see sessions of published studies
       const oppCheck = await query(
-        `SELECT id FROM opportunities WHERE id = $1`,
+        `SELECT id, status FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
-      
+
       if (oppCheck.rows.length === 0) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
-      
+
+      const viewer = parseSessionCookie(req);
+      const isAdmin = viewer?.role === 'researcher_admin' || viewer?.role === 'superadmin';
+      const oppStatus = (oppCheck.rows[0] as { status?: string }).status;
+      if (!isAdmin && oppStatus !== 'published') {
+        // Don't reveal existence of unpublished studies to non-admins
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
+      }
+
       // Get sessions from database
             const { include_past } = req.query;
             let sql = `
@@ -86,16 +95,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (req.method === 'POST') {
-      // Check if opportunity exists
+      // Creating sessions requires an authenticated admin who owns the opportunity.
+      let user;
+      try {
+        user = requireAdmin(req);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
+      }
+
+      // Check if opportunity exists and the caller owns it (or is superadmin)
       const oppCheck = await query(
-        `SELECT id FROM opportunities WHERE id = $1`,
+        `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
         [opportunityId]
       );
-      
+
       if (oppCheck.rows.length === 0) {
         return res.status(404).json(createErrorResponse('Opportunity not found'));
       }
-      
+
+      try {
+        const ownerId = (oppCheck.rows[0] as { owner_user_id: string }).owner_user_id;
+        assertOwnerOrSuperadmin(user, ownerId);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
+      }
+
       const sessionData = Array.isArray(req.body) ? req.body : [req.body];
       
       if (sessionData.length === 0) {

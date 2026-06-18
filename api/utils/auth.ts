@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { SessionUser } from '../../shared/types';
+import { createErrorResponse } from './errors';
 import { logger } from './logger';
 
 /**
@@ -186,20 +187,137 @@ export function parseSessionCookie(req: VercelRequest): SessionUser | null {
 }
 
 /**
- * Require authentication - returns user or throws error response
- * Use this helper in endpoints that require authentication
+ * Auth error thrown by the require* helpers below.
+ * Handlers should catch it via handleAuthError() to return a consistent response.
+ */
+export interface AuthError {
+  status: number;
+  error: string;
+  code?: string;
+}
+
+function authError(status: number, error: string, code?: string): AuthError {
+  return { status, error, code };
+}
+
+/** Type guard for the AuthError shape thrown by require* helpers. */
+export function isAuthError(error: unknown): error is AuthError {
+  return (
+    !!error &&
+    typeof error === 'object' &&
+    'status' in error &&
+    'error' in error &&
+    typeof (error as AuthError).status === 'number'
+  );
+}
+
+/**
+ * If `error` is an AuthError, send the matching response and return true.
+ * Lets handlers do: `if (handleAuthError(res, error)) return;` before generic 500 handling.
+ */
+export function handleAuthError(res: VercelResponse, error: unknown): boolean {
+  if (isAuthError(error)) {
+    res.status(error.status).json(createErrorResponse(error.error, undefined, error.code));
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Require authentication - returns the user or throws an AuthError (401).
+ * Use this helper in endpoints that require authentication.
  */
 export function requireAuth(req: VercelRequest): SessionUser {
   const user = parseSessionCookie(req);
-  
+
   if (!user) {
-    throw {
-      status: 401,
-      error: 'Not authenticated'
-    };
+    throw authError(401, 'Authentication required');
   }
 
   return user;
+}
+
+/**
+ * Require an authenticated researcher_admin or superadmin.
+ * Throws AuthError 401 if not authenticated, 403 (ADMIN_REQUIRED) if not an admin.
+ */
+export function requireAdmin(req: VercelRequest): SessionUser {
+  const user = requireAuth(req);
+
+  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
+    throw authError(403, 'Admin access required', 'ADMIN_REQUIRED');
+  }
+
+  return user;
+}
+
+/**
+ * Require an authenticated superadmin.
+ * Throws AuthError 401 if not authenticated, 403 (SUPERADMIN_REQUIRED) otherwise.
+ */
+export function requireSuperadmin(req: VercelRequest): SessionUser {
+  const user = requireAuth(req);
+
+  if (user.role !== 'superadmin') {
+    throw authError(403, 'Superadmin access required', 'SUPERADMIN_REQUIRED');
+  }
+
+  return user;
+}
+
+/**
+ * Assert the user owns the resource, or is a superadmin (who may act on any owner's resource).
+ * Throws AuthError 403 (OWNER_ONLY) otherwise.
+ */
+export function assertOwnerOrSuperadmin(user: SessionUser, ownerUserId: string): void {
+  if (ownerUserId !== user.id && user.role !== 'superadmin') {
+    throw authError(403, 'Only the owner can perform this action', 'OWNER_ONLY');
+  }
+}
+
+/**
+ * True when running in a production deployment (Vercel or Node).
+ */
+export function isProductionEnv(): boolean {
+  return process.env.VERCEL_ENV === 'production' || process.env.NODE_ENV === 'production';
+}
+
+/**
+ * Whether demo/test login backdoors (demo, admin, superadmin demo logins, demo seed)
+ * are permitted. Always allowed outside production; in production only when
+ * ALLOW_DEMO_LOGIN=true is explicitly set (mirrors the frontend VITE_SHOW_DEMO_LOGIN gate).
+ */
+export function isDemoLoginAllowed(): boolean {
+  if (!isProductionEnv()) return true;
+  return process.env.ALLOW_DEMO_LOGIN === 'true';
+}
+
+/**
+ * Authorize a privileged setup/bootstrap action (run-migrations, set-superadmin).
+ * Passes if the caller is a superadmin, OR a SETUP_SECRET is configured and the
+ * provided secret matches it (timing-safe). The secret may come from the
+ * `secret` query param or request body. Throws AuthError otherwise.
+ *
+ * The secret path exists for first-run bootstrap (e.g. fresh DB with no superadmin yet).
+ */
+export function requireSetupAuthorization(req: VercelRequest): void {
+  const user = parseSessionCookie(req);
+  if (user?.role === 'superadmin') return;
+
+  const configured = process.env.SETUP_SECRET;
+  const provided =
+    (req.query?.secret as string | undefined) ??
+    (req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>).secret : undefined);
+
+  if (configured && typeof provided === 'string' && provided.length === configured.length) {
+    const matches = crypto.timingSafeEqual(
+      Buffer.from(provided),
+      Buffer.from(configured)
+    );
+    if (matches) return;
+  }
+
+  throw authError(403, 'Superadmin or valid setup secret required', 'SETUP_AUTH_REQUIRED');
 }
 
 

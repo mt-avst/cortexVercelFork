@@ -1,16 +1,22 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from '../db';
+import { isDemoLoginAllowed } from '../utils/auth';
 import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
 
 /**
  * POST /api/admin/seed-demo-user-2
- * Seeds Demo User 2 for multi-user testing
- * This is a one-time setup endpoint that can be called to ensure Demo User 2 exists
+ * Seeds Demo User 2 for multi-user testing.
+ * Demo helper — disabled in production unless ALLOW_DEMO_LOGIN=true.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method !== 'POST') {
       return res.status(405).json(createErrorResponse('Method not allowed'));
+    }
+
+    // Demo seeding helper: never available in production unless explicitly enabled.
+    if (!isDemoLoginAllowed()) {
+      return res.status(404).json(createErrorResponse('Not found'));
     }
 
     // Insert second demo user for multi-user testing

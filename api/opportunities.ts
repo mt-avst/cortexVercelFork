@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { query } from './db';
 import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from './utils/errors';
-import { parseSessionCookie } from './utils/auth';
+import { parseSessionCookie, requireAdmin, handleAuthError } from './utils/auth';
 import { logger } from './utils/logger';
 
 /**
@@ -207,6 +207,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     
     if (req.method === 'POST') {
+      // Creating an opportunity requires an authenticated admin.
+      let user;
+      try {
+        user = requireAdmin(req);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
+      }
+
       const {
         type,
         title,
@@ -224,18 +233,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         start_date,
         end_date,
       } = req.body;
-      
+
       // Validate required fields
       if (!type || !title || !purpose_one_liner) {
         return res.status(400).json(createErrorResponse('Type, title, and purpose are required'));
       }
-      
-      // Use authenticated user as owner when available; fallback to body or demo admin
-      const user = parseSessionCookie(req);
-      const finalOwnerId = owner_user_id || user?.id || '633608bc-4b0e-4d60-a498-e680ee97c252'; // Demo admin ID
-      
-      // Only superadmins can set display_width - default to 'single' otherwise
-      const isSuperadmin = user?.role === 'superadmin';
+
+      // Owner is the authenticated admin. Only a superadmin may assign a different owner.
+      const isSuperadmin = user.role === 'superadmin';
+      const finalOwnerId = isSuperadmin && owner_user_id ? owner_user_id : user.id;
       const finalDisplayWidth = isSuperadmin && display_width ? display_width : 'single';
       
       const result = await query(
