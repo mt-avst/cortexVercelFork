@@ -19,6 +19,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,7 +36,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, []);
+  }, [retryCount]);
 
   const launchedStudies = studies.filter((s) => s.status === 'launched');
 
@@ -68,8 +69,15 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               )}
 
               {!loading && fetchError && (
-                <div className="alert alert-warning py-2" style={{ fontSize: '0.875rem' }}>
-                  {fetchError}
+                <div className="alert alert-warning py-2 d-flex align-items-center justify-content-between" style={{ fontSize: '0.875rem' }}>
+                  <span>{fetchError}</span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-warning ms-3"
+                    onClick={() => setRetryCount((n) => n + 1)}
+                  >
+                    Retry
+                  </button>
                 </div>
               )}
 

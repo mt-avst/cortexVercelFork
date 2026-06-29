@@ -1,4 +1,7 @@
 import crypto from 'crypto';
+import { logger } from './logger';
+
+const REQUEST_TIMEOUT_MS = 10_000;
 
 export function isFirstHandConfigured(): boolean {
   return !!(process.env.FIRSTHAND_BASE_URL?.trim() && process.env.FIRSTHAND_INTEGRATION_SECRET?.trim());
@@ -23,12 +26,25 @@ function baseUrl(): string {
   return url;
 }
 
+function withTimeout(ms: number): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
 export async function firstHandGet<T>(path: string): Promise<T> {
   const headers = buildHeaders('');
-  const response = await fetch(`${baseUrl()}${path}`, { headers });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      headers,
+      signal: withTimeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    logger.error('FirstHand GET network error', { path, error: err instanceof Error ? err.message : String(err) });
+    throw new Error(`FirstHand GET ${path} failed: network error`);
+  }
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`FirstHand GET ${path} returned ${response.status}: ${text}`);
+    logger.warn('FirstHand GET non-OK response', { path, status: response.status });
+    throw new Error(`FirstHand GET ${path} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -36,10 +52,21 @@ export async function firstHandGet<T>(path: string): Promise<T> {
 export async function firstHandPost<T>(path: string, payload: unknown): Promise<T> {
   const body = JSON.stringify(payload);
   const headers = { ...buildHeaders(body), 'Content-Type': 'application/json' };
-  const response = await fetch(`${baseUrl()}${path}`, { method: 'POST', headers, body });
+  let response: Response;
+  try {
+    response = await fetch(`${baseUrl()}${path}`, {
+      method: 'POST',
+      headers,
+      body,
+      signal: withTimeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    logger.error('FirstHand POST network error', { path, error: err instanceof Error ? err.message : String(err) });
+    throw new Error(`FirstHand POST ${path} failed: network error`);
+  }
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`FirstHand POST ${path} returned ${response.status}: ${text}`);
+    logger.warn('FirstHand POST non-OK response', { path, status: response.status });
+    throw new Error(`FirstHand POST ${path} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
