@@ -393,14 +393,16 @@ export interface OpportunityFormData {
 }
 
 export interface FirstHandStudy {
-  study: {
-    id: string;
-    title: string;
-    status: 'draft' | 'launched' | 'archived';
-    estimated_duration_minutes?: number | null;
-    created_at?: string;
-  };
-  steps: { id: string }[];
+  id: string;
+  title: string;
+  intro_text: string;
+  consent_text: string;
+  brand_name?: string;
+  estimated_duration_minutes?: number | null;
+  locale?: string;
+  status?: 'draft' | 'launched' | 'archived';
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SessionFormData {

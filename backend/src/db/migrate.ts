@@ -773,6 +773,12 @@ export async function runMigrations() {
       CREATE INDEX IF NOT EXISTS idx_session_events_participant
         ON opportunity_session_events(participant_user_id, occurred_at DESC);
     `);
+
+    // Phase 9: dedup constraint so duplicate callback deliveries don't create duplicate rows
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_session_event_dedup
+        ON opportunity_session_events(firsthand_session_id, event_type);
+    `);
     console.log('✅ Created opportunity_session_events table');
 
     console.log('✅ Database migrations completed successfully');

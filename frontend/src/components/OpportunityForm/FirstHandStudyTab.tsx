@@ -37,7 +37,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
     return () => { cancelled = true; };
   }, []);
 
-  const launchedStudies = studies.filter((s) => s.study.status === 'launched');
+  const launchedStudies = studies.filter((s) => s.status === 'launched');
 
   return (
     <div className="tab-pane active">
@@ -83,10 +83,9 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 >
                   <option value="">-- No FirstHand study (use external link below) --</option>
                   {launchedStudies.map((s) => (
-                    <option key={s.study.id} value={s.study.id}>
-                      {s.study.title}
-                      {s.study.estimated_duration_minutes ? ` (${s.study.estimated_duration_minutes} min)` : ''}
-                      {` — ${s.steps.length} step${s.steps.length !== 1 ? 's' : ''}`}
+                    <option key={s.id} value={s.id}>
+                      {s.title}
+                      {s.estimated_duration_minutes ? ` (${s.estimated_duration_minutes} min)` : ''}
                     </option>
                   ))}
                   {launchedStudies.length === 0 && (
