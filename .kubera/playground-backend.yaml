@@ -71,5 +71,5 @@ deployment:
 initContainer:
   enabled: true
   command: [ "sh", "-c"]
-  args: ["echo 'skipping migrations for diagnostic - remove this before production use'"]
+  args: ["npm run migrate && npm run seed"]
   workingDir: "/app/backend"
