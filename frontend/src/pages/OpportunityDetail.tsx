@@ -422,6 +422,12 @@ const OpportunityDetail: React.FC = () => {
           {isSessionCompleted && (
             <div className="alert alert-success alert-dismissible fade show mission-alert mb-4" role="status" aria-live="polite">
               <strong>Session complete.</strong> Your recording and responses have been saved. The research team will be in touch.
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => navigate(`/opportunities/${id}`, { replace: true })}
+                aria-label="Dismiss"
+              />
             </div>
           )}
 

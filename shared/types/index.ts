@@ -453,6 +453,16 @@ export interface SessionEvent {
   firsthand_review_url?: string | null;
 }
 
+export interface MySessionEvent {
+  id: string;
+  opportunity_id: string;
+  opportunity_title: string;
+  firsthand_session_id: string;
+  event_type: 'session_started' | 'session_completed' | 'session_abandoned' | 'session_failed';
+  occurred_at: string;
+  received_at: string;
+}
+
 // ============================================================================
 // UTILITY TYPES
 // ============================================================================
