@@ -775,7 +775,14 @@ export async function runMigrations() {
     `);
 
     // Phase 9: dedup constraint so duplicate callback deliveries don't create duplicate rows
+    // Remove any existing duplicates before creating the unique index (idempotent)
     await client.query(`
+      DELETE FROM opportunity_session_events
+      WHERE id NOT IN (
+        SELECT DISTINCT ON (firsthand_session_id, event_type) id
+        FROM opportunity_session_events
+        ORDER BY firsthand_session_id, event_type, received_at DESC
+      );
       CREATE UNIQUE INDEX IF NOT EXISTS uq_session_event_dedup
         ON opportunity_session_events(firsthand_session_id, event_type);
     `);
