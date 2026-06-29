@@ -1,5 +1,7 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/authenticate';
+import { pool } from '../config';
+import { asyncHandler } from '../utils/errorHandler';
 import opportunitiesRouter from './opportunities';
 import sessionsRouter from './sessions';
 import bookingsRouter from './bookings';
@@ -18,6 +20,30 @@ const router: Router = Router();
 router.get('/me', requireAuth, (req, res) => {
   res.json(req.user);
 });
+
+// GET /api/me/session-events - Get the current user's own FirstHand session events
+router.get('/me/session-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const userId = req.user!.id;
+  const { rows } = await pool.query<{
+    id: string; opportunity_id: string; opportunity_title: string;
+    firsthand_session_id: string; event_type: string;
+    occurred_at: Date; received_at: Date;
+  }>(`
+    SELECT e.id, e.opportunity_id, o.title AS opportunity_title,
+           e.firsthand_session_id, e.event_type,
+           e.occurred_at, e.received_at
+    FROM opportunity_session_events e
+    JOIN opportunities o ON e.opportunity_id = o.id
+    WHERE e.participant_user_id = $1
+    ORDER BY e.occurred_at DESC
+    LIMIT 50
+  `, [userId]);
+  return res.json(rows.map(r => ({
+    ...r,
+    occurred_at: r.occurred_at instanceof Date ? r.occurred_at.toISOString() : r.occurred_at,
+    received_at: r.received_at instanceof Date ? r.received_at.toISOString() : r.received_at,
+  })));
+}));
 
 // Mount opportunities routes
 router.use('/opportunities', opportunitiesRouter);

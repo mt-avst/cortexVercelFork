@@ -1,13 +1,3 @@
-/**
- * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
- * 
- * This file is automatically copied from the shared/ directory during the build process.
- * Any changes should be made to the source file in the shared/ directory.
- * 
- * Source: See copy-shared-types.js for the source path
- * Generated: 2025-12-01T11:43:17.469Z
- */
-
 // Shared Type Definitions for Adaptalabs Application
 // This file contains all common interfaces used by both frontend and backend
 
@@ -403,14 +393,16 @@ export interface OpportunityFormData {
 }
 
 export interface FirstHandStudy {
-  study: {
-    id: string;
-    title: string;
-    status: 'draft' | 'launched' | 'archived';
-    estimated_duration_minutes?: number | null;
-    created_at?: string;
-  };
-  steps: { id: string }[];
+  id: string;
+  title: string;
+  intro_text: string;
+  consent_text: string;
+  brand_name?: string;
+  estimated_duration_minutes?: number | null;
+  locale?: string;
+  status?: 'draft' | 'launched' | 'archived';
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SessionFormData {
@@ -459,6 +451,16 @@ export interface SessionEvent {
   participant_name?: string;
   participant_email?: string;
   firsthand_review_url?: string | null;
+}
+
+export interface MySessionEvent {
+  id: string;
+  opportunity_id: string;
+  opportunity_title: string;
+  firsthand_session_id: string;
+  event_type: 'session_started' | 'session_completed' | 'session_abandoned' | 'session_failed';
+  occurred_at: string;
+  received_at: string;
 }
 
 // ============================================================================

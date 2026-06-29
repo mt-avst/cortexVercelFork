@@ -6,7 +6,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ## Project overview
 
-- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.3.22
+- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.3.23
 - **Purpose**: Internal recruitment app — researchers post opportunities (studies/sessions), employees browse and book sessions. Includes polls/surveys, dashboard, feedback, notifications.
 - **Production**: https://adapta-labs-p62q.vercel.app  
 - **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E results in `archive/test-results/`.

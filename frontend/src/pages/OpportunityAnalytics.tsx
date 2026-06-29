@@ -863,7 +863,7 @@ const SessionsTab: React.FC<{
                     {event.firsthand_review_url ? (
                       <a
                         href={event.firsthand_review_url}
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         style={{ color: 'var(--color-analytics-orange)', fontSize: '0.8rem' }}
                         target="_blank"
                       >

@@ -218,5 +218,5 @@ You'll know it worked when:
 ---
 
 **Last Updated**: 2025-01-27  
-**Version**: 3.12.0
+**Version**: 7.3.23
 
