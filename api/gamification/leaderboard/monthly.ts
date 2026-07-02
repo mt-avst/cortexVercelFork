@@ -1,11 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../../db';
-import { createErrorResponse, getErrorMessage } from '../../utils/errors';
-import { generateDummyLeaderboard } from '../utils';
+import { getMonthlyLeaderboard } from '../../../shared/services/gamification';
+import { createErrorResponse, createSafeErrorResponse, getErrorMessage } from '../../utils/errors';
+import { parseIntSafe } from '../../utils/helpers';
+import { logger } from '../../utils/logger';
 
 /**
- * GET /api/gamification/leaderboard/monthly
- * Get monthly leaderboard (top users by monthly AdaptaBits)
+ * GET /api/gamification/leaderboard/monthly?limit=20
+ * Get the monthly leaderboard (top users by monthly AdaptaBits).
+ *
+ * Query params:
+ * - limit?: number (default 20)
+ *
+ * Response: LeaderboardEntry[] where each item is:
+ * { user_id, name, total_points, monthly_points, level, rank }
+ *
+ * Note: this endpoint returns only real data. It used to pad short lists with
+ * fabricated "dummy" leaderboard entries; that behavior has been removed since it
+ * could present fake users as real data in production. If there are no real
+ * entries, this returns an empty array.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
@@ -13,77 +26,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const limit = parseInt(req.query.limit as string) || 20;
-
+    const limit = parseIntSafe(req.query.limit, 20);
     const pool = getPool();
 
-    let result;
-    try {
-      result = await pool.query(`
-        SELECT 
-          up.user_id,
-          u.name,
-          up.total_points,
-          up.monthly_points,
-          up.level,
-          ROW_NUMBER() OVER (ORDER BY up.monthly_points DESC) as rank
-        FROM user_profiles up
-        JOIN users u ON up.user_id = u.id
-        ORDER BY up.monthly_points DESC
-        LIMIT $1
-      `, [limit]);
-    } catch (queryError: unknown) {
-      // If query fails (e.g., no tables yet), return dummy data
-      console.warn('Error querying real leaderboard, returning dummy data:', getErrorMessage(queryError));
-      const dummyData = generateDummyLeaderboard(limit, 'monthly');
-      return res.status(200).json(dummyData);
-    }
+    const result = await getMonthlyLeaderboard(pool, limit);
 
-    // Serialize for response
-    const realLeaderboard = result.rows.map(row => ({
+    const leaderboard = result.map((row) => ({
       user_id: row.user_id,
       name: row.name,
-      total_points: parseInt(row.total_points) || 0,
-      monthly_points: parseInt(row.monthly_points) || 0,
-      level: parseInt(row.level) || 1,
-      rank: parseInt(row.rank) || 0,
+      total_points: parseIntSafe(row.total_points, 0),
+      monthly_points: parseIntSafe(row.monthly_points, 0),
+      level: parseIntSafe(row.level, 1),
+      rank: parseIntSafe(row.rank, 0),
     }));
 
-    // If fewer than the requested limit, supplement with dummy data
-    if (realLeaderboard.length < limit) {
-      const dummyData = generateDummyLeaderboard(limit, 'monthly');
-      
-      // If no real users, return all dummy data
-      if (realLeaderboard.length === 0) {
-        return res.status(200).json(dummyData);
-      }
-      
-      // Merge real users with dummy data, avoiding duplicates
-      const mergedData = [...realLeaderboard];
-      const existingUserIds = new Set(realLeaderboard.map(row => row.user_id));
-      let dummyRank = realLeaderboard.length + 1;
-      
-      for (const dummyUser of dummyData) {
-        if (mergedData.length >= limit) break;
-        if (!existingUserIds.has(dummyUser.user_id)) {
-          mergedData.push({
-            ...dummyUser,
-            rank: dummyRank++
-          });
-        }
-      }
-      
-      return res.status(200).json(mergedData);
-    }
-
-    return res.status(200).json(realLeaderboard);
-
+    return res.status(200).json(leaderboard);
   } catch (error: unknown) {
-    console.error('Error fetching monthly leaderboard:', error);
-    // If everything fails, return dummy data
-    const limit = parseInt(req.query?.limit as string) || 20;
-    const dummyData = generateDummyLeaderboard(limit, 'monthly');
-    return res.status(200).json(dummyData);
+    logger.error('Error fetching monthly leaderboard', {
+      errorMessage: getErrorMessage(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return res.status(500).json(
+      createSafeErrorResponse(error, { userMessage: 'Failed to fetch monthly leaderboard' })
+    );
   }
 }
-
