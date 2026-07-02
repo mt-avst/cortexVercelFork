@@ -72,8 +72,31 @@ async function initializeClient() {
   }
 }
 
-// Initialize client on startup
-initializeClient().catch((error) => {
+// Retry initialization on demand if startup init hasn't produced a client yet
+// (e.g. the OIDC provider was briefly unreachable at boot). Without this, a
+// transient failure at startup would leave login permanently broken until the
+// process restarts.
+let clientInitPromise: Promise<void> | null = null;
+
+function startClientInit(): Promise<void> {
+  const promise = initializeClient().finally(() => {
+    if (clientInitPromise === promise) {
+      clientInitPromise = null;
+    }
+  });
+  clientInitPromise = promise;
+  return promise;
+}
+
+async function ensureClient(): Promise<Client | undefined> {
+  if (!client) {
+    await (clientInitPromise ?? startClientInit()).catch(() => {});
+  }
+  return client;
+}
+
+// Initialize client on startup; ensureClient() retries lazily on first use if this fails
+startClientInit().catch((error) => {
   if (process.env.NODE_ENV === 'development') {
     logger.warn('OIDC initialization failed, continuing in development mode', { error });
   } else {
@@ -94,8 +117,9 @@ initializeClient().catch((error) => {
  */
 router.get('/login', async (req, res) => {
   try {
-    // Check if OIDC client is available
-    if (!client) {
+    // Check if OIDC client is available, retrying initialization if needed
+    const oidcClient = await ensureClient();
+    if (!oidcClient) {
       if (process.env.NODE_ENV === 'development') {
         // In development, redirect to demo login
         return res.redirect('/auth/demo-login');
@@ -103,18 +127,18 @@ router.get('/login', async (req, res) => {
         return res.status(500).json({ error: 'Authentication service unavailable' });
       }
     }
-    
+
     // Generate cryptographically secure state parameter
     const state = crypto.randomBytes(32).toString('hex');
-    
+
     // Store state with timestamp for validation
     stateStore.set(state, { timestamp: Date.now(), used: false });
-    
-    const authUrl = client.authorizationUrl({
+
+    const authUrl = oidcClient.authorizationUrl({
       scope: 'openid profile email',
       state: state,
     });
-    
+
     res.redirect(authUrl);
   } catch (error) {
     logger.error('Login initiation failed', { error });
@@ -136,8 +160,9 @@ router.get('/login', async (req, res) => {
  */
 router.get('/callback', async (req, res) => {
   try {
-    // Check if OIDC client is available
-    if (!client) {
+    // Check if OIDC client is available, retrying initialization if needed
+    const oidcClient = await ensureClient();
+    if (!oidcClient) {
       if (process.env.NODE_ENV === 'development') {
         // In development, redirect to demo login
         return res.redirect('/auth/demo-login');
@@ -145,31 +170,31 @@ router.get('/callback', async (req, res) => {
         return res.status(500).json({ error: 'Authentication service unavailable' });
       }
     }
-    
-    const params = client.callbackParams(req);
+
+    const params = oidcClient.callbackParams(req);
     const state = params.state;
-    
+
     // Validate state parameter
     if (!state || !stateStore.has(state)) {
       logger.error('Invalid or missing state parameter');
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
-    
+
     const stateData = stateStore.get(state);
     if (!stateData || stateData.used) {
       logger.error('State parameter already used or expired');
       return res.status(400).json({ error: 'State parameter already used' });
     }
-    
+
     // Mark state as used
     stateData.used = true;
-    
-    const tokenSet = await client.callback(process.env.OIDC_REDIRECT_URL!, params, {
+
+    const tokenSet = await oidcClient.callback(process.env.OIDC_REDIRECT_URL!, params, {
       state: state,
     });
 
     // Get user info from token
-    const userInfo = await client.userinfo(tokenSet.access_token!);
+    const userInfo = await oidcClient.userinfo(tokenSet.access_token!);
     
     // Extract user data from claims
     const userData = {

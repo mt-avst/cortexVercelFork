@@ -1,9 +1,7 @@
 import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
-import App from '../../index';
-import { generateMockUser } from '../../../../shared/test-utils';
-import { createMockDbClient, createMockQueryResult } from '../../../../shared/test-utils';
+import { generateMockUser, createMockQueryResult } from '../../../../shared/test-utils';
 
 // Mock the database pool
 jest.mock('../../config', () => ({
@@ -23,6 +21,8 @@ jest.mock('openid-client', () => ({
 
 // Mock crypto.randomBytes only — preserve the rest of the real module (createHash etc.),
 // which express-session needs internally to hash/compare session state on every request.
+// randomBytes always returning 'mock-state' means the OIDC state token issued by /login
+// is always the literal string 'mock-state' in this file.
 jest.mock('crypto', () => ({
   ...jest.requireActual('crypto'),
   randomBytes: jest.fn(() => ({
@@ -30,14 +30,57 @@ jest.mock('crypto', () => ({
   })),
 }));
 
+// Builds a mock OIDC client. callbackParams reflects the *actual* request query
+// (mirroring real openid-client behavior) rather than a hardcoded value, so tests
+// exercising missing/invalid state are actually falsifiable.
+function createMockClient(overrides: Record<string, any> = {}) {
+  return {
+    authorizationUrl: jest.fn((params: any) => `https://oidc-provider.com/auth?state=${params.state}`),
+    callbackParams: jest.fn((req: any) => ({
+      code: req.query?.code,
+      state: req.query?.state,
+    })),
+    callback: jest.fn().mockResolvedValue({ access_token: 'access-token', id_token: 'id-token' }),
+    userinfo: jest.fn().mockResolvedValue({
+      name: 'Test User',
+      email: 'test@example.com',
+      department: 'Engineering',
+      job_title: 'Developer',
+    }),
+    ...overrides,
+  };
+}
+
+// Configures Issuer.discover to resolve a client built from createMockClient(overrides).
+// Must be called *before* the first request in a test — the resulting client is cached
+// at module scope (mirrors production: the OIDC client is discovered once and reused).
+function mockOidc(overrides: Record<string, any> = {}) {
+  const mockClient = createMockClient(overrides);
+  require('openid-client').Issuer.discover.mockResolvedValue({
+    Client: jest.fn().mockReturnValue(mockClient),
+  });
+  return mockClient;
+}
+
+// Logs in via the real /auth/login flow to obtain a valid, registered state token —
+// the app's CSRF state store only recognizes states actually issued via /login.
+async function loginAndGetState(app: express.Application): Promise<string> {
+  const res = await request(app).get('/auth/login').expect(302);
+  const url = new URL(res.headers.location);
+  return url.searchParams.get('state')!;
+}
+
 describe('Auth Routes Integration Tests', () => {
   let app: express.Application;
   let mockPool: any;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    // auth.ts kicks off OIDC client discovery once at module-load time and caches
+    // the result, so the module must be re-required fresh each test rather than
+    // reused from a shared, already-initialized instance.
+    jest.resetModules();
     mockPool = require('../../config').pool;
-    
+
     // Create a fresh app instance for each test
     app = express();
     app.use(session({
@@ -46,7 +89,7 @@ describe('Auth Routes Integration Tests', () => {
       saveUninitialized: false,
       cookie: { secure: false },
     }));
-    
+
     // Import and use auth routes
     const authRoutes = require('../auth').default;
     app.use('/auth', authRoutes);
@@ -54,13 +97,7 @@ describe('Auth Routes Integration Tests', () => {
 
   describe('GET /auth/login', () => {
     it('should redirect to OIDC provider', async () => {
-      const mockIssuer = {
-        Client: jest.fn().mockImplementation(() => ({
-          authorizationUrl: jest.fn(() => 'https://oidc-provider.com/auth?state=mock-state'),
-        })),
-      };
-      
-      require('openid-client').Issuer.discover.mockResolvedValue(mockIssuer);
+      mockOidc();
 
       const response = await request(app)
         .get('/auth/login')
@@ -80,47 +117,39 @@ describe('Auth Routes Integration Tests', () => {
   });
 
   describe('GET /auth/callback', () => {
+    // The callback route upserts the user via pool.connect() -> dbClient.query(...),
+    // not pool.query() directly, so tests must configure the *connected client's*
+    // query mock, not the pool-level one.
+    let mockClientQuery: jest.Mock;
+
+    beforeEach(() => {
+      mockOidc();
+      mockClientQuery = jest.fn();
+      mockPool.connect.mockResolvedValue({
+        query: mockClientQuery,
+        release: jest.fn(),
+      });
+    });
+
     it('should handle successful OIDC callback', async () => {
       const mockUser = generateMockUser();
-      const mockTokens = {
-        access_token: 'access-token',
-        id_token: 'id-token',
-      };
+      const state = await loginAndGetState(app);
 
-      const mockClient = {
-        callbackParams: jest.fn(() => ({ code: 'auth-code', state: 'mock-state' })),
-        callback: jest.fn().mockResolvedValue({
-          access_token: mockTokens.access_token,
-          id_token: mockTokens.id_token,
-        }),
-        userinfo: jest.fn().mockResolvedValue({
-          sub: mockUser.id,
-          name: mockUser.name,
-          email: mockUser.email,
-          business_unit: mockUser.business_unit,
-          role_title: mockUser.role_title,
-        }),
-      };
-
-      const mockIssuer = {
-        Client: jest.fn().mockReturnValue(mockClient),
-      };
-
-      require('openid-client').Issuer.discover.mockResolvedValue(mockIssuer);
-
-      // Mock database queries
-      mockPool.query
-        .mockResolvedValueOnce(createMockQueryResult([mockUser])) // User lookup
-        .mockResolvedValueOnce(createMockQueryResult([mockUser])); // User creation/update
+      // Mock user upsert query
+      mockClientQuery.mockResolvedValueOnce(createMockQueryResult([mockUser]));
+      // Mock notification preferences creation
+      mockClientQuery.mockResolvedValueOnce(createMockQueryResult([]));
 
       const response = await request(app)
         .get('/auth/callback')
-        .query({ code: 'auth-code', state: 'mock-state' })
+        .query({ code: 'auth-code', state })
         .expect(302);
 
-      expect(response.headers.location).toBe('http://localhost:3000/');
-      expect(mockClient.callback).toHaveBeenCalled();
-      expect(mockClient.userinfo).toHaveBeenCalled();
+      expect(response.headers.location).toBe('http://localhost:3000');
+      expect(mockClientQuery).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO users'),
+        expect.arrayContaining(['Test User', 'test@example.com', 'Engineering', 'Developer'])
+      );
     });
 
     it('should handle missing state parameter', async () => {
@@ -129,162 +158,95 @@ describe('Auth Routes Integration Tests', () => {
         .query({ code: 'auth-code' })
         .expect(400);
 
-      expect(response.body.error).toBe('Missing state parameter');
+      expect(response.body.error).toBe('Invalid state parameter');
     });
 
-    it('should handle missing code parameter', async () => {
+    it('should handle invalid state parameter', async () => {
+      // A state that was never issued via /login is rejected regardless of code.
       const response = await request(app)
         .get('/auth/callback')
-        .query({ state: 'mock-state' })
+        .query({ code: 'auth-code', state: 'never-issued-state' })
         .expect(400);
 
-      expect(response.body.error).toBe('Missing authorization code');
+      expect(response.body.error).toBe('Invalid state parameter');
     });
 
     it('should handle OIDC callback error', async () => {
-      const mockClient = {
-        callbackParams: jest.fn(() => ({ code: 'auth-code', state: 'mock-state' })),
+      mockOidc({
         callback: jest.fn().mockRejectedValue(new Error('OIDC callback failed')),
-      };
-
-      const mockIssuer = {
-        Client: jest.fn().mockReturnValue(mockClient),
-      };
-
-      require('openid-client').Issuer.discover.mockResolvedValue(mockIssuer);
+      });
+      const state = await loginAndGetState(app);
 
       await request(app)
         .get('/auth/callback')
-        .query({ code: 'auth-code', state: 'mock-state' })
+        .query({ code: 'auth-code', state })
         .expect(500);
     });
   });
 
-  describe('GET /auth/logout', () => {
-    it('should logout user and redirect', async () => {
-      const mockUser = generateMockUser();
-      
-      // Mock session with user
+  describe('POST /auth/logout', () => {
+    it('should destroy the session and return success', async () => {
       const response = await request(app)
-        .get('/auth/logout')
+        .post('/auth/logout')
+        .expect(200);
+
+      expect(response.body).toEqual({ success: true });
+    });
+  });
+
+  // GET /auth/me was removed from this router — current-user lookup now lives at
+  // GET /api/me (see src/routes/api.ts), which the frontend already calls. That
+  // route has no dedicated test coverage yet; that's a separate gap, not something
+  // to fake here against a route that no longer exists.
+
+  describe('Demo Routes (Development Only)', () => {
+    // These routes are only registered on the router when NODE_ENV === 'development'
+    // *at module-load time* (see auth.ts's top-level `if` block), so the module must
+    // be re-required with NODE_ENV already set — the outer beforeEach's require runs
+    // under NODE_ENV='test' and won't have them.
+    let demoAuthRoutes: any;
+
+    beforeEach(() => {
+      process.env.NODE_ENV = 'development';
+      jest.resetModules();
+      demoAuthRoutes = require('../auth').default;
+    });
+
+    afterEach(() => {
+      process.env.NODE_ENV = 'test';
+      jest.resetModules();
+    });
+
+    const buildDemoApp = () => {
+      const demoApp = express();
+      demoApp.use(session({
+        secret: 'test-secret',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      }));
+      demoApp.use('/auth', demoAuthRoutes);
+      return demoApp;
+    };
+
+    it('should log the demo user in and redirect home', async () => {
+      const demoApp = buildDemoApp();
+
+      const response = await request(demoApp)
+        .get('/auth/demo-login')
         .expect(302);
 
       expect(response.headers.location).toBe('http://localhost:3000/');
     });
-  });
 
-  describe('GET /auth/me', () => {
-    it('should return user data when authenticated', async () => {
-      const mockUser = generateMockUser();
-      
-      // Mock session with user
-      const response = await request(app)
-        .get('/auth/me')
-        .expect(200);
+    it('should log the demo admin in and redirect to /admin', async () => {
+      const demoApp = buildDemoApp();
 
-      expect(response.body).toEqual(mockUser);
-    });
+      const response = await request(demoApp)
+        .get('/auth/admin-login')
+        .expect(302);
 
-    it('should return 401 when not authenticated', async () => {
-      const response = await request(app)
-        .get('/auth/me')
-        .expect(401);
-
-      expect(response.body.error).toBe('Not authenticated');
-    });
-  });
-
-  describe('POST /auth/demo-login', () => {
-    it('should login demo user', async () => {
-      const mockUser = generateMockUser({ 
-        email: 'demo@example.com',
-        name: 'Demo User',
-        role: 'employee'
-      });
-
-      mockPool.query.mockResolvedValue(createMockQueryResult([mockUser]));
-
-      const response = await request(app)
-        .post('/auth/demo-login')
-        .send({ email: 'demo@example.com' })
-        .expect(200);
-
-      expect(response.body).toEqual(mockUser);
-    });
-
-    it('should handle missing email', async () => {
-      const response = await request(app)
-        .post('/auth/demo-login')
-        .send({})
-        .expect(400);
-
-      expect(response.body.error).toBe('Email is required');
-    });
-
-    it('should handle invalid email format', async () => {
-      const response = await request(app)
-        .post('/auth/demo-login')
-        .send({ email: 'invalid-email' })
-        .expect(400);
-
-      expect(response.body.error).toBe('Invalid email format');
-    });
-
-    it('should handle user not found', async () => {
-      mockPool.query.mockResolvedValue(createMockQueryResult([]));
-
-      const response = await request(app)
-        .post('/auth/demo-login')
-        .send({ email: 'nonexistent@example.com' })
-        .expect(404);
-
-      expect(response.body.error).toBe('User not found');
-    });
-
-    it('should handle database error', async () => {
-      mockPool.query.mockRejectedValue(new Error('Database error'));
-
-      const response = await request(app)
-        .post('/auth/demo-login')
-        .send({ email: 'demo@example.com' })
-        .expect(500);
-
-      expect(response.body.error).toBe('Database operation failed');
-    });
-  });
-
-  describe('POST /auth/admin-login', () => {
-    it('should login admin user', async () => {
-      const mockAdmin = generateMockUser({ 
-        email: 'admin@example.com',
-        name: 'Admin User',
-        role: 'researcher_admin'
-      });
-
-      mockPool.query.mockResolvedValue(createMockQueryResult([mockAdmin]));
-
-      const response = await request(app)
-        .post('/auth/admin-login')
-        .send({ email: 'admin@example.com' })
-        .expect(200);
-
-      expect(response.body).toEqual(mockAdmin);
-    });
-
-    it('should reject non-admin users', async () => {
-      const mockUser = generateMockUser({ 
-        email: 'user@example.com',
-        role: 'employee'
-      });
-
-      mockPool.query.mockResolvedValue(createMockQueryResult([mockUser]));
-
-      const response = await request(app)
-        .post('/auth/admin-login')
-        .send({ email: 'user@example.com' })
-        .expect(403);
-
-      expect(response.body.error).toBe('Admin access required');
+      expect(response.headers.location).toBe('http://localhost:3000/admin');
     });
   });
 });

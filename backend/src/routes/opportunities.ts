@@ -642,8 +642,112 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   }
   
   await pool.query('DELETE FROM opportunities WHERE id = $1', [id]);
-  
+
   res.status(204).send();
+}));
+
+// POST /api/opportunities/:id/duplicate - Duplicate opportunity
+router.post('/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  // Check if database is available
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    // Use mock data for development
+    const { id } = req.params;
+
+    // Check if opportunity exists
+    const existingOpportunity = getMockOpportunity(id);
+    if (!existingOpportunity) {
+      throw new NotFoundError('Opportunity');
+    }
+
+    // Check ownership (superadmins can duplicate any)
+    const isSuperadmin = req.user!.role === 'superadmin';
+    if (!isSuperadmin && existingOpportunity.owner_user_id !== req.user!.id) {
+      throw new ForbiddenError('Only the owner can duplicate this opportunity');
+    }
+
+    // Create duplicate as draft
+    const duplicateOpportunity = {
+      id: `mock-${Date.now()}`,
+      type: existingOpportunity.type,
+      title: `${existingOpportunity.title} (copy)`,
+      purpose_one_liner: existingOpportunity.purpose_one_liner,
+      description_optional: existingOpportunity.description_optional,
+      product_optional: existingOpportunity.product_optional,
+      default_duration_minutes: existingOpportunity.default_duration_minutes,
+      status: 'draft' as const,
+      owner_user_id: req.user!.id,
+      external_link_optional: existingOpportunity.external_link_optional,
+      participant_type_required: existingOpportunity.participant_type_required,
+      participant_type_specific_details: existingOpportunity.participant_type_specific_details,
+      created_at: new Date(),
+      updated_at: new Date(),
+      owner_name: req.user!.name,
+      owner_email: req.user!.email,
+      sessions: []
+    };
+
+    addMockOpportunity(duplicateOpportunity);
+
+    return res.status(201).json(duplicateOpportunity);
+  }
+
+  const { id } = req.params;
+
+  // Check ownership
+  const ownershipCheck = await pool.query(
+    'SELECT owner_user_id FROM opportunities WHERE id = $1',
+    [id]
+  );
+
+  if (ownershipCheck.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  // Check ownership (superadmins can duplicate any)
+  const isSuperadmin = req.user!.role === 'superadmin';
+  if (!isSuperadmin && ownershipCheck.rows[0].owner_user_id !== req.user!.id) {
+    throw new ForbiddenError('Only the owner can duplicate this opportunity');
+  }
+
+  // Get the original opportunity
+  const original = await pool.query('SELECT * FROM opportunities WHERE id = $1', [id]);
+  if (original.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  const opp = original.rows[0];
+
+  // Create duplicate as draft
+  const query = `
+    INSERT INTO opportunities (
+      type, title, purpose_one_liner, description_optional,
+      product_optional, default_duration_minutes, status,
+      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details
+    ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $9, $10)
+    RETURNING *
+  `;
+
+  const values = [
+    opp.type,
+    `${opp.title} (copy)`,
+    opp.purpose_one_liner,
+    opp.description_optional,
+    opp.product_optional,
+    opp.default_duration_minutes,
+    req.user!.id,
+    opp.external_link_optional,
+    opp.participant_type_required,
+    opp.participant_type_specific_details
+  ];
+
+  const result = await pool.query(query, values);
+  const duplicatedOpportunity = result.rows[0];
+
+  // Add empty sessions array for consistency with frontend
+  duplicatedOpportunity.sessions = [];
+
+  res.status(201).json(duplicatedOpportunity);
 }));
 
 // GET /api/opportunities/:id/sessions - Get sessions for an opportunity
