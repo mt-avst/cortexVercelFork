@@ -82,7 +82,7 @@ Cortex backend calls this to populate the study picker for researchers.
 }
 ```
 
-**Status codes:** `200`, `401` (bad/missing HMAC), `503` (persistence not configured → returns `{ studies: [] }`)
+**Status codes:** `200` (including when persistence is not configured, in which case FirstHand returns `200 { studies: [] }` rather than `503`), `401` (bad/missing HMAC)
 
 **Cortex type:** `FirstHandStudy` in `shared/types/index.ts` — flat object matching the above shape. The study list does **not** include step details.
 
