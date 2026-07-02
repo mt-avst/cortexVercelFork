@@ -196,9 +196,11 @@ After a session completes, FirstHand redirects the participant to the `return_ur
 at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id>?completed=1`.
 `OpportunityDetail.tsx` reads `?completed=1` and shows a completion banner.
 
-> **Note (2026-06-29):** The `return_url` redirect is not yet wired in the FirstHand participant
-> UI. Until it is, participants are not automatically returned to Cortex after completing a study.
-> Track this as an open item in the FirstHand repo.
+> **Note (2026-07-02):** Confirmed implemented on the FirstHand side. FirstHand's
+> `participant-session-flow.tsx` redirects via `window.location.assign(returnUrl)` after a
+> 3-second countdown when the session reaches `completed`/`declined` (added FirstHand-side
+> commit `3135d6e`, 2026-06-09). Participants are automatically returned to Cortex after
+> completing a study.
 
 ---
 
@@ -224,5 +226,5 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 ## Assumptions / open items
 
 - Callback delivery is best-effort from FirstHand. There is no retry, so transient Cortex downtime will result in missed events. A future improvement could add a retry queue on the FirstHand side.
-- `return_url` redirect in the FirstHand participant UI is not yet implemented (see note above).
+- `return_url` redirect in the FirstHand participant UI is implemented (see note above).
 - The HMAC scheme is symmetric — the same secret and algorithm is used in both directions. Secret rotation requires a coordinated update to both deployments.
