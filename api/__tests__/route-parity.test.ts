@@ -69,15 +69,6 @@ const KNOWN_GAPS: Array<{ method: Method; routePath: string; reason: string }> =
   { method: 'POST', routePath: '/api/bookings/:param/approve', reason: 'Phase B4 (not yet built)' },
   { method: 'POST', routePath: '/api/bookings/:param/reject', reason: 'Phase B4 (not yet built)' },
   { method: 'DELETE', routePath: '/api/calendar/disconnect', reason: 'Phase B4 (no calendar service in api/ yet)' },
-
-  // --- FirstHand integration — merged to `main` (commit 35d2f74, phases 8-16)
-  // but NOT YET merged into this branch (feat/server-parity branched off
-  // main before that work landed). This is a pre-existing merge gap, not a
-  // B1/B3/B4/B6 gap — do not "fix" it here by porting the endpoints; it will
-  // resolve itself once main is merged into this branch. ---
-  { method: 'POST', routePath: '/api/opportunities/:param/firsthand-handoff', reason: 'FirstHand integration not yet merged from main' },
-  { method: 'GET', routePath: '/api/firsthand/studies', reason: 'FirstHand integration not yet merged from main' },
-  { method: 'GET', routePath: '/api/opportunities/:param/session-events', reason: 'FirstHand integration not yet merged from main' },
 ];
 
 const KNOWN_GAP_KEYS = new Set(KNOWN_GAPS.map((g) => `${g.method} ${g.routePath}`));
