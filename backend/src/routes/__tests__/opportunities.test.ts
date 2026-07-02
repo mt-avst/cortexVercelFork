@@ -383,4 +383,43 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe('Only the owner can duplicate this opportunity');
     });
   });
+
+  describe('POST /api/opportunities/:id/close-if-past', () => {
+    it('should close the opportunity once all sessions are past', async () => {
+      // Ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id' }]
+      });
+
+      // autoCloseOpportunityIfNeeded's session/status lookup
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ total_sessions: '2', past_sessions: '2', status: 'published' }]
+      });
+
+      // autoCloseOpportunityIfNeeded's UPDATE
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/close-if-past')
+        .expect(200);
+
+      expect(response.body).toEqual({ message: 'Opportunity auto-close check completed' });
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE opportunities'),
+        ['closed', '1']
+      );
+    });
+
+    it('should check ownership before closing', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/close-if-past')
+        .expect(403);
+
+      expect(response.body.error).toBe('Only the owner can close this opportunity');
+    });
+  });
 });
