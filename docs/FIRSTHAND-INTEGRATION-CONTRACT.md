@@ -223,6 +223,10 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ---
 
+## Verification history
+
+- **2026-07-03:** Full audit of this contract against actual FirstHand source (not the FirstHand-side `CORTEX_INTEGRATION_PLAN.md`, which is historical/pre-implementation). All six areas — HMAC auth, `GET /api/studies`, `POST /api/sessions` (including `callback_url`/`return_url`, confirmed read and used), FirstHand → Cortex callbacks, return-flow redirect, and env var naming — confirmed matching. Two doc-only corrections applied from this pass: the `/api/studies` status-code claim above, and a missing `.env.example` entry on the FirstHand side.
+
 ## Assumptions / open items
 
 - Callback delivery is best-effort from FirstHand. There is no retry, so transient Cortex downtime will result in missed events. A future improvement could add a retry queue on the FirstHand side.
