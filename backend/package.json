@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-backend",
-  "version": "7.3.1",
+  "version": "7.3.23",
   "description": "Adaptalabs recruitment app backend",
   "main": "dist/index.js",
   "scripts": {
@@ -9,8 +9,8 @@
     "start": "node dist/backend/src/index.js",
     "test": "jest",
     "test:watch": "jest --watch",
-    "migrate": "npx tsx src/db/migrate.ts",
-    "seed": "npx tsx src/db/seed.ts",
+    "migrate": "node dist/backend/src/db/migrate.js",
+    "seed": "node dist/backend/src/db/seed.js",
     "reset-demo": "npx tsx src/db/reset-demo-data.ts",
     "reset-calendar": "npx tsx src/db/reset-calendar-bookings.ts",
     "reset-calendar-full": "npx tsx src/db/reset-calendar-bookings.ts --cancel-all"

@@ -63,6 +63,11 @@ router.post('/callbacks', asyncHandler(async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'missing_fields' });
   }
 
+  const KNOWN_EVENT_TYPES = ['session_started', 'session_completed', 'session_abandoned', 'session_failed'];
+  if (!KNOWN_EVENT_TYPES.includes(event)) {
+    return res.status(400).json({ error: 'unknown_event_type', event });
+  }
+
   const dbAvailable = await isDatabaseAvailable();
   if (dbAvailable && external_ref) {
     try {
@@ -70,7 +75,7 @@ router.post('/callbacks', asyncHandler(async (req: Request, res: Response) => {
         `INSERT INTO opportunity_session_events
            (opportunity_id, participant_user_id, firsthand_session_id, event_type, occurred_at, payload)
          VALUES ($1, $2::uuid, $3, $4, $5, $6)
-         ON CONFLICT DO NOTHING`,
+         ON CONFLICT (firsthand_session_id, event_type) DO NOTHING`,
         [
           external_ref,
           participant_id || null,
@@ -80,8 +85,9 @@ router.post('/callbacks', asyncHandler(async (req: Request, res: Response) => {
           JSON.stringify(req.body)
         ]
       );
-    } catch {
+    } catch (err) {
       // Don't fail the 200 response over a DB error — FirstHand shouldn't retry indefinitely
+      console.warn('[firsthand] callback DB insert failed for session', session_id, err);
     }
   }
 

@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMyBookings, cancelBooking, rescheduleBooking } from '../api/client';
-import { BookingWithDetails } from '../api/types';
+import { getMyBookings, cancelBooking, rescheduleBooking, getMySessionEvents } from '../api/client';
+import { BookingWithDetails, MySessionEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { logger } from '../utils/logger';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
-import { ArrowLeft, RefreshCw, ExternalLink, CalendarX } from 'lucide-react';
+import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +21,7 @@ const MyBookings: React.FC = () => {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<{ show: boolean; bookingId: string | null }>({ show: false, bookingId: null });
   const [rescheduleConfirm, setRescheduleConfirm] = useState<{ show: boolean; bookingId: string | null; targetSessionId: string | null }>({ show: false, bookingId: null, targetSessionId: null });
+  const [sessionEvents, setSessionEvents] = useState<MySessionEvent[]>([]);
 
   useEffect(() => {
     loadBookings();
@@ -47,12 +48,16 @@ const MyBookings: React.FC = () => {
       setLoading(true);
       setError(null);
       logger.debug('Loading my bookings...');
-      const data = await getMyBookings();
+      const [data, events] = await Promise.all([
+        getMyBookings(),
+        getMySessionEvents().catch(() => [] as MySessionEvent[]),
+      ]);
       logger.debug('Loaded bookings data', {
         upcoming: data.upcoming?.length || 0,
         past: data.past?.length || 0
       });
       setBookings(data);
+      setSessionEvents(events);
     } catch (error: unknown) {
       logger.error('Error loading bookings', {
         error: error instanceof Error ? error : undefined,
@@ -433,6 +438,53 @@ const MyBookings: React.FC = () => {
             </div>
           )}
         </section>
+
+        {sessionEvents.length > 0 && (
+          <section className="my-bookings-section my-bookings-section-past">
+            <h2 className="my-bookings-section-title">Self-guided sessions</h2>
+            <div className="booking-cards-grid">
+              {sessionEvents.map((event) => (
+                <Card key={event.id} className="booking-card booking-card-past">
+                  <CardBody className="booking-card-body">
+                    <div className="booking-card-badges">
+                      <span className={`booking-badge ${
+                        event.event_type === 'session_completed' ? 'booking-badge-test' :
+                        event.event_type === 'session_started' ? 'booking-badge-poll' :
+                        'booking-badge-cancelled'
+                      } ms-0`}>
+                        {event.event_type === 'session_completed' ? 'Completed' :
+                         event.event_type === 'session_started' ? 'Started' :
+                         event.event_type === 'session_abandoned' ? 'Abandoned' : 'Failed'}
+                      </span>
+                    </div>
+                    <h3 className="booking-card-title">{event.opportunity_title}</h3>
+                    <dl className="booking-metadata">
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Date</dt>
+                        <dd className="booking-metadata-value">{formatDate(event.occurred_at)}</dd>
+                      </div>
+                      <div className="booking-metadata-row">
+                        <dt className="booking-metadata-label">Type</dt>
+                        <dd className="booking-metadata-value d-flex align-items-center gap-1">
+                          <Monitor size={14} aria-hidden="true" />
+                          Unmoderated
+                        </dd>
+                      </div>
+                    </dl>
+                  </CardBody>
+                  <CardFooter className="booking-card-footer">
+                    <a
+                      href={`/opportunities/${event.opportunity_id}`}
+                      className="btn-booking-reschedule"
+                    >
+                      View opportunity
+                    </a>
+                  </CardFooter>
+                </Card>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Modals */}
         <ConfirmationModal

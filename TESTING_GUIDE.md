@@ -1,6 +1,6 @@
 # End-to-End Testing Guide
 
-**Version**: 3.12.0  
+**Version**: 7.3.23  
 **Date**: 2025-01-27
 
 ---

@@ -303,6 +303,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       log('⚠️  Opportunities table does not exist - skipping opportunity-related migrations');
     }
 
+    // Add firsthand_study_id column for Cortex↔FirstHand integration (Phase 5)
+    if (opportunitiesExists) {
+      try {
+        await client.query(`
+          ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS firsthand_study_id TEXT
+        `);
+        log('✅ Added firsthand_study_id column to opportunities table');
+      } catch (error: unknown) {
+        const err = error as Error;
+        log('ℹ️  firsthand_study_id column may already exist: ' + err.message);
+      }
+    }
+
+    // Create opportunity_session_events table for FirstHand lifecycle callbacks (Phase 6)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS opportunity_session_events (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        opportunity_id UUID REFERENCES opportunities(id) ON DELETE CASCADE NOT NULL,
+        participant_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+        firsthand_session_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        occurred_at TIMESTAMPTZ NOT NULL,
+        payload JSONB,
+        received_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    log('✅ Created opportunity_session_events table');
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_session_events_opportunity
+        ON opportunity_session_events(opportunity_id, occurred_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_session_events_participant
+        ON opportunity_session_events(participant_user_id, occurred_at DESC);
+    `);
+
+    // Phase 9: dedup constraint so duplicate callback deliveries don't create duplicate rows
+    // Remove any existing duplicates before creating the unique index (idempotent)
+    await client.query(`
+      DELETE FROM opportunity_session_events
+      WHERE id NOT IN (
+        SELECT DISTINCT ON (firsthand_session_id, event_type) id
+        FROM opportunity_session_events
+        ORDER BY firsthand_session_id, event_type, received_at DESC
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS uq_session_event_dedup
+        ON opportunity_session_events(firsthand_session_id, event_type);
+    `);
+    log('✅ Created opportunity_session_events indexes');
+
     log('✅ All migrations completed successfully!');
 
     return res.status(200).json({

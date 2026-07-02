@@ -422,6 +422,12 @@ const OpportunityDetail: React.FC = () => {
           {isSessionCompleted && (
             <div className="alert alert-success alert-dismissible fade show mission-alert mb-4" role="status" aria-live="polite">
               <strong>Session complete.</strong> Your recording and responses have been saved. The research team will be in touch.
+              <button
+                type="button"
+                className="btn-close"
+                onClick={() => navigate(`/opportunities/${id}`, { replace: true })}
+                aria-label="Dismiss"
+              />
             </div>
           )}
 
@@ -839,8 +845,15 @@ const OpportunityDetail: React.FC = () => {
                                 await trackOpportunityClick(opportunity.id, 'action');
                                 const { session_url } = await startFirstHandSession(opportunity.id);
                                 window.location.assign(session_url);
-                              } catch {
-                                setError('Failed to start session. Please try again.');
+                              } catch (err: unknown) {
+                                const status = (err as { response?: { status?: number } }).response?.status;
+                                if (status === 503) {
+                                  setError('This study is not yet configured. Please contact your research team.');
+                                } else if (status === 403) {
+                                  setError('This opportunity is not yet available. Please try again later.');
+                                } else {
+                                  setError('Could not start session. Please try again or contact support.');
+                                }
                               } finally {
                                 setFirstHandLoading(false);
                               }

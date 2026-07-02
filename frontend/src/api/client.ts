@@ -245,6 +245,11 @@ export const getOpportunitySessionEvents = async (opportunityId: string): Promis
   return response.data;
 };
 
+export const getMySessionEvents = async (): Promise<import('./types').MySessionEvent[]> => {
+  const response = await api.get('/me/session-events');
+  return response.data;
+};
+
 // Session API functions
 export const getSessions = async (opportunityId: string, params?: {
   from?: string;

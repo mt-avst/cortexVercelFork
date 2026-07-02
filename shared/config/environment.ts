@@ -58,6 +58,10 @@ export const backendEnvSchema = z.object({
   
   // Frontend URL
   FRONTEND_URL: z.string().url('Frontend URL must be a valid URL').catch(() => 'http://localhost:3000'),
+
+  // FirstHand Integration (optional — integration is disabled when unset)
+  FIRSTHAND_BASE_URL: z.string().url('FirstHand base URL must be a valid URL').optional(),
+  FIRSTHAND_INTEGRATION_SECRET: z.string().min(32, 'FirstHand integration secret must be at least 32 characters').optional(),
 });
 
 /**
@@ -233,6 +237,8 @@ export const ENVIRONMENT_DOCS = {
     GOOGLE_OAUTH_CLIENT_SECRET: 'Google OAuth client secret for user calendar integration',
     GOOGLE_OAUTH_REDIRECT_URI: 'Google OAuth redirect URI for calendar callback',
     FRONTEND_URL: 'Frontend application URL',
+    FIRSTHAND_BASE_URL: 'URL of the FirstHand app — used to proxy the study list and build reviewer deep-links. Omit to disable FirstHand integration.',
+    FIRSTHAND_INTEGRATION_SECRET: 'Shared HMAC-SHA256 secret for signing outbound requests to FirstHand and verifying inbound webhook callbacks. Minimum 32 characters. Must match the FIRSTHAND_INTEGRATION_SECRET set in the FirstHand app.',
   },
   frontend: {
     VITE_API_URL: 'Backend API URL',
@@ -264,7 +270,11 @@ OIDC_REDIRECT_URL=http://localhost:3001/auth/callback
 ADMIN_EMAILS=admin1@company.com,admin2@company.com
 CORS_ORIGIN=http://localhost:3000
 ENABLE_CSRF=false
-FRONTEND_URL=http://localhost:3000`,
+FRONTEND_URL=http://localhost:3000
+
+# FirstHand Integration (optional — omit to disable)
+FIRSTHAND_BASE_URL=http://localhost:4000
+FIRSTHAND_INTEGRATION_SECRET=your_shared_firsthand_secret_here_at_least_32_chars`,
     
     production: `NODE_ENV=production
 PORT=3001
@@ -289,7 +299,11 @@ GOOGLE_CALENDAR_ID=primary
 GOOGLE_OAUTH_CLIENT_ID=your_oauth_client_id
 GOOGLE_OAUTH_CLIENT_SECRET=your_oauth_client_secret
 GOOGLE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/api/calendar/auth/callback
-FRONTEND_URL=https://yourdomain.com`,
+FRONTEND_URL=https://yourdomain.com
+
+# FirstHand Integration (optional — omit to disable)
+FIRSTHAND_BASE_URL=https://firsthand.yourdomain.com
+FIRSTHAND_INTEGRATION_SECRET=your_production_shared_firsthand_secret_min_32_chars`,
   },
   
   frontend: {

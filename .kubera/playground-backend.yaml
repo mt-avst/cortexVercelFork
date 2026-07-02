@@ -10,8 +10,11 @@ config:
     NODE_ENV: production
     SKIP_OIDC: "true"
     ENABLE_CSRF: "false"
+    # FirstHand Integration — set to the FirstHand deployment URL to enable
+    # FIRSTHAND_BASE_URL: https://firsthand.yourdomain.com
 secret:
   enabled: true
+  # Required for FirstHand integration: FIRSTHAND_INTEGRATION_SECRET (min 32 chars, shared with FirstHand app)
 resources:
   memory:
     # -- Pod requested memory
@@ -68,5 +71,5 @@ deployment:
 initContainer:
   enabled: true
   command: [ "sh", "-c"]
-  args: [" npm run migrate && npm run seed"]
+  args: ["npm run migrate && npm run seed"]
   workingDir: "/app/backend"

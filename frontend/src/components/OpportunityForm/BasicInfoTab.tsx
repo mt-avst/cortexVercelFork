@@ -83,7 +83,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
                 {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
                 {formData.type === 'survey' && 'Opens external survey tool for detailed feedback'}
-                {formData.type === 'unmoderated' && 'Opens external link for self-guided testing without scheduling'}
+                {formData.type === 'unmoderated' && 'Self-guided recorded testing — links to FirstHand or an external URL'}
                 {!formData.type && '\u00A0'}
               </div>
               <select

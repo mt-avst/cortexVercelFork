@@ -1,6 +1,6 @@
 {
   "name": "adaptalabs-api",
-  "version": "7.3.1",
+  "version": "7.3.23",
   "description": "Vercel serverless API functions for Adaptalabs",
   "scripts": {
     "test": "jest --no-coverage",
@@ -19,5 +19,3 @@
     "ts-jest": "^29.4.0"
   }
 }
-
-
