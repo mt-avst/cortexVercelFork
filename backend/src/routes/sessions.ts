@@ -4,6 +4,7 @@ import { requireAdmin, optionalAuth } from '../middleware/authenticate';
 import { asyncHandler, ValidationError, NotFoundError, ForbiddenError, ConflictError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
+import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { validateSessionData } from '../validation/schemas';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
@@ -53,29 +54,6 @@ const checkSessionOverlaps = async (
   
   const result = client ? await client.query(query, params) : await pool.query(query, params);
   return parseInt(result.rows[0].overlap_count) > 0;
-};
-
-// Helper function to auto-close opportunity if all sessions are past
-const autoCloseOpportunityIfNeeded = async (opportunityId: string): Promise<void> => {
-  const result = await pool.query(`
-    SELECT COUNT(*) as total_sessions,
-           COUNT(CASE WHEN end_time < NOW() THEN 1 END) as past_sessions,
-           status
-    FROM sessions s
-    JOIN opportunities o ON s.opportunity_id = o.id
-    WHERE s.opportunity_id = $1
-    GROUP BY o.status
-  `, [opportunityId]);
-  
-  if (result.rows.length > 0) {
-    const { total_sessions, past_sessions, status } = result.rows[0];
-    if (total_sessions > 0 && past_sessions == total_sessions && status === 'published') {
-      await pool.query(
-        'UPDATE opportunities SET status = $1 WHERE id = $2',
-        ['closed', opportunityId]
-      );
-    }
-  }
 };
 
 // Helper function to format time for error messages
@@ -381,32 +359,6 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   await pool.query('DELETE FROM sessions WHERE id = $1', [sessionId]);
   
   res.status(204).send();
-}));
-
-// POST /api/opportunities/:id/close-if-past - Utility to close opportunity if all sessions are past
-router.post('/opportunities/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
-  const { id: opportunityId } = req.params;
-  
-  // Check opportunity ownership
-  const opportunityCheck = await pool.query(
-    'SELECT owner_user_id FROM opportunities WHERE id = $1',
-    [opportunityId]
-  );
-  
-  if (opportunityCheck.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
-  }
-  
-  // Check ownership (superadmins can close any)
-  const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
-  const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && !isOwner) {
-    throw new ForbiddenError('Only the owner can close this opportunity');
-  }
-  
-  await autoCloseOpportunityIfNeeded(opportunityId);
-  
-  res.json({ message: 'Opportunity auto-close check completed' });
 }));
 
 // POST /api/sessions/sync-booked-counts - Sync booked_count with actual bookings (admin only)

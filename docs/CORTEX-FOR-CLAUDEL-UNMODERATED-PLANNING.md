@@ -121,8 +121,8 @@ From **`backend/src/routes/api.ts`**:
 | Mount | Router / file | Purpose |
 |-------|----------------|--------|
 | GET `/api/me` | api.ts | Current user (requireAuth) |
-| `/api/opportunities` | opportunities.ts | CRUD, list, get by id, sessions, click, analytics |
-| `/api/sessions` | sessions.ts | Create, patch, delete sessions; duplicate opportunity; close-if-past; sync-booked-counts |
+| `/api/opportunities` | opportunities.ts | CRUD, list, get by id, sessions, click, analytics, duplicate, close-if-past |
+| `/api/sessions` | sessions.ts | Create, patch, delete sessions; sync-booked-counts |
 | `/api/bookings` | bookings.ts | book, cancel, reschedule, my/bookings, complete, approve, reject, pending-approvals |
 | `/api/calendar` | calendar.ts + userCalendar.ts | events, availability, check-conflicts; user calendar auth/callback, my-events, connection-status, disconnect |
 | `/api/gamification` | gamification.ts | profile, achievements, leaderboard, leaderboard/monthly, points-history |

@@ -15,6 +15,7 @@ import {
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { isFirstHandConfigured, firstHandPost } from '../utils/firsthand-client';
+import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
@@ -748,6 +749,32 @@ router.post('/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, re
   duplicatedOpportunity.sessions = [];
 
   res.status(201).json(duplicatedOpportunity);
+}));
+
+// POST /api/opportunities/:id/close-if-past - Utility to close opportunity if all sessions are past
+router.post('/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  const { id: opportunityId } = req.params;
+
+  // Check opportunity ownership
+  const opportunityCheck = await pool.query(
+    'SELECT owner_user_id FROM opportunities WHERE id = $1',
+    [opportunityId]
+  );
+
+  if (opportunityCheck.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  // Check ownership (superadmins can close any)
+  const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+  const isSuperadmin = req.user!.role === 'superadmin';
+  if (!isSuperadmin && !isOwner) {
+    throw new ForbiddenError('Only the owner can close this opportunity');
+  }
+
+  await autoCloseOpportunityIfNeeded(opportunityId);
+
+  res.json({ message: 'Opportunity auto-close check completed' });
 }));
 
 // GET /api/opportunities/:id/sessions - Get sessions for an opportunity

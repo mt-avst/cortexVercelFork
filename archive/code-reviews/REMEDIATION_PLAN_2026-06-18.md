@@ -1,5 +1,15 @@
 # AdaptaLabs Remediation Plan — 2026-06-18
 
+> **Status as of 2026-07-02: RESOLVED.** Workstream A (`fix/api-auth-hardening`, MR !6),
+> Workstream B (B1/B3/B6/B4-partial, `feat/server-parity`, MR !7), and Workstream C all
+> merged to `main` and deployed clean. Note: the Vercel `api/` surface this doc targets
+> is a **retired** deployment target — real production is the Express `backend/` server
+> via GitLab/Kubera/K8s (see `archive/code-reviews/` session notes or ask for details).
+> A separate, unrelated live gap in `backend/src/routes/auth.ts` (Google OAuth demo-mode
+> fallback not gated behind `NODE_ENV`, plus a `code=demo-code` bypass) was found and
+> fixed independently via MR !8, merged 2026-07-02T14:31. The rest of this document is
+> kept as a historical record of the original plan and is not being actively worked.
+
 Follows the consistency & integrity review of v7.3.23. Covers three workstreams:
 **A** ship the auth-hardening branch, **B** close the production/dev server-parity gap,
 **C** clean up the medium/low consistency items.
