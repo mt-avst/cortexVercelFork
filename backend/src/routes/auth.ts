@@ -267,8 +267,12 @@ router.post('/logout', (req, res) => {
 router.get('/google-login', async (req, res) => {
   try {
     const isDemoMode = isGoogleOAuthDemoMode();
-    
+
     if (isDemoMode) {
+      if (process.env.NODE_ENV !== 'development') {
+        logger.error('Google OAuth is not configured and demo login is disabled outside development');
+        return res.status(500).json({ error: 'Authentication service unavailable' });
+      }
       // Demo mode: Simulate OAuth flow by redirecting to backend callback with demo code
       logger.debug('Google login: Demo mode - simulating OAuth flow');
       const state = crypto.randomBytes(32).toString('hex');
@@ -324,6 +328,12 @@ router.get('/google-callback', async (req, res) => {
     }
 
     const isDemoMode = isGoogleOAuthDemoMode();
+    const isDemoLoginRequest = isDemoMode || code === 'demo-code';
+
+    if (isDemoLoginRequest && process.env.NODE_ENV !== 'development') {
+      logger.error('Demo Google login attempted outside development mode');
+      return res.status(500).json({ error: 'Authentication service unavailable' });
+    }
 
     let userInfo: {
       id: string;
@@ -335,7 +345,7 @@ router.get('/google-callback', async (req, res) => {
     let refreshToken: string | null;
     let tokenExpiry: Date | null;
 
-    if (isDemoMode || code === 'demo-code') {
+    if (isDemoLoginRequest) {
       // Demo mode: Create mock user from demo code
       logger.debug('Google callback: Demo mode - creating mock user');
       
