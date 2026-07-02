@@ -1,32 +1,29 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
-import session from 'express-session';
-import opportunitiesRouter from '../opportunities';
-import { pool } from '../../config';
 
-// Mock the database pool for testing
-const mockQuery = jest.fn() as jest.MockedFunction<any>;
-const mockConnect = jest.fn() as jest.MockedFunction<any>;
-
+// Mock the database pool for testing (factory uses only inline jest.fn() to avoid TDZ)
 jest.mock('../../config', () => ({
   pool: {
-    query: mockQuery,
-    connect: mockConnect
+    query: jest.fn(),
+    connect: jest.fn(),
   }
 }));
 
+import opportunitiesRouter from '../opportunities';
+import { pool } from '../../config';
+
+const mockQuery = pool.query as jest.MockedFunction<any>;
+const mockConnect = pool.connect as jest.MockedFunction<any>;
+
 const app = express();
 app.use(express.json());
-app.use(session({
-  secret: 'test-secret',
-  resave: false,
-  saveUninitialized: false
-}));
 
-// Mock authentication middleware
+// Mock authentication middleware. requireAdmin/optionalAuth (../middleware/authenticate)
+// only ever read req.session.user, never call session methods like .save()/.touch(),
+// so a plain stub object is enough here — no need for (and no compatibility with) the
+// real express-session middleware, whose response-finalization hooks expect those methods.
 app.use((req: any, res, next) => {
-  // Mock session with user for requireAdmin
   req.session = {
     user: {
       id: 'test-user-id',
@@ -37,7 +34,6 @@ app.use((req: any, res, next) => {
       role: 'researcher_admin'
     }
   };
-  req.user = req.session.user;
   next();
 });
 

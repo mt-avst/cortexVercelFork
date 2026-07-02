@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from '@jest/globals';
+import crypto from 'crypto';
 import { pool } from '../../config';
 
 describe('Race Condition Protection', () => {
@@ -29,9 +30,9 @@ describe('Race Condition Protection', () => {
     
     try {
       // First, create a test session to lock
-      const opportunityId = '00000000-0000-0000-0000-' + Date.now().toString().padStart(12, '0');
-      const sessionId = '00000000-0000-0000-0000-' + (Date.now() + 1).toString().padStart(12, '0');
-      const testUserId = '00000000-0000-0000-0000-' + (Date.now() + 2).toString().padStart(12, '0');
+      const opportunityId = crypto.randomUUID();
+      const sessionId = crypto.randomUUID();
+      const testUserId = crypto.randomUUID();
       
       // Create opportunity if it doesn't exist
       await pool.query(`

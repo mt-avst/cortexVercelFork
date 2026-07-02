@@ -208,24 +208,55 @@ describe('Authentication Routes', () => {
   });
 
   describe('Demo Routes (Development Only)', () => {
+    // These routes are only registered on the router when NODE_ENV === 'development'
+    // *at module-load time* (see auth.ts's top-level `if` block), so the module must
+    // be re-required with NODE_ENV already set — setting it in beforeEach alone is a
+    // no-op against the already-imported, module-cached `authRouter`.
+    let demoAuthRouter: any;
+
     beforeEach(() => {
       process.env.NODE_ENV = 'development';
+      jest.resetModules();
+      demoAuthRouter = require('../auth').default;
     });
 
     afterEach(() => {
       process.env.NODE_ENV = 'test';
+      jest.resetModules();
     });
 
+    const buildDemoApp = (sessionMiddleware: express.RequestHandler) => {
+      const demoApp = express();
+      demoApp.use(express.json());
+      demoApp.use(sessionMiddleware);
+      demoApp.use('/auth', demoAuthRouter);
+      return demoApp;
+    };
+
     it('should provide demo user login', async () => {
-      const response = await request(app)
+      const demoApp = buildDemoApp(session({
+        secret: 'test-secret',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      }));
+
+      const response = await request(demoApp)
         .get('/auth/demo-login')
         .expect(302);
 
-      expect(response.headers.location).toBe('http://localhost:3000');
+      expect(response.headers.location).toBe('http://localhost:3000/');
     });
 
     it('should provide demo admin login', async () => {
-      const response = await request(app)
+      const demoApp = buildDemoApp(session({
+        secret: 'test-secret',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false },
+      }));
+
+      const response = await request(demoApp)
         .get('/auth/admin-login')
         .expect(302);
 
@@ -240,13 +271,10 @@ describe('Authentication Routes', () => {
         }) as any
       };
 
-      const appWithMockSession = express();
-      appWithMockSession.use(express.json());
-      appWithMockSession.use((req, res, next) => {
+      const appWithMockSession = buildDemoApp((req, res, next) => {
         req.session = mockSession as any;
         next();
       });
-      appWithMockSession.use('/auth', authRouter);
 
       await request(appWithMockSession)
         .get('/auth/demo-login')
