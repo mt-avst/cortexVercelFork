@@ -62,12 +62,10 @@ interface HandlerRoute {
 // doesn't silently accumulate.
 // ---------------------------------------------------------------------------
 const KNOWN_GAPS: Array<{ method: Method; routePath: string; reason: string }> = [
-  // --- Phase B4 (booking lifecycle + calendar) — not yet built ---
+  // --- Phase B4 (calendar service) — not yet built ---
   // See ~/.claude-work/plans/can-you-please-plan-snuggly-noodle.md, "Phase B4".
-  { method: 'POST', routePath: '/api/bookings/:param/reschedule', reason: 'Phase B4 (not yet built)' },
-  { method: 'POST', routePath: '/api/bookings/sessions/:param/complete', reason: 'Phase B4 (not yet built)' },
-  { method: 'POST', routePath: '/api/bookings/:param/approve', reason: 'Phase B4 (not yet built)' },
-  { method: 'POST', routePath: '/api/bookings/:param/reject', reason: 'Phase B4 (not yet built)' },
+  // Booking lifecycle (reschedule/complete/approve/reject) has been ported; only
+  // the Google Calendar service port itself remains out of scope.
   { method: 'DELETE', routePath: '/api/calendar/disconnect', reason: 'Phase B4 (no calendar service in api/ yet)' },
 ];
 
