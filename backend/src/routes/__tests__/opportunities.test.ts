@@ -10,11 +10,21 @@ jest.mock('../../config', () => ({
   }
 }));
 
+// Without this, isDatabaseAvailable() resolves false in the test process (no
+// DATABASE_URL), and every route silently falls back to the in-memory mock-data
+// store instead of exercising pool.query at all.
+jest.mock('../../utils/database', () => ({
+  isDatabaseAvailable: jest.fn(),
+}));
+
 import opportunitiesRouter from '../opportunities';
 import { pool } from '../../config';
+import { isDatabaseAvailable } from '../../utils/database';
+import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
+const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 
 const app = express();
 app.use(express.json());
@@ -38,6 +48,11 @@ app.use((req: any, res, next) => {
 });
 
 app.use('/api/opportunities', opportunitiesRouter);
+// Routes throw AppError subclasses (NotFoundError/ForbiddenError/ValidationError) and
+// rely on asyncHandler -> next(error) -> this handler to turn them into JSON responses.
+// Without it, Express's default finalhandler sends text/html, and response.body.error
+// assertions fail even when the status code happens to be right.
+app.use(errorHandler);
 
 describe('Opportunities API', () => {
 
@@ -45,6 +60,7 @@ describe('Opportunities API', () => {
     jest.clearAllMocks();
     // Reset mock to return empty arrays by default
     mockQuery.mockResolvedValue({ rows: [] });
+    mockIsDatabaseAvailable.mockResolvedValue(true);
   });
 
   describe('GET /api/opportunities', () => {
@@ -90,8 +106,10 @@ describe('Opportunities API', () => {
         .get('/api/opportunities?type=test')
         .expect(200);
 
+      // With no other filters and an admin session, type is the only WHERE
+      // condition, so it binds to $1 with no leading "AND".
       expect(mockQuery).toHaveBeenCalledWith(
-        expect.stringContaining('AND o.type = $2'),
+        expect.stringContaining('o.type = $1'),
         expect.arrayContaining(['test'])
       );
     });
@@ -124,7 +142,10 @@ describe('Opportunities API', () => {
         updated_at: new Date()
       };
 
-      mockQuery.mockResolvedValueOnce({ rows: [newOpportunity] });
+      // Route upserts the session user into `users` before inserting the
+      // opportunity, so two queries fire in order.
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert (result unused)
+      mockQuery.mockResolvedValueOnce({ rows: [newOpportunity] }); // opportunity insert
 
       const response = await request(app)
         .post('/api/opportunities')
@@ -146,6 +167,8 @@ describe('Opportunities API', () => {
     });
 
     it('should validate required fields', async () => {
+      // Field presence is enforced by validateRequest(CreateOpportunitySchema) (zod),
+      // which always responds with { error: 'Validation failed', details }.
       const response = await request(app)
         .post('/api/opportunities')
         .send({
@@ -154,7 +177,10 @@ describe('Opportunities API', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toBe('Type, title, and purpose are required');
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.details).toEqual(
+        expect.arrayContaining(['title: Required', 'purpose_one_liner: Required'])
+      );
     });
 
     it('should validate title length', async () => {
@@ -168,7 +194,8 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe('Validation failed');
-      expect(response.body.details).toContain('Title must be between 4 and 140 characters');
+      // zod's default min() message, not a custom "Title must be between..." string
+      expect(response.body.details).toContain('title: String must contain at least 4 character(s)');
     });
 
     it('should validate purpose length', async () => {
@@ -182,7 +209,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe('Validation failed');
-      expect(response.body.details).toContain('Purpose must be between 10 and 180 characters');
+      expect(response.body.details).toContain('purpose_one_liner: String must contain at least 10 character(s)');
     });
 
     it('should require external link for published polls/surveys', async () => {
@@ -197,7 +224,9 @@ describe('Opportunities API', () => {
         })
         .expect(400);
 
-      expect(response.body.error).toBe('External link is required for published polls and surveys');
+      expect(response.body.error).toBe(
+        'External link is required for published polls, surveys, and unmoderated tests without a FirstHand study'
+      );
     });
   });
 
@@ -215,12 +244,18 @@ describe('Opportunities API', () => {
         updated_at: new Date()
       };
 
-      // Mock ownership check
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ owner_user_id: 'test-user-id' }] 
+      // 1. Ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id' }]
       });
-      
-      // Mock update query
+
+      // 2. Existing-opportunity lookup (type/link/firsthand_study_id) used to decide
+      //    whether the published-poll/survey link validation applies
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null }]
+      });
+
+      // 3. The actual UPDATE ... RETURNING *
       mockQuery.mockResolvedValueOnce({ rows: [updatedOpportunity] });
 
       const response = await request(app)
@@ -285,55 +320,10 @@ describe('Opportunities API', () => {
     });
   });
 
-  describe('POST /api/opportunities/:id/duplicate', () => {
-    it('should duplicate an opportunity', async () => {
-      const originalOpportunity = {
-        id: '1',
-        type: 'test',
-        title: 'Original Title',
-        purpose_one_liner: 'Original purpose',
-        description_optional: 'Original description',
-        product_optional: 'Original product',
-        default_duration_minutes: 30,
-        external_link_optional: null
-      };
-
-      const duplicatedOpportunity = {
-        id: '2',
-        type: 'test',
-        title: 'Original Title (copy)',
-        purpose_one_liner: 'Original purpose',
-        description_optional: 'Original description',
-        product_optional: 'Original product',
-        default_duration_minutes: 30,
-        status: 'draft',
-        owner_user_id: 'test-user-id',
-        external_link_optional: null,
-        created_at: new Date(),
-        updated_at: new Date()
-      };
-
-      // Mock ownership check
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ owner_user_id: 'test-user-id' }] 
-      });
-      
-      // Mock get original opportunity
-      mockQuery.mockResolvedValueOnce({ rows: [originalOpportunity] });
-      
-      // Mock duplicate creation
-      mockQuery.mockResolvedValueOnce({ rows: [duplicatedOpportunity] });
-
-      const response = await request(app)
-        .post('/api/opportunities/1/duplicate')
-        .expect(201);
-
-      expect(response.body).toMatchObject({
-        id: '2',
-        title: 'Original Title (copy)',
-        status: 'draft',
-        sessions: []
-      });
-    });
-  });
+  // POST /api/opportunities/:id/duplicate was removed from this router — the real
+  // duplicate route now lives in src/routes/sessions.ts, mounted at
+  // /api/sessions/opportunities/:id/duplicate. There's a separate production bug
+  // here: the frontend calls POST /api/opportunities/:id/duplicate (see
+  // frontend/src/api/client.ts), which doesn't match that mount path at all — flagged
+  // separately, not something to paper over with a test against this router.
 });

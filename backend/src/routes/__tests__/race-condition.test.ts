@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
 import crypto from 'crypto';
 import { pool } from '../../config';
 
@@ -7,16 +7,25 @@ describe('Race Condition Protection', () => {
 
   beforeAll(async () => {
     // Check if database is available before running tests
+    let timeoutHandle: NodeJS.Timeout;
     try {
       await Promise.race([
         pool.query('SELECT 1'),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 2000))
+        new Promise((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error('Database connection timeout')), 2000);
+        })
       ]);
       databaseAvailable = true;
     } catch (error) {
       databaseAvailable = false;
       // Database not available, skipping race condition test
+    } finally {
+      clearTimeout(timeoutHandle!);
     }
+  });
+
+  afterAll(async () => {
+    await pool.end();
   });
 
   it('should prevent concurrent session modifications', async () => {
@@ -33,7 +42,15 @@ describe('Race Condition Protection', () => {
       const opportunityId = crypto.randomUUID();
       const sessionId = crypto.randomUUID();
       const testUserId = crypto.randomUUID();
-      
+
+      // opportunities.owner_user_id has a foreign key to users(id), so the owning
+      // user must exist first.
+      await pool.query(`
+        INSERT INTO users (id, name, email)
+        VALUES ($1, 'Race Condition Test User', $2)
+        ON CONFLICT (id) DO NOTHING
+      `, [testUserId, `race-condition-test-${testUserId}@example.com`]);
+
       // Create opportunity if it doesn't exist
       await pool.query(`
         INSERT INTO opportunities (id, type, title, purpose_one_liner, owner_user_id, status)
