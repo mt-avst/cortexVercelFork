@@ -22,6 +22,11 @@ interface SessionRow {
  * Gets sessions for an opportunity
  * POST /api/opportunities/[id]/sessions
  * Creates sessions for an opportunity
+ * DELETE /api/opportunities/[id]/sessions
+ * Bulk-deletes all sessions for an opportunity. Requires admin auth (owner or
+ * superadmin). All-or-nothing: rejected with 400 if ANY session under the
+ * opportunity has an active ('booked') booking. Response:
+ *   { message: string; deleted_count: number }
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
@@ -172,6 +177,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(201).json(createdSessions);
     }
     
+    if (req.method === 'DELETE') {
+      // Deleting all sessions for an opportunity requires an authenticated admin who owns it.
+      let user;
+      try {
+        user = requireAdmin(req);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
+      }
+
+      const oppCheck = await query(
+        `SELECT id, owner_user_id FROM opportunities WHERE id = $1`,
+        [opportunityId]
+      );
+
+      if (oppCheck.rows.length === 0) {
+        return res.status(404).json(createErrorResponse('Opportunity not found'));
+      }
+
+      try {
+        const ownerId = (oppCheck.rows[0] as { owner_user_id: string }).owner_user_id;
+        assertOwnerOrSuperadmin(user, ownerId);
+      } catch (authErr) {
+        if (handleAuthError(res, authErr)) return;
+        throw authErr;
+      }
+
+      // All-or-nothing guard: refuse to delete anything if any session under this
+      // opportunity has an active booking (mirrors Express DELETE /api/opportunities/:id/sessions).
+      const bookedSessionsCheck = await query(
+        `SELECT s.id FROM sessions s
+         WHERE s.opportunity_id = $1
+           AND EXISTS (SELECT 1 FROM bookings b WHERE b.session_id = s.id AND b.status = 'booked')`,
+        [opportunityId]
+      );
+
+      if (bookedSessionsCheck.rows.length > 0) {
+        return res.status(400).json(createErrorResponse(
+          `Cannot delete sessions with existing bookings. ${bookedSessionsCheck.rows.length} session(s) have bookings.`
+        ));
+      }
+
+      // Delete all bookings first (ON DELETE CASCADE should handle this, but explicit is safer)
+      await query(
+        'DELETE FROM bookings WHERE session_id IN (SELECT id FROM sessions WHERE opportunity_id = $1)',
+        [opportunityId]
+      );
+
+      // Delete all sessions for this opportunity
+      const deleteResult = await query(
+        'DELETE FROM sessions WHERE opportunity_id = $1 RETURNING id',
+        [opportunityId]
+      );
+
+      return res.status(200).json({
+        message: 'All sessions deleted successfully',
+        deleted_count: deleteResult.rows.length,
+      });
+    }
+
     return res.status(405).json(createErrorResponse('Method not allowed'));
   } catch (error: unknown) {
     logger.error('Error in sessions handler', {
