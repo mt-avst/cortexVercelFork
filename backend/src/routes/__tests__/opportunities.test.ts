@@ -320,10 +320,67 @@ describe('Opportunities API', () => {
     });
   });
 
-  // POST /api/opportunities/:id/duplicate was removed from this router — the real
-  // duplicate route now lives in src/routes/sessions.ts, mounted at
-  // /api/sessions/opportunities/:id/duplicate. There's a separate production bug
-  // here: the frontend calls POST /api/opportunities/:id/duplicate (see
-  // frontend/src/api/client.ts), which doesn't match that mount path at all — flagged
-  // separately, not something to paper over with a test against this router.
+  describe('POST /api/opportunities/:id/duplicate', () => {
+    it('should duplicate an opportunity', async () => {
+      const originalOpportunity = {
+        id: '1',
+        type: 'test',
+        title: 'Original Title',
+        purpose_one_liner: 'Original purpose',
+        description_optional: 'Original description',
+        product_optional: 'Original product',
+        default_duration_minutes: 30,
+        external_link_optional: null
+      };
+
+      const duplicatedOpportunity = {
+        id: '2',
+        type: 'test',
+        title: 'Original Title (copy)',
+        purpose_one_liner: 'Original purpose',
+        description_optional: 'Original description',
+        product_optional: 'Original product',
+        default_duration_minutes: 30,
+        status: 'draft',
+        owner_user_id: 'test-user-id',
+        external_link_optional: null,
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      // Mock ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id' }]
+      });
+
+      // Mock get original opportunity
+      mockQuery.mockResolvedValueOnce({ rows: [originalOpportunity] });
+
+      // Mock duplicate creation
+      mockQuery.mockResolvedValueOnce({ rows: [duplicatedOpportunity] });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/duplicate')
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        id: '2',
+        title: 'Original Title (copy)',
+        status: 'draft',
+        sessions: []
+      });
+    });
+
+    it('should check ownership before duplicating', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/duplicate')
+        .expect(403);
+
+      expect(response.body.error).toBe('Only the owner can duplicate this opportunity');
+    });
+  });
 });
