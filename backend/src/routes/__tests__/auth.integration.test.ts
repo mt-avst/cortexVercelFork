@@ -21,8 +21,10 @@ jest.mock('openid-client', () => ({
   },
 }));
 
-// Mock crypto
+// Mock crypto.randomBytes only — preserve the rest of the real module (createHash etc.),
+// which express-session needs internally to hash/compare session state on every request.
 jest.mock('crypto', () => ({
+  ...jest.requireActual('crypto'),
   randomBytes: jest.fn(() => ({
     toString: jest.fn(() => 'mock-state'),
   })),

@@ -18,6 +18,7 @@ let client: Client;
 const stateStore = new Map<string, { timestamp: number; used: boolean }>();
 
 // Clean up expired states every 10 minutes
+// .unref() so this timer alone can't keep the process (or a Jest worker) alive
 setInterval(() => {
   const now = Date.now();
   for (const [state, data] of stateStore.entries()) {
@@ -25,7 +26,7 @@ setInterval(() => {
       stateStore.delete(state);
     }
   }
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 // Initialize OIDC client
 async function initializeClient() {
