@@ -1,55 +1,35 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getPool } from '../db';
-import { parseSessionCookie } from '../utils/auth';
+import { requireSuperadmin, handleAuthError } from '../utils/auth';
 import { createErrorResponse, createSafeErrorResponse } from '../utils/errors';
+import { adminRateLimit } from '../utils/rateLimit';
 
 /**
  * POST /api/admin/reset-production-db
- * Reset production database: Remove all bookings and opportunities, create fresh studies
- * Requires admin authentication
+ * Reset production database: remove all bookings, sessions and opportunities, then
+ * create fresh sample studies. Destructive — requires a superadmin session.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
     return res.status(405).json(createErrorResponse('Method not allowed'));
   }
 
-  try {
-    // Get authenticated user
-    const user = parseSessionCookie(req);
-    if (!user) {
-      return res.status(401).json(createErrorResponse('Authentication required'));
-    }
+  if (await adminRateLimit(req, res)) return;
 
-    // Check admin role - also check ADMIN_EMAILS env var as fallback
-    const adminEmails = process.env.ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
-    const isAdmin = user.role === 'researcher_admin' || adminEmails.includes(user.email);
-    
-    // Debug logging
-    console.log('🔐 Admin check:', {
-      userEmail: user.email,
-      userRole: user.role,
-      adminEmails,
-      isInAdminEmails: adminEmails.includes(user.email),
-      isAdmin,
-    });
-    
-    if (!isAdmin) {
-      return res.status(403).json(createErrorResponse('Forbidden: Admin access required'));
+  try {
+    // Destructive reset: superadmin only (no ADMIN_EMAILS bypass, no role self-grant).
+    let user;
+    try {
+      user = requireSuperadmin(req);
+    } catch (authErr) {
+      if (handleAuthError(res, authErr)) return;
+      throw authErr;
     }
 
     const pool = getPool();
     const client = await pool.connect();
 
     try {
-      // If user is in ADMIN_EMAILS but doesn't have admin role, update it
-      if (adminEmails.includes(user.email) && user.role !== 'researcher_admin') {
-        await client.query(
-          `UPDATE users SET role = 'researcher_admin' WHERE id = $1`,
-          [user.id]
-        );
-        console.log(`✅ Updated user ${user.email} to researcher_admin role`);
-      }
-
       await client.query('BEGIN');
 
       console.log('🗑️  Deleting all bookings...');

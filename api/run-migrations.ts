@@ -1,15 +1,24 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Pool } from 'pg';
 import { createSafeErrorResponse } from './utils/errors';
+import { requireSetupAuthorization, handleAuthError } from './utils/auth';
 
 /**
  * GET /api/run-migrations
- * Run database migrations
- * This endpoint should be called manually to run migrations
+ * Run database migrations.
+ * Must be called by a superadmin session, or with ?secret=$SETUP_SECRET for first-run bootstrap.
  */
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Require superadmin session or a valid setup secret (bootstrap path for a fresh DB).
+  try {
+    requireSetupAuthorization(req);
+  } catch (authErr) {
+    if (handleAuthError(res, authErr)) return;
+    throw authErr;
   }
 
   const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
