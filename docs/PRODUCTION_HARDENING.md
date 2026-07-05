@@ -1,5 +1,13 @@
 # Production hardening checklist
 
+> **Status as of 2026-07-05:** This checklist targets the retired **Vercel** deployment
+> (adapta-labs-p62q.vercel.app). Real production is the Express backend on **Kubera**
+> (adaptalabs.kubera-playground.adaptavist.net) — env vars live in `.kubera/` manifests and
+> the Kubera secret store, security headers in `frontend/nginx.conf` and helmet, logs in the
+> cluster. Kept as a reference for the hardening items themselves; the Vercel-specific
+> mechanics no longer apply.
+
+
 Use this checklist to verify and improve production readiness for AdaptaLabs (Cortex).
 
 ## Pre-production verification

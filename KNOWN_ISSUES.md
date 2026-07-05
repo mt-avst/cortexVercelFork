@@ -21,11 +21,11 @@ _None currently known. All critical bugs have been resolved._
 ### Medium Priority Issues
 
 #### 1. Email Reminders
-**Status**: Automated (Vercel Cron)  
+**Status**: Automated (in-process cron in the Express backend)  
 **Impact**: Low  
-**Description**: Session reminder emails are sent automatically for bookings whose session starts in ~24 hours. A daily cron job (GET /api/cron/send-reminders) runs at 9:00 AM UTC. Requires CRON_SECRET in Vercel env and migrations run (adds reminder_sent_at to bookings).
+**Description**: Session reminder emails are sent automatically for bookings whose session starts in ~24 hours. The backend runs the job daily at 9:00 AM UTC via node-cron; GET /api/cron/send-reminders (Authorization: Bearer CRON_SECRET) triggers it manually. Requires migrations run (adds reminder_sent_at to bookings).
 
-**Workaround**: If reminders are not received, check CRON_SECRET is set, run GET /api/run-migrations, and ensure SMTP/email is configured. Participants can set their own calendar reminders.
+**Workaround**: If reminders are not received, check the backend logs for the cron run, confirm migrations have run and ensure SMTP/email is configured. Participants can set their own calendar reminders.
 
 ---
 
@@ -92,7 +92,7 @@ _None currently known. All critical bugs have been resolved._
 **Current State**:
 - ✅ Booking confirmation emails are sent
 - ✅ Cancellation emails are sent
-- ✅ Reminder emails are sent automatically (Vercel Cron, daily; ~24h before session)
+- ✅ Reminder emails are sent automatically (backend cron, daily; ~24h before session)
 - ⚠️ Email templates are basic
 
 **Limitations**:
@@ -266,7 +266,7 @@ When reporting issues, please include:
 ## 📅 Planned Improvements
 
 ### Short Term (Next Release)
-- [x] Full email reminder automation (Vercel Cron + reminder_sent_at)
+- [x] Full email reminder automation (backend cron + reminder_sent_at)
 - [x] Calendar event cancellation docs and UI note
 - [x] Mobile viewport E2E (Mobile Chrome/Safari in Playwright)
 - [x] Edge and accessibility coverage

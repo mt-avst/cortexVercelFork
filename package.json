@@ -32,7 +32,6 @@
     "concurrently": "^8.2.2"
   },
   "dependencies": {
-    "@vercel/node": "^3.0.7",
     "nodemailer": "^6.9.8",
     "pg": "^8.11.3",
     "zod": "^3.25.76"

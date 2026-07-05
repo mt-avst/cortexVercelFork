@@ -4,11 +4,14 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import csurf from 'csurf';
+import cron from 'node-cron';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { errorHandler } from './utils/errorHandler';
+import { sendDueReminders } from './services/reminders';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
+import cronRoutes from './routes/cron';
 import { TIME_INTERVALS, RATE_LIMITS, SECURITY_CONFIG } from '../../shared/constants';
 
 const app: express.Application = express();
@@ -163,6 +166,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/auth', authLimiter, authRoutes);
 // Also mount auth routes under /api/auth for frontend compatibility
 app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/cron', cronRoutes);
 app.use('/api', apiRoutes);
 
 // Health check endpoint
@@ -175,6 +179,19 @@ app.use(logger.errorLogger());
 
 // Error handling middleware
 app.use(errorHandler);
+
+// Daily reminder emails at 09:00 UTC (single-replica deployment; the job is
+// idempotent per booking via reminder_sent_at). Disable with REMINDER_CRON_DISABLED=true.
+if (process.env.NODE_ENV !== 'test' && process.env.REMINDER_CRON_DISABLED !== 'true') {
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      const summary = await sendDueReminders();
+      logger.info('Reminder cron run complete', { ...summary });
+    } catch (err) {
+      logger.error('Reminder cron run failed', { error: err });
+    }
+  });
+}
 
 // Start server
 app.listen(config.PORT, () => {

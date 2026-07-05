@@ -289,7 +289,7 @@ Ensure these are set in production:
 
 **Version**: 7.3.8  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
-**Deployment**: https://adapta-labs-p62q.vercel.app
+**Deployment**: Kubera (Adaptavist internal Kubernetes) — https://adaptalabs.kubera-playground.adaptavist.net
 
 ### Milestones Completed
 - ✅ **M1**: Auth and Roles

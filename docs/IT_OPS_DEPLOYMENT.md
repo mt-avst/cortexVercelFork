@@ -10,8 +10,8 @@ The app was built with AI-assisted tooling but is a standard stack: **React fron
 
 For **Kubernetes**:
 
-- The repo is currently set up for **Vercel** (serverless API + static frontend). To run on K8s you’d run the **Express backend** (`backend/`) as a Node service and serve the built frontend (e.g. from the same container or a separate one), or adapt the serverless `api/` into a single Node server.
-- The app doesn’t assume Vercel; the main change is **how** the API and frontend are built and deployed (containers, ingress, env injection). All config is via environment variables.
+- The repo deploys to **Kubera** (Adaptavist's internal Kubernetes): the **Express backend** (`backend/`) runs as a Node service and nginx serves the built frontend, proxying `/api` and `/auth` to the backend. Manifests live in `.kubera/`; the old Vercel serverless `api/` tree was removed in July 2026.
+- The app doesn't assume any particular platform; all config is via environment variables (containers, ingress and env injection are the only platform-specific parts).
 
 ---
 
@@ -21,7 +21,7 @@ For **Kubernetes**:
 
 - **OpenID Connect (OIDC)** – The backend supports any OIDC provider via: `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`. **Okta can be used as the app’s OIDC provider**: create an Okta application, set the Okta issuer URL and client credentials in these env vars, and the app handles the login/callback flow. No need for Okta on the load balancer for that.
 - **Cookie-based sessions** – After login, the app uses a signed cookie (`SESSION_SECRET`).
-- **Google OAuth** – Used in the current Vercel production setup; for company SSO you’d use the generic OIDC vars above and point them at Okta.
+- **Google OAuth** – Supported as an alternative login; for company SSO use the generic OIDC vars above and point them at Okta.
 
 **If you put Okta on the load balancer:** The app would need to trust identity headers from the LB (and we’d add code to create a session from those). The simpler approach is to **use Okta as the OIDC provider** (set the four OIDC env vars) and let the app do the redirect/callback flow; then you don’t need Okta at the LB.
 
@@ -57,7 +57,7 @@ For **Kubernetes**:
 
 ### After first deploy
 
-Run migrations once (e.g. `GET https://your-api-url/api/run-migrations` or equivalent) so the DB schema is created/updated.
+Migrations run automatically in the backend initContainer (`npm run migrate && npm run seed`) on every deploy.
 
 ---
 
