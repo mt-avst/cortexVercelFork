@@ -14,7 +14,10 @@ export default defineConfig({
   timeout: 30000, // 30 second timeout
   
   use: {
-    baseURL: process.env.PRODUCTION_URL || 'https://adapta-labs-p62q.vercel.app',
+    // Kubera playground frontend sits behind an Okta ALB - browser flows need an
+    // authenticated storage state; unauthenticated smoke checks should target the
+    // public backend URL (adaptalabs-backend...) instead.
+    baseURL: process.env.PRODUCTION_URL || 'https://adaptalabs.kubera-playground.adaptavist.net',
     trace: 'on',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',

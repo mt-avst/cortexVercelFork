@@ -13,9 +13,9 @@ This doc answers ClaudeL’s questions and provides the artifacts to pull from C
   - **ORM:** None — raw `pg` and SQL. Schema is defined in **migrations**, not Prisma.
 
 - **There is no `schema.prisma`.**  
-  The single source of truth for the DB schema is **`backend/src/db/migrate.ts`** (and any additive logic in **`api/run-migrations.ts`** for Vercel). Use that file as the “schema” for planning.
+  The single source of truth for the DB schema is **`backend/src/db/migrate.ts`**. Use that file as the “schema” for planning.
 
-- **Deployment:** The repo can run as (1) Express server (e.g. Docker/local), or (2) Vercel serverless. On Vercel, the **`api/`** folder is the serverless API (mirrors Express routes). So there are two API “shapes”: **`backend/src/routes/`** (Express) and **`api/`** (Vercel serverless).
+- **Deployment:** The repo runs as an Express server (Docker/Kubera or local). There is one API “shape”: **`backend/src/routes/`**. (The former Vercel serverless `api/` mirror was removed in July 2026.)
 
 - **Testing platform (separate app vs inside Cortex):**  
   That’s a product/architecture choice only you can make. From the codebase we can say: Cortex already supports **unmoderated** as an **opportunity type** (external link + click tracking). If “unmoderated functionality” means a **dedicated testing platform** (e.g. task-based unmoderated tool), it could be either:
@@ -140,29 +140,13 @@ From **`backend/src/routes/api.ts`**:
 - **POST /api/opportunities** — admin create (type can be `unmoderated`).  
 - **PATCH /api/opportunities/:id** — admin update.
 
-### 3.2 Vercel serverless API (`api/` directory)
+### 3.2 Former Vercel serverless API (removed)
 
-Same logical surface, implemented as serverless functions. Key paths:
-
-- **api/me.ts**  
-- **api/opportunities.ts** (list)  
-- **api/opportunities/[id].ts** (get one; click count for poll/survey/unmoderated for admin)  
-- **api/opportunities/[id]/click.ts** (POST click)  
-- **api/opportunities/[id]/analytics.ts**  
-- **api/opportunities/[id]/sessions.ts**  
-- **api/opportunities/[id]/duplicate.ts**  
-- **api/bookings/…** (my/bookings, book, cancel, etc.)  
-- **api/sessions.ts**, **api/sessions/[id].ts**  
-- **api/admin/** (dashboard, requests, admins, reset-demo-data, etc.)  
-- **api/feedback.ts**, **api/feedback/[id].ts**, **api/feedback/export.ts**  
-- **api/gamification/** (profile, leaderboard, leaderboard/monthly)  
-- **api/calendar/** (events, availability, connection-status, etc.)  
-- **api/notification-preferences.ts**  
-- **api/run-migrations.ts**  
-- **api/cron/send-reminders.ts**  
+The repo previously carried a second, serverless implementation of the same API surface under `api/` for Vercel.
+It was removed in July 2026 when the Vercel deployment was retired — Express under `backend/src/routes/` is now the only API implementation.
 - **api/auth/** (google-login, google-callback, demo-login, admin-login, superadmin-login, logout)
 
-So: **no `/app/api` or `/pages/api`** — it’s either Express under `backend/src/routes` or Vercel under `api/`.
+So: **no `/app/api` or `/pages/api`** — it’s Express under `backend/src/routes`.
 
 ---
 
@@ -211,13 +195,13 @@ Until the HDC overview is filled and shared:
    There is no Prisma. The schema is in **`backend/src/db/migrate.ts`**. Share that file (or the “Database schema” section above). Relationships: User → Opportunities (owner); Opportunity → Sessions; Session → Bookings; User → Bookings; Opportunity → opportunity_clicks. Unmoderated is an **opportunity type** and uses **opportunity_clicks** like poll/survey.
 
 2. **API route structure**  
-   No `/app/api` or `/pages/api`. Cortex uses **Express** under **`backend/src/routes/`** (mounted at `/api`) and/or **Vercel serverless** under **`api/`**. Directory listing of **`backend/src/routes/`** and **`api/`** is enough for “shape”; key for unmoderated: opportunities (list, get, create, patch), **opportunities/:id/click**, **opportunities/:id/analytics**.
+   No `/app/api` or `/pages/api`. Cortex uses **Express** under **`backend/src/routes/`** (mounted at `/api`). Directory listing of **`backend/src/routes/`** is enough for “shape”; key for unmoderated: opportunities (list, get, create, patch), **opportunities/:id/click**, **opportunities/:id/analytics**.
 
 3. **Existing unmoderated handler**  
    There is no separate unmoderated handler. Unmoderated is an opportunity type; create/update in opportunities routes; tracking via **POST /api/opportunities/:id/click**; analytics via **GET /api/opportunities/:id/analytics**. See section 4 above.
 
 4. **Tech stack**  
-   **Not Next.js.** React (Vite) + Express + PostgreSQL (raw `pg`, no Prisma). Optional Vercel serverless in `api/`.
+   **Not Next.js.** React (Vite) + Express + PostgreSQL (raw `pg`, no Prisma).
 
 5. **Testing platform: separate app vs inside Cortex**  
    Product decision. Cortex already has unmoderated as external-link + click tracking. A full “testing platform” could be a separate app calling Cortex APIs or a module inside this repo; the schema and API layout in this doc are enough for ClaudeL to propose both.
