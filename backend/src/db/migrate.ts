@@ -339,6 +339,10 @@ export async function runMigrations() {
       ALTER TABLE bookings 
       ADD COLUMN IF NOT EXISTS admin_notes TEXT
     `);
+    await client.query(`
+      ALTER TABLE bookings 
+      ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+    `);
 
     // Create indexes for bookings
     await client.query(`
