@@ -4,15 +4,17 @@ import LoadingSpinner from '../LoadingSpinner';
 
 describe('LoadingSpinner Component', () => {
   it('should render with default props', () => {
-    const { getByText } = render(<LoadingSpinner />);
-    
-    expect(getByText('Loading...')).toBeInTheDocument();
+    // The spinner renders its text twice: a visually-hidden copy for screen
+    // readers and the visible label
+    const { getAllByText } = render(<LoadingSpinner />);
+
+    expect(getAllByText('Loading...').length).toBeGreaterThan(0);
   });
 
   it('should render with custom text', () => {
-    const { getByText } = render(<LoadingSpinner text="Custom loading text" />);
-    
-    expect(getByText('Custom loading text')).toBeInTheDocument();
+    const { getAllByText } = render(<LoadingSpinner text="Custom loading text" />);
+
+    expect(getAllByText('Custom loading text').length).toBeGreaterThan(0);
   });
 
   it('should render without crashing', () => {

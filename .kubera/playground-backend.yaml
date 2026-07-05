@@ -15,7 +15,9 @@ config:
     OIDC_ISSUER: https://adaptavist.okta.com
     NODE_ENV: production
     SKIP_OIDC: "true"
-    ENABLE_CSRF: "false"
+    # CSRF protection defaults on under NODE_ENV=production (csrf-csrf
+    # double-submit; token endpoint /api/csrf-token). Set ENABLE_CSRF: "false"
+    # here to disable in an emergency.
     # FirstHand Integration — integration is disabled at runtime unless both
     # FIRSTHAND_BASE_URL (here) and FIRSTHAND_INTEGRATION_SECRET (secret store) are set
     FIRSTHAND_BASE_URL: https://first-hand.vercel.app

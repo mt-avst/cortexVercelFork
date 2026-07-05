@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import axios, { AxiosError } from 'axios';
 import { 
   mapAxiosError, 
@@ -25,23 +26,25 @@ import {
 } from '../../shared/test-utils';
 
 // Mock axios
-jest.mock('axios');
-const mockedAxios = axios as jest.Mocked<typeof axios>;
+vi.mock('axios');
+const mockedAxios = axios as vi.Mocked<typeof axios>;
 
 // Mock the logger
-jest.mock('../logger', () => ({
+vi.mock('../logger', () => ({
   logger: {
-    log: jest.fn(),
-    error: jest.fn(),
-    warn: jest.fn(),
-    info: jest.fn(),
-    debug: jest.fn(),
+    log: vi.fn(),
+    error: vi.fn(),
+    warn: vi.fn(),
+    info: vi.fn(),
+    debug: vi.fn(),
+    getRequestId: vi.fn(() => null),
+    setRequestId: vi.fn(),
   },
 }));
 
 describe('Frontend Error Handler', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('mapAxiosError', () => {
@@ -53,7 +56,7 @@ describe('Frontend Error Handler', () => {
         name: 'AxiosError',
         config: { headers: {} as any },
         isAxiosError: true,
-        toJSON: jest.fn(),
+        toJSON: vi.fn(),
       } as AxiosError;
 
       const result = mapAxiosError(axiosError);
@@ -71,7 +74,7 @@ describe('Frontend Error Handler', () => {
         name: 'AxiosError',
         config: { headers: {} as any },
         isAxiosError: true,
-        toJSON: jest.fn(),
+        toJSON: vi.fn(),
       } as AxiosError;
 
       const result = mapAxiosError(axiosError);
@@ -88,7 +91,7 @@ describe('Frontend Error Handler', () => {
         name: 'AxiosError',
         config: { headers: {} as any },
         isAxiosError: true,
-        toJSON: jest.fn(),
+        toJSON: vi.fn(),
       } as AxiosError;
 
       const result = mapAxiosError(axiosError);
@@ -98,21 +101,20 @@ describe('Frontend Error Handler', () => {
       expect(result.statusCode).toBe(0);
     });
 
-    it('should map unknown error to AppError', () => {
+    it('should map an error without a response to NetworkError', () => {
       const axiosError = {
         message: 'Unknown error',
         name: 'AxiosError',
         config: { headers: {} as any },
         isAxiosError: true,
-        toJSON: jest.fn(),
+        toJSON: vi.fn(),
       } as AxiosError;
 
       const result = mapAxiosError(axiosError);
 
       expect(result).toBeInstanceOf(AppError);
-      expect(result.message).toBe('Unknown error occurred');
-      expect(result.statusCode).toBe(500);
-      expect(result.code).toBe('UNKNOWN_ERROR');
+      expect(result.message).toBe('Network error');
+      expect(result.statusCode).toBe(0);
     });
   });
 
@@ -124,13 +126,13 @@ describe('Frontend Error Handler', () => {
       mockAxiosInstance = {
         defaults: { baseURL: '' },
         interceptors: {
-          request: { use: jest.fn() },
-          response: { use: jest.fn() },
+          request: { use: vi.fn() },
+          response: { use: vi.fn() },
         },
-        get: jest.fn(),
-        post: jest.fn(),
-        patch: jest.fn(),
-        delete: jest.fn(),
+        get: vi.fn(),
+        post: vi.fn(),
+        patch: vi.fn(),
+        delete: vi.fn(),
       };
 
       mockedAxios.create.mockReturnValue(mockAxiosInstance);
@@ -176,7 +178,7 @@ describe('Frontend Error Handler', () => {
           name: 'AxiosError',
           config: { headers: {} as any },
           isAxiosError: true,
-          toJSON: jest.fn(),
+          toJSON: vi.fn(),
         } as AxiosError;
 
         mockAxiosInstance.get.mockRejectedValue(axiosError);
@@ -204,7 +206,7 @@ describe('Frontend Error Handler', () => {
           name: 'AxiosError',
           config: { headers: {} as any },
           isAxiosError: true,
-          toJSON: jest.fn(),
+          toJSON: vi.fn(),
         } as AxiosError;
 
         mockAxiosInstance.post.mockRejectedValue(axiosError);
@@ -282,7 +284,7 @@ describe('Frontend Error Handler', () => {
 
   describe('withRetry', () => {
     it('should succeed on first attempt', async () => {
-      const mockOperation = jest.fn().mockResolvedValue('success');
+      const mockOperation = vi.fn().mockResolvedValue('success');
       
       const result = await withRetry(mockOperation);
       
@@ -291,7 +293,7 @@ describe('Frontend Error Handler', () => {
     });
 
     it('should retry on failure and eventually succeed', async () => {
-      const mockOperation = jest.fn()
+      const mockOperation = vi.fn()
         .mockRejectedValueOnce(new Error('First attempt failed'))
         .mockRejectedValueOnce(new Error('Second attempt failed'))
         .mockResolvedValue('success');
@@ -303,14 +305,14 @@ describe('Frontend Error Handler', () => {
     });
 
     it('should not retry on client errors', async () => {
-      const mockOperation = jest.fn().mockRejectedValue(new AppError('Bad Request', 400));
+      const mockOperation = vi.fn().mockRejectedValue(new AppError('Bad Request', 400));
       
       await expect(withRetry(mockOperation)).rejects.toThrow(AppError);
       expect(mockOperation).toHaveBeenCalledTimes(1);
     });
 
     it('should fail after max retries', async () => {
-      const mockOperation = jest.fn().mockRejectedValue(new Error('Always fails'));
+      const mockOperation = vi.fn().mockRejectedValue(new Error('Always fails'));
       
       await expect(withRetry(mockOperation, 2, 10)).rejects.toThrow('Always fails');
       expect(mockOperation).toHaveBeenCalledTimes(2);
