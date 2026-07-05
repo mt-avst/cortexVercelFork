@@ -1,7 +1,7 @@
 # Known Issues and Limitations
 
 **Version**: 7.3.23  
-**Last Updated**: 2025-01-27  
+**Last Updated**: 2026-07-05  
 **Status**: Alpha Testing Phase
 
 ---
@@ -309,6 +309,6 @@ When reporting issues, please include:
 
 ---
 
-**Last Updated**: 2025-01-27  
+**Last Updated**: 2026-07-05  
 **For Questions**: Use feedback form or contact nfine@adaptavist.com
 

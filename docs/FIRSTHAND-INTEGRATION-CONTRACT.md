@@ -229,6 +229,10 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ## Assumptions / open items
 
-- Callback delivery is best-effort from FirstHand. There is no retry, so transient Cortex downtime will result in missed events. A future improvement could add a retry queue on the FirstHand side.
+- ~~Callback delivery is best-effort from FirstHand. There is no retry, so transient Cortex downtime will result in missed events. A future improvement could add a retry queue on the FirstHand side.~~
+  **Resolved 2026-07-05:** FirstHand PR #9 adds a `callback_outbox` retry queue.
+  Failed deliveries (thrown or non-2xx) are persisted and retried by the maintenance cron with exponential backoff (1m base, x4, 24h cap, abandoned after 8 attempts), re-signing the HMAC timestamp per attempt.
+  Cortex's `(firsthand_session_id, event_type)` unique index makes redelivery idempotent.
+  Deploy order: run FirstHand migration 0006 before deploying the PR.
 - `return_url` redirect in the FirstHand participant UI is implemented (see note above).
 - The HMAC scheme is symmetric — the same secret and algorithm is used in both directions. Secret rotation requires a coordinated update to both deployments.
