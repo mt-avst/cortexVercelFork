@@ -2,19 +2,31 @@ teamName: platform #Mandatory field
 environment: playground
 service:
   port: 3001
-ingress: 
-  enabled: false
+# Public ingress so FirstHand (Vercel, public internet) can deliver HMAC-verified
+# webhook callbacks to POST /api/firsthand/callbacks. No okta_alb auth block:
+# the backend enforces its own auth (cookie sessions on user/admin routes, HMAC
+# signature verification on callbacks). Browser traffic still goes same-origin
+# through the frontend nginx proxy; this URL exists for server-to-server calls.
+ingress:
+  enabled: true
+  type: public
 config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com
     NODE_ENV: production
     SKIP_OIDC: "true"
     ENABLE_CSRF: "false"
-    # FirstHand Integration — set to the FirstHand deployment URL to enable
-    # FIRSTHAND_BASE_URL: https://firsthand.yourdomain.com
+    # FirstHand Integration — integration is disabled at runtime unless both
+    # FIRSTHAND_BASE_URL (here) and FIRSTHAND_INTEGRATION_SECRET (secret store) are set
+    FIRSTHAND_BASE_URL: https://first-hand.vercel.app
+    # Used to build callback_url passed to FirstHand (must be publicly reachable)
+    BACKEND_URL: https://adaptalabs-backend.kubera-playground.adaptavist.net
+    # Used to build return_url for the participant redirect back to Cortex
+    FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
 secret:
   enabled: true
-  # Required for FirstHand integration: FIRSTHAND_INTEGRATION_SECRET (min 32 chars, shared with FirstHand app)
+  # Required for FirstHand integration: FIRSTHAND_INTEGRATION_SECRET (min 32 chars,
+  # must match the FIRSTHAND_INTEGRATION_SECRET on the FirstHand Vercel project)
 resources:
   memory:
     # -- Pod requested memory
