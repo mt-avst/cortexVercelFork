@@ -2,6 +2,7 @@ import axios, { AxiosResponse, AxiosError } from 'axios';
 
 import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
 import { AppError, mapAxiosError } from '../utils/errorHandler';
+import { ensureCsrfToken, isCsrfError, isMutatingMethod, CSRF_HEADER } from './csrf';
 import { logger } from '../utils/logger';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, redirectToAuth, AUTH_ENDPOINTS } from '../utils/navigation';
 
@@ -27,6 +28,35 @@ const api = axios.create({
     'Pragma': 'no-cache',
     'Expires': '0'
   }
+});
+
+// CSRF: attach the session token to every mutating request, and on a CSRF
+// 403 fetch a fresh token and retry the request once (covers token expiry
+// and session regeneration after login).
+api.interceptors.request.use(async (config) => {
+  if (isMutatingMethod(config.method)) {
+    const csrfToken = await ensureCsrfToken();
+    if (csrfToken) {
+      config.headers[CSRF_HEADER] = csrfToken;
+    }
+  }
+  return config;
+});
+
+api.interceptors.response.use(undefined, async (error: unknown) => {
+  if (isCsrfError(error)) {
+    const config = error.config as (typeof error.config & { __csrfRetried?: boolean }) | undefined;
+    if (config && !config.__csrfRetried) {
+      config.__csrfRetried = true;
+      const csrfToken = await ensureCsrfToken(true);
+      if (csrfToken) {
+        config.headers = config.headers ?? {};
+        (config.headers as Record<string, string>)[CSRF_HEADER] = csrfToken;
+        return api.request(config);
+      }
+    }
+  }
+  return Promise.reject(error);
 });
 
 // Track if we're doing an initial auth check to prevent auto-redirects
@@ -142,10 +172,13 @@ export const getMe = async (): Promise<User> => {
 };
 
 export const logout = async (): Promise<void> => {
-  // Use auth endpoint for logout
+  // Use auth endpoint for logout (separate axios call, so attach the CSRF
+  // token explicitly rather than relying on the api instance interceptor)
+  const csrfToken = await ensureCsrfToken();
   await axios.post(getAuthUrl('/api/auth/logout'), {}, {
     withCredentials: true,
     timeout: API_CONFIG.TIMEOUT,
+    headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : undefined,
   });
 };
 
