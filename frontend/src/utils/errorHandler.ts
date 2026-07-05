@@ -291,9 +291,15 @@ export const validateEmail = (email: string): void => {
 };
 
 export const validateUrl = (url: string): void => {
+  let parsed: URL;
   try {
-    new URL(url);
+    parsed = new URL(url);
   } catch {
+    throw new ValidationError('Invalid URL format');
+  }
+  // User-provided links are rendered as hrefs - only web URLs are acceptable
+  // (rejects javascript:, data:, ftp: and other schemes)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new ValidationError('Invalid URL format');
   }
 };
