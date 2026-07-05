@@ -3,11 +3,12 @@ import session from 'express-session';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import csurf from 'csurf';
+import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
 import { config } from './config';
 import { logger } from './utils/logger';
 import { errorHandler } from './utils/errorHandler';
+import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
@@ -122,37 +123,43 @@ app.use(session({
   },
 }));
 
-// CSRF protection (only for production or when explicitly enabled)
-// TODO: Does not work on production (on container based envs). Need to fix.
-if (config.NODE_ENV === 'production' && config.ENABLE_CSRF) {
-  app.use((csurf as any)({
-    cookie: {
-      httpOnly: true,
-      secure: config.NODE_ENV === 'production',
-      sameSite: config.NODE_ENV === 'production' ? 'strict' : 'lax',
-    },
-    ignoreMethods: ['GET', 'HEAD', 'OPTIONS'],
-  }));
+// CSRF protection - double-submit cookie via csrf-csrf (csurf is deprecated
+// and was never wired to the SPA, which is why it broke in production).
+// Default ON in production; set ENABLE_CSRF=false to disable, or
+// ENABLE_CSRF=true to force-enable in development.
+const csrfEnabled =
+  process.env.ENABLE_CSRF === 'true' ||
+  (config.NODE_ENV === 'production' && process.env.ENABLE_CSRF !== 'false');
+if (csrfEnabled) {
+  app.use(cookieParser());
 
-  // CSRF error handler
-  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    if (err.code === 'EBADCSRFTOKEN') {
+  const { doubleCsrfProtection, generateCsrfToken } = buildCsrfProtection({
+    secret: config.SESSION_SECRET,
+    secureCookies: config.NODE_ENV === 'production',
+  });
+
+  // Token issuance: touching the session makes it persist (saveUninitialized
+  // is false), so anonymous visitors get a stable session id for the token
+  // to bind to. The SPA fetches this once and echoes the token in the
+  // x-csrf-token header on every mutating request.
+  app.get('/api/csrf-token', (req: express.Request, res: express.Response) => {
+    req.session.csrfSeeded = true;
+    res.json({ csrfToken: generateCsrfToken(req, res) });
+  });
+
+  app.use(doubleCsrfProtection);
+
+  app.use((err: Error & { code?: string }, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err.code === CSRF_ERROR_CODE) {
       logger.warn('CSRF token validation failed', {
         method: req.method,
         url: req.url,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
       });
-      return res.status(403).json({ error: 'Invalid CSRF token' });
+      return res.status(403).json({ error: 'Invalid CSRF token', code: CSRF_ERROR_CODE });
     }
-    next(err);
-  });
-
-  // Add CSRF token to response headers
-  app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
-    res.locals.csrfToken = req.csrfToken();
-    res.setHeader('X-CSRF-Token', req.csrfToken());
-    next();
+    return next(err);
   });
 }
 
@@ -199,7 +206,7 @@ app.listen(config.PORT, () => {
     port: config.PORT,
     environment: config.NODE_ENV,
     corsOrigin: config.CORS_ORIGIN,
-    csrfEnabled: config.NODE_ENV === 'production' || config.ENABLE_CSRF,
+    csrfEnabled,
   });
 });
 
