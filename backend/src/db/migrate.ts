@@ -1,7 +1,9 @@
 import { pool } from '../config';
 
 export async function runMigrations() {
+  console.log('⏳ Connecting to database...');
   const client = await pool.connect();
+  console.log('✅ Database connection established');
   
   try {
     // Create users table
@@ -810,5 +812,8 @@ export async function runMigrations() {
 if (require.main === module) {
   runMigrations()
     .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+    .catch((error) => {
+      console.error('❌ Migration script failed:', error);
+      process.exit(1);
+    });
 }
