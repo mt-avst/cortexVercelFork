@@ -1,7 +1,7 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import { getBackendConfig, BackendEnvironment } from '../../../shared/config/environment';
-import { resolveDatabaseUrl } from './databaseUrl';
+import { describeDatabaseUrlSource, resolveDatabaseUrl } from './databaseUrl';
 
 dotenv.config();
 
@@ -9,6 +9,10 @@ dotenv.config();
 const config: BackendEnvironment = getBackendConfig();
 
 const databaseUrl = resolveDatabaseUrl(process.env);
+// Never logs the URL or password itself - just which env var supplied the
+// connection and whether a password was present, so a bad credential shows
+// up immediately in the init container's log instead of another guess.
+console.log(`[db] connection source: ${describeDatabaseUrlSource(process.env)}`);
 
 export const pool = new Pool({
   connectionString: databaseUrl,
