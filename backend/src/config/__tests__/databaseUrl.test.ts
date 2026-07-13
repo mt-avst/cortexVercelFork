@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { resolveDatabaseUrl } from '../databaseUrl';
+import { describeDatabaseUrlSource, resolveDatabaseUrl } from '../databaseUrl';
 
 describe('resolveDatabaseUrl', () => {
   it('prefers an explicit DATABASE_URL over everything else', () => {
@@ -66,5 +66,60 @@ describe('resolveDatabaseUrl', () => {
 
   it('falls back to the local dev database when nothing is configured', () => {
     expect(resolveDatabaseUrl({})).toBe('postgresql://localhost:5432/adaptalabs_dev');
+  });
+
+  it('trims whitespace and surrounding quotes from a full URL (secret managers often inject these)', () => {
+    expect(resolveDatabaseUrl({ DB_URL: '  postgresql://host/db\n' })).toBe(
+      'postgresql://host/db'
+    );
+    expect(resolveDatabaseUrl({ DB_URL: '"postgresql://host/db"' })).toBe(
+      'postgresql://host/db'
+    );
+  });
+
+  it('trims whitespace and newlines from individual host/user/password vars', () => {
+    const url = resolveDatabaseUrl({
+      DB_HOST: 'rds.internal\n',
+      DB_USER: ' postgres ',
+      DB_PASSWORD: 'sekrit\n',
+      DB_NAME: 'adaptalabs',
+    });
+    expect(url).toBe('postgresql://postgres:sekrit@rds.internal:5432/adaptalabs');
+  });
+});
+
+describe('describeDatabaseUrlSource', () => {
+  it('identifies a Kubera DB_URL as the source without revealing it', () => {
+    const description = describeDatabaseUrlSource({
+      DB_URL: 'postgresql://user:hunter2@host/db',
+    });
+    expect(description).toBe('DB_URL (Kubera full URL)');
+    expect(description).not.toContain('hunter2');
+  });
+
+  it('reports the Kubera individual-vars path and whether a password is present', () => {
+    expect(
+      describeDatabaseUrlSource({ DB_HOST: 'h', DB_PASSWORD: 'sekrit' })
+    ).toBe('DB_HOST (Kubera individual vars), password: present (6 chars)');
+
+    expect(describeDatabaseUrlSource({ DB_HOST: 'h' })).toBe(
+      'DB_HOST (Kubera individual vars), password: MISSING'
+    );
+
+    expect(
+      describeDatabaseUrlSource({ DB_HOST: 'h', DB_PASSWORD: '  \n' })
+    ).toBe('DB_HOST (Kubera individual vars), password: MISSING (blank after trim)');
+  });
+
+  it('flags the generic PG* host fallback distinctly from Kubera', () => {
+    expect(
+      describeDatabaseUrlSource({ POSTGRES_HOST: 'h', POSTGRES_PASSWORD: 'x' })
+    ).toBe('POSTGRES_HOST (generic fallback), password: present (1 chars)');
+  });
+
+  it('warns loudly when nothing resolved and the localhost dev fallback will be used', () => {
+    expect(describeDatabaseUrlSource({})).toBe(
+      'NONE FOUND - falling back to localhost dev database (this is wrong outside local dev!)'
+    );
   });
 });
