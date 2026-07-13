@@ -6,7 +6,7 @@
 
 ## Is this “vibe coded”? Kubernetes + external DB
 
-The app was built with AI-assisted tooling but is a standard stack: **React frontend**, **Node API**, **PostgreSQL**. It already uses an **external database only** (no embedded DB): connection via `DATABASE_URL` or `POSTGRES_URL`. So it’s compatible with external Postgres by design.
+The app was built with AI-assisted tooling but is a standard stack: **React frontend**, **Node API**, **PostgreSQL**. It already uses an **external database only** (no embedded DB): connection via `DATABASE_URL`, `POSTGRES_URL`, `DB_URL`, or individual `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars (Kubera's own convention - see backend/src/config/databaseUrl.ts for the full resolution order). So it's compatible with external Postgres by design.
 
 For **Kubernetes**:
 
@@ -33,7 +33,7 @@ For **Kubernetes**:
 
 | Variable | Purpose |
 |----------|---------|
-| `DATABASE_URL` or `POSTGRES_URL` | PostgreSQL connection string (e.g. Neon or your own Postgres). |
+| `DATABASE_URL`, `POSTGRES_URL`, `DB_URL`, or `DB_HOST`+`DB_PORT`+`DB_NAME`+`DB_USER`+`DB_PASSWORD` | PostgreSQL connection (e.g. Neon, your own Postgres, or Kubera's injected `DB_*` vars). |
 | `SESSION_SECRET` | Secret for signing session cookies (min 32 characters). |
 | `CORS_ORIGIN` | Allowed frontend origin (e.g. `https://your-app.example.com`). |
 | `FRONTEND_URL` | Base URL of the frontend (e.g. same as `CORS_ORIGIN`). |
