@@ -1,7 +1,9 @@
 import { pool, config } from '../config';
 
 export async function seedDatabase() {
+  console.log('⏳ Connecting to database...');
   const client = await pool.connect();
+  console.log('✅ Database connection established');
   
   try {
     // Insert demo admin user for development
@@ -131,5 +133,8 @@ export async function seedDatabase() {
 if (require.main === module) {
   seedDatabase()
     .then(() => process.exit(0))
-    .catch(() => process.exit(1));
+    .catch((error) => {
+      console.error('❌ Seeding script failed:', error);
+      process.exit(1);
+    });
 }
