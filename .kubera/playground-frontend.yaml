@@ -2,14 +2,14 @@ teamName: platform #Mandatory field
 environment: playground
 service:
   port: 3000
-ingress: 
+# Plain public ingress, no auth block: the frontend is just static SPA assets plus
+# an nginx proxy for /api and /auth. Authentication is enforced by the backend
+# (app-level Okta OIDC via auth.okta_app on adaptalabs-backend). okta_alb was removed
+# because it cannot coexist with the backend's okta_app and it blocked FirstHand's
+# server-to-server webhooks.
+ingress:
   enabled: true
   type: public
-auth:
-  okta_alb:
-    enabled: true
-    groups:
-      - adaptavist-staff
 config:
   data:
     OIDC_ISSUER: https://adaptavist.okta.com

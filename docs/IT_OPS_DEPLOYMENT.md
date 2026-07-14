@@ -21,7 +21,8 @@ For **Kubernetes**:
 
 - **OpenID Connect (OIDC)** – The backend supports any OIDC provider via: `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`. **Okta can be used as the app’s OIDC provider**: create an Okta application, set the Okta issuer URL and client credentials in these env vars, and the app handles the login/callback flow. No need for Okta on the load balancer for that.
 - **Cookie-based sessions** – After login, the app uses a signed cookie (`SESSION_SECRET`).
-- **Google OAuth** – Supported as an alternative login; for company SSO use the generic OIDC vars above and point them at Okta.
+- **App-level Okta OIDC (production)** – On Kubera, `auth.okta_app` in the backend manifest provisions an Okta OIDC app and injects `clientID`/`clientSecret`; the backend's `/auth/login`+`/auth/callback` run the flow. Cannot be combined with `auth.okta_alb`. First login for an email in `BOOTSTRAP_SUPERADMIN_EMAILS` is elevated to superadmin.
+- **Google OAuth** – Legacy/alternative login; the generic `OIDC_*` vars can also point at any OIDC IdP directly.
 
 **If you put Okta on the load balancer:** The app would need to trust identity headers from the LB (and we’d add code to create a session from those). The simpler approach is to **use Okta as the OIDC provider** (set the four OIDC env vars) and let the app do the redirect/callback flow; then you don’t need Okta at the LB.
 

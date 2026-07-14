@@ -2,33 +2,56 @@ teamName: platform #Mandatory field
 environment: playground
 service:
   port: 3001
-# Public ingress so FirstHand (Vercel, public internet) can deliver HMAC-verified
-# webhook callbacks to POST /api/firsthand/callbacks. No okta_alb auth block:
-# the backend enforces its own auth (cookie sessions on user/admin routes, HMAC
-# signature verification on callbacks). Browser traffic still goes same-origin
-# through the frontend nginx proxy; this URL exists for server-to-server calls.
-ingress:
-  enabled: true
-  type: public
+# Private ingress: the backend is NOT exposed to the public internet. Declaring
+# service.port above (with no ingress block) gives it a private ClusterIP only.
+# Browser and webhook traffic reach it via the frontend nginx proxy, which forwards
+# /api and /auth to adaptalabs-backend.adaptalabs.svc.cluster.local:3001.
 config:
   data:
-    OIDC_ISSUER: https://adaptavist.okta.com
     NODE_ENV: production
-    SKIP_OIDC: "true"
-    # CSRF protection defaults on under NODE_ENV=production (csrf-csrf
-    # double-submit; token endpoint /api/csrf-token). Set ENABLE_CSRF: "false"
-    # here to disable in an emergency.
-    # FirstHand Integration — integration is disabled at runtime unless both
-    # FIRSTHAND_BASE_URL (here) and FIRSTHAND_INTEGRATION_SECRET (secret store) are set
+    # App-level Okta OIDC (see auth.okta_app below). The chart injects clientID and
+    # clientSecret via the <app>-okta-secret; the app discovers everything else from
+    # the issuer's /.well-known/openid-configuration.
+    OIDC_ISSUER: https://adaptavist.okta.com
+    # Must exactly match a registered redirect URI (auth.okta_app.customRedirectUris).
+    # The browser lands here on the public frontend host; nginx proxies /auth/callback
+    # to this private backend, which performs the token exchange.
+    OIDC_REDIRECT_URL: https://adaptalabs.kubera-playground.adaptavist.net/auth/callback
+    # Post-login redirect target and CORS origin - the public frontend.
+    CORS_ORIGIN: https://adaptalabs.kubera-playground.adaptavist.net
+    # One-time bootstrap: these emails are elevated to superadmin on OIDC login (from
+    # the verified Okta ID-token email claim, never user input; only ever elevates).
+    BOOTSTRAP_SUPERADMIN_EMAILS: nfine@adaptavist.com
+    # CSRF protection defaults on under NODE_ENV=production (csrf-csrf double-submit;
+    # token endpoint /api/csrf-token). Set ENABLE_CSRF: "false" to disable in an emergency.
+    # FirstHand Integration — disabled at runtime unless both FIRSTHAND_BASE_URL (here)
+    # and FIRSTHAND_INTEGRATION_SECRET (secret store) are set.
     FIRSTHAND_BASE_URL: https://first-hand.vercel.app
-    # Used to build callback_url passed to FirstHand (must be publicly reachable)
-    BACKEND_URL: https://adaptalabs-backend.kubera-playground.adaptavist.net
-    # Used to build return_url for the participant redirect back to Cortex
+    # callback_url sent to FirstHand. The backend is private, so this points at the
+    # public frontend host; FirstHand's webhook hits nginx, which proxies /api here.
+    BACKEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
+    # return_url for the participant redirect back into Cortex.
     FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
+# App-level Okta OIDC. The chart registers an Okta app and injects clientID/clientSecret
+# into <app>-okta-secret (envFrom). Declared on THIS service (not the frontend) because
+# the backend runs the token exchange. Cannot be combined with okta_alb. The backend
+# stays private, so the real callback is registered explicitly via customRedirectUris -
+# the chart's derived default (this app's own private host) would not be reachable.
+auth:
+  okta_app:
+    enabled: true
+    groups:
+      - adaptavist-staff
+    grantTypes: "authorization_code,refresh_token"
+    customRedirectUris:
+      - "https://adaptalabs.kubera-playground.adaptavist.net/auth/callback"
+    customPostLogoutRedirectUris:
+      - "https://adaptalabs.kubera-playground.adaptavist.net/"
 secret:
   enabled: true
-  # Required for FirstHand integration: FIRSTHAND_INTEGRATION_SECRET (min 32 chars,
-  # must match the FIRSTHAND_INTEGRATION_SECRET on the FirstHand Vercel project)
+  # Secret store holds FIRSTHAND_INTEGRATION_SECRET (min 32 chars) and SESSION_SECRET.
+  # The Okta clientID/clientSecret come separately from the chart-provisioned
+  # <app>-okta-secret (auto-mounted via envFrom when okta_app.enabled is true).
 resources:
   memory:
     # -- Pod requested memory

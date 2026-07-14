@@ -207,6 +207,14 @@ export const googleLogin = async (): Promise<void> => {
 };
 
 /**
+ * App-level Okta OIDC login - redirects to the backend's /auth/login, which
+ * kicks off the OIDC flow. This is the production login path on Kubera.
+ */
+export const oidcLogin = async (): Promise<void> => {
+  authNavigation.toOidcLogin();
+};
+
+/**
  * Fetch opportunities with optional filtering
  * 
  * Retrieves a list of opportunities with support for filtering by type,
