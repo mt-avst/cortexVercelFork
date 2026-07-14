@@ -5,6 +5,7 @@
  */
 
 import { pool } from '../config';
+import { hasDatabaseConfig } from '../config/databaseUrl';
 import { logger } from './logger';
 
 /**
@@ -37,9 +38,13 @@ const VALID_TABLE_NAMES = new Set([
  */
 export const isDatabaseAvailable = async (): Promise<boolean> => {
   try {
-    // Check if DATABASE_URL is set
-    if (!process.env.DATABASE_URL) {
-      logger.debug('DATABASE_URL not set, using mock data');
+    // Check every connection source the pool's URL resolver understands
+    // (DATABASE_URL, POSTGRES_URL, DB_URL, DB_HOST, ...). Checking only
+    // DATABASE_URL is a proven landmine: deleting the stale DATABASE_URL
+    // from the Kubera secret silently flipped the app into mock-data mode
+    // while the pool connected fine via Kubera's injected DB_URL/DB_HOST.
+    if (!hasDatabaseConfig(process.env)) {
+      logger.debug('No database connection configured, using mock data');
       return false;
     }
     // Test connection with a simple query
