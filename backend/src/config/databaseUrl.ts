@@ -51,6 +51,27 @@ export function resolveDatabaseUrl(env: DatabaseEnv): string {
   return 'postgresql://localhost:5432/adaptalabs_dev';
 }
 
+/**
+ * True when ANY of the connection sources resolveDatabaseUrl understands is
+ * configured. This is the check gates like isDatabaseAvailable() must use -
+ * checking process.env.DATABASE_URL alone is a proven landmine: deleting the
+ * stale DATABASE_URL from the Kubera secret store (the fix for the week-long
+ * outage) silently flipped the whole backend into mock-data mode while the
+ * pool connected fine via Kubera's injected DB_URL/DB_HOST.
+ */
+export function hasDatabaseConfig(env: DatabaseEnv): boolean {
+  const candidates = [
+    env.DATABASE_URL,
+    env.POSTGRES_URL,
+    env.POSTGRESQL_URL,
+    env.DB_URL,
+    env.DB_HOST,
+    env.POSTGRES_HOST,
+    env.PGHOST,
+  ];
+  return candidates.some((value) => value !== undefined && trimValue(value).length > 0);
+}
+
 function describePasswordPresence(env: DatabaseEnv): string {
   for (const key of PASSWORD_CANDIDATE_KEYS) {
     const raw = env[key];

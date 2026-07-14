@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { describeDatabaseUrlSource, resolveDatabaseUrl } from '../databaseUrl';
+import { describeDatabaseUrlSource, hasDatabaseConfig, resolveDatabaseUrl } from '../databaseUrl';
 
 describe('resolveDatabaseUrl', () => {
   it('prefers an explicit DATABASE_URL over everything else', () => {
@@ -85,6 +85,30 @@ describe('resolveDatabaseUrl', () => {
       DB_NAME: 'adaptalabs',
     });
     expect(url).toBe('postgresql://postgres:sekrit@rds.internal:5432/adaptalabs');
+  });
+});
+
+describe('hasDatabaseConfig', () => {
+  it('is true for every source resolveDatabaseUrl accepts, not just DATABASE_URL', () => {
+    // Regression: deleting the stale DATABASE_URL from the Kubera secret store
+    // (the fix for the week-long outage) silently flipped isDatabaseAvailable()
+    // into mock-data mode, because it only checked DATABASE_URL while the pool
+    // happily connected via Kubera's injected DB_URL/DB_HOST.
+    expect(hasDatabaseConfig({ DATABASE_URL: 'postgresql://h/db' })).toBe(true);
+    expect(hasDatabaseConfig({ POSTGRES_URL: 'postgresql://h/db' })).toBe(true);
+    expect(hasDatabaseConfig({ POSTGRESQL_URL: 'postgresql://h/db' })).toBe(true);
+    expect(hasDatabaseConfig({ DB_URL: 'postgresql://h/db' })).toBe(true);
+    expect(hasDatabaseConfig({ DB_HOST: 'rds.internal' })).toBe(true);
+    expect(hasDatabaseConfig({ POSTGRES_HOST: 'generic.internal' })).toBe(true);
+    expect(hasDatabaseConfig({ PGHOST: 'pg.internal' })).toBe(true);
+  });
+
+  it('is false when nothing is configured (local dev mock-data mode)', () => {
+    expect(hasDatabaseConfig({})).toBe(false);
+  });
+
+  it('is false when the only values present are blank after trimming', () => {
+    expect(hasDatabaseConfig({ DATABASE_URL: '  \n', DB_HOST: '' })).toBe(false);
   });
 });
 
