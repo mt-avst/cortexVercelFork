@@ -1,5 +1,5 @@
 import React, { useState, memo, useEffect, useRef } from 'react';
-import { demoLogin, demoAdminLogin, demoSuperadminLogin, googleLogin } from '../api/client';
+import { demoLogin, demoAdminLogin, demoSuperadminLogin, oidcLogin } from '../api/client';
 import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
 import StaticNeuralBackground from '../components/StaticNeuralBackground';
 import { useTheme } from '../contexts/ThemeContext';
@@ -58,9 +58,9 @@ const Landing: React.FC = memo(() => {
     demoSuperadminLogin();
   };
 
-  const handleGoogleLogin = () => {
+  const handleLogin = () => {
     setGoogleLoading(true);
-    googleLogin();
+    oidcLogin();
   };
 
   const isLoading = googleLoading || loginLoading;
@@ -91,7 +91,7 @@ const Landing: React.FC = memo(() => {
 
           {/* CTA Button - "Power" solid orange variant */}
           <button 
-            onClick={handleGoogleLogin}
+            onClick={handleLogin}
             className={`btn-power ${isLoading ? 'disabled' : ''}`}
             style={{ marginTop: '2.5rem' }}
             disabled={isLoading}
@@ -163,7 +163,7 @@ const Landing: React.FC = memo(() => {
 
       {/* Sales Sections - Below the fold */}
       <div id="cortex-sales" ref={salesRef}>
-        <SalesSections onAccessCortex={handleGoogleLogin} isLoading={isLoading} />
+        <SalesSections onAccessCortex={handleLogin} isLoading={isLoading} />
       </div>
     </div>
   );

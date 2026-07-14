@@ -17,6 +17,9 @@ export const AUTH_ENDPOINTS = {
   ADMIN_LOGIN: '/api/auth/admin-login',
   SUPERADMIN_LOGIN: '/api/auth/superadmin-login',
   GOOGLE_LOGIN: '/api/auth/google-login',
+  // App-level Okta OIDC (backend /auth/login, also mounted at /api/auth/login).
+  // This is the production login path on Kubera.
+  OIDC_LOGIN: '/api/auth/login',
   LOGOUT: '/api/auth/logout',
 } as const;
 
@@ -92,6 +95,13 @@ export const authNavigation = {
    */
   toGoogleLogin: (): void => {
     redirectToAuth(AUTH_ENDPOINTS.GOOGLE_LOGIN);
+  },
+
+  /**
+   * Redirect to app-level Okta OIDC login (production login path)
+   */
+  toOidcLogin: (): void => {
+    redirectToAuth(AUTH_ENDPOINTS.OIDC_LOGIN);
   },
 
   /**

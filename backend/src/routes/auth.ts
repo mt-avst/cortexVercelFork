@@ -6,6 +6,10 @@ import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { logger } from '../utils/logger';
 import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
+import {
+  parseBootstrapSuperadminEmails,
+  shouldElevateToSuperadmin,
+} from '../utils/superadminBootstrap';
 
 import { SessionUser } from '../types';
 
@@ -57,8 +61,11 @@ async function initializeClient() {
     
     const issuer = await Issuer.discover(process.env.OIDC_ISSUER!);
     client = new issuer.Client({
-      client_id: process.env.OIDC_CLIENT_ID!,
-      client_secret: process.env.OIDC_CLIENT_SECRET!,
+      // Kubera's auth.okta_app injects the provisioned credentials as `clientID`
+      // and `clientSecret` (envFrom the <app>-okta-secret). Fall back to the
+      // conventional OIDC_* names so local dev and other platforms still work.
+      client_id: process.env.OIDC_CLIENT_ID || process.env.clientID!,
+      client_secret: process.env.OIDC_CLIENT_SECRET || process.env.clientSecret!,
       redirect_uris: [process.env.OIDC_REDIRECT_URL!],
       response_types: ['code'],
     });
@@ -218,8 +225,28 @@ router.get('/callback', async (req, res) => {
         RETURNING id, name, email, business_unit, role_title, role
       `, [userData.name, userData.email, userData.business_unit, userData.role_title]);
 
-      const user = result.rows[0];
-      
+      let user = result.rows[0];
+
+      // Superadmin bootstrap: elevate configured emails on login. The email is
+      // from the verified OIDC claim (not user input) and this only ever raises
+      // a role - see utils/superadminBootstrap. Needed because the first Okta
+      // login has no existing admin to grant access and the RDS isn't reachable
+      // to do it by hand.
+      const bootstrapEmails = parseBootstrapSuperadminEmails(
+        process.env.BOOTSTRAP_SUPERADMIN_EMAILS
+      );
+      if (shouldElevateToSuperadmin(user.email, user.role, bootstrapEmails)) {
+        const elevated = await dbClient.query(
+          `UPDATE users SET role = 'superadmin' WHERE id = $1
+           RETURNING id, name, email, business_unit, role_title, role`,
+          [user.id]
+        );
+        user = elevated.rows[0];
+        logger.info('Bootstrapped superadmin from BOOTSTRAP_SUPERADMIN_EMAILS', {
+          email: user.email,
+        });
+      }
+
       // Create notification preferences if first login
       await dbClient.query(`
         INSERT INTO notification_preferences (user_id)

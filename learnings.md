@@ -20,7 +20,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 | **Frontend** | React 18, TypeScript, Vite, React Router, Tailwind, Radix UI, Framer Motion, Three.js (react-three-fiber) for background effects |
 | **API (production and local)** | Express in `backend/` — the single API implementation, deployed as a container on Kubera. The old Vercel serverless `api/` tree was deleted 2026-07-05 (dual maintenance of every route on a retired deploy target). |
 | **Database** | PostgreSQL. Connection resolved by `backend/src/config/databaseUrl.ts` across every convention we've run under - `DATABASE_URL`/`POSTGRES_URL`/`POSTGRESQL_URL` win if set, otherwise `DB_URL` or Kubera's individual `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD` vars, generic `POSTGRES_*`/`PG*` vars as a last resort. **Gotcha (2026-07-13):** the code originally only checked `DATABASE_URL`/`POSTGRES_URL`/`POSTGRESQL_URL` - none of which Kubera actually injects (confirmed against the platform's own `kubera-config` docs: Kubera sets `DB_HOST`/`DB_PORT`/`DB_NAME`/`DB_USER`/`DB_PASSWORD`/`DB_URL`). The backend had silently fallen through to a hardcoded `localhost` dev URL on every Kubera deploy, which is why the migrate/seed init container hung with zero output - `pool.connect()` was targeting a database that doesn't exist in the container, with no connection timeout set (also fixed, MR !17: 10s timeout + explicit logging). On Kubera the RDS instance is provisioned from `.kubera/playground-backend.yaml`. |
-| **Auth** | Cookie-based sessions (signed with `SESSION_SECRET`). Google OAuth + demo login. Roles: `employee`, `researcher_admin`, `superadmin`. |
+| **Auth** | Cookie-based sessions (signed with `SESSION_SECRET`). Production login is **app-level Okta OIDC** (Kubera `auth.okta_app` provisions the Okta app + injects `clientID`/`clientSecret`; backend's `/auth/login`+`/auth/callback` run the flow). Google OAuth + demo login remain as fallbacks. Roles: `employee`, `researcher_admin`, `superadmin`; first login for `BOOTSTRAP_SUPERADMIN_EMAILS` is elevated to superadmin. |
 | **Deployment** | Kubera via GitLab CI (`.gitlab-ci.yml` → docker build → ArgoCD GitOps). Manifests in `.kubera/`. |
 
 ---
@@ -50,7 +50,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 1. **Trigger**: merge to `main` — GitLab CI builds both docker images and a downstream pipeline pushes ArgoCD specs to the GitOps repo; the cluster reconciles asynchronously (CI green ≠ reconciled, check the app URL).
 2. **Manifests**: `.kubera/playground-backend.yaml` and `.kubera/playground-frontend.yaml`. Non-secret env in `config.data`; secrets in the platform-side Kubera secret store.
 3. **Migrations and seed**: run automatically in the backend initContainer (`npm run migrate && npm run seed`).
-4. **URLs**: frontend `https://adaptalabs.kubera-playground.adaptavist.net` (Okta ALB), backend `https://adaptalabs-backend.kubera-playground.adaptavist.net` (public, own auth, exists for server-to-server webhooks).
+4. **URLs**: frontend `https://adaptalabs.kubera-playground.adaptavist.net` (public; app-level Okta OIDC enforced by the backend, not the ALB). Backend is **private** (cluster-internal only) - reached via the frontend nginx proxy; FirstHand webhooks hit the frontend host and are proxied in.
 
 ---
 
