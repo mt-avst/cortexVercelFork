@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 
 import { pool } from '../config';
-import { requireAdmin, optionalAuth } from '../middleware/authenticate';
+import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authenticate';
 import { getMockOpportunities, getMockOpportunity, addMockOpportunity, updateMockOpportunity, deleteMockOpportunity, addMockSessions, getMockSessions } from '../../../demo/mock-data';
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
@@ -499,7 +499,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
 }));
 
 // POST /api/opportunities/:id/firsthand-handoff - Create a FirstHand session for this opportunity
-router.post('/:id/firsthand-handoff', asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -551,7 +551,7 @@ router.post('/:id/firsthand-handoff', asyncHandler(async (req: Request, res: Res
 }));
 
 // GET /api/opportunities/:id/session-events - List FirstHand session events for an opportunity
-router.get('/:id/session-events', asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/session-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
