@@ -10,26 +10,28 @@ import { getAuthUrl, getApiBaseUrl } from '../config/api';
 
 /**
  * Auth endpoint constants
+ *
+ * The demo endpoints only exist on the backend under NODE_ENV=development
+ * (backend/src/routes/auth.ts) - never redirect to them in production.
  */
 export const AUTH_ENDPOINTS = {
   DEMO_LOGIN: '/api/auth/demo-login',
-  DEMO_USER_2_LOGIN: '/api/auth/demo-user-2-login',
   ADMIN_LOGIN: '/api/auth/admin-login',
   SUPERADMIN_LOGIN: '/api/auth/superadmin-login',
-  GOOGLE_LOGIN: '/api/auth/google-login',
   // App-level Okta OIDC (backend /auth/login, also mounted at /api/auth/login).
-  // This is the production login path on Kubera.
+  // This is the only login path that works in production on Kubera.
   OIDC_LOGIN: '/api/auth/login',
   LOGOUT: '/api/auth/logout',
 } as const;
 
 /**
- * Check if currently on admin route
+ * Check if currently on an admin route (/admin and its subpaths).
+ * Participant pages such as /opportunities and /sessions are NOT admin routes.
+ * Only used to pick between the dev demo logins - production ignores it.
  */
 export const isAdminRoute = (): boolean => {
-  return window.location.pathname.includes('/admin') ||
-         window.location.pathname.includes('/opportunities') ||
-         window.location.pathname.includes('/sessions');
+  const { pathname } = window.location;
+  return pathname === '/admin' || pathname.startsWith('/admin/');
 };
 
 /**
@@ -70,13 +72,6 @@ export const authNavigation = {
   },
 
   /**
-   * Redirect to demo user 2 login
-   */
-  toDemoUser2Login: (): void => {
-    redirectToAuth(AUTH_ENDPOINTS.DEMO_USER_2_LOGIN);
-  },
-
-  /**
    * Redirect to admin login
    */
   toAdminLogin: (): void => {
@@ -91,13 +86,6 @@ export const authNavigation = {
   },
 
   /**
-   * Redirect to Google OAuth login
-   */
-  toGoogleLogin: (): void => {
-    redirectToAuth(AUTH_ENDPOINTS.GOOGLE_LOGIN);
-  },
-
-  /**
    * Redirect to app-level Okta OIDC login (production login path)
    */
   toOidcLogin: (): void => {
@@ -106,19 +94,24 @@ export const authNavigation = {
 
   /**
    * Handle login redirect based on context
+   *
+   * In production every role logs in through Okta OIDC - the demo endpoints
+   * do not exist there and Google OAuth is blocked and deprecated. The demo
+   * split (admin vs user) only applies to local development.
+   *
    * @param isAdmin - Whether current route is admin route
    * @param isProduction - Whether running in production
    */
   toLogin: (isAdmin: boolean, isProduction: boolean): void => {
     let loginRoute: string;
-    if (isAdmin) {
+    if (isProduction) {
+      loginRoute = AUTH_ENDPOINTS.OIDC_LOGIN;
+    } else if (isAdmin) {
       loginRoute = AUTH_ENDPOINTS.ADMIN_LOGIN;
-    } else if (isProduction) {
-      loginRoute = AUTH_ENDPOINTS.GOOGLE_LOGIN;
     } else {
       loginRoute = AUTH_ENDPOINTS.DEMO_LOGIN;
     }
-    window.location.href = getAuthUrl(loginRoute);
+    redirectToAuth(loginRoute);
   },
 
   /**

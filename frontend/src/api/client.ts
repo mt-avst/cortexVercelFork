@@ -4,7 +4,7 @@ import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
 import { AppError, mapAxiosError } from '../utils/errorHandler';
 import { ensureCsrfToken, isCsrfError, isMutatingMethod, CSRF_HEADER } from './csrf';
 import { logger } from '../utils/logger';
-import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, redirectToAuth, AUTH_ENDPOINTS } from '../utils/navigation';
+import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, AUTH_ENDPOINTS } from '../utils/navigation';
 
 import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse, AdminRequest } from './types';
 
@@ -175,7 +175,7 @@ export const logout = async (): Promise<void> => {
   // Use auth endpoint for logout (separate axios call, so attach the CSRF
   // token explicitly rather than relying on the api instance interceptor)
   const csrfToken = await ensureCsrfToken();
-  await axios.post(getAuthUrl('/api/auth/logout'), {}, {
+  await axios.post(getAuthUrl(AUTH_ENDPOINTS.LOGOUT), {}, {
     withCredentials: true,
     timeout: API_CONFIG.TIMEOUT,
     headers: csrfToken ? { [CSRF_HEADER]: csrfToken } : undefined,
@@ -187,23 +187,12 @@ export const demoLogin = async (): Promise<void> => {
   authNavigation.toDemoLogin();
 };
 
-export const demoUser2Login = async (): Promise<void> => {
-  authNavigation.toDemoUser2Login();
-};
-
 export const demoAdminLogin = async (): Promise<void> => {
   authNavigation.toAdminLogin();
 };
 
 export const demoSuperadminLogin = async (): Promise<void> => {
   authNavigation.toSuperadminLogin();
-};
-
-/**
- * Google OAuth login - redirects to Google OAuth flow
- */
-export const googleLogin = async (): Promise<void> => {
-  authNavigation.toGoogleLogin();
 };
 
 /**
