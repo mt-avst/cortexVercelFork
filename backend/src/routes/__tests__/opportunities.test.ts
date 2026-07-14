@@ -17,14 +17,22 @@ jest.mock('../../utils/database', () => ({
   isDatabaseAvailable: jest.fn(),
 }));
 
+jest.mock('../../utils/firsthand-client', () => ({
+  isFirstHandConfigured: jest.fn(),
+  firstHandPost: jest.fn(),
+}));
+
 import opportunitiesRouter from '../opportunities';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
+import { isFirstHandConfigured, firstHandPost } from '../../utils/firsthand-client';
 import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
+const mockIsFirstHandConfigured = isFirstHandConfigured as jest.MockedFunction<any>;
+const mockFirstHandPost = firstHandPost as jest.MockedFunction<any>;
 
 const app = express();
 app.use(express.json());
@@ -420,6 +428,83 @@ describe('Opportunities API', () => {
         .expect(403);
 
       expect(response.body.error).toBe('Only the owner can close this opportunity');
+    });
+  });
+
+  // An app with NO session stub - requests arrive unauthenticated, like a
+  // logged-out browser. Regression guard for the bug where these routes
+  // checked req.user but no middleware ever populated it, so even
+  // authenticated users got 401s.
+  const unauthenticatedApp = express();
+  unauthenticatedApp.use(express.json());
+  unauthenticatedApp.use((req: any, res, next) => {
+    req.session = {};
+    next();
+  });
+  unauthenticatedApp.use('/api/opportunities', opportunitiesRouter);
+  unauthenticatedApp.use(errorHandler);
+
+  describe('POST /api/opportunities/:id/firsthand-handoff', () => {
+    it('should create a FirstHand session for an authenticated user', async () => {
+      mockIsFirstHandConfigured.mockReturnValue(true);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockFirstHandPost.mockResolvedValueOnce({
+        session_url: 'https://first-hand.vercel.app/session/xyz'
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(200);
+
+      expect(response.body.session_url).toBe('https://first-hand.vercel.app/session/xyz');
+      expect(mockFirstHandPost).toHaveBeenCalledWith('/api/sessions', expect.objectContaining({
+        study_id: 'study_abc123',
+        participant: expect.objectContaining({ participant_id: 'test-user-id' })
+      }));
+    });
+
+    it('should reject an unauthenticated request with 401', async () => {
+      const response = await request(unauthenticatedApp)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(401);
+
+      expect(response.body.error).toBe('Authentication required');
+    });
+  });
+
+  describe('GET /api/opportunities/:id/session-events', () => {
+    it('should return session events for an authenticated user', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: 'evt-1',
+          opportunity_id: '1',
+          participant_user_id: 'test-user-id',
+          firsthand_session_id: 'fh-session-1',
+          event_type: 'session.completed',
+          occurred_at: '2026-07-15T00:00:00Z',
+          payload: {},
+          received_at: '2026-07-15T00:00:01Z',
+          participant_name: 'Test User',
+          participant_email: 'test@example.com'
+        }]
+      });
+
+      const response = await request(app)
+        .get('/api/opportunities/1/session-events')
+        .expect(200);
+
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0].event_type).toBe('session.completed');
+    });
+
+    it('should reject an unauthenticated request with 401', async () => {
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/session-events')
+        .expect(401);
+
+      expect(response.body.error).toBe('Authentication required');
     });
   });
 });
