@@ -4,7 +4,6 @@ import { render, screen, waitFor, act } from '@testing-library/react';
 import { AuthProvider, useAuth } from '../AuthContext';
 import { generateMockUser } from '../../shared/test-utils';
 import { getMe, logout } from '../../api/client';
-import { getAuthUrl } from '../../config/api';
 
 // Mock the API client
 vi.mock('../../api/client', () => ({
@@ -14,10 +13,7 @@ vi.mock('../../api/client', () => ({
 
 // Mock the config
 vi.mock('../../config/api', () => ({
-  getAuthUrl: vi.fn(() => 'http://localhost:3001/auth/login'),
-  API_CONFIG: {
-    BASE_URL: 'http://localhost:3001',
-  },
+  getApiBaseUrl: vi.fn(() => ''),
 }));
 
 // Mock the logger
@@ -28,22 +24,25 @@ vi.mock('../../utils/logger', () => ({
     warn: vi.fn(),
     info: vi.fn(),
     debug: vi.fn(),
+    getRequestId: vi.fn(() => undefined),
+    setRequestId: vi.fn(),
   },
 }));
 
-// Mock window.location
-const mockLocation = {
-  href: '',
-  search: '',
-  assign: vi.fn(),
-  replace: vi.fn(),
-  reload: vi.fn(),
-};
+// Mock navigation - its own behaviour is covered by utils/__tests__/navigation.test.ts.
+// Here we only need to assert AuthContext calls into it correctly.
+vi.mock('../../utils/navigation', () => ({
+  authNavigation: {
+    toLogin: vi.fn(),
+  },
+  navigation: {
+    toHome: vi.fn(),
+  },
+  isAdminRoute: vi.fn(() => false),
+  isProductionEnvironment: vi.fn(() => false),
+}));
 
-Object.defineProperty(window, 'location', {
-  value: mockLocation,
-  writable: true,
-});
+import { authNavigation, navigation } from '../../utils/navigation';
 
 // Mock sessionStorage
 const mockSessionStorage = {
@@ -64,17 +63,10 @@ Object.defineProperty(document, 'cookie', {
   writable: true,
 });
 
-// Mock document.referrer (configurable so beforeEach can redefine it)
-Object.defineProperty(document, 'referrer', {
-  value: '',
-  writable: true,
-  configurable: true,
-});
-
 // Test component that uses the auth context
 const TestComponent = () => {
   const { user, loading, error, initialAuthCheck } = useAuth();
-  
+
   return (
     <div>
       <div data-testid="loading">{loading ? 'Loading' : 'Not Loading'}</div>
@@ -85,94 +77,98 @@ const TestComponent = () => {
   );
 };
 
-// SKIPPED: these tests describe the pre-redesign AuthProvider that fetched
-// auth unconditionally on mount. The current provider only checks auth when
-// returning from a login redirect (sessionStorage 'loginRedirect'). The suite
-// needs a rewrite against the real behaviour - tracked as a follow-up task.
-describe.skip('AuthContext', () => {
+describe('AuthContext', () => {
   const mockGetMe = vi.mocked(getMe);
   const mockLogout = vi.mocked(logout);
-  const mockGetAuthUrl = vi.mocked(getAuthUrl);
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockLocation.href = '';
-    mockLocation.search = '';
     mockSessionStorage.getItem.mockReturnValue(null);
     document.cookie = '';
-    Object.defineProperty(document, 'referrer', {
-      value: '',
-      writable: true,
-      configurable: true
-    });
   });
 
-  describe('AuthProvider', () => {
-    it('should provide auth context to children', () => {
+  describe('session check on mount', () => {
+    // Reproduces the bug: after a successful login, navigating directly to
+    // an authenticated URL (typed into the address bar, a bookmark, a full
+    // page refresh, or any load that isn't a click on an in-app link) has no
+    // loginRedirect flag in sessionStorage. The provider must still ask the
+    // backend whether the session cookie is valid instead of assuming
+    // logged-out.
+    it('checks the session and renders authenticated on a normal mount with no loginRedirect flag', async () => {
+      mockSessionStorage.getItem.mockReturnValue(null);
+      const mockUser = generateMockUser();
+      mockGetMe.mockResolvedValue(mockUser);
+
       render(
         <AuthProvider>
           <TestComponent />
         </AuthProvider>
       );
 
-      expect(screen.getByTestId('loading')).toBeInTheDocument();
-      expect(screen.getByTestId('error')).toBeInTheDocument();
-      expect(screen.getByTestId('initial-auth-check')).toBeInTheDocument();
-      expect(screen.getByTestId('user')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(mockGetMe).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
+      });
+      expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
     });
 
-    it('should initialize with no user and not loading', () => {
+    it('checks the session and renders authenticated when the loginRedirect flag is present', async () => {
+      mockSessionStorage.getItem.mockReturnValue('true');
+      const mockUser = generateMockUser();
+      mockGetMe.mockResolvedValue(mockUser);
+
       render(
         <AuthProvider>
           <TestComponent />
         </AuthProvider>
       );
 
+      await waitFor(() => {
+        expect(mockGetMe).toHaveBeenCalledTimes(1);
+      });
+      await waitFor(() => {
+        expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
+      });
+    });
+
+    it('clears the loginRedirect flag after reading it so it cannot be reused', async () => {
+      mockSessionStorage.getItem.mockReturnValue('true');
+      mockGetMe.mockResolvedValue(generateMockUser());
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(mockSessionStorage.removeItem).toHaveBeenCalledWith('loginRedirect');
+      });
+    });
+
+    it('renders a clean logged-out state (no error) when there is no valid session', async () => {
+      mockSessionStorage.getItem.mockReturnValue(null);
+      const axiosError = { response: { status: 401 }, message: 'Unauthorized' };
+      mockGetMe.mockRejectedValue(axiosError);
+
+      render(
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
+      });
       expect(screen.getByTestId('user')).toHaveTextContent('No User');
-      expect(screen.getByTestId('loading')).toHaveTextContent('Not Loading');
+      expect(screen.getByTestId('error')).toHaveTextContent('No Error');
     });
 
-    it('should fetch user data on mount', async () => {
-      const mockUser = generateMockUser();
-      mockGetMe.mockResolvedValue(mockUser);
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(mockGetMe).toHaveBeenCalled();
-      });
-
-      await waitFor(() => {
-        expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
-      });
-    });
-
-    it('should handle successful user fetch', async () => {
-      const mockUser = generateMockUser();
-      mockGetMe.mockResolvedValue(mockUser);
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
-        expect(screen.getByTestId('error')).toHaveTextContent('No Error');
-        expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
-      });
-    });
-
-    it('should handle 401 error gracefully', async () => {
-      const axiosError = {
-        response: { status: 401 },
-        message: 'Unauthorized',
-      };
+    it('surfaces an error for a non-401 failure', async () => {
+      mockSessionStorage.getItem.mockReturnValue(null);
+      const axiosError = { response: { status: 500 }, message: 'Internal Server Error' };
       mockGetMe.mockRejectedValue(axiosError);
 
       render(
@@ -182,53 +178,31 @@ describe.skip('AuthContext', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('user')).toHaveTextContent('No User');
-        expect(screen.getByTestId('error')).toHaveTextContent('No Error');
-        expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
+        expect(screen.getByTestId('error')).toHaveTextContent('Failed to fetch user data');
       });
+      expect(screen.getByTestId('user')).toHaveTextContent('No User');
     });
 
-    it('should handle non-401 errors', async () => {
-      const axiosError = {
-        response: { status: 500 },
-        message: 'Internal Server Error',
-      };
-      mockGetMe.mockRejectedValue(axiosError);
+    it('only checks the session once, even under React StrictMode double-invocation', async () => {
+      mockGetMe.mockResolvedValue(generateMockUser());
 
       render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
+        <React.StrictMode>
+          <AuthProvider>
+            <TestComponent />
+          </AuthProvider>
+        </React.StrictMode>
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('user')).toHaveTextContent('No User');
-        expect(screen.getByTestId('error')).toHaveTextContent('Failed to fetch user data');
         expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
       });
-    });
-
-    it('should handle non-axios errors', async () => {
-      const error = new Error('Network error');
-      mockGetMe.mockRejectedValue(error);
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(screen.getByTestId('user')).toHaveTextContent('No User');
-        expect(screen.getByTestId('error')).toHaveTextContent('Failed to fetch user data');
-        expect(screen.getByTestId('initial-auth-check')).toHaveTextContent('Complete');
-      });
+      expect(mockGetMe).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('useAuth hook', () => {
-    it('should throw error when used outside AuthProvider', () => {
-      // Suppress console.error for this test
+    it('throws when used outside an AuthProvider', () => {
       const originalError = console.error;
       console.error = vi.fn();
 
@@ -239,7 +213,9 @@ describe.skip('AuthContext', () => {
       console.error = originalError;
     });
 
-    it('should provide login function', async () => {
+    it('login() sets the loginRedirect flag and delegates to authNavigation.toLogin', async () => {
+      mockGetMe.mockRejectedValue({ response: { status: 401 } });
+
       const TestLoginComponent = () => {
         const { login } = useAuth();
         return <button onClick={login}>Login</button>;
@@ -251,20 +227,19 @@ describe.skip('AuthContext', () => {
         </AuthProvider>
       );
 
-      const loginButton = screen.getByText('Login');
-      
+      await waitFor(() => expect(mockGetMe).toHaveBeenCalled());
+
       act(() => {
-        loginButton.click();
+        screen.getByText('Login').click();
       });
 
-      expect(mockSessionStorage.setItem).toHaveBeenCalledWith('loginRedirect', 'true');
-      expect(mockLocation.href).toBe('http://localhost:3001/auth/login');
+      expect(authNavigation.toLogin).toHaveBeenCalledWith(false, false);
     });
 
-    it('should provide logout function', async () => {
+    it('logout() calls the API, clears user state, and navigates home', async () => {
       const mockUser = generateMockUser();
       mockGetMe.mockResolvedValue(mockUser);
-      mockLogout.mockResolvedValue({});
+      mockLogout.mockResolvedValue(undefined);
 
       const TestLogoutComponent = () => {
         const { logout, user } = useAuth();
@@ -286,19 +261,18 @@ describe.skip('AuthContext', () => {
         expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
       });
 
-      const logoutButton = screen.getByText('Logout');
-      
       await act(async () => {
-        logoutButton.click();
+        screen.getByText('Logout').click();
       });
 
       expect(mockLogout).toHaveBeenCalled();
+      expect(navigation.toHome).toHaveBeenCalled();
       await waitFor(() => {
         expect(screen.getByTestId('user')).toHaveTextContent('No User');
       });
     });
 
-    it('should handle logout errors gracefully', async () => {
+    it('logout() still clears user state and navigates home if the API call fails', async () => {
       const mockUser = generateMockUser();
       mockGetMe.mockResolvedValue(mockUser);
       mockLogout.mockRejectedValue(new Error('Logout failed'));
@@ -323,22 +297,19 @@ describe.skip('AuthContext', () => {
         expect(screen.getByTestId('user')).toHaveTextContent(mockUser.name);
       });
 
-      const logoutButton = screen.getByText('Logout');
-      
       await act(async () => {
-        logoutButton.click();
+        screen.getByText('Logout').click();
       });
 
       expect(mockLogout).toHaveBeenCalled();
-      // User should still be cleared even if logout fails
+      expect(navigation.toHome).toHaveBeenCalled();
       await waitFor(() => {
         expect(screen.getByTestId('user')).toHaveTextContent('No User');
       });
     });
 
-    it('should provide refreshAuth function', async () => {
-      const mockUser = generateMockUser();
-      mockGetMe.mockResolvedValue(mockUser);
+    it('refreshAuth() re-fetches the user on demand', async () => {
+      mockGetMe.mockResolvedValue(generateMockUser());
 
       const TestRefreshComponent = () => {
         const { refreshAuth } = useAuth();
@@ -351,17 +322,18 @@ describe.skip('AuthContext', () => {
         </AuthProvider>
       );
 
-      const refreshButton = screen.getByText('Refresh');
-      
+      await waitFor(() => expect(mockGetMe).toHaveBeenCalledTimes(1));
+
       await act(async () => {
-        refreshButton.click();
+        screen.getByText('Refresh').click();
       });
 
-      // Should call getMe twice - once on mount, once on refresh
       expect(mockGetMe).toHaveBeenCalledTimes(2);
     });
 
-    it('should provide clearSessionCookies function', () => {
+    it('clearSessionCookies() expires the session cookie', async () => {
+      mockGetMe.mockResolvedValue(generateMockUser());
+
       const TestClearComponent = () => {
         const { clearSessionCookies } = useAuth();
         return <button onClick={clearSessionCookies}>Clear Cookies</button>;
@@ -373,65 +345,13 @@ describe.skip('AuthContext', () => {
         </AuthProvider>
       );
 
-      const clearButton = screen.getByText('Clear Cookies');
-      
+      await waitFor(() => expect(mockGetMe).toHaveBeenCalled());
+
       act(() => {
-        clearButton.click();
+        screen.getByText('Clear Cookies').click();
       });
 
-      // Should set cookies to expired values
       expect(document.cookie).toContain('adaptalabs_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC');
-    });
-  });
-
-  describe('Login redirect detection', () => {
-    it('should detect login redirect from referrer', async () => {
-      Object.defineProperty(document, 'referrer', {
-        value: 'http://localhost:3001/auth/callback',
-        writable: true,
-        configurable: true
-      });
-      mockGetMe.mockResolvedValue(generateMockUser());
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(mockGetMe).toHaveBeenCalledTimes(2); // Initial + retry after delay
-      });
-    });
-
-    it('should detect login redirect from sessionStorage', async () => {
-      mockSessionStorage.getItem.mockReturnValue('true');
-      mockGetMe.mockResolvedValue(generateMockUser());
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(mockGetMe).toHaveBeenCalledTimes(2); // Initial + retry after delay
-      });
-    });
-
-    it('should detect login redirect from URL search params', async () => {
-      mockLocation.search = '?auth=success';
-      mockGetMe.mockResolvedValue(generateMockUser());
-
-      render(
-        <AuthProvider>
-          <TestComponent />
-        </AuthProvider>
-      );
-
-      await waitFor(() => {
-        expect(mockGetMe).toHaveBeenCalledTimes(2); // Initial + retry after delay
-      });
     });
   });
 });

@@ -139,11 +139,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const handleLogout = async () => {
     try {
       await logout();
-      setUser(null);
-      setError(null);
-      
-      // Redirect to homepage after logout
-      navigation.toHome();
     } catch (err: unknown) {
       const error = err instanceof Error ? err : new Error(String(err));
       logger.error('Logout failed', {
@@ -155,7 +150,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         },
         requestId: logger.getRequestId() || undefined,
       });
-      // Still redirect even if logout fails
+    } finally {
+      // Clear local state and redirect home even if the API call failed -
+      // the user asked to log out, so the UI should reflect that regardless.
+      setUser(null);
+      setError(null);
       navigation.toHome();
     }
   };
@@ -172,13 +171,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logger.log('AuthProvider: Cleared session cookies');
   };
 
-  // CRITICAL FIX: NEVER automatically check authentication on initial app load.
-  // This prevents automatic login from stale cookies.
-  // Authentication will ONLY be checked when:
-  // 1. User explicitly clicks a login button AND we're returning from that redirect
-  //    (detected by sessionStorage flag that was set RIGHT BEFORE redirect)
-  // 2. Never check based on referrer - it's unreliable and can trigger false positives
-  
+  // Validate the session on every mount - a fresh load, a full-page refresh,
+  // a bookmark, or a URL typed directly into the address bar - not just when
+  // returning from login. The session cookie is httpOnly and validated
+  // server-side, so /api/me is the source of truth; there's no "stale
+  // cookie" risk in asking, only a risk in assuming logged-out without
+  // asking (that assumption was the bug: it showed the logged-out landing
+  // page for a still-valid session on every direct navigation).
+  //
+  // The loginRedirect flag is set by redirectToAuth() immediately before
+  // sending the browser to Okta, and read back here on the return trip. It
+  // doesn't gate whether the check happens - it only triggers one extra
+  // retry, to cover the narrow race where this effect runs before the
+  // session cookie the backend just set has fully landed.
   useEffect(() => {
     const checkAuthStatus = async () => {
       // Prevent double execution in React StrictMode
@@ -187,33 +192,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         return;
       }
       hasCheckedAuth.current = true;
-      
+
       logger.log('AuthProvider: Checking authentication status on mount');
-      
-      // CRITICAL: Only check auth if we have a FRESH sessionStorage flag
-      // Clear any stale flags from previous sessions first
+
       const loginRedirectFlag = sessionStorage.getItem('loginRedirect');
       const isReturningFromLogin = loginRedirectFlag === 'true';
-      
-      // IMPORTANT: Clear the flag immediately, even if true, to prevent reuse
+
+      // Clear the flag immediately, even if true, to prevent reuse
       sessionStorage.removeItem('loginRedirect');
-      
+
       logger.log('AuthProvider: Login redirect detection:', {
         referrer: document.referrer,
         search: window.location.search,
         hadLoginRedirectFlag: !!loginRedirectFlag,
         isReturningFromLogin
       });
-      
+
       if (isReturningFromLogin) {
-        // We were returning from login - check auth immediately
+        // Returning from login - check auth immediately.
         // Cookies are set synchronously by the browser, so no delay needed
+        // for the common case; retry once if that first check fails, in
+        // case the cookie genuinely wasn't ready yet.
         logger.log('AuthProvider: Detected return from login redirect - checking auth immediately');
-        // Set initialAuthCheck to false initially so Admin page waits
         setInitialAuthCheck(false);
-        // Check auth immediately - cookies should already be set by the redirect
         fetchUser(true).catch((err) => {
-          // If first attempt fails, retry once after short delay (in case cookie wasn't ready)
           logger.log('AuthProvider: First auth check failed, retrying after brief delay', err);
           setTimeout(async () => {
             logger.log('AuthProvider: Retrying auth check after login redirect');
@@ -222,35 +224,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         });
         return;
       }
-      
-      // NOT returning from login - ABSOLUTELY DO NOT check auth
-      logger.log('AuthProvider: NOT returning from login - starting completely fresh, NO auth check');
-      
-      // Aggressively clear all cookies (client-side)
-      clearSessionCookies();
-      
-      // Clear HttpOnly cookies via logout API calls (silent)
-      const baseUrl = getApiBaseUrl();
-      const logoutUrls = [
-        baseUrl ? `${baseUrl}/api/auth/logout` : '/api/auth/logout'
-      ];
-      
-      Promise.allSettled(
-        logoutUrls.map(url => 
-          fetch(url, {
-            method: 'POST',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-          })
-        )
-      ).catch(() => {}); // Ignore all errors
-      
-      // Set state: logged out, initial check complete, NO auth performed
-      setInitialAuthCheck(true);
-      setUser(null);
-      setLoading(false);
-      
-      logger.log('AuthProvider: Initial load complete - user is logged out, ZERO auth checks performed');
+
+      // Any other mount - always ask the backend whether a session is
+      // already valid rather than defaulting to logged-out.
+      logger.log('AuthProvider: Not returning from login - checking session anyway');
+      await fetchUser(true);
     };
 
     checkAuthStatus();
