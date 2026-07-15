@@ -734,4 +734,65 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe('Authentication required');
     });
   });
+
+  describe('POST /api/opportunities/:id/click', () => {
+    const publishedUnmoderated = { id: '1', type: 'unmoderated', status: 'published' };
+
+    // The click INSERT is the query whose SQL targets opportunity_clicks.
+    const findInsertCall = () =>
+      mockQuery.mock.calls.find(
+        ([sql]: [unknown]) =>
+          typeof sql === 'string' && sql.includes('INSERT INTO opportunity_clicks')
+      );
+
+    it('persists click_type="view" so views are tracked separately from actions', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] }); // opportunity lookup
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // click insert
+
+      const response = await request(app)
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'view' })
+        .expect(200);
+
+      expect(response.body).toEqual({ ok: true });
+
+      const insertCall = findInsertCall();
+      expect(insertCall).toBeDefined();
+      expect(insertCall![0]).toContain('click_type');
+      expect(insertCall![1]).toContain('view');
+    });
+
+    it('persists click_type="action" for action clicks', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(app)
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'action' })
+        .expect(200);
+
+      expect(findInsertCall()![1]).toContain('action');
+    });
+
+    it('defaults to click_type="action" when the body omits it', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(app)
+        .post('/api/opportunities/1/click')
+        .expect(200);
+
+      expect(findInsertCall()![1]).toContain('action');
+    });
+
+    it('rejects an invalid click_type without touching the database', async () => {
+      const response = await request(app)
+        .post('/api/opportunities/1/click')
+        .send({ click_type: 'bogus' })
+        .expect(400);
+
+      expect(response.body.error).toContain('click_type');
+      expect(findInsertCall()).toBeUndefined();
+    });
+  });
 });
