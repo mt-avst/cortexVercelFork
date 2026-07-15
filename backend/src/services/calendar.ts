@@ -1,4 +1,3 @@
-import { google } from 'googleapis';
 import { config } from '../config';
 import { logger } from '../utils/logger';
 import { CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse } from '../../../shared/types';
