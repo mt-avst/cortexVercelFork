@@ -259,7 +259,7 @@ lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
       "file_size_bytes": 10485760,
       "duration_seconds": 870,
       "uploaded_at": "2026-07-15T10:14:20.000Z",
-      "media_url": null
+      "media_url": "https://firsthand.example.com/api/sessions/session_abc--attempt-002/assets/asset_1/media?exp=1752573600000&sig=<hmac>"
     }
   ]
 }
@@ -272,9 +272,11 @@ lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
 - A transcript that is not ready is **not** an error: the response is `200` with
   `transcript: null` and the live `transcript_status`
   (`not_requested | queued | processing | complete | failed`).
-- `assets[].media_url` is **reserved for phase 2**: it will carry a short-lived signed URL
-  (HMAC-derived, ~5 minute expiry) to a FirstHand asset media route that bypasses reviewer
-  OIDC. `contract_version` remains `1.0` because the change is additive.
+- `assets[].media_url` carries a short-lived **signed media URL** (see endpoint 5) that lets
+  the reviewer's browser play the recording inline, bypassing reviewer OIDC. It is populated
+  for audio/video assets when FirstHand's integration secret is configured, and `null`
+  otherwise (or for non-playable assets). `contract_version` remains `1.0` — the field was
+  reserved from the outset, so populating it is additive.
 
 **Status codes:** `200`, `400` (invalid `attempt`), `401` (HMAC failure), `404`
 (`session_not_found`), `503` (integration not configured)
@@ -285,6 +287,47 @@ the opportunity owner or a superadmin, and verifies the session id appears in
 
 **Cortex types:** `FirstHandSessionOutputs` and friends in `shared/types/index.ts`
 (mirrored in `frontend/src/shared/types.ts`).
+
+---
+
+### 5. GET /api/sessions/:sessionId/assets/:assetId/media (browser → FirstHand)
+
+The signed media route referenced by `assets[].media_url` in endpoint 4. It streams a
+session recording directly to the reviewer's browser (via a `<video>`/`<audio>` element in
+the Cortex Session Review page) **without a FirstHand reviewer OIDC session**.
+
+**Receiver:** FirstHand `src/app/api/sessions/[sessionId]/assets/[assetId]/media/route.ts`
+**Caller:** the reviewer's browser (URL minted by endpoint 4 and proxied through Cortex).
+**Auth:** short-lived HMAC signature bound to the asset (**not** the `${timestamp}\n${body}`
+request-auth scheme).
+
+**Path parameters:** `sessionId` is the **physical** attempt session id (the asset's own
+`session_id`, as embedded in the minted URL); `assetId` is the asset id.
+
+**Query parameters:**
+
+| Param | Notes |
+|---|---|
+| `exp` | absolute expiry, unix ms. TTL ~15 minutes from minting — deliberately longer than the ±5 min request-auth tolerance so the URL stays valid across playback of a full recording. |
+| `sig` | `HMAC-SHA256(FIRSTHAND_INTEGRATION_SECRET, ` `` `${assetId}\n${exp}` `` `).digest("hex")`. Binds the asset id and expiry so a URL cannot be retargeted to another asset. |
+
+**Behaviour:** verifies `sig`/`exp`, resolves the asset, then **streams** the bytes with the
+asset's `Content-Type` (works for both private Vercel Blob and filesystem storage). It does
+**not** redirect to the raw Blob URL — recordings are stored with `access: "private"`, so the
+Blob URL is not publicly fetchable; streaming through this route both works and hides it.
+
+**Status codes:** `200` (streamed media), `401` (missing/expired/tampered signature), `404`
+(asset or session not found, or unreadable), `503` (integration secret not configured).
+
+**Security:** the OIDC bypass is intentional and scoped — the route is reachable only with a
+valid short-lived signature that Cortex (already owner/superadmin gated on endpoint 4) hands
+to the browser. Because `sig` binds the asset id and `getRuntimeAsset` requires the asset to
+belong to the `sessionId` in the path, a leaked URL grants time-boxed access to exactly one
+recording and nothing else.
+
+**Cortex UI:** `frontend/src/components/session-review/AssetsSection.tsx` renders a
+`<video>`/`<audio>` player from `media_url`. Because the URL is short-lived, a playback error
+re-fetches the outputs once (minting a fresh URL) before offering a manual reload.
 
 ---
 
@@ -336,6 +379,11 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ## Verification history
 
+- **2026-07-15 (phase 2):** Populated `assets[].media_url` and added endpoint 5
+  (`GET /api/sessions/:sessionId/assets/:assetId/media`) — a signed, streaming media route so
+  reviewers play recordings inside Cortex without opening FirstHand. HMAC binds `assetId`+`exp`,
+  ~15 min TTL; streams private Blob or filesystem via the existing `createRecordingAssetResponse`.
+  FirstHand PR #11, Cortex MR (this change). `contract_version` unchanged (`1.0`, additive).
 - **2026-07-15:** Added endpoint 4 (`GET /api/sessions/:sessionId/outputs`) for native session
   review in Cortex — transcript and responses in phase 1, `media_url` reserved for phase 2 video.
   Cortex `GET /:id/session-events` tightened from any-authenticated to owner-or-superadmin to
