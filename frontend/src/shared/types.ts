@@ -463,6 +463,84 @@ export interface MySessionEvent {
   received_at: string;
 }
 
+export type FirstHandTranscriptStatus =
+  | 'not_requested'
+  | 'queued'
+  | 'processing'
+  | 'complete'
+  | 'failed';
+
+export interface FirstHandStepResponse {
+  text: string | null;
+  selected_option: string | null;
+  saved_at: string;
+}
+
+export interface FirstHandOutputStep {
+  step_id: string;
+  order: number;
+  type: string;
+  prompt: string;
+  response: FirstHandStepResponse | null;
+}
+
+export interface FirstHandTranscriptSegment {
+  id: string;
+  step_id: string | null;
+  speaker: 'system' | 'participant';
+  speaker_label: string;
+  text: string;
+  timestamp: string;
+}
+
+export interface FirstHandTranscript {
+  body: string;
+  created_at: string;
+  source: string;
+  segments: FirstHandTranscriptSegment[];
+}
+
+export interface FirstHandAssetMeta {
+  asset_id: string;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  duration_seconds: number | null;
+  uploaded_at: string;
+  /** Populated in phase 2 with a short-lived signed URL; always null in phase 1 */
+  media_url: string | null;
+}
+
+export interface FirstHandSessionAttempt {
+  attempt_number: number;
+  session_id: string;
+  session_status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  transcript_status: FirstHandTranscriptStatus;
+}
+
+export interface FirstHandSessionOutputs {
+  contract_version: string;
+  session: {
+    session_id: string;
+    logical_session_id: string;
+    attempt_number: number;
+    study_id: string;
+    study_title: string;
+    participant: { participant_id: string; display_name: string };
+    session_status: string;
+    started_at: string | null;
+    completed_at: string | null;
+    transcript_status: FirstHandTranscriptStatus;
+    transcript_failure_message: string | null;
+  };
+  attempts: FirstHandSessionAttempt[];
+  steps: FirstHandOutputStep[];
+  transcript: FirstHandTranscript | null;
+  assets: FirstHandAssetMeta[];
+}
+
 // ============================================================================
 // UTILITY TYPES
 // ============================================================================

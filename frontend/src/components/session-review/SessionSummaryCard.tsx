@@ -1,0 +1,100 @@
+import React from 'react';
+import { FirstHandSessionOutputs } from '../../api/types';
+
+const SESSION_STATUS_LABELS: Record<string, string> = {
+  created: 'Created',
+  link_opened: 'Link opened',
+  consent_accepted: 'Consent accepted',
+  setup_in_progress: 'Setting up',
+  ready_to_start: 'Ready to start',
+  recording_in_progress: 'In progress',
+  uploading: 'Uploading',
+  completed: 'Completed',
+  abandoned: 'Abandoned',
+  failed: 'Failed'
+};
+
+const SESSION_STATUS_BADGE: Record<string, string> = {
+  completed: 'cortex-badge--best',
+  abandoned: 'cortex-badge--peak',
+  recording_in_progress: 'cortex-badge--info',
+  failed: ''
+};
+
+function formatTimestamp(value: string | null): string {
+  if (!value) return 'Not recorded';
+  return new Date(value).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+const SessionSummaryCard: React.FC<{
+  outputs: FirstHandSessionOutputs;
+  reviewUrl: string | null;
+  onSelectAttempt: (attempt: number) => void;
+}> = ({ outputs, reviewUrl, onSelectAttempt }) => {
+  const { session, attempts } = outputs;
+
+  return (
+    <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
+      <div className="cortex-chart-header">
+        <h5 className="cortex-chart-title">{session.study_title}</h5>
+        {reviewUrl && (
+          <a
+            href={reviewUrl}
+            rel="noopener noreferrer"
+            target="_blank"
+            style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}
+          >
+            Open in FirstHand
+          </a>
+        )}
+      </div>
+
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', padding: '8px 0' }}>
+        <div>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Participant</p>
+          <span style={{ fontWeight: 500 }}>{session.participant.display_name}</span>
+        </div>
+        <div>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Status</p>
+          <span className={`cortex-badge ${SESSION_STATUS_BADGE[session.session_status] ?? ''}`}>
+            {SESSION_STATUS_LABELS[session.session_status] ?? session.session_status}
+          </span>
+        </div>
+        <div>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Started</p>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTimestamp(session.started_at)}</span>
+        </div>
+        <div>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '4px' }}>Completed</p>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>{formatTimestamp(session.completed_at)}</span>
+        </div>
+      </div>
+
+      {attempts.length > 1 && (
+        <div style={{ marginTop: '12px' }}>
+          <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>Attempts</p>
+          <div className="cortex-date-selector" role="group" aria-label="Session attempts">
+            {attempts.map((attempt) => (
+              <button
+                key={attempt.attempt_number}
+                type="button"
+                className={`cortex-period-btn ${attempt.attempt_number === session.attempt_number ? 'cortex-period-btn--active' : ''}`}
+                onClick={() => onSelectAttempt(attempt.attempt_number)}
+              >
+                Attempt {attempt.attempt_number}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SessionSummaryCard;

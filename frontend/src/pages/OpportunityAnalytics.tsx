@@ -6,6 +6,7 @@ import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, t
 import { Opportunity, SessionEvent } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
+import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import { ArrowLeft, Info } from 'lucide-react';
 
 // Cortex Bar Chart component - pure CSS, no dependencies
@@ -438,6 +439,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
 
       {activeTab === 'sessions' ? (
         <SessionsTab
+          opportunityId={id!}
           events={sessionEvents}
           loading={loadingSessionEvents}
           onRefresh={loadSessionEvents}
@@ -764,123 +766,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
       )}
       </div>
-    </div>
-  );
-};
-
-const EVENT_TYPE_LABELS: Record<string, string> = {
-  session_started: 'Started',
-  session_completed: 'Completed',
-  session_abandoned: 'Abandoned',
-  session_failed: 'Failed'
-};
-
-const EVENT_TYPE_BADGE: Record<string, string> = {
-  session_started: 'cortex-badge--info',
-  session_completed: 'cortex-badge--best',
-  session_abandoned: 'cortex-badge--peak',
-  session_failed: ''
-};
-
-const SessionsTab: React.FC<{
-  events: SessionEvent[];
-  loading: boolean;
-  onRefresh: () => void;
-}> = ({ events, loading, onRefresh }) => {
-  if (loading) {
-    return (
-      <div className="text-center py-5">
-        <div className="spinner-border text-primary" role="status">
-          <span className="visually-hidden">Loading sessions...</span>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
-      <div className="cortex-chart-header">
-        <h5 className="cortex-chart-title">FirstHand Sessions</h5>
-        <button
-          type="button"
-          className="cortex-period-btn"
-          onClick={onRefresh}
-          style={{ fontSize: '0.75rem' }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      {events.length === 0 ? (
-        <div className="cortex-no-data" style={{ padding: '32px 0' }}>
-          <p>No session events recorded yet.</p>
-          <p className="cortex-stat-subtitle" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
-            Events are recorded when participants start, complete, or abandon sessions via FirstHand.
-          </p>
-        </div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.08))' }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Participant</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Event</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Occurred</th>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr
-                  key={event.id}
-                  style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}
-                >
-                  <td style={{ padding: '10px 12px' }}>
-                    <span style={{ fontWeight: 500 }}>
-                      {event.participant_name ?? 'Unknown'}
-                    </span>
-                    {event.participant_email && (
-                      <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {event.participant_email}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <span className={`cortex-badge ${EVENT_TYPE_BADGE[event.event_type] ?? ''}`}>
-                      {EVENT_TYPE_LABELS[event.event_type] ?? event.event_type}
-                    </span>
-                  </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                    {new Date(event.occurred_at).toLocaleDateString('en-GB', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    {event.firsthand_review_url ? (
-                      <a
-                        href={event.firsthand_review_url}
-                        rel="noopener noreferrer"
-                        style={{ color: 'var(--color-analytics-orange)', fontSize: '0.8rem' }}
-                        target="_blank"
-                      >
-                        Review in FirstHand
-                      </a>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontFamily: 'monospace' }}>
-                        {event.firsthand_session_id.slice(0, 8)}…
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 };

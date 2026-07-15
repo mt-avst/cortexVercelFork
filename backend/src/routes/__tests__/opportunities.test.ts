@@ -475,21 +475,24 @@ describe('Opportunities API', () => {
   });
 
   describe('GET /api/opportunities/:id/session-events', () => {
-    it('should return session events for an authenticated user', async () => {
+    const sessionEventRows = [{
+      id: 'evt-1',
+      opportunity_id: '1',
+      participant_user_id: 'test-user-id',
+      firsthand_session_id: 'fh-session-1',
+      event_type: 'session.completed',
+      occurred_at: '2026-07-15T00:00:00Z',
+      payload: {},
+      received_at: '2026-07-15T00:00:01Z',
+      participant_name: 'Test User',
+      participant_email: 'test@example.com'
+    }];
+
+    it('should return session events for the opportunity owner', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{
-          id: 'evt-1',
-          opportunity_id: '1',
-          participant_user_id: 'test-user-id',
-          firsthand_session_id: 'fh-session-1',
-          event_type: 'session.completed',
-          occurred_at: '2026-07-15T00:00:00Z',
-          payload: {},
-          received_at: '2026-07-15T00:00:01Z',
-          participant_name: 'Test User',
-          participant_email: 'test@example.com'
-        }]
+        rows: [{ owner_user_id: 'test-user-id' }]
       });
+      mockQuery.mockResolvedValueOnce({ rows: sessionEventRows });
 
       const response = await request(app)
         .get('/api/opportunities/1/session-events')
@@ -505,6 +508,55 @@ describe('Opportunities API', () => {
         .expect(401);
 
       expect(response.body.error).toBe('Authentication required');
+    });
+
+    it('should reject an admin who does not own the opportunity with 403', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
+      });
+
+      const response = await request(app)
+        .get('/api/opportunities/1/session-events')
+        .expect(403);
+
+      expect(response.body.error).toBe('Only the opportunity owner can view session events');
+    });
+
+    it('should return 404 when the opportunity does not exist', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(app)
+        .get('/api/opportunities/1/session-events')
+        .expect(404);
+    });
+
+    it('should allow a superadmin who does not own the opportunity', async () => {
+      const superadminApp = express();
+      superadminApp.use(express.json());
+      superadminApp.use((req: any, res, next) => {
+        req.session = {
+          user: {
+            id: 'superadmin-id',
+            name: 'Super Admin',
+            email: 'super@example.com',
+            role: 'superadmin'
+          }
+        };
+        next();
+      });
+      superadminApp.use('/api/opportunities', opportunitiesRouter);
+      superadminApp.use(errorHandler);
+
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
+      });
+      mockQuery.mockResolvedValueOnce({ rows: sessionEventRows });
+
+      const response = await request(superadminApp)
+        .get('/api/opportunities/1/session-events')
+        .expect(200);
+
+      expect(response.body).toHaveLength(1);
     });
   });
 

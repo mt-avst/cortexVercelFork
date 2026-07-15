@@ -21,6 +21,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Poll = lazy(() => import('./pages/Poll'));
 const GamificationPage = lazy(() => import('./pages/Gamification'));
 const OpportunityAnalyticsPage = lazy(() => import('./pages/OpportunityAnalytics'));
+const SessionReviewPage = lazy(() => import('./pages/SessionReview'));
 const Feedback = lazy(() => import('./pages/Feedback'));
 
 // Page loading fallback component
@@ -52,6 +53,7 @@ function App() {
                       <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
                       <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
                       <Route path="/admin/opportunities/:id/analytics" element={<OpportunityAnalyticsPage />} />
+                      <Route path="/admin/opportunities/:id/sessions/:sessionId/review" element={<SessionReviewPage />} />
                       <Route path="/my-bookings" element={<MyBookings />} />
                       <Route path="/gamification" element={<GamificationPage />} />
                       <Route path="/feedback" element={<Feedback />} />
