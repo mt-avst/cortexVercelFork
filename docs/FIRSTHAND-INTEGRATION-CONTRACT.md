@@ -177,6 +177,117 @@ FirstHand POSTs this to Cortex when a participant session transitions state.
 
 ---
 
+### 4. GET /api/sessions/:sessionId/outputs (Cortex → FirstHand)
+
+Cortex calls this to fetch a session's outputs — transcript, per-step participant responses,
+attempt history and recording asset metadata — for native display in the Cortex Session Review
+UI.
+
+**Caller:** `backend/src/routes/session-outputs.ts` via `firsthand-client.ts:firstHandGet(...)`
+**Receiver:** FirstHand `src/app/api/sessions/[sessionId]/outputs/route.ts`
+**Auth:** HMAC (Cortex signs an empty body, same as `GET /api/studies`)
+
+> Note: the HMAC scheme signs `${timestamp}\n${body}` only — the URL path and query string
+> are not signature-bound. This matches the existing `GET /api/studies` contract; TLS, the
+> shared secret and the ±5 minute timestamp tolerance are the mitigations.
+
+**Path parameter:** the **logical session id** — the same `session_id` value delivered in
+lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
+
+**Query parameters:** `attempt=N` (optional, positive integer) selects a specific attempt.
+
+**Response 200:**
+```json
+{
+  "contract_version": "1.0",
+  "session": {
+    "session_id": "session_abc--attempt-002",
+    "logical_session_id": "session_abc",
+    "attempt_number": 2,
+    "study_id": "study_123",
+    "study_title": "Checkout flow study",
+    "participant": { "participant_id": "<cortex-user-uuid>", "display_name": "Jane Smith" },
+    "session_status": "completed",
+    "started_at": "2026-07-15T10:00:00.000Z",
+    "completed_at": "2026-07-15T10:14:30.000Z",
+    "transcript_status": "complete",
+    "transcript_failure_message": null
+  },
+  "attempts": [
+    {
+      "attempt_number": 2,
+      "session_id": "session_abc--attempt-002",
+      "session_status": "completed",
+      "started_at": "2026-07-15T10:00:00.000Z",
+      "completed_at": "2026-07-15T10:14:30.000Z",
+      "transcript_status": "complete"
+    }
+  ],
+  "steps": [
+    {
+      "step_id": "step_1",
+      "order": 1,
+      "type": "open_text",
+      "prompt": "How did you find the checkout?",
+      "response": {
+        "text": "It was straightforward.",
+        "selected_option": null,
+        "saved_at": "2026-07-15T10:05:00.000Z"
+      }
+    }
+  ],
+  "transcript": {
+    "body": "Full transcript text...",
+    "created_at": "2026-07-15T10:14:35.000Z",
+    "source": "prototype_generated",
+    "segments": [
+      {
+        "id": "seg_1",
+        "step_id": "step_1",
+        "speaker": "participant",
+        "speaker_label": "Jane Smith",
+        "text": "It was straightforward.",
+        "timestamp": "2026-07-15T10:05:00.000Z"
+      }
+    ]
+  },
+  "assets": [
+    {
+      "asset_id": "asset_1",
+      "file_name": "recording.webm",
+      "mime_type": "video/webm",
+      "file_size_bytes": 10485760,
+      "duration_seconds": 870,
+      "uploaded_at": "2026-07-15T10:14:20.000Z",
+      "media_url": null
+    }
+  ]
+}
+```
+
+**Semantics:**
+
+- Steps are returned in authored order with the participant's response merged in;
+  `response: null` means the step was not answered (e.g. abandoned mid-session).
+- A transcript that is not ready is **not** an error: the response is `200` with
+  `transcript: null` and the live `transcript_status`
+  (`not_requested | queued | processing | complete | failed`).
+- `assets[].media_url` is **reserved for phase 2**: it will carry a short-lived signed URL
+  (HMAC-derived, ~5 minute expiry) to a FirstHand asset media route that bypasses reviewer
+  OIDC. `contract_version` remains `1.0` because the change is additive.
+
+**Status codes:** `200`, `400` (invalid `attempt`), `401` (HMAC failure), `404`
+(`session_not_found`), `503` (integration not configured)
+
+**Cortex proxy:** `GET /api/opportunities/:id/sessions/:sessionId/outputs` — restricted to
+the opportunity owner or a superadmin, and verifies the session id appears in
+`opportunity_session_events` for that opportunity before proxying.
+
+**Cortex types:** `FirstHandSessionOutputs` and friends in `shared/types/index.ts`
+(mirrored in `frontend/src/shared/types.ts`).
+
+---
+
 ## Reviewer deep links
 
 Cortex synthesises review URLs from `FIRSTHAND_BASE_URL`:
@@ -225,6 +336,10 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ## Verification history
 
+- **2026-07-15:** Added endpoint 4 (`GET /api/sessions/:sessionId/outputs`) for native session
+  review in Cortex — transcript and responses in phase 1, `media_url` reserved for phase 2 video.
+  Cortex `GET /:id/session-events` tightened from any-authenticated to owner-or-superadmin to
+  match the analytics endpoint.
 - **2026-07-03:** Full audit of this contract against actual FirstHand source (not the FirstHand-side `CORTEX_INTEGRATION_PLAN.md`, which is historical/pre-implementation). All six areas — HMAC auth, `GET /api/studies`, `POST /api/sessions` (including `callback_url`/`return_url`, confirmed read and used), FirstHand → Cortex callbacks, return-flow redirect, and env var naming — confirmed matching. Two doc-only corrections applied from this pass: the `/api/studies` status-code claim above, and a missing `.env.example` entry on the FirstHand side.
 
 ## Assumptions / open items

@@ -551,16 +551,28 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
 }));
 
 // GET /api/opportunities/:id/session-events - List FirstHand session events for an opportunity
-router.get('/:id/session-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
-  if (!req.user) {
-    return res.status(401).json({ error: 'Authentication required' });
-  }
-
+router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const dbAvailable = await isDatabaseAvailable();
 
   if (!dbAvailable) {
     return res.json([]);
+  }
+
+  // Only owner or superadmin can view session events (matches the analytics endpoint;
+  // events name participants and link to their session recordings)
+  const opportunityResult = await pool.query(
+    'SELECT owner_user_id FROM opportunities WHERE id = $1',
+    [id]
+  );
+
+  if (opportunityResult.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  const isSuperadmin = req.user!.role === 'superadmin';
+  if (!isSuperadmin && opportunityResult.rows[0].owner_user_id !== req.user!.id) {
+    throw new ForbiddenError('Only the opportunity owner can view session events');
   }
 
   const firsthandBaseUrl = process.env.FIRSTHAND_BASE_URL || '';

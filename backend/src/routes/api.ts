@@ -13,6 +13,7 @@ import notificationPreferencesRouter from './notificationPreferences';
 import feedbackRouter from './feedback';
 import statsRouter from './stats';
 import firsthandRouter from './firsthand';
+import sessionOutputsRouter from './session-outputs';
 
 const router: Router = Router();
 
@@ -47,6 +48,9 @@ router.get('/me/session-events', requireAuth, asyncHandler(async (req: Request, 
 
 // Mount opportunities routes
 router.use('/opportunities', opportunitiesRouter);
+
+// Mount FirstHand session outputs proxy (GET /:id/sessions/:sessionId/outputs)
+router.use('/opportunities', sessionOutputsRouter);
 
 // Mount sessions routes
 router.use('/sessions', sessionsRouter);

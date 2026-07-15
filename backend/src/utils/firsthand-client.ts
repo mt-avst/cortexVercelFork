@@ -3,6 +3,17 @@ import { logger } from './logger';
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
+/** Thrown when FirstHand responds with a non-2xx status, preserving the status code. */
+export class FirstHandHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'FirstHandHttpError';
+  }
+}
+
 export function isFirstHandConfigured(): boolean {
   return !!(process.env.FIRSTHAND_BASE_URL?.trim() && process.env.FIRSTHAND_INTEGRATION_SECRET?.trim());
 }
@@ -44,7 +55,7 @@ export async function firstHandGet<T>(path: string): Promise<T> {
   }
   if (!response.ok) {
     logger.warn('FirstHand GET non-OK response', { path, status: response.status });
-    throw new Error(`FirstHand GET ${path} returned ${response.status}`);
+    throw new FirstHandHttpError(response.status, `FirstHand GET ${path} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
@@ -66,7 +77,7 @@ export async function firstHandPost<T>(path: string, payload: unknown): Promise<
   }
   if (!response.ok) {
     logger.warn('FirstHand POST non-OK response', { path, status: response.status });
-    throw new Error(`FirstHand POST ${path} returned ${response.status}`);
+    throw new FirstHandHttpError(response.status, `FirstHand POST ${path} returned ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
