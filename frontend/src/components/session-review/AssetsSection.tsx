@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { FirstHandAssetMeta } from '../../api/types';
 
 function formatFileSize(bytes: number): string {
@@ -14,10 +14,44 @@ function formatDuration(seconds: number | null): string | null {
   return minutes > 0 ? `${minutes} min ${remainder} s` : `${remainder} s`;
 }
 
-const AssetsSection: React.FC<{ assets: FirstHandAssetMeta[] }> = ({ assets }) => {
+function isVideo(mimeType: string): boolean {
+  return mimeType.startsWith('video/');
+}
+
+function isAudio(mimeType: string): boolean {
+  return mimeType.startsWith('audio/');
+}
+
+// Signed media URLs are short-lived (~15 min). The review page can sit open longer than
+// that, so on a playback error we re-fetch the outputs once per asset (which mints a fresh
+// URL) before giving up and offering a manual reload. Capping the automatic retry avoids a
+// loop when the media is genuinely unplayable rather than merely expired.
+const AssetsSection: React.FC<{
+  assets: FirstHandAssetMeta[];
+  onRefresh?: () => void;
+}> = ({ assets, onRefresh }) => {
+  const autoRetries = useRef<Record<string, number>>({});
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
+
   if (assets.length === 0) {
     return null;
   }
+
+  const handleError = (assetId: string) => {
+    const attempts = autoRetries.current[assetId] ?? 0;
+    if (attempts < 1 && onRefresh) {
+      autoRetries.current[assetId] = attempts + 1;
+      onRefresh();
+      return;
+    }
+    setFailed((prev) => ({ ...prev, [assetId]: true }));
+  };
+
+  const handleManualReload = (assetId: string) => {
+    autoRetries.current[assetId] = 0;
+    setFailed((prev) => ({ ...prev, [assetId]: false }));
+    onRefresh?.();
+  };
 
   return (
     <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
@@ -28,6 +62,10 @@ const AssetsSection: React.FC<{ assets: FirstHandAssetMeta[] }> = ({ assets }) =
       <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {assets.map((asset) => {
           const duration = formatDuration(asset.duration_seconds);
+          const playableVideo = asset.media_url && isVideo(asset.mime_type);
+          const playableAudio = asset.media_url && isAudio(asset.mime_type);
+          const hasFailed = failed[asset.asset_id];
+
           return (
             <li
               key={asset.asset_id}
@@ -41,9 +79,58 @@ const AssetsSection: React.FC<{ assets: FirstHandAssetMeta[] }> = ({ assets }) =
                 {formatFileSize(asset.file_size_bytes)}
                 {duration && ` · ${duration}`}
               </span>
-              <p className="cortex-stat-subtitle" style={{ fontSize: '0.75rem', marginTop: '4px', marginBottom: 0 }}>
-                Playback in Cortex is coming in a future release.
-              </p>
+
+              {(playableVideo || playableAudio) && !hasFailed && (
+                <div style={{ marginTop: '8px' }}>
+                  {playableVideo ? (
+                    <video
+                      key={asset.media_url as string}
+                      controls
+                      preload="none"
+                      src={asset.media_url as string}
+                      onError={() => handleError(asset.asset_id)}
+                      style={{ width: '100%', maxWidth: '720px', borderRadius: '6px' }}
+                    />
+                  ) : (
+                    <audio
+                      key={asset.media_url as string}
+                      controls
+                      preload="none"
+                      src={asset.media_url as string}
+                      onError={() => handleError(asset.asset_id)}
+                      style={{ width: '100%', maxWidth: '480px' }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {(playableVideo || playableAudio) && hasFailed && (
+                <p className="cortex-stat-subtitle" style={{ fontSize: '0.75rem', marginTop: '8px', marginBottom: 0 }}>
+                  Playback link could not be loaded.{' '}
+                  <button
+                    type="button"
+                    className="cortex-link-button"
+                    onClick={() => handleManualReload(asset.asset_id)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      color: 'var(--cortex-orange, #d98a3d)',
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                      font: 'inherit'
+                    }}
+                  >
+                    Reload
+                  </button>
+                </p>
+              )}
+
+              {!playableVideo && !playableAudio && (
+                <p className="cortex-stat-subtitle" style={{ fontSize: '0.75rem', marginTop: '4px', marginBottom: 0 }}>
+                  Playback is not available for this recording.
+                </p>
+              )}
             </li>
           );
         })}

@@ -146,7 +146,10 @@ const SessionReviewPage: React.FC = () => {
           transcriptFailureMessage={outputs.session.transcript_failure_message}
           onRefresh={() => loadOutputs(selectedAttempt)}
         />
-        <AssetsSection assets={outputs.assets} />
+        <AssetsSection
+          assets={outputs.assets}
+          onRefresh={() => loadOutputs(selectedAttempt)}
+        />
       </div>
     </div>
   );

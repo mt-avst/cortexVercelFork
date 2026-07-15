@@ -507,7 +507,7 @@ export interface FirstHandAssetMeta {
   file_size_bytes: number;
   duration_seconds: number | null;
   uploaded_at: string;
-  /** Populated in phase 2 with a short-lived signed URL; always null in phase 1 */
+  /** Short-lived signed media URL (HMAC, ~15 min TTL) for inline playback; null when the asset is not playable */
   media_url: string | null;
 }
 
