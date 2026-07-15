@@ -507,4 +507,231 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe('Authentication required');
     });
   });
+
+  describe('GET /api/opportunities/:id/analytics', () => {
+    // Query order the route issues once ownership passes: overall totals,
+    // per-click-type totals (view/action), daily breakdown, hourly breakdown,
+    // weekday breakdown, previous-7-days count (for week-over-week).
+    const queueFullAnalyticsMocks = () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id', created_at: new Date('2026-01-01T00:00:00.000Z') }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          total: 8,
+          unique_users: 5,
+          count_24h: 2,
+          count_7d: 6,
+          first_click: new Date('2026-07-01T10:00:00.000Z'),
+          last_click: new Date('2026-07-15T09:30:00.000Z')
+        }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          { click_type: 'view', total: 5, unique_count: 4, count_24h: 1, count_7d: 4 },
+          { click_type: 'action', total: 3, unique_count: 2, count_24h: 1, count_7d: 2 }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          { date: new Date('2026-07-14T00:00:00.000Z'), count: 5, views: 3, actions: 2 },
+          { date: new Date('2026-07-15T00:00:00.000Z'), count: 3, views: 2, actions: 1 }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          { hour: 9, count: 5 },
+          { hour: 14, count: 3 }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          { weekday_num: 2, count: 5 },
+          { weekday_num: 3, count: 3 }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 4 }] });
+    };
+
+    it('should return the full analytics breakdown for the opportunity owner', async () => {
+      queueFullAnalyticsMocks();
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics')
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        clicks_total: 8,
+        clicks_24h: 2,
+        clicks_7d: 6,
+        unique_users: 5,
+        avg_clicks_per_day: 0.3,
+        week_over_week_change: 50,
+
+        views_total: 5,
+        views_24h: 1,
+        views_7d: 4,
+        unique_viewers: 4,
+
+        actions_total: 3,
+        actions_24h: 1,
+        actions_7d: 2,
+        unique_actors: 2,
+
+        conversion_rate: 60,
+
+        first_click: '2026-07-01T10:00:00.000Z',
+        last_click: '2026-07-15T09:30:00.000Z',
+        opportunity_created: '2026-01-01T00:00:00.000Z',
+
+        period: 30
+      });
+
+      expect(response.body.clicks_by_day).toEqual([
+        { date: '2026-07-14', count: 5, views: 3, actions: 2 },
+        { date: '2026-07-15', count: 3, views: 2, actions: 1 }
+      ]);
+      expect(response.body.peak_day).toEqual({ date: '2026-07-14', count: 5, views: 3, actions: 2 });
+
+      expect(response.body.clicks_by_hour).toHaveLength(24);
+      expect(response.body.clicks_by_hour[9]).toEqual({ hour: 9, count: 5 });
+      expect(response.body.clicks_by_hour[14]).toEqual({ hour: 14, count: 3 });
+      expect(response.body.clicks_by_hour[0]).toEqual({ hour: 0, count: 0 });
+      expect(response.body.peak_hour).toEqual({ hour: 9, hour_label: '9:00', count: 5 });
+
+      expect(response.body.clicks_by_weekday).toHaveLength(7);
+      expect(response.body.clicks_by_weekday[2]).toEqual({ weekday: 'Tuesday', weekday_num: 2, count: 5 });
+      expect(response.body.clicks_by_weekday[3]).toEqual({ weekday: 'Wednesday', weekday_num: 3, count: 3 });
+      expect(response.body.clicks_by_weekday[0]).toEqual({ weekday: 'Sunday', weekday_num: 0, count: 0 });
+    });
+
+    it('should default the period to 30 days and echo a valid requested period back', async () => {
+      queueFullAnalyticsMocks();
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics')
+        .expect(200);
+
+      expect(response.body.period).toBe(30);
+
+      mockQuery.mockClear();
+      queueFullAnalyticsMocks();
+
+      const response7d = await request(app)
+        .get('/api/opportunities/1/analytics?period=7')
+        .expect(200);
+
+      expect(response7d.body.period).toBe(7);
+    });
+
+    it('should fall back to 30 days for an invalid period value', async () => {
+      queueFullAnalyticsMocks();
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics?period=99')
+        .expect(200);
+
+      expect(response.body.period).toBe(30);
+    });
+
+    it('should return zeroed stats, null peaks, and empty series when there are no clicks', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id', created_at: new Date('2026-01-01T00:00:00.000Z') }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ total: 0, unique_users: 0, count_24h: 0, count_7d: 0, first_click: null, last_click: null }]
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no view/action rows
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no daily rows
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no hourly rows
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // no weekday rows
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 0 }] }); // no prior week
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics')
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        clicks_total: 0,
+        views_total: 0,
+        actions_total: 0,
+        conversion_rate: 0,
+        avg_clicks_per_day: 0,
+        week_over_week_change: 0,
+        first_click: null,
+        last_click: null,
+        peak_day: null,
+        peak_hour: null,
+        clicks_by_day: []
+      });
+      expect(response.body.clicks_by_hour).toHaveLength(24);
+      expect(response.body.clicks_by_hour.every((h: { count: number }) => h.count === 0)).toBe(true);
+      expect(response.body.clicks_by_weekday).toHaveLength(7);
+    });
+
+    it('should reject a non-owner, non-superadmin user with 403', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id', created_at: new Date('2026-01-01T00:00:00.000Z') }]
+      });
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics')
+        .expect(403);
+
+      expect(response.body.error).toBe('Only the opportunity owner can view analytics');
+    });
+
+    it('should return 404 for a missing opportunity', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics')
+        .expect(404);
+
+      expect(response.body.error).toContain('not found');
+    });
+
+    it('should return zeroed defaults for every field when the database is unavailable', async () => {
+      mockIsDatabaseAvailable.mockResolvedValueOnce(false);
+
+      const response = await request(app)
+        .get('/api/opportunities/1/analytics?period=14')
+        .expect(200);
+
+      expect(response.body).toEqual({
+        clicks_total: 0,
+        clicks_24h: 0,
+        clicks_7d: 0,
+        unique_users: 0,
+        avg_clicks_per_day: 0,
+        week_over_week_change: 0,
+        views_total: 0,
+        views_24h: 0,
+        views_7d: 0,
+        unique_viewers: 0,
+        actions_total: 0,
+        actions_24h: 0,
+        actions_7d: 0,
+        unique_actors: 0,
+        conversion_rate: 0,
+        first_click: null,
+        last_click: null,
+        opportunity_created: null,
+        peak_day: null,
+        peak_hour: null,
+        clicks_by_day: [],
+        clicks_by_hour: [],
+        clicks_by_weekday: [],
+        period: 14
+      });
+    });
+
+    it('should reject an unauthenticated request with 401', async () => {
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/analytics')
+        .expect(401);
+
+      expect(response.body.error).toBe('Authentication required');
+    });
+  });
 });
