@@ -280,6 +280,18 @@ export const getMySessionEvents = async (): Promise<import('./types').MySessionE
   return response.data;
 };
 
+export const getSessionOutputs = async (
+  opportunityId: string,
+  sessionId: string,
+  attempt?: number
+): Promise<import('./types').FirstHandSessionOutputs> => {
+  const response = await api.get(
+    `/opportunities/${opportunityId}/sessions/${sessionId}/outputs`,
+    { params: attempt ? { attempt } : undefined }
+  );
+  return response.data;
+};
+
 // Session API functions
 export const getSessions = async (opportunityId: string, params?: {
   from?: string;
