@@ -1,5 +1,11 @@
 # Use Node.js 20 LTS as base image
 FROM node:20.20.2-alpine3.22
+
+# Pull in Alpine 3.22.5 package updates (libssl3/libcrypto3 3.5.7-r0, fixes
+# CVE-2026-45447). No node:*-alpine3.22 image has been rebuilt against this
+# point release yet, so apply it explicitly until the base image catches up.
+RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
+
 # Set working directory
 WORKDIR /app
 
