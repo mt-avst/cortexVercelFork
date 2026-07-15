@@ -1192,10 +1192,16 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
   }
 }));
 
+const ANALYTICS_WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const VALID_ANALYTICS_PERIODS = [7, 14, 30];
+
 // GET /api/opportunities/:id/analytics - Get click analytics for admin
 router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id: opportunityId } = req.params;
   const userId = req.user!.id;
+
+  const requestedPeriod = parseInt(req.query.period as string, 10);
+  const period = VALID_ANALYTICS_PERIODS.includes(requestedPeriod) ? requestedPeriod : 30;
 
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
@@ -1203,14 +1209,35 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     return res.json({
       clicks_total: 0,
       clicks_24h: 0,
-      clicks_by_day: []
+      clicks_7d: 0,
+      unique_users: 0,
+      avg_clicks_per_day: 0,
+      week_over_week_change: 0,
+      views_total: 0,
+      views_24h: 0,
+      views_7d: 0,
+      unique_viewers: 0,
+      actions_total: 0,
+      actions_24h: 0,
+      actions_7d: 0,
+      unique_actors: 0,
+      conversion_rate: 0,
+      first_click: null,
+      last_click: null,
+      opportunity_created: null,
+      peak_day: null,
+      peak_hour: null,
+      clicks_by_day: [],
+      clicks_by_hour: [],
+      clicks_by_weekday: [],
+      period
     });
   }
 
   try {
     // Check opportunity ownership
     const opportunityResult = await pool.query(
-      'SELECT owner_user_id FROM opportunities WHERE id = $1',
+      'SELECT owner_user_id, created_at FROM opportunities WHERE id = $1',
       [opportunityId]
     );
 
@@ -1226,43 +1253,157 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
       throw new ForbiddenError('Only the opportunity owner can view analytics');
     }
 
-    // Get total clicks
-    const totalResult = await pool.query(
-      'SELECT COUNT(*) as count FROM opportunity_clicks WHERE opportunity_id = $1',
-      [opportunityId]
-    );
-    const clicks_total = parseInt(totalResult.rows[0].count, 10);
-
-    // Get clicks in last 24 hours
-    const hours24Result = await pool.query(
-      `SELECT COUNT(*) as count FROM opportunity_clicks 
-       WHERE opportunity_id = $1 AND clicked_at >= NOW() - INTERVAL '24 hours'`,
-      [opportunityId]
-    );
-    const clicks_24h = parseInt(hours24Result.rows[0].count, 10);
-
-    // Get clicks by day for last 30 days
-    const dailyResult = await pool.query(
-      `SELECT 
-        DATE(clicked_at) as date,
-        COUNT(*)::int as count
+    // Overall totals (all-time), independent of the selected chart period
+    const overallResult = await pool.query(
+      `SELECT
+        COUNT(*)::int AS total,
+        COUNT(DISTINCT user_id)::int AS unique_users,
+        COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
+        COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d,
+        MIN(clicked_at) AS first_click,
+        MAX(clicked_at) AS last_click
        FROM opportunity_clicks
-       WHERE opportunity_id = $1 
-         AND clicked_at >= NOW() - INTERVAL '30 days'
+       WHERE opportunity_id = $1`,
+      [opportunityId]
+    );
+    const overall = overallResult.rows[0];
+
+    // Totals split by click_type ('view' = study details viewed, 'action' = link opened / session booked)
+    const byTypeResult = await pool.query(
+      `SELECT
+        click_type,
+        COUNT(*)::int AS total,
+        COUNT(DISTINCT user_id)::int AS unique_count,
+        COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '24 hours')::int AS count_24h,
+        COUNT(*) FILTER (WHERE clicked_at >= NOW() - INTERVAL '7 days')::int AS count_7d
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1
+       GROUP BY click_type`,
+      [opportunityId]
+    );
+    const viewStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'view') || {};
+    const actionStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'action') || {};
+
+    // Daily breakdown (views/actions split) over the selected period
+    const dailyResult = await pool.query(
+      `SELECT
+        DATE(clicked_at) AS date,
+        COUNT(*)::int AS count,
+        COUNT(*) FILTER (WHERE click_type = 'view')::int AS views,
+        COUNT(*) FILTER (WHERE click_type = 'action')::int AS actions
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1
+         AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
        GROUP BY DATE(clicked_at)
        ORDER BY date ASC`,
+      [opportunityId, period]
+    );
+    const clicks_by_day = dailyResult.rows.map((row: { date: Date; count: number; views: number; actions: number }) => ({
+      date: row.date.toISOString().split('T')[0],
+      count: row.count,
+      views: row.views,
+      actions: row.actions
+    }));
+
+    // Hourly breakdown over the selected period
+    const hourlyResult = await pool.query(
+      `SELECT
+        EXTRACT(HOUR FROM clicked_at)::int AS hour,
+        COUNT(*)::int AS count
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1
+         AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
+       GROUP BY hour
+       ORDER BY hour ASC`,
+      [opportunityId, period]
+    );
+    const hourCounts = new Map<number, number>(hourlyResult.rows.map((r: { hour: number; count: number }) => [r.hour, r.count]));
+    const clicks_by_hour = Array.from({ length: 24 }, (_, hour) => ({
+      hour,
+      count: hourCounts.get(hour) || 0
+    }));
+
+    // Day-of-week breakdown over the selected period (0 = Sunday, matching Postgres DOW)
+    const weekdayResult = await pool.query(
+      `SELECT
+        EXTRACT(DOW FROM clicked_at)::int AS weekday_num,
+        COUNT(*)::int AS count
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1
+         AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
+       GROUP BY weekday_num
+       ORDER BY weekday_num ASC`,
+      [opportunityId, period]
+    );
+    const weekdayCounts = new Map<number, number>(weekdayResult.rows.map((r: { weekday_num: number; count: number }) => [r.weekday_num, r.count]));
+    const clicks_by_weekday = ANALYTICS_WEEKDAY_NAMES.map((weekday, weekday_num) => ({
+      weekday,
+      weekday_num,
+      count: weekdayCounts.get(weekday_num) || 0
+    }));
+
+    // Previous 7-day window (8-14 days ago), to compute week-over-week change
+    const prevWeekResult = await pool.query(
+      `SELECT COUNT(*)::int AS count
+       FROM opportunity_clicks
+       WHERE opportunity_id = $1
+         AND clicked_at >= NOW() - INTERVAL '14 days'
+         AND clicked_at < NOW() - INTERVAL '7 days'`,
       [opportunityId]
     );
+    const prevWeekCount = prevWeekResult.rows[0].count;
 
-    const clicks_by_day = dailyResult.rows.map(row => ({
-      date: row.date.toISOString().split('T')[0], // Format as YYYY-MM-DD
-      count: parseInt(row.count, 10)
-    }));
+    const clicks_total = overall.total || 0;
+    const clicks_7d = overall.count_7d || 0;
+    const views_total = viewStats.total || 0;
+    const actions_total = actionStats.total || 0;
+
+    const peak_day = clicks_by_day.length > 0
+      ? clicks_by_day.reduce((max, day) => (day.count > max.count ? day : max), clicks_by_day[0])
+      : null;
+
+    const peakHourEntry = clicks_by_hour.reduce((max, hour) => (hour.count > max.count ? hour : max), clicks_by_hour[0]);
+    const peak_hour = peakHourEntry.count > 0
+      ? { hour: peakHourEntry.hour, hour_label: `${peakHourEntry.hour}:00`, count: peakHourEntry.count }
+      : null;
+
+    const periodClicksTotal = clicks_by_day.reduce((sum, day) => sum + day.count, 0);
+    const conversionPercentage = views_total > 0 ? (actions_total / views_total) * 100 : 0;
 
     res.json({
       clicks_total,
-      clicks_24h,
-      clicks_by_day
+      clicks_24h: overall.count_24h || 0,
+      clicks_7d,
+      unique_users: overall.unique_users || 0,
+      avg_clicks_per_day: Math.round((periodClicksTotal / period) * 10) / 10,
+      week_over_week_change: prevWeekCount > 0
+        ? Math.round(((clicks_7d - prevWeekCount) / prevWeekCount) * 100)
+        : (clicks_7d > 0 ? 100 : 0),
+
+      views_total,
+      views_24h: viewStats.count_24h || 0,
+      views_7d: viewStats.count_7d || 0,
+      unique_viewers: viewStats.unique_count || 0,
+
+      actions_total,
+      actions_24h: actionStats.count_24h || 0,
+      actions_7d: actionStats.count_7d || 0,
+      unique_actors: actionStats.unique_count || 0,
+
+      conversion_rate: Math.round(conversionPercentage * 10) / 10,
+
+      first_click: overall.first_click ? new Date(overall.first_click).toISOString() : null,
+      last_click: overall.last_click ? new Date(overall.last_click).toISOString() : null,
+      opportunity_created: new Date(opportunity.created_at).toISOString(),
+
+      peak_day,
+      peak_hour,
+
+      clicks_by_day,
+      clicks_by_hour,
+      clicks_by_weekday,
+
+      period
     });
   } catch (error) {
     throw error;
