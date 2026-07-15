@@ -1131,7 +1131,18 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
 // POST /api/opportunities/:id/click - Track click for poll/survey
 router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { id: opportunityId } = req.params;
-  
+
+  // Validate click_type at the boundary. 'view' = study details viewed on mount,
+  // 'action' = action button clicked. Defaults to 'action' for older clients that
+  // don't send it. Persisting this is what keeps views and actions distinct in
+  // analytics - previously it was dropped and every row fell back to the column
+  // default 'action', so "Study Views" always read 0.
+  const rawClickType = req.body?.click_type ?? 'action';
+  if (rawClickType !== 'view' && rawClickType !== 'action') {
+    throw new ValidationError("click_type must be 'view' or 'action'");
+  }
+  const clickType: 'view' | 'action' = rawClickType;
+
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -1181,9 +1192,9 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
 
     // Record the click
     await pool.query(
-      `INSERT INTO opportunity_clicks (opportunity_id, user_id, user_agent, ip_hash)
-       VALUES ($1, $2, $3, $4)`,
-      [opportunityId, userId, userAgent, ipHash]
+      `INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, user_agent, ip_hash)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [opportunityId, userId, clickType, userAgent, ipHash]
     );
 
     res.json({ ok: true });
