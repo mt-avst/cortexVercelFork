@@ -12,8 +12,21 @@ import {
 } from '../utils/superadminBootstrap';
 
 import { SessionUser } from '../types';
+import {
+  describeOidcClientIdConflictWarning,
+  describeOidcCredentialSource,
+} from '../config/oidcCredentials';
 
 logger.debug('Auth module loaded', { oidcIssuer: process.env.OIDC_ISSUER });
+
+// Logged unconditionally at module load (backend startup), not just on first
+// login attempt - never logs the client_secret itself, only which env var
+// supplied the client_id.
+logger.info(`[oidc] credential source: ${describeOidcCredentialSource(process.env)}`);
+const oidcClientIdConflictWarning = describeOidcClientIdConflictWarning(process.env);
+if (oidcClientIdConflictWarning) {
+  logger.warn(`[oidc] CONFIGURATION CONFLICT: ${oidcClientIdConflictWarning}`);
+}
 
 const router: Router = Router();
 let client: Client;
