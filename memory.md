@@ -164,6 +164,21 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **FirstHand PR #14** — `feat(deploy): containerise for Kubera` — **migration plan step 2, OPEN,
+  awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/14
+  Branch `feat/containerise` (off main after #13 merged). `/health` route (dependency-free),
+  `output: "standalone"` + `images.unoptimized` (no sharp), Dockerfile mirroring Cortex's
+  (alpine 3.22, apk upgrade, uid 1001) but `CMD node server.js` — **`next start` refuses standalone
+  output**, verified against a real run. Suite 184/33. e2e green in dev-server mode AND against the
+  built image (`PLAYWRIGHT_BASE_URL` support added to playwright.config.ts).
+  **Big catch from running e2e against the real image:** in standalone, `request.url` carries the
+  BIND address (`http://0.0.0.0:3000`), not the browser's host — every absolute redirect
+  (reviewer/participant login, logout, OIDC callbacks, internal job routes) and the OIDC
+  `redirect_uri` were broken in a container. Fixed centrally with `resolvePublicRequestUrl()`
+  rebasing onto `FIRSTHAND_PUBLIC_BASE_URL` (pass-through when unset, Vercel unchanged). This means
+  **FIRSTHAND_PUBLIC_BASE_URL is mandatory in the S5 manifest** or no login flow works on Kubera.
+  Also: `/dev` was statically prerendered and baked build-time storage mode into HTML — forced
+  dynamic.
 - **FirstHand PR #13** — `feat(storage): S3 provider behind the storage abstraction` — **migration plan
   step 1, OPEN, awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/13
   Branch `feat/s3-storage-provider`. Delivered exactly per the plan: exhaustive provider switches
@@ -249,9 +264,10 @@ deploy to **both** playground and prod clusters — playground for testing, prom
 **production** (`<app>.platform.adaptavist.net`, bucket `{app}-production`); playground = test data
 only, so the PII question dissolves. **The migration plan is now blocked on nothing** — ~~next action
 is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
-(FirstHand PR #13, open, awaiting merge — see "What shipped today")**. Next: merge PR #13, then
-steps 2 (containerise), 3 (presigned uploads) and 4 (migration script) — S2 is parallel-safe now,
-S3/S4 unblock once #13 merges.
+(FirstHand PR #13, MERGED `b724670`)** and **step 2 is DONE (PR #14, open, awaiting merge — see
+"What shipped today")**. Next: merge PR #14, then steps 3 (presigned uploads) and 4 (migration
+script), both unblocked and parallel-safe; then S5 (Kubera manifest — remember
+FIRSTHAND_PUBLIC_BASE_URL is mandatory there).
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
