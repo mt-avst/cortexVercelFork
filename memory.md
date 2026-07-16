@@ -163,9 +163,10 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
-- **FirstHand PR #12** — `fix(api): serve recordings from non-latest session attempts`. MERGED?
-  **No — open at time of writing**, branch `fix/attempt-media-404`, one commit off `main`, CI to
-  confirm. https://github.com/nickfine/FirstHand/pull/12
+- **FirstHand PR #12** — `fix(api): serve recordings from non-latest session attempts`.
+  **MERGED** 2026-07-16, merge commit `ff75c94`. https://github.com/nickfine/FirstHand/pull/12
+  (Branch `fix/attempt-media-404` was **not** auto-deleted — GitHub does not by default. Safe to
+  delete; its content is on `main`.)
   Recordings from any attempt other than the latest were advertised with a `media_url` that
   **404'd**, so Cortex rendered a player that could never load. Root cause: `getRuntimeAsset`
   resolved the session by id alone, and **attempt 1's physical `session_id` is also the
@@ -180,16 +181,25 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## Branch/merge state (verified today)
 
-- FirstHand `main` = `88ed846`. Phase 2 (PR #11) merged. `feat/asset-media-playback` deleted.
+- FirstHand `main` = **`ff75c94`** (PR #12 merge). Phase 2 (PR #11, `88ed846`) merged before it.
+  `feat/asset-media-playback` deleted; **`fix/attempt-media-404` still on the remote**, safe to delete.
 - Cortex `main` = `7563f5d` (MR !34 merge). `feat/firsthand-media-playback` deleted (local + remote).
   Local `main` fast-forwarded.
+- **Cortex MR !35** (`docs/firsthand-migration-plan`) — the docs commit that first tracked this file.
+  https://gitlab.adaptavist.net/cto/AdaptaLabs/-/merge_requests/35
 - Both native-session-review phases are live on `main` in both repos.
 
 ## FirstHand containment — DECIDED (was "defer")
 
-**Decision: Option B, move to Kubera + S3.** The 07-15 deferral was gated on finishing the
-participant UX/session-review work — that gate closed when phase 2 shipped on 07-15.
+**Decision: Option B, move to Kubera + S3.** Nick decided this explicitly on 07-16, knowing the
+trade-off — that decision supersedes the 07-15 "defer", and is the whole justification.
 Fallback stays Option A (Adaptavist-owned Vercel) if DevEx stalls.
+**Correction (07-16, caught by cross-session reconciliation):** an earlier version of this note
+claimed the deferral's gate ("finish the participant UX work first") closed when phase 2 shipped.
+Wrong — phase 2 is the **reviewer's** UX (session review), not the **participant's** journey.
+**Nick confirmed (2026-07-16): the participant UX work is STILL OUTSTANDING.** It remains a live
+priority alongside the migration — the migration did not replace it. So the open work is now:
+(1) participant user-journey/UX tidy-up, (2) the migration plan (Nick's DevEx ask first).
 **Urgency is real, not hypothetical:** the 07-15 E2E run captured an actual screen+mic recording
 that is sitting in the **personal** Vercel Blob store right now.
 
@@ -236,8 +246,10 @@ Steps 1-4 of the plan are DevEx-independent and can start immediately in paralle
 | `FIRSTHAND-RECORDING-PLAYBACK-PHASE2.md` | **HISTORICAL.** Marked shipped; its Options A/B were both wrong (private blobs can't be redirected to) |
 | `PLAYGROUND-BACKEND-INGRESS-PROBLEM.md` | Historical, unchanged |
 
-**All five of these + this file are UNTRACKED in git.** Worth committing so both sessions share one
-source of truth.
+**All five of these + this file are now TRACKED in git** (Cortex MR !35, 2026-07-16) — 1,452 lines
+that previously existed only on one machine, which is how the two parallel sessions diverged.
+Both sessions now share one source of truth. **Keep it that way: commit changes to this file rather
+than leaving them in the working tree.**
 
 ## Lesson (the reason this section exists)
 

@@ -13,11 +13,18 @@
 > would report successful GDPR erasures that delete nothing. §4's ~1 week estimate is optimistic;
 > the plan sizes it at ~8.5 eng-days.
 
-**Decision (2026-07-16):** the deferral's precondition is now met — native session review
-(transcript, responses, and recording playback) shipped to `main` on both repos on
-2026-07-15 (Cortex MR !33/!34, FirstHand PR #10/#11, plus a follow-up attempt-resolution
-bugfix, FirstHand PR #12). Per the sequencing agreed on 2026-07-15 (§7), that was the one
-gate on moving to step 2: consult DevEx.
+**Decision (2026-07-16):** Nick decided to proceed with the migration now.
+That is the whole justification — an explicit call made with the trade-off in view,
+superseding the 2026-07-15 "defer" decision.
+
+> **Correction (2026-07-16, same day):** an earlier version of this paragraph claimed the
+> deferral's precondition had been met because native session review (transcript, responses,
+> recording playback — Cortex MR !33/!34, FirstHand PR #10/#11/#12) shipped on 2026-07-15.
+> That conflated two different things. The 07-15 gate was the **participant** user-journey/UX
+> tidy-up; native session review is the **reviewer's** UX. Shipping the latter did not close
+> the former. The participant UX work's status should be checked with Nick — if it is still
+> outstanding, it remains a live priority alongside this migration, not something the
+> migration replaced.
 
 **Target: Option B (Kubera)**, gated on the two DevEx asks in §8. It is the only option
 that removes the third-party SaaS dependency rather than relocating it, it consolidates onto
