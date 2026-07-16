@@ -1,6 +1,7 @@
 # FirstHand → Kubera migration: construction plan (Option B)
 
-**Created:** 2026-07-16. **Status:** ready to execute, Step 0 not yet sent.
+**Created:** 2026-07-16. **Status:** ready to execute. **Step 0 is ANSWERED and nothing is
+blocked on DevEx** — start at Step 1.
 **Decision it implements:** `docs/FIRSTHAND-KUBERA-MIGRATION-ASSESSMENT.md` (Option B, settled 2026-07-16).
 **Runbook (secrets, rollback, ownership transfer):** `~/.claude-work/plans/firsthand-containment-runbook.md`.
 **Reviewed:** adversarially, 2026-07-16. Six critical findings folded in - see "Corrections to the

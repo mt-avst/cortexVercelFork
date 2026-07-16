@@ -7,8 +7,9 @@ Covers a two-day session (2026-07-13 to 2026-07-15) that shipped FirstHand end-t
 > phase 2 recording playback is **shipped and merged** (the "Immediate next steps" list further
 > down is stale on that point); a real bug in it was found and fixed (FirstHand PR #12); the
 > FirstHand containment question is **decided** (move to Kubera + S3) with a construction plan
-> written; and the DevEx ask is drafted but **not yet sent** — that is the next action and it is
-> Nick's to take.
+> written; the DevEx question was **sent and answered same day** (deploy to both clusters, real
+> participant data to production, everything self-serve — see the 2026-07-16 section); and the
+> participant UX tidy-up is **still outstanding**. Next actions: plan step 1, and the UX work.
 
 ---
 
