@@ -67,14 +67,12 @@ against `cloud-native-platform/devex/devex-helm-charts`, `charts/application-cha
 - **Okta for the reviewer surface is self-serve too** — `auth.okta_app` in the chart, declared in
   the manifest with `customRedirectUris`.
 
-**So the only genuine DevEx dependency is one governance question:** may playground host participant
-PII long-term, or is a prod-grade namespace needed (§8 of the assessment). Possibly also whether
-RDS needs a custom `secret.walletRoleARN` (the chart has a default; verify Cortex doesn't override
-it). Neither blocks the code.
+**So the only genuine DevEx dependency was one governance question** — and it was **answered
+2026-07-16** (see Step 0): deploy to both playground and prod clusters (both self-serve), real
+participant data targets **production**, and no custom `walletRoleARN` is needed for RDS.
 
-Step 0 sends that one question. **Steps 1-5 are all effectively DevEx-independent now** — the S3
-config in step 5 is self-serve. Only step 6 (cutover) genuinely waits on the PII answer, and only
-if the answer is "not playground".
+**Nothing in this plan is blocked on DevEx.** Steps 1-5 proceed freely; S6's cutover targets the
+production cluster and bucket.
 
 **Abort/pivot:** the PII answer constrains *where* the Kubera app lives, not *whether* to proceed.
 If it's "not playground", target a prod-grade namespace rather than abandoning Kubera. Only fall
@@ -128,8 +126,19 @@ hyphens not emdashes, no emojis, no co-author trailers. `env -u GITHUB_TOKEN gh 
 
 ## Step 0 — Ask DevEx the one governance question (human)
 
-**Owner:** Nick. Not a PR. **Blocks:** only S6, and only if the answer forces a non-playground
-home. **Parallel with:** everything.
+> **✅ ANSWERED (Lilly Holden, 2026-07-16).** DevEx provides **both playground and prod clusters**;
+> her recommendation is to deploy to **both** — playground for testing new features, promoting to
+> prod. That is just another config file in `.kubera/` plus an updated `environments` list in
+> `.gitlab-ci.yml` (see the "Initial setup" Confluence page, Step 3: GitLab Pipeline template).
+> Also confirmed: **no custom `walletRoleARN` needed** for RDS — the chart default suffices.
+>
+> **Consequence for this plan:** the PII question dissolves rather than resolves — **real
+> participant recordings target the production cluster** (`<app>.platform.adaptavist.net`, bucket
+> `{app}-production`); playground holds test data only. Production config is self-serve, so
+> **nothing in this plan is blocked on DevEx any more.** S5 gains a production manifest; S4/S6
+> migrate real data to the production bucket.
+
+**Owner:** Nick. Not a PR. ~~Blocks: only S6~~ **Done — nothing blocked.**
 
 ### Context brief
 DevEx/platform own Kubera. Contact: **Lilly Holden** (owns Kubera + Okta, responsive, keep asks
@@ -483,8 +492,12 @@ CI uses `to-be-continuous` Kubera components; deploy is GitLab CI → Kubera pip
   S1/S3 must read the injected bucket name + region from config/env, not hardcode them.
 
 ### Tasks
-- [ ] `.kubera/playground.yaml` in FirstHand's **own namespace** (not under `adaptalabs` -
-      FirstHand is intended to stand alone commercially)
+- [ ] `.kubera/playground.yaml` **and `.kubera/production.yaml`** in FirstHand's **own namespace**
+      (not under `adaptalabs` - FirstHand is intended to stand alone commercially). Per Lilly
+      (2026-07-16): deploy to both clusters; playground for testing, prod for real participants.
+      Update the `environments` list in `.gitlab-ci.yml` accordingly ("Initial setup" Confluence
+      page, Step 3). Production URL pattern: `<app>.platform.adaptavist.net`. Production values per
+      the chart reference: `deletionProtection: true`, `multiAz: true`, `backupRetentionPeriod: 14`
 - [ ] initContainer → `npm run db:migrate` only; no seed
 - [ ] `.gitlab-ci.yml` mirroring Cortex's kubera components. **Ordering:** CI wants the repo on
       GitLab (S7). Resolvable via a GitLab pull-mirror of the GitHub repo in the interim - prefer
@@ -509,7 +522,9 @@ Vercel remains authoritative until S6. Scale the Kubera deployment to zero.
 
 ### Context brief
 The only step touching Cortex. `.kubera/playground-backend.yaml` pins
-`FIRSTHAND_BASE_URL: https://first-hand.vercel.app` → becomes the Kubera host. Cortex MR: push with
+`FIRSTHAND_BASE_URL: https://first-hand.vercel.app` → becomes the Kubera **production** host
+(`<app>.platform.adaptavist.net` — real participant data lives in prod per Lilly, 2026-07-16;
+migration in S4 targets the `{app}-production` bucket). Cortex MR: push with
 `-o merge_request.create`, merge in the UI.
 
 `FIRSTHAND_INTEGRATION_SECRET` must be **identical on both sides** - rotation is a coordinated,

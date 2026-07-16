@@ -227,9 +227,13 @@ blocks as mixed content. Needs `FIRSTHAND_PUBLIC_BASE_URL`. And presigned S3 upl
 
 ### Next action (Nick's — but it no longer blocks the code)
 
-**Send DevEx ONE governance question** to `#dep-internal-engineering`, @-mention Lilly Holden:
-may the playground host consent-gated participant recordings long-term, or does this need a
-prod-grade namespace? Phrasing in §8 of the assessment.
+~~**Send DevEx ONE governance question**~~ **SENT AND ANSWERED (Lilly Holden, 2026-07-16):**
+deploy to **both** playground and prod clusters — playground for testing, promote to prod. Another
+`.kubera/` config file + `environments` list in `.gitlab-ci.yml` (Confluence "Initial setup" Step
+3). **No custom `walletRoleARN` needed.** Real participant recordings therefore target
+**production** (`<app>.platform.adaptavist.net`, bucket `{app}-production`); playground = test data
+only, so the PII question dissolves. **The migration plan is now blocked on nothing** — next action
+is simply to start plan step 1 (S3 storage provider) whenever Nick chooses.
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against

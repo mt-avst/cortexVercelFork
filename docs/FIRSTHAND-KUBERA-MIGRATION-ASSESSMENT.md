@@ -338,6 +338,13 @@ remains the fallback only if the whole Kubera route stalls for reasons beyond th
 > config, so this governance call is the only thing we need from you. Possibly also: does the RDS
 > path need a custom `walletRoleARN`, or does the chart default suffice?)
 
+> **✅ ANSWERED (Lilly Holden, 2026-07-16).** Deploy to **both** playground and prod clusters —
+> playground to test features, promote to prod. Just another `.kubera/` config file plus the
+> `environments` list in `.gitlab-ci.yml` (Confluence "Initial setup", Step 3). No custom
+> `walletRoleARN` needed. Consequence: real participant recordings target **production**
+> (`<app>.platform.adaptavist.net`); playground carries test data only, so the PII-in-playground
+> question dissolves. **Nothing remains blocked on DevEx.** See the plan for the updated steps.
+
 ---
 
 ## 9. Key file references
