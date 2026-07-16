@@ -225,16 +225,30 @@ anywhere — behind Kubera's TLS-terminating ALB that mints `http://`, which Cor
 blocks as mixed content. Needs `FIRSTHAND_PUBLIC_BASE_URL`. And presigned S3 upload is
 **mandatory** before cutover (the server-upload fallback OOMs a 2Gi pod at 2GB).
 
-### Next action (Nick's, blocks steps 5-8 of the plan)
+### Next action (Nick's — but it no longer blocks the code)
 
-**Send the DevEx ask** to `#dep-internal-engineering`, @-mention Lilly Holden. Drafted in §8 of the
-assessment; a Slack-formatted version was drafted 2026-07-16. Three items: S3 bucket + IRSA in
-playground (AWS `270148732964`), the playground-PII verdict, and **an Okta app registration for the
-new host** (third item added today — without it, step 5 blocks on a second DevEx round-trip, and
-reconciliation there runs 10-14 hours).
-**Do not ask about ingress body-size limits** — playground fronts with an ALB, which has no body
-cap, so the answer would falsely green-light the OOM path.
-Steps 1-4 of the plan are DevEx-independent and can start immediately in parallel.
+**Send DevEx ONE governance question** to `#dep-internal-engineering`, @-mention Lilly Holden:
+may the playground host consent-gated participant recordings long-term, or does this need a
+prod-grade namespace? Phrasing in §8 of the assessment.
+
+**MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
+(S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
+`cloud-native-platform/devex/devex-helm-charts` → `charts/application-chart/values.yaml` and DevEx's
+"S3 bucket" Confluence page:
+- **S3 is self-serve chart config** — `s3.enabled: true` + `policies.readAndWrite: true` in
+  `.kubera/<env>.yaml`. Bucket auto-named `{app}-{env}`, region us-east-1 (= cluster region),
+  private + encrypted by default.
+- **IRSA is automatic** — `irsa.enabled: true` is the chart default. Nothing to provision.
+- **Okta is self-serve** — `auth.okta_app.customRedirectUris` in the manifest.
+So the DevEx ask collapses from three provisioning requests to one governance question. Sending the
+old ask would have told the platform owner (Lilly) her chart lacks a feature it's shipped for ~4
+months. **This is the FIFTH time today the "assert from apparent structure, not the source" failure
+bit us** — the S3 claim was inferred from Cortex's manifest (which stores no blobs). Nick caught it.
+Lesson reinforced: verify against the actual chart/docs, never infer.
+**Do not ask about ingress body-size limits** — playground fronts with an ALB, no body cap; the
+answer would falsely green-light the OOM-prone server-upload path.
+**Steps 1-5 of the plan are all effectively DevEx-independent now.** Only step 6 (cutover) waits on
+the PII answer, and only if it's "not playground".
 
 ## Doc status (all updated 2026-07-16)
 

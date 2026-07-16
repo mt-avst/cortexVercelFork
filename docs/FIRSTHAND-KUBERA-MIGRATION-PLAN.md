@@ -52,21 +52,35 @@ corrections, all verified:
 
 ## The binding constraint
 
-**The code is not the bottleneck. DevEx is.** Nick has no kubectl and no AWS SSO; adding even a
-single secret required escalating. Two things cannot be self-served:
+**The code is the bottleneck, not DevEx** — corrected 2026-07-16 against the chart source. An
+earlier version of this plan claimed S3+IRSA had to be DevEx-provisioned and that
+`kubera-application-chart` "has an RDS block but no object-storage block". **Both wrong**, verified
+against `cloud-native-platform/devex/devex-helm-charts`, `charts/application-chart/values.yaml`:
 
-1. An **S3 bucket + IRSA workload identity** in the `adaptalabs` playground (AWS `270148732964`).
-   `kubera-application-chart` has an RDS block but **no object-storage block**.
-2. **Whether playground may host participant PII** long-term, or whether a prod-grade namespace
-   is needed.
+- **S3 is self-serve chart config.** `s3.enabled: true` + `policies.readAndWrite: true` in
+  `.kubera/<env>.yaml` creates a private, encrypted bucket auto-named `{app}-{env}` in `us-east-1`
+  (same region as the cluster — no cross-region penalty). DevEx's "S3 bucket" Confluence page
+  documents it; it has existed for ~4 months.
+- **IRSA is automatic.** `irsa.enabled: true` is the chart default; the workload identity is
+  created for you. The Confluence page: *"Your application will automatically receive the necessary
+  IAM permissions."*
+- **Okta for the reviewer surface is self-serve too** — `auth.okta_app` in the chart, declared in
+  the manifest with `customRedirectUris`.
 
-Step 0 sends that ask. Steps 1-4 are DevEx-independent and run in parallel with the wait.
-Steps 5-8 are gated on the answer.
+**So the only genuine DevEx dependency is one governance question:** may playground host participant
+PII long-term, or is a prod-grade namespace needed (§8 of the assessment). Possibly also whether
+RDS needs a custom `secret.walletRoleARN` (the chart has a default; verify Cortex doesn't override
+it). Neither blocks the code.
 
-**Abort/pivot:** if DevEx stalls or says playground cannot host participant PII, stop before
-Step 5 and pivot to **Option A** (move the existing Vercel stack to an Adaptavist-owned Vercel
-team - near-zero code, runbook Option A). If Option A becomes permanent, S1/S3/S4 are sunk
-(~3.5 eng-days). That is the bounded, knowing price of parallelising against the DevEx wait.
+Step 0 sends that one question. **Steps 1-5 are all effectively DevEx-independent now** — the S3
+config in step 5 is self-serve. Only step 6 (cutover) genuinely waits on the PII answer, and only
+if the answer is "not playground".
+
+**Abort/pivot:** the PII answer constrains *where* the Kubera app lives, not *whether* to proceed.
+If it's "not playground", target a prod-grade namespace rather than abandoning Kubera. Only fall
+back to **Option A** (Adaptavist-owned Vercel, runbook Option A) if the whole route stalls. The code
+in S1-S4 is not wasted in that case unless Option A becomes *permanent* (then S1/S3/S4 are sunk,
+~3.5 eng-days).
 
 ---
 
@@ -83,8 +97,12 @@ S2 (containerise) ────────────────────�
 ```
 
 **Parallel:** S0 ∥ S1 ∥ S2. S3 ∥ S4 after S1.
-**Serial:** S5 needs S0+S2. S6 needs S0+S3+S4+S5. S7 and S8 need S6 verified.
-**S3 is mandatory before S6** - not conditional. See S3.
+**Serial:** S5 needs S2 (S5's S3 config is self-serve, so it does **not** wait on S0). S6 needs
+S3+S4+S5 **and** the S0 governance answer (only if that answer forces a non-playground home). S7
+and S8 need S6 verified.
+**S3 (presigned PUT) is mandatory before S6** - not conditional. See S3.
+> Graph note: the `S0 → S5` edge from the earlier version is dropped — S5 no longer waits on DevEx
+> now that S3/IRSA are known self-serve. S0 only gates S6, and only conditionally.
 
 ## Invariants (verify after every step)
 
@@ -108,15 +126,23 @@ hyphens not emdashes, no emojis, no co-author trailers. `env -u GITHUB_TOKEN gh 
 
 ---
 
-## Step 0 — Send the DevEx ask (BLOCKING, human)
+## Step 0 — Ask DevEx the one governance question (human)
 
-**Owner:** Nick. Not a PR. **Blocks:** S5, S6, S7, S8. **Parallel with:** S1, S2.
+**Owner:** Nick. Not a PR. **Blocks:** only S6, and only if the answer forces a non-playground
+home. **Parallel with:** everything.
 
 ### Context brief
 DevEx/platform own Kubera. Contact: **Lilly Holden** (owns Kubera + Okta, responsive, keep asks
-tight). Channel `#dep-internal-engineering`. Ask drafted in §8 of the assessment; a Slack-formatted
-version was drafted 2026-07-16. An agent cannot send this - no Slack connector is authorised, and it
-must come from Nick regardless.
+tight). Channel `#dep-internal-engineering`. An agent cannot send this - no Slack connector is
+authorised, and it must come from Nick regardless.
+
+**This is now a single governance question, not a provisioning request.** The earlier draft asked
+DevEx to provision S3 + IRSA and stated the chart has "no object-storage block" — verified wrong
+2026-07-16 (see "The binding constraint" above). S3, IRSA and Okta are all self-serve chart config.
+Sending the old ask would have told the platform owner her chart lacks a feature it has shipped for
+months. The only thing genuinely hers to answer: **may the playground host consent-gated
+participant recordings long-term, or does this need a prod-grade namespace?** See §8 of the
+assessment for the phrasing.
 
 **Do not ask about ingress body-size limits.** The playground fronts apps with an **AWS ALB**
 (`docs/PLAYGROUND-BACKEND-INGRESS-PROBLEM.md`), which imposes no request body cap. The answer would
@@ -125,20 +151,21 @@ that path are pod memory (2Gi), ALB idle timeout, and pod restarts mid-upload. P
 mandatory regardless - see S3.
 
 ### Tasks
-- [ ] Send the §8 ask to `#dep-internal-engineering`, @-mentioning Lilly
+- [ ] Send the §8 governance question to `#dep-internal-engineering`, @-mentioning Lilly
 - [ ] Decide whether to include the "real recording already in a personal account" urgency line
-      (true, justifies priority, but surfaces a live data-handling issue in a semi-public channel)
-- [ ] **Add a third ask the assessment misses:** an **Okta app registration** for FirstHand's new
-      host (reviewer surface redirect URIs). Without it S5 blocks on a second DevEx round-trip, and
-      the documented reconciliation latency is 10-14 hours - that round-trip is the real schedule risk
+      (true, justifies priority, but surfaces a live data-handling issue in a semi-public channel;
+      keep it in reserve as an escalation lever rather than leading with it)
+- [ ] Optionally fold in the small `walletRoleARN` verification (does RDS need a custom one, or does
+      the chart default `...654654157235:role/csm-platform-kubera-sts-role` suffice) - one line
+- [ ] ~~Okta app registration ask~~ **not needed** - `auth.okta_app` is self-serve chart config with
+      `customRedirectUris` in the manifest
 
 ### Exit criteria
-DevEx has answered: (a) bucket + region + IRSA role ARN + how to wire it in the chart, (b) the
-playground PII verdict and, if negative, the path to a compliant environment, (c) Okta app
-registration for the new host.
+DevEx has answered the PII verdict: playground acceptable, or the path to a compliant environment.
+(No provisioning to wait on - S3, IRSA, Okta are all self-serve.)
 
 ### Rollback
-n/a. If no answer within a timebox Nick sets, pivot to Option A.
+n/a. If no answer within a timebox Nick sets, proceed with the code (S1-S5) anyway and hold only S6.
 
 ---
 
@@ -407,10 +434,10 @@ or reverse-migrate).
 
 ---
 
-## Step 5 — Kubera manifest, CI, CronJob (GATED on S0)
+## Step 5 — Kubera manifest, CI, CronJob
 
 **Repo:** FirstHand (+ ArgoCD app registration via the DevEx pipeline). **Model tier:** strongest.
-**Depends on:** S0, S2. **Est:** ~2.0 d.
+**Depends on:** S2 (not S0 — the S3 config here is self-serve). **Est:** ~2.0 d.
 
 ### Context brief
 Mirror `/Volumes/Extreme Pro/Labs2/.kubera/playground-backend.yaml`: `teamName`, `environment`,
@@ -434,11 +461,26 @@ CI uses `to-be-continuous` Kubera components; deploy is GitLab CI → Kubera pip
 - **Reviewer auth.** The `/review/*` surface needs auth; participants must stay anonymous
   (token-authed). `auth.okta_app` provisions an Okta app and injects `clientID`/`clientSecret`, and
   the app decides which routes enforce it - so `okta_app` **is** compatible with a public
-  participant ingress (`okta_alb` is not - the manifest comment at `:37` says the two cannot be
-  combined, and `okta_alb` would gate the whole host). Either adopt `okta_app` for `/review/*` or
-  keep FirstHand's own `FIRSTHAND_REVIEWER_OIDC_*`. **Either way the redirect URIs must be
-  re-registered for the new host** - that is S0's third ask.
-- **S3 + IRSA has no chart block** - wire it per DevEx's S0 answer.
+  participant ingress (`okta_alb` is not - the manifest comment says the two cannot be combined, and
+  `okta_alb` would gate the whole host). Either adopt `okta_app` for `/review/*` or keep FirstHand's
+  own `FIRSTHAND_REVIEWER_OIDC_*`. The redirect URIs are set in the manifest
+  (`auth.okta_app.customRedirectUris`) - **self-serve, no DevEx round-trip.**
+- **S3 is a chart block, and it's self-serve** (verified against `values.yaml` 2026-07-16 - the
+  earlier "no chart block, wire it per DevEx" note was wrong):
+  ```yaml
+  s3:
+    enabled: true
+    policies:
+      readAndWrite: true      # s3:List*/Describe*/*Object - upload, download, delete
+    # bucketName defaults to {app}-{environment}; region us-east-1 (= cluster region)
+    # deletionPolicy: Orphan (default) - keep the bucket if the app is torn down
+    versioning:
+      enabled: true           # recommended for participant recordings - recover overwrites/deletes
+  ```
+  `irsa.enabled: true` is the chart default, so the pod gets the IAM role automatically - nothing to
+  request. Confirm live encryption mode (Confluence page says SSE-S3, chart comment says SSE-KMS;
+  both fine for PII, but state which in the manifest if it matters for compliance). The S3 code in
+  S1/S3 must read the injected bucket name + region from config/env, not hardcode them.
 
 ### Tasks
 - [ ] `.kubera/playground.yaml` in FirstHand's **own namespace** (not under `adaptalabs` -
@@ -565,11 +607,11 @@ None. This is the irreversible one - hence the soak and the cold backup.
 
 ## Open questions this plan cannot answer
 
-1. **Playground vs prod-grade for PII** - could invalidate the whole target. S0.
-2. **Okta app registration for the new host** - S0's third ask; without it S5 blocks on a second
-   DevEx round-trip.
-3. **Reviewer auth**: chart `auth.okta_app` vs FirstHand's own `FIRSTHAND_REVIEWER_OIDC_*`. Both are
-   viable (`okta_alb` is not). Decide in S5.
+1. **Playground vs prod-grade for PII** - the one governance question. Constrains *where* the Kubera
+   app lives, not *whether* to proceed. S0.
+2. **Reviewer auth**: chart `auth.okta_app` vs FirstHand's own `FIRSTHAND_REVIEWER_OIDC_*`. Both are
+   viable and both self-serve (`okta_alb` is not). Redirect URIs are set in the manifest, no DevEx
+   round-trip. Decide in S5.
 4. **Multipart upload**: accept single PUT ≤5GB, or implement multipart. Decide in S3.
 5. **Observability, rate limiting, egress cost** - unscoped. Private objects mean **no CDN**, so
    every playback streams 2GB through the pod and out via S3 egress. That is a real bandwidth
