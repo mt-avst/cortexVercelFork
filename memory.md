@@ -9,7 +9,12 @@ Covers a two-day session (2026-07-13 to 2026-07-15) that shipped FirstHand end-t
 > FirstHand containment question is **decided** (move to Kubera + S3) with a construction plan
 > written; the DevEx question was **sent and answered same day** (deploy to both clusters, real
 > participant data to production, everything self-serve — see the 2026-07-16 section); and the
-> participant UX tidy-up is **still outstanding**. Next actions: plan step 1, and the UX work.
+> participant UX tidy-up is **still outstanding**.
+> ~~Next actions: plan step 1, and the UX work.~~ **SUPERSEDED — later on 2026-07-16, migration
+> steps 1-5 were all built AND deployed: FirstHand now lives at GitLab `cto/firsthand` and is
+> running on the Kubera playground (PRs #13-#18, all merged).** Next actions are the secret store
+> entries and the ingress soak — see "Next actions" in the 2026-07-16 section. The participant UX
+> work remains outstanding and untouched.
 
 ---
 
@@ -164,8 +169,51 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **🎉 FIRSTHAND IS DEPLOYED TO THE KUBERA PLAYGROUND** — end of 2026-07-16. Pipeline
+  https://gitlab.adaptavist.net/cto/firsthand/-/pipelines/338105 fully GREEN, downstream deploy
+  pipeline 338129 → `kubera-playground` SUCCESS, ArgoCD Application committed
+  (`syncPolicy.automated`, prune + selfHeal). `kubera-production` correctly held at **manual**.
+  **Steps 1-5 of the plan are no longer just written — they run on Adaptavist infrastructure.**
+  - **New GitLab home: `cto/firsthand`** (project id **5526**), created by Nick.
+    NOT a personal namespace (`nfine/` was rejected on ownership grounds — the whole point of the
+    migration), NOT under AdaptaLabs. Slug `firsthand` is load-bearing (see app-name below).
+    Visibility `internal`, matching AdaptaLabs. Repo pushed direct over Nick's SSH (no pull mirror
+    — GitHub repo is private, so a mirror would need a GitHub PAT stored in GitLab).
+  - **GitHub remains the working remote for now.** GitLab has `main` + 6 feature branches, all
+    SHA-identical. Three GitHub branches deliberately NOT pushed: two `docs/*` already merged into
+    main, plus **`codex/guard-fresh-attempt-creation` (UNMERGED, 1 real commit** touching
+    attempt/scoping + recording routes) — **Nick's decision: leave it, deal with at step 7.**
+  - **`1.0.0` TAG NOW EXISTS ON GITLAB, NOT GITHUB.** semantic-release ran automatically
+    (`SEMREL_AUTO_RELEASE_ENABLED: true` comes from kubera-init, not from us) and pushed a real
+    tag + GitLab release. `SEMREL_INFO_LAST_VERSION` was empty (repo had zero tags ever),
+    `NEXT_VERSION=1.0.0` — so it jumped from package.json's 0.1.4. **The remotes have diverged on
+    tags.** Resolves itself at S7 when GitHub retires.
+  - **Two CI blockers hit and fixed on first contact:**
+    1. **gitleaks false positive → FirstHand PR #18, MERGED (`33036a7`).** Both findings were the
+       literal `"recording/finalize"` in runtime-client.ts — the `generic-api-key` rule fires
+       because a var named `token` is adjacent and entropy 3.57 clears its threshold. Fixed with
+       `.gitleaks.toml` allowlist anchored to the four route literals; provably safe because that
+       arg is typed `"runtime"|"recording"|"recording/client-upload"|"recording/finalize"`, so the
+       compiler forbids a credential there. **Verified by reproducing the CI failure locally with
+       the same image, then deliberately breaking the regex to prove the config was load-bearing**
+       — "0 leaks" alone would equally have meant gitleaks ignored the file.
+    2. **`semantic-release-info` EGITNOPERMISSION → Nick added a `GITLAB_TOKEN` CI/CD variable**
+       (project access token, Maintainer, `api` + `write_repository`, masked + protected) on
+       cto/firsthand. **semantic-release @3.11 has NO CI_JOB_TOKEN fallback** — that was added in
+       later versions. Nothing in the pipeline supplies the token; kubera-init only turns the job
+       ON (`SEMREL_INFO_ON: "branches-ref"`).
+  - **`app-name`/`app-namespace` now PINNED to `firsthand`** in `.gitlab-ci.yml` (FirstHand
+    commit `d9ab1f9`). Verified against the kubera component source: `app-name` defaults to
+    `$CI_PROJECT_NAME` = the **project slug**, never the namespace path — so an earlier worry that
+    a group move would rename the app/hostname/Okta URIs was **wrong, and reading the source
+    disproved it**. Pinned anyway so a cosmetic rename can't silently rename the Kubera app.
+  - **STILL OUTSTANDING before playground actually works:** the secret store entries
+    (`FIRSTHAND_INTEGRATION_SECRET`, `FIRSTHAND_REVIEWER_SESSION_SECRET`,
+    `FIRSTHAND_INTERNAL_JOB_SECRET`, `CRON_SECRET`, + copied `BLOB_READ_WRITE_TOKEN`). Expect the
+    pod unhealthy until they land. Also watch the **public ingress (10-14h known risk)**.
+
 - **FirstHand PR #17** — `feat(deploy): Kubera manifests, CI and scheduler` — **migration plan
-  step 5, OPEN, awaiting Nick's merge + manual platform steps.**
+  step 5, MERGED (`09f97b6`).**
   https://github.com/nickfine/FirstHand/pull/17 Branch `feat/kubera-deploy` (off main after #16).
   `.kubera/playground.yaml` + `.kubera/production.yaml` (public ingress, self-serve S3
   firsthand-{env} versioned + readAndWrite, IRSA default, FIRSTHAND_PUBLIC_BASE_URL set in BOTH,
@@ -311,11 +359,35 @@ only, so the PII question dissolves. **The migration plan is now blocked on noth
 is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
 (FirstHand PR #13, MERGED `b724670`)**, **step 2 DONE (PR #14, MERGED `ee8e253`)**, **step 3 DONE
 (PR #15, MERGED `b862832` — its manual real-session S3 verification is still outstanding)**,
-**step 4 DONE (PR #16, MERGED `c58ecc0`)** and **step 5 code DONE (PR #17, open — see "What
-shipped today")**. Steps 1-5 all built in one day. Remaining before S6 cutover: merge #17, the
-manual platform steps (GitLab project + pull mirror, secret store entries rotated, first
-playground deploy + ingress soak), PR #15's manual real-session verification, and GDPR sign-off.
-S6 then migrates real data to `firsthand-production` and repoints Cortex.
+**step 4 DONE (PR #16, MERGED `c58ecc0`)** and **step 5 DONE (PR #17 `09f97b6` + PR #18 `33036a7`)**.
+**Steps 1-5 all built AND DEPLOYED TO THE PLAYGROUND in one day** — see "What shipped today".
+
+### Next actions (in order)
+
+1. **Secret store entries** (Nick's — agent must never handle the values). Playground pod will be
+   unhealthy without them: `FIRSTHAND_INTEGRATION_SECRET`, `FIRSTHAND_REVIEWER_SESSION_SECRET`,
+   `FIRSTHAND_INTERNAL_JOB_SECRET`, `CRON_SECRET` (all rotated fresh, `openssl rand -hex 32`) plus
+   `BLOB_READ_WRITE_TOKEN` (**copied, not rotated** — must match the existing personal Blob store
+   for legacy reads + the S4 migration source; revoked at S8).
+2. **Watch the public ingress provision** — known 10-14h risk, and a green pipeline is NOT a
+   provisioned ingress (`docs/PLAYGROUND-BACKEND-INGRESS-PROBLEM.md`).
+3. **S5 exit criteria**: probes green, fresh session records to S3 end-to-end, reviewer Okta login
+   works, a `[maintenance]` scheduler line appears in the pod logs.
+4. **PR #15's manual verification** — record a real session locally in S3 mode (screen+mic dialogs
+   need a human).
+5. **GDPR/consent sign-off** — before ANY real participant data moves accounts.
+6. **Then S6 cutover** (model tier: strongest + plan mode): migrate real data to
+   `firsthand-production`, repoint Cortex's `FIRSTHAND_BASE_URL`, rotate
+   `FIRSTHAND_INTEGRATION_SECRET` on both sides simultaneously, disable the Vercel cron, scope any
+   rollback by `uploaded_at < cutover timestamp`.
+
+**Agent access limits (verified 2026-07-16, save re-discovering):** the gitlab MCP token is a
+**project access token scoped to cto/AdaptaLabs (5005), Guest** — `can_create_project: false`. It
+CAN read cto/firsthand (project is `internal`) incl. pipeline job logs, but **cannot retry
+pipelines or trigger anything there (403)**. No aws CLI / `~/.aws` / kubectl / argocd / helm on
+Nick's machine — the secret store, cluster and ArgoCD are all unreachable from an agent session.
+The sandbox also **blocks agent pushes to the `gitlab` remote** (data-exfiltration rule, not
+clearable) — Nick pushes to GitLab himself; agent pushes to GitHub are fine.
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
