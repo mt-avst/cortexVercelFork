@@ -26,13 +26,14 @@ superseding the 2026-07-15 "defer" decision.
 > outstanding, it remains a live priority alongside this migration, not something the
 > migration replaced.
 
-**Target: Option B (Kubera)**, gated on the two DevEx asks in §8. It is the only option
-that removes the third-party SaaS dependency rather than relocating it, it consolidates onto
-the platform Cortex already runs on (one CI/ArgoCD/secrets/on-call surface instead of two),
-and the code cost is modest because the storage and DB layers are already abstracted (§4).
-**Fallback: Option A (Adaptavist-owned Vercel)** if the DevEx asks stall — it is not the
-destination, it is a time-boxed way to get participant data out of a personal account
-without waiting on platform provisioning.
+**Target: Option B (Kubera).** It is the only option that removes the third-party SaaS dependency
+rather than relocating it, it consolidates onto the platform Cortex already runs on (one
+CI/ArgoCD/secrets/on-call surface instead of two), and the code cost is modest because the storage
+and DB layers are already abstracted (§4). **The only genuine platform dependency is one governance
+question** — whether playground may host participant PII (§8); S3, IRSA and Okta all turned out to
+be self-serve chart config (§5 correction, verified 2026-07-16). **Fallback: Option A
+(Adaptavist-owned Vercel)** only if the whole Kubera route stalls — it is not the destination, just
+a way to get participant data out of a personal account.
 
 **Raises the stakes on this, checked 2026-07-16:** this is no longer a hypothetical. The
 2026-07-15 E2E verification run captured a real screen+microphone recording (Nick as test
@@ -217,14 +218,41 @@ From `.kubera/playground-backend.yaml` and the ingress post-mortem:
 - Public ingress pattern exists (`<app>.kubera-playground.adaptavist.net`) — though Cortex's
   backend currently runs **private** behind the frontend nginx proxy.
 
+> **⚠️ CORRECTION (2026-07-16, verified against chart source).** The claim below that S3 is not
+> self-serve was **wrong** — it was inferred from Cortex's own manifest (which stores no blobs, so
+> of course has no S3 block), not checked against the chart. **S3 is a first-class, self-serve
+> feature of the application-chart.** DevEx's Confluence "S3 bucket" page and the chart's own
+> `values.yaml` (`cloud-native-platform/devex/devex-helm-charts`,
+> `charts/application-chart/values.yaml`) both confirm it. Adding a private, encrypted bucket with
+> read/write IAM is four lines in `.kubera/<env>.yaml`:
+> ```yaml
+> s3:
+>   enabled: true
+>   policies:
+>     readAndWrite: true
+> ```
+> The bucket is auto-named `{appName}-{environment}`, region `us-east-1` (same as the cluster —
+> nodepool AZs are `us-east-1a/b/c`, so co-located, no cross-region upload penalty), private by
+> default with server-side encryption. Critically, **`irsa.enabled: true` is the chart default** —
+> the workload identity is created automatically; there is nothing to hand-provision. The Confluence
+> page is explicit: *"Your application will automatically receive the necessary IAM permissions."*
+> Supported for `application` workloads only, which FirstHand is.
+>
+> Net effect: the S3+IRSA item below is **not a DevEx ask**. It collapses into ordinary
+> self-serve config, folded into plan step 5. The genuinely-remaining platform question is the
+> PII/governance one, plus possibly the RDS `walletRoleARN` (the chart has a default
+> `...654654157235:role/csm-platform-kubera-sts-role`; verify whether Cortex relies on it before
+> asking). One minor doc/chart discrepancy noted: the Confluence page says SSE-S3 encryption, the
+> chart comment says default SSE-KMS — both fine for PII-at-rest, worth confirming which is live.
+
 **Does NOT provide out of the box (the gaps):**
-- **No object-storage / S3 block in the app chart.** Cortex's backend stores no large
-  binaries, so this was never needed. FirstHand's recordings would require DevEx to provision
-  an **S3 bucket + workload identity (IRSA)** separately — this is *the* concrete platform ask,
-  and it is not self-serve.
-- **No self-serve cluster access.** Per the ingress doc: no kubectl / AWS SSO on Nick's
-  machine; adding even a single secret (`FIRSTHAND_INTEGRATION_SECRET`) required escalating to
-  DevEx. Application teams are told to escalate, not work around.
+- ~~**No object-storage / S3 block in the app chart.**~~ **False — see the correction above. S3
+  is self-serve chart config, IRSA is automatic.** This whole item was the linchpin of the
+  "DevEx is the binding constraint" thesis, and it does not hold.
+- **No self-serve cluster access** for *some* operations. Per the ingress doc: no kubectl / AWS SSO
+  on Nick's machine, and adding a secret value to the store (e.g. `FIRSTHAND_INTEGRATION_SECRET`)
+  did require escalating. But note this is about *runtime secret values*, not chart features —
+  declaring S3, IRSA, RDS, Okta and ingress in the manifest is all self-serve via GitOps.
 
 **Operational friction observed (real, documented):**
 - ArgoCD reconciliation ran to **hours, not minutes** on at least one change.
@@ -248,60 +276,74 @@ From `.kubera/playground-backend.yaml` and the ingress post-mortem:
   no Kubera consolidation.
 
 ### Option B — Move to Kubera (S3 + RDS + container)
-- **Effort:** ~1 week code (§4) **plus** DevEx-provisioned S3+IRSA, secrets, ingress/proxy.
+- **Effort:** the code lift dominates (see the plan, ~8.5 eng-days). S3, IRSA, RDS and Okta are
+  self-serve chart config — **not** DevEx-provisioned, contrary to the earlier framing.
 - **Solves:** full ownership on one platform; kills the third-party dependency; same
   CI/ArgoCD/secrets/observability/on-call as Cortex; co-located with the app it talks to. Repo
   move to GitLab rides along naturally at this point.
-- **Cost/risk:** DevEx-dependent for every storage/secret/ingress change; playground-grade env;
-  ArgoCD/chart friction.
+- **Cost/risk:** the real dependency is the **PII/governance answer** (is playground an acceptable
+  home) plus setting a couple of secret values in the store; playground-grade env; ArgoCD/chart
+  friction. Much smaller than "DevEx-dependent for every storage/secret/ingress change".
 
 ---
 
 ## 7. Recommendation
 
 **Kubera is the right long-run home** — AWS/S3 makes it coherent and the code lift is modest
-because the abstractions already exist. But **gate the commitment on two DevEx asks**, because
-they are the binding constraint, not the code:
+because the abstractions already exist. **The binding constraint is smaller than first thought:**
+S3 and IRSA are self-serve chart config (see the §5 correction), so the only genuine platform
+question is governance:
 
-1. **Provision an S3 bucket + IRSA (workload identity)** for the FirstHand app in the
-   `adaptalabs`/playground AWS account. *This is the containment win* — it replaces the personal
-   Blob store.
+1. ~~Provision an S3 bucket + IRSA.~~ **Self-serve chart config, not a DevEx ask** — `s3.enabled`
+   + `policies.readAndWrite` in the manifest, IRSA automatic. This is still the containment win; it
+   just isn't blocked on anyone.
 2. **Confirm the playground is an acceptable long-term home for participant PII** (retention,
-   backup, data-processing posture), or provide a path to a prod-grade namespace.
+   backup, data-processing posture), or provide a path to a prod-grade namespace. **This is now the
+   one real gating question.**
 
-**If those asks are slow or uncertain:** do **Option A (Adaptavist-owned Vercel)** now for
-immediate risk reduction, and treat Kubera as the later consolidation once the platform asks
-land. Either way: **move the data first.** The repo and the compute can follow.
+**If the PII answer is "no, not in playground":** that constrains *where* the Kubera app lives, not
+*whether* to go to Kubera — pursue a prod-grade namespace. **Option A (Adaptavist-owned Vercel)**
+remains the fallback only if the whole Kubera route stalls for reasons beyond this. Either way:
+**move the data first.** The repo and the compute can follow.
 
-### Suggested sequencing (agreed 2026-07-15, updated 2026-07-16)
-1. ~~**Now:** finish the participant **user journey / UX** tidy-up.~~ **Done 2026-07-15** —
-   native session review (transcript, responses, recording playback) shipped to `main` on
-   both repos.
-2. **Now:** consult DevEx / internal engineering with the two asks in §8 + the §4 sizing.
-   Ready to send as-is.
-3. **Then:** pick Option A or B based on DevEx turnaround and the PII-hosting answer.
-4. Repo → Adaptavist GitLab as a ride-along with whichever hosting move happens.
+### Suggested sequencing (updated 2026-07-16)
+1. **Participant user-journey / UX tidy-up** — the 2026-07-15 priority. **Still outstanding**
+   (Nick confirmed 2026-07-16). Do not conflate with native session review, which is the
+   *reviewer's* UX and did ship. This remains a live priority alongside the migration.
+2. **The one DevEx question** (§8): PII-in-playground governance. S3/IRSA turned out self-serve,
+   so there is nothing to consult about there.
+3. **The code work** (plan steps 1-4) is DevEx-independent and can proceed in parallel with 1 and 2.
+4. Repo → Adaptavist GitLab as a ride-along with the hosting move.
 
 ---
 
-## 8. Draft asks for DevEx / internal engineering
+## 8. The one DevEx question
+
+> **Superseded 2026-07-16.** The earlier draft here asked DevEx to provision an S3 bucket + IRSA
+> and claimed "the app chart has an RDS block but no object-storage block". **That was wrong** —
+> S3 and IRSA are self-serve chart config (see the §5 correction). Sending that ask would have told
+> the platform owner her chart lacks a feature it has shipped for four months. Only the governance
+> question survives, and it is genuinely hers to answer:
 
 > **Context:** FirstHand is a Next.js app (currently on a personal Vercel account) that backs
 > Cortex/AdaptaLabs "unmoderated" research sessions. It captures participant screen/audio
-> **recordings** (up to ~2 GB each) plus a Postgres runtime. We want to bring it under
-> Adaptavist ownership, ideally into Kubera alongside AdaptaLabs. Two things we can't self-serve:
+> **recordings** — consent-gated research data — plus a Postgres runtime. We're bringing it into
+> Kubera alongside AdaptaLabs, storing recordings in a self-serve S3 bucket via the app chart.
 >
-> 1. **S3 bucket + workload identity (IRSA)** for a new `firsthand` app in the `adaptalabs`
->    playground (AWS `270148732964`): a private bucket for recordings + a role the pod can
->    assume to `PutObject` / `GetObject` / `DeleteObject` and mint presigned PUT/GET URLs. The
->    app chart has an RDS block but no object-storage block — how should we provision and wire
->    this?
-> 2. **Guidance on participant PII in playground:** is the playground an acceptable long-term
->    home for participant recordings (retention, backup, data-processing), or do we need a
->    prod-grade namespace/environment? What's the path?
+> **The question:** is the **playground** an acceptable long-term home for participant recordings
+> (retention, backup, data-processing posture), or should this target a prod-grade
+> namespace/environment? If the latter, what's the path?
 >
-> For scale: the code migration off Vercel is ~1 week (storage layer is already
-> provider-abstracted; Postgres already supported). The bottleneck is the two items above.
+> (Everything technical — S3 bucket, IAM, Okta app for the reviewer surface — is self-serve chart
+> config, so this governance call is the only thing we need from you. Possibly also: does the RDS
+> path need a custom `walletRoleARN`, or does the chart default suffice?)
+
+> **✅ ANSWERED (Lilly Holden, 2026-07-16).** Deploy to **both** playground and prod clusters —
+> playground to test features, promote to prod. Just another `.kubera/` config file plus the
+> `environments` list in `.gitlab-ci.yml` (Confluence "Initial setup", Step 3). No custom
+> `walletRoleARN` needed. Consequence: real participant recordings target **production**
+> (`<app>.platform.adaptavist.net`); playground carries test data only, so the PII-in-playground
+> question dissolves. **Nothing remains blocked on DevEx.** See the plan for the updated steps.
 
 ---
 
