@@ -304,6 +304,14 @@ request-auth scheme).
 **Path parameters:** `sessionId` is the **physical** attempt session id (the asset's own
 `session_id`, as embedded in the minted URL); `assetId` is the asset id.
 
+> **Attempt-1 collision (important).** Attempt 1's physical `session_id` *is* the
+> `logical_session_id` — they are the same string. Resolving that id alone returns the **latest**
+> attempt, so an older attempt's recordings are not reachable by a naive per-session lookup. The
+> route therefore resolves the asset across **all attempts of the logical session**. Fixed in
+> FirstHand PR #12 (2026-07-16); before that, every non-latest attempt's `media_url` was minted
+> and advertised but 404'd on fetch. Filesystem mode only — the Postgres repository matched
+> `recording_assets` on the concrete `session_id` and was unaffected.
+
 **Query parameters:**
 
 | Param | Notes |
@@ -321,9 +329,12 @@ Blob URL is not publicly fetchable; streaming through this route both works and 
 
 **Security:** the OIDC bypass is intentional and scoped — the route is reachable only with a
 valid short-lived signature that Cortex (already owner/superadmin gated on endpoint 4) hands
-to the browser. Because `sig` binds the asset id and `getRuntimeAsset` requires the asset to
-belong to the `sessionId` in the path, a leaked URL grants time-boxed access to exactly one
-recording and nothing else.
+to the browser. `sig` binds the **asset id**, so a leaked URL grants time-boxed access to exactly
+one recording and nothing else: altering `assetId` invalidates the signature and returns `401`
+before any lookup runs. The asset search is scoped to the attempts of the **logical session**
+named in the path (see the attempt-1 note above) — all of which belong to the same participant
+and study, and all of which endpoint 4 already exposes to the same reviewer, so this does not
+widen reach.
 
 **Cortex UI:** `frontend/src/components/session-review/AssetsSection.tsx` renders a
 `<video>`/`<audio>` player from `media_url`. Because the URL is short-lived, a playback error
@@ -379,6 +390,17 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ## Verification history
 
+- **2026-07-16 (endpoint 5 fix):** Recordings from any attempt **other than the latest** were
+  advertised with a `media_url` that 404'd — Cortex rendered a player that could never load.
+  Root cause: `getRuntimeAsset` resolved the session by id alone, and attempt 1's physical
+  `session_id` is also the `logical_session_id`, so the lookup landed on the latest attempt (which
+  does not own the older attempt's asset ids). Fixed by resolving the asset across every attempt of
+  the logical session; this also fixes the pre-existing reviewer route
+  `/api/review/session/:sessionId/asset/:assetId`, which shares the same resolver.
+  **Filesystem mode only — production (Postgres) was never affected**, because the Postgres
+  repository matches `recording_assets` on the concrete `session_id`. The two backends had
+  silently disagreed on the same call. FirstHand PR #12. Found by an end-to-end run against a
+  real two-attempt session; the unit suite missed it because it mocked the repository.
 - **2026-07-15 (phase 2):** Populated `assets[].media_url` and added endpoint 5
   (`GET /api/sessions/:sessionId/assets/:assetId/media`) — a signed, streaming media route so
   reviewers play recordings inside Cortex without opening FirstHand. HMAC binds `assetId`+`exp`,
