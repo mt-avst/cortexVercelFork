@@ -164,6 +164,24 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **FirstHand PR #17** — `feat(deploy): Kubera manifests, CI and scheduler` — **migration plan
+  step 5, OPEN, awaiting Nick's merge + manual platform steps.**
+  https://github.com/nickfine/FirstHand/pull/17 Branch `feat/kubera-deploy` (off main after #16).
+  `.kubera/playground.yaml` + `.kubera/production.yaml` (public ingress, self-serve S3
+  firsthand-{env} versioned + readAndWrite, IRSA default, FIRSTHAND_PUBLIC_BASE_URL set in BOTH,
+  prod hardening deletionProtection/multiAz/backup 14d), `.gitlab-ci.yml` (to-be-continuous,
+  playground auto / production manual), initContainer `node scripts/postgres-migrate.mjs` (NOT npm
+  run — no writable npm cache; no seed).
+  **Two verified-against-source findings:** (1) the application chart has NO CronJob template →
+  maintenance cron became an in-process scheduler via Next instrumentation, gated by
+  FIRSTHAND_MAINTENANCE_SCHEDULER=1 (only Kubera sets it; Vercel cron keeps running till cutover —
+  kills the S6 dual-cron hazard). (2) chart okta_app injects env vars literally named
+  `clientID`/`clientSecret` (verified in Cortex source) → reviewer-auth reads them as fallbacks;
+  **open question 2 DECIDED: okta_app provisions, FirstHand's own OIDC consumes.**
+  Also fixed: standalone image lacked scripts/ + db/migrations/ (only traced imports) — the
+  initContainer would have CrashLooped; Dockerfile now copies both, verified in the image.
+  **Manual before deploy:** GitLab project + pull mirror of the GitHub repo, secret store entries
+  (rotated), first pipeline run; budget 10-14h for public ingress provisioning. Suite 206/37.
 - **FirstHand PR #16** — `feat(migration): DB-driven Blob to S3 migration script` — **migration
   plan step 4, OPEN, awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/16
   Branch `feat/blob-to-s3-migration` (off main after #15 merged).
@@ -292,11 +310,12 @@ deploy to **both** playground and prod clusters — playground for testing, prom
 only, so the PII question dissolves. **The migration plan is now blocked on nothing** — ~~next action
 is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
 (FirstHand PR #13, MERGED `b724670`)**, **step 2 DONE (PR #14, MERGED `ee8e253`)**, **step 3 DONE
-(PR #15, MERGED `b862832` — its manual real-session S3 verification is still outstanding)** and
-**step 4 DONE (PR #16, open, awaiting merge — see "What shipped today")**. All four code steps are
-built. Next: merge PR #16, do PR #15's manual verification, then S5 (Kubera manifest + CI —
-remember FIRSTHAND_PUBLIC_BASE_URL is mandatory there, and S5 needs the GitLab pull-mirror
-decision for CI). S6 cutover needs S3+S4+S5 and GDPR sign-off.
+(PR #15, MERGED `b862832` — its manual real-session S3 verification is still outstanding)**,
+**step 4 DONE (PR #16, MERGED `c58ecc0`)** and **step 5 code DONE (PR #17, open — see "What
+shipped today")**. Steps 1-5 all built in one day. Remaining before S6 cutover: merge #17, the
+manual platform steps (GitLab project + pull mirror, secret store entries rotated, first
+playground deploy + ingress soak), PR #15's manual real-session verification, and GDPR sign-off.
+S6 then migrates real data to `firsthand-production` and repoints Cortex.
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
