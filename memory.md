@@ -381,6 +381,35 @@ is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **s
    `FIRSTHAND_INTEGRATION_SECRET` on both sides simultaneously, disable the Vercel cron, scope any
    rollback by `uploaded_at < cutover timestamp`.
 
+### Work that is UNBLOCKED right now (does NOT wait on Nick, DevEx or the cutover)
+
+Every migration next-action above is gated on Nick or on a soak. These are not. **A new session
+should start here, not idle waiting on the ingress.**
+
+1. **Participant user-journey / UX tidy-up — THE live priority, still untouched.** Confirmed by
+   Nick on 2026-07-16 as a real priority *alongside* the migration, not behind it (an earlier note
+   wrongly claimed phase 2 closed this — phase 2 is the **reviewer's** UX, not the participant's).
+   **Scope is NOT recorded anywhere and Nick has not specified it** — ask him what is bothering him
+   about the journey rather than guessing, or read `/session/[token]` end-to-end and come back with
+   a findings list. Nothing has been done on this at all.
+2. **Plan open question 5 — observability, rate limiting, egress cost. The plan says "size it
+   before S6", and nobody has.** Private objects mean **no CDN**, so every playback streams a up-to-2GB
+   recording through the pod and out via S3 egress — a real bandwidth constraint against a 2Gi pod
+   and a real line item. Pure analysis, needs no cluster access, and is genuinely **due before the
+   cutover**.
+3. **Plan open question 6 — `Range` request support.** Video seeking is broken today;
+   `createRecordingAssetResponse` returns a bare stream with `Content-Length` from the stored
+   `fileSizeBytes`. S1 deliberately scoped it out. S3's `GetObjectCommand` supports `Range`.
+   Interacts with (2): no ranges means re-streaming the whole object to seek.
+4. **`codex/guard-fresh-attempt-creation`** — unmerged branch, 1 commit ("Guard participant attempt
+   creation and scoping") touching attempt scoping, runtime-client and the recording routes.
+   Predates this session's work. Nick's call was to defer to S7, but it may overlap the participant
+   UX work in (1) — worth reading before starting there.
+5. **npm audit advisories** — pre-existing and untouched: Next.js 15.5.14 has high/critical
+   advisories, plus eslint/js-yaml/brace-expansion. Deliberately not touched mid-migration.
+   Upgrading Next is a separate decision, and now that the image builds in CI, trivy passes on
+   CRITICAL-only so this is not currently blocking anything.
+
 **Agent access limits (verified 2026-07-16, save re-discovering):** the gitlab MCP token is a
 **project access token scoped to cto/AdaptaLabs (5005), Guest** — `can_create_project: false`. It
 CAN read cto/firsthand (project is `internal`) incl. pipeline job logs, but **cannot retry
