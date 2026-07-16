@@ -164,6 +164,18 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **FirstHand PR #16** — `feat(migration): DB-driven Blob to S3 migration script` — **migration
+  plan step 4, OPEN, awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/16
+  Branch `feat/blob-to-s3-migration` (off main after #15 merged).
+  `scripts/migrate-blob-to-s3.mjs`: DB-driven inventory (recording_assets + transcript JSONB on
+  runtime_sessions, NEVER key-prefix), copies at existing keys, corrects browser-reported
+  file_size_bytes from HeadObject, idempotent/resumable, sha256 byte-verifies a sample and refuses
+  to flip a row on mismatch, reconciles both directions (rows-without-objects, orphans), never
+  deletes from Blob, dry-run default + `--confirm` gate, JSON report carries the cutover
+  timestamps S6's rollback needs. Engine + adapters split so the integration suite runs against a
+  REAL Postgres (schema via postgres-migrate.mjs — the jsonb transcript-flip SQL is exercised for
+  real) + REAL MinIO in docker; only the @vercel/blob wrapper is faked. Suite 200/36.
+  **The real run is S6, after GDPR sign-off + a hand-checked dry-run against the Vercel dashboard.**
 - **FirstHand PR #15** — `feat(upload): presigned direct-to-S3 uploads, server-authored keys` —
   **migration plan step 3, OPEN, awaiting Nick's merge + one manual verification.**
   https://github.com/nickfine/FirstHand/pull/15 Branch `feat/s3-presigned-upload` (off main after
@@ -279,10 +291,12 @@ deploy to **both** playground and prod clusters — playground for testing, prom
 **production** (`<app>.platform.adaptavist.net`, bucket `{app}-production`); playground = test data
 only, so the PII question dissolves. **The migration plan is now blocked on nothing** — ~~next action
 is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
-(FirstHand PR #13, MERGED `b724670`)**, **step 2 DONE (PR #14, MERGED `ee8e253`)** and **step 3
-DONE (PR #15, open, awaiting merge — see "What shipped today")**. Next: merge PR #15 + do its
-manual real-session verification, then step 4 (migration script, unblocked), then S5 (Kubera
-manifest — remember FIRSTHAND_PUBLIC_BASE_URL is mandatory there).
+(FirstHand PR #13, MERGED `b724670`)**, **step 2 DONE (PR #14, MERGED `ee8e253`)**, **step 3 DONE
+(PR #15, MERGED `b862832` — its manual real-session S3 verification is still outstanding)** and
+**step 4 DONE (PR #16, open, awaiting merge — see "What shipped today")**. All four code steps are
+built. Next: merge PR #16, do PR #15's manual verification, then S5 (Kubera manifest + CI —
+remember FIRSTHAND_PUBLIC_BASE_URL is mandatory there, and S5 needs the GitLab pull-mirror
+decision for CI). S6 cutover needs S3+S4+S5 and GDPR sign-off.
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
