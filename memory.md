@@ -164,6 +164,21 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **FirstHand PR #15** — `feat(upload): presigned direct-to-S3 uploads, server-authored keys` —
+  **migration plan step 3, OPEN, awaiting Nick's merge + one manual verification.**
+  https://github.com/nickfine/FirstHand/pull/15 Branch `feat/s3-presigned-upload` (off main after
+  #14 merged). Key-authority hole FIXED not ported: client-upload derives the object key
+  server-side; finalize trusts only the pending row + HeadObject (403 unknown/foreign key, 410
+  expired, 422 missing object, 413 over cap), browser-supplied objectUrl/fileSizeBytes gone from
+  the s3 payload. **Decision recorded: single PUT, no multipart** (2GB cap < S3 5GB single-PUT
+  limit). Prop chain now `directRecordingUploadMode: vercel_blob|s3|null`; both routes gate on
+  `getObjectStorageMode()`, legacy blob protocol unchanged. Cap env-tunable via
+  `FIRSTHAND_MAX_RECORDING_BYTES`. Suite 196/35.
+  **Real-store testing caught a real hole:** the AWS SDK presigner does NOT sign content-type by
+  default — MinIO accepted a text/html PUT against a video/webm-pinned URL. Fixed with
+  `signableHeaders: new Set(["content-type"])`. A mocked suite would never have seen it.
+  **Manual step outstanding (needs Nick):** record a real session locally in S3 mode (MinIO) —
+  screen+mic dialogs need a human. Setup in the PR body.
 - **FirstHand PR #14** — `feat(deploy): containerise for Kubera` — **migration plan step 2, OPEN,
   awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/14
   Branch `feat/containerise` (off main after #13 merged). `/health` route (dependency-free),
@@ -264,10 +279,10 @@ deploy to **both** playground and prod clusters — playground for testing, prom
 **production** (`<app>.platform.adaptavist.net`, bucket `{app}-production`); playground = test data
 only, so the PII question dissolves. **The migration plan is now blocked on nothing** — ~~next action
 is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
-(FirstHand PR #13, MERGED `b724670`)** and **step 2 is DONE (PR #14, open, awaiting merge — see
-"What shipped today")**. Next: merge PR #14, then steps 3 (presigned uploads) and 4 (migration
-script), both unblocked and parallel-safe; then S5 (Kubera manifest — remember
-FIRSTHAND_PUBLIC_BASE_URL is mandatory there).
+(FirstHand PR #13, MERGED `b724670`)**, **step 2 DONE (PR #14, MERGED `ee8e253`)** and **step 3
+DONE (PR #15, open, awaiting merge — see "What shipped today")**. Next: merge PR #15 + do its
+manual real-session verification, then step 4 (migration script, unblocked), then S5 (Kubera
+manifest — remember FIRSTHAND_PUBLIC_BASE_URL is mandatory there).
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
