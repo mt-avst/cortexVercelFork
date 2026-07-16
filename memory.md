@@ -197,8 +197,9 @@ Fallback stays Option A (Adaptavist-owned Vercel) if DevEx stalls.
 **Correction (07-16, caught by cross-session reconciliation):** an earlier version of this note
 claimed the deferral's gate ("finish the participant UX work first") closed when phase 2 shipped.
 Wrong — phase 2 is the **reviewer's** UX (session review), not the **participant's** journey.
-Whether the participant UX tidy-up is done is UNKNOWN and should be checked with Nick; if
-outstanding, it is still a live priority alongside the migration.
+**Nick confirmed (2026-07-16): the participant UX work is STILL OUTSTANDING.** It remains a live
+priority alongside the migration — the migration did not replace it. So the open work is now:
+(1) participant user-journey/UX tidy-up, (2) the migration plan (Nick's DevEx ask first).
 **Urgency is real, not hypothetical:** the 07-15 E2E run captured an actual screen+mic recording
 that is sitting in the **personal** Vercel Blob store right now.
 
