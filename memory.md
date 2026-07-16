@@ -164,6 +164,20 @@ see "Lesson" below. Nothing was double-built; the redundant plan file was delete
 
 ## What shipped today
 
+- **FirstHand PR #13** — `feat(storage): S3 provider behind the storage abstraction` — **migration plan
+  step 1, OPEN, awaiting Nick's merge.** https://github.com/nickfine/FirstHand/pull/13
+  Branch `feat/s3-storage-provider`. Delivered exactly per the plan: exhaustive provider switches
+  first (task 0, `force: true` dropped from deleteStoredObject), then `s3` in the enum; streaming
+  S3 upload via lib-storage (no `tee()` byte counting), HeadObject size, HeadObject-before-delete;
+  mode resolution `FIRSTHAND_STORAGE_MODE` > `FIRSTHAND_S3_BUCKET` > `BLOB_READ_WRITE_TOKEN` >
+  filesystem, logged once secret-free (stale blob token cannot silently win);
+  `FIRSTHAND_PUBLIC_BASE_URL` used for `media_url` (mixed-content trap); S3 tests run against real
+  MinIO in docker, not SDK mocks. Suite now **176 passing / 30 files** (was 163/29). Range support
+  explicitly deferred. New S3 keys: `recordings/<sessionId>/<ts>-<uuid>-<name>`.
+  **Also fixed along the way:** the Playwright e2e suite was failing on `main` — the test server
+  inherited `FIRSTHAND_REVIEWER_OIDC_*` and `DATABASE_URL` from `.env.local`, and OIDC outranks
+  password auth, so reviewer sign-in 401ed. `playwright.config.ts` now pins the interfering
+  variables to empty strings. e2e green (2/2).
 - **FirstHand PR #12** — `fix(api): serve recordings from non-latest session attempts`.
   **MERGED** 2026-07-16, merge commit `ff75c94`. https://github.com/nickfine/FirstHand/pull/12
   (Branch `fix/attempt-media-404` was **not** auto-deleted — GitHub does not by default. Safe to
@@ -233,8 +247,11 @@ deploy to **both** playground and prod clusters — playground for testing, prom
 `.kubera/` config file + `environments` list in `.gitlab-ci.yml` (Confluence "Initial setup" Step
 3). **No custom `walletRoleARN` needed.** Real participant recordings therefore target
 **production** (`<app>.platform.adaptavist.net`, bucket `{app}-production`); playground = test data
-only, so the PII question dissolves. **The migration plan is now blocked on nothing** — next action
-is simply to start plan step 1 (S3 storage provider) whenever Nick chooses.
+only, so the PII question dissolves. **The migration plan is now blocked on nothing** — ~~next action
+is simply to start plan step 1 (S3 storage provider) whenever Nick chooses~~ **step 1 is DONE
+(FirstHand PR #13, open, awaiting merge — see "What shipped today")**. Next: merge PR #13, then
+steps 2 (containerise), 3 (presigned uploads) and 4 (migration script) — S2 is parallel-safe now,
+S3/S4 unblock once #13 merges.
 
 **MAJOR CORRECTION 2026-07-16 (verified against chart source):** the earlier "three-item DevEx ask"
 (S3 bucket + IRSA + Okta app registration) was **wrong**. Checked against
