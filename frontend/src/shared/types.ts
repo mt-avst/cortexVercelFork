@@ -69,7 +69,7 @@ export interface Opportunity {
   product_optional?: string;
   default_duration_minutes: number;
   status: 'draft' | 'published' | 'closed';
-  owner_user_id: string;
+  owner_user_id?: string; // Admin responses only - stripped from public/participant responses
   external_link_optional?: string;
   firsthand_study_id?: string;
   meeting_location_optional?: string;
@@ -80,7 +80,7 @@ export interface Opportunity {
   end_date?: string; // Study end date for countdown display
   created_at: string;
   updated_at: string;
-  // Frontend-specific fields (populated by API joins)
+  // Admin responses only (populated by API joins) - stripped from public/participant responses
   owner_name?: string;
   owner_email?: string;
   sessions?: Session[];
