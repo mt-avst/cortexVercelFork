@@ -23,6 +23,7 @@ jest.mock('../../utils/firsthand-client', () => ({
 }));
 
 import opportunitiesRouter from '../opportunities';
+import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { isFirstHandConfigured, firstHandPost } from '../../utils/firsthand-client';
@@ -845,6 +846,174 @@ describe('Opportunities API', () => {
 
       expect(response.body.error).toContain('click_type');
       expect(findInsertCall()).toBeUndefined();
+    });
+  });
+
+  // GET / and GET /:id are optionalAuth by design - anonymous participants land
+  // on published opportunities. The owner's identity (owner_user_id, owner_name,
+  // owner_email) is an admin-surface concern only: the participant landing page
+  // renders none of it, so the public serializer must strip all three.
+  describe('public opportunity serializer', () => {
+    const publishedRow = {
+      id: '1',
+      type: 'unmoderated',
+      title: 'Published study',
+      purpose_one_liner: 'A valid purpose line for participants',
+      default_duration_minutes: 30,
+      status: 'published',
+      owner_user_id: 'owner-user-id',
+      firsthand_study_id: 'study_abc123',
+      created_at: new Date(),
+      updated_at: new Date(),
+      owner_name: 'Owner Name',
+      owner_email: 'owner@example.com'
+    };
+
+    // Authenticated but non-admin - sees published studies, not owner identity
+    const employeeApp = express();
+    employeeApp.use(express.json());
+    employeeApp.use((req: any, res, next) => {
+      req.session = {
+        user: {
+          id: 'employee-id',
+          name: 'Employee User',
+          email: 'employee@example.com',
+          role: 'employee'
+        }
+      };
+      next();
+    });
+    employeeApp.use('/api/opportunities', opportunitiesRouter);
+    employeeApp.use(errorHandler);
+
+    it('strips owner fields from GET /:id for anonymous participants', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunity lookup
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body).not.toHaveProperty('owner_user_id');
+      expect(response.body).not.toHaveProperty('owner_name');
+      expect(response.body).not.toHaveProperty('owner_email');
+      // Participant-facing fields survive the strip
+      expect(response.body).toMatchObject({
+        id: '1',
+        type: 'unmoderated',
+        title: 'Published study',
+        firsthand_study_id: 'study_abc123',
+        sessions: []
+      });
+    });
+
+    it('strips owner fields from GET /:id for authenticated non-admin users', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(employeeApp)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body).not.toHaveProperty('owner_user_id');
+      expect(response.body).not.toHaveProperty('owner_name');
+      expect(response.body).not.toHaveProperty('owner_email');
+    });
+
+    it('keeps owner fields on GET /:id for admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(app)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body).toMatchObject({
+        owner_user_id: 'owner-user-id',
+        owner_name: 'Owner Name',
+        owner_email: 'owner@example.com'
+      });
+    });
+
+    it('strips owner fields from the GET / list for anonymous participants', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunities query
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions batch
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities')
+        .expect(200);
+
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).not.toHaveProperty('owner_user_id');
+      expect(response.body[0]).not.toHaveProperty('owner_name');
+      expect(response.body[0]).not.toHaveProperty('owner_email');
+      expect(response.body[0]).toMatchObject({ id: '1', title: 'Published study' });
+    });
+
+    it('keeps owner fields on the GET / list for admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      const response = await request(app)
+        .get('/api/opportunities')
+        .expect(200);
+
+      expect(response.body[0]).toMatchObject({
+        owner_user_id: 'owner-user-id',
+        owner_name: 'Owner Name',
+        owner_email: 'owner@example.com'
+      });
+    });
+
+    it('strips owner fields in mock-data mode too', async () => {
+      // With the database unavailable both GET routes serve the in-memory demo
+      // store, which carries the same owner fields - the strip must apply there
+      // as well or demo deployments leak identities the same way. Seeded
+      // explicitly because under jest the tracked stale demo/mock-data.js
+      // shadows mock-data.ts and its store starts empty.
+      mockIsDatabaseAvailable.mockResolvedValue(false);
+      addMockOpportunity({
+        id: 'mock-owner-strip',
+        type: 'unmoderated',
+        title: 'Mock published study',
+        purpose_one_liner: 'A valid purpose line for participants',
+        default_duration_minutes: 30,
+        status: 'published',
+        owner_user_id: 'admin-user-id',
+        owner_name: 'Research Team',
+        owner_email: 'research@adaptalabs.com',
+        created_at: new Date(),
+        updated_at: new Date(),
+        sessions: []
+      });
+
+      try {
+        const listResponse = await request(unauthenticatedApp)
+          .get('/api/opportunities')
+          .expect(200);
+
+        expect(listResponse.body.length).toBeGreaterThan(0);
+        for (const opportunity of listResponse.body) {
+          expect(opportunity).not.toHaveProperty('owner_user_id');
+          expect(opportunity).not.toHaveProperty('owner_name');
+          expect(opportunity).not.toHaveProperty('owner_email');
+        }
+
+        const detailResponse = await request(unauthenticatedApp)
+          .get('/api/opportunities/mock-owner-strip')
+          .expect(200);
+
+        expect(detailResponse.body).not.toHaveProperty('owner_user_id');
+        expect(detailResponse.body).not.toHaveProperty('owner_name');
+        expect(detailResponse.body).not.toHaveProperty('owner_email');
+        expect(detailResponse.body).toMatchObject({
+          id: 'mock-owner-strip',
+          title: 'Mock published study'
+        });
+      } finally {
+        // The demo store is module-level state shared across tests
+        deleteMockOpportunity('mock-owner-strip');
+      }
     });
   });
 });

@@ -14,6 +14,7 @@ import {
   validateSessionData
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
+import { toPublicOpportunity } from '../utils/publicOpportunity';
 import { isFirstHandConfigured, firstHandPost } from '../utils/firsthand-client';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 
@@ -56,7 +57,7 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
       else if (!isAdmin) filters.status = 'published'; // Default to published for non-admin
       
       const opportunities = getMockOpportunities(filters);
-      res.json(opportunities);
+      res.json(isAdmin ? opportunities : opportunities.map(toPublicOpportunity));
       return;
     }
     
@@ -185,8 +186,8 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
         clicks_total,
       };
     });
-    
-    res.json(opportunities);
+
+    res.json(isAdmin ? opportunities : opportunities.map(toPublicOpportunity));
   } catch (error) {
     logger.error('Error in opportunities route', { error });
     res.status(500).json({ error: 'Internal server error' });
@@ -212,8 +213,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
     if (!isAdmin && opportunity.status !== 'published') {
       throw new NotFoundError('Opportunity');
     }
-    
-    res.json(opportunity);
+
+    res.json(isAdmin ? opportunity : toPublicOpportunity(opportunity));
     return;
   }
   
@@ -268,8 +269,8 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
       updated_at: session.updated_at.toISOString(),
     }))
   };
-  
-  res.json(opportunity);
+
+  res.json(isAdmin ? opportunity : toPublicOpportunity(opportunity));
 }));
 
 // POST /api/opportunities - Create opportunity
