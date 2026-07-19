@@ -26,7 +26,7 @@ config:
     # token endpoint /api/csrf-token). Set ENABLE_CSRF: "false" to disable in an emergency.
     # FirstHand Integration — disabled at runtime unless both FIRSTHAND_BASE_URL (here)
     # and FIRSTHAND_INTEGRATION_SECRET (secret store) are set.
-    FIRSTHAND_BASE_URL: https://first-hand.vercel.app
+    FIRSTHAND_BASE_URL: https://firsthand.kubera-playground.adaptavist.net
     # callback_url sent to FirstHand. The backend is private, so this points at the
     # public frontend host; FirstHand's webhook hits nginx, which proxies /api here.
     BACKEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
