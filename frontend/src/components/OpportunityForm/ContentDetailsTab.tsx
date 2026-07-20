@@ -97,11 +97,18 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
               >
                 <option value="any" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Anyone</option>
                 <option value="internal" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Internal employees only</option>
-                <option value="external" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>External users only</option>
+                {formData.type !== 'unmoderated' && (
+                  <option value="external" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>External users only</option>
+                )}
                 <option value="specific" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Specific criteria</option>
               </select>
               {validationErrors.participant_type_required && (
                 <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.participant_type_required}</div>
+              )}
+              {formData.type === 'unmoderated' && (
+                <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
+                  Unmoderated studies run with logged-in Cortex users only.
+                </div>
               )}
             </div>
           </div>

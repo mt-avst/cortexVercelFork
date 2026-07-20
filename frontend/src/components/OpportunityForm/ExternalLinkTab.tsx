@@ -24,7 +24,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
               External Link
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              Configure the external tool for polls, surveys, and unmoderated tests
+              Configure the external tool for polls, surveys, and questions
             </p>
           </div>
         </div>

@@ -83,8 +83,8 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
                 {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
                 {formData.type === 'survey' && 'Opens external survey tool for detailed feedback'}
-                {formData.type === 'unmoderated' && 'Self-guided recorded testing — links to FirstHand or an external URL'}
-                {!formData.type && '\u00A0'}
+                {formData.type === 'unmoderated' && 'Self-guided recorded study, powered by FirstHand'}
+                {!formData.type && ' '}
               </div>
               <select
                 id="type"
@@ -103,7 +103,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ Question - Single question session</option>
                 <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
                 <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
-                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Unmoderated Testing - Self-guided testing via external link</option>
+                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Unmoderated Testing - Self-guided recorded study via FirstHand</option>
               </select>
                 {validationErrors.type && (
                 <div id="type-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.type}</div>

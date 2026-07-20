@@ -258,21 +258,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     }
     
-    if (formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-      const isFirstHandBacked = formData.type === 'unmoderated' && formData.firsthand_study_id?.trim();
-      if (!isFirstHandBacked) {
-        if (!formData.external_link_optional?.trim()) {
-          errors.external_link_optional = formData.type === 'unmoderated'
-            ? 'A FirstHand study or external link is required for published unmoderated tests'
-            : 'External link is required for published polls, surveys, and questions';
-        } else {
-          try {
-            new URL(formData.external_link_optional);
-          } catch {
-            errors.external_link_optional = 'External link must be a valid URL';
-          }
+    if (formData.status === 'published' && formData.type === 'unmoderated') {
+      if (!formData.firsthand_study_id?.trim()) {
+        errors.firsthand_study_id = 'A FirstHand study is required to publish an unmoderated test';
+      }
+    } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
+      if (!formData.external_link_optional?.trim()) {
+        errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+      } else {
+        try {
+          new URL(formData.external_link_optional);
+        } catch {
+          errors.external_link_optional = 'External link must be a valid URL';
         }
       }
+    }
+
+    // Unmoderated studies run with logged-in Cortex users, so an external
+    // participant type is not representable.
+    if (formData.type === 'unmoderated' && formData.participant_type_required === 'external') {
+      errors.participant_type_required = "Unmoderated studies can't use an external participant type - participants must be logged-in Cortex users";
     }
     
     // Validate specific participant details when required
@@ -334,12 +339,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
         break;
       case 'external_link_optional': {
-        const isFirstHandBacked = formData.type === 'unmoderated' && formData.firsthand_study_id?.trim();
-        if (!isFirstHandBacked && formData.status === 'published' && ['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
+        if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
           if (!stringValue.trim()) {
-            fieldErrors.external_link_optional = formData.type === 'unmoderated'
-              ? 'A FirstHand study or external link is required for published unmoderated tests'
-              : 'External link is required for published polls, surveys, and questions';
+            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
           } else {
             try {
               new URL(stringValue);
@@ -567,16 +569,35 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   };
 
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
+    setFormData(prev => {
+      // Unmoderated is FirstHand-only and runs with logged-in Cortex users, so
+      // drop any external link and coerce an 'external' participant type when
+      // the type switches to unmoderated (a stale value must not persist).
+      if (field === 'type' && value === 'unmoderated') {
+        return {
+          ...prev,
+          type: 'unmoderated' as const,
+          external_link_optional: '',
+          participant_type_required:
+            prev.participant_type_required === 'external' ? 'any' : prev.participant_type_required,
+        };
+      }
+      return { ...prev, [field]: value };
+    });
+
     // Clear validation error for this field immediately when typing
     if (validationErrors[field]) {
       setValidationErrors(prev => {
         const newErrors = { ...prev };
         delete newErrors[field];
+        return newErrors;
+      });
+    }
+    // A type change can resolve the cross-field unmoderated + external rule.
+    if (field === 'type' && validationErrors.participant_type_required) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.participant_type_required;
         return newErrors;
       });
     }
@@ -935,7 +956,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleInputChange={handleInputChange}
                       />
                       
-                      {/* Navigation Buttons for External Link Tab */}
+                      {/* Navigation Buttons for FirstHand Study Tab */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">
                           <button
