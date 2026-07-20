@@ -12,6 +12,40 @@ import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } f
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
 
+/**
+ * Unmoderated studies run with logged-in Cortex users, so an external
+ * participant type is not representable. Kept in sync (character-for-character)
+ * with the authoritative backend rule in routes/opportunities.ts.
+ */
+export const UNMODERATED_EXTERNAL_PARTICIPANT_ERROR =
+  'Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users';
+
+/**
+ * When the opportunity type changes, some fields (and therefore their
+ * validation errors) no longer apply. Return a copy of `errors` with any stale
+ * type-conditional error removed so it cannot linger on a now-hidden field
+ * (blocking submit or resurfacing if the user switches back).
+ */
+export const clearTypeConditionalErrors = (
+  errors: Record<string, string>,
+  newType: string
+): Record<string, string> => {
+  const next = { ...errors };
+  // External link only applies to poll/survey/question.
+  if (!['poll', 'survey', 'question'].includes(newType)) {
+    delete next.external_link_optional;
+  }
+  // A FirstHand study only applies to unmoderated.
+  if (newType !== 'unmoderated') {
+    delete next.firsthand_study_id;
+  }
+  // The unmoderated + external participant (M2) rule only applies to
+  // unmoderated, and switching to unmoderated coerces an external participant
+  // type back to 'any', so this error is stale after any type change.
+  delete next.participant_type_required;
+  return next;
+};
+
 const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -19,7 +53,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const isEdit = Boolean(id);
-  
+
   const [formData, setFormData] = useState({
     type: '' as 'test' | 'interview' | 'poll' | 'survey' | 'question' | 'unmoderated' | '',
     title: '',
@@ -37,7 +71,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     end_date: '' as string | undefined,
     firsthand_study_id: '' as string | undefined
   });
-  
+
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
@@ -64,10 +98,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
-      tabs.push({ 
-        id: 3, 
-        title: 'Session Management', 
-        description: 'Create time slots' 
+      tabs.push({
+        id: 3,
+        title: 'Session Management',
+        description: 'Create time slots'
       });
     }
 
@@ -106,12 +140,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   const loadOpportunity = async () => {
     if (!id) return;
-    
+
     try {
       setLoadingOpportunity(true);
       setError('');
       const opportunity = await getOpportunity(id);
-      
+
       setFormData({
         type: opportunity.type,
         title: opportunity.title,
@@ -151,7 +185,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         end_date: opportunity.end_date || ''
       };
       setOriginalFormData(originalData);
-      
+
       // Load sessions - always try to load fresh sessions from API when editing
       // The opportunity object might have stale session data
       try {
@@ -160,10 +194,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           opportunitySessionsCount: opportunity.sessions?.length || 0,
           willCallAPI: true
         });
-        
+
         // IMPORTANT: Always request ALL sessions including past ones when editing
         const sessions = await getSessions(opportunity.id, { include_past: true });
-        
+
         logger.debug('EDIT MODE - Loaded opportunity sessions from API', {
           opportunityId: opportunity.id,
           sessionsCount: sessions.length,
@@ -177,7 +211,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           })),
           opportunitySessionsCount: opportunity.sessions?.length || 0
         });
-        
+
         if (sessions.length > 0) {
           setSessions(sessions);
         } else if (opportunity.sessions && opportunity.sessions.length > 0) {
@@ -199,7 +233,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           response: axiosError.response?.data,
           status: axiosError.response?.status
         });
-        
+
         // Fallback to sessions from opportunity object if API fails
         if (opportunity.sessions && opportunity.sessions.length > 0) {
           logger.debug('Using sessions from opportunity object as fallback', {
@@ -222,16 +256,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setLoadingOpportunity(false);
     }
   };
-  
+
 
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
-    
+
     // Validate research study type
     if (!formData.type) {
       errors.type = 'Please select a research study type';
     }
-    
+
     if (!formData.title.trim()) {
       errors.title = 'Title is required';
     } else if (formData.title.trim().length < 4) {
@@ -239,7 +273,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     } else if (formData.title.trim().length > 140) {
       errors.title = 'Title must be no more than 140 characters';
     }
-    
+
     if (!formData.purpose_one_liner.trim()) {
       errors.purpose_one_liner = 'Purpose is required';
     } else if (formData.purpose_one_liner.trim().length < 10) {
@@ -247,7 +281,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     } else if (formData.purpose_one_liner.trim().length > 180) {
       errors.purpose_one_liner = 'Purpose must be no more than 180 characters';
     }
-    
+
     // Only validate meeting location and duration for test and interview type opportunities
     if (formData.type === 'test' || formData.type === 'interview') {
       if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
@@ -257,7 +291,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
       }
     }
-    
+
     if (formData.status === 'published' && formData.type === 'unmoderated') {
       if (!formData.firsthand_study_id?.trim()) {
         errors.firsthand_study_id = 'A FirstHand study is required to publish an unmoderated test';
@@ -277,9 +311,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Unmoderated studies run with logged-in Cortex users, so an external
     // participant type is not representable.
     if (formData.type === 'unmoderated' && formData.participant_type_required === 'external') {
-      errors.participant_type_required = "Unmoderated studies can't use an external participant type - participants must be logged-in Cortex users";
+      errors.participant_type_required = UNMODERATED_EXTERNAL_PARTICIPANT_ERROR;
     }
-    
+
     // Validate specific participant details when required
     if (formData.participant_type_required === 'specific') {
       if (!formData.participant_type_specific_details.trim()) {
@@ -288,7 +322,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         errors.participant_type_specific_details = 'Specific participant criteria must be at least 10 characters';
       }
     }
-    
+
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -298,7 +332,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     const fieldErrors: Record<string, string> = { ...validationErrors };
     const stringValue = typeof value === 'string' ? value : '';
     const numValue = typeof value === 'number' ? value : 0;
-    
+
     switch (fieldName) {
       case 'title':
         if (!stringValue.trim()) {
@@ -369,14 +403,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
         break;
     }
-    
+
     setValidationErrors(fieldErrors);
   };
 
   // Check if form has been modified
   const hasChanges = (): boolean => {
     if (!isEdit || !originalFormData) return false;
-    
+
     return (
       formData.type !== originalFormData.type ||
       formData.title.trim() !== originalFormData.title.trim() ||
@@ -397,27 +431,27 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   const handleSubmit = async (e?: React.FormEvent, skipNavigation = false): Promise<string | undefined> => {
     logger.debug('handleSubmit called', { isEdit, opportunityId, skipNavigation });
-    
+
     if (e) {
       e.preventDefault();
     }
-    
+
     // Prevent double-clicks - return early if already saving
     if (saving) {
       logger.debug('Already saving, ignoring duplicate click');
       return undefined;
     }
-    
+
     if (!validateForm()) {
       logger.error('Validation errors', { validationErrors });
       return undefined;
     }
-    
+
     try {
       setSaving(true);
       setError('');
       setSuccessMessage('');
-      
+
       const data: Partial<CreateOpportunityRequest & { display_width?: 'single' | 'double' }> = {
         type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
@@ -430,12 +464,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
         status: allowUserSubmission ? 'draft' : formData.status
       };
-      
+
       // Only include default_duration_minutes for test and interview types
       if (formData.type === 'test' || formData.type === 'interview') {
         data.default_duration_minutes = formData.default_duration_minutes;
       }
-      
+
       // Include start_date, end_date, and firsthand_study_id for external link / unmoderated types
       if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
         data.start_date = formData.start_date || undefined;
@@ -445,17 +479,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (formData.type === 'unmoderated') {
         data.firsthand_study_id = formData.firsthand_study_id?.trim() || undefined;
       }
-      
+
       // Only superadmins can set display_width
       if (user?.role === 'superadmin') {
         data.display_width = formData.display_width;
       }
-      
-      
+
+
       let savedOpportunity: Opportunity;
       if (isEdit && id) {
         savedOpportunity = await updateOpportunity(id, data as UpdateOpportunityRequest);
-        
+
         // Save any temporary sessions that were created during editing (only for test and interview types)
         if (formData.type === 'test' || formData.type === 'interview') {
           const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
@@ -465,7 +499,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             tempSessionIds: tempSessions.map(s => s.id),
             opportunityId: savedOpportunity.id
           });
-          
+
           if (tempSessions.length > 0) {
             try {
               const sessionData = tempSessions.map(session => ({
@@ -474,17 +508,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 capacity: session.capacity,
                 location_or_meet_link_optional: session.location_or_meet_link_optional || ''
               }));
-              
+
               logger.debug('EDIT MODE - Creating sessions', { count: sessionData.length });
               const { createSessions } = await import('../api/client');
               await createSessions(savedOpportunity.id, sessionData);
-              
+
               // Reload sessions to get the real IDs
               const updatedOpportunity = await getOpportunity(savedOpportunity.id);
               logger.debug('EDIT MODE - Updated opportunity sessions', { count: updatedOpportunity.sessions?.length || 0 });
               setSessions(updatedOpportunity.sessions || []);
             } catch (sessionError: unknown) {
-              logger.error('Error saving sessions', { 
+              logger.error('Error saving sessions', {
                 error: sessionError instanceof Error ? sessionError : undefined,
                 errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError)
               });
@@ -497,9 +531,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       } else {
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
-        
+
         logger.debug('CREATE MODE - Opportunity created');
-        
+
         // For types that use external links (no sessions), show success then auto-navigate
         if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
           const isDraft = formData.status === 'draft';
@@ -514,12 +548,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           }, isDraft ? 3000 : 1500); // Longer delay for draft warning
           return savedOpportunity.id;
         }
-        
+
         // For test/interview types, AdminSessionManager will handle session creation
         // Return the opportunity ID so AdminSessionManager can create sessions
         return savedOpportunity.id;
       }
-      
+
       // Update original form data after successful save
       if (isEdit) {
         setOriginalFormData({ ...formData });
@@ -533,12 +567,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // Clear success message after timeout (longer for draft warnings)
         setTimeout(() => setSuccessMessage(''), isDraft ? 3000 : 1500);
       }
-      
+
       // For edit mode, return the existing opportunity ID
       if (isEdit && savedOpportunity) {
         return savedOpportunity.id;
       }
-      
+
       // Navigate after successful save
       if (!skipNavigation) {
         if (allowUserSubmission) {
@@ -557,9 +591,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: isEdit ? 'Opportunity updated!' : 'Opportunity created!' } });
         }
       }
-      
+
       return savedOpportunity?.id;
-      
+
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: { error?: string } } };
       setError(axiosError.response?.data?.error || 'Failed to save opportunity');
@@ -593,13 +627,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         return newErrors;
       });
     }
-    // A type change can resolve the cross-field unmoderated + external rule.
-    if (field === 'type' && validationErrors.participant_type_required) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors.participant_type_required;
-        return newErrors;
-      });
+    // A type change can hide type-specific fields (external link, FirstHand
+    // study, the external participant option); drop any stale errors left on
+    // fields that no longer apply to the new type.
+    if (field === 'type') {
+      setValidationErrors(prev => clearTypeConditionalErrors(prev, String(value ?? '')));
     }
   };
 
@@ -650,19 +682,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     <div className="admin-page-bg">
       {/* Theme-aware Background: Dark Mode gets neural particles */}
       {isDark && <SlowNeuralBackground />}
-      
+
       <div className="container-fluid py-4 opportunity-form min-h-100vh">
         <div className="row justify-content-center">
           <div className="col-12 col-xl-10">
             {/* Back button */}
-            <button 
+            <button
               className="btn btn-outline-secondary mb-3"
               onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
             >
               <ArrowLeft size={16} className="me-1" />
               {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
             </button>
-          
+
           <div className="card shadow-sm border-0">
             <div className="card-header border-0 py-4">
               <div className="d-flex align-items-center justify-content-between">
@@ -700,7 +732,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   {error}
                 </div>
               )}
-              
+
               {successMessage && (
                 <div
                   className={`alert ${successMessage.includes('DRAFT') ? 'alert-warning' : 'alert-success'} d-flex justify-content-between align-items-center mx-4 mt-4 mb-0`}
@@ -763,10 +795,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleBlur={handleBlur}
                         allowUserSubmission={allowUserSubmission}
                       />
-                      
+
                       {/* Display Width Setting - Superadmin Only */}
                       {user?.role === 'superadmin' && (
-                        <div className="form-section mb-4 display-settings-section" style={{ 
+                        <div className="form-section mb-4 display-settings-section" style={{
                           paddingTop: '1.5rem',
                           marginTop: '1rem'
                         }}>
@@ -781,7 +813,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               </p>
                             </div>
                           </div>
-                          
+
                           <div className="row g-3">
                             <div className="col-md-6">
                               <div className="form-group">
@@ -807,7 +839,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           </div>
                         </div>
                       )}
-                      
+
                       {/* Navigation Buttons for Tab 1 */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">
@@ -839,7 +871,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             onClick={() => {
                               // Validate basic info before continuing
                               const errors: Record<string, string> = {};
-                              
+
                               if (!formData.type) {
                                 errors.type = 'Please select a research study type';
                               }
@@ -857,7 +889,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               if ((formData.type === 'test' || formData.type === 'interview') && !formData.meeting_location_optional?.trim()) {
                                 errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
                               }
-                              
+
                               if (Object.keys(errors).length > 0) {
                                 setValidationErrors(errors);
                                 // Show error message
@@ -866,7 +898,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                 return;
                               }
-                              
+
                               setError('');
                               setActiveTab(2);
                             }}
@@ -955,7 +987,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                       />
-                      
+
                       {/* Navigation Buttons for FirstHand Study Tab */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">
@@ -1091,7 +1123,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             </p>
                           </div>
                         </div>
-                        
+
                         {isEdit && !opportunityId && !loadingOpportunity && error ? (
                           <div className="alert alert-warning" role="alert">
                             <AlertTriangle size={18} className="me-2" />
