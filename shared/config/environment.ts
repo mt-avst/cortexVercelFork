@@ -69,6 +69,17 @@ export const backendEnvSchema = z.object({
   // and flips this on at the End-of-B gate, so an incident can flip back to the
   // HMAC integration. Accepts '1' or 'true'.
   FIRSTHAND_INTERNAL: z.string().transform(val => val === 'true' || val === '1').catch(() => false),
+
+  // FirstHand internalised engine — datastore (Phase B, external-first).
+  // Dedicated connection for the firsthand-runtime pool (schema `firsthand`),
+  // kept separate from Cortex's own DATABASE_URL. Set to FirstHand's live RDS
+  // while the data still lives there; dropped at Phase C once the data is
+  // migrated into Cortex's RDS (the resolver then falls back to DATABASE_URL).
+  FIRSTHAND_DATABASE_URL: z.string().optional(),
+  // S3 bucket + region for the internalised recording storage, reached via the
+  // backend's IRSA role (default AWS credential chain — no static keys).
+  FIRSTHAND_S3_BUCKET: z.string().optional(),
+  FIRSTHAND_S3_REGION: z.string().optional(),
 });
 
 /**
@@ -247,6 +258,9 @@ export const ENVIRONMENT_DOCS = {
     FIRSTHAND_BASE_URL: 'URL of the FirstHand app — used to proxy the study list and build reviewer deep-links. Omit to disable FirstHand integration.',
     FIRSTHAND_INTEGRATION_SECRET: 'Shared HMAC-SHA256 secret for signing outbound requests to FirstHand and verifying inbound webhook callbacks. Minimum 32 characters. Must match the FIRSTHAND_INTEGRATION_SECRET set in the FirstHand app.',
     FIRSTHAND_INTERNAL: 'Feature flag (Phase B). Set to 1/true to serve the recorded-study engine in-process instead of proxying the standalone FirstHand app over HMAC. Default off. Flipped on at the End-of-B gate; flip back to roll back to the HMAC integration.',
+    FIRSTHAND_DATABASE_URL: 'Dedicated connection string for the internalised FirstHand runtime pool (schema `firsthand`), kept separate from DATABASE_URL. Points at FirstHand\'s live RDS during Phase B (external-first); dropped at Phase C after the data is migrated into Cortex\'s RDS.',
+    FIRSTHAND_S3_BUCKET: 'S3 bucket for internalised FirstHand recording storage (e.g. firsthand-{env}), reached via the backend IRSA role. Unset disables S3 storage.',
+    FIRSTHAND_S3_REGION: 'AWS region for the FirstHand recording bucket. Falls back to AWS_REGION, then us-east-1.',
   },
   frontend: {
     VITE_API_URL: 'Backend API URL',
