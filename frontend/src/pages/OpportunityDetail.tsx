@@ -13,10 +13,10 @@ import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Tab
 // Helper function to render poll description with checkbox indicators
 const renderPollDescription = (description: string) => {
   if (!description) return null;
-  
+
   const lines = description.split('\n');
   const result: React.ReactNode[] = [];
-  
+
   // Patterns that indicate header/footer/question text, not options
   const excludePatterns = [
     '**',                    // Bold text (headers)
@@ -30,7 +30,7 @@ const renderPollDescription = (description: string) => {
     'What',                  // Question starters
     'How',                   // Question starters
   ];
-  
+
   // Find where the question ends (usually after first question mark or "next?")
   let questionEndIndex = -1;
   for (let i = 0; i < lines.length; i++) {
@@ -40,35 +40,35 @@ const renderPollDescription = (description: string) => {
       break;
     }
   }
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmedLine = line.trim();
-    
+
     // Skip empty lines but add spacing
     if (!trimmedLine) {
       result.push(<br key={`br-${i}`} />);
       continue;
     }
-    
+
     // Check if this is excluded text (header, footer, or question)
-    const isExcluded = excludePatterns.some(pattern => 
+    const isExcluded = excludePatterns.some(pattern =>
       trimmedLine.toLowerCase().includes(pattern.toLowerCase())
     );
-    
+
     // Check if this is before or at the question line
     const isQuestion = i <= questionEndIndex;
-    
+
     // This is a poll option if:
     // 1. It's not excluded text
     // 2. It comes after the question
     // 3. It's reasonably long (more than just a few words)
     // 4. It comes after an empty line (typical poll structure)
-    const isOption = !isExcluded && 
+    const isOption = !isExcluded &&
                      !isQuestion &&
                      trimmedLine.length > 15 &&
                      (i > 0 && lines[i - 1]?.trim() === ''); // Must come after empty line
-    
+
     if (isOption) {
       // This is a poll option - render with checkbox
       result.push(
@@ -96,7 +96,7 @@ const renderPollDescription = (description: string) => {
       }
     }
   }
-  
+
   return <div>{result}</div>;
 };
 
@@ -122,19 +122,19 @@ const OpportunityDetail: React.FC = () => {
 
   const loadOpportunity = async (forceRefresh = false) => {
     if (!id) return;
-    
+
     try {
       setLoading(true);
       setError('');
-      
+
       // Always use cache busting when force refreshing or when coming back to the page
       const params = forceRefresh ? { _t: Date.now() } : undefined;
       const data = await getOpportunity(id, params);
-      
+
       setOpportunity(data);
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number; data?: { error?: string } }; message?: string };
-      
+
       // Provide more specific error messages
       if (axiosError.response?.status === 404) {
         // Could be: opportunity doesn't exist, or it's a draft and user is not admin
@@ -170,7 +170,7 @@ const OpportunityDetail: React.FC = () => {
   // Fetch calendar events when sessions are available
   useEffect(() => {
     let isMounted = true;
-    
+
     const loadCalendarEvents = async () => {
       if (!opportunity?.sessions || opportunity.sessions.length === 0) {
         if (isMounted) setUserCalendarEvents([]);
@@ -179,17 +179,17 @@ const OpportunityDetail: React.FC = () => {
 
       try {
         if (isMounted) setLoadingCalendar(true);
-        
+
         // Get date range from sessions
         const dates = opportunity.sessions
           .map(s => new Date(s.start_time))
           .sort((a, b) => a.getTime() - b.getTime());
-        
+
         if (dates.length === 0) return;
 
         const startTime = new Date(dates[0]);
         startTime.setHours(0, 0, 0, 0);
-        
+
         const endTime = new Date(dates[dates.length - 1]);
         endTime.setHours(23, 59, 59, 999);
 
@@ -198,7 +198,7 @@ const OpportunityDetail: React.FC = () => {
           startTime.toISOString(),
           endTime.toISOString()
         );
-        
+
         if (isMounted) setUserCalendarEvents(events);
       } catch (error: unknown) {
         // Don't show error to user, just log it
@@ -209,7 +209,7 @@ const OpportunityDetail: React.FC = () => {
     };
 
     loadCalendarEvents();
-    
+
     return () => {
       isMounted = false;
     };
@@ -229,20 +229,20 @@ const OpportunityDetail: React.FC = () => {
       if (event.status === 'cancelled' || event.status === 'declined') {
         return false;
       }
-      
+
       const eventStart = new Date(event.start);
       const eventEnd = new Date(event.end);
-      
+
       // Skip if event times are invalid
       if (isNaN(eventStart.getTime()) || isNaN(eventEnd.getTime())) {
         return false;
       }
-      
+
       // Check for actual overlap (not just touching)
       // Events overlap if: sessionStart < eventEnd AND sessionEnd > eventStart
       return (sessionStart < eventEnd && sessionEnd > eventStart);
     });
-    
+
     return hasConflict;
   }, [userCalendarEvents]);
 
@@ -250,7 +250,7 @@ const OpportunityDetail: React.FC = () => {
   // Throttled to prevent excessive refreshes - only refresh if page was hidden for > 30 seconds
   useEffect(() => {
     let hiddenTime: number | null = null;
-    
+
     const handleVisibilityChange = () => {
       if (document.hidden) {
         // Record when page became hidden
@@ -266,7 +266,7 @@ const OpportunityDetail: React.FC = () => {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
@@ -288,34 +288,34 @@ const OpportunityDetail: React.FC = () => {
       setBookingLoading(sessionId);
       setError('');
       setBookingSuccess(null);
-      
+
       // Store the session ID for potential retry
       sessionStorage.setItem('lastAttemptedSession', sessionId);
-      
+
       const bookingResult = await bookSession(sessionId);
-      
+
       // Track action click for successful booking
       if (id) {
         trackOpportunityClick(id, 'action').catch(() => {
           // Silently fail - tracking shouldn't block user experience
         });
       }
-      
+
       setBookingSuccess('Successfully booked! Check your bookings page.');
-      
+
       // Small delay to ensure database transaction is committed
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Reload opportunity to update remaining slots with cache busting
       await loadOpportunity(true);
     } catch (err: unknown) {
       const axiosError = err as { response?: { status?: number; data?: { error?: string } }; code?: string; message?: string };
-      
+
       if (axiosError.response?.status === 409) {
         // Use the specific error message from the backend
         const errorMessage = axiosError.response?.data?.error || 'Session is full or you are already booked';
         setError(errorMessage);
-        
+
         // If it's a capacity issue, refresh the opportunity data to get latest info
         if (errorMessage.includes('full') || errorMessage.includes('capacity')) {
           await loadOpportunity(true);
@@ -371,13 +371,13 @@ const OpportunityDetail: React.FC = () => {
     // If error is 404 and user is not admin, offer helpful guidance
     const is404Error = error.includes('not found') || error.includes('404');
     const isNotAdmin = !user || (user.role !== 'researcher_admin' && user.role !== 'superadmin');
-    
+
     return (
       <div className="container mt-4">
         <h1>Opportunity Details</h1>
         <div className="alert alert-danger" role="alert">
           {error}
-          <button 
+          <button
             className="btn btn-sm btn-outline-danger ms-2"
             onClick={() => window.location.reload()}
             style={{ color: '#c82333', borderColor: '#c82333' }}
@@ -404,12 +404,12 @@ const OpportunityDetail: React.FC = () => {
     <div className="container-fluid py-4 opportunity-detail-page mission-control">
       {/* Living Neural Background - Dark Mode Only */}
       {isDark && <SlowNeuralBackground />}
-      
+
       <section className="container mt-4" aria-label="Opportunity details" style={{ position: 'relative', zIndex: 1 }}>
         <div className="row">
           <div className="col-12">
           {/* Back button */}
-          <button 
+          <button
             className="btn btn-outline-secondary mb-4 mission-back-btn"
             onClick={() => navigate('/')}
             aria-label="Navigate back to Cortex home"
@@ -418,16 +418,36 @@ const OpportunityDetail: React.FC = () => {
           </button>
 
 
-          {/* Session completion banner - shown when returning from FirstHand */}
+          {/* Session completion confirmation - shown when returning from a recorded study */}
           {isSessionCompleted && (
-            <div className="alert alert-success alert-dismissible fade show mission-alert mb-4" role="status" aria-live="polite">
-              <strong>Session complete.</strong> Your recording and responses have been saved. The research team will be in touch.
+            <div
+              className="mission-glass-panel mb-4"
+              role="status"
+              aria-live="polite"
+              style={{ position: 'relative', textAlign: 'center', padding: '2.25rem 1.5rem' }}
+            >
               <button
                 type="button"
-                className="btn-close"
+                className={`btn-close ${isDark ? 'btn-close-white' : ''}`}
                 onClick={() => navigate(`/opportunities/${id}`, { replace: true })}
-                aria-label="Dismiss"
+                aria-label="Dismiss confirmation"
+                style={{ position: 'absolute', top: '1rem', right: '1rem' }}
               />
+              <CheckCircle size={44} className="mb-3" style={{ color: 'var(--brand-orange-700)' }} aria-hidden="true" />
+              {/* Styled as a heading but not a semantic h2: the page's h1 (the study
+                  title) renders lower in Module A, so a real heading here would break
+                  document heading order. */}
+              <p className="h4 mb-2">Session complete</p>
+              <p className="mission-description" style={{ maxWidth: '520px', margin: '0 auto 1.5rem' }}>
+                Thank you. Your recording and responses have been saved, and the research team will be in touch if they need anything more.
+              </p>
+              <button
+                type="button"
+                className="btn btn-primary mission-cta-btn"
+                onClick={() => navigate('/')}
+              >
+                Browse more studies
+              </button>
             </div>
           )}
 
@@ -436,7 +456,7 @@ const OpportunityDetail: React.FC = () => {
             <div className="alert alert-danger alert-dismissible fade show mission-alert" role="alert" aria-live="assertive">
               {error}
               <div className="mt-2">
-                <button 
+                <button
                   className="btn btn-sm btn-outline-danger me-2"
                   onClick={() => loadOpportunity(true)}
                   disabled={loading}
@@ -445,7 +465,7 @@ const OpportunityDetail: React.FC = () => {
                   <RefreshCw size={14} className="me-1" aria-hidden="true" />
                   Refresh Data
                 </button>
-                <button 
+                <button
                   className="btn btn-sm btn-danger me-2"
                   onClick={async () => {
                     setError('');
@@ -462,9 +482,9 @@ const OpportunityDetail: React.FC = () => {
                   Retry Booking
                 </button>
               </div>
-              <button 
-                type="button" 
-                className="btn-close" 
+              <button
+                type="button"
+                className="btn-close"
                 onClick={() => setError('')}
                 aria-label="Close error message"
               ></button>
@@ -474,9 +494,9 @@ const OpportunityDetail: React.FC = () => {
           {/* ============================================================
               MODULE A: THE BRIEF - Glass Panel (Title, Description, Meta)
               ============================================================ */}
-          <div 
+          <div
             className="mission-glass-panel mission-brief"
-            style={{ 
+            style={{
               '--accent-border-color': getCardHoverColor(opportunity?.type)
             } as React.CSSProperties}
           >
@@ -501,7 +521,7 @@ const OpportunityDetail: React.FC = () => {
                 )}
                 {opportunity.description_optional && (
                   <div className="mission-description" style={{ marginTop: '12px' }}>
-                    {opportunity.type === 'poll' 
+                    {opportunity.type === 'poll'
                       ? renderPollDescription(opportunity.description_optional)
                       : <p style={{ whiteSpace: 'pre-wrap' }}>{opportunity.description_optional}</p>
                     }
@@ -537,7 +557,7 @@ const OpportunityDetail: React.FC = () => {
                           case 'any': return 'Any';
                           case 'internal': return 'Internal only';
                           case 'external': return 'External only';
-                          case 'specific': 
+                          case 'specific':
                             return opportunity.participant_type_specific_details || 'Specific';
                           default: return 'Any';
                         }
@@ -551,7 +571,11 @@ const OpportunityDetail: React.FC = () => {
 
           {/* ============================================================
               MODULE B: THE SCHEDULER - Glass Panel (Calendar)
+              Hidden on the completion screen so a just-finished participant is
+              not re-offered the launch CTA alongside the "Session complete"
+              confirmation. Dismissing the confirmation restores it.
               ============================================================ */}
+          {!isSessionCompleted && (
           <div className="mission-glass-panel mission-scheduler">
 
               {/* Sessions for test and interview opportunities */}
@@ -563,7 +587,7 @@ const OpportunityDetail: React.FC = () => {
                       <div>
                         <CheckCircle size={18} className="me-2" aria-hidden="true" />
                         {bookingSuccess}
-                        <button 
+                        <button
                           className="btn btn-sm btn-outline-success ms-3"
                           onClick={() => navigate('/my-bookings')}
                           aria-label="Navigate to My bookings page"
@@ -572,9 +596,9 @@ const OpportunityDetail: React.FC = () => {
                           View my bookings
                         </button>
                       </div>
-                      <button 
-                        type="button" 
-                        className="btn-close" 
+                      <button
+                        type="button"
+                        className="btn-close"
                         onClick={() => setBookingSuccess(null)}
                         aria-label="Close success message"
                       ></button>
@@ -592,8 +616,8 @@ const OpportunityDetail: React.FC = () => {
                         <div className="d-flex align-items-center gap-3" role="list" aria-label="Calendar legend">
                           {CALENDAR_LEGEND_ITEMS.map((item) => (
                             <div key={item.label} className="d-flex align-items-center gap-1" role="listitem">
-                              <div 
-                                className={`legend-swatch ${item.className}`} 
+                              <div
+                                className={`legend-swatch ${item.className}`}
                                 style={{ width: '12px', height: '12px', borderRadius: '3px' }}
                               />
                               <small className={`legend-label ${item.labelClass}`} style={{ fontSize: '0.7rem' }}>
@@ -640,10 +664,10 @@ const OpportunityDetail: React.FC = () => {
                           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} aria-hidden="true" />
                           Refresh
                         </button>
-                        
+
                         {/* Segmented Control for View Mode */}
-                        <div 
-                          role="group" 
+                        <div
+                          role="group"
                           aria-label="View mode selection"
                           style={{
                             display: 'inline-flex',
@@ -722,13 +746,13 @@ const OpportunityDetail: React.FC = () => {
                             const futureSessions = opportunity.sessions.filter(
                               session => new Date(session.end_time) >= new Date()
                             );
-                            
+
                             const sessionsWithoutConflicts = futureSessions.filter(
                               session => !hasCalendarConflict(session)
                             );
-                            
+
                             const conflictedCount = futureSessions.length - sessionsWithoutConflicts.length;
-                            
+
                             return (
                               <>
                                 {conflictedCount > 0 && (
@@ -751,7 +775,7 @@ const OpportunityDetail: React.FC = () => {
                                         <tr>
                                           <td colSpan={3} className="text-center py-4">
                                             <small className="text-muted">
-                                              {futureSessions.length === 0 
+                                              {futureSessions.length === 0
                                                 ? 'No available sessions'
                                                 : 'All available sessions conflict with your calendar'}
                                             </small>
@@ -761,14 +785,14 @@ const OpportunityDetail: React.FC = () => {
                                         sessionsWithoutConflicts.map((session) => {
                                     const startDate = new Date(session.start_time);
                                     const endDate = new Date(session.end_time);
-                                    
+
                                     // Format date (e.g., "Nov 5, 2025")
                                     const dateStr = startDate.toLocaleDateString('en-US', {
                                       month: 'short',
                                       day: 'numeric',
                                       year: 'numeric'
                                     });
-                                    
+
                                     // Format timeslot (e.g., "9:00 AM to 9:30 AM")
                                     const startTimeStr = startDate.toLocaleTimeString('en-US', {
                                       hour: 'numeric',
@@ -781,14 +805,14 @@ const OpportunityDetail: React.FC = () => {
                                       hour12: true
                                     });
                                     const timeSlotStr = `${startTimeStr} to ${endTimeStr}`;
-                                    
+
                                     return (
                                       <tr key={session.id}>
                                         <td>{dateStr}</td>
                                         <td>{timeSlotStr}</td>
                                         <td>
                                           {session.remaining > 0 ? (
-                                            <button 
+                                            <button
                                               className="btn btn-primary btn-sm"
                                               onClick={() => setConfirmBooking({ show: true, session })}
                                               disabled={bookingLoading === session.id}
@@ -886,7 +910,7 @@ const OpportunityDetail: React.FC = () => {
                             : 'Start Test'}
                         </button>
                       ) : (
-                        <a 
+                        <a
                           href={opportunity.external_link_optional}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -915,6 +939,7 @@ const OpportunityDetail: React.FC = () => {
                 </div>
               )}
           </div>
+          )}
           {/* End of MODULE B: THE SCHEDULER */}
 
           {/* Footer with owner info (admin only) */}
