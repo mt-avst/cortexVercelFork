@@ -22,7 +22,6 @@ export interface SessionRow {
   participantEmail: string | null;
   latestEventType: string;
   latestOccurredAt: string;
-  reviewUrl: string | null;
 }
 
 /**
@@ -42,8 +41,7 @@ export function groupEventsBySession(events: SessionEvent[]): SessionRow[] {
       participantName: event.participant_name ?? existing?.participantName ?? null,
       participantEmail: event.participant_email ?? existing?.participantEmail ?? null,
       latestEventType: event.event_type,
-      latestOccurredAt: event.occurred_at,
-      reviewUrl: event.firsthand_review_url ?? existing?.reviewUrl ?? null
+      latestOccurredAt: event.occurred_at
     });
   }, new Map<string, SessionRow>());
 
@@ -135,7 +133,6 @@ const SessionsTab: React.FC<{
                   <td style={{ padding: '10px 12px' }}>
                     <Link
                       to={`/admin/opportunities/${opportunityId}/sessions/${session.sessionId}/review`}
-                      state={{ reviewUrl: session.reviewUrl }}
                       style={{ color: 'var(--color-analytics-orange)', fontSize: '0.8rem' }}
                     >
                       Review session

@@ -34,25 +34,14 @@ function formatTimestamp(value: string | null): string {
 
 const SessionSummaryCard: React.FC<{
   outputs: FirstHandSessionOutputs;
-  reviewUrl: string | null;
   onSelectAttempt: (attempt: number) => void;
-}> = ({ outputs, reviewUrl, onSelectAttempt }) => {
+}> = ({ outputs, onSelectAttempt }) => {
   const { session, attempts } = outputs;
 
   return (
     <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
       <div className="cortex-chart-header">
         <h5 className="cortex-chart-title">{session.study_title}</h5>
-        {reviewUrl && (
-          <a
-            href={reviewUrl}
-            rel="noopener noreferrer"
-            target="_blank"
-            style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}
-          >
-            Open in FirstHand
-          </a>
-        )}
       </div>
 
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '32px', padding: '8px 0' }}>
