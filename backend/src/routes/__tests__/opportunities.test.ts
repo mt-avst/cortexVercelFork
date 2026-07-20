@@ -234,7 +234,75 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls, surveys, and unmoderated tests without a FirstHand study'
+        'External link is required for published polls and surveys'
+      );
+    });
+
+    it('should require a FirstHand study to publish an unmoderated opportunity (A1)', async () => {
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'published'
+          // Missing firsthand_study_id
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'A FirstHand study is required to publish an unmoderated test'
+      );
+    });
+
+    it('should create a published unmoderated opportunity when a FirstHand study is linked (A1)', async () => {
+      const created = {
+        id: '3',
+        type: 'unmoderated',
+        title: 'Valid Unmoderated Title',
+        purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+        status: 'published',
+        owner_user_id: 'test-user-id',
+        firsthand_study_id: 'study_abc123',
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({ rows: [created] }); // opportunity insert
+
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'published',
+          firsthand_study_id: 'study_abc123'
+        })
+        .expect(201);
+
+      expect(response.body).toMatchObject({
+        id: '3',
+        type: 'unmoderated',
+        firsthand_study_id: 'study_abc123',
+        sessions: []
+      });
+    });
+
+    it('should reject an unmoderated opportunity with an external participant type (M2)', async () => {
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          participant_type_required: 'external'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users'
       );
     });
   });
@@ -258,10 +326,10 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'test-user-id' }]
       });
 
-      // 2. Existing-opportunity lookup (type/link/firsthand_study_id) used to decide
-      //    whether the published-poll/survey link validation applies
+      // 2. Existing-opportunity lookup (type/link/firsthand_study_id/participant_type_required)
+      //    used to decide whether the published-link and participant-type rules apply
       mockQuery.mockResolvedValueOnce({
-        rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null }]
+        rows: [{ type: 'test', external_link_optional: null, firsthand_study_id: null, participant_type_required: 'any' }]
       });
 
       // 3. The actual UPDATE ... RETURNING *
@@ -283,10 +351,31 @@ describe('Opportunities API', () => {
       });
     });
 
+    it('should reject flipping an unmoderated opportunity to an external participant type (M2)', async () => {
+      // 1. Ownership check
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id' }]
+      });
+      // 2. Existing-opportunity lookup: an unmoderated opp currently using an
+      //    internal-friendly participant type
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ type: 'unmoderated', external_link_optional: null, firsthand_study_id: 'study_abc123', participant_type_required: 'any' }]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ participant_type_required: 'external' })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users'
+      );
+    });
+
     it('should check ownership', async () => {
       // Mock ownership check - different owner
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ owner_user_id: 'different-user-id' }] 
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
       });
 
       const response = await request(app)
@@ -303,10 +392,10 @@ describe('Opportunities API', () => {
   describe('DELETE /api/opportunities/:id', () => {
     it('should delete an opportunity', async () => {
       // Mock ownership check
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ owner_user_id: 'test-user-id' }] 
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id' }]
       });
-      
+
       // Mock delete query
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
@@ -317,8 +406,8 @@ describe('Opportunities API', () => {
 
     it('should check ownership before delete', async () => {
       // Mock ownership check - different owner
-      mockQuery.mockResolvedValueOnce({ 
-        rows: [{ owner_user_id: 'different-user-id' }] 
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'different-user-id' }]
       });
 
       const response = await request(app)

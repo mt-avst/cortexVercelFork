@@ -58,7 +58,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           <div className="col-12 col-md-8">
             <div className="form-group mb-4">
               <label htmlFor="firsthand_study_id" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
-                FirstHand Study
+                FirstHand Study *
               </label>
 
               {loading && (
@@ -84,12 +84,12 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               {!loading && !fetchError && (
                 <select
                   id="firsthand_study_id"
-                  className="form-select"
+                  className={`form-select ${validationErrors.firsthand_study_id ? 'is-invalid' : ''}`}
                   style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                   value={formData.firsthand_study_id || ''}
                   onChange={(e) => handleInputChange('firsthand_study_id', e.target.value || undefined)}
                 >
-                  <option value="">-- No FirstHand study (use external link below) --</option>
+                  <option value="">-- Select a launched FirstHand study --</option>
                   {launchedStudies.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.title}
@@ -102,39 +102,19 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 </select>
               )}
 
-              {formData.firsthand_study_id && (
+              {validationErrors.firsthand_study_id && (
+                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>
+                  {validationErrors.firsthand_study_id}
+                </div>
+              )}
+
+              {formData.firsthand_study_id ? (
                 <div className="form-text mt-1" style={{ fontSize: '0.875rem', color: 'var(--bs-success)' }}>
                   Participants will be sent directly into this study via a generated session URL.
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <hr className="my-4" />
-
-        <div className="row">
-          <div className="col-12">
-            <div className="form-group mb-3">
-              <label htmlFor="external_link_optional" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
-                External Link {formData.firsthand_study_id ? '(optional - overridden by FirstHand study above)' : '*'}
-              </label>
-              <div className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
-                Fallback URL if no FirstHand study is selected (e.g. Maze, UserTesting)
-              </div>
-              <input
-                type="url"
-                id="external_link_optional"
-                className={`form-control ${validationErrors.external_link_optional ? 'is-invalid' : ''}`}
-                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
-                value={formData.external_link_optional || ''}
-                onChange={(e) => handleInputChange('external_link_optional', e.target.value)}
-                placeholder="https://maze.co/your-test"
-                disabled={!!formData.firsthand_study_id}
-              />
-              {validationErrors.external_link_optional && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>
-                  {validationErrors.external_link_optional}
+              ) : (
+                <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
+                  An unmoderated opportunity is powered by a recorded FirstHand study. Launch one in FirstHand if none appear here.
                 </div>
               )}
             </div>

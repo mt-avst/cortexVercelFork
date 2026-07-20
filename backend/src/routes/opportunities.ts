@@ -313,12 +313,21 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   
   const data: CreateOpportunityRequest = req.body;
   // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
-  
-  // Additional validation for published polls/surveys/unmoderated
-  if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey' || data.type === 'unmoderated')) {
-    const isFirstHandBacked = data.type === 'unmoderated' && data.firsthand_study_id;
-    if (!isFirstHandBacked && (!data.external_link_optional || !validateUrl(data.external_link_optional))) {
-      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests without a FirstHand study');
+
+  // Unmoderated studies run with logged-in Cortex users, so an external
+  // participant type is not representable.
+  if (data.type === 'unmoderated' && data.participant_type_required === 'external') {
+    throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
+  }
+
+  // Additional validation for published opportunities
+  if (data.status === 'published' && data.type === 'unmoderated') {
+    if (!data.firsthand_study_id) {
+      throw new ValidationError('A FirstHand study is required to publish an unmoderated test');
+    }
+  } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
+    if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
+      throw new ValidationError('External link is required for published polls and surveys');
     }
   }
 
@@ -442,7 +451,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   
   // Get existing opportunity to check type when status is being changed
   const existingOpp = await pool.query(
-    'SELECT type, external_link_optional, firsthand_study_id FROM opportunities WHERE id = $1',
+    'SELECT type, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
     [id]
   );
   const existingType = data.type || existingOpp.rows[0].type;
@@ -450,12 +459,31 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
   const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
   const newFirstHandStudyId = data.firsthand_study_id !== undefined ? data.firsthand_study_id : existingFirstHandStudyId;
+  const newParticipantType = data.participant_type_required !== undefined
+    ? data.participant_type_required
+    : existingOpp.rows[0].participant_type_required;
 
-  // Additional validation for published polls/surveys/unmoderated
-  if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey' || existingType === 'unmoderated')) {
-    const isFirstHandBacked = existingType === 'unmoderated' && newFirstHandStudyId;
-    if (!isFirstHandBacked && (!newLink || !validateUrl(newLink))) {
-      throw new ValidationError('External link is required for published polls, surveys, and unmoderated tests without a FirstHand study');
+  // Unmoderated studies run with logged-in Cortex users, so an external
+  // participant type is not representable. Only enforce when this request
+  // actually sets the type or participant type, so an unrelated edit to a
+  // legacy unmoderated+external row is not blocked (the bad value can still be
+  // corrected by PATCHing participant_type_required to a non-external value).
+  if (
+    (data.type !== undefined || data.participant_type_required !== undefined) &&
+    existingType === 'unmoderated' &&
+    newParticipantType === 'external'
+  ) {
+    throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
+  }
+
+  // Additional validation for published opportunities
+  if (data.status === 'published' && existingType === 'unmoderated') {
+    if (!newFirstHandStudyId) {
+      throw new ValidationError('A FirstHand study is required to publish an unmoderated test');
+    }
+  } else if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
+    if (!newLink || !validateUrl(newLink)) {
+      throw new ValidationError('External link is required for published polls and surveys');
     }
   }
   
