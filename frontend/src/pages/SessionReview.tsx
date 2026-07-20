@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams, useLocation, Navigate } from 'react-router-dom';
+import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getSessionOutputs } from '../api/client';
@@ -28,12 +28,9 @@ function errorMessageForStatus(status: number | undefined): string {
 const SessionReviewPage: React.FC = () => {
   const navigate = useNavigate();
   const { id, sessionId } = useParams<{ id: string; sessionId: string }>();
-  const location = useLocation();
   const { user, loading } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-
-  const reviewUrl = (location.state as { reviewUrl?: string | null } | null)?.reviewUrl ?? null;
 
   const [outputs, setOutputs] = useState<FirstHandSessionOutputs | null>(null);
   const [loadingOutputs, setLoadingOutputs] = useState(true);
@@ -136,7 +133,6 @@ const SessionReviewPage: React.FC = () => {
 
         <SessionSummaryCard
           outputs={outputs}
-          reviewUrl={reviewUrl}
           onSelectAttempt={setSelectedAttempt}
         />
         <ResponsesSection steps={outputs.steps} />
