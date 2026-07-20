@@ -22,11 +22,16 @@ jest.mock('../../utils/firsthand-client', () => ({
   firstHandPost: jest.fn(),
 }));
 
+jest.mock('../../firsthand/session-create', () => ({
+  createSession: jest.fn(),
+}));
+
 import opportunitiesRouter from '../opportunities';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { isFirstHandConfigured, firstHandPost } from '../../utils/firsthand-client';
+import { createSession } from '../../firsthand/session-create';
 import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
@@ -34,6 +39,7 @@ const mockConnect = pool.connect as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 const mockIsFirstHandConfigured = isFirstHandConfigured as jest.MockedFunction<any>;
 const mockFirstHandPost = firstHandPost as jest.MockedFunction<any>;
+const mockCreateSession = createSession as jest.MockedFunction<any>;
 
 const app = express();
 app.use(express.json());
@@ -70,6 +76,8 @@ describe('Opportunities API', () => {
     // Reset mock to return empty arrays by default
     mockQuery.mockResolvedValue({ rows: [] });
     mockIsDatabaseAvailable.mockResolvedValue(true);
+    delete process.env.FIRSTHAND_INTERNAL;
+    delete process.env.FRONTEND_URL;
   });
 
   describe('GET /api/opportunities', () => {
@@ -561,6 +569,91 @@ describe('Opportunities API', () => {
         .expect(401);
 
       expect(response.body.error).toBe('Authentication required');
+    });
+
+    it('internal path: mints an in-process session and returns a same-origin URL', async () => {
+      process.env.FIRSTHAND_INTERNAL = '1';
+      process.env.FRONTEND_URL = 'https://cortex.example.com';
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(200);
+
+      expect(response.body.session_url).toBe('https://cortex.example.com/session/fh_tok');
+      expect(mockCreateSession).toHaveBeenCalledWith(expect.objectContaining({
+        studyId: 'study_abc123',
+        participant: expect.objectContaining({ participant_id: 'test-user-id', external_ref: '1' })
+      }));
+      // Internal path must NOT touch the HMAC client.
+      expect(mockFirstHandPost).not.toHaveBeenCalled();
+    });
+
+    it('internal path: does not require the HMAC integration to be configured', async () => {
+      process.env.FIRSTHAND_INTERNAL = '1';
+      mockIsFirstHandConfigured.mockReturnValue(false);
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
+      });
+
+      await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(200);
+      expect(mockCreateSession).toHaveBeenCalledTimes(1);
+    });
+
+    it('internal path: maps a study-without-steps result to 400', async () => {
+      process.env.FIRSTHAND_INTERNAL = '1';
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(400);
+      expect(response.body.error).toBe('Linked FirstHand study has no steps');
+      expect(mockFirstHandPost).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['persistence_not_configured', 503, 'FirstHand runtime datastore not configured'],
+      ['study_not_found', 404, 'Linked FirstHand study not found'],
+    ])('internal path: maps createSession error %s to HTTP %i', async (error, status, message) => {
+      process.env.FIRSTHAND_INTERNAL = '1';
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({ ok: false, error });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(status);
+      expect(response.body.error).toBe(message);
+      expect(mockFirstHandPost).not.toHaveBeenCalled();
+    });
+
+    it('internal path: maps payload_assembly_failed to a 500', async () => {
+      process.env.FIRSTHAND_INTERNAL = '1';
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(500);
+      expect(mockFirstHandPost).not.toHaveBeenCalled();
     });
   });
 
