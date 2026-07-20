@@ -2,16 +2,27 @@
 
 /**
  * Copy shared types, constants, and config into frontend/src/shared before build
- * This is necessary because Create React App doesn't allow imports outside src/
- * 
+ * This is necessary because the bundler cannot import from outside frontend/src/,
+ * so the committed src/shared copies are the actual bundle input.
+ *
  * Files copied:
  * - shared/types/index.ts → src/shared/types.ts
  * - shared/constants/index.ts → src/shared/constants.ts
  * - shared/config/environment.ts → src/shared/config/environment.ts
+ * - shared/firsthand/ (whole tree) → src/shared/firsthand/
+ *
+ * This is an ES module (frontend/package.json declares "type": "module").
+ * Run it deliberately with `node copy-shared-types.js` when a shared source
+ * changes; the frontend build does not invoke it, so re-run and commit the
+ * regenerated src/shared copies.
  */
 
-const fs = require('fs');
-const path = require('path');
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Auto-generated header to add to copied files
 const AUTO_GENERATED_HEADER = `/**
@@ -58,6 +69,20 @@ const filesToCopy = [
   },
 ];
 
+// Directory trees copied wholesale, preserving their internal structure and
+// relative imports. The FirstHand contract is a small tree — contract.ts imports
+// its sibling url-safety.ts and study-input.ts imports contract.ts — so the whole
+// shared/firsthand/ directory must be copied together, not file by file, or the
+// sibling imports would dangle in the frontend copy.
+const directoriesToCopy = [
+  {
+    source: path.resolve(rootDir, 'shared', 'firsthand'),
+    dest: path.resolve(frontendDir, 'src', 'shared', 'firsthand'),
+    name: 'firsthand',
+    required: false,
+  },
+];
+
 // Ensure directories exist
 const ensureDir = (filePath) => {
   const dir = path.dirname(filePath);
@@ -80,6 +105,21 @@ const copyFileWithHeader = (source, dest, name) => {
   console.log(`✓ Copied shared/${name} to src/shared/${name.includes('/') ? name : name + '.ts'}`);
 };
 
+// Recursively copy a directory of .ts files, applying the auto-generated header
+// to each and preserving the tree structure under the destination.
+const copyDirWithHeader = (sourceDir, destDir, name) => {
+  const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const destPath = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirWithHeader(sourcePath, destPath, `${name}/${entry.name}`);
+    } else if (entry.isFile() && entry.name.endsWith('.ts')) {
+      copyFileWithHeader(sourcePath, destPath, `${name}/${entry.name}`);
+    }
+  }
+};
+
 // Process all files
 let hasErrors = false;
 
@@ -99,6 +139,27 @@ for (const file of filesToCopy) {
       hasErrors = true;
     } else {
       console.warn(`⚠ Warning: shared/${file.name} not found, skipping...`);
+    }
+  }
+}
+
+// Process directory trees
+for (const dir of directoriesToCopy) {
+  if (fs.existsSync(dir.source)) {
+    try {
+      copyDirWithHeader(dir.source, dir.dest, dir.name);
+    } catch (error) {
+      console.error(`✗ Error copying ${dir.name}:`, error.message);
+      if (dir.required) {
+        hasErrors = true;
+      }
+    }
+  } else {
+    if (dir.required) {
+      console.error(`✗ Error: shared/${dir.name} not found at`, dir.source);
+      hasErrors = true;
+    } else {
+      console.warn(`⚠ Warning: shared/${dir.name} not found, skipping...`);
     }
   }
 }

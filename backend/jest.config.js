@@ -3,7 +3,9 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.ts'],
-  testPathIgnorePatterns: ['/node_modules/', '/__tests__/\\.'],
+  // Vitest owns src/firsthand/** (see vitest.config.ts). Keep jest out of it so
+  // the FirstHand-derived specs are never double-run by both runners.
+  testPathIgnorePatterns: ['/node_modules/', '/__tests__/\\.', '/src/firsthand/'],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
@@ -13,6 +15,7 @@ module.exports = {
     '!src/db/migrate.ts',
     '!src/db/seed.ts',
     '!src/demo-server.ts',
+    '!src/firsthand/**',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
