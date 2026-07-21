@@ -23,6 +23,8 @@ const GamificationPage = lazy(() => import('./pages/Gamification'));
 const OpportunityAnalyticsPage = lazy(() => import('./pages/OpportunityAnalytics'));
 const SessionReviewPage = lazy(() => import('./pages/SessionReview'));
 const Feedback = lazy(() => import('./pages/Feedback'));
+const Studies = lazy(() => import('./pages/Studies'));
+const StudyEditor = lazy(() => import('./pages/StudyEditor'));
 
 // Page loading fallback component
 const PageLoader = () => (
@@ -50,6 +52,9 @@ function App() {
                       <Route path="/submit-research-request" element={<UnderDevelopment />} />
                       <Route path="/admin" element={<Admin />} />
                       <Route path="/admin/settings" element={<Settings />} />
+                      <Route path="/admin/studies" element={<Studies />} />
+                      <Route path="/admin/studies/new" element={<StudyEditor />} />
+                      <Route path="/admin/studies/:id/edit" element={<StudyEditor />} />
                       <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
                       <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
                       <Route path="/admin/opportunities/:id/analytics" element={<OpportunityAnalyticsPage />} />
