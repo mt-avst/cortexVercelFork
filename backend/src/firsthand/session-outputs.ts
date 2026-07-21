@@ -153,7 +153,7 @@ export type MediaUrlContext = {
   now?: Date;
 };
 
-function isPlayableMimeType(mimeType: string): boolean {
+export function isPlayableMimeType(mimeType: string): boolean {
   return mimeType.startsWith("video/") || mimeType.startsWith("audio/");
 }
 
