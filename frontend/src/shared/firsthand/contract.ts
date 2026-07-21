@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-07-20T21:07:33.084Z
+ * Generated: 2026-07-21T20:18:04.470Z
  */
 
 import { z } from "zod";
@@ -42,8 +42,22 @@ export const sessionSchema = z.object({
   participant_id: z.string().min(1),
   expires_at: z.string().datetime().optional(),
   single_use: z.boolean().optional(),
-  callback_url: z.string().url().optional(),
-  return_url: z.string().url().optional(),
+  callback_url: z
+    .string()
+    .url()
+    .refine(isSafeTargetUrl, {
+      message:
+        "callback_url must be an http(s) URL (no javascript:, data:, or other non-http schemes)"
+    })
+    .optional(),
+  return_url: z
+    .string()
+    .url()
+    .refine(isSafeTargetUrl, {
+      message:
+        "return_url must be an http(s) URL (no javascript:, data:, or other non-http schemes)"
+    })
+    .optional(),
   asset_upload_context: z.record(z.string(), z.unknown()).optional()
 });
 
