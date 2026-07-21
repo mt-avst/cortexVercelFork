@@ -1,4 +1,6 @@
 
+import { checkCallbackEgress } from "./callback-egress-guard";
+import type { LookupImpl } from "./callback-egress-guard";
 import {
   FIRSTHAND_INTEGRATION_SIGNATURE_HEADER,
   FIRSTHAND_INTEGRATION_TIMESTAMP_HEADER,
@@ -66,9 +68,19 @@ export async function deliverSignedCallback(input: {
   body: string;
   callbackUrl: string;
   fetchImpl?: typeof fetch;
+  lookupImpl?: LookupImpl;
   secret: string;
 }): Promise<CallbackDeliveryResult> {
   const fetchImpl = input.fetchImpl ?? fetch;
+
+  // SSRF egress allowlist: never POST a signed callback to a non-https URL or a
+  // private/loopback/link-local destination. Checked before signing so a blocked
+  // target costs nothing and no request is ever issued.
+  const egress = await checkCallbackEgress(input.callbackUrl, input.lookupImpl);
+  if (!egress.allowed) {
+    return { error: `callback egress blocked: ${egress.reason}`, ok: false };
+  }
+
   const timestamp = String(Date.now());
   const signature = signIntegrationPayload({
     body: input.body,
@@ -87,6 +99,11 @@ export async function deliverSignedCallback(input: {
         [FIRSTHAND_INTEGRATION_TIMESTAMP_HEADER]: timestamp
       },
       method: "POST",
+      // A lifecycle callback never legitimately redirects. Refusing to follow
+      // 3xx closes the SSRF hole where a guard-approved public host redirects
+      // the signed POST to a private/loopback/metadata address (the egress
+      // check only validates the original URL, not a redirect target).
+      redirect: "error",
       signal: AbortSignal.timeout(CALLBACK_DELIVERY_TIMEOUT_MS)
     });
   } catch (error) {
