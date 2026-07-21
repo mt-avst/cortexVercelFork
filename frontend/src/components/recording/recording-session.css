@@ -1,0 +1,1375 @@
+/*
+ * Participant recording surface styles (B6).
+ *
+ * Ported from FirstHand `src/app/globals.css` (the participant-journey subset).
+ * Every rule is scoped under `.fh-recording` so this full-page takeover route
+ * cannot leak into the rest of the Cortex SPA - the base component classes
+ * (`.button`, `.chip`, `.alert-banner`, ...) are generic and would otherwise
+ * collide. The journey is a documented exception to the Cortex/Momentum design
+ * system, so its own type scale and palette are reproduced here rather than
+ * re-skinned. Fonts fall back to system faces (Cortex does not bundle the
+ * FirstHand webfonts); a webfont import is a follow-up, not a blocker.
+ *
+ * The modal (`.fh-modal-*`) is portalled to document.body and so lives outside
+ * the page's own `.fh-recording` subtree; its backdrop carries the
+ * `.fh-recording` class itself so the scoped base styles still reach it.
+ */
+
+.fh-recording {
+  --bg: #f7f2ea;
+  --card: rgba(255, 251, 246, 0.9);
+  --ink: #14213d;
+  --muted: #5f6b7a;
+  --line: rgba(20, 33, 61, 0.12);
+  --accent: #dd6e42;
+  --accent-strong: #b9552d;
+  --success: #2f6f5e;
+  --danger: #a63d40;
+  --shadow: 0 24px 70px rgba(20, 33, 61, 0.08);
+  --radius-btn: 10px;
+  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
+  --font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: var(--ink);
+  font-family: var(--font-sans), sans-serif;
+}
+
+.fh-recording *,
+.fh-recording *::before,
+.fh-recording *::after {
+  box-sizing: border-box;
+}
+
+.fh-recording a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.fh-recording button {
+  font: inherit;
+}
+
+.fh-recording ul {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.fh-recording-page {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.fh-recording h1,
+.fh-recording h2,
+.fh-recording h3 {
+  margin: 0;
+  font-family: var(--font-display), serif;
+  font-weight: 600;
+}
+
+.fh-recording h1 {
+  max-width: 12ch;
+  font-size: clamp(2.6rem, 4vw, 4.8rem);
+  line-height: 0.95;
+}
+
+.fh-recording h2 {
+  font-size: clamp(1.5rem, 2.4vw, 2.2rem);
+  margin-bottom: 1rem;
+}
+
+.fh-recording .session-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  padding: 2rem;
+}
+
+.fh-recording .eyebrow,
+.fh-recording .meta-label {
+  margin: 0 0 0.75rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.fh-recording .lede,
+.fh-recording .body-copy,
+.fh-recording .status-copy {
+  color: var(--muted);
+  line-height: 1.65;
+  font-size: 1rem;
+}
+
+.fh-recording .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  margin-top: 2rem;
+}
+
+.fh-recording .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.85rem 1.2rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-btn);
+  background: var(--ink);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fh-recording .button.secondary {
+  background: rgba(20, 33, 61, 0.08);
+  color: var(--ink);
+}
+
+.fh-recording .status-grid {
+  display: grid;
+  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.fh-recording .status-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(10px);
+  padding: 1.25rem;
+}
+
+.fh-recording .status-card strong,
+.fh-recording .meta-value {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--ink);
+}
+
+.fh-recording .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 999px;
+  background: rgba(20, 33, 61, 0.06);
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.fh-recording .chip--danger {
+  background: rgba(166, 61, 64, 0.12);
+  color: var(--danger);
+}
+
+.fh-recording.session-layout {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 5rem;
+}
+
+.fh-recording .back-link {
+  display: inline-flex;
+  margin-bottom: 1rem;
+  color: var(--muted);
+}
+
+.fh-recording .recording-dot {
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  background: #c5434c;
+  box-shadow: 0 0 0 0 rgba(197, 67, 76, 0.45);
+  animation: firsthand-recording-pulse 1.6s ease-out infinite;
+}
+
+.fh-recording .response-validation {
+  margin: 0.75rem 0 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--accent, #c0563a);
+}
+
+.fh-recording .runner-optional-hint {
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+/* Alerts are background tints, never another rounded bordered card. */
+.fh-recording .alert-banner {
+  margin-top: 1.5rem;
+  padding: 1rem 1.2rem;
+  border-radius: 8px;
+}
+
+.fh-recording .alert-banner strong {
+  display: block;
+}
+
+.fh-recording .alert-success {
+  background: rgba(47, 111, 94, 0.12);
+}
+
+.fh-recording .alert-danger {
+  background: rgba(166, 61, 64, 0.1);
+}
+
+.fh-recording .alert-neutral {
+  background: rgba(20, 33, 61, 0.06);
+}
+
+.fh-recording .runner-shell {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.fh-recording .runner-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.fh-recording .runner-header--lean {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fh-recording .runner-header--lean h1 {
+  margin: 0;
+  max-width: 62ch;
+  font-size: clamp(1.25rem, 1.6vw, 1.6rem);
+  line-height: 1.35;
+}
+
+.fh-recording .recording-callout {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  background: rgba(20, 33, 61, 0.05);
+}
+
+.fh-recording .recording-callout.is-failed {
+  background: rgba(166, 61, 64, 0.1);
+}
+
+.fh-recording .recording-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fh-recording .recording-callout .recording-dot {
+  flex: 0 0 auto;
+  width: 0.6rem;
+  height: 0.6rem;
+}
+
+.fh-recording .recording-callout-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.fh-recording .recording-callout--compact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.fh-recording .recording-callout--compact .recording-callout-title {
+  font-size: 0.95rem;
+  margin: 0;
+  flex: 1 1 12rem;
+}
+
+.fh-recording .recording-callout-meta--compact {
+  flex: 0 1 auto;
+  justify-content: flex-end;
+}
+
+.fh-recording .recording-callout-meta--compact .chip {
+  font-size: 0.78rem;
+  padding: 0.35rem 0.6rem;
+}
+
+.fh-recording .runner-card--instruction {
+  padding: 1.35rem 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.fh-recording .runner-instruction-hint {
+  margin: 0 0 1.1rem;
+  font-size: 1.02rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.fh-recording .alert-banner--inline {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding: 0.65rem 1rem;
+}
+
+.fh-recording .alert-banner--inline .status-copy {
+  margin: 0;
+}
+
+.fh-recording .response-input {
+  width: 100%;
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(20, 33, 61, 0.16);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--ink);
+  resize: vertical;
+}
+
+.fh-recording .choice-list {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.fh-recording .choice-item {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1rem 1.1rem;
+  border-radius: 20px;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  background: rgba(255, 255, 255, 0.55);
+  cursor: pointer;
+}
+
+.fh-recording .choice-item input {
+  margin: 0;
+}
+
+.fh-recording .choice-item.is-selected {
+  border-color: rgba(221, 110, 66, 0.3);
+  background: rgba(221, 110, 66, 0.1);
+}
+
+@keyframes firsthand-recording-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(197, 67, 76, 0.42);
+    transform: scale(1);
+  }
+
+  70% {
+    box-shadow: 0 0 0 12px rgba(197, 67, 76, 0);
+    transform: scale(1.02);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(197, 67, 76, 0);
+    transform: scale(1);
+  }
+}
+
+/* ===== Participant journey - prototype-faithful one-page app frame ===== */
+
+.fh-recording.session-layout--journey {
+  width: min(1340px, calc(100% - 3rem));
+  padding: 2rem 0 4.5rem;
+}
+
+.fh-recording .journey-frame {
+  --j-card: #fffcf6;
+  --j-paper-2: #f1ebe0;
+  --j-ink-3: #8b95a3;
+  --j-line-2: rgba(20, 33, 61, 0.22);
+  --j-line-strong: rgba(20, 33, 61, 0.4);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.fh-recording .journey-app {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  border: 1.5px solid var(--ink);
+  background: var(--bg);
+  box-shadow: 7px 7px 0 rgba(20, 33, 61, 0.08);
+}
+
+.fh-recording .journey-nav {
+  padding: 18px 14px;
+  border-right: 1.5px solid var(--j-line-strong);
+  background: var(--j-paper-2);
+}
+
+.fh-recording .journey-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.fh-recording .journey-brand-logo {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1.5px solid var(--ink);
+  border-radius: 50%;
+}
+
+.fh-recording .journey-brand-name b {
+  display: block;
+  font-family: var(--font-display), serif;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.fh-recording .journey-brand-name small {
+  display: block;
+  font-family: var(--font-mono), monospace;
+  font-size: 9px;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-nav-group {
+  margin: 14px 4px 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-nav-link {
+  display: block;
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.fh-recording .journey-nav-link--active {
+  background: var(--j-card);
+  border-color: var(--j-line-strong);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.fh-recording a.journey-nav-link:hover {
+  color: var(--ink);
+}
+
+.fh-recording .journey-nav-link--locked {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.fh-recording .journey-nav-lock-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--danger);
+  animation: firsthand-recording-pulse 1.6s ease-out infinite;
+}
+
+.fh-recording .journey-work {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  min-width: 0;
+}
+
+.fh-recording .journey-main {
+  min-width: 0;
+  padding: 24px 24px 40px;
+  border-right: 1.5px solid var(--j-line-strong);
+}
+
+.fh-recording .journey-rail {
+  padding: 20px 20px 32px;
+  background: var(--j-paper-2);
+}
+
+.fh-recording .journey-hydrating {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-block {
+  margin-bottom: 16px;
+  border: 1.5px solid var(--j-line-2);
+  border-radius: 6px;
+  background: var(--j-card);
+  scroll-margin-top: 16px;
+}
+
+.fh-recording .journey-block--hero {
+  border-color: var(--ink);
+  border-width: 2px;
+}
+
+.fh-recording .journey-block-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1.5px solid var(--line);
+}
+
+.fh-recording .journey-block-title {
+  margin: 0;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--ink);
+}
+
+.fh-recording .journey-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 23px;
+  height: 23px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 50%;
+  background: var(--bg);
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.fh-recording .journey-step--done {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.fh-recording .journey-step--key {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+
+.fh-recording .journey-block-body {
+  padding: 16px;
+}
+
+.fh-recording .journey-gate {
+  margin: 16px;
+  padding: 26px;
+  border: 1.5px dashed var(--j-line-strong);
+  border-radius: 6px;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(20, 33, 61, 0.055),
+    rgba(20, 33, 61, 0.055) 7px,
+    transparent 7px,
+    transparent 14px
+  );
+  text-align: center;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.fh-recording .journey-gate--ended {
+  margin: 0;
+}
+
+.fh-recording .journey-stage {
+  min-width: 0;
+}
+
+.fh-recording .journey-title {
+  margin: 0;
+  max-width: none;
+  font-family: var(--font-display), serif;
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.fh-recording .journey-title--sub {
+  font-size: 19px;
+}
+
+.fh-recording .journey-lede {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fh-recording .journey-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 0;
+}
+
+.fh-recording .journey-tag {
+  padding: 3px 7px;
+  border: 1px solid var(--j-line-strong);
+  border-radius: 3px;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fh-recording .journey-infogrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.fh-recording .journey-infocell {
+  padding: 13px 14px;
+  border-radius: 6px;
+  background: rgba(20, 33, 61, 0.045);
+}
+
+.fh-recording .journey-infocell h4 {
+  margin: 0 0 6px;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fh-recording .journey-infocell p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fh-recording .journey-infocell--explainer {
+  margin-top: 14px;
+}
+
+.fh-recording .journey-orderlist {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fh-recording .journey-orderlist li {
+  display: flex;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-orderlist li:last-child {
+  border-bottom: 0;
+}
+
+.fh-recording .journey-order-n {
+  flex: none;
+  padding-top: 2px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-order-copy {
+  min-width: 0;
+}
+
+.fh-recording .journey-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.fh-recording .journey-frame .actions {
+  margin-top: 16px;
+  gap: 10px;
+}
+
+.fh-recording .journey-frame .button {
+  min-height: 0;
+  padding: 10px 18px;
+  border: 1.5px solid var(--accent-strong);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fh-recording .journey-frame .button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.fh-recording .journey-frame .button.secondary {
+  border-color: var(--j-line-strong);
+  background: transparent;
+  color: var(--ink);
+}
+
+.fh-recording .journey-frame .button.secondary:hover:not(:disabled) {
+  background: rgba(20, 33, 61, 0.05);
+}
+
+.fh-recording .journey-frame .button:disabled {
+  border-color: var(--j-line-strong);
+  background: rgba(20, 33, 61, 0.07);
+  color: var(--j-ink-3);
+  cursor: not-allowed;
+}
+
+.fh-recording .journey-hint {
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-doneline {
+  margin: 16px 0 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-doneline span {
+  color: var(--success);
+}
+
+.fh-recording .journey-launch {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.fh-recording .journey-launch-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+
+.fh-recording .journey-launch-step {
+  display: flex;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 6px;
+  background: rgba(20, 33, 61, 0.045);
+}
+
+.fh-recording .journey-launch-step.is-active {
+  background: rgba(221, 110, 66, 0.08);
+  outline: 1.5px solid var(--j-line-strong);
+}
+
+.fh-recording .journey-launch-step.is-locked {
+  opacity: 0.55;
+}
+
+.fh-recording .journey-launch-num {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 999px;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.fh-recording .journey-launch-step.is-done .journey-launch-num {
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.fh-recording .journey-launch-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.fh-recording .journey-launch-title {
+  margin: 2px 0 4px;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fh-recording .journey-launch-copy {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fh-recording .journey-launch-copy b {
+  color: var(--ink);
+}
+
+.fh-recording .journey-launch-body .journey-actions {
+  margin-top: 10px;
+}
+
+.fh-recording .journey-launch-body .journey-hint {
+  display: block;
+  margin-top: 8px;
+}
+
+.fh-recording .journey-actions--secondary {
+  margin-top: 0;
+}
+
+.fh-recording .task-window-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 8px;
+  border: 1.5px solid var(--j-line-2);
+  background: rgba(20, 33, 61, 0.03);
+  display: grid;
+  gap: 8px;
+}
+
+.fh-recording .task-window-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fh-recording .task-window-eyebrow {
+  margin: 0;
+}
+
+.fh-recording .task-window-open {
+  min-height: 0;
+}
+
+.fh-recording .task-window-copy {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fh-recording .task-window-note {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--accent-strong);
+}
+
+.fh-recording .journey-verdict {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fh-recording .journey-verdict-tick {
+  color: var(--success);
+}
+
+.fh-recording .journey-verdict-detail {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.fh-recording .journey-checkrows {
+  margin-top: 8px;
+}
+
+.fh-recording .journey-checkrow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-checkrow:last-child {
+  border-bottom: 0;
+}
+
+.fh-recording .journey-checkrows--single .journey-checkrow {
+  border-bottom: 0;
+  padding: 2px 0;
+}
+
+.fh-recording .journey-cbx {
+  flex: none;
+  align-self: center;
+  width: 17px;
+  height: 17px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 3px;
+  background: var(--bg);
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: transparent;
+}
+
+.fh-recording .journey-checkrow.is-pass .journey-cbx {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.fh-recording .journey-checkrow.is-pass {
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-checkrow.is-fail .journey-cbx {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.fh-recording .journey-checkrow.is-fail,
+.fh-recording .journey-checkrow.is-warning {
+  color: var(--ink);
+}
+
+.fh-recording .journey-checkrow.is-warning .journey-cbx {
+  border-color: var(--accent-strong);
+  color: var(--accent-strong);
+}
+
+.fh-recording .journey-cname {
+  flex: 1;
+  min-width: 0;
+}
+
+.fh-recording .journey-cname strong {
+  color: var(--ink);
+}
+
+.fh-recording .journey-remediation {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.fh-recording .journey-cstate {
+  flex: none;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-alert {
+  margin-top: 14px;
+  padding: 11px 14px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12.5px;
+}
+
+.fh-recording .journey-alert strong {
+  display: block;
+  color: var(--ink);
+}
+
+.fh-recording .journey-alert p {
+  margin: 4px 0 0;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.fh-recording .journey-alert--danger {
+  border-color: var(--danger);
+}
+
+.fh-recording .journey-progresswrap {
+  height: 22px;
+  max-width: 560px;
+  margin: 14px 0 8px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 4px;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.fh-recording .journey-progressbar {
+  height: 100%;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--accent),
+    var(--accent) 8px,
+    var(--accent-strong) 8px,
+    var(--accent-strong) 16px
+  );
+  transition: width 0.3s linear;
+}
+
+.fh-recording .journey-progress-pct {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-uperr {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--danger);
+  border-radius: 6px;
+  background: var(--j-card);
+  font-size: 12.5px;
+}
+
+.fh-recording .journey-uperr p {
+  margin: 0;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.fh-recording .journey-uperr .journey-actions {
+  margin-top: 10px;
+}
+
+.fh-recording .journey-declined-note {
+  margin: 14px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-inline-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.fh-recording .journey-inline-link:hover {
+  color: var(--ink);
+}
+
+.fh-recording .journey-rail-stick {
+  position: sticky;
+  top: 16px;
+}
+
+.fh-recording .journey-rail-sec {
+  margin-bottom: 20px;
+}
+
+.fh-recording .journey-rail-sec h4 {
+  margin: 0 0 10px;
+  padding-bottom: 7px;
+  border-bottom: 1.5px solid var(--line);
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-rail-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-rail-val {
+  font-family: var(--font-mono), monospace;
+  font-size: 11px;
+  text-align: right;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-rail-val--warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.fh-recording .journey-vitem {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.fh-recording .journey-vitem--done {
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-vtick {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 3px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  line-height: 13px;
+  text-align: center;
+  color: transparent;
+}
+
+.fh-recording .journey-vitem--done .journey-vtick {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+
+.fh-recording .journey-frame .runner-shell {
+  gap: 15px;
+}
+
+.fh-recording .journey-frame .recording-callout--compact {
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 6px;
+  background: var(--j-card);
+  padding: 10px 14px;
+}
+
+.fh-recording .journey-frame .recording-callout.is-active {
+  border-color: var(--danger);
+}
+
+.fh-recording .journey-frame .recording-callout.is-failed {
+  border-color: var(--danger);
+  background: rgba(166, 61, 64, 0.06);
+}
+
+.fh-recording .journey-frame .recording-callout--compact .recording-callout-title {
+  font-size: 13px;
+}
+
+.fh-recording .journey-frame .chip,
+.fh-recording .journey-frame .recording-callout-meta--compact .chip {
+  padding: 3px 7px;
+  border: 1px solid var(--j-line-strong);
+  border-radius: 3px;
+  background: transparent;
+  font-family: var(--font-mono), monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.fh-recording .journey-frame .chip--live {
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.fh-recording .journey-frame .chip--danger {
+  border-color: var(--danger);
+  background: rgba(166, 61, 64, 0.1);
+  color: var(--danger);
+}
+
+.fh-recording .journey-frame .runner-header--lean h1 {
+  max-width: none;
+  font-family: var(--font-sans), sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.fh-recording .journey-frame .runner-header--lean .status-copy {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-frame .runner-card--instruction {
+  padding: 13px 0 0;
+  border-top: 1px solid var(--line);
+}
+
+.fh-recording .journey-frame .runner-instruction-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.fh-recording .journey-frame .status-copy {
+  font-size: 12.5px;
+}
+
+.fh-recording .journey-frame .alert-banner {
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+}
+
+.fh-recording .journey-frame .alert-neutral {
+  border: 1.5px solid var(--line);
+  background: rgba(20, 33, 61, 0.04);
+}
+
+.fh-recording .journey-frame .alert-danger {
+  border: 1.5px solid var(--danger);
+  background: transparent;
+}
+
+.fh-recording .journey-frame .eyebrow {
+  margin: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  color: var(--j-ink-3);
+}
+
+.fh-recording .journey-frame .response-input {
+  padding: 10px 12px;
+  border: 1.5px solid var(--j-line-strong);
+  border-radius: 6px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.fh-recording .journey-frame .choice-item {
+  padding: 10px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 13px;
+}
+
+.fh-recording .journey-frame .choice-item.is-selected {
+  border-color: var(--accent);
+  background: rgba(221, 110, 66, 0.08);
+}
+
+.fh-recording .journey-frame .response-validation {
+  font-size: 12.5px;
+}
+
+/* --- Return modal (portalled to body; backdrop carries the scope class) --- */
+
+.fh-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(20, 33, 61, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.fh-modal-card {
+  width: min(560px, 100%);
+  padding: 1.5rem;
+  border-radius: 28px;
+  border: 1px solid rgba(20, 33, 61, 0.12);
+  background: rgba(255, 251, 246, 0.96);
+  box-shadow: 0 24px 70px rgba(20, 33, 61, 0.18);
+}
+
+.fh-recording .fh-modal-card h2 {
+  margin-bottom: 0.75rem;
+}
+
+.fh-recording .fh-modal-actions {
+  margin-top: 1.5rem;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 1100px) {
+  .fh-recording .journey-work {
+    grid-template-columns: 1fr;
+  }
+
+  .fh-recording .journey-main {
+    border-right: 0;
+  }
+
+  .fh-recording .journey-rail {
+    border-top: 1.5px solid var(--j-line-strong);
+  }
+}
+
+@media (max-width: 900px) {
+  .fh-recording .session-card {
+    padding: 1.5rem;
+  }
+
+  .fh-recording .runner-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .fh-recording .journey-app {
+    grid-template-columns: 1fr;
+  }
+
+  .fh-recording .journey-nav {
+    border-right: 0;
+    border-bottom: 1.5px solid var(--j-line-strong);
+  }
+
+  .fh-recording .journey-infogrid {
+    grid-template-columns: 1fr;
+  }
+}
