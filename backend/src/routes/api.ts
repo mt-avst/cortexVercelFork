@@ -13,6 +13,7 @@ import notificationPreferencesRouter from './notificationPreferences';
 import feedbackRouter from './feedback';
 import statsRouter from './stats';
 import firsthandRouter from './firsthand';
+import firsthandSessionRouter from './firsthand-session';
 import sessionOutputsRouter from './session-outputs';
 
 const router: Router = Router();
@@ -79,7 +80,12 @@ router.use('/feedback', feedbackRouter);
 // Mount stats routes (public, no auth required)
 router.use('/stats', statsRouter);
 
-// Mount FirstHand integration routes
+// Mount the participant runtime API (B4): requireAuth + token->user binding.
+// Registered before the broader '/firsthand' so the specific prefix wins
+// regardless of what routes firsthandRouter grows later.
+router.use('/firsthand/session', firsthandSessionRouter);
+
+// Mount FirstHand integration routes (admin studies CRUD + HMAC callbacks)
 router.use('/firsthand', firsthandRouter);
 
 export default router;

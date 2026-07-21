@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { logger } from './logger';
+import { logger, redactSensitiveUrl } from './logger';
 import { 
   AppError, 
   ValidationError, 
@@ -64,12 +64,54 @@ export const errorHandler = (
   next: NextFunction
 ) => {
   const requestId = res.getHeader('X-Request-ID') as string;
-  
+
+  // Handle body-parser errors (malformed JSON, oversized/aborted bodies) FIRST.
+  // express.json rejects these in its own middleware, before any route runs, so
+  // a route-level try/catch can never see them. Without this they fall through
+  // to the 500 branch — turning a participant abandoning a session mid-POST
+  // (a truncated body) into a 500 with a stack trace. These are expected client
+  // input, so they log at warn, not error. body-parser marks them with a
+  // numeric `status`/`statusCode`, a `type` slug and `expose: true`.
+  const bodyParserError = error as Error & {
+    status?: number;
+    statusCode?: number;
+    type?: string;
+    expose?: boolean;
+  };
+  const bodyParserStatus = bodyParserError.status ?? bodyParserError.statusCode;
+  if (
+    typeof bodyParserStatus === 'number' &&
+    bodyParserStatus >= 400 &&
+    bodyParserStatus < 500 &&
+    typeof bodyParserError.type === 'string' &&
+    bodyParserError.expose === true
+  ) {
+    logger.warn('Malformed request body rejected', {
+      requestId,
+      method: req.method,
+      url: redactSensitiveUrl(req.url),
+      errorMessage: error.message,
+      userId: (req as any).user?.id,
+    });
+
+    const response: ErrorResponse = {
+      error:
+        bodyParserError.type === 'entity.parse.failed'
+          ? 'Invalid JSON in request body'
+          : 'Malformed request body',
+      code: 'INVALID_REQUEST_BODY',
+      timestamp: new Date().toISOString(),
+      requestId,
+    };
+
+    return res.status(bodyParserStatus).json(response);
+  }
+
   // Log the error
   logger.error('Request error', {
     requestId,
     method: req.method,
-    url: req.url,
+    url: redactSensitiveUrl(req.url),
     error: {
       name: error.name,
       message: error.message,
