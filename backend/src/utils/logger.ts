@@ -2,6 +2,18 @@ import { Request, Response } from 'express';
 import { LogContext } from '../../../shared/types';
 
 /**
+ * Redacts participant session bearer tokens from a URL before it is logged.
+ * The token is an opaque capability carried as a path segment
+ * (/api/firsthand/session/<token>/...), so logging the raw URL would leak a
+ * live credential into log aggregation. Replaces only the token segment,
+ * preserving the rest of the path and query for debugging.
+ */
+export function redactSensitiveUrl(url: string | undefined): string | undefined {
+  if (!url) return url;
+  return url.replace(/(\/session\/)[^/?#]+/g, '$1[REDACTED]');
+}
+
+/**
  * Logger class for structured logging with different levels and contexts
  * 
  * Provides consistent logging across the application with support for:
@@ -78,7 +90,7 @@ export class Logger {
       this.info('Request started', {
         requestId,
         method: req.method,
-        url: req.url,
+        url: redactSensitiveUrl(req.url),
         userAgent: req.get('User-Agent'),
         ip: req.ip,
         userId: (req as any).user?.id,
@@ -92,7 +104,7 @@ export class Logger {
         logger.info('Request completed', {
           requestId,
           method: req.method,
-          url: req.url,
+          url: redactSensitiveUrl(req.url),
           statusCode: res.statusCode,
           responseTime,
           userId: (req as any).user?.id,
@@ -113,7 +125,7 @@ export class Logger {
       this.error('Request error', {
         requestId,
         method: req.method,
-        url: req.url,
+        url: redactSensitiveUrl(req.url),
         error: {
           name: error.name,
           message: error.message,
