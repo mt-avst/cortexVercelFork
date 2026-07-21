@@ -54,9 +54,9 @@ describe("buildParticipantReturnUrl", () => {
   });
 
   it("rejects a javascript: return url so it never reaches an href", () => {
-    // The contract validates return_url only as z.string().url(), which accepts
-    // javascript:/data:. This is the sink-side guard: a non-http(s) scheme is
-    // dropped so the "Return to the study hub" anchor is never rendered with it.
+    // The contract now refines return_url with isSafeTargetUrl, but this is the
+    // sink-side second line of defence: a non-http(s) scheme is dropped so the
+    // "Return to the study hub" anchor is never rendered with it.
     expect(
       buildParticipantReturnUrl("javascript:alert(document.cookie)", "completed")
     ).toBeNull();
