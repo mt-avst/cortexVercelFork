@@ -15,10 +15,9 @@ export type SessionOutcome = "completed" | "declined";
  *
  * The result is rendered as an `<a href>`, so a non-http(s) scheme is rejected
  * here (returns null, dropping the button) rather than handed to the sink. The
- * contract validates return_url only as `z.string().url()`, which permits
- * `javascript:`/`data:`; this is the second line of defence at the sink, so the
- * anchor never trusts its own input. `callback_url`/`return_url` contract-level
- * refinement is tracked as a pre-flag-flip follow-up.
+ * contract now also refines `return_url`/`callback_url` with `isSafeTargetUrl`,
+ * rejecting `javascript:`/`data:` at ingestion; this remains the second line of
+ * defence at the sink, so the anchor never trusts its own input.
  */
 export function buildParticipantReturnUrl(
   returnUrl: string,
