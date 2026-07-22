@@ -52,6 +52,24 @@ secret:
   # Secret store holds FIRSTHAND_INTEGRATION_SECRET (min 32 chars) and SESSION_SECRET.
   # The Okta clientID/clientSecret come separately from the chart-provisioned
   # <app>-okta-secret (auto-mounted via envFrom when okta_app.enabled is true).
+# FirstHand cutover (temporary): lets Cortex record into and play back from FirstHand's
+# existing bucket while FirstHand keeps ownership and remains the rollback target.
+# The chart renders these as a Crossplane IAM Policy + RolePolicyAttachment on this
+# app's IRSA role (library-chart _irsa-additional-custom-policy.yaml) - purely additive;
+# remove this block to revoke. irsa.enabled is the chart default, so only the policies
+# are declared here. Schema per entry: effect / action (list) / resource (single string).
+irsa:
+  additionalIAMPolicies:
+    - effect: Allow
+      action:
+        - s3:GetObject
+        - s3:PutObject
+        - s3:DeleteObject
+      resource: arn:aws:s3:::firsthand-playground/*
+    - effect: Allow
+      action:
+        - s3:ListBucket
+      resource: arn:aws:s3:::firsthand-playground
 resources:
   memory:
     # -- Pod requested memory
