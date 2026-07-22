@@ -272,4 +272,50 @@ describe('FirstHand Express router', () => {
     });
   });
 
+  describe('GET /api/firsthand/migration-report (Phase C, superadmin-only)', () => {
+    const superadmin = { id: 'sa-1', name: 'Super', email: 'sa@test.com', role: 'superadmin' as const };
+
+    it('rejects unauthenticated requests with 401', async () => {
+      await request(buildApp(null)).get('/api/firsthand/migration-report').expect(401);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it('rejects researcher_admin with 403 (superadmin only)', async () => {
+      await request(app).get('/api/firsthand/migration-report').expect(403);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it('rejects employee with 403', async () => {
+      const employee = { id: 'emp-1', name: 'Emp', email: 'emp@test.com', role: 'employee' as const };
+      await request(buildApp(employee)).get('/api/firsthand/migration-report').expect(403);
+      expect(mockQuery).not.toHaveBeenCalled();
+    });
+
+    it('serves the latest report as text/plain for a superadmin', async () => {
+      (mockQuery as any).mockResolvedValue({
+        rows: [{
+          ran_at: new Date('2026-07-22T16:00:00Z'),
+          mode: 'dry-run',
+          success: true,
+          report: 'mode: DRY RUN\nsource: firsthand.runtime_sessions rows=3'
+        }]
+      });
+      const res = await request(buildApp(superadmin)).get('/api/firsthand/migration-report').expect(200);
+      expect(res.headers['content-type']).toMatch(/text\/plain/);
+      expect(res.text).toContain('ran_at: 2026-07-22T16:00:00.000Z');
+      expect(res.text).toContain('mode: dry-run');
+      expect(res.text).toContain('success: true');
+      expect(res.text).toContain('firsthand.runtime_sessions rows=3');
+      expect(mockQuery).toHaveBeenCalledWith(
+        expect.stringContaining('FROM firsthand_migration_reports ORDER BY ran_at DESC LIMIT 1')
+      );
+    });
+
+    it('returns 404 text when no report exists yet', async () => {
+      (mockQuery as any).mockResolvedValue({ rows: [] });
+      const res = await request(buildApp(superadmin)).get('/api/firsthand/migration-report').expect(404);
+      expect(res.text).toContain('No migration report yet');
+    });
+  });
+
 });

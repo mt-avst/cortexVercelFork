@@ -133,3 +133,24 @@ initContainer:
   # creates an empty `firsthand` schema here until the Phase C restore fills it.
   args: ["npm run migrate && npm run seed && npm run migrate:firsthand"]
   workingDir: "/app/backend"
+# Phase C data-migration job (TEMPORARY - remove this block when C3 completes).
+# Renders a batch/v1 Job as an ArgoCD PostSync hook, so it re-runs on EVERY
+# sync. It runs scripts/firsthand-data-migrate.mjs in DRY-RUN mode: read-only
+# reports of both databases, no writes on either side. The real copy requires
+# FIRSTHAND_DATA_MIGRATE_EXECUTE: "1" in config.data (its own MR, only after
+# the dry-run output is approved) - and even then the source is never written.
+# OPERATIONAL COUPLING, accepted deliberately: a failed hook (even a transient
+# dry-run blip) marks the ArgoCD sync degraded until the next sync - that is
+# the fail-closed choice for a data-migration surface. ORDERING RULE: this
+# block MUST be removed before (or with) the cutover MR that drops
+# FIRSTHAND_DATABASE_URL, otherwise the job fails deterministically on every
+# sync. The job template has no workingDir field, hence the cd in args.
+# ttlSecondsAfterFinished keeps the completed pod (and its report in the pod
+# log) around for a day instead of the chart's 100s default.
+job:
+  enabled: true
+  command: [ "sh", "-c" ]
+  args: [ "cd /app/backend && node scripts/firsthand-data-migrate.mjs" ]
+  activeDeadlineSeconds: 900
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 86400

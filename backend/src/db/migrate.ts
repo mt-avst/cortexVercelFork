@@ -799,6 +799,23 @@ export async function runMigrations() {
     }
     console.log('✅ Created opportunity_session_events table');
 
+    // Phase C (FirstHand data migration): report sink for the migration job.
+    // The job pod's log is not reachable without cluster access, so
+    // scripts/firsthand-data-migrate.mjs writes its report here and a
+    // superadmin-gated route serves it. Lives in public (Cortex's own
+    // schema), NOT in firsthand - the execute path drops that schema.
+    // Remove with the rest of the Phase-C temporary machinery.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS firsthand_migration_reports (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        mode TEXT NOT NULL,
+        success BOOLEAN NOT NULL,
+        report TEXT NOT NULL
+      )
+    `);
+    console.log('✅ Created firsthand_migration_reports table');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);
