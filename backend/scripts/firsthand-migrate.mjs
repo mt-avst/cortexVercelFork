@@ -1,0 +1,191 @@
+import { createHash } from "node:crypto";
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import pg from "pg";
+
+const { Pool } = pg;
+
+const FIRSTHAND_SCHEMA = "firsthand";
+const MIGRATIONS_TABLE = `${FIRSTHAND_SCHEMA}.schema_migrations`;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const migrationsDirectory = path.resolve(__dirname, "../db/firsthand-migrations");
+
+// Deploy-time migrations ALWAYS target this deployment's own RDS - the same
+// database the initContainer's `npm run migrate && npm run seed` just wrote
+// to. The precedence below mirrors backend/src/config/databaseUrl.ts
+// (DATABASE_URL || POSTGRES_URL || POSTGRESQL_URL || DB_URL, where DB_URL is
+// what Kubera's RDS machinery injects via the ExternalSecret) so this runner
+// can never resolve to a different database than migrate+seed did.
+//
+// Deliberately NOT read here: FIRSTHAND_DATABASE_URL. The application's
+// runtime pool (src/firsthand/runtime-database.ts) prefers it while the
+// engine is external-first, because it points at FirstHand's live RDS - the
+// data-migration SOURCE. Deploy-time DDL must never run against that source;
+// this runner's job is to create and maintain the `firsthand` schema in
+// Cortex's own RDS so the Phase C restore has a home. Do not "fix" this to
+// match the runtime resolver order. The guard below additionally refuses to
+// run if the resolved target turns out to be the FirstHand source host.
+const CONNECTION_SOURCES = [
+  ["DATABASE_URL", "DATABASE_URL"],
+  ["POSTGRES_URL", "POSTGRES_URL"],
+  ["POSTGRESQL_URL", "POSTGRESQL_URL"],
+  ["DB_URL", "DB_URL (Kubera injected)"]
+];
+
+const resolvedConnection = CONNECTION_SOURCES.map(([envName, label]) => ({
+  label,
+  url: process.env[envName]?.trim() || null
+})).find((candidate) => candidate.url);
+
+if (!resolvedConnection) {
+  console.error(
+    "[firsthand-migrate] FirstHand migrations require DATABASE_URL, POSTGRES_URL, POSTGRESQL_URL or DB_URL to be set."
+  );
+  process.exit(1);
+}
+
+const databaseUrl = resolvedConnection.url;
+
+// The init container log is the only debugging surface in the cluster - name
+// the source var (never the value) so a wrong-env failure is diagnosable
+// from the log alone.
+console.info(`[firsthand-migrate] connection source: ${resolvedConnection.label}`);
+
+function hostIdentity(url) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.hostname}:${parsed.port || "5432"}`;
+  } catch {
+    return null;
+  }
+}
+
+// Anti-source guard: while the engine is external-first, FIRSTHAND_DATABASE_URL
+// in the pod env identifies FirstHand's live RDS (real consent-gated
+// participant data - the Phase C migration source). If a misconfiguration ever
+// points DATABASE_URL/POSTGRES_URL/POSTGRESQL_URL/DB_URL at that same host,
+// refuse to run rather than apply DDL to the source. After cutover the
+// variable is dropped and this guard becomes a no-op.
+const firsthandSourceUrl = process.env.FIRSTHAND_DATABASE_URL?.trim();
+if (firsthandSourceUrl) {
+  const targetHost = hostIdentity(databaseUrl);
+  const sourceHost = hostIdentity(firsthandSourceUrl);
+  if (targetHost && sourceHost && targetHost === sourceHost) {
+    console.error(
+      `[firsthand-migrate] REFUSING to run: the resolved target (${resolvedConnection.label}) is the same host as FIRSTHAND_DATABASE_URL - the live FirstHand source RDS. Deploy-time DDL only ever targets this deployment's own RDS.`
+    );
+    process.exit(1);
+  }
+}
+
+function requiresRdsSsl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.has("sslmode")) {
+      return false;
+    }
+    return parsed.hostname.endsWith(".rds.amazonaws.com");
+  } catch {
+    return false;
+  }
+}
+
+const pool = new Pool({
+  connectionString: databaseUrl,
+  max: 1,
+  // Fail loudly instead of hanging until Kubernetes kills the init container.
+  connectionTimeoutMillis: 10_000,
+  // RDS postgres 15+ defaults rds.force_ssl on; the RDS CA is not in Node's
+  // trust store, so encrypt without verification. Explicit ?sslmode= wins.
+  ...(requiresRdsSsl(databaseUrl) ? { ssl: { rejectUnauthorized: false } } : {})
+});
+
+try {
+  const migrationFiles = (await readdir(migrationsDirectory))
+    .filter((entry) => entry.endsWith(".sql"))
+    .sort((left, right) => left.localeCompare(right));
+
+  const client = await pool.connect();
+
+  try {
+    await client.query(`CREATE SCHEMA IF NOT EXISTS ${FIRSTHAND_SCHEMA}`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (
+        name TEXT PRIMARY KEY,
+        checksum TEXT NOT NULL,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    const appliedMigrationsResult = await client.query(
+      `
+        SELECT name, checksum
+        FROM ${MIGRATIONS_TABLE}
+        ORDER BY name ASC
+      `
+    );
+    const appliedMigrations = new Map(
+      appliedMigrationsResult.rows.map((row) => [row.name, row.checksum])
+    );
+
+    let appliedCount = 0;
+
+    for (const migrationFile of migrationFiles) {
+      const migrationPath = path.join(migrationsDirectory, migrationFile);
+      const migrationSql = await readFile(migrationPath, "utf8");
+      const checksum = createHash("sha256").update(migrationSql).digest("hex");
+      const recordedChecksum = appliedMigrations.get(migrationFile);
+
+      if (recordedChecksum && recordedChecksum !== checksum) {
+        throw new Error(
+          `Migration ${migrationFile} was already applied with a different checksum.`
+        );
+      }
+
+      if (recordedChecksum) {
+        continue;
+      }
+
+      console.log(`[firsthand-migrate] Applying ${migrationFile}...`);
+      await client.query("BEGIN");
+
+      try {
+        await client.query(migrationSql);
+        await client.query(
+          `
+            INSERT INTO ${MIGRATIONS_TABLE} (name, checksum)
+            VALUES ($1, $2)
+          `,
+          [migrationFile, checksum]
+        );
+        await client.query("COMMIT");
+        appliedCount += 1;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      }
+    }
+
+    if (appliedCount === 0) {
+      console.log("[firsthand-migrate] FirstHand migrations are already up to date.");
+    } else {
+      console.log(`[firsthand-migrate] Applied ${appliedCount} FirstHand migration(s).`);
+    }
+  } finally {
+    client.release();
+  }
+} catch (error) {
+  // The init container log is the only deploy-time diagnostic - make the
+  // failure findable by prefix. pg error messages may name host:port (never
+  // credentials); that is deliberate, it is the debugging surface.
+  console.error(
+    `[firsthand-migrate] FAILED: ${error instanceof Error ? error.message : String(error)}`
+  );
+  process.exitCode = 1;
+} finally {
+  await pool.end();
+}

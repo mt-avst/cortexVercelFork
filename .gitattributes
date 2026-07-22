@@ -1,2 +1,7 @@
 # Prevent macOS from creating extended attributes
 * -xattr
+
+# FirstHand migration SQL is checksum-tracked (firsthand.schema_migrations
+# records a sha256 of each file; the runner hard-fails on drift). Never let
+# git eol conversion touch these bytes.
+backend/db/firsthand-migrations/*.sql -text

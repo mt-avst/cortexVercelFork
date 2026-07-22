@@ -13,6 +13,7 @@
     "test:vitest:watch": "vitest",
     "migrate": "node dist/backend/src/db/migrate.js",
     "seed": "node dist/backend/src/db/seed.js",
+    "migrate:firsthand": "node scripts/firsthand-migrate.mjs",
     "reset-demo": "npx tsx src/db/reset-demo-data.ts",
     "reset-calendar": "npx tsx src/db/reset-calendar-bookings.ts",
     "reset-calendar-full": "npx tsx src/db/reset-calendar-bookings.ts --cancel-all"
