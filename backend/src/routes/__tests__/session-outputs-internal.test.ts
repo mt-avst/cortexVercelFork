@@ -2,9 +2,8 @@ import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 
-// In-process (FIRSTHAND_INTERNAL) path for the outputs route + the new media
-// streaming route (B3c). The HMAC-proxy path lives in session-outputs.test.ts;
-// this file drives the flag ON, so the firsthand runtime/storage layer is mocked
+// In-process outputs route + the media streaming route (B3c). The HMAC proxy is
+// gone, so this is the only path: the firsthand runtime/storage layer is mocked
 // and the real buildSessionOutputs + sessionOutputsSchema assemble the response.
 
 jest.mock('../../config', () => ({
@@ -13,10 +12,6 @@ jest.mock('../../config', () => ({
 
 jest.mock('../../utils/database', () => ({
   isDatabaseAvailable: jest.fn()
-}));
-
-jest.mock('../../firsthand/internal-flag', () => ({
-  isFirstHandInternalEnabled: jest.fn()
 }));
 
 jest.mock('../../firsthand/runtime-repository', () => ({
@@ -32,7 +27,6 @@ jest.mock('../../firsthand/object-storage', () => ({
 import sessionOutputsRouter from '../session-outputs';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
-import { isFirstHandInternalEnabled } from '../../firsthand/internal-flag';
 import {
   getRuntimeSession,
   listRuntimeSessionAttempts,
@@ -43,7 +37,6 @@ import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
-const mockInternalEnabled = isFirstHandInternalEnabled as jest.MockedFunction<any>;
 const mockGetRuntimeSession = getRuntimeSession as jest.MockedFunction<any>;
 const mockListAttempts = listRuntimeSessionAttempts as jest.MockedFunction<any>;
 const mockGetRuntimeAsset = getRuntimeAsset as jest.MockedFunction<any>;
@@ -124,12 +117,11 @@ function buildRuntimeSession(overrides: Record<string, unknown> = {}) {
 const OUTPUTS_PATH = '/api/opportunities/opp-1/sessions/session_abc/outputs';
 const MEDIA_PATH = '/api/opportunities/opp-1/sessions/session_abc/assets/asset_1/media';
 
-describe('GET outputs (FIRSTHAND_INTERNAL) - in-process assembly', () => {
+describe('GET outputs - in-process assembly', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockQuery.mockResolvedValue({ rows: [] });
     mockIsDatabaseAvailable.mockResolvedValue(true);
-    mockInternalEnabled.mockReturnValue(true);
     mockListAttempts.mockResolvedValue([]);
     process.env.FRONTEND_URL = 'https://cortex.example.com';
   });
@@ -289,7 +281,6 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     jest.clearAllMocks();
     mockQuery.mockResolvedValue({ rows: [] });
     mockIsDatabaseAvailable.mockResolvedValue(true);
-    mockInternalEnabled.mockReturnValue(true);
   });
 
   it('returns 401 when unauthenticated', async () => {
@@ -308,14 +299,6 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     mockOwnershipRow('owner-user-id');
     const response = await request(buildApp(otherAdminUser)).get(MEDIA_PATH);
     expect(response.status).toBe(403);
-    expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
-  });
-
-  it('returns 503 when the internal engine is disabled', async () => {
-    mockInternalEnabled.mockReturnValue(false);
-    mockOwnershipRow();
-    const response = await request(ownerApp).get(MEDIA_PATH);
-    expect(response.status).toBe(503);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
 

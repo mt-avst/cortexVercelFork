@@ -19,10 +19,9 @@ import "../components/recording/recording-session.css";
 // takeover outside the Cortex chrome so there is no one-click exit while a
 // recording is only held in memory.
 //
-// Storage is S3-only (H9): the browser presigns a direct-to-S3 upload. The flag
-// stays OFF through B6, so in normal operation the handoff still returns the
-// HMAC URL and no internal `/session/:token` token is minted - this route lands
-// dark until FIRSTHAND_INTERNAL is flipped at the End-of-B gate.
+// Storage is S3-only (H9): the browser presigns a direct-to-S3 upload. The
+// handoff mints an internal `/session/:token` and routes here; the standalone
+// FirstHand app and its HMAC hop are gone.
 const DIRECT_RECORDING_UPLOAD_MODE = "s3" as const;
 
 function messageForStatus(status: number): string {

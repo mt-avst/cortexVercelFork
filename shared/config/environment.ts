@@ -59,16 +59,10 @@ export const backendEnvSchema = z.object({
   // Frontend URL
   FRONTEND_URL: z.string().url('Frontend URL must be a valid URL').catch(() => 'http://localhost:3000'),
 
-  // FirstHand Integration (optional — integration is disabled when unset)
-  FIRSTHAND_BASE_URL: z.string().url('FirstHand base URL must be a valid URL').optional(),
+  // FirstHand integration HMAC secret, still referenced by the internalised
+  // runtime's integration-auth module. The outbound HMAC proxy (FIRSTHAND_BASE_URL)
+  // and the inbound callback receiver were removed with the merge.
   FIRSTHAND_INTEGRATION_SECRET: z.string().min(32, 'FirstHand integration secret must be at least 32 characters').optional(),
-
-  // FirstHand internalisation flag (Phase B). When enabled, Cortex serves the
-  // recorded-study engine in-process instead of proxying the standalone
-  // FirstHand app over HMAC. Default OFF: Phase B lands the internal paths dark
-  // and flips this on at the End-of-B gate, so an incident can flip back to the
-  // HMAC integration. Accepts '1' or 'true'.
-  FIRSTHAND_INTERNAL: z.string().transform(val => val === 'true' || val === '1').catch(() => false),
 
   // FirstHand internalised engine — datastore (Phase B, external-first).
   // Dedicated connection for the firsthand-runtime pool (schema `firsthand`),
@@ -255,9 +249,7 @@ export const ENVIRONMENT_DOCS = {
     GOOGLE_OAUTH_CLIENT_SECRET: 'Google OAuth client secret for user calendar integration',
     GOOGLE_OAUTH_REDIRECT_URI: 'Google OAuth redirect URI for calendar callback',
     FRONTEND_URL: 'Frontend application URL',
-    FIRSTHAND_BASE_URL: 'URL of the FirstHand app — used to proxy the study list and build reviewer deep-links. Omit to disable FirstHand integration.',
-    FIRSTHAND_INTEGRATION_SECRET: 'Shared HMAC-SHA256 secret for signing outbound requests to FirstHand and verifying inbound webhook callbacks. Minimum 32 characters. Must match the FIRSTHAND_INTEGRATION_SECRET set in the FirstHand app.',
-    FIRSTHAND_INTERNAL: 'Feature flag (Phase B). Set to 1/true to serve the recorded-study engine in-process instead of proxying the standalone FirstHand app over HMAC. Default off. Flipped on at the End-of-B gate; flip back to roll back to the HMAC integration.',
+    FIRSTHAND_INTEGRATION_SECRET: 'HMAC-SHA256 secret referenced by the internalised runtime\'s integration-auth helpers. Minimum 32 characters.',
     FIRSTHAND_DATABASE_URL: 'Dedicated connection string for the internalised FirstHand runtime pool (schema `firsthand`), kept separate from DATABASE_URL. Points at FirstHand\'s live RDS during Phase B (external-first); dropped at Phase C after the data is migrated into Cortex\'s RDS.',
     FIRSTHAND_S3_BUCKET: 'S3 bucket for internalised FirstHand recording storage (e.g. firsthand-{env}), reached via the backend IRSA role. Unset disables S3 storage.',
     FIRSTHAND_S3_REGION: 'AWS region for the FirstHand recording bucket. Falls back to AWS_REGION, then us-east-1.',
@@ -294,8 +286,7 @@ CORS_ORIGIN=http://localhost:3000
 ENABLE_CSRF=false
 FRONTEND_URL=http://localhost:3000
 
-# FirstHand Integration (optional — omit to disable)
-FIRSTHAND_BASE_URL=http://localhost:4000
+# FirstHand integration secret (used by the internalised runtime's integration-auth)
 FIRSTHAND_INTEGRATION_SECRET=your_shared_firsthand_secret_here_at_least_32_chars`,
 
     production: `NODE_ENV=production
@@ -323,8 +314,7 @@ GOOGLE_OAUTH_CLIENT_SECRET=your_oauth_client_secret
 GOOGLE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/api/calendar/auth/callback
 FRONTEND_URL=https://yourdomain.com
 
-# FirstHand Integration (optional — omit to disable)
-FIRSTHAND_BASE_URL=https://firsthand.yourdomain.com
+# FirstHand integration secret (used by the internalised runtime's integration-auth)
 FIRSTHAND_INTEGRATION_SECRET=your_production_shared_firsthand_secret_min_32_chars`,
   },
 

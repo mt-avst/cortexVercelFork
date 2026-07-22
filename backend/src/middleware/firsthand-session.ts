@@ -22,7 +22,7 @@ declare global {
  * binding predicate: the logged-in Cortex user must be the participant the
  * session was minted for. A leaked bearer token replayed by a different
  * authenticated user is rejected with 403 - this is the whole reason B4 is the
- * hard gate that lets FIRSTHAND_INTERNAL flip on. Anonymous access is gone:
+ * hard gate on the internalised runtime. Anonymous access is gone:
  * FirstHand's participant OIDC / cookie path is dropped, not ported.
  *
  * Applying this once, in front of all five routes, guarantees no route can be

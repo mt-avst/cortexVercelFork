@@ -15,7 +15,6 @@ function buildEvent(overrides: Partial<SessionEvent> = {}): SessionEvent {
     received_at: '2026-07-15T10:00:01.000Z',
     participant_name: 'Jane Doe',
     participant_email: 'jane@example.com',
-    firsthand_review_url: 'https://firsthand.example.com/review/session/session_abc',
     ...overrides
   };
 }

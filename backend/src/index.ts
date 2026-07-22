@@ -10,6 +10,7 @@ import { logger } from './utils/logger';
 import { errorHandler } from './utils/errorHandler';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
+import { runFirstHandMaintenance } from './firsthand/maintenance';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import cronRoutes from './routes/cron';
@@ -163,10 +164,9 @@ if (csrfEnabled) {
   });
 }
 
-// Body parsing middleware — capture raw body for webhook signature verification
-app.use(express.json({
-  verify: (req: any, _res, buf) => { req.rawBody = buf.toString('utf8'); }
-}));
+// Body parsing middleware. The raw-body capture that fed the HMAC callback
+// signature check is gone with the callback route — nothing reads req.rawBody now.
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
@@ -197,6 +197,19 @@ if (process.env.NODE_ENV !== 'test' && process.env.REMINDER_CRON_DISABLED !== 't
     } catch (err) {
       logger.error('Reminder cron run failed', { error: err });
     }
+  });
+}
+
+// FirstHand maintenance at 03:00 UTC (single-replica deployment), folding the
+// standalone app's daily maintenance cron in-process: the transcript backstop
+// and the stale-upload reaper. runFirstHandMaintenance is best-effort and never
+// throws. Disable with FIRSTHAND_MAINTENANCE_CRON_DISABLED=true.
+if (
+  process.env.NODE_ENV !== 'test' &&
+  process.env.FIRSTHAND_MAINTENANCE_CRON_DISABLED !== 'true'
+) {
+  cron.schedule('0 3 * * *', async () => {
+    await runFirstHandMaintenance();
   });
 }
 

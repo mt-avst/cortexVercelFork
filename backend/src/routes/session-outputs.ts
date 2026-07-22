@@ -6,12 +6,10 @@ import { z } from 'zod';
 
 import { requireAdmin } from '../middleware/authenticate';
 import { asyncHandler, NotFoundError, ForbiddenError, ValidationError } from '../utils/errorHandler';
-import { isFirstHandConfigured, firstHandGet, FirstHandHttpError } from '../utils/firsthand-client';
 import { pool } from '../config';
 import { isDatabaseAvailable } from '../utils/database';
 import { logger } from '../utils/logger';
-import { FirstHandSessionOutputs, SessionUser } from '../types';
-import { isFirstHandInternalEnabled } from '../firsthand/internal-flag';
+import { SessionUser } from '../types';
 import {
   getRuntimeAsset,
   getRuntimeSession,
@@ -121,9 +119,9 @@ async function serveInternalOutputs(
 }
 
 // GET /api/opportunities/:id/sessions/:sessionId/outputs - session outputs
-// (transcript, participant responses, asset metadata) for the opportunity owner.
-// Flag-gated (correction C1): FIRSTHAND_INTERNAL serves the in-process engine;
-// otherwise the HMAC proxy to standalone FirstHand is kept unchanged.
+// (transcript, participant responses, asset metadata) for the opportunity owner,
+// assembled in-process from the internalised runtime (the HMAC proxy to the
+// standalone FirstHand app was removed with the merge).
 router.get(
   '/:id/sessions/:sessionId/outputs',
   requireAdmin,
@@ -136,36 +134,7 @@ router.get(
 
     await assertOpportunityOwnership(id, req.user!);
 
-    if (isFirstHandInternalEnabled()) {
-      return serveInternalOutputs(req, res, id, sessionId);
-    }
-
-    if (!isFirstHandConfigured()) {
-      return res.status(503).json({ error: 'FirstHand integration not configured' });
-    }
-
-    await assertSessionBelongsToOpportunity(id, sessionId);
-
-    const attemptResult = attemptQuerySchema.safeParse(req.query.attempt);
-    if (!attemptResult.success) {
-      throw new ValidationError('attempt must be a positive integer');
-    }
-
-    const attemptSuffix = attemptResult.data ? `?attempt=${attemptResult.data}` : '';
-    const path = `/api/sessions/${encodeURIComponent(sessionId)}/outputs${attemptSuffix}`;
-
-    try {
-      const outputs = await firstHandGet<FirstHandSessionOutputs>(path);
-      res.json(outputs);
-    } catch (err) {
-      if (err instanceof FirstHandHttpError && err.status === 404) {
-        throw new NotFoundError('Session outputs');
-      }
-      if (err instanceof FirstHandHttpError && err.status === 503) {
-        return res.status(503).json({ error: 'FirstHand integration unavailable' });
-      }
-      throw err;
-    }
+    return serveInternalOutputs(req, res, id, sessionId);
   })
 );
 
@@ -188,8 +157,7 @@ const FORWARDED_MEDIA_HEADERS = [
 // session-scoping chain as the outputs route. getRuntimeAsset binds the asset to
 // the path :sessionId (across its attempts), so the URL cannot be retargeted to a
 // recording outside this owner's session. GET is CSRF-exempt and needs no body
-// parser; only nginx needs Range/buffering tuning (C2, before FIRSTHAND_INTERNAL
-// is flipped on).
+// parser; only nginx needs Range/buffering tuning (C2).
 router.get(
   '/:id/sessions/:sessionId/assets/:assetId/media',
   requireAdmin,
@@ -201,10 +169,6 @@ router.get(
     }
 
     await assertOpportunityOwnership(id, req.user!);
-
-    if (!isFirstHandInternalEnabled()) {
-      return res.status(503).json({ error: 'FirstHand internal engine not enabled' });
-    }
 
     await assertSessionBelongsToOpportunity(id, sessionId);
 
