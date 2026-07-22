@@ -12,11 +12,10 @@ export const CSRF_HEADER = 'x-csrf-token';
 const CSRF_COOKIE_NAME = 'adaptalabs_csrf';
 
 // Routes that authenticate by other means and receive no browser cookies
-// (FirstHand webhook: HMAC signature; cron triggers: CRON_SECRET bearer),
-// plus logout - it only destroys the session (nuisance-level CSRF risk) and
-// the SPA fires a silent tokenless logout on fresh visits from AuthContext.
+// (cron triggers: CRON_SECRET bearer), plus logout - it only destroys the
+// session (nuisance-level CSRF risk) and the SPA fires a silent tokenless
+// logout on fresh visits from AuthContext.
 const EXEMPT_PATH_PREFIXES = [
-  '/api/firsthand/callbacks',
   '/api/cron/',
   '/api/auth/logout',
   '/auth/logout',

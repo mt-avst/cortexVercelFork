@@ -39,6 +39,7 @@ function buildApp() {
 
   app.get('/api/thing', (_req, res) => res.json({ ok: true }));
   app.post('/api/thing', (_req, res) => res.json({ ok: true }));
+  app.post('/api/firsthand/studies', (_req, res) => res.json({ ok: 'studies' }));
   app.post('/api/firsthand/callbacks', (_req, res) => res.json({ ok: 'webhook' }));
   app.post('/api/cron/send-reminders', (_req, res) => res.json({ ok: 'cron' }));
   app.post('/api/auth/logout', (_req, res) => res.json({ ok: 'logout' }));
@@ -89,11 +90,18 @@ describe('CSRF protection', () => {
     expect(response.status).toBe(403);
   });
 
-  it('exempts the FirstHand webhook receiver', async () => {
+  it('no longer exempts the deleted webhook path (exemption stays gone)', async () => {
     const app = buildApp();
     const response = await request(app).post('/api/firsthand/callbacks').send({});
-    expect(response.status).toBe(200);
-    expect(response.body.ok).toBe('webhook');
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe(CSRF_ERROR_CODE);
+  });
+
+  it('protects live /api/firsthand/* routes like any other mutating route', async () => {
+    const app = buildApp();
+    const response = await request(app).post('/api/firsthand/studies').send({});
+    expect(response.status).toBe(403);
+    expect(response.body.code).toBe(CSRF_ERROR_CODE);
   });
 
   it('exempts the cron trigger routes', async () => {
