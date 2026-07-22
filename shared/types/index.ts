@@ -450,7 +450,6 @@ export interface SessionEvent {
   received_at: string;
   participant_name?: string;
   participant_email?: string;
-  firsthand_review_url?: string | null;
 }
 
 export interface MySessionEvent {

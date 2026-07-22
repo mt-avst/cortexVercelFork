@@ -1,3 +1,13 @@
+/**
+ * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
+ * 
+ * This file is automatically copied from the shared/ directory during the build process.
+ * Any changes should be made to the source file in the shared/ directory.
+ * 
+ * Source: See copy-shared-types.js for the source path
+ * Generated: 2026-07-21T20:54:56.026Z
+ */
+
 // Shared Type Definitions for Adaptalabs Application
 // This file contains all common interfaces used by both frontend and backend
 
@@ -450,7 +460,6 @@ export interface SessionEvent {
   received_at: string;
   participant_name?: string;
   participant_email?: string;
-  firsthand_review_url?: string | null;
 }
 
 export interface MySessionEvent {

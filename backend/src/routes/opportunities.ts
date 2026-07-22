@@ -15,9 +15,7 @@ import {
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity } from '../utils/publicOpportunity';
-import { isFirstHandConfigured, firstHandPost } from '../utils/firsthand-client';
 import { createSession } from '../firsthand/session-create';
-import { isFirstHandInternalEnabled } from '../firsthand/internal-flag';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
@@ -536,15 +534,6 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
   }
 
   const { id } = req.params;
-  const internal = isFirstHandInternalEnabled();
-
-  // C1: default OFF hands the participant to the standalone FirstHand app over
-  // HMAC and returns its session URL, so Phase B stays revertible by a flag flip
-  // until the End-of-B gate. The OFF path's HMAC-config guard runs first, exactly
-  // as before; the internal path relies on its own datastore guard instead.
-  if (!internal && !isFirstHandConfigured()) {
-    return res.status(503).json({ error: 'FirstHand integration not configured' });
-  }
 
   const dbAvailable = await isDatabaseAvailable();
 
@@ -576,54 +565,40 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
     external_ref: id,
   };
 
-  if (internal) {
-    // Mint the session in-process and return a same-origin Cortex URL. No
-    // callback_url: the internalised runtime writes lifecycle events directly to
-    // opportunity_session_events (B4), so there is no HMAC callback hop back into
-    // Cortex.
-    const result = await createSession({ studyId, participant, returnUrl });
+  // Mint the session in-process and return a same-origin Cortex URL. No
+  // callback_url: the internalised runtime writes lifecycle events directly to
+  // opportunity_session_events (B4), so there is no HMAC callback hop back into
+  // Cortex. (The HMAC handoff to the standalone app was removed with the flag.)
+  const result = await createSession({ studyId, participant, returnUrl });
 
-    if (!result.ok) {
-      switch (result.error) {
-        case 'persistence_not_configured':
-          return res.status(503).json({ error: 'FirstHand runtime datastore not configured' });
-        case 'study_not_found':
-          return res.status(404).json({ error: 'Linked FirstHand study not found' });
-        case 'study_has_no_steps':
-          return res.status(400).json({ error: 'Linked FirstHand study has no steps' });
-        case 'payload_assembly_failed':
-          throw new AppError(
-            'Failed to assemble the recorded-study session',
-            500,
-            'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
-          );
-        default: {
-          // Exhaustiveness guard: a new CreateSessionError must be handled here.
-          const unexpected: never = result.error;
-          throw new AppError(
-            `Unhandled session-create error: ${String(unexpected)}`,
-            500,
-            'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
-          );
-        }
+  if (!result.ok) {
+    switch (result.error) {
+      case 'persistence_not_configured':
+        return res.status(503).json({ error: 'FirstHand runtime datastore not configured' });
+      case 'study_not_found':
+        return res.status(404).json({ error: 'Linked FirstHand study not found' });
+      case 'study_has_no_steps':
+        return res.status(400).json({ error: 'Linked FirstHand study has no steps' });
+      case 'payload_assembly_failed':
+        throw new AppError(
+          'Failed to assemble the recorded-study session',
+          500,
+          'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
+        );
+      default: {
+        // Exhaustiveness guard: a new CreateSessionError must be handled here.
+        const unexpected: never = result.error;
+        throw new AppError(
+          `Unhandled session-create error: ${String(unexpected)}`,
+          500,
+          'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
+        );
       }
     }
-
-    const sessionUrl = `${frontendUrl}/session/${result.session.session_token}`;
-    return res.json({ session_url: sessionUrl });
   }
 
-  const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
-  const callbackUrl = `${backendUrl}/api/firsthand/callbacks`;
-
-  const session = await firstHandPost<{ session_url: string }>('/api/sessions', {
-    study_id: studyId,
-    participant,
-    callback_url: callbackUrl,
-    return_url: returnUrl,
-  });
-
-  res.json({ session_url: session.session_url });
+  const sessionUrl = `${frontendUrl}/session/${result.session.session_token}`;
+  return res.json({ session_url: sessionUrl });
 }));
 
 // GET /api/opportunities/:id/session-events - List FirstHand session events for an opportunity
@@ -651,8 +626,6 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
     throw new ForbiddenError('Only the opportunity owner can view session events');
   }
 
-  const firsthandBaseUrl = process.env.FIRSTHAND_BASE_URL || '';
-
   const result = await pool.query(
     `SELECT
        e.id,
@@ -672,14 +645,10 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
     [id]
   );
 
-  const events = result.rows.map((row) => ({
-    ...row,
-    firsthand_review_url: firsthandBaseUrl
-      ? `${firsthandBaseUrl}/review/session/${row.firsthand_session_id}`
-      : null
-  }));
-
-  res.json(events);
+  // Reviewers open the recording via the in-Cortex review route
+  // (/admin/opportunities/:id/sessions/:sessionId/review); the old cross-origin
+  // firsthand_review_url was retired with the HMAC seam.
+  res.json(result.rows);
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity

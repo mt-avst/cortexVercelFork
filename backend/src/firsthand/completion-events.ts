@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 import type { SessionPayload } from '../../../shared/firsthand/contract';
 import type { RuntimeMutation, RuntimeSessionRecord } from './runtime-records';
 
-// In-process lifecycle-event write for internalised (FIRSTHAND_INTERNAL) sessions.
+// In-process lifecycle-event write for internalised recorded-study sessions.
 //
 // FirstHand posted lifecycle events back to Cortex over an HMAC callback
 // (src/lib/integration-callbacks.ts -> deliverSignedCallback). The merge deletes
