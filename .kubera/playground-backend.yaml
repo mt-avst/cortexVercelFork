@@ -24,16 +24,14 @@ config:
     BOOTSTRAP_SUPERADMIN_EMAILS: nfine@adaptavist.com
     # CSRF protection defaults on under NODE_ENV=production (csrf-csrf double-submit;
     # token endpoint /api/csrf-token). Set ENABLE_CSRF: "false" to disable in an emergency.
-    # FirstHand Integration — disabled at runtime unless both FIRSTHAND_BASE_URL (here)
-    # and FIRSTHAND_INTEGRATION_SECRET (secret store) are set.
-    FIRSTHAND_BASE_URL: https://firsthand.kubera-playground.adaptavist.net
-    FIRSTHAND_INTERNAL: "1"
+    # Internalised recording storage: FirstHand's existing bucket, reached via
+    # this app's IRSA role (see the irsa block below). Load-bearing - the env
+    # schema treats them as optional, so a missing key boots healthy and fails
+    # at upload time.
     FIRSTHAND_S3_BUCKET: firsthand-playground
     FIRSTHAND_S3_REGION: us-east-1
-    # callback_url sent to FirstHand. The backend is private, so this points at the
-    # public frontend host; FirstHand's webhook hits nginx, which proxies /api here.
-    BACKEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
-    # return_url for the participant redirect back into Cortex.
+    # return_url for the participant redirect back into Cortex, and the origin
+    # media_url/session URLs are minted from.
     FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
 # App-level Okta OIDC. The chart registers an Okta app and injects clientID/clientSecret
 # into <app>-okta-secret (envFrom). Declared on THIS service (not the frontend) because
