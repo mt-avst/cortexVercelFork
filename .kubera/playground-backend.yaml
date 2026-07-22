@@ -33,11 +33,6 @@ config:
     # return_url for the participant redirect back into Cortex, and the origin
     # media_url/session URLs are minted from.
     FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
-    # C3d: arms the REAL data copy in the PostSync migration job (see the job
-    # block below). While set, every sync drop+recopies firsthand.* from the
-    # source RDS - deliberate until cutover. The source is never written.
-    # TEMPORARY - removed by the same teardown MR that removes the job block.
-    FIRSTHAND_DATA_MIGRATE_EXECUTE: "1"
 # App-level Okta OIDC. The chart registers an Okta app and injects clientID/clientSecret
 # into <app>-okta-secret (envFrom). Declared on THIS service (not the frontend) because
 # the backend runs the token exchange. Cannot be combined with okta_alb. The backend
@@ -135,27 +130,7 @@ initContainer:
   # migrate:firsthand chains FirstHand's checksum-guarded schema runner after
   # Cortex's own migrate+seed. It targets THIS deployment's RDS (DB_URL), never
   # FIRSTHAND_DATABASE_URL - see backend/scripts/firsthand-migrate.mjs. It
-  # creates an empty `firsthand` schema here until the Phase C restore fills it.
+  # is checksum-guarded and idempotent: it creates the empty `firsthand` schema
+  # on a fresh environment and is a verified no-op once the schema is populated.
   args: ["npm run migrate && npm run seed && npm run migrate:firsthand"]
   workingDir: "/app/backend"
-# Phase C data-migration job (TEMPORARY - remove this block when C3 completes).
-# Renders a batch/v1 Job as an ArgoCD PostSync hook, so it re-runs on EVERY
-# sync. It runs scripts/firsthand-data-migrate.mjs in DRY-RUN mode: read-only
-# reports of both databases, no writes on either side. The real copy requires
-# FIRSTHAND_DATA_MIGRATE_EXECUTE: "1" in config.data (its own MR, only after
-# the dry-run output is approved) - and even then the source is never written.
-# OPERATIONAL COUPLING, accepted deliberately: a failed hook (even a transient
-# dry-run blip) marks the ArgoCD sync degraded until the next sync - that is
-# the fail-closed choice for a data-migration surface. ORDERING RULE: this
-# block MUST be removed before (or with) the cutover MR that drops
-# FIRSTHAND_DATABASE_URL, otherwise the job fails deterministically on every
-# sync. The job template has no workingDir field, hence the cd in args.
-# ttlSecondsAfterFinished keeps the completed pod (and its report in the pod
-# log) around for a day instead of the chart's 100s default.
-job:
-  enabled: true
-  command: [ "sh", "-c" ]
-  args: [ "cd /app/backend && node scripts/firsthand-data-migrate.mjs" ]
-  activeDeadlineSeconds: 900
-  backoffLimit: 1
-  ttlSecondsAfterFinished: 86400

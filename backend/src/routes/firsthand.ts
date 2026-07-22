@@ -1,7 +1,6 @@
 import { Router, Request, Response } from 'express';
 
-import { pool } from '../config';
-import { requireAdmin, requireSuperadmin } from '../middleware/authenticate';
+import { requireAdmin } from '../middleware/authenticate';
 import { asyncHandler } from '../utils/errorHandler';
 import {
   createStudy,
@@ -37,26 +36,6 @@ function ensureStudiesPersistence(res: Response): boolean {
   }
   return true;
 }
-
-// GET /api/firsthand/migration-report - latest Phase C data-migration report
-// as text/plain, written by scripts/firsthand-data-migrate.mjs (the chart Job)
-// into public.firsthand_migration_reports. Exists because job pod logs are not
-// reachable without cluster access. Superadmin-only; TEMPORARY - remove with
-// the rest of the Phase-C migration machinery.
-router.get('/migration-report', requireSuperadmin, asyncHandler(async (_req: Request, res: Response) => {
-  const result = await pool.query(
-    'SELECT ran_at, mode, success, report FROM firsthand_migration_reports ORDER BY ran_at DESC LIMIT 1'
-  );
-  if (result.rows.length === 0) {
-    return res.status(404).type('text/plain').send(
-      'No migration report yet. Either the job has not run since this table landed, or it failed before connecting to the databases (check the ArgoCD sync status).'
-    );
-  }
-  const row = result.rows[0];
-  res.type('text/plain').send(
-    `ran_at: ${row.ran_at.toISOString()}\nmode: ${row.mode}\nsuccess: ${row.success}\n\n${row.report}\n`
-  );
-}));
 
 // GET /api/firsthand/studies - list studies for the Cortex study picker
 router.get('/studies', requireAdmin, asyncHandler(async (_req: Request, res: Response) => {

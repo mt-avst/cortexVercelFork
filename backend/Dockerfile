@@ -6,11 +6,6 @@ FROM node:20.20.2-alpine3.22
 # point release yet, so apply it explicitly until the base image catches up.
 RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
 
-# Phase C (TEMPORARY - remove after the FirstHand data migration completes):
-# pg_dump/psql 17.x for scripts/firsthand-data-migrate.mjs, which runs as a
-# chart Job streaming the firsthand schema between the two RDS instances.
-RUN apk add --no-cache postgresql17-client
-
 # Set working directory
 WORKDIR /app
 
