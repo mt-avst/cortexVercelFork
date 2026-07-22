@@ -27,6 +27,9 @@ config:
     # FirstHand Integration — disabled at runtime unless both FIRSTHAND_BASE_URL (here)
     # and FIRSTHAND_INTEGRATION_SECRET (secret store) are set.
     FIRSTHAND_BASE_URL: https://firsthand.kubera-playground.adaptavist.net
+    FIRSTHAND_INTERNAL: "1"
+    FIRSTHAND_S3_BUCKET: firsthand-playground
+    FIRSTHAND_S3_REGION: us-east-1
     # callback_url sent to FirstHand. The backend is private, so this points at the
     # public frontend host; FirstHand's webhook hits nginx, which proxies /api here.
     BACKEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
