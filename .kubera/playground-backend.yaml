@@ -129,5 +129,9 @@ deployment:
 initContainer:
   enabled: true
   command: [ "sh", "-c"]
-  args: ["npm run migrate && npm run seed"]
+  # migrate:firsthand chains FirstHand's checksum-guarded schema runner after
+  # Cortex's own migrate+seed. It targets THIS deployment's RDS (DB_URL), never
+  # FIRSTHAND_DATABASE_URL - see backend/scripts/firsthand-migrate.mjs. It
+  # creates an empty `firsthand` schema here until the Phase C restore fills it.
+  args: ["npm run migrate && npm run seed && npm run migrate:firsthand"]
   workingDir: "/app/backend"
