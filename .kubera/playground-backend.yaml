@@ -33,6 +33,11 @@ config:
     # return_url for the participant redirect back into Cortex, and the origin
     # media_url/session URLs are minted from.
     FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
+    # C3d: arms the REAL data copy in the PostSync migration job (see the job
+    # block below). While set, every sync drop+recopies firsthand.* from the
+    # source RDS - deliberate until cutover. The source is never written.
+    # TEMPORARY - removed by the same teardown MR that removes the job block.
+    FIRSTHAND_DATA_MIGRATE_EXECUTE: "1"
 # App-level Okta OIDC. The chart registers an Okta app and injects clientID/clientSecret
 # into <app>-okta-secret (envFrom). Declared on THIS service (not the frontend) because
 # the backend runs the token exchange. Cannot be combined with okta_alb. The backend
