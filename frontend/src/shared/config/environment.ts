@@ -79,7 +79,6 @@ export const backendEnvSchema = z.object({
   // kept separate from Cortex's own DATABASE_URL. Set to FirstHand's live RDS
   // while the data still lives there; dropped at Phase C once the data is
   // migrated into Cortex's RDS (the resolver then falls back to DATABASE_URL).
-  FIRSTHAND_DATABASE_URL: z.string().optional(),
   // S3 bucket + region for the internalised recording storage, reached via the
   // backend's IRSA role (default AWS credential chain — no static keys).
   FIRSTHAND_S3_BUCKET: z.string().optional(),
@@ -260,7 +259,6 @@ export const ENVIRONMENT_DOCS = {
     GOOGLE_OAUTH_REDIRECT_URI: 'Google OAuth redirect URI for calendar callback',
     FRONTEND_URL: 'Frontend application URL',
     FIRSTHAND_INTEGRATION_SECRET: 'HMAC-SHA256 secret referenced by the internalised runtime\'s integration-auth helpers. Minimum 32 characters.',
-    FIRSTHAND_DATABASE_URL: 'Dedicated connection string for the internalised FirstHand runtime pool (schema `firsthand`), kept separate from DATABASE_URL. Points at FirstHand\'s live RDS during Phase B (external-first); dropped at Phase C after the data is migrated into Cortex\'s RDS.',
     FIRSTHAND_S3_BUCKET: 'S3 bucket for internalised FirstHand recording storage (e.g. firsthand-{env}), reached via the backend IRSA role. Unset disables S3 storage.',
     FIRSTHAND_S3_REGION: 'AWS region for the FirstHand recording bucket. Falls back to AWS_REGION, then us-east-1.',
   },

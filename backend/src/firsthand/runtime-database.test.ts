@@ -16,6 +16,7 @@ describe("runtime database verification", () => {
     delete process.env.DATABASE_URL;
     delete process.env.POSTGRES_URL;
     delete process.env.DB_URL;
+    delete process.env.FIRSTHAND_DATABASE_URL;
     delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
       .__firsthandRuntimePool;
     delete (
@@ -80,6 +81,7 @@ describe("Kubera database environment", () => {
     delete process.env.DATABASE_URL;
     delete process.env.POSTGRES_URL;
     delete process.env.DB_URL;
+    delete process.env.FIRSTHAND_DATABASE_URL;
     delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
       .__firsthandRuntimePool;
     vi.clearAllMocks();
@@ -93,6 +95,17 @@ describe("Kubera database environment", () => {
     const runtimeDatabase = await import("./runtime-database");
 
     expect(runtimeDatabase.isPostgresRuntimeConfigured()).toBe(true);
+    expect(runtimeDatabase.getRuntimeDatabaseUrl()).toBe(process.env.DB_URL);
+  });
+
+  it("ignores FIRSTHAND_DATABASE_URL after the Phase C cutover (rollback = git revert)", async () => {
+    process.env.FIRSTHAND_DATABASE_URL =
+      "postgresql://firsthand:secret@firsthand-source.abc123.us-east-1.rds.amazonaws.com:5432/postgres";
+    process.env.DB_URL =
+      "postgresql://cortex:secret@adaptalabs.def456.us-east-1.rds.amazonaws.com:5432/postgres";
+
+    const runtimeDatabase = await import("./runtime-database");
+
     expect(runtimeDatabase.getRuntimeDatabaseUrl()).toBe(process.env.DB_URL);
   });
 
