@@ -22,12 +22,14 @@ type RuntimeDatabaseGlobal = typeof globalThis & {
 const globalRuntimeDatabase = globalThis as RuntimeDatabaseGlobal;
 
 export function getRuntimeDatabaseUrl() {
-  // FIRSTHAND_DATABASE_URL is the dedicated firsthand-runtime connection and
-  // MUST win: while the engine is internalised (Phase B, external-first) it
-  // points this pool at FirstHand's own live RDS, keeping the firsthand schema
-  // off Cortex's application database. When the data is migrated into Cortex's
-  // RDS (Phase C) this var is dropped and the resolver falls through to Cortex's
-  // own DATABASE_URL — the intended cutover, no code change.
+  // Phase C cutover (2026-07-22, executed): the firsthand runtime now lives in
+  // THIS deployment's own RDS. FIRSTHAND_DATABASE_URL - the Phase B bridge
+  // that pointed this pool at FirstHand's live RDS while the data still lived
+  // there - is deliberately NOT read any more; the migrated copy in Cortex's
+  // RDS is authoritative. The env var may still be present in the pod
+  // (secret-store removal is post-retention hygiene): it must stay unread.
+  // ROLLBACK for the retention window = git-revert this commit, which points
+  // the pool back at the untouched FirstHand source RDS.
   //
   // DB_URL is what Kubera's RDS machinery injects: the terraform-aws-rds
   // module writes {DB_USER,DB_PASSWORD,DB_HOST,DB_PORT,DB_NAME,DB_URL} to
@@ -37,7 +39,6 @@ export function getRuntimeDatabaseUrl() {
   // filesystem while migrations ran fine against postgres is a proven outage
   // pattern (Cortex ran mock data for a week that way).
   return (
-    process.env.FIRSTHAND_DATABASE_URL?.trim() ||
     process.env.DATABASE_URL?.trim() ||
     process.env.POSTGRES_URL?.trim() ||
     process.env.DB_URL?.trim() ||
@@ -80,7 +81,7 @@ export function getRuntimeDatabasePool() {
 
   if (!databaseUrl) {
     throw new Error(
-      "PostgreSQL runtime persistence requires FIRSTHAND_DATABASE_URL, DATABASE_URL, POSTGRES_URL or DB_URL."
+      "PostgreSQL runtime persistence requires DATABASE_URL, POSTGRES_URL or DB_URL."
     );
   }
 
