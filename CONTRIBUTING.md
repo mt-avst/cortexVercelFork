@@ -32,7 +32,6 @@ The codebase follows a clear separation of concerns:
 - **Consistent Imports**: Use consistent import paths based on location:
   - From `frontend/src`: `../../../shared/types`
   - From `backend/src`: `../../../shared/types`
-  - From `api/`: `../../shared/types`
 
 ---
 
@@ -67,16 +66,13 @@ import { User, Opportunity } from '../../../shared/types';
 
 // From backend/src/routes/...
 import { User, Opportunity } from '../../../shared/types';
-
-// From api/utils/...
-import { SessionUser } from '../../shared/types';
 ```
 
 ---
 
 ## Validation Patterns
 
-We use **multiple validation approaches** depending on the context:
+We use **two validation approaches** depending on the context:
 
 ### Pattern 1: Zod Schemas (Preferred)
 
@@ -123,7 +119,7 @@ Use manual validation functions for complex business logic that Zod doesn't hand
 
 **Example**:
 ```typescript
-// backend/src/routes/sessions.ts
+// backend/src/validation/schemas.ts (imported by routes/sessions.ts)
 const validateSessionData = (data: CreateSessionRequest | UpdateSessionRequest): string[] => {
   const errors: string[] = [];
   
@@ -158,41 +154,14 @@ router.post(
 );
 ```
 
-### Pattern 3: Database Constraints (API Routes)
-
-For API serverless functions, we rely more on database constraints and runtime checks.
-
-✅ **When to use**:
-- Serverless functions where middleware is less convenient
-- When database constraints provide sufficient validation
-- For performance-critical endpoints
-
-**Example**:
-```typescript
-// api/bookings/sessions/[id]/book.ts
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Guardrails with clear error messages
-  if (session.opportunity_status !== 'published') {
-    return res.status(404).json(createErrorResponse('Session not found or opportunity not published'));
-  }
-
-  if (new Date(session.end_time) <= new Date()) {
-    return res.status(400).json(createErrorResponse('Cannot book past sessions'));
-  }
-
-  // Database constraints handle the rest
-  // ...
-}
-```
+Database constraints (`NOT NULL`, `CHECK`, foreign keys, unique indexes) remain a defence-in-depth backstop behind both patterns, not a substitute for validating at the route.
 
 ### Validation Strategy Decision Tree
 
 ```
 Is it a standard form/request body?
 ├─ Yes → Use Zod Schema (Pattern 1)
-└─ No → Is it complex business logic?
-    ├─ Yes → Use Manual Validation (Pattern 2)
-    └─ No → Use Database Constraints + Runtime Checks (Pattern 3)
+└─ No  → Use Manual Validation (Pattern 2) for complex business logic
 ```
 
 ### Best Practices
@@ -241,34 +210,21 @@ throw new NotFoundError('Opportunity');
 throw new ConflictError('Session is already booked');
 ```
 
-### Backend Error Handling
+### Route Error Handling
 
-All async route handlers must use `asyncHandler`:
+All async route handlers must use `asyncHandler`. It catches thrown errors (including the `AppError` subclasses above) and forwards them to the central error middleware, which serialises them into the `ErrorResponse` format:
 
 ```typescript
 import { asyncHandler } from '../utils/errorHandler';
 
 router.post('/', requireAdmin, asyncHandler(async (req, res) => {
   // ✅ Correct - errors automatically caught and passed to error middleware
+  // Throw an AppError subclass and the middleware renders the ErrorResponse
+  throw new NotFoundError('Opportunity');
 }));
 ```
 
-### API Route Error Handling
-
-```typescript
-import { createErrorResponse, getErrorMessage } from '../utils/errors';
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    // ...
-  } catch (error: unknown) {
-    // ✅ Always use createErrorResponse for consistency
-    return res.status(500).json(
-      createErrorResponse('Failed to process request', getErrorMessage(error))
-    );
-  }
-}
-```
+Never hand-roll a `try/catch` that builds an error response inline. Throw the appropriate `AppError` subclass and let the middleware format it, so every endpoint returns the same shape.
 
 ---
 
@@ -276,19 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 ### Architecture Overview
 
-The codebase uses **two different authentication patterns** due to different deployment architectures:
+Authentication is enforced with **Express middleware** on the backend routes (`backend/src/routes/`). The middleware reads the session, attaches `req.user`, and gates the route before the handler runs.
 
-1. **Backend Express Routes** (`backend/src/routes/`) - Express middleware pattern
-2. **API Serverless Functions** (`api/`) - Direct function calls
-
-Both patterns are **correct for their contexts** - choose based on where your code runs.
-
----
-
-### Backend Express Routes
-
-**Location**: `backend/src/routes/*.ts`  
-**Pattern**: Express middleware (runs before route handler)  
 **Implementation**: `backend/src/middleware/authenticate.ts`
 
 **Why this pattern?**
@@ -309,7 +254,8 @@ router.get('/my-data', requireAuth, asyncHandler(async (req, res) => {
 
 // ✅ Require admin role
 router.post('/admin-action', requireAdmin, asyncHandler(async (req, res) => {
-  // Only researcher_admin can access
+  // researcher_admin OR superadmin can access
+  // (use requireSuperadmin, same file, for superadmin-only routes)
   // req.user is guaranteed to be admin
 }));
 
@@ -324,58 +270,9 @@ router.get('/public-data', optionalAuth, asyncHandler(async (req, res) => {
 
 **Key Points**:
 - Middleware sets `req.user` from `req.session.user`
-- Returns `void` - modifies request object
-- Uses Express middleware chain
-
----
-
-### API Serverless Functions
-
-**Location**: `api/**/*.ts`  
-**Pattern**: Direct function calls (Vercel serverless)  
-**Implementation**: `api/utils/auth.ts`
-
-**Why this pattern?**
-- Serverless functions don't use Express middleware
-- Uses cookies directly from request headers
-- Returns `SessionUser` directly or throws error
-
-**Usage**:
-
-```typescript
-import { requireAuth, parseSessionCookie } from '../utils/auth';
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  try {
-    // ✅ Require authentication - throws if not authenticated
-    const user = requireAuth(req); // Returns SessionUser
-    const userId = user.id;
-    
-    // ... handler code
-  } catch (error: unknown) {
-    // Handle auth errors
-    if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
-      return res.status(401).json(createErrorResponse('Not authenticated'));
-    }
-    throw error;
-  }
-}
-
-// ✅ Optional authentication
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const user = parseSessionCookie(req); // Returns SessionUser | null
-  if (user && user.role === 'researcher_admin') {
-    // Admin-specific logic
-  }
-  // ... public logic
-}
-```
-
-**Key Points**:
-- Function returns `SessionUser` directly
-- Throws error object with `{ status: 401, error: '...' }` if not authenticated
-- Uses cookie parsing directly (no Express session)
+- Returns `void` - modifies the request object
+- Runs in the Express middleware chain, before the route handler
+- `requireAuth` / `requireAdmin` reject unauthenticated or under-privileged requests with a 401/403 before the handler runs, so handlers never need to check auth themselves
 
 ---
 
@@ -385,7 +282,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 ```typescript
 // ✅ Correct - Single source of truth
-import { SessionUser } from '../../shared/types'; // From api/
 import { SessionUser } from '../../../shared/types'; // From backend/src/
 
 // ❌ Don't define your own
@@ -398,51 +294,9 @@ export interface SessionUser {
   id: string;
   name: string;
   email: string;
-  business_unit?: string | null;
-  role_title?: string | null;
-  role: 'employee' | 'researcher_admin';
-}
-```
-
----
-
-### Decision Tree: Which Pattern to Use?
-
-```
-Is your code in backend/src/routes/?
-├─ YES → Use Express middleware pattern
-│   └─ Import from '../middleware/authenticate'
-│
-└─ NO → Is your code in api/?
-    ├─ YES → Use serverless function pattern
-    │   └─ Import from '../utils/auth' (or '../../utils/auth' etc.)
-    │
-    └─ NO → Review architecture - should be in one of these locations
-```
-
----
-
-### Error Handling Differences
-
-**Backend Express**:
-```typescript
-// Middleware handles errors automatically
-router.get('/data', requireAuth, asyncHandler(async (req, res) => {
-  // If not authenticated, middleware returns 401 before this runs
-  // No need to catch auth errors here
-}));
-```
-
-**API Serverless**:
-```typescript
-// Must catch errors from requireAuth()
-try {
-  const user = requireAuth(req); // May throw
-} catch (error) {
-  if (error && typeof error === 'object' && 'status' in error && error.status === 401) {
-    return res.status(401).json(createErrorResponse('Not authenticated'));
-  }
-  throw error;
+  business_unit?: string;
+  role_title?: string;
+  role: 'employee' | 'researcher_admin' | 'superadmin';
 }
 ```
 
@@ -450,40 +304,29 @@ try {
 
 ### Common Mistakes to Avoid
 
-❌ **Don't mix patterns**:
+❌ **Don't check auth by hand inside the handler**:
 ```typescript
-// ❌ WRONG - Using Express middleware in API route
-import { requireAuth } from '../middleware/authenticate';
-// This won't work - API routes don't use Express middleware!
+// ❌ WRONG - re-implementing the gate the middleware already provides
+router.get('/my-data', asyncHandler(async (req, res) => {
+  if (!req.session?.user) return res.status(401).json({ error: 'Not authenticated' });
+  // ...
+}));
+```
+✅ **Do gate the route with middleware**:
+```typescript
+// ✅ CORRECT - requireAuth runs first; req.user is guaranteed in the handler
+router.get('/my-data', requireAuth, asyncHandler(async (req, res) => {
+  const userId = req.user!.id;
+  // ...
+}));
 ```
 
-❌ **Don't duplicate SessionUser type**:
+❌ **Don't duplicate the `SessionUser` type**:
 ```typescript
 // ❌ WRONG - Defining your own SessionUser
 interface SessionUser { id: string; ... }
 // Always import from shared/types!
 ```
-
-✅ **Do use the correct pattern for your location**:
-```typescript
-// ✅ CORRECT - API route uses API pattern
-import { requireAuth } from '../utils/auth';
-const user = requireAuth(req);
-```
-
----
-
-### Summary Table
-
-| Aspect | Backend Express | API Serverless |
-|--------|----------------|----------------|
-| **Location** | `backend/src/routes/` | `api/` |
-| **Import** | `../middleware/authenticate` | `../utils/auth` |
-| **Pattern** | Middleware | Function call |
-| **Return Type** | `void` (sets `req.user`) | `SessionUser` |
-| **Error Handling** | Automatic (middleware) | Manual (try/catch) |
-| **User Access** | `req.user!.id` | `user.id` |
-| **Session Source** | `req.session.user` | Cookie parsing |
 
 ---
 
@@ -574,7 +417,7 @@ Request IDs enable correlating logs across frontend and backend for the same req
 **Implementation:**
 
 ```typescript
-// Backend: middleware/requestLogger.ts
+// Backend: utils/logger.ts — logger.requestLogger() (wired in index.ts)
 const requestId = req.headers['x-request-id'] || `req-${Date.now()}-${Math.random()...}`;
 res.setHeader('X-Request-ID', requestId);
 
@@ -598,9 +441,9 @@ api.interceptors.response.use((response) => {
 
 ## Database Patterns
 
-### Backend (Express)
+### Connection Pooling
 
-Use connection pooling:
+Use the shared connection pool for all queries:
 
 ```typescript
 import { pool } from '../config';
@@ -608,22 +451,14 @@ import { pool } from '../config';
 const result = await pool.query('SELECT * FROM opportunities WHERE id = $1', [id]);
 ```
 
-### API (Serverless)
-
-Use the `query` helper for connection management:
-
-```typescript
-import { query } from '../db';
-
-const result = await query('SELECT * FROM opportunities WHERE id = $1', [id]);
-```
+When a request issues several reads on one `PoolClient`, keep them sequential — concurrent `client.query()` calls on the same client are unsafe.
 
 ### Best Practices
 
 1. **Always use parameterized queries** - Never concatenate user input into SQL
 2. **Use transactions** - For operations that must be atomic
 3. **Handle errors** - Map database errors to application errors
-4. **Connection management** - Let the helper handle connections in serverless
+4. **Release clients** - Always release a checked-out `PoolClient` in a `finally` block
 
 ---
 
@@ -689,9 +524,8 @@ Before submitting code, ensure:
 
 ## Questions?
 
-If you're unsure about which pattern to use, ask in code review or check existing code for similar patterns. Consistency is more important than perfection!
+If you're unsure which approach to use, ask in code review or check existing code for similar patterns. Consistency is more important than perfection!
 
 ---
 
-*Last updated: 2025-01-27 - Enhanced with complete logging patterns and request ID propagation details*
-
+*Last updated: 2026-07-23 - Removed the retired Vercel serverless (`api/**`) patterns; the backend is Express-only.*
