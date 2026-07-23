@@ -10,7 +10,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, CheckCircle, List, History, MessageSquare, Calendar, Download } from 'lucide-react';
+import { Settings, ClipboardList, CalendarCheck, Users, Clock, CheckCircle, List, History, MessageSquare, Calendar, Download, Clapperboard } from 'lucide-react';
 
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
@@ -252,7 +252,16 @@ const Admin: React.FC = () => {
                   <p className="admin-subtitle">Manage research studies, bookings, and participant feedback</p>
                 </div>
                 <div className="admin-table-actions">
-                  <button 
+                  <button
+                    className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
+                    onClick={() => navigate('/admin/studies')}
+                    aria-label="Recorded studies"
+                  >
+                    <Clapperboard size={16} className="me-2" />
+                    <span className="d-none d-md-inline">Recorded Studies</span>
+                    <span className="d-md-none">Recorded</span>
+                  </button>
+                  <button
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
                     onClick={() => navigate('/admin/settings')}
                     aria-label="Settings"
@@ -286,7 +295,7 @@ const Admin: React.FC = () => {
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Studies</span>
+                        <span className="text-uppercase stat-label">Research Studies</span>
                         <div className="stat-icon-wrapper">
                           <ClipboardList size={20} className="stat-icon" />
                         </div>
