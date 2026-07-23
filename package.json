@@ -23,7 +23,7 @@
     "status": "./start-dev.sh status",
     "clean": "./start-dev.sh clean",
     "verify:prod": "node scripts/verify-production.mjs",
-    "test:a11y:prod": "PLAYWRIGHT_NO_WEBSERVER=1 PRODUCTION_URL=https://adapta-labs-p62q.vercel.app npx playwright test e2e/accessibility.test.ts --config=playwright.prod.config.ts --project=chromium"
+    "test:a11y:prod": "PLAYWRIGHT_NO_WEBSERVER=1 PRODUCTION_URL=https://adaptalabs.kubera-playground.adaptavist.net npx playwright test e2e/accessibility.test.ts --config=playwright.prod.config.ts --project=chromium"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.0",

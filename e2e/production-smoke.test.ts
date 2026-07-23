@@ -7,7 +7,7 @@ import { test, expect } from '@playwright/test';
  * Accepts both success (opportunities load) and degraded ("Backend API not available" + key UI visible).
  */
 
-const PRODUCTION_URL = process.env.PRODUCTION_URL || 'https://adapta-labs-p62q.vercel.app';
+const PRODUCTION_URL = process.env.PRODUCTION_URL || 'https://adaptalabs.kubera-playground.adaptavist.net';
 const WAIT_AFTER_LOAD_MS = 3000;
 
 test.describe('Production Smoke Tests', () => {
