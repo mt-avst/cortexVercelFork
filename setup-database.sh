@@ -50,7 +50,6 @@ if [ "$has_url" != "y" ] && [ "$has_url" != "Y" ]; then
     echo ""
     echo "   Option 1 (Recommended): Neon Postgres"
     echo "   → https://neon.tech (free tier available)"
-    echo "   → See setup-neon-postgres.md for detailed guide"
     echo ""
     echo "   Option 2: Check if Vercel Postgres is available"
     echo "   → Vercel Dashboard → Storage → Create Database"

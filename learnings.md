@@ -78,7 +78,6 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 | `TESTING_GUIDE.md` | How to run tests, E2E/smoke/accessibility |
 | `KNOWN_ISSUES.md` | Known limitations, workarounds |
 | `USER_GUIDE.md` / `ADMIN_GUIDE.md` | User and admin docs |
-| `DATABASE_SETUP.md` | DB setup |
 | `plan.md` | Product scope, data model, booking rules |
 | `archive/deployment-and-status/` | Vercel env vars, deployment status, alpha readiness |
 | `archive/test-results/` | E2E checklists, test run results |
