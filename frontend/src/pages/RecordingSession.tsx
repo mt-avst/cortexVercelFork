@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
+import useDocumentTitle from "../hooks/useDocumentTitle";
 import { getApiBaseUrl } from "../config/api";
 import type { SessionPayload } from "../shared/firsthand/contract";
 import {
@@ -60,6 +61,10 @@ const RecordingSession = () => {
   const { token } = useParams<{ token: string }>();
   const [searchParams] = useSearchParams();
   const [state, setState] = useState<LoadState>({ status: "loading" });
+
+  // Static title for the participant recording surface (A4 precedent wording).
+  // Placed before the early returns below to keep hook order unconditional.
+  useDocumentTitle("Recorded study session");
 
   const isAuthResolved = !loading && initialAuthCheck;
   const isLoggedIn = Boolean(user);
