@@ -6,6 +6,13 @@ FROM node:20.20.2-alpine3.22
 # point release yet, so apply it explicitly until the base image catches up.
 RUN apk update && apk upgrade --no-cache && rm -rf /var/cache/apk/*
 
+# The npm CLI bundled with node:20.20.2 vendors vulnerable copies of tar,
+# glob, minimatch, sigstore, cross-spawn and brace-expansion (16 HIGH + 1
+# CRITICAL trivy findings) - upgrade npm itself until a rebuilt base image
+# ships with a patched CLI. npm is runtime-load-bearing here (CMD npm start).
+# Exact pin for reproducible image builds - bump deliberately, in git.
+RUN npm install -g npm@11.18.0 && npm cache clean --force
+
 # Set working directory
 WORKDIR /app
 
