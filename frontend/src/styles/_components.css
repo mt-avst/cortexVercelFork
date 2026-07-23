@@ -10036,7 +10036,11 @@ body.theme-dark .hero-scroll-tab.hero-scroll-tab--inline {
   align-items: center;
   gap: var(--spacing-3);
   flex-shrink: 0;
-  flex-wrap: nowrap;
+  /* Wrap the action buttons onto a second line on narrow viewports instead of
+     overflowing: the row now holds three non-shrinking btn-nowrap buttons
+     (Recorded Studies, Settings, Create Study) which cannot fit at ~360px. */
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 /* Cortex brand title - styles defined in ADMIN DASHBOARD section above */
