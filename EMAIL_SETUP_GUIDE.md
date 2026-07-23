@@ -6,7 +6,7 @@ The email service is currently in **demo mode** - it logs emails to console inst
 
 ## How to Enable Real Email Sending
 
-To enable actual email sending, you need to configure SMTP settings in Vercel environment variables.
+To enable actual email sending, configure the SMTP settings as backend environment variables. On Kubera these go in the secret store for the credential-bearing values (`EMAIL_SMTP_USER`, `EMAIL_SMTP_PASS`), with the non-secret values (`EMAIL_SMTP_HOST`, `EMAIL_SMTP_PORT`, `EMAIL_FROM`, `EMAIL_FROM_NAME`) either in the secret store alongside them or in `.kubera/playground-backend.yaml` `config.data`.
 
 ### Option 1: Gmail SMTP (Recommended for Testing)
 
@@ -17,9 +17,7 @@ To enable actual email sending, you need to configure SMTP settings in Vercel en
    - Enter "AdaptaLabs" as the name
    - Copy the generated 16-character password
 
-3. **Set Environment Variables in Vercel**:
-   - Go to: https://vercel.com/nicks-projects-113886a0/adapta-labs-p62q/settings/environment-variables
-   - Add the following variables:
+3. **Set the environment variables** (Kubera secret store for the backend):
 
 ```
 EMAIL_SMTP_HOST=smtp.gmail.com
@@ -30,7 +28,7 @@ EMAIL_FROM=noreply@adaptalabs.com
 EMAIL_FROM_NAME=Adaptalabs Impact Lab
 ```
 
-4. **Redeploy** after adding environment variables
+4. **Redeploy** so the backend pod picks up the new values (push to trigger a pipeline, or restart the pod)
 
 ### Option 2: SendGrid (Recommended for Production)
 
@@ -40,7 +38,7 @@ EMAIL_FROM_NAME=Adaptalabs Impact Lab
    - Create a new API key with "Mail Send" permissions
    - Copy the API key
 
-3. **Set Environment Variables in Vercel**:
+3. **Set the environment variables** (Kubera secret store for the backend):
 ```
 EMAIL_SMTP_HOST=smtp.sendgrid.net
 EMAIL_SMTP_PORT=587
@@ -50,13 +48,13 @@ EMAIL_FROM=noreply@adaptalabs.com
 EMAIL_FROM_NAME=Adaptalabs Impact Lab
 ```
 
-4. **Redeploy** after adding environment variables
+4. **Redeploy** so the backend pod picks up the new values (push to trigger a pipeline, or restart the pod)
 
 ### Option 3: AWS SES (For Production Scale)
 
 1. **Set up AWS SES** in your AWS account
 2. **Get SMTP credentials** from AWS SES console
-3. **Set Environment Variables in Vercel**:
+3. **Set the environment variables** (Kubera secret store for the backend):
 ```
 EMAIL_SMTP_HOST=email-smtp.us-east-1.amazonaws.com
 EMAIL_SMTP_PORT=587
@@ -66,7 +64,7 @@ EMAIL_FROM=noreply@adaptalabs.com
 EMAIL_FROM_NAME=Adaptalabs Impact Lab
 ```
 
-4. **Redeploy** after adding environment variables
+4. **Redeploy** so the backend pod picks up the new values (push to trigger a pipeline, or restart the pod)
 
 ## Testing Email Sending
 
@@ -74,7 +72,7 @@ After configuring SMTP:
 
 1. **Make a booking** in the app
 2. **Check your email** - you should receive a booking confirmation with calendar links
-3. **Check Vercel logs** - you should see "📧 EMAIL SENT" instead of "EMAIL NOTIFICATION (Demo Mode)"
+3. **Check the backend pod logs** - you should see "EMAIL SENT" instead of "EMAIL NOTIFICATION (Demo Mode)"
 
 ## Email Content
 
@@ -88,9 +86,8 @@ The booking confirmation email includes:
 
 ### Emails Still Not Sending
 
-1. **Check Vercel logs**:
-   - Go to Functions tab in Vercel dashboard
-   - Look for `/api/bookings/sessions/:id/book` function
+1. **Check the backend pod logs** (Kubera or `kubectl logs`):
+   - Look for the `POST /api/bookings/sessions/:id/book` request
    - Check logs for email-related errors
 
 2. **Verify Environment Variables**:
@@ -111,7 +108,7 @@ The booking confirmation email includes:
 ## Demo Mode
 
 If SMTP is not configured, the system will:
-- ✅ Log emails to console (Vercel function logs)
+- Log emails to the backend console (pod logs)
 - ✅ Include all calendar links in the logged email
 - ⚠️ Not actually send emails
 

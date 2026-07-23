@@ -114,7 +114,7 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks â
 - **Auth:** SSO (e.g. OpenID Connect / Google); session-based; `/api/me` for current user and role.
 - **Google Calendar:** On book: create event on opportunity ownerâ€™s calendar; attendees include participant and owner; reminder (e.g. 24h). On cancel/reschedule: update/remove event and notify.
 - **Email:** Transactional emails for booked, reminder, cancelled, reschedule; researcher notification toggles for on_book and on_cancel.
-- **Cron (e.g. Vercel Cron):** Reminder job (e.g. 24h before session); protected by CRON_SECRET.
+- **Cron (in-process node-cron in the Express backend):** Reminder job (e.g. 24h before session); the manual trigger endpoint is protected by CRON_SECRET.
 
 ---
 
@@ -130,7 +130,7 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks â
 
 - **Performance:** List of opportunities renders in under ~1 second with large lists (e.g. 100 items).
 - **Accessibility:** WCAG 2.2 AA basics.
-- **Deployment:** Production-ready; alpha testing phase; e.g. Vercel + Postgres; Docker option for dev.
+- **Deployment:** Production-ready; alpha testing phase; Kubernetes (Kubera) + AWS RDS Postgres; Docker option for dev.
 
 ---
 
