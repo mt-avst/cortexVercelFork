@@ -26,7 +26,7 @@ const router: Router = Router();
 
 const attemptQuerySchema = z.coerce.number().int().positive().optional();
 
-// The firsthand runtime pool runs `SET search_path TO firsthand, public` on its
+// The firsthand runtime pool runs `SET search_path TO firsthand` on its
 // own (separate) connections. These authz queries run on Cortex's default pool,
 // but they are schema-qualified to `public` so they can never resolve against a
 // firsthand-schema relation regardless of search_path state — defence in depth

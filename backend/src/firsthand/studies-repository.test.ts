@@ -76,7 +76,7 @@ describe("studies repository", () => {
     const operationClient = createMockClient({ missingRelations: [] });
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand, public") {
+      if (sql === "SET search_path TO firsthand") {
         return { rowCount: null, rows: [] };
       }
 
@@ -239,7 +239,7 @@ describe("studies repository", () => {
     let stepInsertAttempts = 0;
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand, public") {
+      if (sql === "SET search_path TO firsthand") {
         return { rowCount: null, rows: [] };
       }
 
@@ -284,7 +284,7 @@ describe("studies repository", () => {
 
 function createMockClient(input: { missingRelations: string[] }): MockClient {
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
-    if (sql === "SET search_path TO firsthand, public") {
+    if (sql === "SET search_path TO firsthand") {
       return {
         rowCount: null,
         rows: []

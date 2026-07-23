@@ -47,10 +47,10 @@ describe("runtime database verification", () => {
     expect(result).toBe("ok");
     expect(poolConstructorMock).toHaveBeenCalledTimes(1);
     expect(verificationClient.query).toHaveBeenCalledWith(
-      "SET search_path TO firsthand, public"
+      "SET search_path TO firsthand"
     );
     expect(operationClient.query).toHaveBeenCalledWith(
-      "SET search_path TO firsthand, public"
+      "SET search_path TO firsthand"
     );
     expect(verificationClient.release).toHaveBeenCalledOnce();
     expect(operationClient.release).toHaveBeenCalledOnce();
@@ -165,7 +165,7 @@ describe("Kubera database environment", () => {
 
 function createMockClient(input: { missingRelations: string[] }) {
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
-    if (sql === "SET search_path TO firsthand, public") {
+    if (sql === "SET search_path TO firsthand") {
       return {
         rowCount: null,
         rows: []

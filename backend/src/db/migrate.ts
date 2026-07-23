@@ -799,13 +799,6 @@ export async function runMigrations() {
     }
     console.log('✅ Created opportunity_session_events table');
 
-    // Phase C teardown: ONE-SHOT cleanup of the temporary
-    // firsthand_migration_reports sink, removed along with the migration job,
-    // its script and the report route. REMOVE THIS LINE once every environment
-    // has deployed past it - it runs unconditionally on every deploy and would
-    // silently drop any future table that happens to take this name.
-    await client.query('DROP TABLE IF EXISTS public.firsthand_migration_reports');
-
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);
