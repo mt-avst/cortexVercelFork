@@ -32,7 +32,7 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **Auth rate limiting** – Login endpoints use `authRateLimit` (10 attempts per 15 min per IP). See `api/utils/rateLimit.ts`.
 - [x] **Feedback rate limiting** – `POST /api/feedback` uses `feedbackRateLimit` (20 per 15 min per IP).
 - [x] **Sensitive admin routes** – Destructive admin endpoints (e.g. reset DB, set-superadmin) use `adminRateLimit`.
-- [x] **Security headers** – Implemented in [vercel.json](../vercel.json) (`headers`): X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy. CSP is optional (report-only first if added later).
+- [x] **Security headers** – Served by nginx in the frontend image, see [frontend/nginx.conf](../frontend/nginx.conf): X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy. CSP is optional (report-only first if added later). Permissions-Policy is not currently set.
 
 ## Reliability and errors
 

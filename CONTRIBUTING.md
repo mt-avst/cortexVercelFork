@@ -22,7 +22,6 @@ The codebase follows a clear separation of concerns:
 /
 ├── backend/          # Express.js backend server
 ├── frontend/         # React frontend application
-├── api/             # Vercel serverless functions
 └── shared/           # Shared types, constants, and utilities
 ```
 
