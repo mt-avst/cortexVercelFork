@@ -57,3 +57,14 @@ variables:
         DOCKER_RELEASE_IMAGE: "$CI_REGISTRY_IMAGE/$APP_2:$CI_COMMIT_REF_NAME"
         DOCKER_CONTEXT_PATH: "."
         DOCKER_BUILD_CACHE_DISABLED: "true"
+# Cap the advisory security_reports_gate (injected by the private kubera
+# component - it is not defined in the public docker@6.1 template) at 5
+# minutes instead of inheriting the 60-minute default. The gate is
+# allow_failure on every pipeline, and its failure mode is a silent hang to
+# the full job timeout while publish/deploy jobs queue behind it - observed
+# even with every scan green (main pipeline for e2ca23d5, 2026-07-23: all
+# scans passed, gate still burned 00:41->01:41 before timing out). Healthy
+# gate runs complete in seconds, so 5m is generous headroom. Remove this
+# override if/when the component's gate is fixed upstream.
+security_reports_gate:
+  timeout: 5m
