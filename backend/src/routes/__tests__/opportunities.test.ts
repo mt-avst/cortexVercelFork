@@ -533,7 +533,7 @@ describe('Opportunities API', () => {
   unauthenticatedApp.use('/api/opportunities', opportunitiesRouter);
   unauthenticatedApp.use(errorHandler);
 
-  describe('POST /api/opportunities/:id/firsthand-handoff', () => {
+  describe('POST /api/opportunities/:id/recorded-study-session', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
@@ -545,7 +545,7 @@ describe('Opportunities API', () => {
       });
 
       const response = await request(app)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(200);
 
       expect(response.body.session_url).toBe('https://cortex.example.com/session/fh_tok');
@@ -557,7 +557,7 @@ describe('Opportunities API', () => {
 
     it('should reject an unauthenticated request with 401', async () => {
       const response = await request(unauthenticatedApp)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(401);
 
       expect(response.body.error).toBe('Authentication required');
@@ -570,7 +570,7 @@ describe('Opportunities API', () => {
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
       const response = await request(app)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(400);
       expect(response.body.error).toBe('Linked recorded study has no steps');
     });
@@ -585,7 +585,7 @@ describe('Opportunities API', () => {
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
       const response = await request(app)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(status);
       expect(response.body.error).toBe(message);
       // Participant-visible bodies must not leak the internal product name
@@ -599,7 +599,7 @@ describe('Opportunities API', () => {
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
       const response = await request(app)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(500);
       expect(response.body.error).toBe('Failed to assemble the recorded-study session');
       expect(response.body.code).toBe('SESSION_ASSEMBLY_FAILED');
@@ -616,7 +616,7 @@ describe('Opportunities API', () => {
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'firsthand.runtime_sessions boom' });
 
       const response = await request(app)
-        .post('/api/opportunities/1/firsthand-handoff')
+        .post('/api/opportunities/1/recorded-study-session')
         .expect(500);
       expect(response.body.error).toBe('Failed to assemble the recorded-study session');
       expect(response.body.code).toBe('SESSION_ASSEMBLY_FAILED');
@@ -624,6 +624,26 @@ describe('Opportunities API', () => {
       // server-side, never serialised into the participant-visible body.
       expect(JSON.stringify(response.body)).not.toMatch(/firsthand/i);
       expect(JSON.stringify(response.body)).not.toMatch(/boom/);
+    });
+
+    // The legacy /:id/firsthand-handoff path is kept as a deprecated alias so a cached
+    // SPA can still reach the handler after the backend rolls. Removing the alias later
+    // should turn this into a deliberate red test.
+    it('still serves the deprecated /:id/firsthand-handoff alias path', async () => {
+      process.env.FRONTEND_URL = 'https://cortex.example.com';
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(200);
+
+      expect(response.body.session_url).toBe('https://cortex.example.com/session/fh_tok');
     });
   });
 

@@ -531,8 +531,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   res.json(opportunity);
 }));
 
-// POST /api/opportunities/:id/firsthand-handoff - Create a FirstHand session for this opportunity
-router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+// POST /api/opportunities/:id/recorded-study-session - Create a recorded-study session for this opportunity.
+// The legacy path /:id/firsthand-handoff is kept as a deprecated-for-removal alias so a cached SPA can
+// still POST it after the backend rolls; remove the alias once no client references the old path.
+router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAuth, asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }

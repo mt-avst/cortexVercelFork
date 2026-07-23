@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startFirstHandSession } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startRecordedStudySession } from '../api/client';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -867,7 +867,7 @@ const OpportunityDetail: React.FC = () => {
                               setFirstHandLoading(true);
                               try {
                                 await trackOpportunityClick(opportunity.id, 'action');
-                                const { session_url } = await startFirstHandSession(opportunity.id);
+                                const { session_url } = await startRecordedStudySession(opportunity.id);
                                 window.location.assign(session_url);
                               } catch (err: unknown) {
                                 const status = (err as { response?: { status?: number } }).response?.status;
