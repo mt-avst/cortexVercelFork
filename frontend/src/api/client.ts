@@ -260,8 +260,8 @@ export const duplicateOpportunity = async (id: string): Promise<Opportunity> => 
   return response.data;
 };
 
-export const startFirstHandSession = async (opportunityId: string): Promise<{ session_url: string }> => {
-  const response = await api.post(`/opportunities/${opportunityId}/firsthand-handoff`);
+export const startRecordedStudySession = async (opportunityId: string): Promise<{ session_url: string }> => {
+  const response = await api.post(`/opportunities/${opportunityId}/recorded-study-session`);
   return response.data;
 };
 
