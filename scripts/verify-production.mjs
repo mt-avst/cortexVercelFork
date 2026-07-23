@@ -2,11 +2,11 @@
 /**
  * Post-deploy verification: GET /api/health and /api/opportunities.
  * Usage: node scripts/verify-production.mjs [BASE_URL]
- *   BASE_URL defaults to https://adapta-labs-p62q.vercel.app
+ *   BASE_URL defaults to https://adaptalabs.kubera-playground.adaptavist.net
  * Exit 0 if both pass, 1 otherwise.
  */
 
-const BASE_URL = process.env.BASE_URL || process.argv[2] || 'https://adapta-labs-p62q.vercel.app';
+const BASE_URL = process.env.BASE_URL || process.argv[2] || 'https://adaptalabs.kubera-playground.adaptavist.net';
 const base = BASE_URL.replace(/\/$/, '');
 
 async function check(name, url, validate) {

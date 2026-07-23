@@ -28,7 +28,7 @@ if ! npx playwright --version &> /dev/null; then
 fi
 
 # Set production URL
-PRODUCTION_URL="${PRODUCTION_URL:-https://adapta-labs-p62q.vercel.app}"
+PRODUCTION_URL="${PRODUCTION_URL:-https://adaptalabs.kubera-playground.adaptavist.net}"
 echo "🌐 Testing against: $PRODUCTION_URL"
 echo ""
 

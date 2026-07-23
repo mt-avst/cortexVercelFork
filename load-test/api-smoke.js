@@ -8,7 +8,7 @@
  *   k6 run load-test/api-smoke.js
  *
  * Run against a custom base URL:
- *   k6 run -e BASE_URL=https://your-app.vercel.app load-test/api-smoke.js
+ *   k6 run -e BASE_URL=https://adaptalabs.kubera-playground.adaptavist.net load-test/api-smoke.js
  *
  * Shorter run (e.g. 10s, 5 VUs):
  *   k6 run -e DURATION=10s -e VUS=5 load-test/api-smoke.js
@@ -16,7 +16,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 
-const BASE_URL = __ENV.BASE_URL || 'https://adapta-labs-p62q.vercel.app';
+const BASE_URL = __ENV.BASE_URL || 'https://adaptalabs.kubera-playground.adaptavist.net';
 const DURATION = __ENV.DURATION || '30s';
 const VUS = __ENV.VUS ? parseInt(__ENV.VUS, 10) : 10;
 
