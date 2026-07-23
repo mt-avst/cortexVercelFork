@@ -22,6 +22,10 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
 
 const router: Router = Router();
 
+// Thrown by both the create and update publish-time guards. Hoisted so the two
+// cannot drift apart: only the POST site is covered by a test.
+const UNMODERATED_STUDY_REQUIRED = 'A recorded study is required to publish an unmoderated test';
+
 // Validation helper
 const validateUrl = (url: string): boolean => {
   try {
@@ -323,7 +327,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   // Additional validation for published opportunities
   if (data.status === 'published' && data.type === 'unmoderated') {
     if (!data.firsthand_study_id) {
-      throw new ValidationError('A FirstHand study is required to publish an unmoderated test');
+      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
     if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
@@ -479,7 +483,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   // Additional validation for published opportunities
   if (data.status === 'published' && existingType === 'unmoderated') {
     if (!newFirstHandStudyId) {
-      throw new ValidationError('A FirstHand study is required to publish an unmoderated test');
+      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
     if (!newLink || !validateUrl(newLink)) {
@@ -553,7 +557,7 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
   }
 
   if (!studyId) {
-    return res.status(400).json({ error: 'Opportunity has no FirstHand study linked' });
+    return res.status(400).json({ error: 'Opportunity has no recorded study linked' });
   }
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
@@ -574,11 +578,11 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
   if (!result.ok) {
     switch (result.error) {
       case 'persistence_not_configured':
-        return res.status(503).json({ error: 'FirstHand runtime datastore not configured' });
+        return res.status(503).json({ error: 'Recorded-study runtime datastore not configured' });
       case 'study_not_found':
-        return res.status(404).json({ error: 'Linked FirstHand study not found' });
+        return res.status(404).json({ error: 'Linked recorded study not found' });
       case 'study_has_no_steps':
-        return res.status(400).json({ error: 'Linked FirstHand study has no steps' });
+        return res.status(400).json({ error: 'Linked recorded study has no steps' });
       case 'payload_assembly_failed':
         throw new AppError(
           'Failed to assemble the recorded-study session',

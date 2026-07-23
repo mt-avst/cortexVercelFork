@@ -136,14 +136,14 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     // The FirstHand Study step replaces the External Link step for this type.
     expect(
-      screen.getByRole('button', { name: /FirstHand Study/i })
+      screen.getByRole('button', { name: /Recorded Study/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /External Link/i })
     ).not.toBeInTheDocument();
-    // ...and the type helper copy names FirstHand as the engine.
+    // ...and the type helper copy no longer names an internal product.
     expect(
-      screen.getByText('Self-guided recorded study, powered by FirstHand')
+      screen.getByText('Self-guided recorded study')
     ).toBeInTheDocument();
   });
 
@@ -155,7 +155,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /External Link/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /FirstHand Study/i })
+      screen.queryByRole('button', { name: /Recorded Study/i })
     ).not.toBeInTheDocument();
   });
 
@@ -164,11 +164,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('unmoderated');
 
     // Open the FirstHand Study step.
-    fireEvent.click(screen.getByRole('button', { name: /FirstHand Study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Recorded Study/i }));
 
     // The picker loads launched studies from FirstHand; there is no external-link fallback.
     expect(
-      await screen.findByText('-- Select a launched FirstHand study --')
+      await screen.findByText('-- Select a launched study --')
     ).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Demo Study' })).toBeInTheDocument();
     expect(vi.mocked(getFirstHandStudies)).toHaveBeenCalled();
