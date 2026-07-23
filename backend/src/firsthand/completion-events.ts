@@ -82,7 +82,7 @@ export async function recordInternalSessionEvent(
     if (!dbAvailable) return;
 
     await pool.query(
-      `INSERT INTO opportunity_session_events
+      `INSERT INTO public.opportunity_session_events
          (opportunity_id, participant_user_id, firsthand_session_id, event_type, occurred_at, payload)
        VALUES ($1, $2::uuid, $3, $4, $5, $6)
        ON CONFLICT (firsthand_session_id, event_type) DO NOTHING`,
