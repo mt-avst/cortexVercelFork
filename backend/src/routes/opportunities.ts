@@ -578,7 +578,7 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
   if (!result.ok) {
     switch (result.error) {
       case 'persistence_not_configured':
-        return res.status(503).json({ error: 'Recorded-study runtime datastore not configured' });
+        return res.status(503).json({ error: 'Recorded-study sessions are not available' });
       case 'study_not_found':
         return res.status(404).json({ error: 'Linked recorded study not found' });
       case 'study_has_no_steps':
@@ -587,15 +587,20 @@ router.post('/:id/firsthand-handoff', requireAuth, asyncHandler(async (req: Requ
         throw new AppError(
           'Failed to assemble the recorded-study session',
           500,
-          'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
+          'SESSION_ASSEMBLY_FAILED'
         );
       default: {
         // Exhaustiveness guard: a new CreateSessionError must be handled here.
+        // This branch only runs for a value outside the modelled union, so the
+        // raw value is unpredictable and must NOT reach the participant-visible
+        // AppError.message (errorHandler serialises it verbatim). Log it
+        // server-side and throw a static message instead.
         const unexpected: never = result.error;
+        logger.error('Unhandled session-create error', { error: String(unexpected) });
         throw new AppError(
-          `Unhandled session-create error: ${String(unexpected)}`,
+          'Failed to assemble the recorded-study session',
           500,
-          'FIRSTHAND_SESSION_ASSEMBLY_FAILED'
+          'SESSION_ASSEMBLY_FAILED'
         );
       }
     }
