@@ -82,7 +82,7 @@ client_secret_*.json
 *.json.encrypted
 
 # Cookie/session secrets (never commit)
-*_cookies.txt
+*cookies*.txt
 cookies.txt
 
 # Playwright artefacts
