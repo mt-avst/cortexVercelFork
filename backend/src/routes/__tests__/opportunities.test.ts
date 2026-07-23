@@ -250,7 +250,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'A FirstHand study is required to publish an unmoderated test'
+        'A recorded study is required to publish an unmoderated test'
       );
     });
 
@@ -572,12 +572,12 @@ describe('Opportunities API', () => {
       const response = await request(app)
         .post('/api/opportunities/1/firsthand-handoff')
         .expect(400);
-      expect(response.body.error).toBe('Linked FirstHand study has no steps');
+      expect(response.body.error).toBe('Linked recorded study has no steps');
     });
 
     it.each([
-      ['persistence_not_configured', 503, 'FirstHand runtime datastore not configured'],
-      ['study_not_found', 404, 'Linked FirstHand study not found'],
+      ['persistence_not_configured', 503, 'Recorded-study runtime datastore not configured'],
+      ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
         rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]

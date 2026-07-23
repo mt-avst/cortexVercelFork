@@ -71,7 +71,7 @@ const SessionsTab: React.FC<{
   return (
     <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
       <div className="cortex-chart-header">
-        <h5 className="cortex-chart-title">FirstHand Sessions</h5>
+        <h5 className="cortex-chart-title">Study Sessions</h5>
         <button
           type="button"
           className="cortex-period-btn"
@@ -86,7 +86,7 @@ const SessionsTab: React.FC<{
         <div className="cortex-no-data" style={{ padding: '32px 0' }}>
           <p>No session events recorded yet.</p>
           <p className="cortex-stat-subtitle" style={{ fontSize: '0.8rem', marginTop: '4px' }}>
-            Events are recorded when participants start, complete, or abandon sessions via FirstHand.
+            Events are recorded when participants start, complete or abandon a study session.
           </p>
         </div>
       ) : (

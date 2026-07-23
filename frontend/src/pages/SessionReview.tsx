@@ -17,7 +17,7 @@ function errorMessageForStatus(status: number | undefined): string {
     return 'Session outputs are not available. The session may not have started yet.';
   }
   if (status === 503) {
-    return 'The FirstHand integration is not configured or is currently unavailable.';
+    return 'Session outputs are temporarily unavailable. Try again shortly.';
   }
   if (status === 403) {
     return 'You do not have permission to review sessions for this opportunity.';

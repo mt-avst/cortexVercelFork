@@ -30,7 +30,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
         if (!cancelled) setStudies(data);
       })
       .catch(() => {
-        if (!cancelled) setFetchError('Could not load FirstHand studies. Check that FirstHand is running.');
+        if (!cancelled) setFetchError('Could not load studies.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -46,10 +46,10 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
           <div>
             <h2 className="h4 mb-1 section-title" style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}>
-              FirstHand Study
+              Recorded Study
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-              Link a FirstHand unmoderated study - participants will be routed directly into it
+              Link a recorded study - participants will be routed directly into it
             </p>
           </div>
         </div>
@@ -58,7 +58,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           <div className="col-12 col-md-8">
             <div className="form-group mb-4">
               <label htmlFor="firsthand_study_id" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
-                FirstHand Study *
+                Recorded Study *
               </label>
 
               {loading && (
@@ -89,7 +89,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                   value={formData.firsthand_study_id || ''}
                   onChange={(e) => handleInputChange('firsthand_study_id', e.target.value || undefined)}
                 >
-                  <option value="">-- Select a launched FirstHand study --</option>
+                  <option value="">-- Select a launched study --</option>
                   {launchedStudies.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.title}
@@ -97,7 +97,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                     </option>
                   ))}
                   {launchedStudies.length === 0 && (
-                    <option disabled value="">No launched studies available in FirstHand</option>
+                    <option disabled value="">No launched studies available</option>
                   )}
                 </select>
               )}
@@ -114,7 +114,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 </div>
               ) : (
                 <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-                  An unmoderated opportunity is powered by a recorded FirstHand study. Launch one in FirstHand if none appear here.
+                  An unmoderated opportunity is powered by a recorded study. Only launched studies appear here.
                 </div>
               )}
             </div>

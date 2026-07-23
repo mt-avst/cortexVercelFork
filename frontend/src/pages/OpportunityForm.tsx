@@ -94,7 +94,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.type === 'unmoderated') {
-      tabs.push({ id: 3, title: 'FirstHand Study', description: 'Connect a FirstHand study' });
+      tabs.push({ id: 3, title: 'Recorded Study', description: 'Connect a recorded study' });
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
@@ -294,7 +294,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
       if (!formData.firsthand_study_id?.trim()) {
-        errors.firsthand_study_id = 'A FirstHand study is required to publish an unmoderated test';
+        errors.firsthand_study_id = 'A recorded study is required to publish an unmoderated test';
       }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
