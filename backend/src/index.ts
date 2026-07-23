@@ -11,6 +11,7 @@ import { errorHandler } from './utils/errorHandler';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
 import { runFirstHandMaintenance } from './firsthand/maintenance';
+import { isPostgresRuntimeConfigured } from './firsthand/runtime-database';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import cronRoutes from './routes/cron';
@@ -34,6 +35,16 @@ if (process.env.TRUST_PROXY === 'false' || process.env.TRUST_PROXY === '0') {
 } else {
   // Development: Don't trust proxies by default (safer)
   app.set('trust proxy', false);
+}
+
+// The recorded-study runtime has no non-postgres fallback: without a database
+// URL its writes throw but its READS return empty-as-real (not_found / []),
+// which in production would silently present a working app with no data.
+// Fail the boot instead - the URL is always injected on Kubera (DB_URL).
+if (config.NODE_ENV === 'production' && !isPostgresRuntimeConfigured()) {
+  throw new Error(
+    'Recorded-study persistence requires DATABASE_URL, POSTGRES_URL or DB_URL in production.'
+  );
 }
 
 // Chrome DevTools discovery endpoint (for development)

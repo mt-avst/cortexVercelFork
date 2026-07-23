@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-07-21T20:54:56.026Z
+ * Generated: 2026-07-23T01:54:59.771Z
  */
 
 // Shared Environment Configuration for Adaptalabs Application
@@ -74,11 +74,6 @@ export const backendEnvSchema = z.object({
   // and the inbound callback receiver were removed with the merge.
   FIRSTHAND_INTEGRATION_SECRET: z.string().min(32, 'FirstHand integration secret must be at least 32 characters').optional(),
 
-  // FirstHand internalised engine — datastore (Phase B, external-first).
-  // Dedicated connection for the firsthand-runtime pool (schema `firsthand`),
-  // kept separate from Cortex's own DATABASE_URL. Set to FirstHand's live RDS
-  // while the data still lives there; dropped at Phase C once the data is
-  // migrated into Cortex's RDS (the resolver then falls back to DATABASE_URL).
   // S3 bucket + region for the internalised recording storage, reached via the
   // backend's IRSA role (default AWS credential chain — no static keys).
   FIRSTHAND_S3_BUCKET: z.string().optional(),

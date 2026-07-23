@@ -157,5 +157,12 @@ async function verifyRuntimeDatabase() {
 }
 
 async function setRuntimeSearchPath(client: PoolClient) {
-  await client.query(`SET search_path TO ${FIRSTHAND_RUNTIME_SCHEMA}, public`);
+  // firsthand ONLY - no public. Since the Phase C cutover this pool runs on
+  // Cortex's own RDS, where public holds the live application schema. With
+  // public in the path, a future unqualified runtime query for a table
+  // missing from the firsthand schema would silently resolve against live
+  // Cortex tenant data instead of erroring. Nothing in the runtime needs
+  // public: all 9 relations are verified in firsthand at startup and
+  // gen_random_uuid() lives in pg_catalog.
+  await client.query(`SET search_path TO ${FIRSTHAND_RUNTIME_SCHEMA}`);
 }

@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2025-12-01T11:43:17.469Z
+ * Generated: 2026-07-23T01:54:59.771Z
  */
 
 // Shared Constants for Adaptalabs Application
@@ -51,6 +51,8 @@ export const TIME_INTERVALS = {
 export const API_CONFIG = {
   /** Default API timeout in milliseconds */
   TIMEOUT_MS: 10000,
+  /** @deprecated Use TIMEOUT_MS instead. Alias for backwards compatibility */
+  TIMEOUT: 10000,
   /** Maximum retry attempts for failed requests */
   MAX_RETRIES: 3,
   /** Delay between retry attempts in milliseconds */
