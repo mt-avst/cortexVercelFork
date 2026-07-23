@@ -4,6 +4,7 @@ import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import useDocumentTitle from '../hooks/useDocumentTitle';
 import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -109,6 +110,9 @@ const OpportunityDetail: React.FC = () => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  // Title tracks the loaded opportunity; undefined while loading no-ops, so the
+  // static "AdaptaLabs" title holds until data lands. Restored on unmount.
+  useDocumentTitle(opportunity?.title);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
