@@ -245,5 +245,5 @@ After setting up credentials:
 4. Verify calendar events are created for bookings
 5. Check that calendar conflicts are detected correctly
 
-For production deployment, add these environment variables to your hosting platform (Vercel, Heroku, etc.) with production URLs.
+For production deployment, add these environment variables to the Kubera secret store (or `.kubera/playground-backend.yaml` `config.data` for the non-secret values) with production URLs.
 

@@ -229,7 +229,7 @@ Control when you receive email notifications:
 
 ### Session Reminder Emails
 
-Participants receive an automatic reminder email ~24 hours before their session. This is handled by a daily cron job (Vercel Cron) that runs at 9:00 AM UTC. In production, set the **CRON_SECRET** environment variable in Vercel so only the cron invoker can call the reminder endpoint. Run **GET /api/run-migrations** after deploy to add the `reminder_sent_at` column to bookings. To test reminders locally, call **GET /api/cron/send-reminders** with header `Authorization: Bearer <your-CRON_SECRET>` (only works for bookings whose session starts in the 23–25 hour window).
+Participants receive an automatic reminder email ~24 hours before their session. This is handled by an in-process `node-cron` schedule inside the Express backend that runs daily at 9:00 AM UTC and calls `sendDueReminders()` (`backend/src/services/reminders.ts`); each booking is reminded at most once via the `reminder_sent_at` column. Because the scheduler runs inside the backend process there is no external invoker to authenticate — the **CRON_SECRET** environment variable (in the Kubera secret store) only guards the manual trigger endpoint below. The `reminder_sent_at` column is added by the migrations that run automatically on every deploy (the backend init container), so no manual migration step is needed. To trigger reminders manually (locally or in production), call **GET /api/cron/send-reminders** with header `Authorization: Bearer <CRON_SECRET>` (only works for bookings whose session starts in the 23–25 hour window). Disable the scheduler with `REMINDER_CRON_DISABLED=true`.
 
 ---
 

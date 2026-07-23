@@ -9,6 +9,9 @@
 
 For alpha readiness, we'll test against the **production deployment** to ensure everything works in the real environment.
 
+> **Note:** the production host (`https://adaptalabs.kubera-playground.adaptavist.net`) is Okta-gated.
+> Suites reach the host, but anonymous flows redirect to Okta login rather than passing cleanly; public endpoints such as `GET /api/csrf-token` and `GET /api/opportunities` still respond without a session.
+
 ---
 
 ## 🚀 Quick Start
@@ -20,7 +23,7 @@ For alpha readiness, we'll test against the **production deployment** to ensure 
 chmod +x run-alpha-tests.sh
 
 # Run tests against production
-PRODUCTION_URL=https://adapta-labs-p62q.vercel.app ./run-alpha-tests.sh
+PRODUCTION_URL=https://adaptalabs.kubera-playground.adaptavist.net ./run-alpha-tests.sh
 ```
 
 ### Option 2: Manual Testing (Most Comprehensive)
@@ -49,7 +52,7 @@ Follow the **`archive/test-results/END_TO_END_TESTING_CHECKLIST.md`** step-by-st
 
 **Goal**: Verify a new user can browse and book
 
-1. Open https://adapta-labs-p62q.vercel.app in incognito window
+1. Open https://adaptalabs.kubera-playground.adaptavist.net in incognito window
 2. Verify opportunities list loads
 3. Click on an opportunity
 4. Verify details page loads
@@ -287,7 +290,7 @@ k6 run load-test/api-smoke.js
 
 **Custom base URL:**
 ```bash
-k6 run -e BASE_URL=https://your-app.vercel.app load-test/api-smoke.js
+k6 run -e BASE_URL=https://adaptalabs.kubera-playground.adaptavist.net load-test/api-smoke.js
 ```
 
 **Shorter run (10s, 5 VUs):**
