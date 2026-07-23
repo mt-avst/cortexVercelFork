@@ -576,7 +576,7 @@ describe('Opportunities API', () => {
     });
 
     it.each([
-      ['persistence_not_configured', 503, 'Recorded-study runtime datastore not configured'],
+      ['persistence_not_configured', 503, 'Recorded-study sessions are not available'],
       ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
@@ -588,17 +588,42 @@ describe('Opportunities API', () => {
         .post('/api/opportunities/1/firsthand-handoff')
         .expect(status);
       expect(response.body.error).toBe(message);
+      // Participant-visible bodies must not leak the internal product name
+      expect(JSON.stringify(response.body)).not.toMatch(/firsthand/i);
     });
 
-    it('maps payload_assembly_failed to a 500', async () => {
+    it('maps payload_assembly_failed to a 500 with a neutral error code', async () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
-      await request(app)
+      const response = await request(app)
         .post('/api/opportunities/1/firsthand-handoff')
         .expect(500);
+      expect(response.body.error).toBe('Failed to assemble the recorded-study session');
+      expect(response.body.code).toBe('SESSION_ASSEMBLY_FAILED');
+      // Participant-visible bodies must not leak the internal product name
+      expect(JSON.stringify(response.body)).not.toMatch(/firsthand/i);
+    });
+
+    it('maps an unmodelled createSession error through the default branch without leaking the raw value', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      // A value outside the CreateSessionError union drives the exhaustiveness
+      // guard. Its message must be static, not the interpolated raw value.
+      mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'firsthand.runtime_sessions boom' });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/firsthand-handoff')
+        .expect(500);
+      expect(response.body.error).toBe('Failed to assemble the recorded-study session');
+      expect(response.body.code).toBe('SESSION_ASSEMBLY_FAILED');
+      // The unmodelled value carried an internal identifier; it must be logged
+      // server-side, never serialised into the participant-visible body.
+      expect(JSON.stringify(response.body)).not.toMatch(/firsthand/i);
+      expect(JSON.stringify(response.body)).not.toMatch(/boom/);
     });
   });
 
