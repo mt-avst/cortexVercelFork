@@ -14,7 +14,8 @@ Before go-live, confirm each item (ops / project owner):
 2. [ ] **Secrets** – `SESSION_SECRET` and `FIRSTHAND_INTEGRATION_SECRET` (min 32 chars) present in the Kubera secret store; Okta `clientID`/`clientSecret` come from the chart-provisioned `<app>-okta-secret`. No secrets in the repo or in chat.
 3. [ ] **Database** – RDS PostgreSQL provisioned by the chart (`database.postgresql`); the backend reads its connection string from `DB_URL`, injected by the chart (the resolver also accepts `DATABASE_URL`/`POSTGRES_URL`/`POSTGRESQL_URL`, but only `DB_URL` is set here).
 4. [ ] **CORS_ORIGIN** – Matches the production frontend URL (`https://adaptalabs.kubera-playground.adaptavist.net`).
-5. [ ] **RDS backups** – Automated-backup retention confirmed non-zero. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md) (retention must be verified in the AWS RDS console, not assumed).
+5. [x] **RDS backups declared** – `database.postgresql.rds.backupRetentionPeriod: 14` is set in `.kubera/playground-backend.yaml` rather than left to the chart default. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
+6. [ ] **RDS backups applied** – Confirm the running instance actually reports `BackupRetentionPeriod: 14`. Declared is not applied: Helm ignores unrecognised values keys silently, so a wrong key name would leave retention at the default while the line above still reads as done. Needs AWS RDS read access.
 
 ## Environment and config
 
@@ -38,7 +39,8 @@ Before go-live, confirm each item (ops / project owner):
 
 ## Data and backups
 
-- [ ] **RDS backups** – Confirm automated-backup retention is non-zero; see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
+- [x] **RDS backups declared** – Retention is declared as 14 days in `.kubera/playground-backend.yaml`; see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md). Change it there, not in the AWS console, to avoid manifest/instance drift.
+- [ ] **RDS backups applied** – Unverified: confirming the live instance reports 14 needs AWS RDS read access.
 - [x] **Migrations** – Run automatically on every deploy by the backend init container (`npm run migrate && npm run seed && npm run migrate:firsthand` against `DB_URL`); idempotent and checksum-guarded. There is no manual `run-migrations` endpoint.
 
 ## Performance and monitoring

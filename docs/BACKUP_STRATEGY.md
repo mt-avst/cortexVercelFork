@@ -19,19 +19,25 @@ AWS RDS provides two backup mechanisms:
 On instance deletion the chart sets `rds.skipFinalSnapshot: false`, so RDS takes a final snapshot before the instance is removed.
 `rds.deletionProtection` is `false`, so the instance is not protected against accidental deletion at the AWS level.
 
-## Retention – MUST be confirmed, not assumed
+## Retention – declared in the manifest
 
-`.kubera/playground-backend.yaml` does **not** declare `database.postgresql.rds.backupRetentionPeriod`.
-Retention is therefore whatever the Kubera library chart defaults it to, which is not visible from this repository.
+`.kubera/playground-backend.yaml` declares `database.postgresql.rds.backupRetentionPeriod: 14`, which should give automated backups a **14-day** window with point-in-time recovery across it.
 
-This is load-bearing and must be verified directly:
-during the FirstHand-into-Cortex migration the FirstHand RDS was found to have `backupRetentionPeriod` defaulted to **0** (automated backups effectively off).
-Cortex's RDS may inherit the same default.
-Do not assume PITR is enabled.
+Declared is not the same as applied, and the difference matters here: Helm ignores unrecognised values keys without erroring, so a wrong key name would leave retention on the chart default while this document asserts 14.
+Treat the applied value as unconfirmed until someone with AWS RDS read access checks it (see the table below).
 
-**Action:** confirm the actual retention window in the **AWS RDS console** (or via `aws rds describe-db-instances`) for the Cortex instance.
-If `backupRetentionPeriod` is 0, automated backups and PITR are off and should be enabled (set a non-zero retention, e.g. 7 days) by adding `backupRetentionPeriod` under `database.postgresql.rds` in the manifest, or via the AWS console for an existing instance.
-This requires AWS RDS access, which lives outside GitLab; note the finding as a fact and decide who holds that access.
+This is declared explicitly rather than left to the chart default, on purpose.
+During the FirstHand-into-Cortex migration the FirstHand RDS was found to have `backupRetentionPeriod` defaulted to **0** – automated backups and PITR silently off.
+Leaving the key unset makes retention an invisible property of the platform's default; declaring it makes it a reviewed line in git that survives re-provisioning.
+14 days matches the value FirstHand's own production manifest established.
+
+Change the retention window by editing that key and deploying, not in the AWS console: the chart provisions this instance through Crossplane, so an out-of-band console change drifts from the manifest and is liable to be reconciled away.
+
+Break-glass: in an incident (retention discovered at 0, or the pipeline unavailable) the console is the fast path and should be used. Follow it with a same-day manifest change to reconcile, and expect the console value to be reverted if Crossplane syncs first.
+
+**Note on applying a change:** AWS applies a move between 0 and a non-zero retention *immediately, with a brief instance restart*. Moving between two non-zero values applies without an outage.
+
+Reading the instance's live state (as opposed to its declared state) needs AWS RDS access, which lives outside GitLab. The declared value above is the source of truth for what the platform should be applying.
 
 ## Recovery
 
@@ -47,8 +53,8 @@ There is no `GET /api/run-migrations` endpoint; that was a retired Vercel-era me
 
 | Item | Responsibility | How to verify |
 |------|----------------|---------------|
-| Retention configured | Ops / AWS RDS owner | `aws rds describe-db-instances` → `BackupRetentionPeriod` for the Cortex instance; confirm it is non-zero |
-| Automated backups on | Ops / AWS RDS owner | AWS RDS console → Maintenance & backups → automated backups present within the retention window |
+| Retention declared | Anyone with repo access | `database.postgresql.rds.backupRetentionPeriod` is set (currently 14) in `.kubera/playground-backend.yaml` |
+| Retention actually applied | AWS RDS owner (access outside GitLab) | `aws rds describe-db-instances` → `BackupRetentionPeriod` matches the declared value |
 | Manual snapshot (pre-risky-change) | Whoever runs the change | Take a manual snapshot from the RDS console/CLI before schema or data changes with blast radius |
 | Recovery path known | Ops | Confirm the restore-to-point-in-time / restore-from-snapshot flow and that `DB_URL` gets repointed at the restored instance |
 | Schema after restore | Deploy pipeline | The next deploy's init container re-runs the migrations (idempotent); no manual migration call |
