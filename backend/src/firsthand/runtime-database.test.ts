@@ -3,8 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const connectMock = vi.fn();
+// `on` is part of the mock because the runtime pool now registers an `error`
+// listener at construction: without a listener, an error on an idle pooled
+// connection is an unhandled EventEmitter error and kills the process.
+const onMock = vi.fn();
 const poolConstructorMock = vi.fn(() => ({
-  connect: connectMock
+  connect: connectMock,
+  on: onMock
 }));
 
 vi.mock("pg", () => ({
@@ -146,6 +151,39 @@ describe("Kubera database environment", () => {
       poolConstructorMock.mock.calls as unknown as Array<[{ ssl?: unknown }]>
     )[0]?.[0];
     expect(poolConfig?.ssl).toBeUndefined();
+  });
+
+  it("registers an error listener on the runtime pool so a failover cannot kill the process", async () => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+    connectMock.mockResolvedValue(createMockClient({ missingRelations: [] }));
+
+    const runtimeDatabase = await import("./runtime-database");
+    runtimeDatabase.getRuntimeDatabasePool();
+
+    // An RDS failover drops every idle connection at once. pg re-emits those
+    // on the Pool, and Node throws on an `error` event with no listener, so
+    // the absence of this registration is a hard process exit.
+    expect(onMock).toHaveBeenCalledWith("error", expect.any(Function));
+
+    // This is the pool carrying withRuntimeDatabaseClient transactions, so it
+    // is exactly where the checked-out window matters: pg strips a client's
+    // own error listener while it is checked out, and the acquire/release pair
+    // is what covers the gaps between statements in a BEGIN/COMMIT.
+    expect(onMock).toHaveBeenCalledWith("acquire", expect.any(Function));
+    expect(onMock).toHaveBeenCalledWith("release", expect.any(Function));
+  });
+
+  it("attaches the error listener once even when the pool is fetched repeatedly", async () => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+    connectMock.mockResolvedValue(createMockClient({ missingRelations: [] }));
+
+    const runtimeDatabase = await import("./runtime-database");
+    runtimeDatabase.getRuntimeDatabasePool();
+    runtimeDatabase.getRuntimeDatabasePool();
+    runtimeDatabase.getRuntimeDatabasePool();
+
+    expect(poolConstructorMock).toHaveBeenCalledTimes(1);
+    expect(onMock.mock.calls.filter(([event]) => event === "error")).toHaveLength(1);
   });
 
   it("lets an explicit sslmode in the URL win over host-based ssl detection", async () => {

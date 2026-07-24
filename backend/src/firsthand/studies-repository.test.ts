@@ -3,8 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 const connectMock = vi.fn();
+// `on` is part of the mock because the runtime pool registers an `error`
+// listener at construction - see ../utils/poolErrorLogging.ts. A pool without
+// one turns an idle-connection error into an unhandled EventEmitter error.
+const onMock = vi.fn();
 const poolConstructorMock = vi.fn(() => ({
-  connect: connectMock
+  connect: connectMock,
+  on: onMock
 }));
 
 vi.mock("pg", () => ({
