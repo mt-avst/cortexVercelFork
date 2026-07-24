@@ -26,7 +26,7 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
-import { errorHandler } from '../../utils/errorHandler';
+import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
@@ -1186,6 +1186,73 @@ describe('Opportunities API', () => {
         // The demo store is module-level state shared across tests
         deleteMockOpportunity('mock-owner-strip');
       }
+    });
+  });
+  // Pins the route-layer half of the database-outage fix. Without these, the
+  // `if (error instanceof AppError) throw error` guards in the catch-alls can
+  // be deleted and the rest of the suite still passes: the catch would flatten
+  // the 503 to a generic 500 and the outage would look like an app bug.
+  describe('database outage propagation', () => {
+    const outage = () =>
+      new AppError('Service temporarily unavailable', 503, 'DB_CONNECTION_FAILED');
+
+    it('surfaces 503 and the code on GET / rather than flattening to 500', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app).get('/api/opportunities');
+
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('DB_CONNECTION_FAILED');
+    });
+
+    // The whole point of the fix: an outage must never look like a success.
+    it('never answers 200 with fixture data during an outage', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app).get('/api/opportunities');
+
+      expect(response.status).not.toBe(200);
+      expect(Array.isArray(response.body)).toBe(false);
+    });
+
+    it('surfaces 503 on the sessions listing rather than 500', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app).get('/api/opportunities/some-id/sessions');
+
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('DB_CONNECTION_FAILED');
+    });
+
+    // The two admin write routes have their own catch-alls. Without these two
+    // cases their guards can be deleted individually with the suite still
+    // green, even though removing all six is caught.
+    it('surfaces 503 on POST /:id/sessions rather than 500', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app)
+        .post('/api/opportunities/some-id/sessions')
+        .send([{ start_time: '2026-08-01T10:00:00Z', end_time: '2026-08-01T11:00:00Z', capacity: 1 }]);
+
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('DB_CONNECTION_FAILED');
+    });
+
+    it('surfaces 503 on DELETE /:id/sessions rather than 500', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app).delete('/api/opportunities/some-id/sessions');
+
+      expect(response.status).toBe(503);
+      expect(response.body.code).toBe('DB_CONNECTION_FAILED');
+    });
+
+    it('leaks no driver detail in the outage body', async () => {
+      mockIsDatabaseAvailable.mockRejectedValue(outage());
+
+      const response = await request(app).get('/api/opportunities');
+
+      expect(JSON.stringify(response.body)).not.toMatch(/password|postgres|ECONNREFUSED/i);
     });
   });
 });

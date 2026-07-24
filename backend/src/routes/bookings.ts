@@ -800,15 +800,12 @@ router.get('/my/bookings/debug', requireAuth, async (req: Request, res: Response
 });
 
 // GET /api/my/bookings - Get user's bookings
-router.get('/my/bookings', requireAuth, async (req: Request, res: Response) => {
+router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
-    // Check if DATABASE_URL is set - if not, return empty bookings
-    if (!process.env.DATABASE_URL) {
-      logger.info('DATABASE_URL not set, returning empty bookings');
-      return res.json({ upcoming: [], past: [] });
-    }
-
-    // Check if database is available
+    // No bare process.env.DATABASE_URL check here: Kubera injects DB_URL, not
+    // DATABASE_URL, so that guard returned empty bookings on a working
+    // database. isDatabaseAvailable() already covers configuration (via
+    // hasDatabaseConfig) and connectivity.
     const dbAvailable = await isDatabaseAvailable();
     if (!dbAvailable) {
       logger.warn('Database not available, returning empty bookings');
@@ -872,13 +869,16 @@ router.get('/my/bookings', requireAuth, async (req: Request, res: Response) => {
     });
 
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error fetching user bookings', { error });
     res.status(500).json({ error: 'Failed to fetch bookings' });
   }
-});
+}));
 
 // GET /api/opportunities/:id/bookings - Get bookings for an opportunity (admin only)
-router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res: Response) => {
+router.get('/opportunities/:id/bookings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
@@ -911,7 +911,7 @@ router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res:
 
     // Get bookings with participant details
     const result = await pool.query(`
-      SELECT b.*, s.start_time, s.end_time,
+      SELECT b.*, s.start_time as session_start_time, s.end_time as session_end_time,
              u.name as participant_name, u.email as participant_email,
              u.business_unit, u.role_title
       FROM bookings b
@@ -934,10 +934,13 @@ router.get('/opportunities/:id/bookings', requireAuth, async (req: Request, res:
     res.json(bookings);
 
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error fetching opportunity bookings', { error });
     res.status(500).json({ error: 'Failed to fetch opportunity bookings' });
   }
-});
+}));
 
 // POST /api/bookings/sessions/:id/complete - Mark session as completed and award AdaptaBits
 router.post('/sessions/:id/complete', requireAuth, asyncHandler(async (req: Request, res: Response) => {

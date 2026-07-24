@@ -875,7 +875,13 @@ const OpportunityDetail: React.FC = () => {
                                 window.location.assign(session_url);
                               } catch (err: unknown) {
                                 const status = (err as { response?: { status?: number } }).response?.status;
-                                if (status === 503) {
+                                const code = (err as { response?: { data?: { code?: string } } }).response?.data?.code;
+                                // A database outage and an unconfigured study both
+                                // answer 503; only the second is the research team's
+                                // to fix, so key on the code before the status.
+                                if (code === 'DB_CONNECTION_FAILED' || code === 'DB_NOT_CONFIGURED') {
+                                  setError('Temporarily unavailable. Please try again shortly.');
+                                } else if (status === 503) {
                                   setError('This study is not yet configured. Please contact your research team.');
                                 } else if (status === 403) {
                                   setError('This opportunity is not yet available. Please try again later.');
