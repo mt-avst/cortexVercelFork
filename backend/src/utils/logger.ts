@@ -1,16 +1,39 @@
 import { Request, Response } from 'express';
 import { LogContext } from '../../../shared/types';
 
+/** Query parameters that carry a live credential and must never be logged. */
+const SENSITIVE_QUERY_PARAMS = [
+  'code',
+  'state',
+  'id_token',
+  'access_token',
+  'refresh_token',
+  'token',
+] as const;
+
 /**
- * Redacts participant session bearer tokens from a URL before it is logged.
- * The token is an opaque capability carried as a path segment
- * (/api/firsthand/session/<token>/...), so logging the raw URL would leak a
- * live credential into log aggregation. Replaces only the token segment,
- * preserving the rest of the path and query for debugging.
+ * Redacts live credentials from a URL before it is logged, preserving
+ * everything else for debugging.
+ *
+ * Two kinds:
+ * - Participant session bearer tokens carried as a path segment
+ *   (/api/firsthand/session/<token>/...) - an opaque capability.
+ * - OAuth parameters in the query string. The Okta callback lands at
+ *   /auth/callback?code=...&state=..., so without this the full authorization
+ *   code was written to logs on every login, twice (request started and
+ *   completed). Single-use and short-lived, but a live credential in a log
+ *   aggregator all the same.
  */
 export function redactSensitiveUrl(url: string | undefined): string | undefined {
   if (!url) return url;
-  return url.replace(/(\/session\/)[^/?#]+/g, '$1[REDACTED]');
+
+  const pathRedacted = url.replace(/(\/session\/)[^/?#]+/g, '$1[REDACTED]');
+
+  return pathRedacted.replace(
+    // Matches ?code=... or &code=..., stopping at the next separator or fragment.
+    new RegExp(`([?&](?:${SENSITIVE_QUERY_PARAMS.join('|')})=)[^&#]*`, 'gi'),
+    '$1[REDACTED]'
+  );
 }
 
 /**
@@ -26,6 +49,7 @@ export function redactSensitiveUrl(url: string | undefined): string | undefined 
 export class Logger {
   private isDevelopment = process.env.NODE_ENV === 'development';
   private isProduction = process.env.NODE_ENV === 'production';
+  private isTest = process.env.NODE_ENV === 'test';
 
   private formatLog(level: string, message: string, context?: LogContext): string {
     const timestamp = new Date().toISOString();
@@ -45,10 +69,8 @@ export class Logger {
 
   private log(level: string, message: string, context?: LogContext): void {
     const formattedLog = this.formatLog(level, message, context);
-    
-    if (this.isDevelopment) {
-      console.log(formattedLog);
-    } else if (this.isProduction) {
+
+    if (this.isDevelopment || this.isProduction) {
       // In production, you would send logs to a service like:
       // - Winston with file/console transports
       // - Logstash
@@ -56,7 +78,21 @@ export class Logger {
       // - Datadog
       // - New Relic
       console.log(formattedLog);
+      return;
     }
+
+    // Tests are deliberately quiet.
+    if (this.isTest) {
+      return;
+    }
+
+    // Anything else - an unset, misspelled or new NODE_ENV - degrades to
+    // NOISY, never silent. This branch previously fell through and wrote
+    // nothing, which meant every error log in the app vanished on an
+    // unrecognised value. That is worse than the failure it hides: the pool
+    // error guard added in !86 is a log line and nothing else, so a silent
+    // logger converts a crash into total silence. Issue #3.
+    console.error(formattedLog);
   }
 
   info(message: string, context?: LogContext): void {

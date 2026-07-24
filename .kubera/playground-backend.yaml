@@ -136,12 +136,39 @@ deployment:
     periodSeconds: 30
     timeoutSeconds: 5
     failureThreshold: 10
+  # Readiness deliberately points at the STATIC /health, not at a database
+  # check. Readiness controls whether this pod receives traffic, and the
+  # deployment is single-replica: taking the only pod out of the Ready set
+  # during a database outage leaves the Service with no endpoints, so the
+  # frontend nginx returns its own 502 Bad Gateway page instead of the app's
+  # 503 with a DB_CONNECTION_FAILED code. That is worse for users and worse to
+  # diagnose, and with Multi-AZ it would black the app out during every routine
+  # failover: periodSeconds 10 x failureThreshold 3 takes the pod NotReady in
+  # ~30s, well inside a 60-120s failover, whereas liveness (30 x 10, ~300s)
+  # tolerates one comfortably.
+  #
+  # Dependency-driven readiness is also the classic cascading-failure
+  # anti-pattern in general: every replica fails the same probe at once, so a
+  # partial degradation becomes a total endpoint drain. At replicaCount > 1
+  # a readiness SELECT 1 becomes defensible again - raising the replica count
+  # is the real fix, and this note should be revisited alongside it.
+  #
+  # The database is reported at GET /api/health instead - visibility without
+  # touching traffic routing. Issue #3.
+  #
+  # The timings below were previously omitted, which inherited Kubernetes'
+  # defaults of periodSeconds 10, timeoutSeconds 1, failureThreshold 3 - so
+  # three event-loop stalls over one second would have evicted the only pod.
+  # Stated explicitly and matched to the liveness probe's deliberate 5s.
   readinessProbe:
     httpGet:
       path: '/health'
       port: 3001
       scheme: HTTP
     initialDelaySeconds: 20
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
 initContainer:
   enabled: true
   command: [ "sh", "-c"]
