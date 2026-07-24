@@ -5,8 +5,9 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
-import { config } from './config';
+import { config, pool } from './config';
 import { logger } from './utils/logger';
+import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
@@ -185,6 +186,50 @@ app.use('/auth', authLimiter, authRoutes);
 // Also mount auth routes under /api/auth for frontend compatibility
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/cron', cronRoutes);
+// Deep health check. Registered BEFORE the /api router so it wins the path,
+// and served under /api because the frontend nginx proxy forwards only /api
+// and /auth to this private backend - a route under /health would be
+// unreachable from outside the cluster and so useless to monitoring.
+//
+// Unlike /health below this one really touches the pool, which is what makes a
+// durably dead database visible to something other than the app's own 503s.
+// Rate limited because it is unauthenticated and does I/O. Issue #3.
+// The probe dedupes concurrent callers and briefly reuses a verdict, so the
+// database cost is constant regardless of request rate. That is what makes the
+// generous ceiling below safe: behind two proxy hops `trust proxy: 1` resolves
+// req.ip to the ingress, so this bucket is shared by every external caller and
+// a tight limit would let anyone 429 the monitor - which reads as "unhealthy"
+// and would make the endpoint lie in the direction it exists to prevent.
+const healthLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const databaseHealthProbe = createDatabaseHealthProbe(pool);
+
+app.get('/api/health', healthLimiter, (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+  // Express 4 does not forward a rejected promise to the error handler, and an
+  // unhandled rejection terminates the process under Node 22. checkDatabaseHealth
+  // is documented and tested never to reject, but the endpoint added to survive
+  // a database failure is the wrong place to rely on that.
+  databaseHealthProbe()
+    .then((database) => {
+      res.set('Cache-Control', 'no-store');
+      res.status(database.healthy ? 200 : 503).json({
+        status: database.healthy ? 'ok' : 'degraded',
+        database: database.healthy ? 'up' : 'down',
+        // Reported on the healthy path only. On failure it is a latency oracle
+        // - an immediate refusal versus a blackholed connection sitting at the
+        // timeout - and `status` already carries everything monitoring needs.
+        ...(database.healthy ? { databaseLatencyMs: database.latencyMs } : {}),
+        timestamp: new Date().toISOString(),
+      });
+    })
+    .catch(next);
+});
+
 app.use('/api', apiRoutes);
 
 // Health check endpoint
@@ -224,14 +269,18 @@ if (
   });
 }
 
-// Start server
-app.listen(config.PORT, () => {
-  logger.info('Server started', {
-    port: config.PORT,
-    environment: config.NODE_ENV,
-    corsOrigin: config.CORS_ORIGIN,
-    csrfEnabled,
+// Start server. Guarded like the cron schedules above so the app can be
+// imported by tests and driven with supertest without binding a port - which
+// is what lets a test pin the real middleware order rather than a copy of it.
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(config.PORT, () => {
+    logger.info('Server started', {
+      port: config.PORT,
+      environment: config.NODE_ENV,
+      corsOrigin: config.CORS_ORIGIN,
+      csrfEnabled,
+    });
   });
-});
+}
 
 export default app;

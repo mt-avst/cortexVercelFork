@@ -139,7 +139,10 @@ export const errorHandler = (
     logger.error('Database error details:', {
       requestId,
       method: req.method,
-      url: req.url,
+      // Redacted like every other log site in this file. Participant routes
+      // are mounted at /api/firsthand/session/<token>/..., so the raw URL put
+      // a live capability token in the log on any database error.
+      url: redactSensitiveUrl(req.url),
       error: {
         code: dbError.code,
         message: dbError.message,
