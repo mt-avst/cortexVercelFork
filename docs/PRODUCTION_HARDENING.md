@@ -16,6 +16,8 @@ Before go-live, confirm each item (ops / project owner):
 4. [ ] **CORS_ORIGIN** – Matches the production frontend URL (`https://adaptalabs.kubera-playground.adaptavist.net`).
 5. [x] **RDS backups declared** – `database.postgresql.rds.backupRetentionPeriod: 14` is set in `.kubera/playground-backend.yaml` rather than left to the chart default. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
 6. [ ] **RDS backups applied** – Confirm the running instance actually reports `BackupRetentionPeriod: 14`. Declared is not applied: Helm ignores unrecognised values keys silently, so a wrong key name would leave retention at the default while the line above still reads as done. Needs AWS RDS read access.
+7. [x] **RDS deletion protection declared** – `database.postgresql.rds.deletionProtection: true` is set in `.kubera/playground-backend.yaml`, matching FirstHand's own production manifest. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
+8. [ ] **RDS deletion protection applied** – Confirm the running instance actually reports `DeletionProtection: true`. Same declared-vs-applied caveat as retention. Needs AWS RDS read access.
 
 ## Environment and config
 
@@ -41,6 +43,8 @@ Before go-live, confirm each item (ops / project owner):
 
 - [x] **RDS backups declared** – Retention is declared as 14 days in `.kubera/playground-backend.yaml`; see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md). Change it there, not in the AWS console, to avoid manifest/instance drift.
 - [ ] **RDS backups applied** – Unverified: confirming the live instance reports 14 needs AWS RDS read access.
+- [x] **RDS deletion protection declared** – `deletionProtection: true` in `.kubera/playground-backend.yaml`. Change it there, not in the AWS console, to avoid manifest/instance drift. Deleting the instance deliberately means flipping the flag off in the manifest first.
+- [ ] **RDS deletion protection applied** – Unverified: confirming the live instance reports it needs AWS RDS read access.
 - [x] **Migrations** – Run automatically on every deploy by the backend init container (`npm run migrate && npm run seed && npm run migrate:firsthand` against `DB_URL`); idempotent and checksum-guarded. There is no manual `run-migrations` endpoint.
 
 ## Performance and monitoring
