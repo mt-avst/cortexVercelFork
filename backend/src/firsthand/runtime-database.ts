@@ -1,6 +1,8 @@
 
 import { Pool, type PoolClient } from "pg";
 
+import { attachPoolErrorLogging } from "../utils/poolErrorLogging";
+
 const FIRSTHAND_RUNTIME_SCHEMA = "firsthand";
 const REQUIRED_RUNTIME_RELATIONS = [
   "schema_migrations",
@@ -86,8 +88,14 @@ export function getRuntimeDatabasePool() {
   }
 
   if (!globalRuntimeDatabase.__firsthandRuntimePool) {
-    globalRuntimeDatabase.__firsthandRuntimePool = new Pool(
-      getRuntimePoolConfig(databaseUrl)
+    // Load-bearing: without an `error` listener, an error on an idle pooled
+    // connection is an unhandled EventEmitter error and terminates the
+    // process. An RDS failover drops every idle connection at once, so this
+    // is a routine event on a Multi-AZ instance, not only an incident one.
+    // See ../utils/poolErrorLogging.ts.
+    globalRuntimeDatabase.__firsthandRuntimePool = attachPoolErrorLogging(
+      new Pool(getRuntimePoolConfig(databaseUrl)),
+      "firsthand-runtime"
     );
   }
 
