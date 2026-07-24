@@ -97,10 +97,17 @@ database:
     rds:
       # Guards against accidental instance deletion at the AWS level: a delete
       # must first flip this off. This instance holds the migrated FirstHand
-      # data; FirstHand's own production manifest set it true. multiAz is
-      # consciously NOT set here - real cost and failover implications, its own
-      # decision if wanted.
+      # data; FirstHand's own production manifest set it true.
       deletionProtection: true
+      # Synchronous standby in a second availability zone, with automatic
+      # failover. Costs roughly double a single-AZ instance - accepted
+      # deliberately: this instance is the only remaining home of the migrated
+      # FirstHand data once the retention window closes, and single-AZ makes an
+      # AZ outage extended downtime with restore-from-backup as the worst case.
+      # Multi-AZ reduces that to a failover of a minute or two - it is an
+      # availability control, not a backup. Matches the chart reference recorded
+      # in docs/FIRSTHAND-KUBERA-MIGRATION-PLAN.md.
+      multiAz: true
       # Declared explicitly rather than left to the chart default: this instance
       # holds the migrated FirstHand data, and the FirstHand RDS was found during
       # that migration to have retention defaulted to 0, i.e. automated backups

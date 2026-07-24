@@ -18,6 +18,8 @@ Before go-live, confirm each item (ops / project owner):
 6. [ ] **RDS backups applied** – Confirm the running instance actually reports `BackupRetentionPeriod: 14`. Declared is not applied: Helm ignores unrecognised values keys silently, so a wrong key name would leave retention at the default while the line above still reads as done. Needs AWS RDS read access.
 7. [x] **RDS deletion protection declared** – `database.postgresql.rds.deletionProtection: true` is set in `.kubera/playground-backend.yaml`, matching FirstHand's own production manifest. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
 8. [ ] **RDS deletion protection applied** – Confirm the running instance actually reports `DeletionProtection: true`. Same declared-vs-applied caveat as retention. Needs AWS RDS read access.
+9. [x] **RDS Multi-AZ declared** – `database.postgresql.rds.multiAz: true` is set in `.kubera/playground-backend.yaml`, matching the chart reference recorded in [docs/FIRSTHAND-KUBERA-MIGRATION-PLAN.md](FIRSTHAND-KUBERA-MIGRATION-PLAN.md) and FirstHand's own production manifest. Availability, not backup – see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
+10. [ ] **RDS Multi-AZ applied** – Confirm the running instance actually reports `MultiAZ: true`. Same declared-vs-applied caveat as retention. Read `PendingModifiedValues` and `DBInstanceStatus` in the same call and follow the four-state rule in [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md) before concluding anything: a `false` reading is only evidence of a wrong key name once the deploy has demonstrably reconciled, and reading inside the 15–30 minute ArgoCD lag will mislead you. Needs AWS RDS read access.
 
 ## Environment and config
 
@@ -38,6 +40,8 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **API logging** – Routes use `logger` (not `console`) for errors.
 - [x] **Health check** – The backend serves `GET /health` (used by the Kubera liveness/readiness probes on port 3001); the frontend serves its own `/health` probe. These are internal probes, not a public JSON status page.
 - [x] **DB connectivity** – After deploy, verify `GET /api/opportunities` returns 200 (confirms DB + env through the nginx proxy).
+- [x] **RDS Multi-AZ declared** – `multiAz: true` in `.kubera/playground-backend.yaml`: a synchronous standby in a second AZ with automatic failover. Change it there, not in the AWS console, to avoid manifest/instance drift – it is the likeliest of the three to get toggled off to trim spend. Listed here rather than under Data and backups because it is an availability control, not a backup – it replicates mistakes as faithfully as it replicates good writes. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
+- [ ] **RDS Multi-AZ applied** – Unverified: confirming the live instance reports `MultiAZ: true` needs AWS RDS read access.
 
 ## Data and backups
 
