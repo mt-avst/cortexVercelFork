@@ -17,7 +17,8 @@ AWS RDS provides two backup mechanisms:
 - **Manual snapshots** – on-demand snapshots taken from the AWS RDS console or CLI. These persist until explicitly deleted and are independent of the retention window.
 
 On instance deletion the chart sets `rds.skipFinalSnapshot: false`, so RDS takes a final snapshot before the instance is removed.
-`rds.deletionProtection` is `false`, so the instance is not protected against accidental deletion at the AWS level.
+`rds.deletionProtection` is `true`, so a deletion attempt fails at the AWS level until that flag is first flipped off in the manifest and deployed.
+As with retention below, this is the declared value; the applied value cannot be read back from git.
 
 ## Retention – declared in the manifest
 

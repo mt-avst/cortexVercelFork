@@ -95,7 +95,12 @@ database:
       user: 'postgres'
     deploymentType: "rds"
     rds:
-      deletionProtection: false
+      # Guards against accidental instance deletion at the AWS level: a delete
+      # must first flip this off. This instance holds the migrated FirstHand
+      # data; FirstHand's own production manifest set it true. multiAz is
+      # consciously NOT set here - real cost and failover implications, its own
+      # decision if wanted.
+      deletionProtection: true
       # Declared explicitly rather than left to the chart default: this instance
       # holds the migrated FirstHand data, and the FirstHand RDS was found during
       # that migration to have retention defaulted to 0, i.e. automated backups
