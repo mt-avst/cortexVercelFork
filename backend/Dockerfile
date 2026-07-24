@@ -46,5 +46,11 @@ USER nodejs
 # Expose port
 EXPOSE 3001
 
+# Defence in depth for the mock-data gate in utils/database.ts: with no
+# NODE_ENV and no database configured, the app would serve demo fixtures.
+# Kubera sets NODE_ENV=production explicitly; this makes the image safe on
+# its own rather than relying on that.
+ENV NODE_ENV=production
+
 # Start the application
 CMD ["npm", "start"]

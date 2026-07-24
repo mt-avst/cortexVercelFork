@@ -136,7 +136,7 @@ const Home: React.FC = memo(() => {
         if (typeof data === 'string' && (data as string).includes('<!doctype html>')) {
           setError('Backend API not available');
         } else {
-          setError('No backend available. This is a production demo with frontend only.');
+          setError('Studies are temporarily unavailable. Please try again shortly.');
         }
       } else {
         const list = presentationListing
@@ -145,7 +145,7 @@ const Home: React.FC = memo(() => {
         setOpportunities(list);
       }
     } catch (err: unknown) {
-      setError('Failed to load opportunities - backend not available in production demo');
+      setError('Studies are temporarily unavailable. Please try again shortly.');
       setOpportunities([]); // Set empty array on error
     } finally {
       setLoading(false);

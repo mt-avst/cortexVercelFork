@@ -193,6 +193,12 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
 
     res.json(isAdmin ? opportunities : opportunities.map(toPublicOpportunity));
   } catch (error) {
+    // Operational errors (e.g. the 503 isDatabaseAvailable throws during an
+    // outage) carry their own status and code - let errorHandler serialise
+    // them instead of flattening to a generic 500.
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error in opportunities route', { error });
     res.status(500).json({ error: 'Internal server error' });
   }
@@ -960,6 +966,9 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
     
     res.json(sessions);
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error fetching sessions', { error });
     res.status(500).json({ error: 'Failed to fetch sessions' });
   }
@@ -1101,6 +1110,9 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       client.release();
     }
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error creating sessions', { error });
     res.status(500).json({ error: 'Failed to create sessions' });
   }
@@ -1191,6 +1203,9 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
       deleted_count: deleteResult.rowCount 
     });
   } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
     logger.error('Error deleting sessions', { error });
     res.status(500).json({ error: 'Failed to delete sessions' });
   }
