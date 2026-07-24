@@ -96,6 +96,12 @@ database:
     deploymentType: "rds"
     rds:
       deletionProtection: false
+      # Declared explicitly rather than left to the chart default: this instance
+      # holds the migrated FirstHand data, and the FirstHand RDS was found during
+      # that migration to have retention defaulted to 0, i.e. automated backups
+      # and point-in-time recovery silently off. 14 days matches the value
+      # FirstHand's own production manifest established.
+      backupRetentionPeriod: 14
       majorEngineVersion: "17"
       engineVersion: "17.6"
       autoMinorVersionUpgrade: false
