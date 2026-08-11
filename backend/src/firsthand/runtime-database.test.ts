@@ -21,7 +21,6 @@ describe("runtime database verification", () => {
     delete process.env.DATABASE_URL;
     delete process.env.POSTGRES_URL;
     delete process.env.DB_URL;
-    delete process.env.FIRSTHAND_DATABASE_URL;
     delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
       .__firsthandRuntimePool;
     delete (
@@ -103,9 +102,13 @@ describe("Kubera database environment", () => {
     expect(runtimeDatabase.getRuntimeDatabaseUrl()).toBe(process.env.DB_URL);
   });
 
-  it("ignores FIRSTHAND_DATABASE_URL after the Phase C cutover (rollback = git revert)", async () => {
+  it("resolves only DATABASE_URL, POSTGRES_URL and DB_URL - legacy vars are not in the chain", async () => {
+    // Pin: the hand-rolled precedence chain has already produced one outage in
+    // this codebase, and the retired FIRSTHAND_DATABASE_URL secret can linger
+    // in the pod env until AWS-side hygiene deletes it. A legacy var must
+    // never influence resolution - it now names a destroyed host.
     process.env.FIRSTHAND_DATABASE_URL =
-      "postgresql://firsthand:secret@firsthand-source.abc123.us-east-1.rds.amazonaws.com:5432/postgres";
+      "postgresql://decommissioned-source.example.invalid:5432/postgres";
     process.env.DB_URL =
       "postgresql://cortex:secret@adaptalabs.def456.us-east-1.rds.amazonaws.com:5432/postgres";
 

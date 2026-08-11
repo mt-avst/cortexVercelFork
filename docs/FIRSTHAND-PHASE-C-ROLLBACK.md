@@ -1,7 +1,8 @@
-# FirstHand Phase C rollback runbook
+# FirstHand Phase C cutover record
 
-Status: ACTIVE through the retention window.
-Written 2026-07-23, immediately after the Phase C cutover deployed.
+Status: CLOSED 2026-08-11.
+Rollback is no longer possible - the FirstHand source RDS was decommissioned (FirstHand repo MR !2, deployed via pipeline 353122; AWS took a final snapshot before the destroy).
+Retained as the migration's verification and provenance record; the rollback procedure this file used to describe was a git revert of the cutover commit and is struck as unusable.
 
 ## What was cut over
 
@@ -9,41 +10,24 @@ On 2026-07-22 the FirstHand runtime data (schema `firsthand`: studies, steps, se
 On 2026-07-23 at 01:26 UTC the cutover deployed: `getRuntimeDatabaseUrl()` no longer reads `FIRSTHAND_DATABASE_URL`, so the firsthand runtime pool resolves to this deployment's own RDS (`DB_URL`), where the migrated copy lives.
 Recordings themselves never moved: the `firsthand-playground` S3 bucket is unchanged and is reached via the backend's IRSA grant.
 
-## Rollback (retention window): one git revert
+## How the window closed
 
-The rollback is a revert of the cutover commit, nothing else.
+The retention window closed on 2026-07-25.
+The source RDS deletion merged as FirstHand repo MR !2 (commit `21a3a70d`) and deployed on 2026-08-11 after a group-level Nexus credential fix; the kubera-playground job log confirmed ArgoCD `prune: true`, which removes the RDS Workspace and runs the destroy with `skipFinalSnapshot: false`.
+Recovery routes from here are point-in-time recovery and automated backups on Cortex's own instance (14 days - see [BACKUP_STRATEGY.md](BACKUP_STRATEGY.md)) or the source's final snapshot in AWS.
 
-```bash
-git revert 4dbff74b   # "feat: cut the firsthand runtime over to Cortex's own RDS (C3 cutover)"
-```
-
-Raise the revert as an MR, merge, let it deploy.
-The revert restores `FIRSTHAND_DATABASE_URL` to the head of the resolver chain, and the env var is still injected into the backend pod from the secret store - so on restart the runtime pool points straight back at the untouched FirstHand source RDS.
-No AWS action, no data restore, no coordination required.
-
-### Preconditions that keep this rollback alive
-
-1. The `FIRSTHAND_DATABASE_URL` secret MUST stay in the adaptalabs backend's secret store until the retention window closes.
-   Deleting it is post-retention hygiene ONLY - doing it early converts the rollback from a git revert into an AWS re-provisioning exercise.
-2. The FirstHand RDS instance and the `firsthand-playground` bucket stay untouched and retained.
-   The source RDS has no automated backups (chart default) - the live instance IS the rollback copy.
-3. The standalone FirstHand app is only scaled to zero on explicit instruction, after the migrated data has been verified end to end in the reviewer UI.
-
-### What a rollback loses
-
-Any firsthand-runtime data written between cutover and rollback exists only in Cortex's RDS and is not visible after reverting.
-This is the same drift window that motivates the standing rule: no recording sessions until the migration is verified and stable.
-Note the copy pipeline was torn down with Phase C (job, script, report route and table all removed) - re-running the copy after a rollback requires reverting the teardown MR as well and re-authorising an execute run.
-
-## Verification after either direction
+## Verification record
 
 - Reviewer UI lists the migrated studies and sessions.
-- Playback of pre-migration session `session_bb101ec8` works end to end (asset streams with Range support, transcript renders).
-- Backend boot is the tripwire: a wrong or missing database URL fails startup schema-verify (nine `firsthand.*` relations checked) rather than serving empty or foreign data.
+- Playback of pre-migration session `session_bb101ec8` verified end to end (asset streams with Range support, transcript renders).
+- Backend boot check: a wrong or missing database URL fails startup schema-verify (nine `firsthand.*` relations checked) rather than serving empty or foreign data.
+  Note the limit: schema-verify catches an unmigrated database, not a wrong-but-migrated one.
 
 ## Key commits
 
 - Execute flag (data copy armed): !62, merge `5ddd77cd`
 - Migration machinery teardown: !63, merge `dfab5de0`
-- Cutover (revert THIS to roll back): !64, squash `4dbff74b`, merge `50230caf`
+- Cutover: !64, squash `4dbff74b`, merge `50230caf`
 - Image CVE cleanup: !65, merge `e2ca23d5`
+- Source RDS decommission: FirstHand repo !2, merge `21a3a70d`, deployed 2026-08-11
+- Dead-remnant removal (guard, comments, resolver test): !89
