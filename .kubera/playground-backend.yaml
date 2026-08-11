@@ -53,8 +53,10 @@ secret:
   # Secret store holds FIRSTHAND_INTEGRATION_SECRET (min 32 chars) and SESSION_SECRET.
   # The Okta clientID/clientSecret come separately from the chart-provisioned
   # <app>-okta-secret (auto-mounted via envFrom when okta_app.enabled is true).
-# FirstHand cutover (temporary): lets Cortex record into and play back from FirstHand's
-# existing bucket while FirstHand keeps ownership and remains the rollback target.
+# FirstHand bucket access (permanent): Cortex records into and plays back from
+# firsthand-playground, retained at migration rather than copied. The standalone
+# FirstHand app is retired (source RDS decommissioned 2026-08-11) - removing
+# this block revokes live recording and playback.
 # The chart renders these as a Crossplane IAM Policy + RolePolicyAttachment on this
 # app's IRSA role (library-chart _irsa-additional-custom-policy.yaml) - purely additive;
 # remove this block to revoke. irsa.enabled is the chart default, so only the policies
@@ -101,8 +103,9 @@ database:
       deletionProtection: true
       # Synchronous standby in a second availability zone, with automatic
       # failover. Costs roughly double a single-AZ instance - accepted
-      # deliberately: this instance is the only remaining home of the migrated
-      # FirstHand data once the retention window closes, and single-AZ makes an
+      # deliberately: this instance is the only remaining live home of the
+      # migrated FirstHand data (retention window closed 2026-08-11; the
+      # source RDS is gone), and single-AZ makes an
       # AZ outage extended downtime with restore-from-backup as the worst case.
       # Multi-AZ reduces that to a failover of a minute or two - it is an
       # availability control, not a backup. Matches the chart reference recorded
@@ -173,9 +176,9 @@ initContainer:
   enabled: true
   command: [ "sh", "-c"]
   # migrate:firsthand chains FirstHand's checksum-guarded schema runner after
-  # Cortex's own migrate+seed. It targets THIS deployment's RDS (DB_URL), never
-  # FIRSTHAND_DATABASE_URL - see backend/scripts/firsthand-migrate.mjs. It
-  # is checksum-guarded and idempotent: it creates the empty `firsthand` schema
-  # on a fresh environment and is a verified no-op once the schema is populated.
+  # Cortex's own migrate+seed. It targets THIS deployment's RDS (DB_URL) -
+  # see backend/scripts/firsthand-migrate.mjs. It is checksum-guarded and
+  # idempotent: it creates the empty `firsthand` schema on a fresh environment
+  # and is a verified no-op once the schema is populated.
   args: ["npm run migrate && npm run seed && npm run migrate:firsthand"]
   workingDir: "/app/backend"

@@ -24,14 +24,10 @@ type RuntimeDatabaseGlobal = typeof globalThis & {
 const globalRuntimeDatabase = globalThis as RuntimeDatabaseGlobal;
 
 export function getRuntimeDatabaseUrl() {
-  // Phase C cutover (2026-07-22, executed): the firsthand runtime now lives in
-  // THIS deployment's own RDS. FIRSTHAND_DATABASE_URL - the Phase B bridge
-  // that pointed this pool at FirstHand's live RDS while the data still lived
-  // there - is deliberately NOT read any more; the migrated copy in Cortex's
-  // RDS is authoritative. The env var may still be present in the pod
-  // (secret-store removal is post-retention hygiene): it must stay unread.
-  // ROLLBACK for the retention window = git-revert this commit, which points
-  // the pool back at the untouched FirstHand source RDS.
+  // The firsthand runtime lives in THIS deployment's own RDS (Phase C
+  // cutover, 2026-07-22). The FirstHand source RDS was decommissioned in
+  // 2026-08, closing the git-revert rollback path - the migrated copy here
+  // is the only copy.
   //
   // DB_URL is what Kubera's RDS machinery injects: the terraform-aws-rds
   // module writes {DB_USER,DB_PASSWORD,DB_HOST,DB_PORT,DB_NAME,DB_URL} to

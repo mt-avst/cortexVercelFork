@@ -62,6 +62,10 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **WCAG 2.2 AA** – Contrast fixes (CTA, power button, Settings tab), heading order, page h1s. See `e2e/accessibility.test.ts`.
 - [ ] **Re-run a11y tests** – After deploy run `npm run test:a11y:prod`. Uses the production URL and Chromium; use `load` not `networkidle` for production. Note the host is Okta-gated, so anonymous flows redirect to login rather than passing cleanly.
 
+## Residual decommission hygiene
+
+- [ ] **Delete the inert `FIRSTHAND_DATABASE_URL` entry from the backend secret store** - nothing reads it since the Phase C cutover, and the host it names was decommissioned on 2026-08-11 (see [FIRSTHAND-PHASE-C-ROLLBACK.md](FIRSTHAND-PHASE-C-ROLLBACK.md)). AWS-side action; requires AWS access.
+
 ## Quick verification after deploy
 
 1. `curl -s https://adaptalabs.kubera-playground.adaptavist.net/api/csrf-token` → `{"csrfToken":"..."}` (200) — backend reachable through the nginx proxy

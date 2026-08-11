@@ -21,14 +21,12 @@ const migrationsDirectory = path.resolve(__dirname, "../db/firsthand-migrations"
 // what Kubera's RDS machinery injects via the ExternalSecret) so this runner
 // can never resolve to a different database than migrate+seed did.
 //
-// Deliberately NOT read here: FIRSTHAND_DATABASE_URL. The application's
-// runtime pool (src/firsthand/runtime-database.ts) prefers it while the
-// engine is external-first, because it points at FirstHand's live RDS - the
-// data-migration SOURCE. Deploy-time DDL must never run against that source;
-// this runner's job is to create and maintain the `firsthand` schema in
-// Cortex's own RDS so the Phase C restore has a home. Do not "fix" this to
-// match the runtime resolver order. The guard below additionally refuses to
-// run if the resolved target turns out to be the FirstHand source host.
+// This runner's job is to create and maintain the `firsthand` schema in
+// Cortex's own RDS. (The FIRSTHAND_DATABASE_URL bridge to FirstHand's source
+// RDS, and the anti-source guard that protected that source from stray DDL,
+// were removed 2026-08-11 when the source RDS was decommissioned - FirstHand
+// repo MR !2. Note the runtime pool deliberately reads a narrower var set
+// than this runner: no POSTGRESQL_URL - see runtime-database.ts.)
 const CONNECTION_SOURCES = [
   ["DATABASE_URL", "DATABASE_URL"],
   ["POSTGRES_URL", "POSTGRES_URL"],
@@ -54,33 +52,6 @@ const databaseUrl = resolvedConnection.url;
 // the source var (never the value) so a wrong-env failure is diagnosable
 // from the log alone.
 console.info(`[firsthand-migrate] connection source: ${resolvedConnection.label}`);
-
-function hostIdentity(url) {
-  try {
-    const parsed = new URL(url);
-    return `${parsed.hostname}:${parsed.port || "5432"}`;
-  } catch {
-    return null;
-  }
-}
-
-// Anti-source guard: while the engine is external-first, FIRSTHAND_DATABASE_URL
-// in the pod env identifies FirstHand's live RDS (real consent-gated
-// participant data - the Phase C migration source). If a misconfiguration ever
-// points DATABASE_URL/POSTGRES_URL/POSTGRESQL_URL/DB_URL at that same host,
-// refuse to run rather than apply DDL to the source. After cutover the
-// variable is dropped and this guard becomes a no-op.
-const firsthandSourceUrl = process.env.FIRSTHAND_DATABASE_URL?.trim();
-if (firsthandSourceUrl) {
-  const targetHost = hostIdentity(databaseUrl);
-  const sourceHost = hostIdentity(firsthandSourceUrl);
-  if (targetHost && sourceHost && targetHost === sourceHost) {
-    console.error(
-      `[firsthand-migrate] REFUSING to run: the resolved target (${resolvedConnection.label}) is the same host as FIRSTHAND_DATABASE_URL - the live FirstHand source RDS. Deploy-time DDL only ever targets this deployment's own RDS.`
-    );
-    process.exit(1);
-  }
-}
 
 function requiresRdsSsl(url) {
   try {
