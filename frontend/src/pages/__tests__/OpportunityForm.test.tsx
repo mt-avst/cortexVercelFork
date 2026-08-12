@@ -294,13 +294,45 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       (vi.mocked(updateOpportunity).mock.calls[0][1] as any).inline_study
     ).toBeDefined();
 
-    // Having adopted it, the tab is now locked to the picker and the tickbox is
-    // gone - the same state a fresh load of this opportunity would produce.
-    await vi.waitFor(() => {
-      expect(
-        screen.queryByLabelText(/Reuse a script from an existing study/i)
-      ).not.toBeInTheDocument();
+    // Having adopted it, the tab is locked to the picker - wait on the picker
+    // appearing rather than the tickbox vanishing, so the study-list fetch it
+    // triggers settles inside the assertion instead of after the test.
+    expect(await screen.findByText('-- Select a launched study --')).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Reuse a script from an existing study/i)
+    ).not.toBeInTheDocument();
+
+    // The point of the fix: a LATER save must not re-send the tasks, which the
+    // backend would now reject as authoring over an existing study. Asserting
+    // only that the tickbox vanished would pass even if the steps survived.
+    //
+    // A real edit is needed to trigger it - an unchanged form saves nothing.
+    vi.mocked(updateOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      firsthand_study_id: 'study_created_on_save'
+    } as any);
+
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.change(await screen.findByLabelText(/^Title/i), {
+      target: { value: 'Draft saved early, now renamed' }
     });
+
+    // Back to the study tab, where the save control lives. It stays disabled
+    // while the post-save success banner is up, so wait it out rather than
+    // racing it - a click during that window is silently dropped.
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    const saveAgain = await screen.findByRole('button', { name: /Update Opportunity/i });
+    await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
+    fireEvent.click(saveAgain);
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(2);
+    });
+
+    const secondPayload = vi.mocked(updateOpportunity).mock.calls[1][1] as any;
+    expect(secondPayload.inline_study).toBeUndefined();
+    expect(secondPayload.firsthand_study_id).toBe('study_created_on_save');
   });
 
   it('locks an edit to the picker once a study is actually linked', async () => {

@@ -71,7 +71,9 @@ export interface Opportunity {
   status: 'draft' | 'published' | 'closed';
   owner_user_id?: string; // Admin responses only - stripped from public/participant responses
   external_link_optional?: string;
-  firsthand_study_id?: string;
+  // Nullable: the column is nullable, the update schema accepts null to clear
+  // the link, and the API returns null for an opportunity with no study.
+  firsthand_study_id?: string | null;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
@@ -113,7 +115,9 @@ export interface UpdateOpportunityRequest {
   default_duration_minutes?: number;
   status?: 'draft' | 'published' | 'closed';
   external_link_optional?: string;
-  firsthand_study_id?: string;
+  // Nullable: the column is nullable, the update schema accepts null to clear
+  // the link, and the API returns null for an opportunity with no study.
+  firsthand_study_id?: string | null;
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;

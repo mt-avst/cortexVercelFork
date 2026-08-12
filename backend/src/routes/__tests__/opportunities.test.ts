@@ -711,7 +711,7 @@ describe('Opportunities API', () => {
       // no study - the very state the guard exists to prevent.
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({
-        rows: [{ ...existingUnmoderated('study_live'), status: 'published' }]
+        rows: [existingUnmoderated('study_live', 'published')]
       });
 
       const response = await request(app)
@@ -719,9 +719,47 @@ describe('Opportunities API', () => {
         .send({ firsthand_study_id: null })
         .expect(400);
 
+      // Names what this caller is actually doing - they are removing a study,
+      // not failing to publish one.
       expect(response.body.error).toBe(
-        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+        'A published unmoderated test cannot have its recorded study removed; unpublish it first'
       );
+    });
+
+    it('answers 404, not 500, when the opportunity vanishes before the type read', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      // Deleted between the ownership check and the existing-row lookup: the
+      // row access used to throw a TypeError straight into the 500 branch.
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ title: 'A perfectly fine new title' })
+        .expect(404);
+    });
+
+    it('still allows an unrelated edit to a legacy published row with no study', async () => {
+      // The guard must not lock rows ALREADY in the bad state, or the
+      // documented remediation for a legacy unmoderated+external row - which
+      // reset-demo-data.ts seeds - becomes impossible to apply.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            ...existingUnmoderated(null, 'published'),
+            participant_type_required: 'external'
+          }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ participant_type_required: 'any' })
+        .expect(200);
     });
 
     it('will not turn a published opportunity into a poll with no link', async () => {

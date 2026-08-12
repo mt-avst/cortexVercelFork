@@ -47,12 +47,8 @@ type CreateOpportunityBody = CreateOpportunityRequest & {
   inline_study?: InlineStudy;
 };
 
-// firsthand_study_id is Omitted and redeclared rather than intersected: an
-// intersection would narrow `string | null` back to `string`, and the update
-// schema genuinely permits null to clear the link.
-type UpdateOpportunityBody = Omit<UpdateOpportunityRequest, 'firsthand_study_id'> & {
+type UpdateOpportunityBody = UpdateOpportunityRequest & {
   inline_study?: InlineStudy;
-  firsthand_study_id?: string | null;
 };
 
 // Validation helper
@@ -574,6 +570,12 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
     [id]
   );
+  // Same delete-mid-request race the UPDATE below now handles: without this the
+  // row access throws a TypeError and answers 500 instead of 404.
+  if (existingOpp.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
   const existingType = data.type || existingOpp.rows[0].type;
   const existingLink = existingOpp.rows[0].external_link_optional;
   const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
@@ -631,13 +633,38 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
       ? data.status === 'published'
       : existingOpp.rows[0].status === 'published';
 
-  if (willBePublished && existingType === 'unmoderated') {
+  // ...but only for requests that could CREATE the bad state: ones that
+  // publish, change the type, or change what the opportunity points at. An
+  // unrelated edit to a row ALREADY in that state stays allowed, or a legacy
+  // published row with no study could never have its other fields corrected -
+  // which is precisely the remediation the participant-type comment above
+  // promises, and reset-demo-data.ts seeds exactly such a row.
+  const changesPublishShape =
+    data.status !== undefined ||
+    data.type !== undefined ||
+    data.firsthand_study_id !== undefined ||
+    inlineStudyInput !== undefined ||
+    data.external_link_optional !== undefined;
+
+  const publishGuardApplies = willBePublished && changesPublishShape;
+
+  if (publishGuardApplies && existingType === 'unmoderated') {
     // Trimmed for the same reason as the create guard: an all-whitespace id
     // would otherwise satisfy this and store NULL.
     if (!newFirstHandStudyId?.trim() && !inlineStudyInput) {
-      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
+      // A caller REMOVING the study from a published opportunity is not trying
+      // to publish, so telling them to add a prompt "before publishing"
+      // describes an action they are not taking.
+      const removingStudy =
+        data.firsthand_study_id !== undefined && existingFirstHandStudyId?.trim();
+
+      throw new ValidationError(
+        removingStudy
+          ? 'A published unmoderated test cannot have its recorded study removed; unpublish it first'
+          : UNMODERATED_STUDY_REQUIRED
+      );
     }
-  } else if (willBePublished && (existingType === 'poll' || existingType === 'survey')) {
+  } else if (publishGuardApplies && (existingType === 'poll' || existingType === 'survey')) {
     // Same reasoning as the unmoderated branch above: gating on the request's
     // own status let `PATCH { type: 'poll' }` against a published opportunity
     // produce a published poll with no link, which is what this rejects.
