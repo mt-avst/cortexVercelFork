@@ -559,6 +559,46 @@ describe('Opportunities API', () => {
       expect(mockCreateStudy).not.toHaveBeenCalled();
     });
 
+    it('refuses to author over a linked study even when the request nulls the link', async () => {
+      // firsthand_study_id is nullable on the update schema, and null?.trim()
+      // is falsy - so checking only the merged value let a caller clear the
+      // link and author a replacement in one request, orphaning the study a
+      // live opportunity was running.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [existingUnmoderated('study_already_linked')]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: null, inline_study: inlineStudy })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'This opportunity already has a recorded study; edit its tasks in the studies area'
+      );
+      expect(mockCreateStudy).not.toHaveBeenCalled();
+    });
+
+    it('removes the created study when the opportunity vanished mid-update', async () => {
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_raced' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      // Deleted between the ownership check and the write: the UPDATE succeeds
+      // but matches nothing.
+      mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ inline_study: inlineStudy })
+        .expect(404);
+
+      expect(mockDeleteStudy).toHaveBeenCalledWith('study_raced');
+    });
+
     it('deletes the study it created when the update fails', async () => {
       mockCreateStudy.mockResolvedValueOnce({
         study: { id: 'study_orphan_patch' },

@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-12T22:19:09.620Z
+ * Generated: 2026-08-12T22:31:13.732Z
  */
 
 import { z } from "zod";
@@ -69,13 +69,22 @@ export const INLINE_STUDY_LIMITS = {
   maxPromptLength: 2000,
   maxConsentLength: 10000,
   maxOptions: 20,
-  maxOptionLength: 500
+  maxOptionLength: 500,
+  // studies.estimated_duration_minutes is a Postgres INTEGER, so an unbounded
+  // value overflows and surfaces as a 500 rather than a validation error. A day
+  // is far beyond any real session.
+  maxDurationMinutes: 24 * 60
 } as const;
 
 export const inlineStudySchema = z
   .object({
     consent_text: z.string().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
-    estimated_duration_minutes: z.number().int().positive().optional(),
+    estimated_duration_minutes: z
+      .number()
+      .int()
+      .positive()
+      .max(INLINE_STUDY_LIMITS.maxDurationMinutes)
+      .optional(),
     steps: z.array(inlineStudyStepSchema).min(1).max(INLINE_STUDY_LIMITS.maxSteps)
   })
   .superRefine((value, ctx) => {

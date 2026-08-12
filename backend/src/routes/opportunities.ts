@@ -593,7 +593,14 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     throw new ValidationError('Only unmoderated opportunities can carry a study');
   }
 
-  if (inlineStudyInput && newFirstHandStudyId?.trim()) {
+  // Checked against the STORED link as well as this request's override. Using
+  // the merged value alone let `firsthand_study_id: null` (which the update
+  // schema permits) clear the link in the same breath as authoring a new study,
+  // silently re-pointing a live opportunity and orphaning the study it had.
+  if (
+    inlineStudyInput &&
+    (existingFirstHandStudyId?.trim() || data.firsthand_study_id?.trim())
+  ) {
     throw new ValidationError(
       'This opportunity already has a recorded study; edit its tasks in the studies area'
     );
@@ -671,6 +678,14 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   let result;
   try {
     result = await pool.query(query, values);
+
+    // Zero rows means the opportunity was deleted between the ownership check
+    // and this write. Raised inside the try so it takes the compensating
+    // delete: otherwise the row access below threw outside it, leaving the
+    // study behind.
+    if (result.rowCount === 0) {
+      throw new NotFoundError('Opportunity');
+    }
   } catch (error) {
     if (createdStudyId) {
       try {
