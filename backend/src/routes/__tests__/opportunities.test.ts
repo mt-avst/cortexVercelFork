@@ -493,6 +493,28 @@ describe('Opportunities API', () => {
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
 
+      it('rejects a whitespace-only title rather than naming the study ""', async () => {
+        // title and purpose_one_liner become the study's title and intro_text.
+        // Validating them untrimmed let "    " satisfy min(4) and store '',
+        // producing a study whose session payload cannot assemble.
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({ ...inlineBody, title: '      ' })
+          .expect(400);
+
+        expect(response.body.error).toBe('Validation failed');
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('rejects a whitespace-only purpose, which becomes the study intro', async () => {
+        await request(app)
+          .post('/api/opportunities')
+          .send({ ...inlineBody, purpose_one_liner: '             ' })
+          .expect(400);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
       it('answers 503, not 500, when the studies pool is not configured', async () => {
         mockIsStudiesPersistenceConfigured.mockReturnValueOnce(false);
 
@@ -540,8 +562,15 @@ describe('Opportunities API', () => {
   });
 
   describe('PATCH /api/opportunities/:id inline study', () => {
-    const existingUnmoderated = (firsthandStudyId: string | null) => ({
+    // status is explicit: omitting it left existingOpp.rows[0].status
+    // undefined, so willBePublished evaluated false in every case and the guard
+    // it drives was only ever exercised by the one test that set it.
+    const existingUnmoderated = (
+      firsthandStudyId: string | null,
+      status: 'draft' | 'published' | 'closed' = 'draft'
+    ) => ({
       type: 'unmoderated',
+      status,
       title: 'Existing title',
       purpose_one_liner: 'Existing purpose that is comfortably long enough',
       external_link_optional: null,
@@ -593,6 +622,30 @@ describe('Opportunities API', () => {
       expect(updateSql).toContain('firsthand_study_id');
       expect(updateSql).not.toContain('inline_study');
       expect(mockQuery.mock.calls[2][1]).toContain('study_from_edit');
+    });
+
+    it('does not inherit an empty stored title into the study it creates', async () => {
+      // Rows written before the schema trimmed these fields can hold ''. `??`
+      // only guards null/undefined, so it propagated '' straight into a study
+      // whose session payload then failed to assemble.
+      mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_x' }, steps: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...existingUnmoderated(null), title: '', purpose_one_liner: '' }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ inline_study: inlineStudy })
+        .expect(200);
+
+      const created = mockCreateStudy.mock.calls[0][0];
+      expect(created.title).toBe('Untitled study');
+      expect(created.intro_text).toBe('Recorded study');
     });
 
     it('refuses to author over an opportunity that already has a study', async () => {
@@ -671,6 +724,30 @@ describe('Opportunities API', () => {
       );
     });
 
+    it('will not turn a published opportunity into a poll with no link', async () => {
+      // The matched half of the unmoderated guard: gating on the request's own
+      // status let a type flip on an already-published row through, producing a
+      // published poll whose call to action goes nowhere.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            ...existingUnmoderated('study_live', 'published'),
+            external_link_optional: null
+          }
+        ]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ type: 'poll' })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'External link is required for published polls and surveys'
+      );
+    });
+
     it('says "not both" rather than "already has one" when neither is stored', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
@@ -700,10 +777,16 @@ describe('Opportunities API', () => {
         .send({ firsthand_study_id: '   ' })
         .expect(200);
 
+      // Asserted against the parameter the SQL actually binds firsthand_study_id
+      // to, not merely "a null exists somewhere in the values array" - which
+      // would pass even if the null landed on the wrong column.
+      const [sql, boundValues] = mockQuery.mock.calls[2];
+      const assignments = String(sql).match(/SET ([^]*?)\s+WHERE/)![1].split(',').map(a => a.trim());
+      const index = assignments.findIndex(a => a.startsWith('firsthand_study_id ='));
+      expect(index).toBeGreaterThanOrEqual(0);
       // Create normalises the same input to NULL; two representations of "no
       // study" would defeat any later IS NOT NULL predicate.
-      expect(mockQuery.mock.calls[2][1]).toContain(null);
-      expect(mockQuery.mock.calls[2][1]).not.toContain('');
+      expect(boundValues[index]).toBeNull();
     });
 
     it('answers 503 when the studies pool is not configured', async () => {

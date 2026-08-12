@@ -637,7 +637,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     if (!newFirstHandStudyId?.trim() && !inlineStudyInput) {
       throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
-  } else if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
+  } else if (willBePublished && (existingType === 'poll' || existingType === 'survey')) {
+    // Same reasoning as the unmoderated branch above: gating on the request's
+    // own status let `PATCH { type: 'poll' }` against a published opportunity
+    // produce a published poll with no link, which is what this rejects.
     if (!newLink || !validateUrl(newLink)) {
       throw new ValidationError('External link is required for published polls and surveys');
     }
@@ -656,9 +659,12 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     const studyId = `study_${crypto.randomUUID()}`;
     const stored = await createStudy({
       id: studyId,
-      title: (data.title ?? existingOpp.rows[0].title ?? 'Untitled study').trim(),
+      // `||` rather than `??`: a row stored before the schema trimmed these
+      // fields can hold '', which `??` would happily propagate into a study
+      // whose session payload then fails to assemble.
+      title: (data.title || existingOpp.rows[0].title || 'Untitled study').trim(),
       intro_text: (
-        data.purpose_one_liner ?? existingOpp.rows[0].purpose_one_liner ?? 'Recorded study'
+        data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded study'
       ).trim(),
       consent_text: inlineStudyInput.consent_text.trim(),
       estimated_duration_minutes:
