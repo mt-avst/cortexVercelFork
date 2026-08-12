@@ -486,6 +486,111 @@ describe('Opportunities API', () => {
     });
   });
 
+  describe('PATCH /api/opportunities/:id inline study', () => {
+    const existingUnmoderated = (firsthandStudyId: string | null) => ({
+      type: 'unmoderated',
+      title: 'Existing title',
+      purpose_one_liner: 'Existing purpose that is comfortably long enough',
+      external_link_optional: null,
+      firsthand_study_id: firsthandStudyId,
+      participant_type_required: 'any'
+    });
+
+    const inlineStudy = {
+      consent_text: 'We record your screen.',
+      steps: [{ type: 'open_text', prompt: 'What did you expect?' }]
+    };
+
+    it('lets a draft saved without tasks get them on the way back in', async () => {
+      // The gap this closes: an unmoderated draft is legitimately savable with
+      // no tasks, and editing used to force the reuse picker, sending the
+      // author back to the create-and-launch-elsewhere errand.
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_from_edit' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            firsthand_study_id: 'study_from_edit',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'published', inline_study: inlineStudy })
+        .expect(200);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'launched' })
+      );
+      // Inherits the opportunity's own title rather than a placeholder, which
+      // needs title/purpose in the existing-row SELECT.
+      expect(mockCreateStudy.mock.calls[0][0].title).toBe('Existing title');
+
+      // The generated id reaches the UPDATE, and inline_study never becomes a
+      // column name in it.
+      const updateSql = mockQuery.mock.calls[2][0];
+      expect(updateSql).toContain('firsthand_study_id');
+      expect(updateSql).not.toContain('inline_study');
+      expect(mockQuery.mock.calls[2][1]).toContain('study_from_edit');
+    });
+
+    it('refuses to author over an opportunity that already has a study', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [existingUnmoderated('study_already_linked')]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ inline_study: inlineStudy })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'This opportunity already has a recorded study; edit its tasks in the studies area'
+      );
+      expect(mockCreateStudy).not.toHaveBeenCalled();
+    });
+
+    it('deletes the study it created when the update fails', async () => {
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_orphan_patch' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockRejectedValueOnce(new Error('update exploded'));
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ inline_study: inlineStudy })
+        .expect(500);
+
+      expect(mockDeleteStudy).toHaveBeenCalledWith('study_orphan_patch');
+    });
+
+    it('still blocks publishing an unmoderated opportunity with neither route', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'published' })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+      );
+    });
+  });
+
   describe('PATCH /api/opportunities/:id', () => {
     it('should update an opportunity', async () => {
       const updatedOpportunity = {

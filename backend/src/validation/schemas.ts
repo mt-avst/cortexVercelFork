@@ -65,6 +65,11 @@ export const UpdateOpportunitySchema = z.object({
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   firsthand_study_id: z.string().min(1).optional().nullable(),
+  // Unmoderated only, and only when the opportunity has no study yet. Saving a
+  // draft before writing any tasks is legitimate, so the author has to be able
+  // to write them on the way back in - otherwise the errand this feature
+  // removes reappears for exactly that path.
+  inline_study: inlineStudySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),

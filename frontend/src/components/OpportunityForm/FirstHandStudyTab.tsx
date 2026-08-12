@@ -27,8 +27,15 @@ interface FirstHandStudyTabProps {
   handleInputChange: (field: string, value: FormFieldValue) => void;
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
   handleStepsChange: (steps: InlineStudyStep[]) => void;
-  /** Edit mode links an already-created study; its script is edited in the studies area. */
-  isEdit: boolean;
+  /**
+   * True only when the opportunity already had a study when it loaded. Authoring
+   * inline would then be a second source of truth against a script that is
+   * edited in the studies area, so reuse is the only option. An edit of an
+   * opportunity with NO study - a draft saved before its tasks were written -
+   * is not locked, or the errand this feature removes would come back for
+   * exactly that path.
+   */
+  lockedToExistingStudy: boolean;
 }
 
 const STEP_TYPE_LABELS: Record<(typeof authorableStepTypes)[number], string> = {
@@ -45,24 +52,22 @@ const STEP_TYPE_LABELS: Record<(typeof authorableStepTypes)[number], string> = {
  * version of this tab only offered a picker of already-launched studies, which
  * meant abandoning a part-filled form to go and create one elsewhere.
  *
- * Reusing an existing script is still possible behind the toggle, and remains
- * the only option when editing (the opportunity already points at a study).
+ * Reusing an existing script is still possible behind the toggle, and is the
+ * only option once the opportunity actually points at a study.
  */
 const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
   handleStepsChange,
-  isEdit
+  lockedToExistingStudy
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
-  // Editing always reuses: the study exists already and its script is edited in
-  // the studies area, so the inline author would be a second source of truth.
-  const reuseExisting = isEdit || Boolean(formData.reuse_existing_study);
+  const reuseExisting = lockedToExistingStudy || Boolean(formData.reuse_existing_study);
 
   useEffect(() => {
     // Only the picker needs the list. Skip the request (and its cost) when
@@ -137,7 +142,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         </div>
 
-        {!isEdit && (
+        {!lockedToExistingStudy && (
           <div className="form-check mb-4">
             <input
               className="form-check-input"

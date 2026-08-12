@@ -86,6 +86,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     reuse_existing_study: false
   });
 
+  // Whether the opportunity already pointed at a study when it loaded. Only
+  // then is authoring inline off the table - an unmoderated draft saved before
+  // its tasks were written must still be authorable on the way back in.
+  const [lockedToExistingStudy, setLockedToExistingStudy] = useState(false);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
@@ -176,13 +180,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
-        // Editing always points at the study that already exists; its script is
-        // edited in the studies area, so the inline author stays closed.
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [],
-        reuse_existing_study: true
+        // Only pre-tick reuse when a study is actually linked; otherwise the
+        // author gets the same choice they had when creating.
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
       });
 
+      setLockedToExistingStudy(Boolean(opportunity.firsthand_study_id));
       setOpportunityId(opportunity.id);
 
       // Store original form data for change detection
@@ -204,7 +209,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         end_date: opportunity.end_date || '',
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [] as InlineStudyStep[],
-        reuse_existing_study: true
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
       };
       setOriginalFormData(originalData);
 
@@ -315,11 +320,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
-      if (formData.reuse_existing_study || isEdit) {
+      if (formData.reuse_existing_study || lockedToExistingStudy) {
         if (!formData.firsthand_study_id?.trim()) {
-          // The reuse tickbox is not rendered when editing, so do not tell an
-          // editing author to untick it.
-          errors.firsthand_study_id = isEdit
+          // The reuse tickbox is not rendered once a study is linked, so do not
+          // tell that author to untick it.
+          errors.firsthand_study_id = lockedToExistingStudy
             ? 'Select a launched study before publishing'
             : 'Select a launched study, or untick the reuse box and write the tasks here';
         }
@@ -344,7 +349,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // backend contract rejects an empty prompt or a one-option choice on every
     // save, so a draft with a half-written task would fail server-side with a
     // far less useful message.
-    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !isEdit) {
+    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !lockedToExistingStudy) {
       formData.inline_study_steps.forEach((step, index) => {
         if (!step.prompt.trim()) {
           errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
@@ -540,11 +545,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       if (formData.type === 'unmoderated') {
-        // Send the authored study only when creating and not reusing. Editing
-        // keeps pointing at the existing study, whose script is edited in the
-        // studies area.
+        // Authoring is available whenever no study is linked yet - on create,
+        // and on an edit of a draft saved before its tasks were written. Once
+        // one is linked the script is edited in the studies area instead.
         const authoringInline =
-          !isEdit && !formData.reuse_existing_study && formData.inline_study_steps.length > 0;
+          !lockedToExistingStudy &&
+          !formData.reuse_existing_study &&
+          formData.inline_study_steps.length > 0;
 
         // Exactly one of the two, never both. A study id can survive in state
         // after the author ticks reuse, picks one, then unticks and writes
@@ -1104,7 +1111,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleStepsChange={handleStepsChange}
-                        isEdit={isEdit}
+                        lockedToExistingStudy={lockedToExistingStudy}
                       />
 
                       {/* Navigation Buttons for FirstHand Study Tab */}

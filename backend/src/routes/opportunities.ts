@@ -28,16 +28,12 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
 
 const router: Router = Router();
 
-// The create and update guards deliberately say different things, because the
-// two endpoints offer different remedies. Create accepts an inline study, so it
-// can tell the author to write the tasks; update has no inline path (there is
-// no inline_study on UpdateOpportunitySchema), so telling them to add prompts
-// there would name something the endpoint cannot accept.
+// Shared by the create and update publish guards. Both endpoints accept an
+// inline study, and the guard only fires when no study is linked - which is
+// exactly when authoring one is available - so the same wording is correct at
+// both sites.
 const UNMODERATED_STUDY_REQUIRED =
   'Add at least one prompt to the study, or link an existing recorded study, before publishing';
-
-const UNMODERATED_STUDY_UPDATE_REQUIRED =
-  'Link a launched recorded study before publishing this unmoderated test';
 
 /**
  * Body of POST /api/opportunities.
@@ -48,6 +44,10 @@ const UNMODERATED_STUDY_UPDATE_REQUIRED =
  * there would not resolve in the copy.
  */
 type CreateOpportunityBody = CreateOpportunityRequest & {
+  inline_study?: InlineStudy;
+};
+
+type UpdateOpportunityBody = UpdateOpportunityRequest & {
   inline_study?: InlineStudy;
 };
 
@@ -535,7 +535,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   }
   
   const { id } = req.params;
-  const data: UpdateOpportunityRequest = req.body;
+  // inline_study is consumed to build a study and must NOT survive into the
+  // generic field loop below, which maps every remaining key straight to a
+  // column name - it is not a column on opportunities.
+  const { inline_study: inlineStudyInput, ...data }: UpdateOpportunityBody = req.body;
   // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
   
   // Check ownership (only owner or global admin can edit)
@@ -557,7 +560,9 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   
   // Get existing opportunity to check type when status is being changed
   const existingOpp = await pool.query(
-    'SELECT type, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
+    // title and purpose_one_liner are read so an inline study created on this
+    // path can inherit them when the request does not also change them.
+    'SELECT type, title, purpose_one_liner, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
     [id]
   );
   const existingType = data.type || existingOpp.rows[0].type;
@@ -582,12 +587,24 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
   }
 
+  // An inline study can only fill a gap, never replace a link. Rejected rather
+  // than resolved by precedence, matching create.
+  if (inlineStudyInput && existingType !== 'unmoderated') {
+    throw new ValidationError('Only unmoderated opportunities can carry a study');
+  }
+
+  if (inlineStudyInput && newFirstHandStudyId?.trim()) {
+    throw new ValidationError(
+      'This opportunity already has a recorded study; edit its tasks in the studies area'
+    );
+  }
+
   // Additional validation for published opportunities
   if (data.status === 'published' && existingType === 'unmoderated') {
     // Trimmed for the same reason as the create guard: an all-whitespace id
     // would otherwise satisfy this and store NULL.
-    if (!newFirstHandStudyId?.trim()) {
-      throw new ValidationError(UNMODERATED_STUDY_UPDATE_REQUIRED);
+    if (!newFirstHandStudyId?.trim() && !inlineStudyInput) {
+      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
     if (!newLink || !validateUrl(newLink)) {
@@ -595,11 +612,40 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     }
   }
   
+  // Build the study before the update, for the same reason as create: the row
+  // has to reference an id that already exists. See the create handler for why
+  // this cannot share a transaction with the opportunity write.
+  let createdStudyId: string | null = null;
+
+  if (inlineStudyInput) {
+    if (!isStudiesPersistenceConfigured()) {
+      throw new AppError('Studies require a configured PostgreSQL database.', 503);
+    }
+
+    const studyId = `study_${crypto.randomUUID()}`;
+    const stored = await createStudy({
+      id: studyId,
+      title: (data.title ?? existingOpp.rows[0].title ?? 'Untitled study').trim(),
+      intro_text: (
+        data.purpose_one_liner ?? existingOpp.rows[0].purpose_one_liner ?? 'Recorded study'
+      ).trim(),
+      consent_text: inlineStudyInput.consent_text.trim(),
+      estimated_duration_minutes:
+        inlineStudyInput.estimated_duration_minutes ?? data.default_duration_minutes,
+      status: 'launched',
+      steps: toStudySteps(inlineStudyInput.steps, studyId)
+    });
+    createdStudyId = stored.study.id;
+    // Routed through the same field loop as everything else so the id lands in
+    // the UPDATE without a second code path.
+    data.firsthand_study_id = createdStudyId;
+  }
+
   // Build dynamic update query
   const updateFields: string[] = [];
   const values: (string | number | Date | null)[] = [];
   let paramCount = 0;
-  
+
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined) {
       paramCount++;
@@ -622,7 +668,23 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     RETURNING *
   `;
   
-  const result = await pool.query(query, values);
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    if (createdStudyId) {
+      try {
+        await deleteStudy(createdStudyId);
+      } catch (cleanupError) {
+        logger.error('Failed to remove inline study after opportunity update failed', {
+          studyId: createdStudyId,
+          error: String(cleanupError)
+        });
+      }
+    }
+    throw error;
+  }
+
   const opportunity = {
     ...result.rows[0],
     created_at: result.rows[0].created_at.toISOString(),
@@ -631,7 +693,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
     sessions: []
   };
-  
+
   res.json(opportunity);
 }));
 

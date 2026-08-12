@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, {
@@ -215,6 +215,67 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(payload.inline_study.steps).toEqual([
       { type: 'open_text', prompt: 'Find the export button' }
     ]);
+  });
+
+  it('offers inline authoring when editing an unmoderated draft that has no study yet', async () => {
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-1',
+      type: 'unmoderated',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the tasks were written, which is allowed',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: null,
+      participant_type_required: 'any'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+
+    // Not locked to the picker: the reuse tickbox is offered and authoring is
+    // the default, exactly as on create.
+    expect(
+      await screen.findByLabelText(/Reuse a script from an existing study/i)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
+  });
+
+  it('locks an edit to the picker once a study is actually linked', async () => {
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-2',
+      type: 'unmoderated',
+      title: 'Already wired up',
+      purpose_one_liner: 'This one already points at a recorded study somewhere',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: 'study_demo',
+      participant_type_required: 'any'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-2/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+
+    expect(
+      await screen.findByText('-- Select a launched study --')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Reuse a script from an existing study/i)
+    ).not.toBeInTheDocument();
   });
 
   it('still offers the launched-study picker when reuse is ticked', async () => {
