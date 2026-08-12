@@ -8,6 +8,11 @@ import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
+import {
+  DEFAULT_CONSENT_TEXT,
+  type InlineStudy as InlineStudyPayload,
+  type InlineStudyStep
+} from '../shared/firsthand/inline-study';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
@@ -35,9 +40,13 @@ export const clearTypeConditionalErrors = (
   if (!['poll', 'survey', 'question'].includes(newType)) {
     delete next.external_link_optional;
   }
-  // A FirstHand study only applies to unmoderated.
+  // A study - linked or authored inline - only applies to unmoderated.
   if (newType !== 'unmoderated') {
     delete next.firsthand_study_id;
+    delete next.inline_study_consent_text;
+    Object.keys(next)
+      .filter((key) => key.startsWith('inline_study_steps'))
+      .forEach((key) => delete next[key]);
   }
   // The unmoderated + external participant (M2) rule only applies to
   // unmoderated, and switching to unmoderated coerces an external participant
@@ -69,9 +78,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     display_width: 'single' as 'single' | 'double',
     start_date: '' as string | undefined,
     end_date: '' as string | undefined,
-    firsthand_study_id: '' as string | undefined
+    firsthand_study_id: '' as string | undefined,
+    // Unmoderated study authored inline. The backend creates and launches the
+    // study from these on save, so a study is not a separate errand.
+    inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
+    inline_study_steps: [] as InlineStudyStep[],
+    reuse_existing_study: false
   });
 
+  // Whether the opportunity already pointed at a study when it loaded. Only
+  // then is authoring inline off the table - an unmoderated draft saved before
+  // its tasks were written must still be authorable on the way back in.
+  const [lockedToExistingStudy, setLockedToExistingStudy] = useState(false);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
@@ -94,7 +112,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.type === 'unmoderated') {
-      tabs.push({ id: 3, title: 'Recorded Study', description: 'Connect a recorded study' });
+      tabs.push({ id: 3, title: 'Study Tasks', description: 'What the participant does' });
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
@@ -161,9 +179,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
         display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
-        end_date: opportunity.end_date || ''
+        end_date: opportunity.end_date || '',
+        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_steps: [],
+        // Only pre-tick reuse when a study is actually linked; otherwise the
+        // author gets the same choice they had when creating.
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
       });
 
+      setLockedToExistingStudy(Boolean(opportunity.firsthand_study_id));
       setOpportunityId(opportunity.id);
 
       // Store original form data for change detection
@@ -182,7 +206,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
         display_width: opportunity.display_width || 'single' as 'single' | 'double',
         start_date: opportunity.start_date || '',
-        end_date: opportunity.end_date || ''
+        end_date: opportunity.end_date || '',
+        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_steps: [] as InlineStudyStep[],
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
       };
       setOriginalFormData(originalData);
 
@@ -293,8 +320,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
-      if (!formData.firsthand_study_id?.trim()) {
-        errors.firsthand_study_id = 'A recorded study is required to publish an unmoderated test';
+      if (formData.reuse_existing_study || lockedToExistingStudy) {
+        if (!formData.firsthand_study_id?.trim()) {
+          // The reuse tickbox is not rendered once a study is linked, so do not
+          // tell that author to untick it.
+          errors.firsthand_study_id = lockedToExistingStudy
+            ? 'Select a launched study before publishing'
+            : 'Select a launched study, or untick the reuse box and write the tasks here';
+        }
+      } else if (formData.inline_study_steps.length === 0) {
+        // Named against the thing the author does, not the object model. The
+        // backend rejects the same state with an equivalent message.
+        errors.inline_study_steps = 'Add at least one task before publishing';
       }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
@@ -305,6 +342,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         } catch {
           errors.external_link_optional = 'External link must be a valid URL';
         }
+      }
+    }
+
+    // Task content is checked whenever tasks exist, not only at publish: the
+    // backend contract rejects an empty prompt or a one-option choice on every
+    // save, so a draft with a half-written task would fail server-side with a
+    // far less useful message.
+    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !lockedToExistingStudy) {
+      formData.inline_study_steps.forEach((step, index) => {
+        if (!step.prompt.trim()) {
+          errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
+        }
+        if (step.type === 'single_choice') {
+          const filled = (step.options ?? []).filter((option) => option.trim()).length;
+          if (filled < 2) {
+            errors[`inline_study_steps.${index}.options`] = 'A choice task needs at least two options';
+          }
+        }
+      });
+
+      if (
+        formData.inline_study_steps.length > 0 &&
+        !formData.inline_study_consent_text.trim()
+      ) {
+        errors.inline_study_consent_text = 'Consent text is required';
       }
     }
 
@@ -452,7 +514,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setError('');
       setSuccessMessage('');
 
-      const data: Partial<CreateOpportunityRequest & { display_width?: 'single' | 'double' }> = {
+      // inline_study is not on the shared CreateOpportunityRequest: shared/types
+      // is flattened into one file when copied here, so it cannot import the
+      // inline-study contract. Added at the call site instead.
+      const data: Partial<CreateOpportunityRequest & {
+        display_width?: 'single' | 'double';
+        inline_study?: InlineStudyPayload;
+      }> = {
         type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
         purpose_one_liner: formData.purpose_one_liner.trim(),
@@ -477,7 +545,37 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       if (formData.type === 'unmoderated') {
-        data.firsthand_study_id = formData.firsthand_study_id?.trim() || undefined;
+        // Authoring is available whenever no study is linked yet - on create,
+        // and on an edit of a draft saved before its tasks were written. Once
+        // one is linked the script is edited in the studies area instead.
+        const authoringInline =
+          !lockedToExistingStudy &&
+          !formData.reuse_existing_study &&
+          formData.inline_study_steps.length > 0;
+
+        // Exactly one of the two, never both. A study id can survive in state
+        // after the author ticks reuse, picks one, then unticks and writes
+        // tasks instead; sending it alongside the authored study would be
+        // ambiguous, and the backend rejects that rather than guessing.
+        data.firsthand_study_id = authoringInline
+          ? undefined
+          : formData.firsthand_study_id?.trim() || undefined;
+
+        if (authoringInline) {
+          data.inline_study = {
+            consent_text: formData.inline_study_consent_text.trim(),
+            estimated_duration_minutes: formData.default_duration_minutes || undefined,
+            steps: formData.inline_study_steps.map((step) => ({
+              type: step.type,
+              prompt: step.prompt.trim(),
+              // Blank rows are UI scaffolding, not content: drop them so a
+              // trailing empty option cannot fail the contract's min(1).
+              ...(step.type === 'single_choice'
+                ? { options: (step.options ?? []).map((o) => o.trim()).filter(Boolean) }
+                : {})
+            }))
+          };
+        }
       }
 
       // Only superadmins can set display_width
@@ -556,7 +654,28 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
       // Update original form data after successful save
       if (isEdit) {
-        setOriginalFormData({ ...formData });
+        // Adopt the server's answer before anything else. Edit mode stays on
+        // the form, so without this the state still says "no study linked"
+        // while the database now has one: the next save would send the tasks
+        // again and be rejected as authoring over an existing study, stranding
+        // the author on the very flow this supports.
+        const savedStudyId = savedOpportunity?.firsthand_study_id || '';
+        const nowLinked = Boolean(savedStudyId);
+
+        setFormData(prev => ({
+          ...prev,
+          firsthand_study_id: savedStudyId,
+          inline_study_steps: nowLinked ? [] : prev.inline_study_steps,
+          reuse_existing_study: nowLinked ? true : prev.reuse_existing_study
+        }));
+        setLockedToExistingStudy(nowLinked);
+
+        setOriginalFormData({
+          ...formData,
+          firsthand_study_id: savedStudyId,
+          inline_study_steps: nowLinked ? [] : formData.inline_study_steps,
+          reuse_existing_study: nowLinked ? true : formData.reuse_existing_study
+        });
         // Show success message for edit mode
         const isDraft = formData.status === 'draft';
         setSuccessMessage(
@@ -602,8 +721,34 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
   };
 
+  /**
+   * Steps are an array, which handleInputChange's scalar signature cannot
+   * carry. Kept separate rather than widening that signature so the existing
+   * type-change coercions there stay readable.
+   */
+  const handleStepsChange = (steps: InlineStudyStep[]) => {
+    setFormData(prev => ({ ...prev, inline_study_steps: steps }));
+    setValidationErrors(prev => {
+      // Drop every per-step error on any structural change: indices shift when
+      // a step is added, removed or moved, so a kept error would point at the
+      // wrong task.
+      const next = { ...prev };
+      Object.keys(next)
+        .filter(key => key.startsWith('inline_study_steps'))
+        .forEach(key => delete next[key]);
+      return next;
+    });
+  };
+
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => {
+      // Unticking reuse drops the study that was picked while it was ticked.
+      // Without this the id lives on invisibly - the picker is no longer on
+      // screen - and would be submitted alongside the authored tasks.
+      if (field === 'reuse_existing_study' && value === false) {
+        return { ...prev, reuse_existing_study: false, firsthand_study_id: '' };
+      }
+
       // Unmoderated is FirstHand-only and runs with logged-in Cortex users, so
       // drop any external link and coerce an 'external' participant type when
       // the type switches to unmoderated (a stale value must not persist).
@@ -986,6 +1131,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         formData={formData}
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
+                        handleStepsChange={handleStepsChange}
+                        lockedToExistingStudy={lockedToExistingStudy}
                       />
 
                       {/* Navigation Buttons for FirstHand Study Tab */}

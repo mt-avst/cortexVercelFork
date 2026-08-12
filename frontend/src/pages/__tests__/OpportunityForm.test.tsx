@@ -1,13 +1,13 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, {
   clearTypeConditionalErrors,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
 } from '../OpportunityForm';
-import { getFirstHandStudies, getOpportunity } from '../../api/client';
+import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 
 // OpportunityForm is an admin-gated, context-heavy page. Model a signed-in
 // researcher_admin so the auth gate lets the form render, and keep the theme
@@ -136,7 +136,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     // The FirstHand Study step replaces the External Link step for this type.
     expect(
-      screen.getByRole('button', { name: /Recorded Study/i })
+      screen.getByRole('button', { name: /Study Tasks/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /External Link/i })
@@ -147,7 +147,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the External Link tab for poll and hides FirstHand Study', () => {
+  it('keeps the External Link tab for poll and hides the study tab', () => {
     renderForm();
     selectType('poll');
 
@@ -155,18 +155,223 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /External Link/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Recorded Study/i })
+      screen.queryByRole('button', { name: /Study Tasks/i })
     ).not.toBeInTheDocument();
   });
 
-  it('sends unmoderated participants into a launched FirstHand study picker', async () => {
+  it('lets an unmoderated study be authored inline without visiting the studies area', async () => {
     renderForm();
     selectType('unmoderated');
 
-    // Open the FirstHand Study step.
-    fireEvent.click(screen.getByRole('button', { name: /Recorded Study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
 
-    // The picker loads launched studies from FirstHand; there is no external-link fallback.
+    // Authoring is the default path, so the tab opens on the task author and
+    // does not fetch the study list at all.
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+
+    expect(
+      screen.getByLabelText(/What the participant sees/i)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
+    expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
+  });
+
+  it('does not send a stale study id alongside tasks authored after unticking reuse', async () => {
+    // The sequence that silently dropped authored tasks: tick reuse, pick a
+    // study, change your mind, untick, write tasks. The id survived in state
+    // and won on the backend, discarding everything typed.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+
+    const reuse = await screen.findByLabelText(/Reuse a script from an existing study/i);
+    fireEvent.click(reuse);
+    fireEvent.change(await screen.findByLabelText(/Recorded study/i), {
+      target: { value: 'study_demo' }
+    });
+    fireEvent.click(reuse);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
+    expect(payload.firsthand_study_id).toBeUndefined();
+    expect(payload.inline_study.steps).toEqual([
+      { type: 'open_text', prompt: 'Find the export button' }
+    ]);
+  });
+
+  it('offers inline authoring when editing an unmoderated draft that has no study yet', async () => {
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-1',
+      type: 'unmoderated',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the tasks were written, which is allowed',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: null,
+      participant_type_required: 'any'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+
+    // Not locked to the picker: the reuse tickbox is offered and authoring is
+    // the default, exactly as on create.
+    expect(
+      await screen.findByLabelText(/Reuse a script from an existing study/i)
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
+  });
+
+  it('adopts the created study after saving, so a second save is not rejected', async () => {
+    // Edit mode stays on the form after saving. Without adopting the server's
+    // answer the state still said "no study linked" while the database had one,
+    // so the next save re-sent the tasks and the backend refused it as
+    // authoring over an existing study - dead-ending the flow on click two.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the tasks were written, which is allowed',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: null,
+      participant_type_required: 'any'
+    } as any);
+    vi.mocked(updateOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      firsthand_study_id: 'study_created_on_save'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-3/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalled();
+    });
+
+    // First save authored the study.
+    expect(
+      (vi.mocked(updateOpportunity).mock.calls[0][1] as any).inline_study
+    ).toBeDefined();
+
+    // Having adopted it, the tab is locked to the picker - wait on the picker
+    // appearing rather than the tickbox vanishing, so the study-list fetch it
+    // triggers settles inside the assertion instead of after the test.
+    expect(await screen.findByText('-- Select a launched study --')).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Reuse a script from an existing study/i)
+    ).not.toBeInTheDocument();
+
+    // The point of the fix: a LATER save must not re-send the tasks, which the
+    // backend would now reject as authoring over an existing study. Asserting
+    // only that the tickbox vanished would pass even if the steps survived.
+    //
+    // A real edit is needed to trigger it - an unchanged form saves nothing.
+    vi.mocked(updateOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      firsthand_study_id: 'study_created_on_save'
+    } as any);
+
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.change(await screen.findByLabelText(/^Title/i), {
+      target: { value: 'Draft saved early, now renamed' }
+    });
+
+    // Back to the study tab, where the save control lives. It stays disabled
+    // while the post-save success banner is up, so wait it out rather than
+    // racing it - a click during that window is silently dropped.
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    const saveAgain = await screen.findByRole('button', { name: /Update Opportunity/i });
+    await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
+    fireEvent.click(saveAgain);
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(2);
+    });
+
+    const secondPayload = vi.mocked(updateOpportunity).mock.calls[1][1] as any;
+    expect(secondPayload.inline_study).toBeUndefined();
+    expect(secondPayload.firsthand_study_id).toBe('study_created_on_save');
+  });
+
+  it('locks an edit to the picker once a study is actually linked', async () => {
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-2',
+      type: 'unmoderated',
+      title: 'Already wired up',
+      purpose_one_liner: 'This one already points at a recorded study somewhere',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: 'study_demo',
+      participant_type_required: 'any'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-2/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+
+    expect(
+      await screen.findByText('-- Select a launched study --')
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/Reuse a script from an existing study/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('still offers the launched-study picker when reuse is ticked', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByLabelText(/Reuse a script from an existing study/i));
+
     expect(
       await screen.findByText('-- Select a launched study --')
     ).toBeInTheDocument();

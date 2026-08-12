@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { SESSION_CAPACITY } from '../../../shared/constants';
+import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
@@ -32,16 +33,28 @@ export const OpportunityTypeSchema = z.enum(['test', 'poll', 'survey', 'question
 export const OpportunityStatusSchema = z.enum(['draft', 'published', 'closed']);
 export const ParticipantTypeSchema = z.enum(['any', 'internal', 'external', 'specific']);
 
+// Trimmed BEFORE the length checks, not after.
+//
+// The handlers already store `title.trim()`, so validating the untrimmed value
+// let "    " satisfy min(4) and reach storage as ''. For an unmoderated
+// opportunity those two fields become the study's title and intro_text, which
+// the session contract requires at min(1) - so an all-whitespace title produced
+// a study that assembled no session and 500'd every participant who started it.
 export const CreateOpportunitySchema = z.object({
   type: OpportunityTypeSchema,
-  title: z.string().min(4).max(140),
-  purpose_one_liner: z.string().min(10).max(180),
+  title: z.string().trim().min(4).max(140),
+  purpose_one_liner: z.string().trim().min(10).max(180),
   description_optional: z.string().optional(),
   product_optional: z.string().optional(),
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   firsthand_study_id: z.string().min(1).optional(),
+  // Unmoderated only: the study's content authored on the opportunity form
+  // itself. The handler creates the study from this and links it, so the author
+  // never has to create and launch one separately. Sending it alongside
+  // firsthand_study_id is rejected, not resolved by precedence.
+  inline_study: inlineStudySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: z.enum(['draft', 'published']).optional(),
@@ -51,14 +64,19 @@ export const CreateOpportunitySchema = z.object({
 
 export const UpdateOpportunitySchema = z.object({
   type: OpportunityTypeSchema.optional(),
-  title: z.string().min(4).max(140).optional(),
-  purpose_one_liner: z.string().min(10).max(180).optional(),
+  title: z.string().trim().min(4).max(140).optional(),
+  purpose_one_liner: z.string().trim().min(10).max(180).optional(),
   description_optional: z.string().optional(),
   product_optional: z.string().optional(),
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   firsthand_study_id: z.string().min(1).optional().nullable(),
+  // Unmoderated only, and only when the opportunity has no study yet. Saving a
+  // draft before writing any tasks is legitimate, so the author has to be able
+  // to write them on the way back in - otherwise the errand this feature
+  // removes reappears for exactly that path.
+  inline_study: inlineStudySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),
