@@ -7,7 +7,7 @@ import OpportunityForm, {
   clearTypeConditionalErrors,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
 } from '../OpportunityForm';
-import { createOpportunity, getFirstHandStudies, getOpportunity } from '../../api/client';
+import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 
 // OpportunityForm is an admin-gated, context-heavy page. Model a signed-in
 // researcher_admin so the auth gate lets the form render, and keep the theme
@@ -246,6 +246,61 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
     expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
+  });
+
+  it('adopts the created study after saving, so a second save is not rejected', async () => {
+    // Edit mode stays on the form after saving. Without adopting the server's
+    // answer the state still said "no study linked" while the database had one,
+    // so the next save re-sent the tasks and the backend refused it as
+    // authoring over an existing study - dead-ending the flow on click two.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the tasks were written, which is allowed',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: null,
+      participant_type_required: 'any'
+    } as any);
+    vi.mocked(updateOpportunity).mockResolvedValueOnce({
+      id: 'opp-3',
+      type: 'unmoderated',
+      firsthand_study_id: 'study_created_on_save'
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-3/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(updateOpportunity)).toHaveBeenCalled();
+    });
+
+    // First save authored the study.
+    expect(
+      (vi.mocked(updateOpportunity).mock.calls[0][1] as any).inline_study
+    ).toBeDefined();
+
+    // Having adopted it, the tab is now locked to the picker and the tickbox is
+    // gone - the same state a fresh load of this opportunity would produce.
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByLabelText(/Reuse a script from an existing study/i)
+      ).not.toBeInTheDocument();
+    });
   });
 
   it('locks an edit to the picker once a study is actually linked', async () => {

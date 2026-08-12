@@ -35,19 +35,6 @@ export const authorableStepTypes = [
 export const authorableStepTypeSchema = z.enum(authorableStepTypes);
 
 /**
- * `step_id` and `order` are absent by design. They are bookkeeping the author
- * should never have to invent, and `toStudySteps` derives both from array
- * position, which is also the only ordering the form can express.
- */
-export const inlineStudyStepSchema = z.object({
-  type: authorableStepTypeSchema,
-  prompt: z.string().min(1).max(2000),
-  options: z.array(z.string().min(1).max(500)).max(20).optional(),
-  helper_text: z.string().min(1).max(2000).optional(),
-  is_required: z.boolean().optional()
-});
-
-/**
  * Bounds exist because every step is a row on the FirstHand runtime pool, which
  * is small (max 5 connections) and shared with the live participant runtime. An
  * unbounded payload is one admin request away from holding a pooled client long
@@ -66,9 +53,35 @@ export const INLINE_STUDY_LIMITS = {
   maxDurationMinutes: 24 * 60
 } as const;
 
+/**
+ * Every string is `.trim()`ed BEFORE `.min(1)` rather than after.
+ *
+ * The order matters: validating first and trimming later let "   " satisfy
+ * min(1) and then reach storage as "", producing a study whose prompt or
+ * consent text is empty. Nothing downstream rejects that - the columns are TEXT
+ * NOT NULL and validateSteps does not check emptiness - but assembling a
+ * session payload from it fails the contract's own min(1), so every participant
+ * who started that study got a 500. Trimming inside the schema means the
+ * validated value is the stored value.
+ *
+ * `step_id` and `order` are absent by design: they are bookkeeping the author
+ * should never have to invent, and `toStudySteps` derives both from array
+ * position, which is also the only ordering the form can express.
+ */
+export const inlineStudyStepSchema = z.object({
+  type: authorableStepTypeSchema,
+  prompt: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxPromptLength),
+  options: z
+    .array(z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxOptionLength))
+    .max(INLINE_STUDY_LIMITS.maxOptions)
+    .optional(),
+  helper_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxPromptLength).optional(),
+  is_required: z.boolean().optional()
+});
+
 export const inlineStudySchema = z
   .object({
-    consent_text: z.string().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
+    consent_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     estimated_duration_minutes: z
       .number()
       .int()

@@ -654,7 +654,28 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
       // Update original form data after successful save
       if (isEdit) {
-        setOriginalFormData({ ...formData });
+        // Adopt the server's answer before anything else. Edit mode stays on
+        // the form, so without this the state still says "no study linked"
+        // while the database now has one: the next save would send the tasks
+        // again and be rejected as authoring over an existing study, stranding
+        // the author on the very flow this supports.
+        const savedStudyId = savedOpportunity?.firsthand_study_id || '';
+        const nowLinked = Boolean(savedStudyId);
+
+        setFormData(prev => ({
+          ...prev,
+          firsthand_study_id: savedStudyId,
+          inline_study_steps: nowLinked ? [] : prev.inline_study_steps,
+          reuse_existing_study: nowLinked ? true : prev.reuse_existing_study
+        }));
+        setLockedToExistingStudy(nowLinked);
+
+        setOriginalFormData({
+          ...formData,
+          firsthand_study_id: savedStudyId,
+          inline_study_steps: nowLinked ? [] : formData.inline_study_steps,
+          reuse_existing_study: nowLinked ? true : formData.reuse_existing_study
+        });
         // Show success message for edit mode
         const isDraft = formData.status === 'draft';
         setSuccessMessage(

@@ -37,7 +37,7 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
-import { createStudy, deleteStudy } from '../../firsthand/studies-repository';
+import { createStudy, deleteStudy, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
@@ -46,6 +46,7 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 const mockCreateSession = createSession as jest.MockedFunction<any>;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
 const mockDeleteStudy = deleteStudy as jest.MockedFunction<any>;
+const mockIsStudiesPersistenceConfigured = isStudiesPersistenceConfigured as jest.MockedFunction<any>;
 
 const app = express();
 app.use(express.json());
@@ -448,6 +449,58 @@ describe('Opportunities API', () => {
         expect(firstIds[0].startsWith(first.id)).toBe(true);
       });
 
+      it('rejects a whitespace-only prompt instead of storing an empty one', async () => {
+        // The schema trims before min(1). Validating first and trimming later
+        // stored "" and produced a study whose session payload could not be
+        // assembled, so every participant got a 500 at run time.
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: {
+              consent_text: 'We record your screen.',
+              steps: [{ type: 'open_text', prompt: '     ' }]
+            }
+          })
+          .expect(400);
+
+        expect(JSON.stringify(response.body)).toContain('prompt');
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('rejects whitespace-only consent text', async () => {
+        await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: { consent_text: '   ', steps: inlineBody.inline_study.steps }
+          })
+          .expect(400);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('refuses an inline study on a type that cannot carry one', async () => {
+        // Create used to drop this silently while PATCH rejected it.
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({ ...inlineBody, type: 'poll', external_link_optional: 'https://example.com' })
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Only unmoderated opportunities can carry a study'
+        );
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('answers 503, not 500, when the studies pool is not configured', async () => {
+        mockIsStudiesPersistenceConfigured.mockReturnValueOnce(false);
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(503);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
       it('rejects a choice step with fewer than two options', async () => {
         const response = await request(app)
           .post('/api/opportunities')
@@ -597,6 +650,73 @@ describe('Opportunities API', () => {
         .expect(404);
 
       expect(mockDeleteStudy).toHaveBeenCalledWith('study_raced');
+    });
+
+    it('will not let a published unmoderated opportunity have its study cleared', async () => {
+      // The guard used to fire only when the request itself set status, so
+      // clearing the link on an already-published opportunity left it live with
+      // no study - the very state the guard exists to prevent.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...existingUnmoderated('study_live'), status: 'published' }]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: null })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+      );
+    });
+
+    it('says "not both" rather than "already has one" when neither is stored', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: 'study_x', inline_study: inlineStudy })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'Send either firsthand_study_id or inline_study, not both'
+      );
+    });
+
+    it('stores null, not an empty string, when the link is cleared', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...existingUnmoderated('study_old'), status: 'draft' }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: '   ' })
+        .expect(200);
+
+      // Create normalises the same input to NULL; two representations of "no
+      // study" would defeat any later IS NOT NULL predicate.
+      expect(mockQuery.mock.calls[2][1]).toContain(null);
+      expect(mockQuery.mock.calls[2][1]).not.toContain('');
+    });
+
+    it('answers 503 when the studies pool is not configured', async () => {
+      mockIsStudiesPersistenceConfigured.mockReturnValueOnce(false);
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ inline_study: inlineStudy })
+        .expect(503);
+
+      expect(mockCreateStudy).not.toHaveBeenCalled();
     });
 
     it('deletes the study it created when the update fails', async () => {

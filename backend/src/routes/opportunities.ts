@@ -47,8 +47,12 @@ type CreateOpportunityBody = CreateOpportunityRequest & {
   inline_study?: InlineStudy;
 };
 
-type UpdateOpportunityBody = UpdateOpportunityRequest & {
+// firsthand_study_id is Omitted and redeclared rather than intersected: an
+// intersection would narrow `string | null` back to `string`, and the update
+// schema genuinely permits null to clear the link.
+type UpdateOpportunityBody = Omit<UpdateOpportunityRequest, 'firsthand_study_id'> & {
   inline_study?: InlineStudy;
+  firsthand_study_id?: string | null;
 };
 
 // Validation helper
@@ -362,16 +366,21 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   // unmoderated opportunity with no study, exactly what the guard prevents.
   const linkedStudyId = data.firsthand_study_id?.trim() || undefined;
 
-  // An inline study is only meaningful for unmoderated. Sending both a link and
-  // an authored study is rejected rather than resolved by precedence: silently
-  // dropping the tasks someone just wrote is worse than making them choose.
-  if (data.type === 'unmoderated' && linkedStudyId && data.inline_study) {
+  // An inline study is only meaningful for unmoderated. Both of these are
+  // rejections rather than silent drops, and PATCH enforces the same two: a
+  // request that quietly discards the tasks someone just wrote is the failure
+  // mode this whole feature exists to remove.
+  if (data.inline_study && data.type !== 'unmoderated') {
+    throw new ValidationError('Only unmoderated opportunities can carry a study');
+  }
+
+  if (linkedStudyId && data.inline_study) {
     throw new ValidationError(
       'Send either firsthand_study_id or inline_study, not both'
     );
   }
 
-  const inlineStudy = data.type === 'unmoderated' ? data.inline_study : undefined;
+  const inlineStudy = data.inline_study;
 
   // Additional validation for published opportunities
   if (data.status === 'published' && data.type === 'unmoderated') {
@@ -562,7 +571,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const existingOpp = await pool.query(
     // title and purpose_one_liner are read so an inline study created on this
     // path can inherit them when the request does not also change them.
-    'SELECT type, title, purpose_one_liner, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
+    'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
     [id]
   );
   const existingType = data.type || existingOpp.rows[0].type;
@@ -593,21 +602,36 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     throw new ValidationError('Only unmoderated opportunities can carry a study');
   }
 
-  // Checked against the STORED link as well as this request's override. Using
-  // the merged value alone let `firsthand_study_id: null` (which the update
-  // schema permits) clear the link in the same breath as authoring a new study,
+  // Two distinct refusals, kept apart so each says something true. Checked
+  // against the STORED link as well as this request's override: using the
+  // merged value alone let `firsthand_study_id: null` (which the update schema
+  // permits) clear the link in the same breath as authoring a new study,
   // silently re-pointing a live opportunity and orphaning the study it had.
-  if (
-    inlineStudyInput &&
-    (existingFirstHandStudyId?.trim() || data.firsthand_study_id?.trim())
-  ) {
+  if (inlineStudyInput && existingFirstHandStudyId?.trim()) {
     throw new ValidationError(
       'This opportunity already has a recorded study; edit its tasks in the studies area'
     );
   }
 
-  // Additional validation for published opportunities
-  if (data.status === 'published' && existingType === 'unmoderated') {
+  if (inlineStudyInput && data.firsthand_study_id?.trim()) {
+    throw new ValidationError(
+      'Send either firsthand_study_id or inline_study, not both'
+    );
+  }
+
+  // Additional validation for published opportunities.
+  //
+  // Evaluated against the state this request LEAVES BEHIND, not only against a
+  // status it sets. Gating on `data.status === 'published'` alone meant that
+  // clearing the study on an already-published opportunity sailed through:
+  // PATCH { firsthand_study_id: null } left a live unmoderated opportunity with
+  // no study, the exact state this guard exists to prevent.
+  const willBePublished =
+    data.status !== undefined
+      ? data.status === 'published'
+      : existingOpp.rows[0].status === 'published';
+
+  if (willBePublished && existingType === 'unmoderated') {
     // Trimmed for the same reason as the create guard: an all-whitespace id
     // would otherwise satisfy this and store NULL.
     if (!newFirstHandStudyId?.trim() && !inlineStudyInput) {
@@ -646,6 +670,11 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     // Routed through the same field loop as everything else so the id lands in
     // the UPDATE without a second code path.
     data.firsthand_study_id = createdStudyId;
+  } else if (data.firsthand_study_id !== undefined) {
+    // Normalise before the loop, which stores `value.trim()` verbatim and would
+    // otherwise write '' where create writes NULL for the same input. Two
+    // representations of "no study" is a trap for any later IS NOT NULL query.
+    data.firsthand_study_id = data.firsthand_study_id?.trim() || null;
   }
 
   // Build dynamic update query
