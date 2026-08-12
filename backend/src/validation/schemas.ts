@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { SESSION_CAPACITY } from '../../../shared/constants';
+import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
@@ -42,6 +43,11 @@ export const CreateOpportunitySchema = z.object({
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
   firsthand_study_id: z.string().min(1).optional(),
+  // Unmoderated only: the study's content authored on the opportunity form
+  // itself. The handler creates the study from this and links it, so the author
+  // never has to create and launch one separately. Ignored when
+  // firsthand_study_id is supplied (an existing script is being reused).
+  inline_study: inlineStudySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: z.enum(['draft', 'published']).optional(),

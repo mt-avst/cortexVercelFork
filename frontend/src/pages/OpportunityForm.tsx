@@ -8,6 +8,11 @@ import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
+import {
+  DEFAULT_CONSENT_TEXT,
+  type InlineStudy as InlineStudyPayload,
+  type InlineStudyStep
+} from '../shared/firsthand/inline-study';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
@@ -35,9 +40,13 @@ export const clearTypeConditionalErrors = (
   if (!['poll', 'survey', 'question'].includes(newType)) {
     delete next.external_link_optional;
   }
-  // A FirstHand study only applies to unmoderated.
+  // A study - linked or authored inline - only applies to unmoderated.
   if (newType !== 'unmoderated') {
     delete next.firsthand_study_id;
+    delete next.inline_study_consent_text;
+    Object.keys(next)
+      .filter((key) => key.startsWith('inline_study_steps'))
+      .forEach((key) => delete next[key]);
   }
   // The unmoderated + external participant (M2) rule only applies to
   // unmoderated, and switching to unmoderated coerces an external participant
@@ -69,7 +78,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     display_width: 'single' as 'single' | 'double',
     start_date: '' as string | undefined,
     end_date: '' as string | undefined,
-    firsthand_study_id: '' as string | undefined
+    firsthand_study_id: '' as string | undefined,
+    // Unmoderated study authored inline. The backend creates and launches the
+    // study from these on save, so a study is not a separate errand.
+    inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
+    inline_study_steps: [] as InlineStudyStep[],
+    reuse_existing_study: false
   });
 
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
@@ -94,7 +108,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.type === 'unmoderated') {
-      tabs.push({ id: 3, title: 'Recorded Study', description: 'Connect a recorded study' });
+      tabs.push({ id: 3, title: 'Study Tasks', description: 'What the participant does' });
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
@@ -161,7 +175,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
         display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
-        end_date: opportunity.end_date || ''
+        end_date: opportunity.end_date || '',
+        // Editing always points at the study that already exists; its script is
+        // edited in the studies area, so the inline author stays closed.
+        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_steps: [],
+        reuse_existing_study: true
       });
 
       setOpportunityId(opportunity.id);
@@ -182,7 +201,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
         display_width: opportunity.display_width || 'single' as 'single' | 'double',
         start_date: opportunity.start_date || '',
-        end_date: opportunity.end_date || ''
+        end_date: opportunity.end_date || '',
+        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_steps: [] as InlineStudyStep[],
+        reuse_existing_study: true
       };
       setOriginalFormData(originalData);
 
@@ -293,8 +315,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
-      if (!formData.firsthand_study_id?.trim()) {
-        errors.firsthand_study_id = 'A recorded study is required to publish an unmoderated test';
+      if (formData.reuse_existing_study || isEdit) {
+        if (!formData.firsthand_study_id?.trim()) {
+          errors.firsthand_study_id = 'Select a launched study, or untick the reuse box and write the tasks here';
+        }
+      } else if (formData.inline_study_steps.length === 0) {
+        // Named against the thing the author does, not the object model. The
+        // backend rejects the same state with an equivalent message.
+        errors.inline_study_steps = 'Add at least one task before publishing';
       }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
@@ -305,6 +333,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         } catch {
           errors.external_link_optional = 'External link must be a valid URL';
         }
+      }
+    }
+
+    // Task content is checked whenever tasks exist, not only at publish: the
+    // backend contract rejects an empty prompt or a one-option choice on every
+    // save, so a draft with a half-written task would fail server-side with a
+    // far less useful message.
+    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !isEdit) {
+      formData.inline_study_steps.forEach((step, index) => {
+        if (!step.prompt.trim()) {
+          errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
+        }
+        if (step.type === 'single_choice') {
+          const filled = (step.options ?? []).filter((option) => option.trim()).length;
+          if (filled < 2) {
+            errors[`inline_study_steps.${index}.options`] = 'A choice task needs at least two options';
+          }
+        }
+      });
+
+      if (
+        formData.inline_study_steps.length > 0 &&
+        !formData.inline_study_consent_text.trim()
+      ) {
+        errors.inline_study_consent_text = 'Consent text is required';
       }
     }
 
@@ -452,7 +505,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setError('');
       setSuccessMessage('');
 
-      const data: Partial<CreateOpportunityRequest & { display_width?: 'single' | 'double' }> = {
+      // inline_study is not on the shared CreateOpportunityRequest: shared/types
+      // is flattened into one file when copied here, so it cannot import the
+      // inline-study contract. Added at the call site instead.
+      const data: Partial<CreateOpportunityRequest & {
+        display_width?: 'single' | 'double';
+        inline_study?: InlineStudyPayload;
+      }> = {
         type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
         purpose_one_liner: formData.purpose_one_liner.trim(),
@@ -478,6 +537,29 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
       if (formData.type === 'unmoderated') {
         data.firsthand_study_id = formData.firsthand_study_id?.trim() || undefined;
+
+        // Send the authored study only when creating and not reusing. Editing
+        // keeps pointing at the existing study, whose script is edited in the
+        // studies area; sending both would be ambiguous, and the backend
+        // ignores inline_study whenever an id is present.
+        const authoringInline =
+          !isEdit && !formData.reuse_existing_study && formData.inline_study_steps.length > 0;
+
+        if (authoringInline) {
+          data.inline_study = {
+            consent_text: formData.inline_study_consent_text.trim(),
+            estimated_duration_minutes: formData.default_duration_minutes || undefined,
+            steps: formData.inline_study_steps.map((step) => ({
+              type: step.type,
+              prompt: step.prompt.trim(),
+              // Blank rows are UI scaffolding, not content: drop them so a
+              // trailing empty option cannot fail the contract's min(1).
+              ...(step.type === 'single_choice'
+                ? { options: (step.options ?? []).map((o) => o.trim()).filter(Boolean) }
+                : {})
+            }))
+          };
+        }
       }
 
       // Only superadmins can set display_width
@@ -600,6 +682,25 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     } finally {
       setSaving(false);
     }
+  };
+
+  /**
+   * Steps are an array, which handleInputChange's scalar signature cannot
+   * carry. Kept separate rather than widening that signature so the existing
+   * type-change coercions there stay readable.
+   */
+  const handleStepsChange = (steps: InlineStudyStep[]) => {
+    setFormData(prev => ({ ...prev, inline_study_steps: steps }));
+    setValidationErrors(prev => {
+      // Drop every per-step error on any structural change: indices shift when
+      // a step is added, removed or moved, so a kept error would point at the
+      // wrong task.
+      const next = { ...prev };
+      Object.keys(next)
+        .filter(key => key.startsWith('inline_study_steps'))
+        .forEach(key => delete next[key]);
+      return next;
+    });
   };
 
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
@@ -986,6 +1087,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         formData={formData}
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
+                        handleStepsChange={handleStepsChange}
+                        isEdit={isEdit}
                       />
 
                       {/* Navigation Buttons for FirstHand Study Tab */}

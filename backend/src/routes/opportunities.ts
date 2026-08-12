@@ -16,6 +16,8 @@ import {
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
+import { createStudy, deleteStudy } from '../firsthand/studies-repository';
+import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
@@ -24,7 +26,24 @@ const router: Router = Router();
 
 // Thrown by both the create and update publish-time guards. Hoisted so the two
 // cannot drift apart: only the POST site is covered by a test.
-const UNMODERATED_STUDY_REQUIRED = 'A recorded study is required to publish an unmoderated test';
+//
+// Wording note: this fires when neither an inline study nor an existing study
+// id was supplied, so it names the thing the author actually has to do rather
+// than the object model behind it.
+const UNMODERATED_STUDY_REQUIRED =
+  'Add at least one prompt to the study, or link an existing recorded study, before publishing';
+
+/**
+ * Body of POST /api/opportunities.
+ *
+ * `inline_study` is validated by CreateOpportunitySchema but is not part of the
+ * shared CreateOpportunityRequest interface: shared/types/index.ts is flattened
+ * into a single file when it is copied to the frontend, so a cross-tree import
+ * there would not resolve in the copy.
+ */
+type CreateOpportunityBody = CreateOpportunityRequest & {
+  inline_study?: InlineStudy;
+};
 
 // Validation helper
 const validateUrl = (url: string): boolean => {
@@ -321,7 +340,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     return res.status(201).json(mockOpportunity);
   }
   
-  const data: CreateOpportunityRequest = req.body;
+  const data: CreateOpportunityBody = req.body;
   // Note: Data is already validated by validateRequest(CreateOpportunitySchema) middleware
 
   // Unmoderated studies run with logged-in Cortex users, so an external
@@ -330,9 +349,17 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
   }
 
+  // An inline study is only meaningful for unmoderated, and only when no
+  // existing script was picked. Resolved once here so the publish guard and the
+  // insert below agree on whether a study will exist.
+  const inlineStudy =
+    data.type === 'unmoderated' && !data.firsthand_study_id?.trim()
+      ? data.inline_study
+      : undefined;
+
   // Additional validation for published opportunities
   if (data.status === 'published' && data.type === 'unmoderated') {
-    if (!data.firsthand_study_id) {
+    if (!data.firsthand_study_id && !inlineStudy) {
       throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
@@ -371,6 +398,31 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     RETURNING *
   `;
 
+  // The study has to exist before the opportunity row that references it.
+  //
+  // Studies live on the FirstHand runtime pool and opportunities on the app
+  // pool, so a single SQL transaction cannot span both even though they are the
+  // same database. The compensating delete below is what keeps a failed insert
+  // from leaving behind a launched study nobody asked for.
+  let createdStudyId: string | null = null;
+
+  if (inlineStudy) {
+    const stored = await createStudy({
+      title: data.title.trim(),
+      intro_text: data.purpose_one_liner.trim(),
+      consent_text: inlineStudy.consent_text.trim(),
+      estimated_duration_minutes:
+        inlineStudy.estimated_duration_minutes ?? data.default_duration_minutes,
+      // Launched rather than draft: only launched studies are selectable, and a
+      // study authored as part of an opportunity has no separate review step to
+      // wait for. Leaving it draft would publish an opportunity pointing at a
+      // study the picker refuses to show.
+      status: 'launched',
+      steps: toStudySteps(inlineStudy.steps)
+    });
+    createdStudyId = stored.study.id;
+  }
+
   const values = [
     data.type,
     data.title.trim(),
@@ -382,15 +434,32 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.status || 'draft',
     req.user!.id,
     data.external_link_optional?.trim() || null,
-    data.firsthand_study_id?.trim() || null,
+    createdStudyId ?? (data.firsthand_study_id?.trim() || null),
     data.participant_type_required || 'any',
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
     data.end_date || null,
     finalDisplayWidth
   ];
-  
-  const result = await pool.query(query, values);
+
+  let result;
+  try {
+    result = await pool.query(query, values);
+  } catch (error) {
+    if (createdStudyId) {
+      try {
+        await deleteStudy(createdStudyId);
+      } catch (cleanupError) {
+        // Swallowed deliberately: the caller needs the original insert failure,
+        // not this one. Logged with the id so an orphan can be found by hand.
+        logger.error('Failed to remove inline study after opportunity insert failed', {
+          studyId: createdStudyId,
+          error: String(cleanupError)
+        });
+      }
+    }
+    throw error;
+  }
   const opportunity = {
     ...result.rows[0],
     created_at: result.rows[0].created_at.toISOString(),

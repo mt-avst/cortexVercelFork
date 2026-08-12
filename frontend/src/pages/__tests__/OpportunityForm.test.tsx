@@ -136,7 +136,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     // The FirstHand Study step replaces the External Link step for this type.
     expect(
-      screen.getByRole('button', { name: /Recorded Study/i })
+      screen.getByRole('button', { name: /Study Tasks/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /External Link/i })
@@ -147,7 +147,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the External Link tab for poll and hides FirstHand Study', () => {
+  it('keeps the External Link tab for poll and hides the study tab', () => {
     renderForm();
     selectType('poll');
 
@@ -155,18 +155,34 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /External Link/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Recorded Study/i })
+      screen.queryByRole('button', { name: /Study Tasks/i })
     ).not.toBeInTheDocument();
   });
 
-  it('sends unmoderated participants into a launched FirstHand study picker', async () => {
+  it('lets an unmoderated study be authored inline without visiting the studies area', async () => {
     renderForm();
     selectType('unmoderated');
 
-    // Open the FirstHand Study step.
-    fireEvent.click(screen.getByRole('button', { name: /Recorded Study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
 
-    // The picker loads launched studies from FirstHand; there is no external-link fallback.
+    // Authoring is the default path, so the tab opens on the task author and
+    // does not fetch the study list at all.
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+
+    expect(
+      screen.getByLabelText(/What the participant sees/i)
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
+    expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
+  });
+
+  it('still offers the launched-study picker when reuse is ticked', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByLabelText(/Reuse a script from an existing study/i));
+
     expect(
       await screen.findByText('-- Select a launched study --')
     ).toBeInTheDocument();

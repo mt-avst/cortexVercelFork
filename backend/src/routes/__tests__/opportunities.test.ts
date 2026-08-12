@@ -21,17 +21,27 @@ jest.mock('../../firsthand/session-create', () => ({
   createSession: jest.fn(),
 }));
 
+// The create route builds a study from an inline payload. Mocked so these tests
+// stay on the app pool and never reach the FirstHand runtime pool.
+jest.mock('../../firsthand/studies-repository', () => ({
+  createStudy: jest.fn(),
+  deleteStudy: jest.fn(),
+}));
+
 import opportunitiesRouter from '../opportunities';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
+import { createStudy, deleteStudy } from '../../firsthand/studies-repository';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 const mockCreateSession = createSession as jest.MockedFunction<any>;
+const mockCreateStudy = createStudy as jest.MockedFunction<any>;
+const mockDeleteStudy = deleteStudy as jest.MockedFunction<any>;
 
 const app = express();
 app.use(express.json());
@@ -237,7 +247,7 @@ describe('Opportunities API', () => {
       );
     });
 
-    it('should require a FirstHand study to publish an unmoderated opportunity (A1)', async () => {
+    it('should require a study to publish an unmoderated opportunity (A1)', async () => {
       const response = await request(app)
         .post('/api/opportunities')
         .send({
@@ -245,12 +255,12 @@ describe('Opportunities API', () => {
           title: 'Valid Unmoderated Title',
           purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
           status: 'published'
-          // Missing firsthand_study_id
+          // Neither firsthand_study_id nor inline_study
         })
         .expect(400);
 
       expect(response.body.error).toBe(
-        'A recorded study is required to publish an unmoderated test'
+        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
       );
     });
 
@@ -286,6 +296,116 @@ describe('Opportunities API', () => {
         type: 'unmoderated',
         firsthand_study_id: 'study_abc123',
         sessions: []
+      });
+    });
+
+    describe('inline study authoring', () => {
+      const inlineBody = {
+        type: 'unmoderated',
+        title: 'Valid Unmoderated Title',
+        purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+        status: 'published',
+        inline_study: {
+          consent_text: 'We record your screen.',
+          steps: [{ type: 'open_text', prompt: 'What did you expect to happen?' }]
+        }
+      };
+
+      it('publishes without a study id by creating a launched study from the inline payload', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_generated' },
+          steps: []
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+        mockQuery.mockResolvedValueOnce({
+          rows: [
+            {
+              id: '9',
+              type: 'unmoderated',
+              firsthand_study_id: 'study_generated',
+              created_at: new Date(),
+              updated_at: new Date()
+            }
+          ]
+        });
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(inlineBody)
+          .expect(201);
+
+        // Launched, not draft: a draft study cannot be selected, so an
+        // opportunity pointing at one would be unrunnable.
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ status: 'launched' })
+        );
+
+        // The end step is appended by toStudySteps, never authored.
+        const createdSteps = mockCreateStudy.mock.calls[0][0].steps;
+        expect(createdSteps).toHaveLength(2);
+        expect(createdSteps[1]).toMatchObject({ type: 'end', order: 2 });
+
+        // The generated id is what lands on the opportunity row.
+        const insertValues = mockQuery.mock.calls[1][1];
+        expect(insertValues[10]).toBe('study_generated');
+        expect(response.body).toMatchObject({ firsthand_study_id: 'study_generated' });
+      });
+
+      it('deletes the study it just created when the opportunity insert fails', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_orphan' },
+          steps: []
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+        mockQuery.mockRejectedValueOnce(new Error('insert exploded'));
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(500);
+
+        // Studies and opportunities sit on different pools, so this
+        // compensating delete is the only thing preventing a launched study
+        // that no opportunity references.
+        expect(mockDeleteStudy).toHaveBeenCalledWith('study_orphan');
+      });
+
+      it('ignores the inline payload when an existing study is linked', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+        mockQuery.mockResolvedValueOnce({
+          rows: [
+            {
+              id: '10',
+              type: 'unmoderated',
+              firsthand_study_id: 'study_existing',
+              created_at: new Date(),
+              updated_at: new Date()
+            }
+          ]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({ ...inlineBody, firsthand_study_id: 'study_existing' })
+          .expect(201);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+        expect(mockQuery.mock.calls[1][1][10]).toBe('study_existing');
+      });
+
+      it('rejects a choice step with fewer than two options', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: {
+              consent_text: 'We record your screen.',
+              steps: [
+                { type: 'single_choice', prompt: 'Pick one', options: ['only one'] }
+              ]
+            }
+          })
+          .expect(400);
+
+        expect(response.body.error).toBeDefined();
+        expect(mockCreateStudy).not.toHaveBeenCalled();
       });
     });
 
