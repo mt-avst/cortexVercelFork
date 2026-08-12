@@ -26,6 +26,10 @@ jest.mock('../../firsthand/session-create', () => ({
 jest.mock('../../firsthand/studies-repository', () => ({
   createStudy: jest.fn(),
   deleteStudy: jest.fn(),
+  // Default true so the inline path runs; the route checks this before
+  // building a study so a misconfigured runtime pool answers 503 rather than
+  // letting createStudy throw a bare Error into the 500 branch.
+  isStudiesPersistenceConfigured: jest.fn(() => true),
 }));
 
 import opportunitiesRouter from '../opportunities';
@@ -345,10 +349,12 @@ describe('Opportunities API', () => {
         expect(createdSteps).toHaveLength(2);
         expect(createdSteps[1]).toMatchObject({ type: 'end', order: 2 });
 
-        // The generated id is what lands on the opportunity row.
+        // The generated id is what lands on the opportunity row. Asserted on
+        // the insert parameters, not the response body: the body is built from
+        // the mocked row, so it would match regardless of what the route wrote.
         const insertValues = mockQuery.mock.calls[1][1];
         expect(insertValues[10]).toBe('study_generated');
-        expect(response.body).toMatchObject({ firsthand_study_id: 'study_generated' });
+        expect(response.status).toBe(201);
       });
 
       it('deletes the study it just created when the opportunity insert fails', async () => {
@@ -367,7 +373,21 @@ describe('Opportunities API', () => {
         expect(mockDeleteStudy).toHaveBeenCalledWith('study_orphan');
       });
 
-      it('ignores the inline payload when an existing study is linked', async () => {
+      it('rejects a body carrying both a linked study and an authored one', async () => {
+        // Resolving this by precedence silently discarded whichever lost, so
+        // the ambiguity is refused instead.
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({ ...inlineBody, firsthand_study_id: 'study_existing' })
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Send either firsthand_study_id or inline_study, not both'
+        );
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('links an existing study without building one when no inline payload is sent', async () => {
         mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
         mockQuery.mockResolvedValueOnce({
           rows: [
@@ -381,13 +401,51 @@ describe('Opportunities API', () => {
           ]
         });
 
+        const { inline_study, ...linkedOnly } = inlineBody;
+
         await request(app)
           .post('/api/opportunities')
-          .send({ ...inlineBody, firsthand_study_id: 'study_existing' })
+          .send({ ...linkedOnly, firsthand_study_id: 'study_existing' })
           .expect(201);
 
         expect(mockCreateStudy).not.toHaveBeenCalled();
         expect(mockQuery.mock.calls[1][1][10]).toBe('study_existing');
+      });
+
+      it('refuses to publish on a whitespace-only study id instead of storing null', async () => {
+        const { inline_study, ...linkedOnly } = inlineBody;
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({ ...linkedOnly, firsthand_study_id: '   ' })
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+        );
+      });
+
+      it('namespaces step ids by study so a second inline study cannot collide', async () => {
+        // study_steps.id is a GLOBAL primary key, so position-only ids such as
+        // step_1 would make the second inline study fail with a unique
+        // violation surfaced as a misleading 409.
+        mockCreateStudy.mockResolvedValue({ study: { id: 'ignored' }, steps: [] });
+        mockQuery.mockResolvedValue({
+          rows: [{ id: 'x', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+
+        const first = mockCreateStudy.mock.calls[0][0];
+        const second = mockCreateStudy.mock.calls[1][0];
+
+        expect(first.id).not.toBe(second.id);
+        const firstIds = first.steps.map((s: any) => s.step_id);
+        const secondIds = second.steps.map((s: any) => s.step_id);
+        expect(firstIds.filter((id: string) => secondIds.includes(id))).toEqual([]);
+        // The id passed to createStudy is the one the steps are namespaced with.
+        expect(firstIds[0].startsWith(first.id)).toBe(true);
       });
 
       it('rejects a choice step with fewer than two options', async () => {
@@ -404,7 +462,9 @@ describe('Opportunities API', () => {
           })
           .expect(400);
 
-        expect(response.body.error).toBeDefined();
+        // Names the offending field rather than merely being defined, so the
+        // assertion cannot pass on an unrelated schema failure.
+        expect(JSON.stringify(response.body)).toContain('options');
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
     });

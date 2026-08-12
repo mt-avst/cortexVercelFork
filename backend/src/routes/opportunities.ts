@@ -16,7 +16,11 @@ import {
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
-import { createStudy, deleteStudy } from '../firsthand/studies-repository';
+import {
+  createStudy,
+  deleteStudy,
+  isStudiesPersistenceConfigured
+} from '../firsthand/studies-repository';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 
@@ -24,14 +28,16 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
 
 const router: Router = Router();
 
-// Thrown by both the create and update publish-time guards. Hoisted so the two
-// cannot drift apart: only the POST site is covered by a test.
-//
-// Wording note: this fires when neither an inline study nor an existing study
-// id was supplied, so it names the thing the author actually has to do rather
-// than the object model behind it.
+// The create and update guards deliberately say different things, because the
+// two endpoints offer different remedies. Create accepts an inline study, so it
+// can tell the author to write the tasks; update has no inline path (there is
+// no inline_study on UpdateOpportunitySchema), so telling them to add prompts
+// there would name something the endpoint cannot accept.
 const UNMODERATED_STUDY_REQUIRED =
   'Add at least one prompt to the study, or link an existing recorded study, before publishing';
+
+const UNMODERATED_STUDY_UPDATE_REQUIRED =
+  'Link a launched recorded study before publishing this unmoderated test';
 
 /**
  * Body of POST /api/opportunities.
@@ -349,17 +355,27 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
   }
 
-  // An inline study is only meaningful for unmoderated, and only when no
-  // existing script was picked. Resolved once here so the publish guard and the
-  // insert below agree on whether a study will exist.
-  const inlineStudy =
-    data.type === 'unmoderated' && !data.firsthand_study_id?.trim()
-      ? data.inline_study
-      : undefined;
+  // Normalised once and used everywhere below. Three separate truthiness rules
+  // on this field previously disagreed: an all-whitespace id passed
+  // z.string().min(1), was falsy where the inline study was resolved but truthy
+  // in the publish guard, and then stored as NULL - landing a published
+  // unmoderated opportunity with no study, exactly what the guard prevents.
+  const linkedStudyId = data.firsthand_study_id?.trim() || undefined;
+
+  // An inline study is only meaningful for unmoderated. Sending both a link and
+  // an authored study is rejected rather than resolved by precedence: silently
+  // dropping the tasks someone just wrote is worse than making them choose.
+  if (data.type === 'unmoderated' && linkedStudyId && data.inline_study) {
+    throw new ValidationError(
+      'Send either firsthand_study_id or inline_study, not both'
+    );
+  }
+
+  const inlineStudy = data.type === 'unmoderated' ? data.inline_study : undefined;
 
   // Additional validation for published opportunities
   if (data.status === 'published' && data.type === 'unmoderated') {
-    if (!data.firsthand_study_id && !inlineStudy) {
+    if (!linkedStudyId && !inlineStudy) {
       throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
@@ -407,7 +423,18 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   let createdStudyId: string | null = null;
 
   if (inlineStudy) {
+    if (!isStudiesPersistenceConfigured()) {
+      // Matches the 503 the direct studies route answers with, rather than
+      // letting createStudy throw a bare Error that the handler cannot map.
+      throw new AppError('Studies require a configured PostgreSQL database.', 503);
+    }
+
+    // Generated here rather than left to createStudy so the step ids can be
+    // namespaced with it - see toStudySteps on why that is load-bearing.
+    const studyId = `study_${crypto.randomUUID()}`;
+
     const stored = await createStudy({
+      id: studyId,
       title: data.title.trim(),
       intro_text: data.purpose_one_liner.trim(),
       consent_text: inlineStudy.consent_text.trim(),
@@ -418,7 +445,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       // wait for. Leaving it draft would publish an opportunity pointing at a
       // study the picker refuses to show.
       status: 'launched',
-      steps: toStudySteps(inlineStudy.steps)
+      steps: toStudySteps(inlineStudy.steps, studyId)
     });
     createdStudyId = stored.study.id;
   }
@@ -434,7 +461,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.status || 'draft',
     req.user!.id,
     data.external_link_optional?.trim() || null,
-    createdStudyId ?? (data.firsthand_study_id?.trim() || null),
+    createdStudyId ?? linkedStudyId ?? null,
     data.participant_type_required || 'any',
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
@@ -557,8 +584,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
 
   // Additional validation for published opportunities
   if (data.status === 'published' && existingType === 'unmoderated') {
-    if (!newFirstHandStudyId) {
-      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
+    // Trimmed for the same reason as the create guard: an all-whitespace id
+    // would otherwise satisfy this and store NULL.
+    if (!newFirstHandStudyId?.trim()) {
+      throw new ValidationError(UNMODERATED_STUDY_UPDATE_REQUIRED);
     }
   } else if (data.status === 'published' && (existingType === 'poll' || existingType === 'survey')) {
     if (!newLink || !validateUrl(newLink)) {

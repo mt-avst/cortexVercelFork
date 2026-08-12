@@ -317,7 +317,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (formData.status === 'published' && formData.type === 'unmoderated') {
       if (formData.reuse_existing_study || isEdit) {
         if (!formData.firsthand_study_id?.trim()) {
-          errors.firsthand_study_id = 'Select a launched study, or untick the reuse box and write the tasks here';
+          // The reuse tickbox is not rendered when editing, so do not tell an
+          // editing author to untick it.
+          errors.firsthand_study_id = isEdit
+            ? 'Select a launched study before publishing'
+            : 'Select a launched study, or untick the reuse box and write the tasks here';
         }
       } else if (formData.inline_study_steps.length === 0) {
         // Named against the thing the author does, not the object model. The
@@ -536,14 +540,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       if (formData.type === 'unmoderated') {
-        data.firsthand_study_id = formData.firsthand_study_id?.trim() || undefined;
-
         // Send the authored study only when creating and not reusing. Editing
         // keeps pointing at the existing study, whose script is edited in the
-        // studies area; sending both would be ambiguous, and the backend
-        // ignores inline_study whenever an id is present.
+        // studies area.
         const authoringInline =
           !isEdit && !formData.reuse_existing_study && formData.inline_study_steps.length > 0;
+
+        // Exactly one of the two, never both. A study id can survive in state
+        // after the author ticks reuse, picks one, then unticks and writes
+        // tasks instead; sending it alongside the authored study would be
+        // ambiguous, and the backend rejects that rather than guessing.
+        data.firsthand_study_id = authoringInline
+          ? undefined
+          : formData.firsthand_study_id?.trim() || undefined;
 
         if (authoringInline) {
           data.inline_study = {
@@ -705,6 +714,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => {
+      // Unticking reuse drops the study that was picked while it was ticked.
+      // Without this the id lives on invisibly - the picker is no longer on
+      // screen - and would be submitted alongside the authored tasks.
+      if (field === 'reuse_existing_study' && value === false) {
+        return { ...prev, reuse_existing_study: false, firsthand_study_id: '' };
+      }
+
       // Unmoderated is FirstHand-only and runs with logged-in Cortex users, so
       // drop any external link and coerce an 'external' participant type when
       // the type switches to unmoderated (a stale value must not persist).

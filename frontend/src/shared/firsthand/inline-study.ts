@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-12T21:51:10.355Z
+ * Generated: 2026-08-12T22:13:18.078Z
  */
 
 import { z } from "zod";
@@ -51,17 +51,32 @@ export const authorableStepTypeSchema = z.enum(authorableStepTypes);
  */
 export const inlineStudyStepSchema = z.object({
   type: authorableStepTypeSchema,
-  prompt: z.string().min(1),
-  options: z.array(z.string().min(1)).optional(),
-  helper_text: z.string().min(1).optional(),
+  prompt: z.string().min(1).max(2000),
+  options: z.array(z.string().min(1).max(500)).max(20).optional(),
+  helper_text: z.string().min(1).max(2000).optional(),
   is_required: z.boolean().optional()
 });
 
+/**
+ * Bounds exist because every step is a row on the FirstHand runtime pool, which
+ * is small (max 5 connections) and shared with the live participant runtime. An
+ * unbounded payload is one admin request away from holding a pooled client long
+ * enough to time out participant traffic. The numbers are generous for real
+ * authoring, not tight.
+ */
+export const INLINE_STUDY_LIMITS = {
+  maxSteps: 50,
+  maxPromptLength: 2000,
+  maxConsentLength: 10000,
+  maxOptions: 20,
+  maxOptionLength: 500
+} as const;
+
 export const inlineStudySchema = z
   .object({
-    consent_text: z.string().min(1),
+    consent_text: z.string().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     estimated_duration_minutes: z.number().int().positive().optional(),
-    steps: z.array(inlineStudyStepSchema).min(1)
+    steps: z.array(inlineStudyStepSchema).min(1).max(INLINE_STUDY_LIMITS.maxSteps)
   })
   .superRefine((value, ctx) => {
     // Mirrors the rule enforced in studies-repository.validateSteps. Duplicated
@@ -102,10 +117,22 @@ export const DEFAULT_CONSENT_TEXT =
  * Assigns `step_id` and `order` from array position, and appends the `end`
  * completion marker. Optional fields are omitted rather than set to undefined
  * so the result matches what `stepSchema` expects for an absent field.
+ *
+ * `studyId` is required and prefixes every step id, because step ids are NOT
+ * scoped to their study in storage: `firsthand.study_steps.id` is a global
+ * `TEXT PRIMARY KEY` (0004_firsthand_studies.sql), and `insertStudySteps`
+ * writes `step_id` straight into it. Position-only ids such as `step_1` would
+ * therefore collide the second time anything authored a study this way, and the
+ * resulting unique violation surfaces as a misleading 409 about the
+ * opportunity. Prefixing with the study's own id makes collision impossible
+ * without changing the schema or the hand-authored editor's behaviour.
  */
-export function toStudySteps(steps: InlineStudyStep[]): StudyStep[] {
+export function toStudySteps(
+  steps: InlineStudyStep[],
+  studyId: string
+): StudyStep[] {
   const authored: StudyStep[] = steps.map((step, index) => ({
-    step_id: `step_${index + 1}`,
+    step_id: `${studyId}_step_${index + 1}`,
     order: index + 1,
     type: step.type,
     prompt: step.prompt.trim(),
@@ -117,7 +144,7 @@ export function toStudySteps(steps: InlineStudyStep[]): StudyStep[] {
   return [
     ...authored,
     {
-      step_id: "step_end",
+      step_id: `${studyId}_step_end`,
       order: authored.length + 1,
       type: "end",
       prompt: END_STEP_PROMPT

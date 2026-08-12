@@ -92,9 +92,11 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
 
   const steps = formData.inline_study_steps ?? [];
   const launchedStudies = studies.filter((s) => s.status === 'launched');
-  // A study that exists but is not launched cannot be picked. Saying so beats
-  // an empty dropdown, which reads as "you have no studies".
-  const unlaunchedCount = studies.length - launchedStudies.length;
+  // A draft study cannot be picked but can be launched, so saying how many are
+  // waiting beats an empty dropdown that reads as "you have no studies".
+  // Archived studies are excluded: they are deliberately retired, so offering
+  // to launch them would be wrong.
+  const draftCount = studies.filter((s) => s.status === 'draft').length;
 
   const updateStep = (index: number, patch: Partial<InlineStudyStep>) => {
     handleStepsChange(
@@ -224,9 +226,9 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
 
                 {!loading && !fetchError && launchedStudies.length === 0 && (
                   <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-                    {unlaunchedCount > 0
-                      ? `No launched studies. You have ${unlaunchedCount} ${unlaunchedCount === 1 ? 'study' : 'studies'} that ${unlaunchedCount === 1 ? 'is' : 'are'} not launched yet - launch ${unlaunchedCount === 1 ? 'it' : 'one'} in the studies area, or untick the box above and write the tasks here.`
-                      : 'There are no studies yet. Untick the box above to write the tasks here.'}
+                    {draftCount > 0
+                      ? `No launched studies. You have ${draftCount} ${draftCount === 1 ? 'study' : 'studies'} still in draft - launch ${draftCount === 1 ? 'it' : 'one'} in the studies area, or untick the box above and write the tasks here.`
+                      : 'There are no studies to reuse. Untick the box above to write the tasks here.'}
                   </div>
                 )}
               </div>

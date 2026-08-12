@@ -7,7 +7,7 @@ import OpportunityForm, {
   clearTypeConditionalErrors,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
 } from '../OpportunityForm';
-import { getFirstHandStudies, getOpportunity } from '../../api/client';
+import { createOpportunity, getFirstHandStudies, getOpportunity } from '../../api/client';
 
 // OpportunityForm is an admin-gated, context-heavy page. Model a signed-in
 // researcher_admin so the auth gate lets the form render, and keep the theme
@@ -174,6 +174,47 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
+  });
+
+  it('does not send a stale study id alongside tasks authored after unticking reuse', async () => {
+    // The sequence that silently dropped authored tasks: tick reuse, pick a
+    // study, change your mind, untick, write tasks. The id survived in state
+    // and won on the backend, discarding everything typed.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+
+    const reuse = await screen.findByLabelText(/Reuse a script from an existing study/i);
+    fireEvent.click(reuse);
+    fireEvent.change(await screen.findByLabelText(/Recorded study/i), {
+      target: { value: 'study_demo' }
+    });
+    fireEvent.click(reuse);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
+    expect(payload.firsthand_study_id).toBeUndefined();
+    expect(payload.inline_study.steps).toEqual([
+      { type: 'open_text', prompt: 'Find the export button' }
+    ]);
   });
 
   it('still offers the launched-study picker when reuse is ticked', async () => {
