@@ -5,12 +5,13 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-12T23:16:56.094Z
+ * Generated: 2026-08-13T09:43:16.214Z
  */
 
 import { z } from "zod";
 
 import type { StudyStep } from "./contract";
+import { isSafeTargetUrl } from "./url-safety";
 
 /**
  * Inline study authoring for unmoderated opportunities.
@@ -60,7 +61,8 @@ export const INLINE_STUDY_LIMITS = {
   // studies.estimated_duration_minutes is a Postgres INTEGER, so an unbounded
   // value overflows and surfaces as a 500 rather than a validation error. A day
   // is far beyond any real session.
-  maxDurationMinutes: 24 * 60
+  maxDurationMinutes: 24 * 60,
+  maxTargetUrlLength: 2000
 } as const;
 
 /**
@@ -89,8 +91,41 @@ export const inlineStudyStepSchema = z.object({
   is_required: z.boolean().optional()
 });
 
+/**
+ * Shown by the schema and by the form. Exported so the two cannot drift into
+ * saying different things about the same rule.
+ */
+export const UNSAFE_TARGET_URL_MESSAGE =
+  "Enter an http(s) address, or a path beginning with a single /";
+
 export const inlineStudySchema = z
   .object({
+    /**
+     * The page the participant opens and shares before recording starts.
+     *
+     * Study-level rather than per-step, which is how the job is actually
+     * described ("test this page"), even though the contract carries
+     * `target_url` per step: `toStudySteps` applies it to every authored step,
+     * because the setup handoff reads the first one while StudyRunner needs it
+     * on the current step to keep offering the task window.
+     *
+     * Optional, and its absence is meaningful: a study with no target on any
+     * step is not a first-hand study at all, and the setup flow falls back to a
+     * single start action instead of the open-then-share sequence. That is the
+     * right shape for a pure questionnaire.
+     *
+     * Validated with the same `isSafeTargetUrl` the contract and the window
+     * sink use - the task page is opened as a same-origin about:blank and then
+     * navigated by assigning location.href, so a javascript: URL here would
+     * execute against the participant's session.
+     */
+    target_url: z
+      .string()
+      .trim()
+      .min(1)
+      .max(INLINE_STUDY_LIMITS.maxTargetUrlLength)
+      .refine(isSafeTargetUrl, { message: UNSAFE_TARGET_URL_MESSAGE })
+      .optional(),
     consent_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     estimated_duration_minutes: z
       .number()
@@ -151,13 +186,30 @@ export const DEFAULT_CONSENT_TEXT =
  */
 export function toStudySteps(
   steps: InlineStudyStep[],
-  studyId: string
+  studyId: string,
+  targetUrl?: string
 ): StudyStep[] {
   const authored: StudyStep[] = steps.map((step, index) => ({
     step_id: `${studyId}_step_${index + 1}`,
     order: index + 1,
     type: step.type,
     prompt: step.prompt.trim(),
+    // The starting URL goes on EVERY authored step, not just the first.
+    //
+    // getPrimaryTargetUrl only needs it on one - it finds the first runnable
+    // step carrying a target, for the setup handoff before the runner mounts.
+    // But it is not the only consumer: StudyRunner renders TaskWindowPanel
+    // (the "Go to the task page" button and the "keep the task window open or
+    // the recording stops" warning) only when the CURRENT step carries one. On
+    // first-step-only, a participant who buried or closed the popup during task
+    // 2 had no way to bring it back and had never been warned. It also made an
+    // inline study a different shape from the same study built by hand in
+    // StudyEditor, which sets the target per step.
+    //
+    // Safe to repeat: task-window.ts focuses rather than reopens when the URL
+    // is unchanged, so this does not spawn a window per task. The appended
+    // `end` marker is added after this map and never gets one.
+    ...(targetUrl ? { target_url: targetUrl.trim() } : {}),
     ...(step.options ? { options: step.options } : {}),
     ...(step.helper_text ? { helper_text: step.helper_text } : {}),
     ...(step.is_required !== undefined ? { is_required: step.is_required } : {})

@@ -6,6 +6,7 @@ import {
 } from '../../../shared/firsthand/contract';
 import { getStudyById, isStudiesPersistenceConfigured } from './studies-repository';
 import { seedRuntimeSession } from './runtime-repository';
+import { logger } from '../utils/logger';
 
 // In-process session creation (Phase B, step B3b). This is the internalised
 // equivalent of FirstHand's `POST /api/sessions` route body: it mints the
@@ -114,6 +115,15 @@ export async function createSession(
   const validated = sessionPayloadSchema.safeParse(payload);
 
   if (!validated.success) {
+    // The caller only gets an opaque code, so without this an operator sees a
+    // 500 with nothing naming the field. Matters more now the target_url guard
+    // is stricter: a study stored under the looser rule fails here rather than
+    // at the sink. PATHS ONLY, never values - a target_url or callback_url can
+    // carry tokens.
+    logger.error('Session payload failed contract validation', {
+      studyId: study.study.id,
+      issues: validated.error.issues.map((issue) => issue.path.join('.'))
+    });
     return { ok: false, error: 'payload_assembly_failed' };
   }
 

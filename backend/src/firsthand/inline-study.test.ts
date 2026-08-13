@@ -39,6 +39,35 @@ describe("toStudySteps", () => {
     ]);
   });
 
+  it("puts the study-level target url on every authored step, never the end marker", () => {
+    // Not just the first: StudyRunner renders the task-window panel - the "go
+    // to the task page" button and the "keep it open or recording stops"
+    // warning - only when the CURRENT step carries a target. First-step-only
+    // left tasks 2..n with no way to recover a buried or closed popup.
+    const steps = toStudySteps(
+      [
+        { type: "instruction", prompt: "Open the dashboard" },
+        { type: "open_text", prompt: "What did you expect?" }
+      ],
+      "study_x",
+      "https://example.com/checkout"
+    );
+
+    expect(steps[0].target_url).toBe("https://example.com/checkout");
+    expect(steps[1].target_url).toBe("https://example.com/checkout");
+    // The appended completion marker is never a task and never gets one.
+    expect(steps[2].type).toBe("end");
+    expect(steps[2].target_url).toBeUndefined();
+  });
+
+  it("omits target_url entirely when no starting url is given", () => {
+    // Absence is meaningful: a study with no target on any step is not a
+    // first-hand study, and the setup flow falls back to a single start action.
+    const [step] = toStudySteps([{ type: "open_text", prompt: "A" }], "study_x");
+
+    expect("target_url" in step).toBe(false);
+  });
+
   it("gives two studies disjoint step ids", () => {
     // study_steps.id is a GLOBAL primary key rather than one scoped by
     // study_id, so position-only ids made the second inline study fail with a
@@ -119,6 +148,43 @@ describe("inlineStudySchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it.each([
+    ["javascript:alert(1)"],
+    ["data:text/html,<script>alert(1)</script>"],
+    ["//evil.example.com/checkout"],
+    // Look root-relative, resolve cross-origin: the parser treats `\` as `/`
+    // and strips tab/CR/LF. See url-safety.ts for why these were the dangerous
+    // ones - they also suppress the destination label shown to the participant.
+    ["/\\evil.example.com/checkout"],
+    ["/\t/evil.example.com/checkout"],
+    ["/\n/evil.example.com/checkout"],
+    ["/\r/evil.example.com/checkout"]
+  ])("rejects the unsafe target url %s", (target) => {
+    // The task page is opened as a same-origin about:blank and navigated by
+    // assigning location.href, so an active scheme would execute against the
+    // participant's session. Protocol-relative resolves to another origin.
+    const result = inlineStudySchema.safeParse({
+      consent_text: "C",
+      target_url: target,
+      steps: [{ type: "open_text", prompt: "A" }]
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it.each([["https://example.com/checkout"], ["/demo/checkout"]])(
+    "accepts the safe target url %s",
+    (target) => {
+      const result = inlineStudySchema.safeParse({
+        consent_text: "C",
+        target_url: target,
+        steps: [{ type: "open_text", prompt: "A" }]
+      });
+
+      expect(result.success).toBe(true);
+    }
+  );
 
   it("rejects the end type, which is machine-appended rather than authored", () => {
     const result = inlineStudySchema.safeParse({

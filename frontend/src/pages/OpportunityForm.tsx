@@ -10,9 +10,12 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
 import {
   DEFAULT_CONSENT_TEXT,
+  INLINE_STUDY_LIMITS,
+  UNSAFE_TARGET_URL_MESSAGE,
   type InlineStudy as InlineStudyPayload,
   type InlineStudyStep
 } from '../shared/firsthand/inline-study';
+import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
@@ -44,6 +47,7 @@ export const clearTypeConditionalErrors = (
   if (newType !== 'unmoderated') {
     delete next.firsthand_study_id;
     delete next.inline_study_consent_text;
+    delete next.inline_study_target_url;
     Object.keys(next)
       .filter((key) => key.startsWith('inline_study_steps'))
       .forEach((key) => delete next[key]);
@@ -81,6 +85,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     firsthand_study_id: '' as string | undefined,
     // Unmoderated study authored inline. The backend creates and launches the
     // study from these on save, so a study is not a separate errand.
+    inline_study_target_url: '' as string,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
     inline_study_steps: [] as InlineStudyStep[],
     reuse_existing_study: false
@@ -180,6 +185,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
+        inline_study_target_url: '',
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [],
         // Only pre-tick reuse when a study is actually linked; otherwise the
@@ -207,6 +213,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         display_width: opportunity.display_width || 'single' as 'single' | 'double',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
+        inline_study_target_url: '',
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [] as InlineStudyStep[],
         reuse_existing_study: Boolean(opportunity.firsthand_study_id)
@@ -367,6 +374,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         !formData.inline_study_consent_text.trim()
       ) {
         errors.inline_study_consent_text = 'Consent text is required';
+      }
+
+      // Optional, but if given it must be openable. Mirrors isSafeTargetUrl on
+      // the contract: the task page is opened as a same-origin about:blank and
+      // then navigated, so an active-scheme URL would run against the
+      // participant's session.
+      const targetUrl = formData.inline_study_target_url.trim();
+      if (targetUrl && !isSafeTargetUrl(targetUrl)) {
+        errors.inline_study_target_url = UNSAFE_TARGET_URL_MESSAGE;
+      } else if (targetUrl.length > INLINE_STUDY_LIMITS.maxTargetUrlLength) {
+        // Mirrored so an over-long URL fails here rather than as a server 400.
+        errors.inline_study_target_url = `Keep the URL under ${INLINE_STUDY_LIMITS.maxTargetUrlLength} characters`;
+      }
+
+      // A URL with no tasks would be silently dropped: the payload is only
+      // built when there is at least one task, so say so rather than discarding
+      // what they typed.
+      if (targetUrl && formData.inline_study_steps.length === 0) {
+        errors.inline_study_steps =
+          'Add at least one task - a starting URL on its own has nothing for the participant to do';
       }
     }
 
@@ -562,7 +589,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           : formData.firsthand_study_id?.trim() || undefined;
 
         if (authoringInline) {
+          const targetUrl = formData.inline_study_target_url.trim();
+
           data.inline_study = {
+            // Omitted rather than sent empty: its absence is meaningful, and
+            // the contract rejects an empty string.
+            ...(targetUrl ? { target_url: targetUrl } : {}),
             consent_text: formData.inline_study_consent_text.trim(),
             estimated_duration_minutes: formData.default_duration_minutes || undefined,
             steps: formData.inline_study_steps.map((step) => ({

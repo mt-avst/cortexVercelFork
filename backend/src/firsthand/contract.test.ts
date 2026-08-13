@@ -40,6 +40,38 @@ describe("stepSchema target_url safety", () => {
     ).toBe(false);
   });
 
+  // These four LOOK root-relative and used to pass a startsWith("/") check,
+  // but the WHATWG parser treats `\` as `/` and strips tab/CR/LF anywhere in
+  // the input, so every one of them resolves to https://evil.example/.
+  //
+  // Worse than an ordinary cross-origin target: describeTarget throws on them
+  // and falls back to calling the destination "the task page" - the copy that
+  // exists because a relative target is this app's own origin - so the
+  // participant is told they are opening a Cortex page and then asked to share
+  // it. The guard resolves against a sentinel origin for exactly this reason.
+  it.each([
+    ["backslash", "/\\evil.example/x"],
+    ["tab", "/\t/evil.example/x"],
+    ["line feed", "/\n/evil.example/x"],
+    ["carriage return", "/\r/evil.example/x"]
+  ])("rejects a %s target that escapes to another origin", (_label, target) => {
+    expect(new URL(target, "https://cortex.test").origin).toBe(
+      "https://evil.example"
+    );
+    expect(stepSchema.safeParse({ ...base, target_url: target }).success).toBe(
+      false
+    );
+  });
+
+  it.each([["/demo/checkout"], ["/"], ["/a/b?c=d#e"]])(
+    "still accepts the genuinely same-origin path %s",
+    (target) => {
+      expect(stepSchema.safeParse({ ...base, target_url: target }).success).toBe(
+        true
+      );
+    }
+  );
+
   it("still allows an omitted target_url (survey-style steps)", () => {
     expect(stepSchema.safeParse(base).success).toBe(true);
   });

@@ -450,7 +450,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       // wait for. Leaving it draft would publish an opportunity pointing at a
       // study the picker refuses to show.
       status: 'launched',
-      steps: toStudySteps(inlineStudy.steps, studyId)
+      steps: toStudySteps(inlineStudy.steps, studyId, inlineStudy.target_url)
     });
     createdStudyId = stored.study.id;
   }
@@ -697,7 +697,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
       estimated_duration_minutes:
         inlineStudyInput.estimated_duration_minutes ?? data.default_duration_minutes,
       status: 'launched',
-      steps: toStudySteps(inlineStudyInput.steps, studyId)
+      steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
     });
     createdStudyId = stored.study.id;
     // Routed through the same field loop as everything else so the id lands in

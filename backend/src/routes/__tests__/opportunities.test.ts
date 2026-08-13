@@ -449,6 +449,48 @@ describe('Opportunities API', () => {
         expect(firstIds[0].startsWith(first.id)).toBe(true);
       });
 
+      it('carries the starting url onto the first step of the created study', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_t' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '11', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: {
+              ...inlineBody.inline_study,
+              target_url: 'https://example.com/checkout'
+            }
+          })
+          .expect(201);
+
+        const steps = mockCreateStudy.mock.calls[0][0].steps;
+        expect(steps[0].target_url).toBe('https://example.com/checkout');
+      });
+
+      it('refuses a starting url that could execute against the participant session', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: {
+              ...inlineBody.inline_study,
+              target_url: 'javascript:alert(1)'
+            }
+          })
+          .expect(400);
+
+        // Asserted on the issue path, not on the body echoing the payload back
+        // - that would pass for any 400 that happens to include the request.
+        expect(response.body.details).toEqual(
+          expect.arrayContaining([expect.stringContaining('target_url')])
+        );
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
       it('rejects a whitespace-only prompt instead of storing an empty one', async () => {
         // The schema trims before min(1). Validating first and trimming later
         // stored "" and produced a study whose session payload could not be
