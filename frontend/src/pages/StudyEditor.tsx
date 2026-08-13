@@ -8,6 +8,7 @@ import {
   updateFirstHandStudy,
 } from '../api/firsthand-studies';
 import { Alert, Button, Card, CardBody } from '../components/ui';
+import { isStudyReadOnly, type StudyViewer } from '../utils/studyOwnership';
 import type { FirstHandStudy } from '../api/types';
 import type { StudyStep } from '../shared/firsthand/contract';
 import {
@@ -215,6 +216,12 @@ function extractSaveError(caught: unknown): string {
 type StudyEditorFormProps = {
   initialStudy?: FirstHandStudy;
   initialSteps?: StudyStep[];
+  /**
+   * Passed in rather than read from useAuth here so the form stays renderable
+   * (and testable) without an AuthProvider, matching how the page already owns
+   * the auth lookup for its own admin redirect.
+   */
+  viewer?: StudyViewer;
 };
 
 /**
@@ -225,9 +232,13 @@ type StudyEditorFormProps = {
 export function StudyEditorForm({
   initialStudy,
   initialSteps,
+  viewer,
 }: StudyEditorFormProps) {
   const navigate = useNavigate();
   const isEditing = Boolean(initialStudy);
+  // No `isEditing &&` guard: the create form has no initialStudy, so
+  // isStudyReadOnly already answers false for it.
+  const readOnly = isStudyReadOnly(initialStudy, viewer);
   const [title, setTitle] = useState(initialStudy?.title ?? '');
   const [introText, setIntroText] = useState(initialStudy?.intro_text ?? '');
   const [consentText, setConsentText] = useState(
@@ -405,309 +416,338 @@ export function StudyEditorForm({
         </Alert>
       ) : null}
 
-      <div className="form-group mb-3">
-        <label className="form-label" htmlFor="study-title">
-          Title
-        </label>
-        <input
-          className="form-control"
-          id="study-title"
-          onChange={(event) => setTitle(event.target.value)}
-          required
-          value={title}
-        />
-      </div>
-
-      <div className="form-group mb-3">
-        <label className="form-label" htmlFor="study-intro">
-          Intro text
-        </label>
-        <textarea
-          className="form-control"
-          id="study-intro"
-          onChange={(event) => setIntroText(event.target.value)}
-          required
-          rows={3}
-          value={introText}
-        />
-      </div>
-
-      <div className="form-group mb-3">
-        <label className="form-label" htmlFor="study-consent">
-          Consent text
-        </label>
-        <textarea
-          className="form-control"
-          id="study-consent"
-          onChange={(event) => setConsentText(event.target.value)}
-          required
-          rows={3}
-          value={consentText}
-        />
-      </div>
-
-      <div className="row g-3">
-        <div className="col-md-6">
-          <div className="form-group mb-3">
-            <label className="form-label" htmlFor="study-brand">
-              Brand
-            </label>
-            <input
-              className="form-control"
-              id="study-brand"
-              onChange={(event) => setBrandName(event.target.value)}
-              value={brandName}
-            />
-          </div>
-        </div>
-
-        <div className="col-md-6">
-          <div className="form-group mb-3">
-            <label className="form-label" htmlFor="study-duration">
-              Estimated duration (minutes)
-            </label>
-            <input
-              className="form-control"
-              id="study-duration"
-              min={1}
-              onChange={(event) => setDurationMinutes(event.target.value)}
-              type="number"
-              value={durationMinutes}
-            />
-          </div>
-        </div>
-
-        <div className="col-md-6">
-          <div className="form-group mb-3">
-            <label className="form-label" htmlFor="study-locale">
-              Locale
-            </label>
-            <input
-              className="form-control"
-              id="study-locale"
-              onChange={(event) => setLocale(event.target.value)}
-              value={locale}
-            />
-          </div>
-        </div>
-
-        <div className="col-md-6">
-          <div className="form-group mb-3">
-            <label className="form-label" htmlFor="study-status">
-              Status
-            </label>
-            <select
-              className="form-select"
-              id="study-status"
-              onChange={(event) =>
-                setStatus(event.target.value as StudyStatus)
-              }
-              value={status}
-            >
-              <option value="draft">draft</option>
-              <option value="launched">launched</option>
-              <option value="archived">archived</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <h2 className="h5 mt-4 mb-3">Steps</h2>
-
-      <ol className="list-unstyled">
-        {steps.map((step, index) => (
-          <li className="mb-4" key={index}>
-            <Card padding="md" hoverable={false}>
-              <CardBody>
-                <p className="fw-semibold mb-3">Step {step.order}</p>
-
-                <div className="form-group mb-3">
-                  <label className="form-label" htmlFor={`step-id-${index}`}>
-                    Step id
-                  </label>
-                  <input
-                    className="form-control"
-                    id={`step-id-${index}`}
-                    onChange={(event) =>
-                      updateStep(index, 'step_id', event.target.value)
-                    }
-                    required
-                    value={step.step_id}
-                  />
-                </div>
-
-                <div className="form-group mb-3">
-                  <label className="form-label" htmlFor={`step-type-${index}`}>
-                    Type
-                  </label>
-                  <select
-                    className="form-select"
-                    id={`step-type-${index}`}
-                    onChange={(event) =>
-                      updateStep(index, 'type', event.target.value as StepType)
-                    }
-                    value={step.type}
-                  >
-                    {stepTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group mb-3">
-                  <label
-                    className="form-label"
-                    htmlFor={`step-prompt-${index}`}
-                  >
-                    Prompt
-                  </label>
-                  <textarea
-                    className="form-control"
-                    id={`step-prompt-${index}`}
-                    onChange={(event) =>
-                      updateStep(index, 'prompt', event.target.value)
-                    }
-                    required
-                    rows={2}
-                    value={step.prompt}
-                  />
-                </div>
-
-                <div className="form-group mb-3">
-                  <label
-                    className="form-label"
-                    htmlFor={`step-target-${index}`}
-                  >
-                    Target URL
-                  </label>
-                  <input
-                    className="form-control"
-                    id={`step-target-${index}`}
-                    onChange={(event) =>
-                      updateStep(index, 'target_url', event.target.value)
-                    }
-                    placeholder="https://..."
-                    value={step.target_url}
-                  />
-                  <div className="form-text">
-                    The page the participant opens and records. Leave blank only
-                    for a survey-style step with no product to test.
-                  </div>
-                </div>
-
-                <div className="form-group mb-3">
-                  <label
-                    className="form-label"
-                    htmlFor={`step-helper-${index}`}
-                  >
-                    Helper text
-                  </label>
-                  <input
-                    className="form-control"
-                    id={`step-helper-${index}`}
-                    onChange={(event) =>
-                      updateStep(index, 'helper_text', event.target.value)
-                    }
-                    value={step.helper_text}
-                  />
-                </div>
-
-                <div className="form-check mb-3">
-                  <input
-                    className="form-check-input"
-                    id={`step-required-${index}`}
-                    checked={step.is_required}
-                    onChange={(event) =>
-                      updateStep(index, 'is_required', event.target.checked)
-                    }
-                    type="checkbox"
-                  />
-                  <label
-                    className="form-check-label"
-                    htmlFor={`step-required-${index}`}
-                  >
-                    Required
-                  </label>
-                </div>
-
-                {step.type === 'single_choice' ? (
-                  <div className="form-group mb-3">
-                    <label
-                      className="form-label"
-                      htmlFor={`step-options-${index}`}
-                    >
-                      Options (one per line)
-                    </label>
-                    <textarea
-                      className="form-control"
-                      id={`step-options-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'options', event.target.value)
-                      }
-                      rows={3}
-                      value={step.options}
-                    />
-                  </div>
-                ) : null}
-
-                {steps.length > 1 ? (
-                  <Button
-                    variant="outline-danger"
-                    size="sm"
-                    onClick={() => removeStep(index)}
-                    type="button"
-                  >
-                    Remove step
-                  </Button>
-                ) : null}
-              </CardBody>
-            </Card>
-          </li>
-        ))}
-      </ol>
-
-      {missingTaskPageUrl ? (
-        <Alert variant="warning" className="mb-4">
-          <strong>No task page URL set</strong>
-          <p className="mb-2">
-            Participants will be asked to share their screen with nothing
-            pre-opened, and won't see the guided open-and-share step. Add a
-            Target URL to a task step, or confirm this is a survey-style task list.
+      {readOnly ? (
+        <Alert variant="info" className="mb-4" id="study-read-only-notice">
+          <strong>Read only</strong>
+          <p className="mb-0">
+            Another researcher owns this task list. Ask them, or a superadmin,
+            to make changes.
           </p>
-          <div className="form-check">
-            <input
-              className="form-check-input"
-              id="ack-no-task-page"
-              checked={acknowledgedNoTaskPageUrl}
-              onChange={(event) =>
-                setAcknowledgedNoTaskPageUrl(event.target.checked)
-              }
-              type="checkbox"
-            />
-            <label className="form-check-label" htmlFor="ack-no-task-page">
-              This task list has no task page on purpose
-            </label>
-          </div>
         </Alert>
       ) : null}
 
-      <div className="d-flex gap-2">
-        <Button variant="secondary" onClick={addStep} type="button">
-          Add step
-        </Button>
-        <Button
-          variant="primary"
-          disabled={
-            submitting || (missingTaskPageUrl && !acknowledgedNoTaskPageUrl)
-          }
-          loading={submitting}
-          type="submit"
-        >
-          {submitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create task list'}
-        </Button>
-      </div>
+      {/* One fieldset rather than a `disabled` prop on every control: the
+          native cascade covers each input, textarea, select and button inside
+          it, so a control added later cannot forget to opt in. The backend is
+          still the authority - this only stops an author filling in a form
+          whose save is going to 403.
+
+          minInlineSize because a bare fieldset carries a UA
+          `min-inline-size: min-content`, which would stop it shrinking with
+          the Bootstrap grid rows inside it on a narrow viewport. Inline rather
+          than a class: there is no such utility in styles/_utilities.css.
+          aria-describedby so a screen reader reaching the disabled controls is
+          told why they are disabled. */}
+      <fieldset
+        aria-describedby={readOnly ? 'study-read-only-notice' : undefined}
+        className="border-0 p-0 m-0"
+        disabled={readOnly}
+        style={{ minInlineSize: 0 }}
+      >
+        <div className="form-group mb-3">
+          <label className="form-label" htmlFor="study-title">
+            Title
+          </label>
+          <input
+            className="form-control"
+            id="study-title"
+            onChange={(event) => setTitle(event.target.value)}
+            required
+            value={title}
+          />
+        </div>
+
+        <div className="form-group mb-3">
+          <label className="form-label" htmlFor="study-intro">
+            Intro text
+          </label>
+          <textarea
+            className="form-control"
+            id="study-intro"
+            onChange={(event) => setIntroText(event.target.value)}
+            required
+            rows={3}
+            value={introText}
+          />
+        </div>
+
+        <div className="form-group mb-3">
+          <label className="form-label" htmlFor="study-consent">
+            Consent text
+          </label>
+          <textarea
+            className="form-control"
+            id="study-consent"
+            onChange={(event) => setConsentText(event.target.value)}
+            required
+            rows={3}
+            value={consentText}
+          />
+        </div>
+
+        <div className="row g-3">
+          <div className="col-md-6">
+            <div className="form-group mb-3">
+              <label className="form-label" htmlFor="study-brand">
+                Brand
+              </label>
+              <input
+                className="form-control"
+                id="study-brand"
+                onChange={(event) => setBrandName(event.target.value)}
+                value={brandName}
+              />
+            </div>
+          </div>
+
+          <div className="col-md-6">
+            <div className="form-group mb-3">
+              <label className="form-label" htmlFor="study-duration">
+                Estimated duration (minutes)
+              </label>
+              <input
+                className="form-control"
+                id="study-duration"
+                min={1}
+                onChange={(event) => setDurationMinutes(event.target.value)}
+                type="number"
+                value={durationMinutes}
+              />
+            </div>
+          </div>
+
+          <div className="col-md-6">
+            <div className="form-group mb-3">
+              <label className="form-label" htmlFor="study-locale">
+                Locale
+              </label>
+              <input
+                className="form-control"
+                id="study-locale"
+                onChange={(event) => setLocale(event.target.value)}
+                value={locale}
+              />
+            </div>
+          </div>
+
+          <div className="col-md-6">
+            <div className="form-group mb-3">
+              <label className="form-label" htmlFor="study-status">
+                Status
+              </label>
+              <select
+                className="form-select"
+                id="study-status"
+                onChange={(event) =>
+                  setStatus(event.target.value as StudyStatus)
+                }
+                value={status}
+              >
+                <option value="draft">draft</option>
+                <option value="launched">launched</option>
+                <option value="archived">archived</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <h2 className="h5 mt-4 mb-3">Steps</h2>
+
+        <ol className="list-unstyled">
+          {steps.map((step, index) => (
+            <li className="mb-4" key={index}>
+              <Card padding="md" hoverable={false}>
+                <CardBody>
+                  <p className="fw-semibold mb-3">Step {step.order}</p>
+
+                  <div className="form-group mb-3">
+                    <label className="form-label" htmlFor={`step-id-${index}`}>
+                      Step id
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`step-id-${index}`}
+                      onChange={(event) =>
+                        updateStep(index, 'step_id', event.target.value)
+                      }
+                      required
+                      value={step.step_id}
+                    />
+                  </div>
+
+                  <div className="form-group mb-3">
+                    <label className="form-label" htmlFor={`step-type-${index}`}>
+                      Type
+                    </label>
+                    <select
+                      className="form-select"
+                      id={`step-type-${index}`}
+                      onChange={(event) =>
+                        updateStep(index, 'type', event.target.value as StepType)
+                      }
+                      value={step.type}
+                    >
+                      {stepTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor={`step-prompt-${index}`}
+                    >
+                      Prompt
+                    </label>
+                    <textarea
+                      className="form-control"
+                      id={`step-prompt-${index}`}
+                      onChange={(event) =>
+                        updateStep(index, 'prompt', event.target.value)
+                      }
+                      required
+                      rows={2}
+                      value={step.prompt}
+                    />
+                  </div>
+
+                  <div className="form-group mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor={`step-target-${index}`}
+                    >
+                      Target URL
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`step-target-${index}`}
+                      onChange={(event) =>
+                        updateStep(index, 'target_url', event.target.value)
+                      }
+                      placeholder="https://..."
+                      value={step.target_url}
+                    />
+                    <div className="form-text">
+                      The page the participant opens and records. Leave blank only
+                      for a survey-style step with no product to test.
+                    </div>
+                  </div>
+
+                  <div className="form-group mb-3">
+                    <label
+                      className="form-label"
+                      htmlFor={`step-helper-${index}`}
+                    >
+                      Helper text
+                    </label>
+                    <input
+                      className="form-control"
+                      id={`step-helper-${index}`}
+                      onChange={(event) =>
+                        updateStep(index, 'helper_text', event.target.value)
+                      }
+                      value={step.helper_text}
+                    />
+                  </div>
+
+                  <div className="form-check mb-3">
+                    <input
+                      className="form-check-input"
+                      id={`step-required-${index}`}
+                      checked={step.is_required}
+                      onChange={(event) =>
+                        updateStep(index, 'is_required', event.target.checked)
+                      }
+                      type="checkbox"
+                    />
+                    <label
+                      className="form-check-label"
+                      htmlFor={`step-required-${index}`}
+                    >
+                      Required
+                    </label>
+                  </div>
+
+                  {step.type === 'single_choice' ? (
+                    <div className="form-group mb-3">
+                      <label
+                        className="form-label"
+                        htmlFor={`step-options-${index}`}
+                      >
+                        Options (one per line)
+                      </label>
+                      <textarea
+                        className="form-control"
+                        id={`step-options-${index}`}
+                        onChange={(event) =>
+                          updateStep(index, 'options', event.target.value)
+                        }
+                        rows={3}
+                        value={step.options}
+                      />
+                    </div>
+                  ) : null}
+
+                  {steps.length > 1 ? (
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      onClick={() => removeStep(index)}
+                      type="button"
+                    >
+                      Remove step
+                    </Button>
+                  ) : null}
+                </CardBody>
+              </Card>
+            </li>
+          ))}
+        </ol>
+
+        {missingTaskPageUrl ? (
+          <Alert variant="warning" className="mb-4">
+            <strong>No task page URL set</strong>
+            <p className="mb-2">
+              Participants will be asked to share their screen with nothing
+              pre-opened, and won't see the guided open-and-share step. Add a
+              Target URL to a task step, or confirm this is a survey-style task list.
+            </p>
+            <div className="form-check">
+              <input
+                className="form-check-input"
+                id="ack-no-task-page"
+                checked={acknowledgedNoTaskPageUrl}
+                onChange={(event) =>
+                  setAcknowledgedNoTaskPageUrl(event.target.checked)
+                }
+                type="checkbox"
+              />
+              <label className="form-check-label" htmlFor="ack-no-task-page">
+                This task list has no task page on purpose
+              </label>
+            </div>
+          </Alert>
+        ) : null}
+
+        <div className="d-flex gap-2">
+          <Button variant="secondary" onClick={addStep} type="button">
+            Add step
+          </Button>
+          <Button
+            variant="primary"
+            disabled={
+              submitting || (missingTaskPageUrl && !acknowledgedNoTaskPageUrl)
+            }
+            loading={submitting}
+            type="submit"
+          >
+            {submitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create task list'}
+          </Button>
+        </div>
+      </fieldset>
     </form>
   );
 }
@@ -825,6 +865,7 @@ const StudyEditor: React.FC = () => {
         <StudyEditorForm
           initialStudy={isEdit ? study ?? undefined : undefined}
           initialSteps={isEdit ? steps : undefined}
+          viewer={user}
         />
       )}
     </div>

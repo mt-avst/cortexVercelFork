@@ -405,6 +405,10 @@ export interface FirstHandStudy {
   estimated_duration_minutes?: number | null;
   locale?: string;
   status?: 'draft' | 'launched' | 'archived';
+  // The authoring user. Null on a study created before owners existed: those
+  // stay editable by any admin until the first save claims them. See
+  // canWriteStudy in backend/src/firsthand/studies-repository.ts.
+  owner_user_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }

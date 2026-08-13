@@ -17,8 +17,9 @@ import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler 
 import { toPublicOpportunity } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
 import {
+  claimStudyIfUnowned,
   createStudy,
-  deleteStudy,
+  deleteStudyUnchecked,
   isStudiesPersistenceConfigured
 } from '../firsthand/studies-repository';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
@@ -450,9 +451,27 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       // wait for. Leaving it draft would publish an opportunity pointing at a
       // study the picker refuses to show.
       status: 'launched',
+      // Same owner as the opportunity this study is being authored for, so the
+      // two sides of the same authoring action agree on who may edit them.
+      owner_user_id: req.user!.id,
       steps: toStudySteps(inlineStudy.steps, studyId, inlineStudy.target_url)
     });
     createdStudyId = stored.study.id;
+  } else if (linkedStudyId && isStudiesPersistenceConfigured()) {
+    // Reusing an existing study. If it is one of the legacy rows migration
+    // 0007 could not attribute, claim it now: publishing an opportunity is the
+    // moment an unowned study starts being served to participants, and until
+    // it has an owner any admin can rewrite its consent copy and target URLs.
+    // Before the opportunity row is written, so a failure here fails the whole
+    // request rather than leaving a published opportunity behind an unowned
+    // study. Claiming a study whose insert then fails is harmless - it gives
+    // an ownerless row an owner, which is the direction this is going anyway.
+    if (await claimStudyIfUnowned(linkedStudyId, req.user!.id)) {
+      logger.info('Unowned study claimed by the opportunity linking it', {
+        studyId: linkedStudyId,
+        newOwnerUserId: req.user!.id
+      });
+    }
   }
 
   const values = [
@@ -480,7 +499,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   } catch (error) {
     if (createdStudyId) {
       try {
-        await deleteStudy(createdStudyId);
+        await deleteStudyUnchecked(createdStudyId);
       } catch (cleanupError) {
         // Swallowed deliberately: the caller needs the original insert failure,
         // not this one. Logged with the id so an orphan can be found by hand.
@@ -697,6 +716,10 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
       estimated_duration_minutes:
         inlineStudyInput.estimated_duration_minutes ?? data.default_duration_minutes,
       status: 'launched',
+      // The editing user, not the opportunity's owner: a superadmin editing
+      // someone else's opportunity is the author of the study they just wrote,
+      // and the opportunity owner never saw its consent copy.
+      owner_user_id: req.user!.id,
       steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
     });
     createdStudyId = stored.study.id;
@@ -708,6 +731,19 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     // otherwise write '' where create writes NULL for the same input. Two
     // representations of "no study" is a trap for any later IS NOT NULL query.
     data.firsthand_study_id = data.firsthand_study_id?.trim() || null;
+
+    // Same claim-on-link as the create handler, for the same reason: attaching
+    // an unowned legacy study to an opportunity is the point at which it
+    // starts being served, so it must not still be writable by every admin.
+    if (data.firsthand_study_id && isStudiesPersistenceConfigured()) {
+      const claimedStudyId = data.firsthand_study_id;
+      if (await claimStudyIfUnowned(claimedStudyId, req.user!.id)) {
+        logger.info('Unowned study claimed by the opportunity linking it', {
+          studyId: claimedStudyId,
+          newOwnerUserId: req.user!.id
+        });
+      }
+    }
   }
 
   // Build dynamic update query
@@ -751,7 +787,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   } catch (error) {
     if (createdStudyId) {
       try {
-        await deleteStudy(createdStudyId);
+        await deleteStudyUnchecked(createdStudyId);
       } catch (cleanupError) {
         logger.error('Failed to remove inline study after opportunity update failed', {
           studyId: createdStudyId,

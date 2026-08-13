@@ -175,6 +175,7 @@ describe("studies repository", () => {
       brand_name: "Adaptavist",
       estimated_duration_minutes: 15,
       locale: "en-GB",
+      owner_user_id: "user-author",
       steps: [baseStep, choiceStep, endStep]
     });
 
@@ -192,6 +193,11 @@ describe("studies repository", () => {
 
     expect(studyInserts).toHaveLength(1);
     expect(stepInserts).toHaveLength(3);
+
+    // The author is stored, or every study lands unowned and the whole
+    // ownership rule below degrades to "anyone may edit anything".
+    expect(String(studyInserts[0][0])).toContain("owner_user_id");
+    expect(studyInserts[0][1]).toContain("user-author");
     expect(
       operationClient.query.mock.calls.some((call) => call[0] === "BEGIN")
     ).toBe(true);
@@ -285,6 +291,489 @@ describe("studies repository", () => {
       operationClient.query.mock.calls.some((call) => call[0] === "ROLLBACK")
     ).toBe(true);
   });
+});
+
+// ─── Ownership ────────────────────────────────────────────────────────────────
+//
+// The boundary these cover: a second researcher_admin rewriting the consent
+// copy and a task step's target_url on somebody else's LAUNCHED study, which
+// is then served to employees while screen and microphone recording runs. The
+// route-level tests only prove the 403 is relayed; the decision itself is
+// taken here, inside the transaction, and this is where it has to be pinned.
+describe("studies repository ownership", () => {
+  const owner = { userId: "user-owner", isSuperadmin: false };
+  const intruder = { userId: "user-intruder", isSuperadmin: false };
+  const superadmin = { userId: "user-super", isSuperadmin: true };
+
+  beforeEach(() => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & { __firsthandRuntimeVerification?: unknown }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  describe("updateStudy", () => {
+    it("lets the owner edit their own study", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { consent_text: "Updated consent" },
+        owner
+      );
+
+      expect(result.ok).toBe(true);
+      expect(updateStatements(client)).toHaveLength(1);
+      expect(committed(client)).toBe(true);
+    });
+
+    it("refuses a non-owner and writes nothing", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { consent_text: "Attacker consent", steps: [baseStep, endStep] },
+        intruder
+      );
+
+      expect(result).toEqual({ ok: false, reason: "forbidden" });
+      // Not just "the answer was forbidden" - nothing may have reached the
+      // table, including the DELETE that replaces the step rows.
+      expect(updateStatements(client)).toHaveLength(0);
+      expect(
+        client.query.mock.calls.filter((call) =>
+          /DELETE FROM|INSERT INTO/.test(String(call[0]))
+        )
+      ).toHaveLength(0);
+      expect(rolledBack(client)).toBe(true);
+      expect(committed(client)).toBe(false);
+    });
+
+    it("lets a superadmin edit a study they do not own", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { title: "Renamed by superadmin" },
+        superadmin
+      );
+
+      expect(result.ok).toBe(true);
+      expect(updateStatements(client)).toHaveLength(1);
+    });
+
+    it("does not re-stamp the owner on an owned study", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      // A superadmin edit must not quietly transfer the study to the
+      // superadmin - the owner would lose their own study to a routine fix.
+      await studiesRepository.updateStudy("study_abc", { title: "Renamed" }, superadmin);
+
+      expect(String(updateStatements(client)[0][0])).not.toContain("owner_user_id");
+    });
+
+    it("claims an unowned legacy study for the editing admin", async () => {
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { title: "Tidied up" },
+        intruder
+      );
+
+      // Fail-open on read, closed on write: a legacy row stays editable (it is
+      // otherwise unmanageable by the people who authored it), and this edit
+      // is the last one any non-owner gets.
+      expect(result.ok).toBe(true);
+      expect(result.ok && result.claimed).toBe(true);
+      expectAssignedOwner(updateStatements(client)[0], "user-intruder");
+    });
+
+    it("does not claim when the request changes nothing", async () => {
+      // Every field in updateStudyRequestSchema is optional, so `PUT {}`
+      // parses. Claiming on that would let one admin walk the study list -
+      // which now carries every study's id and owner - and take every unowned
+      // study without editing a thing.
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy("study_abc", {}, intruder);
+
+      expect(result.ok).toBe(true);
+      expect(result.ok && result.claimed).toBe(false);
+      expect(updateStatements(client)).toHaveLength(0);
+    });
+
+    it("does not let a superadmin claim an unowned study by editing it", async () => {
+      // A superadmin can already write every study, so claiming buys them no
+      // access - it would only take a legacy study away from the researcher
+      // who wrote it, the moment a superadmin fixed a typo on it.
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { title: "Superadmin tidy-up" },
+        superadmin
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.ok && result.claimed).toBe(false);
+      expect(String(updateStatements(client)[0][0])).not.toContain("owner_user_id");
+    });
+
+    it("lets a superadmin reassign the owner explicitly", async () => {
+      // The only way to correct an owner - notably one migration 0007 inferred
+      // from whichever opportunity happened to be created first. There is no
+      // database console to do it by hand.
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { owner_user_id: "user-rightful" },
+        superadmin
+      );
+
+      expect(result.ok).toBe(true);
+      expectAssignedOwner(updateStatements(client)[0], "user-rightful");
+    });
+
+    it("refuses a reassignment from a researcher admin, even on their own study", async () => {
+      const client = arrangeOwnedStudy("user-intruder");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_abc",
+        { owner_user_id: "user-someone-else" },
+        intruder
+      );
+
+      expect(result).toEqual({ ok: false, reason: "forbidden" });
+      expect(updateStatements(client)).toHaveLength(0);
+    });
+
+    it("prefers an explicit reassignment over the automatic claim", async () => {
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      await studiesRepository.updateStudy(
+        "study_abc",
+        { title: "Handed to its author", owner_user_id: "user-rightful" },
+        superadmin
+      );
+
+      expectAssignedOwner(updateStatements(client)[0], "user-rightful");
+    });
+
+    it("claims an unowned study even when only its steps change", async () => {
+      // The steps-only branch skips the field UPDATE entirely, so the claim
+      // has to ride the same path rather than the field loop.
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      await studiesRepository.updateStudy(
+        "study_abc",
+        { steps: [baseStep, endStep] },
+        intruder
+      );
+
+      const owning = updateStatements(client).filter((call) =>
+        String(call[0]).includes("owner_user_id")
+      );
+      expect(owning).toHaveLength(1);
+      expect(owning[0][1]).toContain("user-intruder");
+    });
+
+    it("reports a missing study as not_found, not forbidden", async () => {
+      const client = arrangeMissingStudy();
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.updateStudy(
+        "study_missing",
+        { title: "Ghost" },
+        intruder
+      );
+
+      expect(result).toEqual({ ok: false, reason: "not_found" });
+      expect(updateStatements(client)).toHaveLength(0);
+    });
+
+    it("takes the owner row lock inside the transaction", async () => {
+      // Without FOR UPDATE two concurrent editors of an unowned study both
+      // read NULL and both claim it, and the loser's authorisation decision
+      // was taken against an owner that no longer holds.
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      await studiesRepository.updateStudy("study_abc", { title: "Renamed" }, owner);
+
+      const ownerSelectIndex = client.query.mock.calls.findIndex((call) =>
+        String(call[0]).includes("FOR UPDATE")
+      );
+      const beginIndex = client.query.mock.calls.findIndex((call) => call[0] === "BEGIN");
+      expect(ownerSelectIndex).toBeGreaterThan(beginIndex);
+    });
+  });
+
+  describe("deleteStudy", () => {
+    it("lets the owner delete their own study", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.deleteStudy("study_abc", owner);
+
+      expect(result).toEqual({ ok: true });
+      expect(deleteStudyStatements(client)).toHaveLength(1);
+      expect(committed(client)).toBe(true);
+    });
+
+    it("refuses a non-owner and deletes nothing", async () => {
+      // The other half of the attack: deleting a study out from under a
+      // published opportunity that references it.
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      const result = await studiesRepository.deleteStudy("study_abc", intruder);
+
+      expect(result).toEqual({ ok: false, reason: "forbidden" });
+      expect(deleteStudyStatements(client)).toHaveLength(0);
+      expect(rolledBack(client)).toBe(true);
+    });
+
+    it("lets a superadmin delete a study they do not own", async () => {
+      const client = arrangeOwnedStudy("user-owner");
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(
+        studiesRepository.deleteStudy("study_abc", superadmin)
+      ).resolves.toEqual({ ok: true });
+      expect(deleteStudyStatements(client)).toHaveLength(1);
+    });
+
+    it("still deletes an unowned legacy study, since a delete cannot claim it", async () => {
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(
+        studiesRepository.deleteStudy("study_abc", intruder)
+      ).resolves.toEqual({ ok: true });
+      expect(deleteStudyStatements(client)).toHaveLength(1);
+    });
+
+    it("reports a missing study as not_found", async () => {
+      const client = arrangeMissingStudy();
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(
+        studiesRepository.deleteStudy("study_missing", owner)
+      ).resolves.toEqual({ ok: false, reason: "not_found" });
+      expect(deleteStudyStatements(client)).toHaveLength(0);
+    });
+  });
+
+  describe("claimStudyIfUnowned", () => {
+    it("claims an unowned study in one conditional statement", async () => {
+      // The guard lives in the WHERE clause rather than in a read-then-write,
+      // so two admins linking the same study cannot both claim it and no row
+      // lock is needed.
+      const client = arrangeOwnedStudy(null);
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(
+        studiesRepository.claimStudyIfUnowned("study_abc", "user-linker")
+      ).resolves.toBe(true);
+
+      const statements = updateStatements(client);
+      expect(statements).toHaveLength(1);
+      expect(String(statements[0][0])).toContain("owner_user_id IS NULL");
+      expectAssignedOwner(statements[0], "user-linker");
+    });
+
+    it("reports false when the study already has an owner", async () => {
+      // rowCount 0 is what a study someone already owns produces, and the
+      // caller only logs the transfer when this says it happened.
+      const client = arrangeOwnedStudy("user-owner");
+      client.query.mockImplementation(async (sql: string) => {
+        if (sql.startsWith("UPDATE studies")) return { rowCount: 0, rows: [] };
+        return { rowCount: null, rows: [] };
+      });
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(
+        studiesRepository.claimStudyIfUnowned("study_abc", "user-linker")
+      ).resolves.toBe(false);
+    });
+  });
+
+  describe("deleteStudyUnchecked", () => {
+    it("deletes without consulting the owner at all", async () => {
+      // The compensating rollback in the opportunity handlers removes a study
+      // it created moments earlier. An ownership check there could strand a
+      // launched study no opportunity references.
+      const client = arrangeOwnedStudy("user-someone-else");
+      const studiesRepository = await import("./studies-repository");
+
+      await expect(studiesRepository.deleteStudyUnchecked("study_abc")).resolves.toBe(
+        true
+      );
+      expect(deleteStudyStatements(client)).toHaveLength(1);
+      expect(
+        client.query.mock.calls.filter((call) => String(call[0]).includes("FOR UPDATE"))
+      ).toHaveLength(0);
+    });
+  });
+
+  // ── Arrangement helpers ────────────────────────────────────────────────────
+
+  /**
+   * Script a runtime client for one study row. `ownerUserId` is what the
+   * `FOR UPDATE` owner probe returns; null models a row created before
+   * migration 0007.
+   */
+  function arrangeOwnedStudy(ownerUserId: string | null) {
+    return arrangeClient({ ownerRows: [{ owner_user_id: ownerUserId }] });
+  }
+
+  /**
+   * A study id that is not in the table. The reload branch returns nothing
+   * either, so the mock stays a consistent model of the real database rather
+   * than one that has no owner row but a full study row.
+   */
+  function arrangeMissingStudy() {
+    return arrangeClient({ ownerRows: [], studyExists: false });
+  }
+
+  function arrangeClient(input: {
+    ownerRows: { owner_user_id: string | null }[];
+    studyExists?: boolean;
+  }) {
+    const studyExists = input.studyExists ?? true;
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+        return { rowCount: null, rows: [] };
+      }
+
+      // Checked before the generic `FROM studies` branch: the owner probe
+      // selects from the same table.
+      if (sql.includes("FOR UPDATE")) {
+        return { rowCount: input.ownerRows.length, rows: input.ownerRows };
+      }
+
+      if (sql.startsWith("DELETE FROM studies") || sql.startsWith("UPDATE studies")) {
+        return { rowCount: 1, rows: [] };
+      }
+
+      if (sql.includes("DELETE FROM study_steps") || sql.includes("INSERT INTO study_steps")) {
+        return { rowCount: 1, rows: [] };
+      }
+
+      if (sql.includes("FROM studies")) {
+        if (!studyExists) {
+          return { rowCount: 0, rows: [] };
+        }
+
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "study_abc",
+              title: "Sample",
+              intro_text: "Intro",
+              consent_text: "Consent",
+              brand_name: null,
+              estimated_duration_minutes: null,
+              locale: null,
+              status: "launched",
+              owner_user_id: input.ownerRows[0]?.owner_user_id ?? null,
+              created_at: "2026-06-08T00:00:00.000Z",
+              updated_at: "2026-06-08T00:00:00.000Z"
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("FROM study_steps")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "study_abc_step_001",
+              study_id: "study_abc",
+              step_order: 1,
+              type: "end",
+              prompt: "Thanks for taking part.",
+              target_url: null,
+              helper_text: null,
+              is_required: false,
+              options: null
+            }
+          ]
+        };
+      }
+
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return operationClient;
+  }
+
+  // ── Assertion helpers ──────────────────────────────────────────────────────
+
+  function updateStatements(client: MockClient) {
+    return client.query.mock.calls.filter((call) =>
+      String(call[0]).startsWith("UPDATE studies")
+    );
+  }
+
+  /**
+   * Assert the owner a statement actually writes, by reading the placeholder
+   * index out of `owner_user_id = $N` and indexing the parameters with it.
+   * A bare `toContain` would pass on a claim written into the wrong slot -
+   * which is a study with someone else's id in its title, not an owner.
+   */
+  function expectAssignedOwner(call: unknown[], expected: string) {
+    const sql = String(call[0]);
+    const placeholder = /owner_user_id = \$(\d+)/.exec(sql);
+
+    expect(placeholder).not.toBeNull();
+    expect((call[1] as unknown[])[Number(placeholder![1]) - 1]).toBe(expected);
+  }
+
+  function deleteStudyStatements(client: MockClient) {
+    return client.query.mock.calls.filter((call) =>
+      String(call[0]).startsWith("DELETE FROM studies")
+    );
+  }
+
+  function committed(client: MockClient) {
+    return client.query.mock.calls.some((call) => call[0] === "COMMIT");
+  }
+
+  function rolledBack(client: MockClient) {
+    return client.query.mock.calls.some((call) => call[0] === "ROLLBACK");
+  }
 });
 
 function createMockClient(input: { missingRelations: string[] }): MockClient {

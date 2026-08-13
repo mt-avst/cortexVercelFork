@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-12T23:16:56.094Z
+ * Generated: 2026-08-13T13:06:53.027Z
  */
 
 // Shared Type Definitions for Adaptalabs Application
@@ -415,6 +415,10 @@ export interface FirstHandStudy {
   estimated_duration_minutes?: number | null;
   locale?: string;
   status?: 'draft' | 'launched' | 'archived';
+  // The authoring user. Null on a study created before owners existed: those
+  // stay editable by any admin until the first save claims them. See
+  // canWriteStudy in backend/src/firsthand/studies-repository.ts.
+  owner_user_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }
