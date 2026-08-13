@@ -128,6 +128,16 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ---
 
+## Unmoderated studies and the deploy pipeline (2026-08-13)
+
+- **A `refactor:`, `docs:` or `chore:` merge to main NEVER DEPLOYS, and the pipeline stays fully green**: Cortex ships by release tag - semantic-release cuts a version, that becomes the image tag, ArgoCD rolls it. semantic-release releases `feat`, `fix`, `perf`, `revert` and breaking changes only. A user-visible rename squashed as `refactor:` (MR !94) sat merged and undeployed for an hour, indistinguishable from a platform stall, with `trigger-deployment-prod` reporting success. **Verify with `git tag --points-at <merge-sha>`, never the pipeline** - an empty result means it will never ship. There is no repair commit needed: the image is built from main's whole tree, so a stranded change ships with the next `feat:`/`fix:` merge. Now detected automatically by the `check-release-will-deploy` job (MR !98) - it fails main when there is no release AND deployable paths changed, and passes docs-only merges
+- **`firsthand.study_steps.id` is a GLOBAL `TEXT PRIMARY KEY`, not scoped per study**: `insertStudySteps` writes the client-supplied `step_id` straight into it, so positional ids like `step_001` are claimed deployment-wide by the first study that uses them and the second study to try fails on a unique violation - surfacing as a misleading 409 or a raw Postgres 400. Both authoring paths now namespace ids with the study id (MRs !91, !93). The proper fix is still a composite `PRIMARY KEY (study_id, id)`
+- **A copy rename can silently disarm a test, and the suite stays green**: renaming a label widened a `findByLabelText(/Recorded study/i)` so it also matched a checkbox whose label contained the new phrase. `findBy*` returns the first match, so the test selected nothing and its assertion became trivially true - it passed against a build with the guarded bug reintroduced. **Query by role, not label text, when two controls can share a phrase, and re-verify by mutation after any copy change.** Also: `<option>`s load asynchronously, so setting a `<select>` to a value it does not yet carry is a silent no-op
+- **`crypto.randomUUID` and `navigator.clipboard` are both secure-context only**: absent over plain http, so they throw or are undefined on a dev server reached by IP. `crypto.getRandomValues` is available in insecure contexts and is the correct fallback for a v4 uuid - never `Math.random()` for a value that becomes a primary key
+- **Verifying a deploy: sample the served asset, but not mid-swap**: during a roll the served HTML briefly yields no `index-*.js` match, so every marker grep returns 0 and reads as "deployed but broken". Skip empty samples and wait ~20s after detecting a change. Also, back-to-back merges each cut their own release, so a bundle that rolled two minutes before your second merge does not contain it
+- **Source-reading is not enough for UI documentation**: every label can be read correctly from source and the doc can still be wrong, because source tells you what strings exist rather than which one a person sees as a field label. The Basic Information field is "Research Study Type", not "Type" - only walking the real form caught it (MRs !99, !100)
+
+
 ## Links
 
 - Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net
