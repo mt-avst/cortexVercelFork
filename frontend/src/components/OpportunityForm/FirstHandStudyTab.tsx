@@ -29,10 +29,10 @@ interface FirstHandStudyTabProps {
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
   handleStepsChange: (steps: InlineStudyStep[]) => void;
   /**
-   * True only when the opportunity already had a study when it loaded. Authoring
-   * inline would then be a second source of truth against a script that is
-   * edited in the studies area, so reuse is the only option. An edit of an
-   * opportunity with NO study - a draft saved before its tasks were written -
+   * True only when the opportunity already had a task list when it loaded.
+   * Authoring inline would then be a second source of truth against a list that
+   * is edited in the Task Lists area, so reuse is the only option. An edit of an
+   * opportunity with NO task list - a draft saved before its tasks were written -
    * is not locked, or the errand this feature removes would come back for
    * exactly that path.
    */
@@ -46,15 +46,16 @@ const STEP_TYPE_LABELS: Record<(typeof authorableStepTypes)[number], string> = {
 };
 
 /**
- * Authoring surface for an unmoderated study.
+ * Authoring surface for an unmoderated opportunity's task list.
  *
- * An unmoderated opportunity cannot run without a study, so this tab collects
- * the study's content directly and the backend creates it on save. The previous
- * version of this tab only offered a picker of already-launched studies, which
- * meant abandoning a part-filled form to go and create one elsewhere.
+ * An unmoderated opportunity cannot run without a task list, so this tab
+ * collects its content directly and the backend creates it on save. The
+ * previous version of this tab only offered a picker of already-launched task
+ * lists, which meant abandoning a part-filled form to go and create one
+ * elsewhere.
  *
- * Reusing an existing script is still possible behind the toggle, and is the
- * only option once the opportunity actually points at a study.
+ * Reusing an existing task list is still possible behind the toggle, and is the
+ * only option once the opportunity actually points at one.
  */
 const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   formData,
@@ -86,7 +87,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
         if (!cancelled) setStudies(data);
       })
       .catch(() => {
-        if (!cancelled) setFetchError('Could not load studies.');
+        if (!cancelled) setFetchError('Could not load task lists.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -98,10 +99,10 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
 
   const steps = formData.inline_study_steps ?? [];
   const launchedStudies = studies.filter((s) => s.status === 'launched');
-  // A draft study cannot be picked but can be launched, so saying how many are
-  // waiting beats an empty dropdown that reads as "you have no studies".
-  // Archived studies are excluded: they are deliberately retired, so offering
-  // to launch them would be wrong.
+  // A draft task list cannot be picked but can be launched, so saying how many
+  // are waiting beats an empty dropdown that reads as "you have none".
+  // Archived ones are excluded: they are deliberately retired, so offering to
+  // launch them would be wrong.
   const draftCount = studies.filter((s) => s.status === 'draft').length;
 
   const updateStep = (index: number, patch: Partial<InlineStudyStep>) => {
@@ -135,7 +136,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               className="h4 mb-1 section-title"
               style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}
             >
-              Study tasks
+              Task List
             </h2>
             <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
               What the participant is asked to do while their screen is recorded
@@ -155,7 +156,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               }
             />
             <label className="form-check-label" htmlFor="reuse_existing_study">
-              Reuse a script from an existing study instead of writing one here
+              Reuse an existing task list instead of writing one here
             </label>
           </div>
         )}
@@ -169,7 +170,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                   className="form-label mb-2"
                   style={{ fontSize: '1rem', fontWeight: '600' }}
                 >
-                  Recorded study *
+                  Existing task list *
                 </label>
 
                 {loading && (
@@ -179,7 +180,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                       role="status"
                       aria-hidden="true"
                     />
-                    Loading studies...
+                    Loading task lists...
                   </div>
                 )}
 
@@ -209,7 +210,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                       handleInputChange('firsthand_study_id', e.target.value || undefined)
                     }
                   >
-                    <option value="">-- Select a launched study --</option>
+                    <option value="">-- Select a launched task list --</option>
                     {launchedStudies.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.title}
@@ -233,8 +234,8 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 {!loading && !fetchError && launchedStudies.length === 0 && (
                   <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
                     {draftCount > 0
-                      ? `No launched studies. You have ${draftCount} ${draftCount === 1 ? 'study' : 'studies'} still in draft - launch ${draftCount === 1 ? 'it' : 'one'} in the studies area, or untick the box above and write the tasks here.`
-                      : 'There are no studies to reuse. Untick the box above to write the tasks here.'}
+                      ? `No launched task lists. You have ${draftCount} ${draftCount === 1 ? 'task list' : 'task lists'} still in draft - launch ${draftCount === 1 ? 'it' : 'one'} in the Task Lists area, or untick the box above and write the tasks here.`
+                      : 'There are no task lists to reuse. Untick the box above to write the tasks here.'}
                   </div>
                 )}
               </div>

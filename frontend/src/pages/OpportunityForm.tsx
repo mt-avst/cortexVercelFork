@@ -117,7 +117,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.type === 'unmoderated') {
-      tabs.push({ id: 3, title: 'Study Tasks', description: 'What the participant does' });
+      tabs.push({ id: 3, title: 'Task List', description: 'What the participant does' });
     }
 
     if (formData.type === 'test' || formData.type === 'interview') {
@@ -332,8 +332,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // The reuse tickbox is not rendered once a study is linked, so do not
           // tell that author to untick it.
           errors.firsthand_study_id = lockedToExistingStudy
-            ? 'Select a launched study before publishing'
-            : 'Select a launched study, or untick the reuse box and write the tasks here';
+            ? 'Select a launched task list before publishing'
+            : 'Select a launched task list, or untick the reuse box and write the tasks here';
         }
       } else if (formData.inline_study_steps.length === 0) {
         // Named against the thing the author does, not the object model. The
@@ -572,9 +572,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       if (formData.type === 'unmoderated') {
-        // Authoring is available whenever no study is linked yet - on create,
-        // and on an edit of a draft saved before its tasks were written. Once
-        // one is linked the script is edited in the studies area instead.
+        // Authoring is available whenever no task list is linked yet - on
+        // create, and on an edit of a draft saved before its tasks were written.
+        // Once one is linked it is edited in the Task Lists area instead.
         const authoringInline =
           !lockedToExistingStudy &&
           !formData.reuse_existing_study &&
@@ -1145,7 +1145,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             {formData.type === 'test' || formData.type === 'interview'
                               ? 'Continue to Session Setup'
                               : formData.type === 'unmoderated'
-                              ? 'Continue to Study Setup'
+                              ? 'Continue to Task List'
                               : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
                               ? 'Continue to Link Setup'
                               : 'Continue'}
@@ -1156,7 +1156,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                     </>
                   )}
 
-                  {/* FirstHand Study Tab - only for unmoderated */}
+                  {/* Task List tab - only for unmoderated */}
                   {activeTab === 3 && formData.type === 'unmoderated' && (
                     <>
                       <FirstHandStudyTab
@@ -1167,7 +1167,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         lockedToExistingStudy={lockedToExistingStudy}
                       />
 
-                      {/* Navigation Buttons for FirstHand Study Tab */}
+                      {/* Navigation buttons for the Task List tab */}
                       <div className="border-top mt-4 pt-4">
                         <div className="d-flex justify-content-between align-items-center gap-2">
                           <button

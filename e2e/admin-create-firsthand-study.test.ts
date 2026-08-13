@@ -1,19 +1,19 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * Authoring E2E for the ported study editor (B5).
- * Flow: login as admin -> /admin/studies -> New study -> fill three steps ->
- * Create -> land on the studies list -> reload and confirm it persisted.
+ * Authoring E2E for the ported task list editor (B5).
+ * Flow: login as admin -> /admin/studies -> New Task List -> fill three steps
+ * -> Create -> land on the task lists index -> reload and confirm it persisted.
  *
  * Uses the seeded admin-login (researcher_admin), same harness as
  * superadmin-create-study.test.ts. Assumes dev servers are already running
  * (npm run dev:all) with a Postgres DB configured for FirstHand studies.
  */
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const UNIQUE_TITLE = `E2E Recorded Study ${Date.now()}`;
+const UNIQUE_TITLE = `E2E Task List ${Date.now()}`;
 
-test.describe('Admin authoring - create recorded study', () => {
-  test('admin can create a study with three steps, save, and see it after reload', async ({
+test.describe('Admin authoring - create task list', () => {
+  test('admin can create a task list with three steps, save, and see it after reload', async ({
     page,
   }) => {
     test.setTimeout(90000);
@@ -55,9 +55,9 @@ test.describe('Admin authoring - create recorded study', () => {
     await page.fill('#step-prompt-2', 'Rate the overall experience');
 
     // Save.
-    await page.getByRole('button', { name: /Create study/i }).click();
+    await page.getByRole('button', { name: /Create task list/i }).click();
 
-    // Lands on the studies list with the new study visible.
+    // Lands on the task lists index with the new task list visible.
     await page.waitForURL(/\/admin\/studies$/, { timeout: 10000 });
     await expect(page.getByText(UNIQUE_TITLE)).toBeVisible({ timeout: 10000 });
 

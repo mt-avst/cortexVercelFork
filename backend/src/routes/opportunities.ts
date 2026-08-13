@@ -33,7 +33,7 @@ const router: Router = Router();
 // exactly when authoring one is available - so the same wording is correct at
 // both sites.
 const UNMODERATED_STUDY_REQUIRED =
-  'Add at least one prompt to the study, or link an existing recorded study, before publishing';
+  'Add at least one prompt to the task list, or link an existing task list, before publishing';
 
 /**
  * Body of POST /api/opportunities.
@@ -367,7 +367,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
   // request that quietly discards the tasks someone just wrote is the failure
   // mode this whole feature exists to remove.
   if (data.inline_study && data.type !== 'unmoderated') {
-    throw new ValidationError('Only unmoderated opportunities can carry a study');
+    throw new ValidationError('Only unmoderated opportunities can carry a task list');
   }
 
   if (linkedStudyId && data.inline_study) {
@@ -431,7 +431,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     if (!isStudiesPersistenceConfigured()) {
       // Matches the 503 the direct studies route answers with, rather than
       // letting createStudy throw a bare Error that the handler cannot map.
-      throw new AppError('Studies require a configured PostgreSQL database.', 503);
+      throw new AppError('Task lists require a configured PostgreSQL database.', 503);
     }
 
     // Generated here rather than left to createStudy so the step ids can be
@@ -601,7 +601,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   // An inline study can only fill a gap, never replace a link. Rejected rather
   // than resolved by precedence, matching create.
   if (inlineStudyInput && existingType !== 'unmoderated') {
-    throw new ValidationError('Only unmoderated opportunities can carry a study');
+    throw new ValidationError('Only unmoderated opportunities can carry a task list');
   }
 
   // Two distinct refusals, kept apart so each says something true. Checked
@@ -611,7 +611,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   // silently re-pointing a live opportunity and orphaning the study it had.
   if (inlineStudyInput && existingFirstHandStudyId?.trim()) {
     throw new ValidationError(
-      'This opportunity already has a recorded study; edit its tasks in the studies area'
+      'This opportunity already has a task list; edit its tasks in the Task Lists area'
     );
   }
 
@@ -660,7 +660,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
 
       throw new ValidationError(
         removingStudy
-          ? 'A published unmoderated test cannot have its recorded study removed; unpublish it first'
+          ? 'A published unmoderated test cannot have its task list removed; unpublish it first'
           : UNMODERATED_STUDY_REQUIRED
       );
     }
@@ -680,7 +680,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
 
   if (inlineStudyInput) {
     if (!isStudiesPersistenceConfigured()) {
-      throw new AppError('Studies require a configured PostgreSQL database.', 503);
+      throw new AppError('Task lists require a configured PostgreSQL database.', 503);
     }
 
     const studyId = `study_${crypto.randomUUID()}`;

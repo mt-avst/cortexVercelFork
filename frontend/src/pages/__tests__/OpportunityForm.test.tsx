@@ -28,7 +28,7 @@ vi.mock('../../contexts/ThemeContext', () => ({
 vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 vi.mock('../../components/AdminSessionManager', () => ({ default: () => null }));
 
-// The form and the FirstHand study tab both call the API client on interaction.
+// The form and the Task List tab both call the API client on interaction.
 // Stub every function they use; getFirstHandStudies returns one launched study
 // so the picker has something to render. (Mocks are defined inside the factory
 // to avoid the vi.mock hoisting temporal-dead-zone trap.)
@@ -130,13 +130,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(getOpportunity)).not.toHaveBeenCalled();
   });
 
-  it('routes unmoderated studies to the FirstHand Study tab, not External Link', () => {
+  it('routes unmoderated opportunities to the Task List tab, not External Link', () => {
     renderForm();
     selectType('unmoderated');
 
     // The FirstHand Study step replaces the External Link step for this type.
     expect(
-      screen.getByRole('button', { name: /Study Tasks/i })
+      screen.getByRole('button', { name: /Task List/i })
     ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /External Link/i })
@@ -147,7 +147,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
   });
 
-  it('keeps the External Link tab for poll and hides the study tab', () => {
+  it('keeps the External Link tab for poll and hides the Task List tab', () => {
     renderForm();
     selectType('poll');
 
@@ -155,15 +155,15 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       screen.getByRole('button', { name: /External Link/i })
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole('button', { name: /Study Tasks/i })
+      screen.queryByRole('button', { name: /Task List/i })
     ).not.toBeInTheDocument();
   });
 
-  it('lets an unmoderated study be authored inline without visiting the studies area', async () => {
+  it('lets an unmoderated study be authored inline without visiting the Task Lists area', async () => {
     renderForm();
     selectType('unmoderated');
 
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
     // Authoring is the default path, so the tab opens on the task author and
     // does not fetch the study list at all.
@@ -187,7 +187,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Find out where people stall in the checkout flow' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
     fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
       target: { value: 'Find the export button' }
@@ -229,7 +229,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Find out where people stall in the checkout flow' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     fireEvent.change(await screen.findByLabelText(/Starting URL/i), {
       target: { value: 'https://example.com/checkout' }
     });
@@ -244,7 +244,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
 
-  it('does not send a stale study id alongside tasks authored after unticking reuse', async () => {
+  it('does not send a stale task list id alongside tasks authored after unticking reuse', async () => {
     // The sequence that silently dropped authored tasks: tick reuse, pick a
     // study, change your mind, untick, write tasks. The id survived in state
     // and won on the backend, discarding everything typed.
@@ -258,13 +258,27 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Find out where people stall in the checkout flow' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
-    const reuse = await screen.findByLabelText(/Reuse a script from an existing study/i);
+    const reuse = await screen.findByLabelText(/Reuse an existing task list/i);
     fireEvent.click(reuse);
-    fireEvent.change(await screen.findByLabelText(/Recorded study/i), {
-      target: { value: 'study_demo' }
-    });
+    // Anchored to the picker's own label. `/Task list/i` alone also matches the
+    // reuse checkbox ("Reuse an existing task list..."), and while the picker is
+    // still loading that checkbox is the ONLY match - so the query silently
+    // returned it, no study was ever selected, and the assertion below passed
+    // against a build with the guard removed.
+    // Queried by ROLE, not by label text: the checkbox label reads "Reuse an
+    // existing task list...", so any /task list/ label matcher - anchored or
+    // not - also matches the checkbox, and `findBy*` returns it. That is how
+    // this test was silently disarmed. Role separates them by element type.
+    // The option must be awaited too: selecting a value the select does not yet
+    // carry is a no-op, which left the picker empty and the assertion vacuous.
+    const picker = (await screen.findByRole('combobox', {
+      name: /Existing task list/i
+    })) as HTMLSelectElement;
+    await screen.findByRole('option', { name: /Demo Study/i });
+    fireEvent.change(picker, { target: { value: 'study_demo' } });
+    expect(picker.value).toBe('study_demo');
     fireEvent.click(reuse);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
@@ -285,7 +299,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ]);
   });
 
-  it('offers inline authoring when editing an unmoderated draft that has no study yet', async () => {
+  it('offers inline authoring when editing an unmoderated draft that has no task list yet', async () => {
     vi.mocked(getOpportunity).mockResolvedValueOnce({
       id: 'opp-1',
       type: 'unmoderated',
@@ -305,12 +319,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     // Not locked to the picker: the reuse tickbox is offered and authoring is
     // the default, exactly as on create.
     expect(
-      await screen.findByLabelText(/Reuse a script from an existing study/i)
+      await screen.findByLabelText(/Reuse an existing task list/i)
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
     expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
@@ -345,7 +359,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
     fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
       target: { value: 'Find the export button' }
@@ -365,9 +379,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // Having adopted it, the tab is locked to the picker - wait on the picker
     // appearing rather than the tickbox vanishing, so the study-list fetch it
     // triggers settles inside the assertion instead of after the test.
-    expect(await screen.findByText('-- Select a launched study --')).toBeInTheDocument();
+    expect(await screen.findByText('-- Select a launched task list --')).toBeInTheDocument();
     expect(
-      screen.queryByLabelText(/Reuse a script from an existing study/i)
+      screen.queryByLabelText(/Reuse an existing task list/i)
     ).not.toBeInTheDocument();
 
     // The point of the fix: a LATER save must not re-send the tasks, which the
@@ -386,10 +400,10 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Draft saved early, now renamed' }
     });
 
-    // Back to the study tab, where the save control lives. It stays disabled
+    // Back to the Task List tab, where the save control lives. It stays disabled
     // while the post-save success banner is up, so wait it out rather than
     // racing it - a click during that window is silently dropped.
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     const saveAgain = await screen.findByRole('button', { name: /Update Opportunity/i });
     await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
     fireEvent.click(saveAgain);
@@ -403,12 +417,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(secondPayload.firsthand_study_id).toBe('study_created_on_save');
   });
 
-  it('locks an edit to the picker once a study is actually linked', async () => {
+  it('locks an edit to the picker once a task list is actually linked', async () => {
     vi.mocked(getOpportunity).mockResolvedValueOnce({
       id: 'opp-2',
       type: 'unmoderated',
       title: 'Already wired up',
-      purpose_one_liner: 'This one already points at a recorded study somewhere',
+      purpose_one_liner: 'This one already points at a task list somewhere',
       status: 'draft',
       default_duration_minutes: 30,
       firsthand_study_id: 'study_demo',
@@ -423,25 +437,25 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       </MemoryRouter>
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     expect(
-      await screen.findByText('-- Select a launched study --')
+      await screen.findByText('-- Select a launched task list --')
     ).toBeInTheDocument();
     expect(
-      screen.queryByLabelText(/Reuse a script from an existing study/i)
+      screen.queryByLabelText(/Reuse an existing task list/i)
     ).not.toBeInTheDocument();
   });
 
-  it('still offers the launched-study picker when reuse is ticked', async () => {
+  it('still offers the launched-task-list picker when reuse is ticked', async () => {
     renderForm();
     selectType('unmoderated');
 
-    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
-    fireEvent.click(await screen.findByLabelText(/Reuse a script from an existing study/i));
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByLabelText(/Reuse an existing task list/i));
 
     expect(
-      await screen.findByText('-- Select a launched study --')
+      await screen.findByText('-- Select a launched task list --')
     ).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Demo Study' })).toBeInTheDocument();
     expect(vi.mocked(getFirstHandStudies)).toHaveBeenCalled();

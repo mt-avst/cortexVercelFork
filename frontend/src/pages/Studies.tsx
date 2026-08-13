@@ -7,8 +7,9 @@ import { Alert, Card, CardBody } from '../components/ui';
 import type { FirstHandStudy } from '../api/types';
 
 /**
- * Study index for `/admin/studies`. Lists the recorded-study definitions a
- * researcher can author and edit. Ported from FirstHand's studies index and
+ * Task list index for `/admin/studies`. Lists the task lists a researcher can
+ * author and edit. The route keeps its `studies` path: renaming it would break
+ * existing links, and this rename is copy only. Ported from FirstHand's studies index and
  * admin-gated via AuthContext (the backend studies CRUD is `requireAdmin`).
  */
 const Studies: React.FC = () => {
@@ -34,7 +35,7 @@ const Studies: React.FC = () => {
         if (!cancelled) setStudies(result);
       })
       .catch(() => {
-        if (!cancelled) setError('Could not load studies.');
+        if (!cancelled) setError('Could not load task lists.');
       })
       .finally(() => {
         if (!cancelled) setLoadingStudies(false);
@@ -74,15 +75,15 @@ const Studies: React.FC = () => {
           <p className="text-uppercase fw-semibold text-muted mb-1">
             Researcher workspace
           </p>
-          <h1 className="h3 mb-2">Studies</h1>
+          <h1 className="h3 mb-2">Task Lists</h1>
           <p className="text-muted mb-0">
-            Studies define the prompt sequence, consent copy, and recording
-            context participants experience. An unmoderated opportunity
-            references a study by id.
+            A task list defines the prompt sequence, consent copy and
+            recording context participants experience. An unmoderated
+            opportunity references a task list by id.
           </p>
         </div>
         <Link className="btn btn-primary" to="/admin/studies/new">
-          New study
+          New Task List
         </Link>
       </div>
 
@@ -97,14 +98,14 @@ const Studies: React.FC = () => {
           <div
             className="spinner-border text-primary"
             role="status"
-            aria-label="Loading studies"
+            aria-label="Loading task lists"
           >
-            <span className="visually-hidden">Loading studies...</span>
+            <span className="visually-hidden">Loading task lists...</span>
           </div>
         </div>
       ) : studies.length === 0 ? (
         <p className="text-muted">
-          No studies yet. Create the first one to get started.
+          No task lists yet. Create the first one to get started.
         </p>
       ) : (
         <ul className="list-unstyled">

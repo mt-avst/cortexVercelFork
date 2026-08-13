@@ -402,7 +402,7 @@ export interface OpportunityFormData {
   start_date?: string;
   end_date?: string;
 
-  // FirstHand Study Tab (unmoderated type)
+  // Task List tab (unmoderated type)
   firsthand_study_id?: string;
 }
 

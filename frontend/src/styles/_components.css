@@ -10038,7 +10038,7 @@ body.theme-dark .hero-scroll-tab.hero-scroll-tab--inline {
   flex-shrink: 0;
   /* Wrap the action buttons onto a second line on narrow viewports instead of
      overflowing: the row now holds three non-shrinking btn-nowrap buttons
-     (Recorded Studies, Settings, Create Study) which cannot fit at ~360px. */
+     (Task Lists, Settings, Create Study) which cannot fit at ~360px. */
   flex-wrap: wrap;
   justify-content: flex-end;
 }

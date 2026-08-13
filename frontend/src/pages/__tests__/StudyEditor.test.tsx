@@ -82,7 +82,7 @@ describe('StudyEditorForm - create', () => {
   it('renders the create action and a first step by default', () => {
     renderForm();
     expect(
-      screen.getByRole('button', { name: /Create study/i })
+      screen.getByRole('button', { name: /Create task list/i })
     ).toBeInTheDocument();
     expect(screen.getByText('Step 1')).toBeInTheDocument();
   });
@@ -91,11 +91,11 @@ describe('StudyEditorForm - create', () => {
     renderForm();
     // Default step is an instruction with no target url -> warning + disabled.
     expect(screen.getByText('No task page URL set')).toBeInTheDocument();
-    const submit = screen.getByRole('button', { name: /Create study/i });
+    const submit = screen.getByRole('button', { name: /Create task list/i });
     expect(submit).toBeDisabled();
 
     fireEvent.click(
-      screen.getByLabelText('This study has no task page on purpose')
+      screen.getByLabelText('This task list has no task page on purpose')
     );
     expect(submit).not.toBeDisabled();
   });
@@ -119,7 +119,7 @@ describe('StudyEditorForm - create', () => {
       target: { value: 'https://example.com/checkout' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
 
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
     const payload = mockedCreate.mock.calls[0][0];
@@ -149,10 +149,10 @@ describe('StudyEditorForm - create', () => {
       target: { value: 'javascript:alert(1)' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
 
     await waitFor(() =>
-      expect(screen.getByText(/Could not save study\./i)).toBeInTheDocument()
+      expect(screen.getByText(/Could not save task list\./i)).toBeInTheDocument()
     );
     expect(mockedCreate).not.toHaveBeenCalled();
   });
@@ -211,16 +211,16 @@ describe('StudyEditorForm - step id namespacing', () => {
     status: 'launched',
   } as const;
 
-  it('gives two freshly-created studies disjoint step ids', async () => {
+  it('gives two freshly-created task lists disjoint step ids', async () => {
     const first = renderForm();
     fillRequiredFields({ title: 'First study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
     first.unmount();
 
     const second = renderForm();
     fillRequiredFields({ title: 'Second study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(2));
     second.unmount();
 
@@ -246,7 +246,7 @@ describe('StudyEditorForm - step id namespacing', () => {
       target: { value: 'Second task' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
 
     const payload = mockedCreate.mock.calls[0][0];
@@ -266,11 +266,11 @@ describe('StudyEditorForm - step id namespacing', () => {
 
     renderForm();
     fillRequiredFields({ title: 'Retried study' });
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
 
     // Retry the identical form.
-    fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
     await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(2));
 
     const first = mockedCreate.mock.calls[0][0];
@@ -411,7 +411,7 @@ describe('StudyEditorForm - step id namespacing', () => {
       expect(typeof crypto.randomUUID).not.toBe('function');
       renderForm();
       fillRequiredFields({ title: 'Insecure context study' });
-      fireEvent.click(screen.getByRole('button', { name: /Create study/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Create task list/i }));
       await waitFor(() => expect(mockedCreate).toHaveBeenCalledTimes(1));
 
       const payload = mockedCreate.mock.calls[0][0];
