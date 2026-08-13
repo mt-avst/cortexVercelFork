@@ -244,6 +244,11 @@ test.describe("participant setup gate", () => {
 
     await expect(panel).toBeVisible();
     await expect(panel).toContainText("Keep the task window open until you finish");
+    // The warning is only true when the task window is the shared surface, and
+    // whole-screen sharing is the fallback the launch step offers. Asserting
+    // the qualifier keeps the unconditional "closing it stops the recording"
+    // from coming back unnoticed.
+    await expect(panel).toContainText("closing it ends the recording");
     await expect(
       panel.getByRole("button", { name: "Go to the task page" })
     ).toBeVisible();

@@ -662,10 +662,21 @@ function TaskWindowPanel({
         then come back here and confirm below.
       </p>
 
+      {/*
+        Deliberately conditional in wording rather than in code. Only the
+        shared surface's video track ending stops a recording, so closing the
+        task window stops it only when that window is what was shared - and
+        whole-screen sharing is the fallback this flow actively suggests. The
+        surface is knowable (session-recorder reads displaySurface off the
+        track settings) but not dependable: Firefox is a supported browser and
+        does not report it at all, and surfaceSwitching lets the participant
+        change the shared surface mid-session, after the one read. Copy that
+        must never be wrong cannot be gated on that.
+      */}
       {recordingActive ? (
         <p className="task-window-note">
-          Keep the task window open until you finish - closing it stops the
-          recording.
+          Keep the task window open until you finish. If you shared that window
+          rather than your whole screen, closing it ends the recording.
         </p>
       ) : null}
 
