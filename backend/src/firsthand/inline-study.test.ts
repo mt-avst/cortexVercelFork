@@ -148,7 +148,14 @@ describe("inlineStudySchema", () => {
   it.each([
     ["javascript:alert(1)"],
     ["data:text/html,<script>alert(1)</script>"],
-    ["//evil.example.com/checkout"]
+    ["//evil.example.com/checkout"],
+    // Look root-relative, resolve cross-origin: the parser treats `\` as `/`
+    // and strips tab/CR/LF. See url-safety.ts for why these were the dangerous
+    // ones - they also suppress the destination label shown to the participant.
+    ["/\\evil.example.com/checkout"],
+    ["/\t/evil.example.com/checkout"],
+    ["/\n/evil.example.com/checkout"],
+    ["/\r/evil.example.com/checkout"]
   ])("rejects the unsafe target url %s", (target) => {
     // The task page is opened as a same-origin about:blank and navigated by
     // assigning location.href, so an active scheme would execute against the

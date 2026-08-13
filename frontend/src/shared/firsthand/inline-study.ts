@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-13T00:13:54.131Z
+ * Generated: 2026-08-13T00:23:33.692Z
  */
 
 import { z } from "zod";

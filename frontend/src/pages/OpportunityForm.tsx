@@ -383,6 +383,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         errors.inline_study_target_url =
           'Enter an http(s) address, or a path beginning with a single /';
       }
+
+      // A URL with no tasks would be silently dropped: the payload is only
+      // built when there is at least one task, so say so rather than discarding
+      // what they typed.
+      if (targetUrl && formData.inline_study_steps.length === 0) {
+        errors.inline_study_steps =
+          'Add at least one task - a starting URL on its own has nothing for the participant to do';
+      }
     }
 
     // Unmoderated studies run with logged-in Cortex users, so an external

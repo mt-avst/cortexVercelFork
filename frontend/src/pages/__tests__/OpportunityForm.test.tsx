@@ -218,6 +218,32 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(payload.inline_study.target_url).toBe('https://example.com/checkout');
   });
 
+  it('will not silently discard a starting url typed with no tasks', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.change(await screen.findByLabelText(/Starting URL/i), {
+      target: { value: 'https://example.com/checkout' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    // The payload is only built when a task exists, so without this the URL
+    // would vanish and the save would look like it worked.
+    expect(
+      await screen.findByText(/a starting URL on its own has nothing/i)
+    ).toBeInTheDocument();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+  });
+
   it('does not send a stale study id alongside tasks authored after unticking reuse', async () => {
     // The sequence that silently dropped authored tasks: tick reuse, pick a
     // study, change your mind, untick, write tasks. The id survived in state
