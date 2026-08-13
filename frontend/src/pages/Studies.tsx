@@ -124,7 +124,7 @@ const Studies: React.FC = () => {
                   ) : null}
                   <Link
                     className="btn btn-outline-primary btn-sm"
-                    to={`/admin/studies/${study.id}/edit`}
+                    to={`/admin/studies/${encodeURIComponent(study.id)}/edit`}
                   >
                     Edit
                   </Link>

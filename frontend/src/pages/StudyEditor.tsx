@@ -36,8 +36,99 @@ const stepTypeOptions: StepType[] = [
   'end',
 ];
 
-const defaultStep = (order: number): StepDraft => ({
-  step_id: `step_${String(order).padStart(3, '0')}`,
+/**
+ * Step ids are namespaced by their study, because they are NOT scoped to it in
+ * storage: `firsthand.study_steps.id` is a global `TEXT PRIMARY KEY`
+ * (0004_firsthand_studies.sql) and `insertStudySteps` writes `step_id` straight
+ * into it.
+ *
+ * The old default was `step_${order}` zero-padded, so every study started with
+ * `step_001` and the SECOND study anyone authored here failed on a unique
+ * violation. This route reports it as a 400 `create_failed` carrying the raw
+ * Postgres text (`routes/firsthand.ts` catches locally); the inline path, which
+ * lets `mapDatabaseError` see the 23505, reports the same cause as a misleading
+ * 409 "Resource already exists". Either way the author's only way out was to
+ * rename the ids by hand. The inline authoring path fixed this for itself; this
+ * is the same fix for the editor.
+ *
+ * The field stays user-editable, so a determined author can still collide by
+ * typing another study's id. That is a deliberate mistake rather than the
+ * default behaviour, which is what this closes.
+ */
+const stepIdFor = (studyId: string, sequence: number): string =>
+  `${studyId}_step_${String(sequence).padStart(3, '0')}`;
+
+/**
+ * A study id of the same shape the server mints: `study_<uuid v4>`.
+ *
+ * `crypto.randomUUID` is secure-context only, so it is absent over plain http -
+ * a dev server reached from another machine by IP, or an http staging host. It
+ * is called from a `useState` initialiser, so its absence throws during render
+ * and the app ErrorBoundary swallows the whole New Study page.
+ *
+ * The fallback builds a v4 uuid from `crypto.getRandomValues`, which IS
+ * available in insecure contexts. It is deliberately NOT `Math.random()`: this
+ * value becomes a primary key, and a weak generator would trade a page that
+ * fails loudly for ids that collide quietly.
+ */
+const mintStudyId = (): string => {
+  if (typeof crypto.randomUUID === 'function') {
+    return `study_${crypto.randomUUID()}`;
+  }
+
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10x
+  const hex = Array.from(bytes, (byte) =>
+    byte.toString(16).padStart(2, '0')
+  ).join('');
+
+  return `study_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(
+    12,
+    16
+  )}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+};
+
+/**
+ * The lowest sequence number not already claimed by a step in this form.
+ *
+ * Sequence is deliberately NOT the step's `order`: removing a step renumbers
+ * every `order` after it but leaves the step ids alone, so `order` is reused
+ * while an id is not. Deriving a new id from `order` therefore reissues an id a
+ * surviving step still holds - remove step 1 of three, add a step, and the new
+ * step claims `_step_003` a second time. That is caught by `validateSteps` as a
+ * "Duplicate step_id", which is a dead end the author cannot act on. Scanning
+ * for a free sequence also copes with studies authored before ids were
+ * namespaced, whose steps carry bare `step_001` and claim nothing here.
+ *
+ * Sequences freed by a removal ARE reused once nothing holds them. Accepted
+ * knowingly: `participant_responses.step_id` is free text with no FK, so a
+ * recycled id conflates old responses with the new step for anything that
+ * aggregates across sessions. Nothing does today - playback resolves prompts
+ * from the session's frozen step snapshot, not the live table.
+ *
+ * Ids are compared trimmed, because `stepDraftToPayload` trims before sending:
+ * an untrimmed compare would read a pasted "..._step_002 " as a different id,
+ * hand the same sequence out again, and land on the very "Duplicate step_id"
+ * this exists to avoid.
+ */
+const nextStepId = (current: ReadonlyArray<StepDraft>, studyId: string): string => {
+  const taken = new Set(current.map((step) => step.step_id.trim()));
+  let sequence = current.length + 1;
+  while (taken.has(stepIdFor(studyId, sequence))) {
+    sequence += 1;
+  }
+
+  return stepIdFor(studyId, sequence);
+};
+
+/** One past the highest order in use, so a non-contiguous set cannot repeat one. */
+const nextStepOrder = (current: ReadonlyArray<StepDraft>): number =>
+  current.reduce((highest, step) => Math.max(highest, step.order), 0) + 1;
+
+const defaultStep = (order: number, stepId: string): StepDraft => ({
+  step_id: stepId,
   order,
   type: 'instruction',
   prompt: '',
@@ -150,6 +241,13 @@ export function StudyEditorForm({
   const [status, setStatus] = useState<StudyStatus>(
     (initialStudy?.status as StudyStatus | undefined) ?? 'draft'
   );
+  // Known before the first save so step ids can be namespaced by it. On create
+  // the server would otherwise mint the id only once the study is inserted -
+  // too late for the step ids travelling in the same request - so it is
+  // generated here and sent as `id`, which createStudyRequestSchema accepts.
+  // The same shape the server uses: study_<uuid>.
+  const [studyId, setStudyId] = useState(() => initialStudy?.id ?? mintStudyId());
+
   const [steps, setSteps] = useState<StepDraft[]>(() => {
     if (initialSteps && initialSteps.length > 0) {
       return initialSteps
@@ -158,7 +256,7 @@ export function StudyEditorForm({
         .map(stepDraftFromStep);
     }
 
-    return [defaultStep(1)];
+    return [defaultStep(1, stepIdFor(studyId, 1))];
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,7 +266,39 @@ export function StudyEditorForm({
   const missingTaskPageUrl = studyMissingTaskPageUrl(steps);
 
   const addStep = () => {
-    setSteps((current) => [...current, defaultStep(current.length + 1)]);
+    setSteps((current) => [
+      ...current,
+      // `order` is taken from the highest in use, not from the step count, for
+      // the same reason the id is: `validateSteps` rejects a duplicate order but
+      // never requires them to be contiguous, so a study stored with orders
+      // 1, 3, 4 (reachable through the API) would make a count-derived order
+      // repeat 4 and fail the save with an unactionable "Duplicate step order".
+      defaultStep(nextStepOrder(current), nextStepId(current, studyId)),
+    ]);
+  };
+
+  /**
+   * Swap in a fresh study id, carrying the step ids that are namespaced by the
+   * old one across with it. Ids the author typed themselves are left alone -
+   * they were a deliberate choice, and rewriting them would be a surprise.
+   */
+  const remintStudyId = (previousId: string) => {
+    const nextId = mintStudyId();
+    const previousPrefix = `${previousId}_step_`;
+
+    setStudyId(nextId);
+    setSteps((current) =>
+      current.map((step) =>
+        step.step_id.trim().startsWith(previousPrefix)
+          ? {
+              ...step,
+              step_id: `${nextId}_step_${step.step_id
+                .trim()
+                .slice(previousPrefix.length)}`,
+            }
+          : step
+      )
+    );
   };
 
   const removeStep = (index: number) => {
@@ -209,6 +339,9 @@ export function StudyEditorForm({
     }
 
     const payload = {
+      // Sent on create so the study row's id matches the prefix already baked
+      // into the step ids. Ignored on update, where the id comes from the route.
+      id: studyId,
       title: title.trim(),
       intro_text: introText.trim(),
       consent_text: consentText.trim(),
@@ -248,6 +381,16 @@ export function StudyEditorForm({
       navigate('/admin/studies');
     } catch (caught) {
       setError(extractSaveError(caught));
+
+      // A client-minted primary key makes a create retry non-idempotent. If the
+      // study committed but the response was lost to a timeout or a proxy blip,
+      // the author sees a failure and clicks Create again - and every retry now
+      // collides on studies_pkey, with no escape but reloading and losing the
+      // form. Re-mint so the next attempt is a fresh insert. Create only: on
+      // update the id comes from the route and re-minting would be meaningless.
+      if (!isEditing) {
+        remintStudyId(studyId);
+      }
     } finally {
       setSubmitting(false);
     }
