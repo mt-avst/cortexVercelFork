@@ -16,11 +16,12 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 1. [Getting Started](#getting-started)
 2. [Creating an Opportunity](#creating-an-opportunity)
 3. [Managing Sessions](#managing-sessions)
-4. [Publishing Opportunities](#publishing-opportunities)
-5. [Dashboard and Analytics](#dashboard-and-analytics)
-6. [Settings](#settings)
-7. [Managing Bookings](#managing-bookings)
-8. [Tips and Best Practices](#tips-and-best-practices)
+4. [Unmoderated Studies](#unmoderated-studies)
+5. [Publishing Opportunities](#publishing-opportunities)
+6. [Dashboard and Analytics](#dashboard-and-analytics)
+7. [Settings](#settings)
+8. [Managing Bookings](#managing-bookings)
+9. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -61,6 +62,7 @@ Fill in the required fields:
   - 📋 **Survey**: Detailed feedback collection
   - 💬 **Interview**: One-on-one interviews
   - ❓ **Question**: Single question opportunities
+  - 🖥️ **Unmoderated Testing**: Self-guided study recorded in the participant's browser. See [Unmoderated Studies](#unmoderated-studies)
 
 - **Title**: Clear, descriptive title (required)
 - **Purpose (One-liner)**: Brief description shown on list (required)
@@ -133,6 +135,98 @@ If creating a Poll or Survey:
 - Users can see remaining slots
 - Sessions automatically close when full
 - You can increase capacity later if needed
+
+---
+
+## Unmoderated Studies
+
+An unmoderated study is self-guided: there is no moderator and no time slot.
+The participant works through a list of tasks on their own while Cortex records their screen and microphone in the browser.
+You watch the recording afterwards.
+
+Use it when you want to see people actually using something, without booking time with each of them.
+Use a **Test** or **Interview** instead when you need to be in the room.
+
+### What you need before you start
+
+- The page or prototype you want people to use, at a URL they can reach
+- Two to five tasks, phrased as things to do rather than questions to answer
+- Nothing else - there are no sessions to schedule and no external tool to configure
+
+### Step 1: Create the opportunity
+
+1. Go to Admin Dashboard
+2. Click **"Create New Opportunity"**
+3. On **Basic Information**, set Type to **"🖥️ Unmoderated Testing - Self-guided recorded study"**
+4. Fill in Title and Purpose as usual on **Basic Information** and **Content & Details**
+
+Choosing Unmoderated replaces the External Link tab with a **Task List** tab.
+There is no Sessions tab, because there is nothing to book.
+
+### Step 2: Write the Task List
+
+Open the **Task List** tab. It is headed *"What the participant is asked to do while their screen is recorded"*.
+
+- **Starting URL**: the page the participant is asked to open and record. Optional, but leave it blank only for a survey-style study with nothing to test. Without it, participants share their screen with nothing pre-opened and never see the guided open-and-share step
+- **Add task**: adds a task. Each one has **"What the participant sees"** and a type:
+  - **Instruction** - something to read or do, no answer captured
+  - **Open text** - participant types an answer
+  - **Choice** - participant picks one option
+- **Consent text**: pre-filled with wording that covers screen and microphone recording, who sees it and the right to stop. Edit it if your study needs something different, but do not delete it
+
+Write tasks as goals, not instructions.
+*"Find last month's report and download it"* tells you whether the journey works.
+*"Click Reports, then click Download"* only tells you whether they can follow directions.
+
+Up to 50 tasks are allowed, though most useful studies have far fewer.
+
+### Step 3: Reuse a Task List instead, if you have one
+
+Tick **"Reuse an existing task list instead of writing one here"** to pick one you or a colleague has already written, from **Existing task list**.
+
+Only launched task lists appear.
+If the dropdown is empty and you know one exists, it is probably still a draft - the form will tell you how many drafts are waiting.
+
+Reuse is deliberate: several opportunities can run the same task list, and results stay separate per opportunity.
+You can reuse a colleague's task list, but only its owner or a superadmin can change it.
+
+### Step 4: Publish and share
+
+Publish as you would any opportunity.
+Once published, open it and you will see a **Share this study** panel with the participant link.
+See [Sharing an Opportunity with Participants](#sharing-an-opportunity-with-participants).
+
+Participants need a Cortex account and will be asked to sign in, so the link does not work for anyone outside the organisation.
+
+### What the participant experiences
+
+1. Opens the link, reads the brief and clicks **Start Test**
+2. Reads and accepts the consent text
+3. Shares their screen and grants microphone access. The task page opens in its own window first, so it appears in the browser's share picker
+4. Works through the tasks, thinking aloud
+5. Finishes, and the recording uploads
+
+Their steps are fixed at the moment they start.
+Editing a task list never changes a session already under way, so a participant mid-study will not see your edit - relaunch is not needed and not possible for them.
+
+### Reviewing results
+
+1. Open the opportunity and go to **Analytics**
+2. Use the **Sessions** tab, which lists Participant, Session, Status and Last activity
+3. Open a session for **Session Review**: recording playback, the answers to each task and a transcript
+
+### Editing a study that is already published
+
+- Editing the task list changes what **future** participants see. Sessions already started keep the tasks they began with
+- If someone else owns the task list you are reusing, the editor opens read only and says so. Ask the owner or a superadmin to make the change
+- Changing the Starting URL after people have taken part makes the recordings harder to compare. Prefer a new opportunity for a genuinely different study
+
+### Common mistakes
+
+- **No Starting URL on a study that has something to test** - participants share a blank screen and have to find their own way there
+- **Tasks written as click-by-click instructions** - you learn whether they can follow you, not whether the design works
+- **Publishing with no task list linked** - the Share panel warns you, and the participant's start button is disabled. Link one before sharing
+- **Assuming a colleague can edit your task list** - only its owner or a superadmin can
 
 ---
 
