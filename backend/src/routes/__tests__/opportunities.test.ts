@@ -265,7 +265,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+        'Add at least one prompt to the task list, or link an existing task list, before publishing'
       );
     });
 
@@ -422,7 +422,7 @@ describe('Opportunities API', () => {
           .expect(400);
 
         expect(response.body.error).toBe(
-          'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+          'Add at least one prompt to the task list, or link an existing task list, before publishing'
         );
       });
 
@@ -530,7 +530,7 @@ describe('Opportunities API', () => {
           .expect(400);
 
         expect(response.body.error).toBe(
-          'Only unmoderated opportunities can carry a study'
+          'Only unmoderated opportunities can carry a task list'
         );
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
@@ -702,7 +702,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'This opportunity already has a recorded study; edit its tasks in the studies area'
+        'This opportunity already has a task list; edit its tasks in the Task Lists area'
       );
       expect(mockCreateStudy).not.toHaveBeenCalled();
     });
@@ -723,7 +723,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'This opportunity already has a recorded study; edit its tasks in the studies area'
+        'This opportunity already has a task list; edit its tasks in the Task Lists area'
       );
       expect(mockCreateStudy).not.toHaveBeenCalled();
     });
@@ -764,7 +764,7 @@ describe('Opportunities API', () => {
       // Names what this caller is actually doing - they are removing a study,
       // not failing to publish one.
       expect(response.body.error).toBe(
-        'A published unmoderated test cannot have its recorded study removed; unpublish it first'
+        'A published unmoderated test cannot have its task list removed; unpublish it first'
       );
     });
 
@@ -909,7 +909,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'Add at least one prompt to the study, or link an existing recorded study, before publishing'
+        'Add at least one prompt to the task list, or link an existing task list, before publishing'
       );
     });
   });

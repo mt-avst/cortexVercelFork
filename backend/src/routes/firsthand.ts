@@ -30,7 +30,7 @@ function ensureStudiesPersistence(res: Response): boolean {
   if (!isStudiesPersistenceConfigured()) {
     res.status(503).json({
       error: 'persistence_not_configured',
-      message: 'Studies require a configured PostgreSQL database.'
+      message: 'Task lists require a configured PostgreSQL database.'
     });
     return false;
   }

@@ -111,9 +111,17 @@ describe('Admin page', () => {
 
     // Header action row - query by the stable aria-labels (jsdom renders both responsive
     // spans, so text queries would hit duplicates; aria-label is the accessible name).
-    expect(screen.getByRole('button', { name: 'Recorded studies' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Task lists' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create new research study' })).toBeInTheDocument();
+
+    // The VISIBLE text of both responsive spans, which the aria-label queries
+    // above do not reach. Pinned because the two senses of "study" diverge
+    // here: this button opens the task lists, while its neighbour creates a
+    // research study (the opportunity), and only one of them renamed.
+    expect(screen.getByText('Task Lists')).toBeInTheDocument();
+    expect(screen.getByText('Tasks')).toBeInTheDocument();
+    expect(screen.getByText('Create Research Study →')).toBeInTheDocument();
 
     // Opportunities table renders the mocked row once the async load resolves.
     expect(await screen.findByText('Checkout usability test')).toBeInTheDocument();
@@ -124,9 +132,9 @@ describe('Admin page', () => {
     expect(screen.getAllByText('Research Studies')).toHaveLength(2);
   });
 
-  it('navigates to Recorded Studies from the header', async () => {
+  it('navigates to Task Lists from the header', async () => {
     renderAdmin();
-    fireEvent.click(await screen.findByRole('button', { name: 'Recorded studies' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Task lists' }));
     expect(screen.getByText('STUDIES SENTINEL')).toBeInTheDocument();
   });
 
@@ -156,6 +164,6 @@ describe('Admin page', () => {
     expect(screen.getByText('HOME SENTINEL')).toBeInTheDocument();
     // The admin header must not render for a gated-out user.
     expect(screen.queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Recorded studies' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Task lists' })).not.toBeInTheDocument();
   });
 });

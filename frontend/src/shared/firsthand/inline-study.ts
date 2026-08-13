@@ -24,7 +24,7 @@ import { isSafeTargetUrl } from "./url-safety";
  * study's content directly, so the backend can create the study as part of
  * creating the opportunity.
  *
- * The separate studies area is unchanged and remains the place to edit a script
+ * The separate Task Lists area is unchanged and remains the place to edit a script
  * or reuse one across several opportunities.
  */
 

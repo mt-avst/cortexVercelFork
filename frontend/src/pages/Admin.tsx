@@ -255,11 +255,11 @@ const Admin: React.FC = () => {
                   <button
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"
                     onClick={() => navigate('/admin/studies')}
-                    aria-label="Recorded studies"
+                    aria-label="Task lists"
                   >
                     <Clapperboard size={16} className="me-2" />
-                    <span className="d-none d-md-inline">Recorded Studies</span>
-                    <span className="d-md-none">Recorded</span>
+                    <span className="d-none d-md-inline">Task Lists</span>
+                    <span className="d-md-none">Tasks</span>
                   </button>
                   <button
                     className="btn btn-outline-secondary admin-settings-btn btn-nowrap"

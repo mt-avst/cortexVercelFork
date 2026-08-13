@@ -182,9 +182,9 @@ const stepDraftToPayload = (draft: StepDraft): StudyStep => {
 /**
  * Whether a study has task steps but no task-page URL on any of them.
  *
- * A study with task steps but no `target_url` anywhere records the participant's
+ * A task list with task steps but no `target_url` anywhere records the participant's
  * whole screen with nothing pre-opened, and they never see the guided
- * open-and-share step. That is correct for a survey-style study, but is almost
+ * open-and-share step. That is correct for a survey-style task list, but is almost
  * always an accidental omission for a product test - so the editor forces a
  * conscious choice rather than saving it silently. `end` steps are terminal
  * markers, never task steps, so they are ignored.
@@ -333,7 +333,7 @@ export function StudyEditorForm({
     // task study save with no task-page URL unless it was acknowledged.
     if (missingTaskPageUrl && !acknowledgedNoTaskPageUrl) {
       setError(
-        'This study has task steps but no task page URL. Add one, or confirm it is a survey-style study.'
+        'This task list has task steps but no task page URL. Add one, or confirm it is a survey-style task list.'
       );
       return;
     }
@@ -365,14 +365,14 @@ export function StudyEditorForm({
       if (isEditing) {
         const parsed = updateStudyRequestSchema.safeParse(payload);
         if (!parsed.success) {
-          setError(parsed.error.issues[0]?.message ?? 'The study is not valid.');
+          setError(parsed.error.issues[0]?.message ?? 'The task list is not valid.');
           return;
         }
         await updateFirstHandStudy(initialStudy!.id, parsed.data);
       } else {
         const parsed = createStudyRequestSchema.safeParse(payload);
         if (!parsed.success) {
-          setError(parsed.error.issues[0]?.message ?? 'The study is not valid.');
+          setError(parsed.error.issues[0]?.message ?? 'The task list is not valid.');
           return;
         }
         await createFirstHandStudy(parsed.data);
@@ -400,7 +400,7 @@ export function StudyEditorForm({
     <form onSubmit={handleSubmit}>
       {error ? (
         <Alert variant="danger" className="mb-4">
-          <strong>Could not save study.</strong>
+          <strong>Could not save task list.</strong>
           <p className="mb-0">{error}</p>
         </Alert>
       ) : null}
@@ -674,7 +674,7 @@ export function StudyEditorForm({
           <p className="mb-2">
             Participants will be asked to share their screen with nothing
             pre-opened, and won't see the guided open-and-share step. Add a
-            Target URL to a task step, or confirm this is a survey-style study.
+            Target URL to a task step, or confirm this is a survey-style task list.
           </p>
           <div className="form-check">
             <input
@@ -687,7 +687,7 @@ export function StudyEditorForm({
               type="checkbox"
             />
             <label className="form-check-label" htmlFor="ack-no-task-page">
-              This study has no task page on purpose
+              This task list has no task page on purpose
             </label>
           </div>
         </Alert>
@@ -705,7 +705,7 @@ export function StudyEditorForm({
           loading={submitting}
           type="submit"
         >
-          {submitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create study'}
+          {submitting ? 'Saving...' : isEditing ? 'Save changes' : 'Create task list'}
         </Button>
       </div>
     </form>
@@ -752,7 +752,7 @@ const StudyEditor: React.FC = () => {
           ?.status;
         setLoadError(
           status === 404
-            ? 'That study could not be found.'
+            ? 'That task list could not be found.'
             : extractSaveError(caught)
         );
       })
@@ -791,19 +791,19 @@ const StudyEditor: React.FC = () => {
   return (
     <div className="py-4">
       <Link className="btn btn-link px-0 mb-3" to="/admin/studies">
-        Back to studies
+        Back to task lists
       </Link>
 
       <p className="text-uppercase fw-semibold text-muted mb-1">
         Researcher workspace
       </p>
       <h1 className="h3 mb-2">
-        {isEdit ? `Edit ${study?.title ?? 'study'}` : 'New study'}
+        {isEdit ? `Edit ${study?.title ?? 'task list'}` : 'New Task List'}
       </h1>
       <p className="text-muted mb-4">
         {isEdit
           ? 'Changes apply to new participant sessions. Sessions already in flight keep their original step payload.'
-          : 'Define the intro copy, consent, and step sequence. An unmoderated opportunity references the study id once published.'}
+          : 'Define the intro copy, consent and step sequence. An unmoderated opportunity references the task list id once published.'}
       </p>
 
       {isEdit && loadingStudy ? (
@@ -811,14 +811,14 @@ const StudyEditor: React.FC = () => {
           <div
             className="spinner-border text-primary"
             role="status"
-            aria-label="Loading study"
+            aria-label="Loading task list"
           >
-            <span className="visually-hidden">Loading study...</span>
+            <span className="visually-hidden">Loading task list...</span>
           </div>
         </div>
       ) : loadError ? (
         <Alert variant="danger">
-          <strong>Could not load study.</strong>
+          <strong>Could not load task list.</strong>
           <p className="mb-0">{loadError}</p>
         </Alert>
       ) : (
