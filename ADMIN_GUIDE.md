@@ -158,6 +158,22 @@ If creating a Poll or Survey:
 
 **Note**: Closed opportunities are still visible but show as "Closed" and cannot be booked.
 
+### Sharing an Opportunity with Participants
+
+Once an opportunity is published, open it and you will see a **Share this study** panel with its link.
+Only admins see this panel.
+Click **Copy link** and send the URL to the people you want to take part.
+
+The link goes to the opportunity page, where a participant reads the brief and starts from there.
+There is no separate link to a task list, because a participant never opens one directly.
+
+Two things to know before you send it:
+
+- Recipients need a Cortex account and will be asked to sign in, so the link does not work for anyone outside the organisation
+- The panel warns you if nothing is linked for participants to start yet, which means the start button on that page is disabled. Link a task list before sharing
+
+The panel does not appear on a draft or a closed opportunity, because neither can be started.
+
 ---
 
 ## Dashboard and Analytics

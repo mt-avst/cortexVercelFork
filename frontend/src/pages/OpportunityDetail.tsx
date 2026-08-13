@@ -8,6 +8,7 @@ import useDocumentTitle from '../hooks/useDocumentTitle';
 import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
+import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -531,6 +532,20 @@ const OpportunityDetail: React.FC = () => {
                     }
                   </div>
                 )}
+
+                {/* Admin-only, published-only. Renders null for everyone else,
+                    so the participant view of this page is unchanged.
+                    `startable` mirrors the CTA's own disabled rule below, so a
+                    published opportunity nobody can start says so here rather
+                    than being shared as if it works. */}
+                <ShareOpportunityLink
+                  opportunityId={opportunity.id}
+                  role={user?.role}
+                  startable={Boolean(
+                    opportunity.firsthand_study_id || opportunity.external_link_optional
+                  )}
+                  status={opportunity.status}
+                />
               </div>
 
               {/* Right Column: Data Box (30%) - Technical Specs */}
