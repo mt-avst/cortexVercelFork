@@ -197,6 +197,13 @@ lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
 **Query parameters:** `attempt=N` (optional, positive integer) selects a specific attempt.
 
 **Response 200:**
+> **`step_id` is namespaced by its study on purpose.** `firsthand.study_steps.id` is a
+> **global** `TEXT PRIMARY KEY`, not scoped per study, and `insertStudySteps` writes
+> `step_id` straight into it. A bare positional id like `step_1` is therefore claimed
+> deployment-wide by the first study that uses it, and the next study to copy this
+> example collides — surfacing as an unactionable duplicate-key error. Both authoring
+> paths prefix with the study id; anything hand-authored must do the same.
+
 ```json
 {
   "contract_version": "1.0",
@@ -225,7 +232,7 @@ lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
   ],
   "steps": [
     {
-      "step_id": "step_1",
+      "step_id": "study_123_step_1",
       "order": 1,
       "type": "open_text",
       "prompt": "How did you find the checkout?",
@@ -243,7 +250,7 @@ lifecycle callbacks (endpoint 3). Resolves to the latest attempt by default.
     "segments": [
       {
         "id": "seg_1",
-        "step_id": "step_1",
+        "step_id": "study_123_step_1",
         "speaker": "participant",
         "speaker_label": "Jane Smith",
         "text": "It was straightforward.",

@@ -12,8 +12,8 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 
 ## M6 - Polls, Surveys & Analytics
 
-- **Opportunity types**: `poll`, `survey`, `unmoderated` (external links); `test`, `interview` (bookable sessions). Admins create and publish; employees see and click.
-- **Click tracking**: Two levels — **view** (opened study details) and **action** (clicked "Open Poll/Survey" or "Book Session"). IP is hashed for privacy.
+- **Opportunity types**: `poll`, `survey`, `question` (external links); `unmoderated` (self-guided study recorded in the browser — NOT an external link); `test`, `interview` (bookable sessions). Admins create and publish; employees see and click.
+- **Click tracking**: Two levels — **view** (opened study details) and **action** (clicked "Open Poll/Survey", "Book Session" or "Start Test"). IP is hashed for privacy.
 - **Analytics API** (admin/owner only):
   - `GET /api/opportunities/[id]/analytics?period=7|14|30` — Returns views/actions counts and time-series for the given period (default 30 days).
   - `POST /api/opportunities/[id]/click` — Body: `{ "click_type": "view" | "action" }`. Optional auth; used by frontend when user views or clicks the action button.
