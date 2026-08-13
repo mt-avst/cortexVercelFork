@@ -218,6 +218,67 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(payload.inline_study.target_url).toBe('https://example.com/checkout');
   });
 
+  // The failure this closes: a Starting URL typed the way people say addresses
+  // out loud was rejected, and the message described the rule rather than the
+  // one thing wrong with it.
+  it('adds the missing https:// on blur, visibly, and sends the normalised url', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    const startingUrl = screen.getByLabelText(/Starting URL/i) as HTMLInputElement;
+    fireEvent.change(startingUrl, { target: { value: 'example.com/checkout' } });
+    fireEvent.blur(startingUrl);
+
+    // Visible in the field, not just corrected on the way to the server: the
+    // author has to be able to see what will be stored.
+    await vi.waitFor(() => {
+      expect(
+        (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
+      ).toBe('https://example.com/checkout');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const normalisedPayload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
+    expect(normalisedPayload.inline_study.target_url).toBe(
+      'https://example.com/checkout'
+    );
+  });
+
+  it('does not prepend a scheme to an active-scheme url on blur', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+
+    const startingUrl = await screen.findByLabelText(/Starting URL/i);
+    fireEvent.change(startingUrl, { target: { value: 'javascript:alert(1)' } });
+    fireEvent.blur(startingUrl);
+
+    // Unchanged, so the guard still gets to reject it rather than being handed
+    // "https://javascript:alert(1)".
+    expect((screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value).toBe(
+      'javascript:alert(1)'
+    );
+  });
+
   it('will not silently discard a starting url typed with no tasks', async () => {
     renderForm();
     selectType('unmoderated');

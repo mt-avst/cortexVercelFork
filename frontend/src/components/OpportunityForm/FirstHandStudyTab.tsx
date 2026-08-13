@@ -6,6 +6,7 @@ import {
   authorableStepTypes,
   type InlineStudyStep
 } from '../../shared/firsthand/inline-study';
+import { normaliseTargetUrl } from '../../utils/targetUrl';
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -262,6 +263,16 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                     onChange={(e) =>
                       handleInputChange('inline_study_target_url', e.target.value)
                     }
+                    // Normalise on blur rather than at save, so the author
+                    // WATCHES "example.com" become "https://example.com" and
+                    // knows what will be stored. Rewriting silently at submit
+                    // would fix the symptom and hide the change.
+                    onBlur={(e) => {
+                      const normalised = normaliseTargetUrl(e.target.value);
+                      if (normalised !== e.target.value) {
+                        handleInputChange('inline_study_target_url', normalised);
+                      }
+                    }}
                     placeholder="https://example.com/checkout"
                   />
                   {validationErrors.inline_study_target_url && (
