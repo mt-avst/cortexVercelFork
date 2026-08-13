@@ -39,9 +39,11 @@ describe("toStudySteps", () => {
     ]);
   });
 
-  it("puts the study-level target url on the first step only", () => {
-    // getPrimaryTargetUrl finds the FIRST runnable step carrying a target_url,
-    // and the setup flow resolves it before the runner mounts.
+  it("puts the study-level target url on every authored step, never the end marker", () => {
+    // Not just the first: StudyRunner renders the task-window panel - the "go
+    // to the task page" button and the "keep it open or recording stops"
+    // warning - only when the CURRENT step carries a target. First-step-only
+    // left tasks 2..n with no way to recover a buried or closed popup.
     const steps = toStudySteps(
       [
         { type: "instruction", prompt: "Open the dashboard" },
@@ -52,7 +54,9 @@ describe("toStudySteps", () => {
     );
 
     expect(steps[0].target_url).toBe("https://example.com/checkout");
-    expect(steps[1].target_url).toBeUndefined();
+    expect(steps[1].target_url).toBe("https://example.com/checkout");
+    // The appended completion marker is never a task and never gets one.
+    expect(steps[2].type).toBe("end");
     expect(steps[2].target_url).toBeUndefined();
   });
 

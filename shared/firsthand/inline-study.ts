@@ -81,6 +81,13 @@ export const inlineStudyStepSchema = z.object({
   is_required: z.boolean().optional()
 });
 
+/**
+ * Shown by the schema and by the form. Exported so the two cannot drift into
+ * saying different things about the same rule.
+ */
+export const UNSAFE_TARGET_URL_MESSAGE =
+  "Enter an http(s) address, or a path beginning with a single /";
+
 export const inlineStudySchema = z
   .object({
     /**
@@ -88,9 +95,9 @@ export const inlineStudySchema = z
      *
      * Study-level rather than per-step, which is how the job is actually
      * described ("test this page"), even though the contract carries
-     * `target_url` per step: `toStudySteps` applies it to the FIRST authored
-     * step, which is what `getPrimaryTargetUrl` looks for when the setup flow
-     * resolves the destination up front.
+     * `target_url` per step: `toStudySteps` applies it to every authored step,
+     * because the setup handoff reads the first one while StudyRunner needs it
+     * on the current step to keep offering the task window.
      *
      * Optional, and its absence is meaningful: a study with no target on any
      * step is not a first-hand study at all, and the setup flow falls back to a
@@ -107,10 +114,7 @@ export const inlineStudySchema = z
       .trim()
       .min(1)
       .max(INLINE_STUDY_LIMITS.maxTargetUrlLength)
-      .refine(isSafeTargetUrl, {
-        message:
-          "Enter an http(s) address, or a path beginning with a single /"
-      })
+      .refine(isSafeTargetUrl, { message: UNSAFE_TARGET_URL_MESSAGE })
       .optional(),
     consent_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     estimated_duration_minutes: z
@@ -180,12 +184,22 @@ export function toStudySteps(
     order: index + 1,
     type: step.type,
     prompt: step.prompt.trim(),
-    // The study-level starting URL lands on the FIRST authored step, because
-    // getPrimaryTargetUrl resolves the destination by finding the first
-    // runnable step that carries one - the setup handoff needs it before the
-    // runner mounts. Putting it on every step would be equivalent for that
-    // lookup but would misrepresent the study as navigating per task.
-    ...(index === 0 && targetUrl ? { target_url: targetUrl.trim() } : {}),
+    // The starting URL goes on EVERY authored step, not just the first.
+    //
+    // getPrimaryTargetUrl only needs it on one - it finds the first runnable
+    // step carrying a target, for the setup handoff before the runner mounts.
+    // But it is not the only consumer: StudyRunner renders TaskWindowPanel
+    // (the "Go to the task page" button and the "keep the task window open or
+    // the recording stops" warning) only when the CURRENT step carries one. On
+    // first-step-only, a participant who buried or closed the popup during task
+    // 2 had no way to bring it back and had never been warned. It also made an
+    // inline study a different shape from the same study built by hand in
+    // StudyEditor, which sets the target per step.
+    //
+    // Safe to repeat: task-window.ts focuses rather than reopens when the URL
+    // is unchanged, so this does not spawn a window per task. The appended
+    // `end` marker is added after this map and never gets one.
+    ...(targetUrl ? { target_url: targetUrl.trim() } : {}),
     ...(step.options ? { options: step.options } : {}),
     ...(step.helper_text ? { helper_text: step.helper_text } : {}),
     ...(step.is_required !== undefined ? { is_required: step.is_required } : {})

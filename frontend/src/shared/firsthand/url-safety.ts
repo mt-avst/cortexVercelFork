@@ -5,18 +5,27 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-08-13T00:23:33.692Z
+ * Generated: 2026-08-13T09:43:16.214Z
  */
 
 /**
- * A base used only to decide whether a relative target stays on its own origin.
+ * Bases used only to decide whether a relative target stays on its own origin.
  *
- * Deliberately a `.invalid` host (RFC 6761 - guaranteed never resolvable) so it
- * cannot be confused with a real destination if it ever leaks into a message.
- * Nothing is ever fetched from it: it exists so the URL parser, rather than
- * string matching, decides where a relative path actually lands.
+ * TWO of them, and that is load-bearing. With a single base, an input that
+ * NAMES that base satisfies the origin check: `//same-origin.invalid/x`
+ * resolved to the base's own origin and was accepted - a hole the string check
+ * this replaced did not have, since it rejected anything starting `//`. No
+ * input can name both hosts at once, so requiring the origin to be preserved
+ * against each in turn closes it without going back to pattern matching.
+ *
+ * Deliberately `.invalid` hosts (RFC 6761 - guaranteed never resolvable) so
+ * they cannot be confused with a real destination if one ever leaks into a
+ * message. Nothing is ever fetched from them.
  */
-const RELATIVE_RESOLUTION_BASE = "https://same-origin.invalid";
+const RELATIVE_RESOLUTION_BASES = [
+  "https://a.same-origin.invalid",
+  "https://b.same-origin.invalid"
+] as const;
 
 /**
  * Whether a study's target_url is safe to open and navigate a window to.
@@ -28,9 +37,9 @@ const RELATIVE_RESOLUTION_BASE = "https://same-origin.invalid";
  * So only absolute http(s) URLs and same-origin root-relative paths are
  * allowed; protocol-relative ("//host") and every non-http scheme are rejected.
  *
- * This is enforced twice: at the contract boundary when a session payload is
- * validated, and again at the sink in useTaskWindow, so the window navigation
- * never trusts its own input.
+ * This is enforced three times: on the authoring form, at the contract boundary
+ * when a session payload is validated, and again at the sink in useTaskWindow,
+ * so the window navigation never trusts its own input.
  *
  * THE RELATIVE BRANCH RESOLVES RATHER THAN PATTERN-MATCHES, and must stay that
  * way. It used to be `raw.startsWith("/") && !raw.startsWith("//")`, which the
@@ -50,18 +59,30 @@ export function isSafeTargetUrl(raw: string): boolean {
 
     return parsed.protocol === "http:" || parsed.protocol === "https:";
   } catch {
-    // Not an absolute URL. Resolve it against a sentinel origin and require it
-    // to have stayed there: anything that escapes - protocol-relative, or the
-    // backslash and control-character forms above - lands on another origin and
-    // is rejected. Parsing decides, not the shape of the string.
-    try {
-      const resolved = new URL(raw, RELATIVE_RESOLUTION_BASE);
-
-      return (
-        resolved.origin === RELATIVE_RESOLUTION_BASE && raw.startsWith("/")
-      );
-    } catch {
-      return false;
-    }
+    // Not an absolute URL. Resolve it against each sentinel origin and require
+    // it to have stayed there every time: anything that escapes -
+    // protocol-relative, or the backslash and control-character forms above -
+    // lands elsewhere and is rejected. Parsing decides, not the shape of the
+    // string.
+    //
+    // The leading-slash requirement is NOT redundant next to the origin check,
+    // and must not be tidied away. A path-relative input ("checkout", "?q=1",
+    // "#f") resolves against the sentinel ROOT here but against the OPENER's
+    // document URL at the sink - window.open("") yields a same-origin
+    // about:blank that inherits a base carrying a path like
+    // /participant/session/123. Requiring "/" makes this answer the same
+    // question the sink asks, rather than a base-dependent one.
+    return (
+      raw.startsWith("/") &&
+      RELATIVE_RESOLUTION_BASES.every((base) => {
+        try {
+          return new URL(raw, base).origin === base;
+        } catch {
+          // Malformed authority forms ("/\", "//") throw here and also throw at
+          // the sink, so rejecting them is correct rather than over-strict.
+          return false;
+        }
+      })
+    );
   }
 }

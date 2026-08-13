@@ -10,6 +10,8 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
 import {
   DEFAULT_CONSENT_TEXT,
+  INLINE_STUDY_LIMITS,
+  UNSAFE_TARGET_URL_MESSAGE,
   type InlineStudy as InlineStudyPayload,
   type InlineStudyStep
 } from '../shared/firsthand/inline-study';
@@ -380,8 +382,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // participant's session.
       const targetUrl = formData.inline_study_target_url.trim();
       if (targetUrl && !isSafeTargetUrl(targetUrl)) {
-        errors.inline_study_target_url =
-          'Enter an http(s) address, or a path beginning with a single /';
+        errors.inline_study_target_url = UNSAFE_TARGET_URL_MESSAGE;
+      } else if (targetUrl.length > INLINE_STUDY_LIMITS.maxTargetUrlLength) {
+        // Mirrored so an over-long URL fails here rather than as a server 400.
+        errors.inline_study_target_url = `Keep the URL under ${INLINE_STUDY_LIMITS.maxTargetUrlLength} characters`;
       }
 
       // A URL with no tasks would be silently dropped: the payload is only

@@ -483,7 +483,11 @@ describe('Opportunities API', () => {
           })
           .expect(400);
 
-        expect(JSON.stringify(response.body)).toContain('target_url');
+        // Asserted on the issue path, not on the body echoing the payload back
+        // - that would pass for any 400 that happens to include the request.
+        expect(response.body.details).toEqual(
+          expect.arrayContaining([expect.stringContaining('target_url')])
+        );
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
 
