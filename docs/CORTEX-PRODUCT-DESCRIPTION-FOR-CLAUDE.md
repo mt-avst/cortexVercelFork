@@ -50,14 +50,26 @@ Identity is SSO (e.g. company Google); no separate Cortex account. Demo logins (
 
 A research “study” or activity. Key attributes:
 
-- **Type:** `test`, `poll`, `survey`, `interview`, `question`, `unmoderated` (external link only).
+- **Type:** `test`, `poll`, `survey`, `interview`, `question`, `unmoderated`. `poll`, `survey` and `question` point at an external tool; `unmoderated` does **not** — it is a self-guided study that Cortex records in the browser (see *Unmoderated studies* below). `test` and `interview` are bookable.
 - **Content:** title, purpose one-liner, optional description, optional product, default duration.
 - **Status:** draft (admin-only), published (visible to all), closed (visible but not bookable).
-- **Sessions:** For bookable types (test, interview), one or more time slots with capacity, location/meeting link; for poll/survey/unmoderated, optional external link and click tracking only.
+- **Sessions:** For bookable types (test, interview), one or more time slots with capacity, location/meeting link; for poll/survey/question, an optional external link and click tracking only. `unmoderated` has neither — no time slots to book and no external link; it carries a **Task List** instead.
+
+### Unmoderated studies
+
+An `unmoderated` opportunity is a **self-guided study that Cortex records in the participant's browser**. There is no moderator, no time slot and no external tool. This capability came from folding the former standalone FirstHand app into Cortex, which is why the code still uses `firsthand` naming throughout.
+
+- **Task List** — the script the participant works through: intro copy, consent text and an ordered list of steps (`instruction`, `open_text`, `single_choice`, plus a terminal `end` marker). A step may carry a `target_url`, the page the participant is asked to open and test. Authored inline on the opportunity form, or reused from an existing Task List at `/admin/studies`.
+- **Vocabulary** — admin-side, the script object is a **Task List** and the word *study* means the research project (the opportunity). Participant-facing copy still says "recorded study", deliberately: a participant only ever meets one object, so the distinction would be noise to them.
+- **Participation** — the participant opens the published opportunity, clicks *Start Test*, consents, then shares screen and microphone. The task page opens in its own window so it appears in the browser's share picker. A session is minted server-side and its steps are **snapshotted at launch**, so editing a Task List never changes a session already in flight.
+- **Who can take part** — logged-in Cortex users only. There is no anonymous or emailed-token route, so an unmoderated study cannot be sent to anyone outside the organisation.
+- **Sharing** — the shareable unit is the **opportunity URL** (`/opportunities/:id`). There is no participant-facing URL for a Task List. An admin viewing a published opportunity sees a *Share this study* panel offering that link.
+- **Ownership** — a Task List records `owner_user_id`. Any admin may reuse one, but only its owner or a superadmin may edit or delete it.
+- **Review** — the research team gets recording playback, per-step responses and a transcript.
 
 ### Sessions
 
-Time-bound slots for an opportunity: start/end time, capacity, booked count, optional location or meeting link. Sessions auto-close when full or when end time has passed.
+Time-bound slots for an opportunity: start/end time, capacity, booked count, optional location or meeting link. Sessions auto-close when full or when end time has passed. Bookable types only — `unmoderated` never has them.
 
 ### Bookings
 
@@ -89,10 +101,10 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
 ### For researcher admins
 
 - **Admin dashboard:** Counts (opportunities, bookings, participants, available slots); table of opportunities with stats (sessions, bookings, clicks for poll/survey).
-- **CRUD opportunities:** Create, edit, delete, duplicate; set type, title, purpose, description, duration, status; for poll/survey/unmoderated set external link.
+- **CRUD opportunities:** Create, edit, delete, duplicate; set type, title, purpose, description, duration, status; for poll/survey/question set an external link; for unmoderated author a Task List on the form (or reuse an existing one).
 - **Sessions:** Add, edit, delete sessions (start/end, capacity, location/meeting link); sessions with existing bookings require care when editing.
 - **Publish workflow:** Save as draft or publish; draft only visible to admins.
-- **Analytics (per opportunity):** For poll/survey/unmoderated (and relevant types): views/actions, time-series, conversion; period 7/14/30 days. Admin/owner only.
+- **Analytics (per opportunity):** For poll/survey/unmoderated (and relevant types): views/actions, time-series, conversion; period 7/14/30 days. Admin/owner only. Unmoderated additionally has per-session review — recording playback, step responses and transcript.
 - **Click tracking:** Back-end records view (detail opened) and action (e.g. “Open Poll” / “Book” clicked); optional auth; IP hashed for privacy.
 - **Settings:** Notification preferences (on_book_email, on_cancel_email); optional reminder timing.
 
@@ -156,7 +168,7 @@ When editing copy, UX, or features:
 
 - **Product name in user-facing text:** Cortex (Collective Intelligence); parent brand Adaptavist.
 - **User types:** Visitor, Employee, Researcher admin, Superadmin.
-- **Opportunity types:** test, poll, survey, interview, question, unmoderated; bookable vs external-link-only.
+- **Opportunity types:** test, poll, survey, interview, question, unmoderated. Three shapes, not two: **bookable** (test, interview), **external link** (poll, survey, question), and **recorded self-guided** (unmoderated). Do not describe unmoderated as external-link.
 - **Flows:** Browse → Detail → Book (or Open Poll/Survey); My Bookings for cancel/reschedule; Admin for create/publish/analytics; superadmin for admin requests and feedback.
 - **Rewards:** AdaptaBits (points, levels, leaderboards, achievements).
 - **Support:** In-app “Send Feedback”; service desk link; contact (e.g. cortex@adaptavist.com, nfine@adaptavist.com for support).
