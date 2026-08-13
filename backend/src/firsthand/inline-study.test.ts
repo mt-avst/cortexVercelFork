@@ -39,6 +39,31 @@ describe("toStudySteps", () => {
     ]);
   });
 
+  it("puts the study-level target url on the first step only", () => {
+    // getPrimaryTargetUrl finds the FIRST runnable step carrying a target_url,
+    // and the setup flow resolves it before the runner mounts.
+    const steps = toStudySteps(
+      [
+        { type: "instruction", prompt: "Open the dashboard" },
+        { type: "open_text", prompt: "What did you expect?" }
+      ],
+      "study_x",
+      "https://example.com/checkout"
+    );
+
+    expect(steps[0].target_url).toBe("https://example.com/checkout");
+    expect(steps[1].target_url).toBeUndefined();
+    expect(steps[2].target_url).toBeUndefined();
+  });
+
+  it("omits target_url entirely when no starting url is given", () => {
+    // Absence is meaningful: a study with no target on any step is not a
+    // first-hand study, and the setup flow falls back to a single start action.
+    const [step] = toStudySteps([{ type: "open_text", prompt: "A" }], "study_x");
+
+    expect("target_url" in step).toBe(false);
+  });
+
   it("gives two studies disjoint step ids", () => {
     // study_steps.id is a GLOBAL primary key rather than one scoped by
     // study_id, so position-only ids made the second inline study fail with a
@@ -119,6 +144,36 @@ describe("inlineStudySchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it.each([
+    ["javascript:alert(1)"],
+    ["data:text/html,<script>alert(1)</script>"],
+    ["//evil.example.com/checkout"]
+  ])("rejects the unsafe target url %s", (target) => {
+    // The task page is opened as a same-origin about:blank and navigated by
+    // assigning location.href, so an active scheme would execute against the
+    // participant's session. Protocol-relative resolves to another origin.
+    const result = inlineStudySchema.safeParse({
+      consent_text: "C",
+      target_url: target,
+      steps: [{ type: "open_text", prompt: "A" }]
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it.each([["https://example.com/checkout"], ["/demo/checkout"]])(
+    "accepts the safe target url %s",
+    (target) => {
+      const result = inlineStudySchema.safeParse({
+        consent_text: "C",
+        target_url: target,
+        steps: [{ type: "open_text", prompt: "A" }]
+      });
+
+      expect(result.success).toBe(true);
+    }
+  );
 
   it("rejects the end type, which is machine-appended rather than authored", () => {
     const result = inlineStudySchema.safeParse({

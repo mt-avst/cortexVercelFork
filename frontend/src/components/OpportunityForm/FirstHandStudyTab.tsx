@@ -16,6 +16,7 @@ type FormFieldValue = string | number | boolean | undefined;
  */
 export type InlineStudyFormFields = {
   firsthand_study_id?: string;
+  inline_study_target_url?: string;
   inline_study_consent_text?: string;
   inline_study_steps?: InlineStudyStep[];
   reuse_existing_study?: boolean;
@@ -241,6 +242,41 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         ) : (
           <>
+            <div className="row">
+              <div className="col-12 col-md-8">
+                <div className="form-group mb-4">
+                  <label
+                    htmlFor="inline_study_target_url"
+                    className="form-label mb-2"
+                    style={{ fontSize: '1rem', fontWeight: '600' }}
+                  >
+                    Starting URL
+                  </label>
+                  <input
+                    id="inline_study_target_url"
+                    type="text"
+                    className={`form-control ${validationErrors.inline_study_target_url ? 'is-invalid' : ''}`}
+                    style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem' }}
+                    value={formData.inline_study_target_url ?? ''}
+                    onChange={(e) =>
+                      handleInputChange('inline_study_target_url', e.target.value)
+                    }
+                    placeholder="https://example.com/checkout"
+                  />
+                  {validationErrors.inline_study_target_url && (
+                    <div className="invalid-feedback d-block">
+                      {validationErrors.inline_study_target_url}
+                    </div>
+                  )}
+                  <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
+                    The page the participant opens and shares before recording starts.
+                    Leave it empty for a questionnaire with no page to test - they will
+                    get a single start button instead.
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {validationErrors.inline_study_steps && (
               <div className="alert alert-danger py-2" style={{ fontSize: '0.875rem' }}>
                 {validationErrors.inline_study_steps}

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { StudyStep } from "./contract";
+import { isSafeTargetUrl } from "./url-safety";
 
 /**
  * Inline study authoring for unmoderated opportunities.
@@ -50,7 +51,8 @@ export const INLINE_STUDY_LIMITS = {
   // studies.estimated_duration_minutes is a Postgres INTEGER, so an unbounded
   // value overflows and surfaces as a 500 rather than a validation error. A day
   // is far beyond any real session.
-  maxDurationMinutes: 24 * 60
+  maxDurationMinutes: 24 * 60,
+  maxTargetUrlLength: 2000
 } as const;
 
 /**
@@ -81,6 +83,35 @@ export const inlineStudyStepSchema = z.object({
 
 export const inlineStudySchema = z
   .object({
+    /**
+     * The page the participant opens and shares before recording starts.
+     *
+     * Study-level rather than per-step, which is how the job is actually
+     * described ("test this page"), even though the contract carries
+     * `target_url` per step: `toStudySteps` applies it to the FIRST authored
+     * step, which is what `getPrimaryTargetUrl` looks for when the setup flow
+     * resolves the destination up front.
+     *
+     * Optional, and its absence is meaningful: a study with no target on any
+     * step is not a first-hand study at all, and the setup flow falls back to a
+     * single start action instead of the open-then-share sequence. That is the
+     * right shape for a pure questionnaire.
+     *
+     * Validated with the same `isSafeTargetUrl` the contract and the window
+     * sink use - the task page is opened as a same-origin about:blank and then
+     * navigated by assigning location.href, so a javascript: URL here would
+     * execute against the participant's session.
+     */
+    target_url: z
+      .string()
+      .trim()
+      .min(1)
+      .max(INLINE_STUDY_LIMITS.maxTargetUrlLength)
+      .refine(isSafeTargetUrl, {
+        message:
+          "Enter an http(s) address, or a path beginning with a single /"
+      })
+      .optional(),
     consent_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     estimated_duration_minutes: z
       .number()
@@ -141,13 +172,20 @@ export const DEFAULT_CONSENT_TEXT =
  */
 export function toStudySteps(
   steps: InlineStudyStep[],
-  studyId: string
+  studyId: string,
+  targetUrl?: string
 ): StudyStep[] {
   const authored: StudyStep[] = steps.map((step, index) => ({
     step_id: `${studyId}_step_${index + 1}`,
     order: index + 1,
     type: step.type,
     prompt: step.prompt.trim(),
+    // The study-level starting URL lands on the FIRST authored step, because
+    // getPrimaryTargetUrl resolves the destination by finding the first
+    // runnable step that carries one - the setup handoff needs it before the
+    // runner mounts. Putting it on every step would be equivalent for that
+    // lookup but would misrepresent the study as navigating per task.
+    ...(index === 0 && targetUrl ? { target_url: targetUrl.trim() } : {}),
     ...(step.options ? { options: step.options } : {}),
     ...(step.helper_text ? { helper_text: step.helper_text } : {}),
     ...(step.is_required !== undefined ? { is_required: step.is_required } : {})

@@ -176,6 +176,48 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
 
+  it('sends the starting url, and blocks one that could run against the session', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Study Tasks/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    // An active-scheme URL is refused before it can reach the payload.
+    fireEvent.change(screen.getByLabelText(/Starting URL/i), {
+      target: { value: 'javascript:alert(1)' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    expect(
+      await screen.findByText(/http\(s\) address, or a path beginning with a single/i)
+    ).toBeInTheDocument();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+
+    // A real one goes through and lands on the payload.
+    fireEvent.change(screen.getByLabelText(/Starting URL/i), {
+      target: { value: 'https://example.com/checkout' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
+    expect(payload.inline_study.target_url).toBe('https://example.com/checkout');
+  });
+
   it('does not send a stale study id alongside tasks authored after unticking reuse', async () => {
     // The sequence that silently dropped authored tasks: tick reuse, pick a
     // study, change your mind, untick, write tasks. The id survived in state
