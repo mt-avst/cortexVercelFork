@@ -5,7 +5,7 @@
  * Any changes should be made to the source file in the shared/ directory.
  * 
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-07-23T01:54:59.771Z
+ * Generated: 2026-08-13T13:06:53.027Z
  */
 
 import { z } from "zod";
@@ -29,6 +29,11 @@ export const updateStudyRequestSchema = z.object({
   estimated_duration_minutes: z.number().int().positive().nullable().optional(),
   locale: z.string().min(1).nullable().optional(),
   status: z.enum(["draft", "launched", "archived"]).optional(),
+  // Superadmin-only ownership reassignment; the repository answers 403 for
+  // anyone else. Not nullable - handing a study back to the unowned fail-open
+  // is not a repair. See updateStudy in backend/src/firsthand/
+  // studies-repository.ts for why this is the only way to correct an owner.
+  owner_user_id: z.string().min(1).optional(),
   steps: z.array(stepSchema).min(1).optional()
 });
 

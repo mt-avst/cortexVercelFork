@@ -4,6 +4,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getFirstHandStudies } from '../api/client';
 import { Alert, Card, CardBody } from '../components/ui';
+import { isStudyReadOnly } from '../utils/studyOwnership';
 import type { FirstHandStudy } from '../api/types';
 
 /**
@@ -109,30 +110,43 @@ const Studies: React.FC = () => {
         </p>
       ) : (
         <ul className="list-unstyled">
-          {studies.map((study) => (
-            <li className="mb-3" key={study.id}>
-              <Card padding="md" hoverable={false}>
-                <CardBody>
-                  <p className="text-uppercase fw-semibold text-muted mb-1">
-                    {study.status ?? 'draft'}
-                  </p>
-                  <strong className="d-block mb-1">{study.title}</strong>
-                  <p className="mb-2">{study.intro_text}</p>
-                  {study.updated_at ? (
-                    <p className="text-muted small mb-3">
-                      Updated {new Date(study.updated_at).toLocaleString()}
+          {studies.map((study) => {
+            // Another researcher's study is still listed - reuse across owners
+            // is deliberate - but offering "Edit" would walk the user into a
+            // form that immediately tells them they cannot save.
+            const readOnly = isStudyReadOnly(study, user);
+
+            return (
+              <li className="mb-3" key={study.id}>
+                <Card padding="md" hoverable={false}>
+                  <CardBody>
+                    <p className="text-uppercase fw-semibold text-muted mb-1">
+                      {study.status ?? 'draft'}
                     </p>
-                  ) : null}
-                  <Link
-                    className="btn btn-outline-primary btn-sm"
-                    to={`/admin/studies/${encodeURIComponent(study.id)}/edit`}
-                  >
-                    Edit
-                  </Link>
-                </CardBody>
-              </Card>
-            </li>
-          ))}
+                    <strong className="d-block mb-1">{study.title}</strong>
+                    <p className="mb-2">{study.intro_text}</p>
+                    {study.updated_at || readOnly ? (
+                      <p className="text-muted small mb-3">
+                        {study.updated_at
+                          ? `Updated ${new Date(
+                              study.updated_at
+                            ).toLocaleString()}`
+                          : null}
+                        {study.updated_at && readOnly ? <br /> : null}
+                        {readOnly ? 'Owned by another researcher' : null}
+                      </p>
+                    ) : null}
+                    <Link
+                      className="btn btn-outline-primary btn-sm"
+                      to={`/admin/studies/${encodeURIComponent(study.id)}/edit`}
+                    >
+                      {readOnly ? 'View' : 'Edit'}
+                    </Link>
+                  </CardBody>
+                </Card>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

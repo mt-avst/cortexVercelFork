@@ -28,6 +28,7 @@ import {
   deleteStudy,
 } from '../../firsthand/studies-repository';
 import { isDatabaseAvailable } from '../../utils/database';
+import { logger } from '../../utils/logger';
 
 const mockIsStudiesPersistenceConfigured = (isStudiesPersistenceConfigured as jest.MockedFunction<typeof isStudiesPersistenceConfigured>);
 const mockListStudies = (listStudies as jest.MockedFunction<typeof listStudies>);
@@ -36,6 +37,11 @@ const mockGetStudyById = (getStudyById as jest.MockedFunction<typeof getStudyByI
 const mockUpdateStudy = (updateStudy as jest.MockedFunction<typeof updateStudy>);
 const mockDeleteStudy = (deleteStudy as jest.MockedFunction<typeof deleteStudy>);
 const mockIsDatabaseAvailable = (isDatabaseAvailable as jest.MockedFunction<typeof isDatabaseAvailable>);
+const mockLogger = logger as unknown as {
+  info: jest.Mock;
+  warn: jest.Mock;
+  error: jest.Mock;
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 type SessionRole = 'researcher_admin' | 'superadmin' | 'employee';
@@ -184,6 +190,32 @@ describe('FirstHand Express router', () => {
       expect(res.body.steps).toHaveLength(2);
     });
 
+    it('stamps the session user as the owner', async () => {
+      (mockCreateStudy as any).mockResolvedValue(storedStudy);
+      await request(app)
+        .post('/api/firsthand/studies')
+        .type('json')
+        .send(JSON.stringify(validStudyBody))
+        .expect(201);
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ owner_user_id: 'admin-1' })
+      );
+    });
+
+    // A body-supplied owner would let an author plant a study under someone
+    // else's name - and then be locked out of the study they just wrote.
+    it('ignores an owner_user_id sent in the body', async () => {
+      (mockCreateStudy as any).mockResolvedValue(storedStudy);
+      await request(app)
+        .post('/api/firsthand/studies')
+        .type('json')
+        .send(JSON.stringify({ ...validStudyBody, owner_user_id: 'someone-else' }))
+        .expect(201);
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ owner_user_id: 'admin-1' })
+      );
+    });
+
     it('returns 503 when persistence is not configured', async () => {
       mockIsStudiesPersistenceConfigured.mockReturnValue(false);
       const res = await request(app)
@@ -223,24 +255,147 @@ describe('FirstHand Express router', () => {
 
   describe('PUT /api/firsthand/studies/:studyId', () => {
     it('updates a study → 200', async () => {
-      (mockUpdateStudy as any).mockResolvedValue(storedStudy);
+      (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
       const res = await request(app)
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
         .expect(200);
       expect(res.body.study.id).toBe('study_abc');
-      expect(mockUpdateStudy).toHaveBeenCalledWith('study_abc', { title: 'Renamed' });
+      expect(mockUpdateStudy).toHaveBeenCalledWith(
+        'study_abc',
+        { title: 'Renamed' },
+        { userId: 'admin-1', isSuperadmin: false }
+      );
+    });
+
+    it('marks a superadmin requester so the repository can bypass ownership', async () => {
+      const superadminApp = buildApp({
+        id: 'super-1', name: 'Super', email: 'super@test.com', role: 'superadmin',
+      });
+      (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
+      await request(superadminApp)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ title: 'Renamed' }))
+        .expect(200);
+      expect(mockUpdateStudy).toHaveBeenCalledWith(
+        'study_abc',
+        { title: 'Renamed' },
+        { userId: 'super-1', isSuperadmin: true }
+      );
     });
 
     it('returns 404 for an unknown study', async () => {
-      (mockUpdateStudy as any).mockResolvedValue(null);
+      (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
       const res = await request(app)
         .put('/api/firsthand/studies/missing')
         .type('json')
         .send(JSON.stringify({ title: 'New' }))
         .expect(404);
       expect(res.body).toMatchObject({ error: 'not_found' });
+    });
+
+    // The attack this route now blocks: a second researcher_admin rewriting
+    // another owner's consent copy and task target_url on a launched study.
+    it('returns 403 when the repository refuses a non-owner edit', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
+      const res = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ consent_text: 'Rewritten by someone else' }))
+        .expect(403);
+      expect(res.body).toMatchObject({
+        error: 'forbidden',
+        message: 'Only the owner of this task list can edit it',
+      });
+    });
+
+    // These handlers answer directly rather than throwing ForbiddenError, so
+    // they never reach errorHandler - the only thing that logs the
+    // opportunities equivalent. Without this the attempt is silent.
+    it('logs a refused cross-owner write', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ consent_text: 'Rewritten by someone else' }))
+        .expect(403);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Refused a cross-owner study write',
+        expect.objectContaining({ studyId: 'study_abc', userId: 'admin-1', verb: 'edit' })
+      );
+    });
+
+    it('does not log a refusal when the study simply does not exist', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
+      await request(app)
+        .put('/api/firsthand/studies/missing')
+        .type('json')
+        .send(JSON.stringify({ title: 'New' }))
+        .expect(404);
+
+      expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+
+    it('logs an ownership claim, which has no UI and no undo below superadmin', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: true, ...storedStudy });
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ title: 'Tidied up' }))
+        .expect(200);
+
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        'Unowned study claimed by its first editor',
+        expect.objectContaining({ studyId: 'study_abc', newOwnerUserId: 'admin-1' })
+      );
+    });
+
+    it('does not log a claim on an ordinary edit', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ title: 'Renamed' }))
+        .expect(200);
+
+      expect(mockLogger.info).not.toHaveBeenCalled();
+    });
+
+    // A repository throw here can be a duplicate step id (the author's
+    // problem) or a dropped connection (nobody's), and both answer 400. The
+    // log is the only thing that tells them apart.
+    it('logs the cause when the repository throws', async () => {
+      (mockUpdateStudy as any).mockRejectedValue(new Error('connection terminated'));
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ title: 'Renamed' }))
+        .expect(400);
+
+      expect(mockLogger.error).toHaveBeenCalledWith(
+        'Study update failed',
+        expect.objectContaining({ studyId: 'study_abc', userId: 'admin-1' })
+      );
+    });
+
+    // Superadmin-only, and the repository is what enforces it - the route must
+    // pass the field through rather than stripping it.
+    it('passes an owner reassignment through to the repository', async () => {
+      (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ owner_user_id: 'user-rightful' }))
+        .expect(200);
+
+      expect(mockUpdateStudy).toHaveBeenCalledWith(
+        'study_abc',
+        { owner_user_id: 'user-rightful' },
+        { userId: 'admin-1', isSuperadmin: false }
+      );
     });
 
     it('rejects invalid update payloads with 400 invalid_payload', async () => {
@@ -256,16 +411,32 @@ describe('FirstHand Express router', () => {
 
   describe('DELETE /api/firsthand/studies/:studyId', () => {
     it('deletes a study → 200 { ok: true }', async () => {
-      (mockDeleteStudy as any).mockResolvedValue(true);
+      (mockDeleteStudy as any).mockResolvedValue({ ok: true });
       const res = await request(app).delete('/api/firsthand/studies/study_abc').expect(200);
       expect(res.body).toEqual({ ok: true });
-      expect(mockDeleteStudy).toHaveBeenCalledWith('study_abc');
+      expect(mockDeleteStudy).toHaveBeenCalledWith('study_abc', {
+        userId: 'admin-1',
+        isSuperadmin: false,
+      });
     });
 
     it('returns 404 when the study does not exist', async () => {
-      (mockDeleteStudy as any).mockResolvedValue(false);
+      (mockDeleteStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
       const res = await request(app).delete('/api/firsthand/studies/missing').expect(404);
       expect(res.body).toMatchObject({ error: 'not_found' });
+    });
+
+    // Deleting someone else's study is the other half of the attack: it breaks
+    // the published opportunity that points at it.
+    it('returns 403 when the repository refuses a non-owner delete', async () => {
+      (mockDeleteStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
+      const res = await request(app)
+        .delete('/api/firsthand/studies/study_abc')
+        .expect(403);
+      expect(res.body).toMatchObject({
+        error: 'forbidden',
+        message: 'Only the owner of this task list can delete it',
+      });
     });
   });
 

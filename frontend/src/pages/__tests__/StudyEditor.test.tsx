@@ -1,13 +1,19 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { StudyEditorForm, studyMissingTaskPageUrl } from '../StudyEditor';
+import StudyEditor, {
+  StudyEditorForm,
+  studyMissingTaskPageUrl,
+} from '../StudyEditor';
+import { isStudyReadOnly } from '../../utils/studyOwnership';
 import {
   createFirstHandStudy,
+  getFirstHandStudy,
   updateFirstHandStudy,
 } from '../../api/firsthand-studies';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Editor navigation depends on react-router; the CRUD calls are the only side
 // effects. Stub the studies client module so no real HTTP is attempted.
@@ -17,8 +23,16 @@ vi.mock('../../api/firsthand-studies', () => ({
   getFirstHandStudy: vi.fn(),
 }));
 
+// The page (not the form) reads useAuth. Mocked rather than wrapped in a real
+// AuthProvider, which would fetch /me on mount.
+vi.mock('../../contexts/AuthContext', () => ({
+  useAuth: vi.fn(),
+}));
+
 const mockedCreate = vi.mocked(createFirstHandStudy);
 const mockedUpdate = vi.mocked(updateFirstHandStudy);
+const mockedGet = vi.mocked(getFirstHandStudy);
+const mockedUseAuth = vi.mocked(useAuth) as unknown as ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -189,6 +203,105 @@ describe('StudyEditorForm - edit', () => {
     await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
     expect(mockedUpdate.mock.calls[0][0]).toBe('study_abc');
     expect(mockedCreate).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ownership affordance
+//
+// The gate is the backend (canWriteStudy in studies-repository.ts, 403 from
+// routes/firsthand.ts). These cover the UI half: an author who cannot save
+// should be told before they have retyped the consent copy, not after.
+// ---------------------------------------------------------------------------
+describe('isStudyReadOnly', () => {
+  const owner = { id: 'user-owner', role: 'researcher_admin' };
+  const intruder = { id: 'user-intruder', role: 'researcher_admin' };
+  const superadmin = { id: 'user-super', role: 'superadmin' };
+
+  it('is false for the owner', () => {
+    expect(isStudyReadOnly({ owner_user_id: 'user-owner' }, owner)).toBe(false);
+  });
+
+  it('is true for another researcher admin', () => {
+    expect(isStudyReadOnly({ owner_user_id: 'user-owner' }, intruder)).toBe(
+      true
+    );
+  });
+
+  it('is false for a superadmin', () => {
+    expect(isStudyReadOnly({ owner_user_id: 'user-owner' }, superadmin)).toBe(
+      false
+    );
+  });
+
+  it('is false for an unowned legacy study, which the API still accepts', () => {
+    expect(isStudyReadOnly({ owner_user_id: null }, intruder)).toBe(false);
+    expect(isStudyReadOnly({}, intruder)).toBe(false);
+  });
+
+  it('is true when the viewer is not resolved yet, rather than open', () => {
+    expect(isStudyReadOnly({ owner_user_id: 'user-owner' }, undefined)).toBe(
+      true
+    );
+  });
+});
+
+describe('StudyEditorForm - read only', () => {
+  const ownedElsewhere = {
+    id: 'study_abc',
+    title: 'Someone else’s study',
+    intro_text: 'Intro',
+    consent_text: 'Original consent',
+    status: 'launched' as const,
+    owner_user_id: 'user-owner',
+  };
+  const intruder = { id: 'user-intruder', role: 'researcher_admin' };
+  // A task step with a target URL, so the unrelated missing-task-page-URL gate
+  // is not what disables the submit in these assertions.
+  const steps = [
+    {
+      step_id: 'study_abc_step_001',
+      order: 1,
+      type: 'instruction' as const,
+      prompt: 'Do the thing',
+      target_url: 'https://example.com/checkout',
+    },
+  ];
+
+  it('explains why, and blocks every control, on a study owned elsewhere', () => {
+    renderForm({
+      initialStudy: ownedElsewhere,
+      initialSteps: steps,
+      viewer: intruder,
+    });
+
+    expect(screen.getByText('Read only')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save changes/i })).toBeDisabled();
+    // The whole fieldset, not just the button: the consent copy is the field
+    // the attack rewrites, so it must not look editable either.
+    expect(screen.getByLabelText('Consent text')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Add step/i })).toBeDisabled();
+  });
+
+  it('leaves the owner’s own study fully editable', () => {
+    renderForm({
+      initialStudy: ownedElsewhere,
+      initialSteps: steps,
+      viewer: { id: 'user-owner', role: 'researcher_admin' },
+    });
+
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Consent text')).toBeEnabled();
+    expect(
+      screen.getByRole('button', { name: /Save changes/i })
+    ).not.toBeDisabled();
+  });
+
+  it('never blocks the create form, which has no owner yet', () => {
+    renderForm({ viewer: intruder });
+
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Consent text')).toBeEnabled();
   });
 });
 
@@ -478,5 +591,86 @@ describe('StudyEditorForm - step id namespacing', () => {
       'study_abc_step_004',
     ]);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The page, not the form
+//
+// Every test above hands StudyEditorForm an explicit `viewer`, so deleting
+// `viewer={user}` where the page renders the form would kill the whole
+// affordance with a green suite. This renders the page for real, through
+// useAuth and the study fetch, so that wire is covered too.
+// ---------------------------------------------------------------------------
+describe('StudyEditor page', () => {
+  const renderPage = () =>
+    render(
+      <MemoryRouter initialEntries={['/admin/studies/study_abc/edit']}>
+        <Routes>
+          <Route path="/admin/studies/:id/edit" element={<StudyEditor />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+  it('passes the signed-in user through, so a study owned elsewhere is read only', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-intruder', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'Someone else’s study',
+        intro_text: 'Intro',
+        consent_text: 'Original consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [
+        {
+          step_id: 'study_abc_step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com/checkout',
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByText('Read only')).toBeInTheDocument();
+    expect(screen.getByLabelText('Consent text')).toBeDisabled();
+  });
+
+  it('leaves the owner their own study', async () => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-owner', role: 'researcher_admin' },
+      loading: false,
+    });
+    mockedGet.mockResolvedValue({
+      study: {
+        id: 'study_abc',
+        title: 'My study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'launched',
+        owner_user_id: 'user-owner',
+      },
+      steps: [
+        {
+          step_id: 'study_abc_step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com/checkout',
+        },
+      ],
+    });
+
+    renderPage();
+
+    expect(await screen.findByLabelText('Consent text')).toBeEnabled();
+    expect(screen.queryByText('Read only')).not.toBeInTheDocument();
   });
 });

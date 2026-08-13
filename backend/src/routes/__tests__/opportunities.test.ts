@@ -25,7 +25,10 @@ jest.mock('../../firsthand/session-create', () => ({
 // stay on the app pool and never reach the FirstHand runtime pool.
 jest.mock('../../firsthand/studies-repository', () => ({
   createStudy: jest.fn(),
-  deleteStudy: jest.fn(),
+  // Defaults to false: most tests link nothing, or link a study that already
+  // has an owner, and only a real claim is worth reporting.
+  claimStudyIfUnowned: jest.fn(() => Promise.resolve(false)),
+  deleteStudyUnchecked: jest.fn(),
   // Default true so the inline path runs; the route checks this before
   // building a study so a misconfigured runtime pool answers 503 rather than
   // letting createStudy throw a bare Error into the 500 branch.
@@ -37,7 +40,7 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
-import { createStudy, deleteStudy, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
+import { claimStudyIfUnowned, createStudy, deleteStudyUnchecked, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
@@ -45,7 +48,8 @@ const mockConnect = pool.connect as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 const mockCreateSession = createSession as jest.MockedFunction<any>;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
-const mockDeleteStudy = deleteStudy as jest.MockedFunction<any>;
+const mockClaimStudyIfUnowned = claimStudyIfUnowned as jest.MockedFunction<any>;
+const mockDeleteStudyUnchecked = deleteStudyUnchecked as jest.MockedFunction<any>;
 const mockIsStudiesPersistenceConfigured = isStudiesPersistenceConfigured as jest.MockedFunction<any>;
 
 const app = express();
@@ -345,6 +349,12 @@ describe('Opportunities API', () => {
           expect.objectContaining({ status: 'launched' })
         );
 
+        // Owned by the author, so a second researcher_admin cannot later
+        // rewrite its consent copy or a step's target_url.
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ owner_user_id: 'test-user-id' })
+        );
+
         // The end step is appended by toStudySteps, never authored.
         const createdSteps = mockCreateStudy.mock.calls[0][0].steps;
         expect(createdSteps).toHaveLength(2);
@@ -371,7 +381,7 @@ describe('Opportunities API', () => {
         // Studies and opportunities sit on different pools, so this
         // compensating delete is the only thing preventing a launched study
         // that no opportunity references.
-        expect(mockDeleteStudy).toHaveBeenCalledWith('study_orphan');
+        expect(mockDeleteStudyUnchecked).toHaveBeenCalledWith('study_orphan');
       });
 
       it('rejects a body carrying both a linked study and an authored one', async () => {
@@ -411,6 +421,64 @@ describe('Opportunities API', () => {
 
         expect(mockCreateStudy).not.toHaveBeenCalled();
         expect(mockQuery.mock.calls[1][1][10]).toBe('study_existing');
+
+        // Claim on link. A legacy study migration 0007 could not attribute is
+        // writable by ANY admin until it has an owner, so publishing an
+        // opportunity that serves it to participants is the last safe moment
+        // to close that. Without this, the reuse picker is a way back into the
+        // exact attack this feature exists to stop.
+        expect(mockClaimStudyIfUnowned).toHaveBeenCalledWith(
+          'study_existing',
+          'test-user-id'
+        );
+      });
+
+      it('claims the linked study before the opportunity row is written', async () => {
+        // Ordering matters: claiming after the insert leaves a window where a
+        // published opportunity points at a study anyone can rewrite, and a
+        // failed claim would then have to un-publish something.
+        const order: string[] = [];
+        mockClaimStudyIfUnowned.mockImplementationOnce(async () => {
+          order.push('claim');
+          return true;
+        });
+        mockQuery.mockImplementationOnce(async () => {
+          order.push('user-upsert');
+          return { rows: [] };
+        });
+        mockQuery.mockImplementationOnce(async () => {
+          order.push('insert');
+          return {
+            rows: [{ id: '11', created_at: new Date(), updated_at: new Date() }]
+          };
+        });
+
+        const { inline_study, ...linkedOnly } = inlineBody;
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({ ...linkedOnly, firsthand_study_id: 'study_existing' })
+          .expect(201);
+
+        expect(order.indexOf('claim')).toBeLessThan(order.indexOf('insert'));
+      });
+
+      it('does not claim anything when the study is authored inline', async () => {
+        // An inline study is created owned, so there is nothing to claim - and
+        // a stray claim here would be a second write to a row created in the
+        // same request.
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_inline' },
+          steps: []
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '12', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+
+        expect(mockClaimStudyIfUnowned).not.toHaveBeenCalled();
       });
 
       it('refuses to publish on a whitespace-only study id instead of storing null', async () => {
@@ -657,6 +725,8 @@ describe('Opportunities API', () => {
       // Inherits the opportunity's own title rather than a placeholder, which
       // needs title/purpose in the existing-row SELECT.
       expect(mockCreateStudy.mock.calls[0][0].title).toBe('Existing title');
+      // Owned by whoever authored it on this edit.
+      expect(mockCreateStudy.mock.calls[0][0].owner_user_id).toBe('test-user-id');
 
       // The generated id reaches the UPDATE, and inline_study never becomes a
       // column name in it.
@@ -688,6 +758,46 @@ describe('Opportunities API', () => {
       const created = mockCreateStudy.mock.calls[0][0];
       expect(created.title).toBe('Untitled study');
       expect(created.intro_text).toBe('Recorded study');
+    });
+
+    it('claims an unowned study when an edit links one', async () => {
+      // The PATCH half of claim-on-link. Attaching a study to an existing
+      // opportunity puts it in front of participants just as surely as
+      // creating one does, so it must not still be writable by every admin.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: 'study_reused' })
+        .expect(200);
+
+      expect(mockClaimStudyIfUnowned).toHaveBeenCalledWith(
+        'study_reused',
+        'test-user-id'
+      );
+    });
+
+    it('does not claim when an edit clears the study link', async () => {
+      // '' and null both mean "no study" here; neither is a study id, and
+      // claiming on one would be a write against a row that does not exist.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: '   ' })
+        .expect(200);
+
+      expect(mockClaimStudyIfUnowned).not.toHaveBeenCalled();
     });
 
     it('refuses to author over an opportunity that already has a study', async () => {
@@ -744,7 +854,7 @@ describe('Opportunities API', () => {
         .send({ inline_study: inlineStudy })
         .expect(404);
 
-      expect(mockDeleteStudy).toHaveBeenCalledWith('study_raced');
+      expect(mockDeleteStudyUnchecked).toHaveBeenCalledWith('study_raced');
     });
 
     it('will not let a published unmoderated opportunity have its study cleared', async () => {
@@ -896,7 +1006,7 @@ describe('Opportunities API', () => {
         .send({ inline_study: inlineStudy })
         .expect(500);
 
-      expect(mockDeleteStudy).toHaveBeenCalledWith('study_orphan_patch');
+      expect(mockDeleteStudyUnchecked).toHaveBeenCalledWith('study_orphan_patch');
     });
 
     it('still blocks publishing an unmoderated opportunity with neither route', async () => {
