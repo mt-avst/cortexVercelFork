@@ -16,6 +16,7 @@ import {
   type InlineStudyStep
 } from '../shared/firsthand/inline-study';
 import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
+import { normaliseTargetUrl } from '../utils/targetUrl';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
 import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
@@ -380,7 +381,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // the contract: the task page is opened as a same-origin about:blank and
       // then navigated, so an active-scheme URL would run against the
       // participant's session.
-      const targetUrl = formData.inline_study_target_url.trim();
+      // Normalised, not just trimmed, and for the same reason the payload
+      // below is: blur has almost always already rewritten the field, but a
+      // submit that somehow skipped it must not be rejected for a missing
+      // scheme we would have added. Normalising is idempotent, so running it
+      // again here costs nothing.
+      const targetUrl = normaliseTargetUrl(formData.inline_study_target_url);
       if (targetUrl && !isSafeTargetUrl(targetUrl)) {
         errors.inline_study_target_url = UNSAFE_TARGET_URL_MESSAGE;
       } else if (targetUrl.length > INLINE_STUDY_LIMITS.maxTargetUrlLength) {
@@ -589,7 +595,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           : formData.firsthand_study_id?.trim() || undefined;
 
         if (authoringInline) {
-          const targetUrl = formData.inline_study_target_url.trim();
+          // Must match what validateForm checked, or a value could pass
+          // validation and then be sent in a different shape.
+          const targetUrl = normaliseTargetUrl(formData.inline_study_target_url);
 
           data.inline_study = {
             // Omitted rather than sent empty: its absence is meaningful, and
