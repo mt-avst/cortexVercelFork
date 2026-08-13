@@ -18,8 +18,9 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 3. [Booking a Session](#booking-a-session)
 4. [Managing Your Bookings](#managing-your-bookings)
 5. [Polls and Surveys](#polls-and-surveys)
-6. [Troubleshooting](#troubleshooting)
-7. [FAQ](#faq)
+6. [Unmoderated Studies](#unmoderated-studies)
+7. [Troubleshooting](#troubleshooting)
+8. [FAQ](#faq)
 
 ---
 
@@ -50,18 +51,19 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 - The home page shows all available opportunities
 - Each opportunity card shows:
-  - **Type**: Test, Poll, Survey, Interview, or Question
+  - **Type**: App Testing, Unmoderated, Poll, Survey, Interview or Question
   - **Title**: Name of the opportunity
   - **Purpose**: Brief description
-  - **Available Sessions**: Number of remaining slots
+  - **Available Sessions**: Number of remaining slots, on the types you book. Unmoderated, polls and surveys show roughly how long they take instead
 
 ### Filtering Opportunities
 
-- Use the **Type filter** dropdown to filter by:
-  - All Types
-  - Test
-  - Poll
+- Use the **type filter** buttons above the list to filter by:
+  - All
+  - App Testing
+  - Unmoderated
   - Survey
+  - Poll
   - Interview
   - Question
 
@@ -126,9 +128,10 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 ### Viewing Your Bookings
 
 1. Click **"My Bookings"** in the header (when logged in)
-2. You'll see two tabs:
-   - **Upcoming**: Future bookings
-   - **Past**: Completed bookings
+2. You'll see:
+   - **Upcoming bookings**: sessions still to come
+   - **Past bookings**: sessions that have happened
+   - **Self-guided sessions**: unmoderated studies you have started, shown only once you have started one. See [Unmoderated Studies](#unmoderated-studies)
 
 ### Canceling a Booking
 
@@ -175,6 +178,75 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 - Your click is tracked for analytics
 - Researchers can see participation rates
 - Your privacy is protected (IP addresses are hashed)
+
+---
+
+## Unmoderated Studies
+
+An unmoderated study is self-guided.
+There is no researcher with you and nothing to book.
+You work through a short list of tasks on your own, while Cortex records your screen and microphone in the browser.
+The research team watches the recording afterwards.
+
+They appear in the opportunity list like anything else.
+Filter by **Unmoderated** to find them, and the card tells you roughly how long the study takes.
+
+### What You Need
+
+- A laptop or desktop, and a browser window at least 1024 pixels wide
+- Chrome, Edge, Arc, Opera or Firefox. Safari cannot record a session
+- A working microphone
+- To be signed in to Cortex
+
+Cortex checks all of this for you before anything starts, and tells you what to fix if something is missing.
+You cannot take part on a phone or tablet.
+
+### What Is Recorded
+
+- **Your screen**, and only the window or screen you choose when the browser asks
+- **Your microphone**, so you can think aloud as you work
+- **Your typed answers** to each task
+
+Your camera is never used.
+Nothing is recorded until you have agreed to it and pressed start.
+
+### How to Take Part
+
+The session page is one long page of six numbered blocks: Welcome, Consent, Setup and start, Task, Upload and Done.
+Each unlocks as you finish the one before it.
+
+1. Open the opportunity and click **Start Test**. The session opens in the same tab and takes over the page
+2. **Welcome**: read the brief and the list of tasks, then click **Continue to consent**
+3. **Consent**: read what you are agreeing to, then click **I agree and want to continue**. Choosing **I do not agree** ends the study there and nothing is recorded
+4. **Setup and start**: Cortex checks your browser, window size, microphone and screen sharing. If something fails, fix it and click **Check again**
+5. **Start recording**, which works one of two ways:
+   - If the study has a page for you to use, click **Open the task page** first. It opens in its own window. Then click **Start recording**, allow your microphone, and pick the task page in the browser's sharing chooser. In Chrome and Edge it is under the **Window** tab. Sharing your whole screen works just as well if you cannot find it
+   - If the study has no page to use, there is a single **Start recorded study** button instead
+6. **Task**: work through the tasks one at a time. A banner at the top of the page shows that recording is live. Each task either asks you to do something, to type an answer or to choose an option. Click **I’ve completed this task** to move on
+7. **Upload**: stay on the page while your recording uploads. Recording itself has already stopped by this point
+8. **Done**: you will see **Recording captured**, and nothing further is needed from you
+
+There are no right answers.
+The team is testing the product, not you.
+
+### Stopping
+
+You stay in control throughout:
+
+- **Before you begin**: click **I do not agree** at the consent step. The study ends cleanly and no recording begins. If you did that by mistake, **Review consent again** takes you back
+- **Once it has started**: stop sharing your screen using your browser's own stop-sharing control, at any point and for any reason. Recording ends immediately. What was already captured is kept, and your saved answers stay saved, so you can carry on through the remaining tasks
+- **If you shared the task window itself** rather than your whole screen, closing that window also ends the recording. Keep it open until you have finished
+
+Do not refresh or close the session tab until the upload has finished.
+Your recording is held in the browser until it uploads, so leaving the page destroys it, and that is true whether the recording stopped early or ran to the end.
+Your browser will warn you if you try.
+
+### After the Session
+
+Your sessions appear in **My Bookings** under **Self-guided sessions**.
+Each stage is listed separately, so one completed session usually shows two entries, one **Started** and one **Completed**, with the time each happened.
+A session you declined or left part-way through shows as **Abandoned**.
+**View opportunity** takes you back to the study it belonged to.
 
 ---
 
@@ -230,6 +302,31 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 - Try a different browser
 - Contact support if the problem continues
 
+### I Can't Start an Unmoderated Study
+
+If the **Start Test** button is disabled, or you are told the study is not yet configured, the research team has not finished setting it up.
+Contact them, or try again later.
+
+### My Browser Blocked the Task Page
+
+Allow pop-ups for Cortex from your browser's address bar, then click **Open the task page** again.
+
+### I Can't Find the Task Page in the Sharing Chooser
+
+In Chrome and Edge, look under the **Window** tab in the chooser.
+If it still is not listed, share your whole screen instead.
+
+### My Recording Stopped Before I Finished
+
+Either you or your browser stopped the screen share, which ends the recording.
+Everything captured up to that point is safe and still uploads, and your answers are saved.
+Carry on through the remaining tasks to finish the session.
+
+### I Can't Take Part on My Phone
+
+Recorded sessions need a laptop or desktop, a window at least 1024 pixels wide and one of Chrome, Edge, Arc, Opera or Firefox.
+Safari cannot record a session.
+
 ---
 
 ## FAQ
@@ -276,6 +373,24 @@ No, for privacy reasons, you can only see:
 2. Use the **"Send Feedback"** link in the header
 3. Contact support: nfine@adaptavist.com
 4. Submit a ticket via Service Desk
+
+### Do I Need to Book an Unmoderated Study?
+
+No.
+There is nothing to book and no time slot to keep.
+Open it and start whenever it suits you.
+
+### Is My Camera Recorded?
+
+No.
+An unmoderated study records your screen and your microphone only.
+Your camera is never switched on.
+
+### Can I Stop a Recorded Session Once It Has Started?
+
+Yes.
+Stop sharing your screen using your browser's own control and the recording ends immediately.
+Whatever was recorded before that point is kept, so if you would rather a session was not used at all, tell the research team.
 
 ### Is My Data Secure?
 
