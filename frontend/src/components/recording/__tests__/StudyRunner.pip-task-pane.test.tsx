@@ -67,22 +67,24 @@ function payload(token: string): SessionPayload {
 }
 
 type RunnerOverrides = {
+  captureStoppedExternally?: boolean;
   onCloseTaskPip?: () => void;
   onOpenTaskPip?: () => Promise<boolean>;
   onComplete?: () => void;
   pipSupported?: boolean;
   pipWindow?: Window | null;
+  recordingStatus?: "active" | "stopped";
 };
 
 function renderRunner(token: string, overrides: RunnerOverrides = {}) {
   return render(
     <StudyRunner
       attemptNumber={1}
-      captureStoppedExternally={false}
+      captureStoppedExternally={overrides.captureStoppedExternally ?? false}
       microphonePermission="granted"
       payload={payload(token)}
       recordingStartedAt={Date.parse("2026-08-14T10:00:00.000Z")}
-      recordingStatus="active"
+      recordingStatus={overrides.recordingStatus ?? "active"}
       screenPermission="granted"
       onComplete={overrides.onComplete ?? vi.fn()}
       onCloseTaskPip={overrides.onCloseTaskPip ?? vi.fn()}
@@ -221,6 +223,113 @@ describe("StudyRunner floating task pane", () => {
     expect(
       screen.getByRole("button", { name: /completed this task/i })
     ).toBeTruthy();
+  });
+
+  it("carries a non-authorable trust header the researcher cannot spoof", async () => {
+    // The pane has no browser chrome and the prompt is researcher-authored, so
+    // without this a one-step study is a bare window containing someone else's
+    // sentence, an input and a button, floating over everything and looking
+    // like it came from Cortex.
+    const pipWindow = createFakePipWindow();
+
+    renderRunner("token_pane_trust", { pipWindow });
+
+    const pane = await waitFor(() =>
+      within(pipWindow.document.body).getByRole("region", {
+        name: "Floating task panel"
+      })
+    );
+
+    expect(within(pane).getByText("Cortex")).toBeTruthy();
+    expect(within(pane).getByText("Checkout walkthrough")).toBeTruthy();
+    expect(within(pane).getByText(/^Recording$/)).toBeTruthy();
+  });
+
+  it("warns inside the pane when the recording has stopped", async () => {
+    // The "your recording stopped" modal renders in the Cortex tab - the one
+    // this pane exists to stop them looking at. Without this they can answer
+    // their way through a study that captured nothing.
+    const pipWindow = createFakePipWindow();
+
+    renderRunner("token_pane_rec_stopped", {
+      captureStoppedExternally: true,
+      pipWindow,
+      recordingStatus: "stopped"
+    });
+
+    const pane = await waitFor(() =>
+      within(pipWindow.document.body).getByRole("region", {
+        name: "Floating task panel"
+      })
+    );
+
+    expect(within(pane).getByText(/recording has stopped/i)).toBeTruthy();
+    expect(within(pane).getByText(/nothing you do here is being recorded/i)).toBeTruthy();
+    expect(within(pane).getByText("Not recording")).toBeTruthy();
+  });
+
+  it("keeps the pane up when the completion request fails", async () => {
+    // Closing it first made a failed final save look like the study had simply
+    // vanished, because the error renders only in the tab behind the task page.
+    const { sendRuntimeEvent } = await import("../../../lib/recording/runtime-client");
+    const pipWindow = createFakePipWindow();
+    const onCloseTaskPip = vi.fn();
+
+    renderRunner("token_pane_finish_fails", { onCloseTaskPip, pipWindow });
+
+    const pipBody = pipWindow.document.body;
+
+    await waitFor(() => {
+      within(pipBody).getByText("Task 1 of 2");
+    });
+    fireEvent.click(
+      within(pipBody).getByRole("button", { name: /completed this task/i })
+    );
+    await waitFor(() => {
+      within(pipBody).getByText("Task 2 of 2");
+    });
+
+    // Reject the COMPLETION event specifically. A bare mockRejectedValueOnce
+    // is consumed by the step_exited event that precedes it, so the failure
+    // lands before finishSession is ever reached and the test proves nothing.
+    // Verified by mutation: restoring the close-before-completion bug fails
+    // this test only with the conditional rejection in place.
+    vi.mocked(sendRuntimeEvent).mockImplementation(async (_token, event) => {
+      if ((event as { eventType?: string }).eventType === "session_completed") {
+        throw new Error("network");
+      }
+
+      return undefined as never;
+    });
+
+    fireEvent.click(
+      within(pipBody).getByRole("button", { name: /completed this task/i })
+    );
+
+    await screen.findByText(/could not finish the session/i);
+    expect(onCloseTaskPip).not.toHaveBeenCalled();
+  });
+
+  it("takes the pane down on any exit from the task phase, not just completion", async () => {
+    // An interrupted run unwinds by unmounting this component; the hook that
+    // owns the pane lives in the parent and stays mounted, so without an
+    // unmount cleanup the participant is left with an empty always-on-top
+    // window over the recovery message.
+    const pipWindow = createFakePipWindow();
+    const onCloseTaskPip = vi.fn();
+
+    const { unmount } = renderRunner("token_pane_unmount", {
+      onCloseTaskPip,
+      pipWindow
+    });
+
+    await waitFor(() => {
+      within(pipWindow.document.body).getByText("Task 1 of 2");
+    });
+
+    unmount();
+
+    expect(onCloseTaskPip).toHaveBeenCalled();
   });
 
   it("offers no pane control at all where Document PiP is unsupported", async () => {

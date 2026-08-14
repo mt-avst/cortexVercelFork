@@ -520,8 +520,19 @@ export function ParticipantSessionFlow({
                         //
                         // Only for studies with a task page: a questionnaire
                         // with no target has nothing to float over.
+                        //
+                        // Deliberately NOT awaited. requestWindow is invoked
+                        // synchronously inside openTaskPip, so the activation
+                        // is spent either way - but awaiting the window's
+                        // creation suspends this handler with capture already
+                        // live and the phase not yet flipped, which paints an
+                        // ENABLED "Start recording" button over a running
+                        // recording. startCapture has no re-entrancy guard, so
+                        // a second press restarts capture and orphans the first
+                        // recording's chunks. Never gate the phase flip on a
+                        // browser API.
                         if (primaryTargetUrl) {
-                          await taskPip.openTaskPip();
+                          void taskPip.openTaskPip();
                         }
 
                         setPhase("running");

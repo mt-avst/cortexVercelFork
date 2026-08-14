@@ -925,6 +925,50 @@
   margin: 0;
 }
 
+/* The non-authorable trust strip: Cortex identity and live recording state,
+   pinned above any researcher-authored prompt. */
+.fh-recording .pip-trust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1.5px solid var(--j-line-2);
+}
+
+.fh-recording .pip-trust-brand {
+  font-family: var(--font-display), serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.fh-recording .pip-trust-rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono), monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fh-recording .pip-trust-rec.is-live {
+  color: var(--accent-strong);
+}
+
+.fh-recording .pip-trust-rec.is-stopped {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.fh-recording .pip-trust-study {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
 .fh-recording .pip-prompt {
   margin: 0;
   font-family: var(--font-display), serif;
