@@ -16,9 +16,12 @@ describe('Race Condition Protection', () => {
         })
       ]);
       databaseAvailable = true;
-    } catch (error) {
+    } catch {
+      // The one genuinely discardable case in this sweep. This is a probe, not
+      // an operation: the failure IS the answer, and the suite skips rather
+      // than fails when no database is reachable - which is the normal case,
+      // because the backend suite is deliberately run without DATABASE_URL.
       databaseAvailable = false;
-      // Database not available, skipping race condition test
     } finally {
       clearTimeout(timeoutHandle!);
     }

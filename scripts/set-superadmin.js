@@ -46,7 +46,15 @@ async function setSuperadmin() {
       `);
       console.log('✅ Updated role constraint to include superadmin');
     } catch (error) {
-      console.log('ℹ️  Role constraint update skipped (may already be correct)');
+      // See set-superadmin.ts, which this file duplicates: not fatal, because a
+      // connection that cannot ALTER the table still works against a database
+      // whose constraint already allows superadmin, and the UPDATE below is the
+      // real gate. The message no longer asserts a cause it has not checked,
+      // and the error is no longer discarded.
+      console.log(
+        'ℹ️  Role constraint update did not apply:',
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     // Check if user exists

@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getNotificationPreferences, updateNotificationPreferences, NotificationPreference } from '../api/client';
+import { logger } from '../utils/logger';
 import AdminManagement from '../components/AdminManagement';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Card, CardHeader, CardBody, Alert, Spinner } from '../components/ui';
@@ -42,6 +43,10 @@ const Settings: React.FC = () => {
       const prefs = await getNotificationPreferences();
       setPreferences(prefs);
     } catch (err: unknown) {
+      logger.error('Failed to load notification preferences', {
+        component: 'Settings',
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       setError('Failed to load notification preferences');
     } finally {
       setLoadingPrefs(false);
@@ -70,6 +75,14 @@ const Settings: React.FC = () => {
       // Clear success message after 3 seconds
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
+      // The toggle is left showing the OLD value, which is correct - preferences
+      // state is only replaced from the server's response - but it means a
+      // failed save and a save the user never made look the same on screen.
+      logger.error('Failed to save notification preferences', {
+        component: 'Settings',
+        field,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       setError('Failed to save notification preferences');
     } finally {
       setSaving(false);

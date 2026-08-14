@@ -44,8 +44,22 @@ async function setSuperadmin() {
           CHECK (role IN ('employee', 'researcher_admin', 'superadmin'));
       `);
       console.log('✅ Updated role constraint to include superadmin');
-    } catch (error: any) {
-      console.log('ℹ️  Role constraint update skipped (may already be correct)');
+    } catch (error) {
+      // Not fatal, and deliberately so: an operator connecting as a role that
+      // cannot ALTER the table still gets here on a database whose constraint
+      // already allows superadmin, and the UPDATE below is the real gate - it
+      // fails on a check violation if the constraint genuinely is wrong.
+      //
+      // The message used to assert "may already be correct" without having
+      // checked anything, and dropped the error, so the one case that matters -
+      // existing rows holding a role the new constraint rejects - was invisible.
+      // Both statements go in one simple query, so pg wraps them in an implicit
+      // transaction and a failure leaves the old constraint in place rather
+      // than leaving the table unconstrained.
+      console.log(
+        'ℹ️  Role constraint update did not apply:',
+        error instanceof Error ? error.message : String(error)
+      );
     }
 
     // Check if user exists

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
 import { getMyCalendarEvents, getAvailability } from '../api/client';
@@ -104,6 +104,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   excludeWeekends,
   sessions
 }) => {
+  /**
+   * Slots whose label has already failed to render and been reported.
+   *
+   * The report below happens during render, and this grid re-renders on every
+   * currentTime tick - so without this, one malformed timestamp would emit a
+   * console line every tick for the life of the page. Once per slot is enough
+   * to diagnose it; a flood is just a different way of losing the signal.
+   */
+  const reportedLabelFailures = useRef<Set<string>>(new Set());
+
   const formatTime = (dateString: string) => {
     // Ensure consistent UTC time formatting
     const date = new Date(dateString);
@@ -848,6 +858,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                   </div>
                                 );
                               } catch (error) {
+                                // Rendering null keeps one bad timestamp from
+                                // throwing during render and taking the whole
+                                // session grid down with it. But an admin cannot
+                                // tell a label that is hidden from a label that
+                                // failed, so the cause has to go somewhere -
+                                // once per slot, for the reason on the ref.
+                                const slotKey = `${slot.start}|${slot.end}`;
+                                if (!reportedLabelFailures.current.has(slotKey)) {
+                                  reportedLabelFailures.current.add(slotKey);
+                                  logger.error('Could not render a time-slot label', {
+                                    component: 'AdminSessionManager',
+                                    slotStart: slot.start,
+                                    slotEnd: slot.end,
+                                    errorMessage: error instanceof Error ? error.message : String(error),
+                                  });
+                                }
                                 return null;
                               }
                             })()}

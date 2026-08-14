@@ -7,9 +7,6 @@
   "backend/src/db/migrate.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 12
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "backend/src/db/reset-calendar-bookings.ts": {
@@ -81,11 +78,6 @@
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 6
-    }
-  },
-  "backend/src/routes/__tests__/race-condition.test.ts": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "backend/src/routes/__tests__/session-outputs-internal.test.ts": {
@@ -224,12 +216,12 @@
   },
   "frontend/src/components/AdminSessionManager.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 4
     }
   },
   "frontend/src/components/CalendarGrid.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 12
+      "count": 10
     }
   },
   "frontend/src/components/KpiStats.tsx": {
@@ -264,7 +256,7 @@
   },
   "frontend/src/pages/Admin.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 2
     }
   },
   "frontend/src/pages/Feedback.tsx": {
@@ -277,7 +269,7 @@
       "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
-      "count": 2
+      "count": 1
     }
   },
   "frontend/src/pages/MyBookings.tsx": {
@@ -287,7 +279,7 @@
   },
   "frontend/src/pages/OpportunityDetail.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 6
+      "count": 5
     }
   },
   "frontend/src/pages/OpportunityForm.tsx": {
@@ -297,7 +289,7 @@
   },
   "frontend/src/pages/Settings.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 1
     }
   },
   "frontend/src/pages/__tests__/OpportunityForm.test.tsx": {
@@ -340,17 +332,6 @@
   },
   "scripts/set-superadmin.js": {
     "@typescript-eslint/no-require-imports": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
-  "scripts/set-superadmin.ts": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
       "count": 1
     }
   },

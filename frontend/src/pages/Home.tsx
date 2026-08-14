@@ -6,6 +6,7 @@ import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHoverBgColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining, filterOpportunitiesForPresentationListing } from '../utils/opportunityUtils';
+import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
@@ -145,6 +146,15 @@ const Home: React.FC = memo(() => {
         setOpportunities(list);
       }
     } catch (err: unknown) {
+      // "Temporarily unavailable, try again shortly" is a claim about the CAUSE,
+      // and this catch also covers the filtering above it - so a bug in that
+      // filter told every employee on the landing page to come back later,
+      // forever, and left nothing behind to say otherwise.
+      logger.error('Failed to load the opportunity listing', {
+        component: 'Home',
+        presentationListing,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
       setError('Studies are temporarily unavailable. Please try again shortly.');
       setOpportunities([]); // Set empty array on error
     } finally {
