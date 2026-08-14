@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -5,6 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, {
   clearTypeConditionalErrors,
+  describeValidationFailure,
+  FIELD_LOCATIONS,
+  locateField,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
 } from '../OpportunityForm';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
@@ -46,6 +52,11 @@ vi.mock('../../api/client', () => ({
 // so getFirstHandStudies still resolves its launched study in every test.
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom has no scroll implementation, and every refused action in this form
+  // now scrolls the banner into view - without this the suite is buried in
+  // "Not implemented: window.scrollTo". Re-established each test, after the
+  // clear, so call history is per-test.
+  vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
 });
 
 // ---------------------------------------------------------------------------
@@ -520,5 +531,298 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Demo Study' })).toBeInTheDocument();
     expect(vi.mocked(getFirstHandStudies)).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Silent failures in the authoring form - two live defects (2026-08-14)
+//
+// Both had the same shape: the author acts, nothing visible happens, and the
+// only tell is a console line they will never see. The form spans three tabs,
+// so "the problem is on a tab you are not looking at" is the normal case, not
+// an edge case.
+// ---------------------------------------------------------------------------
+
+describe('locateField', () => {
+  it('puts each error key on the tab that actually renders it', () => {
+    expect(locateField('title').tab).toBe(1);
+    expect(locateField('participant_type_specific_details').tab).toBe(2);
+    expect(locateField('external_link_optional').tab).toBe(3);
+    expect(locateField('inline_study_consent_text').tab).toBe(3);
+  });
+
+  it('names a task by its position, not by its state key', () => {
+    // The author never sees "inline_study_steps.0.prompt" anywhere in the UI.
+    expect(locateField('inline_study_steps.0.prompt')).toEqual({
+      tab: 3,
+      label: 'Task 1',
+    });
+    expect(locateField('inline_study_steps.2.options').label).toBe('Task 3');
+  });
+
+  it('falls back to the first tab for a key it does not know', () => {
+    // A new validation rule must never route the author nowhere.
+    expect(locateField('some_future_field')).toEqual({
+      tab: 1,
+      label: 'some_future_field',
+    });
+  });
+
+  it('does not mistake an inherited Object property for a known field', () => {
+    // A plain object answers to `constructor`, `toString` and `__proto__` with
+    // truthy inherited values, which would sail past a `??` fallback and
+    // produce a banner naming no field and no tab to open.
+    ['constructor', 'toString', '__proto__', 'hasOwnProperty'].forEach((key) => {
+      expect(locateField(key)).toEqual({ tab: 1, label: key });
+    });
+  });
+});
+
+describe('describeValidationFailure', () => {
+  it('opens the earliest tab holding a problem, and names every failing field', () => {
+    const { tab, message } = describeValidationFailure({
+      inline_study_consent_text: 'Consent text is required',
+      title: 'Title is required',
+    });
+
+    // Earliest, not first-inserted: the object above lists the tab-3 error
+    // first, and sending the author to tab 3 would leave the title untouched.
+    expect(tab).toBe(1);
+    expect(message).toBe('Please fix these fields: Title, Consent text');
+  });
+
+  it('names a field once even when it fails twice', () => {
+    const { message } = describeValidationFailure({
+      'inline_study_steps.0.prompt': 'Add what the participant should see',
+      'inline_study_steps.0.options': 'A choice task needs at least two options',
+    });
+    expect(message).toBe('Please fix these fields: Task 1');
+  });
+
+  it('holds the current tab when there is nothing to report', () => {
+    expect(describeValidationFailure({})).toEqual({ tab: null, message: '' });
+  });
+});
+
+describe('FIELD_LOCATIONS completeness', () => {
+  // The fallback in locateField degrades gracefully - tab 1, and the raw state
+  // key as the label - which means a new validation rule shows the author
+  // "Please fix these fields: some_new_key" and routes them to the wrong tab,
+  // while every test still passes. Nothing else in the repo catches that: there
+  // is no ESLint here and the keys are strings on both sides. So hold the map
+  // to the source of truth in both directions.
+  // Resolved from the vitest root (frontend/), because import.meta.url is not
+  // a file: URL under the jsdom environment.
+  const source = readFileSync(resolve(process.cwd(), 'src/pages/OpportunityForm.tsx'), 'utf8');
+  const produced = [
+    ...new Set(
+      [...source.matchAll(/(?:errors|fieldErrors)\.([a-z_]+)\s*=/g)].map((match) => match[1])
+    ),
+  ].sort();
+
+  it('finds the validation keys it is meant to be checking', () => {
+    // Guards the regex itself: if it stops matching, the two tests below pass
+    // vacuously against an empty list.
+    expect(produced.length).toBeGreaterThanOrEqual(12);
+    expect(produced).toContain('title');
+    expect(produced).toContain('inline_study_consent_text');
+  });
+
+  it('has an entry for every error key the validators can set', () => {
+    const missing = produced.filter((key) => !(key in FIELD_LOCATIONS));
+    expect(missing).toEqual([]);
+  });
+
+  it('has no entry for a field that can never fail', () => {
+    // A dead entry looks verified and drifts silently - two of them named
+    // fields whose on-screen labels had already changed.
+    const dead = Object.keys(FIELD_LOCATIONS).filter((key) => !produced.includes(key));
+    expect(dead).toEqual([]);
+  });
+});
+
+describe('OpportunityForm - a refused action always says so', () => {
+  it('sends the author back to the type field instead of no-oping on Continue', async () => {
+    // Reachable because the tab headers are directly clickable, which bypasses
+    // the guard on tab 1's own Continue. With no type chosen there is no tab 3
+    // to continue to, so the button used to setActiveTab(2) from tab 2 - a
+    // no-op, with the label silently degraded to a bare "Continue".
+    renderForm();
+
+    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    expect(screen.getByLabelText(/Description \(Optional\)/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
+
+    expect(
+      await screen.findByText('Please fix these fields: Research Study Type')
+    ).toBeInTheDocument();
+    // Back on the tab that holds the field, with the field itself marked.
+    expect(
+      screen.getByRole('combobox', { name: /Research Study Type/i })
+    ).toBeInvalid();
+    expect(screen.getByText('Please select a research study type')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalled();
+  });
+
+  it('says why a save was refused, and opens the tab holding the problem', async () => {
+    // The create button only exists on tab 3, so every create is submitted from
+    // the furthest tab from Basic Information. A missing title failed
+    // validation, logged, and returned - no banner, no scroll, no tab change.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    expect(
+      await screen.findByText('Please fix these fields: Title')
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/^Title/i)).toBeInvalid();
+    expect(screen.getByText('Title is required')).toBeInTheDocument();
+    expect(window.scrollTo).toHaveBeenCalled();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it('opens the middle tab when that is where the problem is', async () => {
+    // Guards the routing rather than a hardcoded "go to tab 1": the failing
+    // field here is on Content & Details, two tabs from where it was refused.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' },
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    fireEvent.change(screen.getByLabelText(/Participant Type/i), {
+      target: { value: 'specific' },
+    });
+
+    // Anchored on the tab's own description: from tab 2 the forward button is
+    // named "Continue to Task List", so /Task List/i alone matches both.
+    fireEvent.click(
+      screen.getByRole('button', { name: /What the participant does/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    expect(
+      await screen.findByText('Please fix these fields: Specific Criteria')
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Specific participant criteria is required when "Specific" is selected'
+      )
+    ).toBeInTheDocument();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it('takes the banner away as the author fixes what it named', () => {
+    // The banner used to be a second copy of the failure held in its own state,
+    // so fixing the field cleared the inline error underneath while the banner
+    // went on naming it. Derived now, so it empties itself.
+    const { container } = renderForm();
+
+    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
+    expect(
+      screen.getByText('Please fix these fields: Research Study Type')
+    ).toBeInTheDocument();
+
+    selectType('poll');
+
+    expect(
+      screen.queryByText('Please fix these fields: Research Study Type')
+    ).not.toBeInTheDocument();
+    // The banner has to GO, not just empty out: rendering the alert box off a
+    // flag while its text comes from elsewhere leaves a red bar saying nothing.
+    expect(container.querySelector('.alert-danger')).toBeNull();
+  });
+
+  it('stays put when the earliest problem is already on the open tab', async () => {
+    // Exercises setActiveTab(3) from tab 3 - the routing must not bounce the
+    // author to tab 1 just because that is where most fields live.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' },
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' },
+    });
+    fireEvent.change(screen.getByLabelText(/Consent text/i), { target: { value: '  ' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    expect(
+      await screen.findByText('Please fix these fields: Consent text')
+    ).toBeInTheDocument();
+    // Still on the Task List tab, with the field that failed on screen.
+    expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it('refuses an emptied duration instead of letting the API reject it', async () => {
+    // parseInt('') is NaN, and NaN < 5 and NaN > 240 are both false, so a
+    // cleared duration passed every client check and came back as an opaque
+    // 400 with no field named. Driven through edit mode because Save Changes
+    // is the only submit control a test/interview study has outside the
+    // session manager.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-9',
+      type: 'test',
+      title: 'Moderated walkthrough',
+      purpose_one_liner: 'Watch people work through the new checkout end to end',
+      status: 'draft',
+      default_duration_minutes: 30,
+      meeting_location_optional: 'Zoom',
+      participant_type_required: 'any',
+    } as any);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-9/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Basic Info/i }));
+    fireEvent.change(await screen.findByLabelText(/Default Duration/i), {
+      target: { value: '' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
+
+    expect(
+      await screen.findByText('Please fix these fields: Default Duration (minutes)')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Duration must be between 5 and 240 minutes')).toBeInTheDocument();
+    expect(vi.mocked(updateOpportunity)).not.toHaveBeenCalled();
   });
 });
