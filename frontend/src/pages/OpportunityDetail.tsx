@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startRecordedStudySession } from '../api/client';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
@@ -11,7 +11,7 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
-import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
+import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators
 const renderPollDescription = (description: string) => {
@@ -125,6 +125,37 @@ const OpportunityDetail: React.FC = () => {
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   // Table view booking confirmation state
   const [confirmBooking, setConfirmBooking] = useState<{ show: boolean; session: Session | null }>({ show: false, session: null });
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Two things the page now owes the participant, because it no longer
+   * disappears when something fails.
+   *
+   * TAKE THEM TO THE MESSAGE. The banner renders above the study brief, while
+   * the calendar and the Start Test button are both well below the fold. The
+   * old full-page takeover was destructive but never missable - the page
+   * collapsed to a short alert and the browser clamped scroll to the top.
+   * Someone who had scrolled down to click a slot would otherwise now see
+   * literally nothing change when that slot fails. aria-live covers assistive
+   * tech only; this is for everyone else.
+   *
+   * AND DO NOT CONTRADICT IT. bookingSuccess lives in a different panel and
+   * nothing else clears it, so a booking that succeeded and a later failure -
+   * a failed refresh, say - could show a green "Successfully booked" and a red
+   * error at once. That was impossible while any error removed the page.
+   */
+  useEffect(() => {
+    if (!error) return;
+
+    setBookingSuccess(null);
+
+    const banner = errorBannerRef.current;
+    if (!banner) return;
+    // Optional call: jsdom does not implement scrollIntoView, and a missing
+    // scroll must not cost the focus move on the line after it.
+    banner.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+    banner.focus();
+  }, [error]);
 
   const loadOpportunity = useCallback(async (forceRefresh = false) => {
     if (!id) return;
@@ -152,6 +183,22 @@ const OpportunityDetail: React.FC = () => {
       } else {
         const errorMessage = axiosError.response?.data?.error || axiosError.message || 'Failed to load opportunity';
         setError(`Failed to load opportunity: ${errorMessage}`);
+      }
+
+      // Drop the loaded study when the server said it is no longer ours to
+      // show, and keep it when the server simply did not answer.
+      //
+      // This is what makes the page-level `error && !opportunity` gate correct
+      // by construction rather than by coincidence. Without it, a study that
+      // has since been deleted, unpublished or closed - or a draft whose reader
+      // has lost the role that let them see it - would keep rendering from
+      // stale state behind a banner, indefinitely, with a bookable calendar for
+      // something that is not bookable. A 5xx, a timeout or a dropped
+      // connection says nothing about entitlement, so there the content on
+      // screen is still the best thing to show and the banner annotates it.
+      const status = axiosError.response?.status;
+      if (status === 401 || status === 403 || status === 404) {
+        setOpportunity(null);
       }
     } finally {
       setLoading(false);
@@ -323,9 +370,6 @@ const OpportunityDetail: React.FC = () => {
       setError('');
       setBookingSuccess(null);
 
-      // Store the session ID for potential retry
-      sessionStorage.setItem('lastAttemptedSession', sessionId);
-
       const bookingResult = await bookSession(sessionId);
 
       // Track action click for successful booking
@@ -394,12 +438,10 @@ const OpportunityDetail: React.FC = () => {
       // Guarding it on a "did the booking land" flag was tried and removed: the
       // flag was unreachable, and its test passed against a build without it.
       //
-      // What this does not fix: setError above trips the page-level
-      // `if (error)` early return, which replaces this whole page - grid
-      // included - on most failure paths, so the unwind is usually unmounted
-      // rather than seen. That early return is its own defect, and it is also
-      // why the inline Retry Booking banner further down is unreachable. Fixing
-      // it is a separate change.
+      // The unwind is now actually visible: the page-level early return only
+      // fires when there is no opportunity to show, so a failed booking leaves
+      // the study and its calendar on screen with the message in the inline
+      // banner, and the slot goes back to being clickable.
       throw err;
     } finally {
       setBookingLoading(null);
@@ -415,7 +457,17 @@ const OpportunityDetail: React.FC = () => {
     }
   };
 
-  if (loading) {
+  // Same rule as the error gate below, and the fix is only half applied
+  // without it: a refresh of a page that is ALREADY on screen must not blank
+  // it. This branch runs first, so a bare `if (loading)` undid most of the
+  // point - the 409 path awaits loadOpportunity(true), so "Session is full"
+  // still made the study and its calendar vanish to a spinner and come back.
+  // It also meant the banner's own Refresh Data button unmounted the banner it
+  // lives in, which is why its `disabled={loading}` was unreachable.
+  //
+  // The in-place affordance for a refresh already exists: the ghost refresh
+  // control in the sessions panel spins on `loading`.
+  if (loading && !opportunity) {
     return (
       <div className="container mt-4" aria-busy="true" aria-live="polite">
         <h1>Loading Opportunity</h1>
@@ -429,11 +481,25 @@ const OpportunityDetail: React.FC = () => {
     );
   }
 
-  if (error) {
-    // If error is 404 and user is not admin, offer helpful guidance
-    const is404Error = error.includes('not found') || error.includes('404');
-    const isNotAdmin = !user || (user.role !== 'researcher_admin' && user.role !== 'superadmin');
-
+  // Only take the whole page over when there is genuinely nothing to show.
+  //
+  // This used to be a bare `if (error)`, which meant ANY error replaced the
+  // entire page with the alert below - the study description, the session
+  // calendar, all of it - leaving a full reload as the only way back. An
+  // ordinary "Session is full" from two participants racing for the last slot
+  // did that. So did a failed refresh of a page that was already on screen and
+  // perfectly readable.
+  //
+  // It also made the page's own inline error banner unreachable dead code: the
+  // one further down with Refresh Data, Retry Booking and a dismiss button,
+  // which is obviously the intended surface for a failure that happens while
+  // you are looking at a study. This restores it.
+  //
+  // The distinction is what the participant can still do, not how bad the error
+  // is. No opportunity means the page has no content and the error IS the page.
+  // An opportunity in hand means the error is about one action, and taking the
+  // study away to report it costs more than it explains.
+  if (error && !opportunity) {
     return (
       <div className="container mt-4">
         <h1>Opportunity Details</h1>
@@ -515,7 +581,13 @@ const OpportunityDetail: React.FC = () => {
 
           {/* Error message */}
           {error && (
-            <div className="alert alert-danger alert-dismissible fade show mission-alert" role="alert" aria-live="assertive">
+            <div
+              ref={errorBannerRef}
+              tabIndex={-1}
+              className="alert alert-danger alert-dismissible fade show mission-alert"
+              role="alert"
+              aria-live="assertive"
+            >
               {error}
               <div className="mt-2">
                 <button
@@ -527,25 +599,21 @@ const OpportunityDetail: React.FC = () => {
                   <RefreshCw size={14} className="me-1" aria-hidden="true" />
                   Refresh Data
                 </button>
-                <button
-                  className="btn btn-sm btn-danger me-2"
-                  onClick={async () => {
-                    setError('');
-                    // Try to book a session
-                    const sessionToRetry = opportunity?.sessions?.find(s => s.remaining > 0);
-                    if (sessionToRetry) {
-                      // handleBookSession rethrows so CalendarGrid can unwind
-                      // its optimistic mark. There is nothing to unwind here,
-                      // and the banner it sets is already the whole surface.
-                      await handleBookSession(sessionToRetry.id).catch(() => undefined);
-                    }
-                  }}
-                  disabled={loading}
-                  aria-label="Retry booking a session"
-                >
-                  <RotateCcw size={14} className="me-1" aria-hidden="true" />
-                  Retry Booking
-                </button>
+                {/*
+                  There WAS a "Retry Booking" button here, and it is deliberately
+                  gone rather than restored along with the rest of this banner.
+                  It retried `sessions.find(s => s.remaining > 0)` - the first
+                  session with space, NOT the one the participant had chosen - so
+                  the moment this banner became reachable it would have started
+                  booking people into slots they never picked. Silently, since a
+                  booking that succeeds says only "Successfully booked".
+                  It is also redundant now: the whole point of not taking the
+                  page over is that the calendar is still there, and the previous
+                  change unwinds the failed slot's optimistic mark, so retrying
+                  is clicking the slot again - against the slot they actually
+                  want. If a one-click retry is ever wanted here, it has to carry
+                  the session id that failed.
+                */}
               </div>
               <button
                 type="button"
@@ -1058,7 +1126,7 @@ const OpportunityDetail: React.FC = () => {
         variant="primary"
         onConfirm={() => {
           if (confirmBooking.session) {
-            // See the retry button above: the rethrow exists for CalendarGrid,
+            // As with the retry path: the rethrow exists for CalendarGrid,
             // and the error banner is already the surface for this path.
             void handleBookSession(confirmBooking.session.id).catch(() => undefined);
           }
