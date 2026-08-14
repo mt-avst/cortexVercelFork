@@ -1,0 +1,416 @@
+{
+  "backend/src/__tests__/health-endpoint.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "backend/src/db/migrate.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 12
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/db/reset-calendar-bookings.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/db/reset-demo-data.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "backend/src/firsthand/runtime-repository-postgres.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "backend/src/firsthand/s3-upload-integration.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "backend/src/firsthand/session-store.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "backend/src/index.ts": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/middleware/authenticate.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/routes/__tests__/auth.integration.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "backend/src/routes/__tests__/auth.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 16
+    }
+  },
+  "backend/src/routes/__tests__/bookings.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    }
+  },
+  "backend/src/routes/__tests__/firsthand-session.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 21
+    }
+  },
+  "backend/src/routes/__tests__/firsthand.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 28
+    }
+  },
+  "backend/src/routes/__tests__/opportunities.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 14
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "backend/src/routes/__tests__/race-condition.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/routes/__tests__/session-outputs-internal.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 7
+    }
+  },
+  "backend/src/routes/__tests__/sessions.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "backend/src/routes/auth.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/routes/bookings.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 7
+    }
+  },
+  "backend/src/routes/calendar.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "backend/src/routes/gamification.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "backend/src/routes/opportunities.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "backend/src/routes/sessions.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "backend/src/routes/userCalendar.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/services/calendar.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 10
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 7
+    }
+  },
+  "backend/src/services/email.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "backend/src/services/userCalendar.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/utils/__tests__/database.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "backend/src/utils/__tests__/deepHealth.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 10
+    }
+  },
+  "backend/src/utils/__tests__/errorHandler.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "backend/src/utils/__tests__/logger.test.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "backend/src/utils/errorHandler.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 18
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "backend/src/utils/logger.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 5
+    },
+    "@typescript-eslint/no-unsafe-function-type": {
+      "count": 2
+    }
+  },
+  "backend/src/utils/publicOpportunity.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "backend/src/validation/schemas.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    }
+  },
+  "e2e/light-mode-contrast.test.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "frontend/src/api/client.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "frontend/src/components/AdminFeedback.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/AdminSessionManager.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 5
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 7
+    }
+  },
+  "frontend/src/components/CalendarGrid.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 12
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "frontend/src/components/KpiStats.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/Leaderboard.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/LoadingSpinner.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/OpportunityForm/BasicInfoTab.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/SessionEditor.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    }
+  },
+  "frontend/src/components/SpotlightGrid.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "frontend/src/components/StaticNeuralBackground.tsx": {
+    "react-hooks/exhaustive-deps": {
+      "count": 4
+    }
+  },
+  "frontend/src/contexts/AuthContext.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 4
+    }
+  },
+  "frontend/src/pages/Admin.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 7
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "frontend/src/pages/Feedback.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "frontend/src/pages/Home.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 1
+    }
+  },
+  "frontend/src/pages/MyBookings.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "frontend/src/pages/OpportunityDetail.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 6
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 3
+    }
+  },
+  "frontend/src/pages/OpportunityForm.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    },
+    "react-hooks/exhaustive-deps": {
+      "count": 2
+    }
+  },
+  "frontend/src/pages/Settings.tsx": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 3
+    }
+  },
+  "frontend/src/pages/__tests__/OpportunityForm.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 11
+    }
+  },
+  "frontend/src/utils/__tests__/errorHandler.test.tsx": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 10
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 4
+    }
+  },
+  "frontend/src/utils/errorHandler.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 12
+    }
+  },
+  "frontend/src/utils/logger.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    }
+  },
+  "frontend/src/utils/opportunityUtils.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/migrate-tokens.ts": {
+    "@typescript-eslint/no-unused-vars": {
+      "count": 2
+    }
+  },
+  "scripts/reset-keep-two-users.js": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    }
+  },
+  "scripts/set-superadmin.js": {
+    "@typescript-eslint/no-require-imports": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "scripts/set-superadmin.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 1
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "shared/config/environment.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 2
+    }
+  },
+  "shared/services/gamification.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 3
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  },
+  "shared/test-utils/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 14
+    }
+  },
+  "shared/types/index.ts": {
+    "@typescript-eslint/no-explicit-any": {
+      "count": 6
+    },
+    "@typescript-eslint/no-unused-vars": {
+      "count": 1
+    }
+  }
+}

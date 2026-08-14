@@ -99,3 +99,34 @@ check-release-will-deploy:
 
 security_reports_gate:
   timeout: 5m
+
+# Lint. Nothing in this pipeline ran ESLint before, because ESLint was not
+# installed - the frontend/.eslintrc.js that existed was inert.
+#
+# The rule policy lives in eslint.config.mjs at the repo root. Every rule is an
+# error; the 396 pre-existing violations are recorded per file and per rule in
+# eslint-suppressions.json. So a new violation fails even if someone fixed one
+# somewhere else in the same change - which no aggregate count can do, however
+# it is asserted - and ESLint also fails the run when a suppression stops being
+# needed, which is what stops the record quietly drifting out of date. Run
+# `npm run lint:prune` when it says so.
+#
+# Root `npm ci` only. The config uses the non-type-aware typescript-eslint
+# preset, so parsing frontend/ and backend/ sources needs neither of their
+# dependency trees installed.
+#
+# Image pinned exactly, and to the same Node the apps build on - matching
+# backend/Dockerfile's own "bump deliberately, in git" standard.
+lint:
+  stage: .pre
+  image: registry.hub.docker.com/library/node:20.20.2-alpine3.22
+  needs: []
+  interruptible: true
+  script:
+    - npm ci --ignore-scripts
+    - npm run lint
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'

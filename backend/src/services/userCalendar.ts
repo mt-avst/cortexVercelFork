@@ -671,7 +671,7 @@ export class UserCalendarService {
         { title: 'Lunch Break', duration: 60 },
       ];
 
-      let currentDate = new Date(start);
+      const currentDate = new Date(start);
       let eventCount = 0;
       const maxEvents = 5;
 
