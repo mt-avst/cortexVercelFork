@@ -279,7 +279,7 @@
   },
   "frontend/src/pages/OpportunityDetail.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 5
+      "count": 3
     }
   },
   "frontend/src/pages/OpportunityForm.tsx": {
