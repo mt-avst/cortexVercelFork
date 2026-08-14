@@ -176,7 +176,10 @@ const Home: React.FC = memo(() => {
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [location.pathname]); // Only re-run when pathname changes
+    // loadOpportunities is memoised on presentationListing, so this also
+    // reloads if that flips - which is correct, since it decides which studies
+    // are filtered out of the response.
+  }, [location.pathname, loadOpportunities]);
 
 
   // Check for booking success parameter and show banner

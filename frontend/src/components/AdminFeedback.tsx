@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { getFeedback, deleteFeedback, exportFeedbackCsv, FeedbackItem } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
@@ -157,21 +157,26 @@ const AdminFeedback: React.FC = () => {
     setViewModal({ show: true, index });
   };
 
-  const closeViewModal = () => {
+  // These three are named by the keyboard effect below, so they are memoised
+  // on what they actually read - otherwise being rebuilt every render would
+  // re-register the window listener on every render.
+  const closeViewModal = useCallback(() => {
     setViewModal({ show: false, index: 0 });
-  };
+  }, []);
 
-  const goToPrevious = () => {
-    if (viewModal.index > 0) {
-      setViewModal({ show: true, index: viewModal.index - 1 });
-    }
-  };
+  const goToPrevious = useCallback(() => {
+    setViewModal((current) =>
+      current.index > 0 ? { show: true, index: current.index - 1 } : current
+    );
+  }, []);
 
-  const goToNext = () => {
-    if (viewModal.index < sortedFeedback.length - 1) {
-      setViewModal({ show: true, index: viewModal.index + 1 });
-    }
-  };
+  const goToNext = useCallback(() => {
+    setViewModal((current) =>
+      current.index < sortedFeedback.length - 1
+        ? { show: true, index: current.index + 1 }
+        : current
+    );
+  }, [sortedFeedback.length]);
 
   // Handle keyboard navigation in modal
   useEffect(() => {
@@ -189,7 +194,10 @@ const AdminFeedback: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [viewModal]);
+    // viewModal.show rather than the whole object: the handlers read the index
+    // through the state updater, so the listener no longer has to be torn down
+    // and re-registered every time the index moves.
+  }, [viewModal.show, goToPrevious, goToNext, closeViewModal]);
 
   const currentFeedback = sortedFeedback[viewModal.index];
 
