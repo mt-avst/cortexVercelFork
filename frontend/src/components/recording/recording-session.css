@@ -898,6 +898,44 @@
   color: var(--accent-strong);
 }
 
+.fh-recording .task-window-float {
+  min-height: 0;
+  justify-self: start;
+}
+
+/*
+ * Floating task pane (Document PiP). The PiP document's body carries
+ * .fh-recording itself (set in task-pip.ts), the same trick the portalled
+ * modal uses, so the scoped variables and base component styles all apply.
+ */
+.fh-recording.pip-body {
+  margin: 0;
+  background: var(--bg);
+  overflow: auto;
+}
+
+.fh-recording .pip-card {
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.fh-recording .pip-counter {
+  margin: 0;
+}
+
+.fh-recording .pip-prompt {
+  margin: 0;
+  font-family: var(--font-display), serif;
+  font-size: 19px;
+  line-height: 1.3;
+}
+
+.fh-recording .pip-complete {
+  justify-self: start;
+}
+
 .fh-recording .journey-verdict {
   margin: 0 0 4px;
   font-size: 14px;

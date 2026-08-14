@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import type { SessionPayload, StudyStep } from "../../shared/firsthand/contract";
 import { describeTarget } from "../../lib/recording/task-target";
@@ -46,6 +47,13 @@ type StudyRunnerProps = {
   // Opens (or brings back to the front) the separate window the participant is
   // recording. Returns false only when a pop-up block stopped it.
   onOpenTaskWindow: (url: string) => boolean;
+  // The floating task pane is owned by the session flow, which opens it as
+  // recording starts. The runner only renders into it, takes it down when the
+  // session ends, and offers the way back if the participant closes it.
+  onCloseTaskPip: () => void;
+  onOpenTaskPip: () => Promise<boolean>;
+  pipSupported: boolean;
+  pipWindow: Window | null;
 };
 
 type StoredResponseMap = Record<
@@ -72,7 +80,11 @@ export function StudyRunner({
   recordingStatus,
   screenPermission,
   onComplete,
-  onOpenTaskWindow
+  onCloseTaskPip,
+  onOpenTaskPip,
+  onOpenTaskWindow,
+  pipSupported,
+  pipWindow
 }: StudyRunnerProps) {
   const storageKey = getRunnerStorageKey(payload.session.session_token, attemptNumber);
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
@@ -219,6 +231,26 @@ export function StudyRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedAt, isHydrated, startedAt, taskSteps.length]);
 
+  function handleTextChange(step: StudyStep, text: string) {
+    setValidationError(null);
+    setResponses((currentResponses) => ({
+      ...currentResponses,
+      [step.step_id]: {
+        text
+      }
+    }));
+  }
+
+  function handleChooseOption(step: StudyStep, option: string) {
+    setValidationError(null);
+    setResponses((currentResponses) => ({
+      ...currentResponses,
+      [step.step_id]: {
+        selectedOption: option
+      }
+    }));
+  }
+
   if (!isHydrated) {
     return (
       <div className="runner-shell">
@@ -230,6 +262,9 @@ export function StudyRunner({
   }
 
   async function finishSession() {
+    // The floating pane belongs to the running study; the upload and done
+    // sections happen back in this tab.
+    onCloseTaskPip();
     await sendRuntimeEvent(payload.session.session_token, {
       attemptNumber,
       eventType: "session_completed"
@@ -368,7 +403,10 @@ export function StudyRunner({
 
       {currentTargetUrl ? (
         <TaskWindowPanel
+          onReopen={onOpenTaskPip}
           onOpen={onOpenTaskWindow}
+          pipOpen={Boolean(pipWindow)}
+          pipSupported={pipSupported}
           recordingActive={recordingStatus === "active"}
           targetUrl={currentTargetUrl}
         />
@@ -399,54 +437,12 @@ export function StudyRunner({
           </div>
         ) : null}
 
-        {currentStep.type === "open_text" ? (
-          <textarea
-            className="response-input"
-            onChange={(event) => {
-              const text = event.target.value;
-              setValidationError(null);
-              setResponses((currentResponses) => ({
-                ...currentResponses,
-                [currentStep.step_id]: {
-                  text
-                }
-              }));
-            }}
-            placeholder="Type your response here"
-            rows={7}
-            value={responses[currentStep.step_id]?.text ?? ""}
-          />
-        ) : null}
-
-        {currentStep.type === "single_choice" ? (
-          <div className="choice-list">
-            {currentStep.options?.map((option) => {
-              const checked =
-                responses[currentStep.step_id]?.selectedOption === option;
-
-              return (
-                <label className={`choice-item ${checked ? "is-selected" : ""}`} key={option}>
-                  <input
-                    checked={checked}
-                    name={currentStep.step_id}
-                    onChange={() => {
-                      setValidationError(null);
-                      setResponses((currentResponses) => ({
-                        ...currentResponses,
-                        [currentStep.step_id]: {
-                          selectedOption: option
-                        }
-                      }));
-                    }}
-                    type="radio"
-                    value={option}
-                  />
-                  <span>{option}</span>
-                </label>
-              );
-            })}
-          </div>
-        ) : null}
+        <TaskResponseFields
+          onChooseOption={(option) => handleChooseOption(currentStep, option)}
+          onTextChange={(text) => handleTextChange(currentStep, text)}
+          response={responses[currentStep.step_id]}
+          step={currentStep}
+        />
 
         {validationError ? (
           // Beside the input the participant needs to act on, not in the
@@ -476,6 +472,25 @@ export function StudyRunner({
           {isSubmitting ? "Saving..." : "I’ve completed this task"}
         </button>
       </div>
+
+      {pipWindow
+        ? createPortal(
+            <PipTaskCard
+              count={taskSteps.length}
+              index={safeTaskIndex}
+              isSubmitting={isSubmitting}
+              onChooseOption={(option) => handleChooseOption(currentStep, option)}
+              onComplete={() => {
+                void handleCompleteTask();
+              }}
+              onTextChange={(text) => handleTextChange(currentStep, text)}
+              response={responses[currentStep.step_id]}
+              step={currentStep}
+              validationError={validationError}
+            />,
+            pipWindow.document.body
+          )
+        : null}
 
       {shouldShowReturnModal ? (
         <Modal
@@ -632,15 +647,22 @@ function formatStartedTime(epochMs: number) {
  */
 function TaskWindowPanel({
   onOpen,
+  onReopen,
+  pipOpen,
+  pipSupported,
   recordingActive,
   targetUrl
 }: {
   onOpen: (url: string) => boolean;
+  onReopen: () => Promise<boolean>;
+  pipOpen: boolean;
+  pipSupported: boolean;
   recordingActive: boolean;
   targetUrl: string;
 }) {
   const { label } = describeTarget(targetUrl);
   const [blocked, setBlocked] = useState(false);
+  const [reopenFailed, setReopenFailed] = useState(false);
 
   return (
     <section className="task-window-panel" aria-label="Task page">
@@ -661,6 +683,42 @@ function TaskWindowPanel({
         Your task is in the separate window showing {label}. Do the task there,
         then come back here and confirm below.
       </p>
+
+      {/*
+        Recovery only. The pane is opened for the participant as recording
+        starts, so this is the way BACK after they close it - not the way in.
+        Hidden while it is up, because a control that reopens something already
+        open reads as broken.
+      */}
+      {pipSupported && !pipOpen ? (
+        <button
+          className="button secondary task-window-float"
+          onClick={() => {
+            void onReopen().then((opened) => {
+              setReopenFailed(!opened);
+            });
+          }}
+          type="button"
+        >
+          Keep tasks on top
+        </button>
+      ) : null}
+
+      {pipOpen ? (
+        <p className="task-window-copy">
+          Your tasks are in the small window on top. Close that window to bring
+          them back here.
+        </p>
+      ) : null}
+
+      {reopenFailed && !pipOpen ? (
+        <div className="alert-banner alert-danger">
+          <strong>That window would not open</strong>
+          <p className="status-copy">
+            You can keep using the tasks below instead.
+          </p>
+        </div>
+      ) : null}
 
       {/*
         Deliberately conditional in wording rather than in code. Only the
@@ -688,6 +746,135 @@ function TaskWindowPanel({
           </p>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+/**
+ * The response inputs, shared by the in-page task card and the floating PiP
+ * pane so there is exactly one implementation of each input type. Both render
+ * the same controlled state; whichever surface the participant types into,
+ * the other reflects it.
+ */
+function TaskResponseFields({
+  onChooseOption,
+  onTextChange,
+  response,
+  step
+}: {
+  onChooseOption: (option: string) => void;
+  onTextChange: (text: string) => void;
+  response: { text?: string; selectedOption?: string } | undefined;
+  step: StudyStep;
+}) {
+  return (
+    <>
+      {step.type === "open_text" ? (
+        <textarea
+          className="response-input"
+          onChange={(event) => {
+            onTextChange(event.target.value);
+          }}
+          placeholder="Type your response here"
+          rows={7}
+          value={response?.text ?? ""}
+        />
+      ) : null}
+
+      {step.type === "single_choice" ? (
+        <div className="choice-list">
+          {step.options?.map((option) => {
+            const checked = response?.selectedOption === option;
+
+            return (
+              <label className={`choice-item ${checked ? "is-selected" : ""}`} key={option}>
+                <input
+                  checked={checked}
+                  name={step.step_id}
+                  onChange={() => {
+                    onChooseOption(option);
+                  }}
+                  type="radio"
+                  value={option}
+                />
+                <span>{option}</span>
+              </label>
+            );
+          })}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * The whole current task, rendered into the floating Document PiP window so
+ * the participant can read the prompt and answer without leaving the page
+ * under test. Same state and same completion handler as the in-page card -
+ * this is a second view of the task, never a second copy of the logic.
+ */
+function PipTaskCard({
+  count,
+  index,
+  isSubmitting,
+  onChooseOption,
+  onComplete,
+  onTextChange,
+  response,
+  step,
+  validationError
+}: {
+  count: number;
+  index: number;
+  isSubmitting: boolean;
+  onChooseOption: (option: string) => void;
+  onComplete: () => void;
+  onTextChange: (text: string) => void;
+  response: { text?: string; selectedOption?: string } | undefined;
+  step: StudyStep;
+  validationError: string | null;
+}) {
+  const isAnswerable = step.type === "open_text" || step.type === "single_choice";
+
+  return (
+    <section aria-label="Floating task panel" className="pip-card">
+      {count > 1 ? (
+        <p className="status-copy pip-counter">
+          Task {index + 1} of {count}
+        </p>
+      ) : null}
+
+      <h1 className="pip-prompt">{step.prompt}</h1>
+
+      {step.helper_text ? (
+        <p className="runner-instruction-hint">{step.helper_text}</p>
+      ) : null}
+
+      {isAnswerable && step.is_required === false ? (
+        <p className="runner-optional-hint">This one is optional.</p>
+      ) : null}
+
+      <TaskResponseFields
+        onChooseOption={onChooseOption}
+        onTextChange={onTextChange}
+        response={response}
+        step={step}
+      />
+
+      {validationError ? (
+        <p className="response-validation" role="alert">
+          {validationError}
+        </p>
+      ) : null}
+
+      <button
+        className="button pip-complete"
+        disabled={isSubmitting}
+        onClick={onComplete}
+        type="button"
+      >
+        {isSubmitting ? "Saving..." : "I’ve completed this task"}
+      </button>
     </section>
   );
 }
