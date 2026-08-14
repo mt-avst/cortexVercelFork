@@ -204,8 +204,15 @@ Participants need a Cortex account and will be asked to sign in, so the link doe
 1. Opens the link, reads the brief and clicks **Start Test**
 2. Reads and accepts the consent text
 3. Shares their screen and grants microphone access. The task page opens in its own window first, so it appears in the browser's share picker
-4. Works through the tasks, thinking aloud
+4. Works through the tasks, thinking aloud. If the study has a Starting URL, the current task floats in a small window above the page they are testing, so they are not switching back and forth to remember what you asked. It appears on its own and needs nothing from them
 5. Finishes, and the recording uploads
+
+Two things follow from that floating window when you write a task list:
+
+- **Keep prompts short.** The window is small and the prompt is the first thing in it, so a long paragraph is harder to work from there than it looks in the editor
+- **A participant sharing their whole screen will have that window in the recording**, sitting over the page under test. Someone sharing only the task window will not. Either way the task list sits beside the playback in review, so nothing is lost
+
+It needs a Chromium browser (Chrome, Edge, Arc, Opera). Firefox participants get the previous two-window experience, which still works.
 
 Their steps are fixed at the moment they start.
 Editing a task list never changes a session already under way, so a participant mid-study will not see your edit - relaunch is not needed and not possible for them.
