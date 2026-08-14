@@ -100,18 +100,33 @@ export function useTaskPip(): TaskPipState {
       return false;
     }
 
-    copyStylesInto(win.document);
-    // The recording surface's styles are all scoped under .fh-recording (see
-    // recording-session.css); the class on body lets them reach the portal
-    // content, exactly like the portalled modal does it.
-    win.document.body.className = "fh-recording pip-body";
+    // Everything past requestWindow is best-effort DRESSING, and it is inside
+    // the try for a reason: the caller runs while capture is already live, so
+    // a throw here (an absent body, a stylesheet that misbehaves) must never
+    // propagate and strand a participant who is being recorded. This function
+    // resolves true or false and never rejects.
+    try {
+      copyStylesInto(win.document);
+      // The recording surface's styles are all scoped under .fh-recording (see
+      // recording-session.css); the class on body lets them reach the portal
+      // content, exactly like the portalled modal does it.
+      win.document.body.className = "fh-recording pip-body";
+      // Screen readers announce the window title and pick a voice from the
+      // language; without these the pane is an untitled, language-less window.
+      win.document.title = "Your task";
+      win.document.documentElement.lang =
+        document.documentElement.lang || "en";
 
-    // Fires when the participant closes the floating window (or the browser
-    // replaces it). State resets so the "float" affordance comes back.
-    win.addEventListener("pagehide", () => {
-      pipRef.current = null;
-      setPipWindow(null);
-    });
+      // Fires when the participant closes the floating window (or the browser
+      // replaces it). State resets so the way back comes with it.
+      win.addEventListener("pagehide", () => {
+        pipRef.current = null;
+        setPipWindow(null);
+      });
+    } catch {
+      // Dressing failed but the window exists; still hand it back, because a
+      // bare-but-working pane beats no pane and beats a broken session.
+    }
 
     pipRef.current = win;
     setPipWindow(win);

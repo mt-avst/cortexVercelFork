@@ -208,6 +208,14 @@ export function StudyRunner({
     }
   }, [captureStoppedExternally, recordingStatus]);
 
+  // The pane must not outlive the task phase by ANY route, not just the tidy
+  // one. Completion calls onCloseTaskPip explicitly, but an interrupted run
+  // unwinds by unmounting this component straight back to setup - and the hook
+  // that owns the pane lives in the parent, which stays mounted. Without this,
+  // that path leaves an empty always-on-top window covering the recovery
+  // message the participant is supposed to read.
+  useEffect(() => onCloseTaskPip, [onCloseTaskPip]);
+
   // Defensive: the schema guarantees at least one step but not at least one
   // task. A payload of only an end step has nothing to run, so complete
   // immediately instead of rendering an empty task shell.
@@ -262,9 +270,11 @@ export function StudyRunner({
   }
 
   async function finishSession() {
-    // The floating pane belongs to the running study; the upload and done
-    // sections happen back in this tab.
-    onCloseTaskPip();
+    // The pane is taken down AFTER the session is actually finished, never
+    // before. Closing it first meant a failed completion request made the
+    // participant's tasks window vanish while the only error message rendered
+    // in the tab behind the page they were working in - so from where they
+    // sat, the study simply disappeared.
     await sendRuntimeEvent(payload.session.session_token, {
       attemptNumber,
       eventType: "session_completed"
@@ -277,6 +287,9 @@ export function StudyRunner({
       completedAt: now,
       responsesCount: responseCount
     });
+    // The floating pane belongs to the running study; the upload and done
+    // sections happen back in this tab.
+    onCloseTaskPip();
     clearParticipantSessionStorage(
       window.localStorage,
       payload.session.session_token,
@@ -476,6 +489,7 @@ export function StudyRunner({
       {pipWindow
         ? createPortal(
             <PipTaskCard
+              completedAt={completedAt}
               count={taskSteps.length}
               index={safeTaskIndex}
               isSubmitting={isSubmitting}
@@ -484,8 +498,10 @@ export function StudyRunner({
                 void handleCompleteTask();
               }}
               onTextChange={(text) => handleTextChange(currentStep, text)}
+              recordingActive={recordingStatus === "active"}
               response={responses[currentStep.step_id]}
               step={currentStep}
+              studyTitle={payload.study.title}
               validationError={validationError}
             />,
             pipWindow.document.body
@@ -814,30 +830,79 @@ function TaskResponseFields({
  * this is a second view of the task, never a second copy of the logic.
  */
 function PipTaskCard({
+  completedAt,
   count,
   index,
   isSubmitting,
   onChooseOption,
   onComplete,
   onTextChange,
+  recordingActive,
   response,
   step,
+  studyTitle,
   validationError
 }: {
+  completedAt: string | null;
   count: number;
   index: number;
   isSubmitting: boolean;
   onChooseOption: (option: string) => void;
   onComplete: () => void;
   onTextChange: (text: string) => void;
+  recordingActive: boolean;
   response: { text?: string; selectedOption?: string } | undefined;
   step: StudyStep;
+  studyTitle: string;
   validationError: string | null;
 }) {
   const isAnswerable = step.type === "open_text" || step.type === "single_choice";
 
   return (
     <section aria-label="Floating task panel" className="pip-card">
+      {/*
+        A NON-AUTHORABLE header, and it is a security control rather than
+        decoration. This window has no browser chrome, no nav and no study
+        context, and the prompt below is researcher-authored text rendered as
+        its only heading - so without this, a one-step study is a bare window
+        containing an attacker's sentence, a text input and a button, floating
+        above every application and attributed by the OS to Cortex. That is a
+        credible surface for "re-enter your SSO password to continue", whose
+        answer would be stored as a study response and typed into the recording.
+        Everything in this strip comes from Cortex or from recorder state; none
+        of it can be authored.
+      */}
+      <header className="pip-trust">
+        <span className="pip-trust-brand">Cortex</span>
+        <span className={`pip-trust-rec is-${recordingActive ? "live" : "stopped"}`}>
+          {recordingActive ? (
+            <>
+              <span aria-hidden="true" className="recording-dot" />
+              Recording
+            </>
+          ) : (
+            "Not recording"
+          )}
+        </span>
+      </header>
+      <p className="pip-trust-study">{studyTitle}</p>
+
+      {/*
+        The whole point of this pane is that the participant stops looking at
+        the Cortex tab - which is exactly where the "your recording stopped"
+        modal renders. Without this they could answer their way through an
+        entire study that captured nothing.
+      */}
+      {!recordingActive ? (
+        <div className="alert-banner alert-danger" role="alert">
+          <strong>Recording has stopped</strong>
+          <p className="status-copy">
+            Go back to the Cortex tab to see what happened. Nothing you do here
+            is being recorded.
+          </p>
+        </div>
+      ) : null}
+
       {count > 1 ? (
         <p className="status-copy pip-counter">
           Task {index + 1} of {count}
@@ -869,7 +934,9 @@ function PipTaskCard({
 
       <button
         className="button pip-complete"
-        disabled={isSubmitting}
+        // Matches the in-page control exactly. The two are meant to be one
+        // button in two places; divergence here is how they drift apart.
+        disabled={isSubmitting || Boolean(completedAt)}
         onClick={onComplete}
         type="button"
       >
