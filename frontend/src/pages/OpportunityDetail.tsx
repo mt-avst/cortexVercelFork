@@ -125,7 +125,7 @@ const OpportunityDetail: React.FC = () => {
   // Table view booking confirmation state
   const [confirmBooking, setConfirmBooking] = useState<{ show: boolean; session: Session | null }>({ show: false, session: null });
 
-  const loadOpportunity = async (forceRefresh = false) => {
+  const loadOpportunity = useCallback(async (forceRefresh = false) => {
     if (!id) return;
 
     try {
@@ -155,22 +155,31 @@ const OpportunityDetail: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+    // Only the route id: the rest are setters.
+  }, [id]);
 
   useEffect(() => {
     // Always force refresh when component mounts to ensure fresh data
     loadOpportunity(true);
-  }, [id]);
+  }, [id, loadOpportunity]);
 
   // Track view click when user opens the study details page
+  // Track the view once per study actually loaded.
+  //
+  // Reads the id off the LOADED opportunity rather than off the route, which
+  // also removes the second dependency the rule was asking for. To be precise
+  // about what this does and does not fix: on ordinary navigation the old code
+  // was already correct, because the effect only re-ran once opportunity.id had
+  // caught up with the route. It bites only when the two genuinely diverge -
+  // an out-of-order response - where the loaded id is the truthful one.
   useEffect(() => {
-    if (opportunity && id) {
-      // Track the view (user clicked to view study details)
-      trackOpportunityClick(id, 'view').catch(() => {
-        // Silently fail - tracking shouldn't block user experience
-      });
-    }
-  }, [opportunity?.id]); // Only run once when opportunity is first loaded
+    const loadedId = opportunity?.id;
+    if (!loadedId) return;
+
+    trackOpportunityClick(loadedId, 'view').catch(() => {
+      // Silently fail - tracking shouldn't block user experience
+    });
+  }, [opportunity?.id]);
 
   // Fetch calendar events when sessions are available
   useEffect(() => {
@@ -275,7 +284,9 @@ const OpportunityDetail: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [id]);
+    // `id` stays listed: the visibility handler reads it directly, so trimming
+    // it as implied-by-loadOpportunity reintroduces a violation.
+  }, [id, loadOpportunity]);
 
   const handleBookSession = async (sessionId: string) => {
     if (!user) {

@@ -4,6 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import Admin from '../Admin';
+import { getDashboardStats, getOpportunities } from '../../api/client';
 
 // Admin is an admin-gated, context-heavy page. It gates on `loading || !initialAuthCheck`
 // (Admin.tsx:225) BEFORE the user/role checks, so the auth mock MUST provide
@@ -148,6 +149,44 @@ describe('Admin page', () => {
     renderAdmin();
     fireEvent.click(await screen.findByRole('button', { name: 'Create new research study' }));
     expect(screen.getByText('NEW STUDY SENTINEL')).toBeInTheDocument();
+  });
+
+  // Both of Admin's effects name loadOpportunities in their dependency arrays.
+  // That is only safe because it is memoised on the filters it reads - as the
+  // plain function it used to be, it was rebuilt every render, so naming it
+  // would re-run the effect on every render and, since it sets state, forever.
+  //
+  // An infinite loop presents here as an unbounded call count, so these assert
+  // how many times the API is hit rather than what is on screen.
+  it('loads the dashboard once on mount and does not re-enter', async () => {
+    renderAdmin();
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(getOpportunities)).toHaveBeenCalled();
+    });
+    // Let any follow-on renders and their effects settle.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(getDashboardStats)).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refetch when the page re-renders without a filter change', async () => {
+    const { rerender } = renderAdmin();
+    await vi.waitFor(() => {
+      expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <MemoryRouter initialEntries={['/admin']}>
+        <Routes>
+          <Route path="/admin" element={<Admin />} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(vi.mocked(getOpportunities)).toHaveBeenCalledTimes(1);
   });
 
   it('redirects a non-admin user to the home route', () => {

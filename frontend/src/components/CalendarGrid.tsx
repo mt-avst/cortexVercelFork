@@ -299,7 +299,10 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   };
 
   // Group sessions by date and generate all days in the date range
-  const groupSessionsByDate = () => {
+  // Memoised on `sessions`, which is the only reactive value it reads, so the
+  // useMemo below can depend on it by identity. The dependency was correct
+  // already - the rule simply cannot see through a plain function call.
+  const groupSessionsByDate = useCallback(() => {
     if (sessions.length === 0) {
       return [];
     }
@@ -347,9 +350,9 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     }
 
     return allDays;
-  };
+  }, [sessions]);
 
-  const sessionsByDate = useMemo(() => groupSessionsByDate(), [sessions]);
+  const sessionsByDate = useMemo(() => groupSessionsByDate(), [groupSessionsByDate]);
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
   /** Timeline column height — slots use top/height as % of .calendar-timeline-container (same reference as grid lines). */
   const TIMELINE_HEIGHT_PX = 900;
@@ -364,7 +367,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
   // Check if today is in the visible date range
   const todayColumnIndex = useMemo(() => {
-    const today = new Date();
+    // Derived from the ticking `currentTime` rather than a fresh `new Date()`.
+    // The dependency was already listed and was NOT redundant - it is what moves
+    // the highlighted column when the clock crosses midnight with the page open -
+    // but reading the clock independently inside the body made it look that way
+    // to the linter, and left the two able to disagree by up to a minute.
+    //
+    // Not strictly behaviour-preserving, and worth naming: this now reads a
+    // clock that only refreshes on the 60s tick, so if sessionsByDate changes
+    // just after midnight the highlighted column can lag by up to that tick.
+    // The consistency with getCurrentTimePosition, which reads the same clock,
+    // is worth more than the sub-minute precision.
+    const today = new Date(currentTime);
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toDateString();
     

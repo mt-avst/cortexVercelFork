@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { gamificationApi, gamificationUtils, LeaderboardEntry } from '../api/gamification';
 import LoadingSpinner from './LoadingSpinner';
 import { AlertTriangle, Trophy, Calendar, CalendarRange } from 'lucide-react';
@@ -14,11 +14,10 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadLeaderboards();
-  }, [limit]);
-
-  const loadLeaderboards = async () => {
+  // useCallback BEFORE the effect can depend on it: as a plain function this
+  // was rebuilt every render, so naming it in the dependency array without
+  // memoising first would re-run the effect on every render, forever.
+  const loadLeaderboards = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -40,7 +39,11 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [limit]);
+
+  useEffect(() => {
+    loadLeaderboards();
+  }, [loadLeaderboards]);
 
   const getPoints = (entry: LeaderboardEntry) => {
     return activeTab === 'total' ? entry.total_points : entry.monthly_points;

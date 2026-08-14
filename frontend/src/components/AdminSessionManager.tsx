@@ -1096,13 +1096,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   
   // Persist selected slots in sessionStorage to survive navigation
   // Use URL parameter for stable key that doesn't change during component lifecycle
-  const getStorageKey = (type: 'selected' | 'confirmed') => {
+  // The root of the sessionStorage helpers. Memoised on the two values it
+  // reads so that everything built on it below is stable too - four of the
+  // effects and callbacks in this file reach it, and without this they could
+  // not name their real dependencies without being rebuilt every render.
+  const getStorageKey = useCallback((type: 'selected' | 'confirmed') => {
     // Use URL ID if available (for editing), otherwise use opportunityId or temp
     const key = urlId || opportunityId || 'temp';
     return `${type}Slots_${key}`;
-  };
+  }, [urlId, opportunityId]);
 
-  const getStoredSelectedSlots = (): Set<string> => {
+  const getStoredSelectedSlots = useCallback((): Set<string> => {
     try {
       const key = getStorageKey('selected');
       const stored = sessionStorage.getItem(key);
@@ -1111,9 +1115,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     } catch {
       return new Set();
     }
-  };
+  }, [getStorageKey]);
 
-  const getStoredConfirmedSlots = (): Set<string> => {
+  const getStoredConfirmedSlots = useCallback((): Set<string> => {
     try {
       const key = getStorageKey('confirmed');
       const stored = sessionStorage.getItem(key);
@@ -1122,7 +1126,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     } catch {
       return new Set();
     }
-  };
+  }, [getStorageKey]);
 
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(getStoredSelectedSlots);
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
@@ -1153,10 +1157,16 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         booked_count: s.booked_count
       }))
     });
+    // Mount-only by design: a one-shot diagnostic snapshot of what the
+    // component was handed. Listing the seven values it reads would turn it
+    // into a log line on every slot click, so the empty array is the intent
+    // here rather than an oversight. The directive has to be the line directly
+    // above the dependency array for ESLint to attach it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist slots to sessionStorage whenever they change
-  const persistSelectedSlots = (slots: Set<string>) => {
+  const persistSelectedSlots = useCallback((slots: Set<string>) => {
     try {
       const key = getStorageKey('selected');
       const value = JSON.stringify(Array.from(slots));
@@ -1165,9 +1175,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     } catch (error) {
       logger.warn('Failed to persist selected slots', { errorMessage: String(error) });
     }
-  };
+  }, [getStorageKey]);
 
-  const persistConfirmedSlots = (slots: Set<string>) => {
+  const persistConfirmedSlots = useCallback((slots: Set<string>) => {
     try {
       const key = getStorageKey('confirmed');
       const value = JSON.stringify(Array.from(slots));
@@ -1176,7 +1186,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     } catch (error) {
       logger.warn('Failed to persist confirmed slots', { errorMessage: String(error) });
     }
-  };
+  }, [getStorageKey]);
   
   // Calendar view controls - use UTC to match backend
   const [startDate, setStartDate] = useState(() => {
@@ -1217,7 +1227,19 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             storedCount: stored.size,
             stored: Array.from(stored).slice(0, 3)
           });
-          setConfirmedSlots(stored);
+          // Content-compared, so a re-run writing an equal set returns the
+          // SAME reference and React bails out. This is the branch that made
+          // the dependency array load-bearing: it wrote a brand new Set every
+          // run, so it only settled because the dependency below is a
+          // primitive. Widening that dependency to the set itself - which is
+          // what the hooks rule would prefer and never warn about - used to
+          // turn this into an unbounded loop on first paint of the new-study
+          // picker. Now it converges regardless of how the array is written.
+          setConfirmedSlots(prev =>
+            prev.size === stored.size && Array.from(prev).every(slot => stored.has(slot))
+              ? prev
+              : stored
+          );
         } else if (confirmedSlots.size > 0) {
           logger.debug('🔄 Clearing confirmed slots (no sessions and no stored slots)');
           setConfirmedSlots(new Set());
@@ -1281,19 +1303,27 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       }),
       confirmedSlotsCount: sessionSlots.size,
       confirmedSlotsArray: Array.from(sessionSlots),
-      sampleAvailableSlots: availableSlots.slice(0, 5).map(slot => {
-        const start = toISOString(slot.start);
-        const end = toISOString(slot.end);
-        const slotKey = `${start}|${end}`;
-        return {
-          start,
-          end,
-          slotKey,
-          matchesConfirmed: sessionSlots.has(slotKey)
-        };
-      })
+      // Deliberately does not sample availableSlots. That was the only thing
+      // in this effect that touched the prop, and every getAvailability
+      // response is a freshly parsed array - so it changed identity on every
+      // calendar load and re-entered this effect for a log line. Exactly the
+      // false dependency removed from loadCalendarData.
     });
-  }, [sessions, opportunityId, availableSlots]);
+    // confirmedSlots.SIZE rather than the set. Every branch that writes here
+    // now returns the previous reference when the content is unchanged, so
+    // convergence does not depend on this choice - the primitive is an
+    // optimisation that avoids a redundant pass, not the safety mechanism. An
+    // earlier version of this comment claimed every branch was size-guarded;
+    // the temporary-restore branch was not, and the guarantee rested entirely
+    // on this one word.
+  }, [
+    sessions,
+    opportunityId,
+    confirmedSlots.size,
+    isTemporary,
+    getStoredConfirmedSlots,
+    persistConfirmedSlots
+  ]);
 
   // Cleanup persisted state when opportunity changes
   useEffect(() => {
@@ -1306,7 +1336,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         logger.warn('Failed to cleanup persisted slots', { errorMessage: String(error) });
       }
     };
-  }, [urlId, opportunityId]);
+    // getStorageKey is memoised on exactly [urlId, opportunityId], so this is
+    // the same trigger as before, expressed through the thing actually used.
+  }, [getStorageKey]);
 
   // Load calendar data
   const loadCalendarData = useCallback(async () => {
@@ -1341,38 +1373,21 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       setCalendarEvents(eventsResult);
       setAvailableSlots(availabilityResult.available_slots);
       
-      // Match available slots with sessions
+      // Deliberately does NOT log the sessions prop. Reading it here made
+      // `sessions` a dependency of this callback, which would change its
+      // identity on every booking update and make the date-change effect below
+      // fire a second calendar load each time - real API traffic to produce a
+      // debug line. The sessions/slot correlation is logged by the sync effect
+      // above, which genuinely depends on sessions.
       logger.debug('📅 Calendar data loaded:', {
         eventsCount: eventsResult.length,
         availableSlotsCount: availabilityResult.available_slots.length,
-        sessionsCount: sessions.length,
-        sessions: sessions.map(session => ({
-          id: session.id,
-          start_time: session.start_time,
-          end_time: session.end_time,
-          opportunity_id: session.opportunity_id,
-          slotKey: `${session.start_time}|${session.end_time}`
-        })),
         sampleAvailableSlots: availabilityResult.available_slots.slice(0, 3).map(slot => ({
           start: slot.start,
           end: slot.end,
           slotKey: `${slot.start}|${slot.end}`
         }))
       });
-      
-      // Check if any sessions match available slots
-      if (sessions.length > 0 && availabilityResult.available_slots.length > 0) {
-        const sessionKeys = new Set(sessions.map(s => `${s.start_time}|${s.end_time}`));
-        const slotKeys = new Set(availabilityResult.available_slots.map(s => `${s.start}|${s.end}`));
-        const matchedKeys = Array.from(sessionKeys).filter(key => slotKeys.has(key));
-        logger.debug('🔍 Session/Slot matching:', {
-          sessionKeysCount: sessionKeys.size,
-          slotKeysCount: slotKeys.size,
-          matchedCount: matchedKeys.length,
-          matchedKeys: matchedKeys.slice(0, 5),
-          unmatchedSessions: Array.from(sessionKeys).filter(key => !slotKeys.has(key)).slice(0, 5)
-        });
-      }
       
       // Reset pagination when new data is loaded
       setCurrentPage(0);
@@ -1425,12 +1440,20 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     }
   }, [startDate, endDate, durationMinutes, excludeWeekends, disabled]);
 
-  // Direct effect to watch for date changes
+  // Direct effect to watch for date changes.
+  //
+  // loadCalendarData is memoised on exactly the values this array used to
+  // list, so this is the same set of triggers - but it can no longer drift
+  // from them, which is the failure this rule is really guarding against.
   useEffect(() => {
     if (!disabled) {
       loadCalendarData();
     }
-  }, [startDate, endDate, durationMinutes, excludeWeekends, disabled]);
+    // `disabled` stays listed even though loadCalendarData is memoised on it:
+    // this effect's own body reads it, and the rule is right to want it. The
+    // review suggested trimming it as redundant - it is not, and removing it
+    // reintroduces a violation.
+  }, [loadCalendarData, disabled]);
 
   // Refresh calendar data when sessions change (to reflect booking updates)
   useEffect(() => {
@@ -1459,7 +1482,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       persistSelectedSlots(newSet);
       return newSet;
     });
-  }, [selectedSlots, opportunityId, urlId, isTemporary]);
+  }, [selectedSlots, opportunityId, urlId, isTemporary, persistSelectedSlots]);
 
   const handleSlotDeselect = useCallback(async (slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
@@ -1518,7 +1541,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       persistConfirmedSlots(newSet);
       return newSet;
     });
-  }, [selectedSlots, confirmedSlots, opportunityId, sessions, onSessionsChange]);
+  }, [selectedSlots, confirmedSlots, sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots]);
 
   const handleCreateSessionsFromSelected = async () => {
     if (selectedSlots.size === 0) {

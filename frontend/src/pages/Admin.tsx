@@ -96,7 +96,10 @@ const Admin: React.FC = () => {
     }
   };
 
-  const loadOpportunities = async (forceClearFilter = false) => {
+  // Memoised on the filters it actually reads. Both effects below name it in
+  // their dependency arrays, which is only safe because of this - as a plain
+  // function it was rebuilt every render and would have looped.
+  const loadOpportunities = useCallback(async (forceClearFilter = false) => {
     try {
       setLoadingOpportunities(true);
       setError('');
@@ -117,9 +120,9 @@ const Admin: React.FC = () => {
     } finally {
       setLoadingOpportunities(false);
     }
-  };
+  }, [statusFilter, typeFilter]);
 
-  const loadDashboardStats = async () => {
+  const loadDashboardStats = useCallback(async () => {
     try {
       setLoadingStats(true);
       const stats = await getDashboardStats();
@@ -129,14 +132,16 @@ const Admin: React.FC = () => {
     } finally {
       setLoadingStats(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (user?.role === 'researcher_admin' || user?.role === 'superadmin') {
       loadOpportunities();
       loadDashboardStats();
     }
-  }, [user, statusFilter, typeFilter]);
+    // statusFilter and typeFilter are not listed directly: loadOpportunities is
+    // memoised on them, so its identity already changes when they do.
+  }, [user, loadOpportunities, loadDashboardStats]);
 
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
@@ -156,7 +161,7 @@ const Admin: React.FC = () => {
         loadOpportunities(true); // true = force clear filters
       }, 150);
     }
-  }, [location.state, user, navigate, location.pathname]);
+  }, [location.state, user, navigate, location.pathname, loadOpportunities]);
 
   // Close dropdown when clicking outside
   useEffect(() => {

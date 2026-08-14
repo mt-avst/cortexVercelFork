@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -129,6 +129,41 @@ export const describeValidationFailure = (
   return { tab: located[0].tab, message: `Please fix these fields: ${labels.join(', ')}` };
 };
 
+/**
+ * The wizard's steps for a given research study type. A pure function of the
+ * type, and at module scope deliberately: as a closure over `formData` it was
+ * rebuilt every render, so the effect that clamps `activeTab` could not name it
+ * as a dependency without re-running on every render forever. Hoisting it
+ * removes the dependency rather than memoising around it.
+ *
+ * Tab 3 is type-dependent and simply absent until a type is chosen, which is
+ * why the Continue button has to handle there being no tab to continue to.
+ */
+export const getTabsForType = (type: string) => {
+  const tabs = [
+    { id: 1, title: 'Basic Information', description: 'Configure type and status' },
+    { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
+  ];
+
+  if (['poll', 'survey', 'question'].includes(type)) {
+    tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
+  }
+
+  if (type === 'unmoderated') {
+    tabs.push({ id: 3, title: 'Task List', description: 'What the participant does' });
+  }
+
+  if (type === 'test' || type === 'interview') {
+    tabs.push({
+      id: 3,
+      title: 'Session Management',
+      description: 'Create time slots'
+    });
+  }
+
+  return tabs;
+};
+
 const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -186,62 +221,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
 
   // Define tabs based on opportunity type
-  const getTabs = () => {
-    const tabs = [
-      { id: 1, title: 'Basic Information', description: 'Configure type and status' },
-      { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
-    ];
+  const tabs = getTabsForType(formData.type);
 
-    if (['poll', 'survey', 'question'].includes(formData.type)) {
-      tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
-    }
-
-    if (formData.type === 'unmoderated') {
-      tabs.push({ id: 3, title: 'Task List', description: 'What the participant does' });
-    }
-
-    if (formData.type === 'test' || formData.type === 'interview') {
-      tabs.push({
-        id: 3,
-        title: 'Session Management',
-        description: 'Create time slots'
-      });
-    }
-
-    return tabs;
-  };
-
-  const tabs = getTabs();
-
-  useEffect(() => {
-    if (isEdit && id) {
-      loadOpportunity();
-    }
-  }, [isEdit, id]);
-
-  // Ensure activeTab is valid when opportunity type changes
-  useEffect(() => {
-    const tabs = getTabs();
-    const maxTabId = Math.max(...tabs.map(tab => tab.id));
-    if (activeTab > maxTabId) {
-      setActiveTab(1);
-    }
-  }, [formData.type, activeTab]);
-
-  // Set active tab when editing existing opportunity
-  // Only user tests and interviews should go to tab 3 (Session Management)
-  // All other types should go to tab 1 (Basic Information)
-  useEffect(() => {
-    if (isEdit && opportunityId && formData.type) {
-      if (formData.type === 'test' || formData.type === 'interview') {
-        setActiveTab(3); // Go to tab 3 (Session Management) for tests and interviews
-      } else {
-        setActiveTab(1); // Go to tab 1 (Basic Information) for all other types
-      }
-    }
-  }, [isEdit, opportunityId, formData.type]);
-
-  const loadOpportunity = async () => {
+  const loadOpportunity = useCallback(async () => {
     if (!id) return;
 
     try {
@@ -369,7 +351,36 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     } finally {
       setLoadingOpportunity(false);
     }
-  };
+    // Only the route id: everything else it touches is a setter.
+  }, [id]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      loadOpportunity();
+    }
+  }, [isEdit, id, loadOpportunity]);
+
+  // Ensure activeTab is valid when opportunity type changes
+  useEffect(() => {
+    const maxTabId = Math.max(...getTabsForType(formData.type).map(tab => tab.id));
+    if (activeTab > maxTabId) {
+      setActiveTab(1);
+    }
+  }, [formData.type, activeTab]);
+
+  // Set active tab when editing existing opportunity
+  // Only user tests and interviews should go to tab 3 (Session Management)
+  // All other types should go to tab 1 (Basic Information)
+  useEffect(() => {
+    if (isEdit && opportunityId && formData.type) {
+      if (formData.type === 'test' || formData.type === 'interview') {
+        setActiveTab(3); // Go to tab 3 (Session Management) for tests and interviews
+      } else {
+        setActiveTab(1); // Go to tab 1 (Basic Information) for all other types
+      }
+    }
+  }, [isEdit, opportunityId, formData.type]);
+
 
 
   // Named for what it returns, not for a verdict: it hands back the errors so
@@ -1270,7 +1281,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             className="btn btn-primary px-5 py-2 fw-semibold"
                             onClick={() => {
                               // Determine next tab based on opportunity type
-                              const tabs = getTabs();
+                              const tabs = getTabsForType(formData.type);
                               const nextTab = tabs.find(tab => tab.id > 2)?.id;
                               if (!nextTab) {
                                 // There is no third tab until a type is chosen,
