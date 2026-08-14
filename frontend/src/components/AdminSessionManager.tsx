@@ -33,6 +33,31 @@ import {
   ArrowLeft 
 } from 'lucide-react';
 
+/**
+ * What to do once the parent's save callback comes back.
+ *
+ * Extracted and pure because the wrong answer here is invisible. In create mode
+ * the parent's `onNavigate` announces "Opportunity created successfully!", so
+ * navigating after a save that returned no id tells the author their study was
+ * created when nothing was saved and no sessions were created either. A refused
+ * save (the parent's validation banner) and a failed one both land here.
+ */
+export type OpportunitySaveOutcome = 'create-sessions' | 'already-saved' | 'not-saved';
+
+export const resolveSaveOutcome = (
+  savedOpportunityId: string | null | undefined,
+  propOpportunityId: string | null | undefined,
+  urlId: string | undefined,
+  opportunityIdBeforeSave: string | null | undefined
+): OpportunitySaveOutcome => {
+  const idToUse =
+    savedOpportunityId || propOpportunityId || (urlId && urlId !== 'new' ? urlId : null);
+  if (!idToUse) {
+    return 'not-saved';
+  }
+  return idToUse !== opportunityIdBeforeSave ? 'create-sessions' : 'already-saved';
+};
+
 interface AdminSessionManagerProps {
   opportunityId: string;
   sessions: Session[];
@@ -1564,8 +1589,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             
             // Use the opportunity ID returned from the callback, or fall back to prop/URL
             const opportunityIdToUse = savedOpportunityId || opportunityId || (urlId && urlId !== 'new' ? urlId : null);
-            
-            if (opportunityIdToUse && opportunityIdToUse !== opportunityIdBeforeSave) {
+            const outcome = resolveSaveOutcome(savedOpportunityId, opportunityId, urlId, opportunityIdBeforeSave);
+
+            // The `&& opportunityIdToUse` is for the type narrowing only -
+            // 'create-sessions' already implies it.
+            if (outcome === 'create-sessions' && opportunityIdToUse) {
               logger.debug('🔄 Creating sessions for saved opportunity:', {
                 oldId: opportunityIdBeforeSave,
                 newId: opportunityIdToUse,
@@ -1608,13 +1636,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   navigation.toAdmin();
                 }
               }
-            } else if (!opportunityIdToUse) {
-              logger.warn('Cannot create sessions: Opportunity ID not returned from save callback. Navigating to admin.');
-              if (onNavigate) {
-                onNavigate('/admin');
-              } else {
-                navigation.toAdmin();
-              }
+            } else if (outcome === 'not-saved') {
+              // Do NOT navigate: the parent announces success on navigation, so
+              // leaving here would report a study that was never created. The
+              // parent has already named the fields at fault and opened the tab
+              // holding them - stay on the form so the author can see it.
+              logger.warn('Save returned no opportunity id - staying on the form so the refusal stays visible');
+              setError('The study was not saved, so no sessions were created. Check the fields flagged above.');
             } else {
               logger.warn('Opportunity ID unchanged, sessions may have been created by parent component. Navigating to admin.');
               if (onNavigate) {
@@ -1626,12 +1654,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           } catch (saveError: unknown) {
             const errorMessage = saveError instanceof Error ? saveError.message : String(saveError);
             logger.error('Error saving temporary opportunity', { errorMessage });
-            // Navigate to admin even on error
-            if (onNavigate) {
-              onNavigate('/admin');
-            } else {
-              navigation.toAdmin();
-            }
+            // Same reason as the 'not-saved' branch: navigating reports a
+            // success that did not happen. Nothing was saved, so stay put.
+            setError('The study was not saved, so no sessions were created. Please try again.');
           }
         } else {
           logger.debug('⚠️ onOpportunitySave callback not provided for temporary opportunity');

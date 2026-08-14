@@ -60,6 +60,75 @@ export const clearTypeConditionalErrors = (
   return next;
 };
 
+/**
+ * Which tab renders each validation error, and what the author sees that field
+ * called. The form spans three tabs and the save controls only exist on the
+ * last one, so a refused save is almost always about a field that is not on
+ * screen: naming it and opening its tab is the whole point. Labels are the
+ * on-screen label text minus the required marker - not the state key, which
+ * appears nowhere in the UI.
+ */
+export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
+  type: { tab: 1, label: 'Research Study Type' },
+  title: { tab: 1, label: 'Title' },
+  meeting_location_optional: { tab: 1, label: 'Meeting Location' },
+  purpose_one_liner: { tab: 1, label: 'Purpose' },
+  default_duration_minutes: { tab: 1, label: 'Default Duration (minutes)' },
+  participant_type_required: { tab: 2, label: 'Participant Type' },
+  participant_type_specific_details: { tab: 2, label: 'Specific Criteria' },
+  external_link_optional: { tab: 3, label: 'External Link' },
+  firsthand_study_id: { tab: 3, label: 'Existing task list' },
+  inline_study_target_url: { tab: 3, label: 'Starting URL' },
+  inline_study_steps: { tab: 3, label: 'Task List' },
+  inline_study_consent_text: { tab: 3, label: 'Consent text' }
+};
+
+/**
+ * Resolve one validation error key to the tab that renders it and the name the
+ * author knows it by. Per-task errors are keyed `inline_study_steps.<i>.<field>`
+ * and are named by position, since tasks have no other identity on screen.
+ * An unknown key falls back to the first tab rather than routing nowhere.
+ *
+ * The lookup is `hasOwn`-guarded, not `??`: a plain object inherits
+ * `constructor`, `toString` and friends, so those keys would return a truthy
+ * inherited value, skip the fallback, and yield a banner naming no field and no
+ * tab to open - this fix's own failure mode, reintroduced. No user-supplied
+ * string becomes an error key today, but backend zod issue paths are one commit
+ * away from being mapped straight into these.
+ */
+export const locateField = (key: string): { tab: number; label: string } => {
+  const step = /^inline_study_steps\.(\d+)\./.exec(key);
+  if (step) {
+    return { tab: 3, label: `Task ${Number(step[1]) + 1}` };
+  }
+  // `Object.hasOwn` would read better but needs the es2022 lib, and widening
+  // the compiler target for one call is not a trade worth making.
+  return Object.prototype.hasOwnProperty.call(FIELD_LOCATIONS, key)
+    ? FIELD_LOCATIONS[key]
+    : { tab: 1, label: key };
+};
+
+/**
+ * Turn a set of validation errors into the two things a refusal owes the
+ * author: which tab to open, and which fields to fix. The tab is the earliest
+ * one holding a problem, so the author works forwards rather than being sent
+ * to the last failure and back. Every failing field is named once, in tab
+ * order, because fixing them one banner at a time is the same silent failure
+ * in slow motion.
+ */
+export const describeValidationFailure = (
+  errors: Record<string, string>
+): { tab: number | null; message: string } => {
+  const located = Object.keys(errors)
+    .map(locateField)
+    .sort((a, b) => a.tab - b.tab);
+  if (located.length === 0) {
+    return { tab: null, message: '' };
+  }
+  const labels = Array.from(new Set(located.map((field) => field.label)));
+  return { tab: located[0].tab, message: `Please fix these fields: ${labels.join(', ')}` };
+};
+
 const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -101,6 +170,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  // Whether a refusal is currently being reported. The banner's TEXT is derived
+  // from `validationErrors` on every render rather than stored: a second copy
+  // goes stale the moment the author fixes a field, leaving a banner naming a
+  // field that no longer shows an error. This flag only says whether to show
+  // it - fixing the last field empties the message and it disappears on its own.
+  const [refusalShown, setRefusalShown] = useState(false);
+  // Bumped on every refusal so React remounts the alert. Refusing twice with
+  // the same message into the same node repaints nothing and is not re-announced
+  // to a screen reader, which reads as another dead button.
+  const [refusalCount, setRefusalCount] = useState(0);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<number>(1);
@@ -293,7 +372,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   };
 
 
-  const validateForm = (): boolean => {
+  // Named for what it returns, not for a verdict: it hands back the errors so
+  // the caller can name the failing fields and open the tab that holds them.
+  // `if (!validateForm())` was the old shape and is legal TypeScript against a
+  // record - always false, so it would submit every invalid payload - and the
+  // name is the only thing that makes that misuse look wrong. Reading the
+  // errors back off `validationErrors` is not an option either: that is the
+  // pre-update state from this closure, which is what the old log line
+  // reported.
+  const collectValidationErrors = (): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     // Validate research study type
@@ -322,7 +409,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
         errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
       }
-      if (formData.default_duration_minutes < 5 || formData.default_duration_minutes > 240) {
+      // Number.isFinite first: clearing the field stores NaN (parseInt('')), and
+      // NaN < 5 and NaN > 240 are BOTH false, so an empty duration passed every
+      // check here and failed as an opaque 400 at the API instead.
+      if (
+        !Number.isFinite(formData.default_duration_minutes) ||
+        formData.default_duration_minutes < 5 ||
+        formData.default_duration_minutes > 240
+      ) {
         errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
       }
     }
@@ -419,7 +513,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     setValidationErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
   };
 
   // Validate single field
@@ -537,14 +631,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       return undefined;
     }
 
-    if (!validateForm()) {
-      logger.error('Validation errors', { validationErrors });
+    const errors = collectValidationErrors();
+    if (Object.keys(errors).length > 0) {
+      // A save refused in silence is indistinguishable from a save that did
+      // nothing: the create controls only exist on the last tab, so the field
+      // at fault is usually two tabs away and its inline error is off screen.
+      const { tab } = describeValidationFailure(errors);
+      logger.error('Validation errors', { errors });
+      showRefusal();
+      setSuccessMessage('');
+      if (tab) {
+        setActiveTab(tab);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return undefined;
     }
 
     try {
       setSaving(true);
       setError('');
+      setRefusalShown(false);
       setSuccessMessage('');
 
       // inline_study is not on the shared CreateOpportunityRequest: shared/types
@@ -595,7 +701,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           : formData.firsthand_study_id?.trim() || undefined;
 
         if (authoringInline) {
-          // Must match what validateForm checked, or a value could pass
+          // Must match what collectValidationErrors checked, or a value could pass
           // validation and then be sent in a different shape.
           const targetUrl = normaliseTargetUrl(formData.inline_study_target_url);
 
@@ -780,6 +886,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     });
   };
 
+  // One place that turns a refusal on, so every path reports it identically.
+  const showRefusal = () => {
+    setRefusalShown(true);
+    setRefusalCount(count => count + 1);
+  };
+
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => {
       // Unticking reuse drops the study that was picked while it was ticked.
@@ -911,6 +1023,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             </div>
 
             <div className="card-body p-0">
+              {refusalShown && describeValidationFailure(validationErrors).message && (
+                <div
+                  key={`refusal-${refusalCount}`}
+                  className="alert alert-danger mx-4 mt-4 mb-0"
+                  role="alert"
+                >
+                  <AlertTriangle size={18} className="me-2" />
+                  {describeValidationFailure(validationErrors).message}
+                </div>
+              )}
+
               {error && (
                 <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
                   <AlertTriangle size={18} className="me-2" />
@@ -1077,14 +1200,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
                               if (Object.keys(errors).length > 0) {
                                 setValidationErrors(errors);
-                                // Show error message
-                                setError('Please fill in all required fields: ' + Object.values(errors).join(', '));
+                                // Reported the same way as every other refusal
+                                // in this form, so the author learns one shape.
+                                showRefusal();
                                 // Scroll to top to see errors
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                 return;
                               }
 
-                              setError('');
+                              // Clears the refusal only - a server error
+                              // banner is not this button's to erase.
+                              setRefusalShown(false);
                               setActiveTab(2);
                             }}
                             style={{ fontSize: '0.95rem' }}
@@ -1145,7 +1271,24 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             onClick={() => {
                               // Determine next tab based on opportunity type
                               const tabs = getTabs();
-                              const nextTab = tabs.find(tab => tab.id > 2)?.id || 2;
+                              const nextTab = tabs.find(tab => tab.id > 2)?.id;
+                              if (!nextTab) {
+                                // There is no third tab until a type is chosen,
+                                // and the tab headers are directly clickable -
+                                // so this tab is reachable with no type set.
+                                // Continuing to tab 2 from tab 2 is a no-op the
+                                // author reads as a broken button. Send them to
+                                // the field that is actually blocking them.
+                                setValidationErrors(prev => ({
+                                  ...prev,
+                                  type: 'Please select a research study type'
+                                }));
+                                showRefusal();
+                                setActiveTab(1);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                return;
+                              }
+                              setRefusalShown(false);
                               setActiveTab(nextTab);
                             }}
                             style={{ fontSize: '0.95rem' }}

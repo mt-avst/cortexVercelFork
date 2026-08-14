@@ -244,7 +244,14 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   id="default_duration_minutes"
                   className={`form-control ${validationErrors.default_duration_minutes ? 'is-invalid' : ''}`}
                   style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%', maxWidth: '150px' }}
-                  value={formData.default_duration_minutes}
+                  // Clearing the field stores NaN (parseInt('')), and React
+                  // warns and keeps the last painted value if that reaches
+                  // `value`. Show it empty, which is what the author did.
+                  value={
+                    Number.isFinite(formData.default_duration_minutes)
+                      ? formData.default_duration_minutes
+                      : ''
+                  }
                   onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
                   min={SESSION_DURATION.MIN_MINUTES}
                   max={SESSION_DURATION.MAX_MINUTES}
