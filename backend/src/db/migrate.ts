@@ -616,14 +616,71 @@ export async function runMigrations() {
       )
     `);
 
-    // Add click_type column if table already exists without it
+    // Add click_type column if table already exists without it.
+    //
+    // This catch used to be empty, on the stated reasoning that the column "may
+    // already exist" - which ADD COLUMN IF NOT EXISTS already handles, so
+    // nothing benign can reach the catch at all. Anything that does is a real
+    // failure (a lock timeout, a privilege problem, a half-built table), and
+    // discarding it left every click-tracking insert failing at runtime for the
+    // life of the deployment with no trace anywhere.
+    //
+    // The error is not simply rethrown, because the outer catch aborts the
+    // whole migration and takes the pod with it, and this column is not worth
+    // that on the strength of an error nobody has ever seen. Instead the schema
+    // is asked directly: continue if the column is there after all, fail loudly
+    // if it genuinely is not.
+    //
+    // TWO REASONS THE OBVIOUS information_schema.columns QUERY IS WRONG HERE,
+    // both of which turn this guard into the failure it exists to prevent:
+    //
+    //   1. It matches ANY schema, while ALTER TABLE binds the FIRST match on
+    //      the search path. With a legacy public.opportunity_clicks that has
+    //      the column and an app.opportunity_clicks that does not, the ALTER
+    //      fails against app, the check finds public, and the migration goes
+    //      green with the column still missing where it is actually used.
+    //   2. information_schema is PRIVILEGE-FILTERED. A privilege failure is one
+    //      of the causes named above, and it hides the column from the check
+    //      for the same reason it broke the ALTER - so the one case designed to
+    //      continue safely would rethrow and CrashLoop the pod instead.
+    //
+    // to_regclass resolves by the identical rule the ALTER used, by
+    // construction, and pg_catalog is not privilege-filtered. Do not "simplify"
+    // this back to information_schema.
     try {
       await client.query(`
-        ALTER TABLE opportunity_clicks 
+        ALTER TABLE opportunity_clicks
         ADD COLUMN IF NOT EXISTS click_type TEXT NOT NULL DEFAULT 'action'
       `);
-    } catch (e) {
-      // Column may already exist
+    } catch (error) {
+      console.error(
+        '❌ Could not add opportunity_clicks.click_type:',
+        error instanceof Error ? error.message : String(error)
+      );
+
+      // Guarded in turn: if the ALTER failed because the connection died, this
+      // throws too, and an unguarded version would replace the real cause with
+      // "Client has encountered a connection error" on the way to the outer
+      // catch - a different fault entirely from the one that happened.
+      let columnCheck;
+      try {
+        columnCheck = await client.query(`
+          SELECT 1
+          FROM pg_attribute
+          WHERE attrelid = to_regclass('opportunity_clicks')
+            AND attname = 'click_type'
+            AND attnum > 0
+            AND NOT attisdropped
+        `);
+      } catch {
+        throw error;
+      }
+
+      if (columnCheck.rows.length === 0) {
+        throw error;
+      }
+
+      console.log('ℹ️  opportunity_clicks.click_type is present despite the error above, continuing');
     }
 
     // Create index for efficient analytics queries

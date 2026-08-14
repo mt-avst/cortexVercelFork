@@ -6,6 +6,7 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv } from '../api/client';
 import { Opportunity } from '../api/types';
 import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { logger } from '../utils/logger';
 import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
@@ -114,7 +115,14 @@ const Admin: React.FC = () => {
       // Performance: debug logging disabled in production
       setOpportunities(data || []);
     } catch (error: unknown) {
-      // Performance: error logging kept but reduced verbosity
+      // The banner says the same thing whatever went wrong, so without this the
+      // cause was gone. The API interceptor records a failed request, which is
+      // most of them - but not a throw from anything else in the try, and not
+      // which call the admin was actually making when it happened.
+      logger.error('Failed to load research studies', {
+        component: 'Admin',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       setError('Failed to load research studies');
       setOpportunities([]);
     } finally {
@@ -128,7 +136,15 @@ const Admin: React.FC = () => {
       const stats = await getDashboardStats();
       setDashboardStats(stats);
     } catch (error: unknown) {
-      // Don't show error to user - dashboard stats are non-critical
+      // Deliberately not shown: the dashboard tiles are a summary, and an admin
+      // can do everything on this page without them. Deliberately not silent
+      // either - this was the only site here with no user surface AND no log,
+      // so a permanently empty stats row looked identical to a genuinely empty
+      // deployment.
+      logger.warn('Failed to load dashboard stats', {
+        component: 'Admin',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
     } finally {
       setLoadingStats(false);
     }
@@ -190,6 +206,13 @@ const Admin: React.FC = () => {
       await loadOpportunities();
       setDeleteConfirm({ show: false, opportunity: null });
     } catch (error: unknown) {
+      // A 403 from the owner gate and a 500 both read as this one sentence, so
+      // record which it was - the two need completely different responses.
+      logger.error('Failed to delete research study', {
+        component: 'Admin',
+        opportunityId: deleteConfirm.opportunity.id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       setError('Failed to delete research study');
     }
   };
@@ -203,6 +226,14 @@ const Admin: React.FC = () => {
       await duplicateOpportunity(id);
       await loadOpportunities();
     } catch (error: unknown) {
+      // Note this also catches a failure of the RELOAD, where the duplicate did
+      // in fact get created - so the message can be wrong, and the cause is the
+      // only way to tell.
+      logger.error('Failed to duplicate research study', {
+        component: 'Admin',
+        opportunityId: id,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
       setError('Failed to duplicate research study');
     }
   };

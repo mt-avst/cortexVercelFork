@@ -8,7 +8,16 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 
 interface CalendarGridProps {
   sessions: Session[];
-  onBookSession: (sessionId: string) => void;
+  /**
+   * Books the session, and rejects if it could not.
+   *
+   * The rejection is load-bearing, not incidental: handleConfirmBooking marks
+   * the slot booked before awaiting this and unwinds that mark on a throw. The
+   * old `=> void` signature let a handler that swallowed its own failures
+   * typecheck cleanly while silently disabling that unwind, which is exactly
+   * the bug this shape exists to stop.
+   */
+  onBookSession: (sessionId: string) => void | Promise<void>;
   bookingLoading: string | null;
   hideLegend?: boolean; // Allow parent to render legend elsewhere
 }
@@ -152,6 +161,23 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           calendarConnectedStatus = status.connected;
           setCalendarConnected(status.connected);
         } catch (error: unknown) {
+          // Not surfaced: "we could not ask" and "not connected" look the same
+          // to a participant, and both correctly mean no conflict overlay. They
+          // are NOT the same to anyone diagnosing it, which is why the cause is
+          // logged rather than discarded.
+          //
+          // A 401 is excluded because it is not a fault: /opportunities/:id is
+          // reachable from the shareable participant link while
+          // /calendar/connection-status is requireAuth, so every logged-out
+          // visitor produces one on their way to the login redirect. Logging an
+          // expected condition at WARN is how a warning stops meaning anything.
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status !== 401) {
+            logger.warn('Could not read calendar connection status', {
+              component: 'CalendarGrid',
+              errorMessage: error instanceof Error ? error.message : String(error),
+            });
+          }
           setCalendarConnected(false);
         }
 
@@ -405,7 +431,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
       setBookedSlots(prev => new Set([...prev, sessionId]));
       await onBookSession(sessionId);
       setConfirmingSlot(null);
-    } catch (error) {
+    } catch {
+      // No binding, and nothing logged or shown here on purpose: the owner of
+      // onBookSession displays the message and logs the cause before rethrowing.
+      // All this path owes is unwinding the optimistic mark applied above, so
+      // the slot goes back to being clickable rather than sitting there looking
+      // booked - handleSlotClick refuses a slot it believes is booked.
+      //
+      // Until that rethrow existed this catch never ran for a failed booking at
+      // all, because the caller resolved normally after handling the error.
       setBookedSlots(prev => {
         const newSet = new Set(prev);
         newSet.delete(sessionId);

@@ -10,6 +10,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
+import { logger } from '../utils/logger';
 import { RefreshCw, RotateCcw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators
@@ -215,7 +216,15 @@ const OpportunityDetail: React.FC = () => {
 
         if (isMounted) setUserCalendarEvents(events);
       } catch (error: unknown) {
-        // Don't show error to user, just log it
+        // Deliberately not surfaced: the calendar overlay marks which sessions
+        // clash with the participant's own diary, and the booking grid is fully
+        // usable without it. It IS logged, which the comment here used to claim
+        // while nothing did it - the API interceptor covers a failed request,
+        // but not a throw from the date arithmetic above it.
+        logger.error('Failed to load participant calendar events', {
+          component: 'OpportunityDetail',
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
         if (isMounted) setUserCalendarEvents([]);
       } finally {
         if (isMounted) setLoadingCalendar(false);
@@ -288,16 +297,25 @@ const OpportunityDetail: React.FC = () => {
     // it as implied-by-loadOpportunity reintroduces a violation.
   }, [id, loadOpportunity]);
 
+  /**
+   * Books a session and owns the message shown when that fails.
+   *
+   * The contract the caller depends on: if this returns normally the booking
+   * happened, and if it throws it did not. CalendarGrid marks the slot booked
+   * optimistically before calling in and unwinds that mark on a throw, so the
+   * two guards below have to reject rather than return - a guard that returned
+   * quietly would leave the slot looking booked with nothing behind it.
+   */
   const handleBookSession = async (sessionId: string) => {
     if (!user) {
       setError('Please log in to book sessions');
-      return;
+      throw new Error('Not signed in');
     }
 
     // Additional validation
     if (!user.id) {
       setError('User session invalid. Please log in again.');
-      return;
+      throw new Error('User session invalid');
     }
 
     try {
@@ -335,6 +353,13 @@ const OpportunityDetail: React.FC = () => {
         // If it's a capacity issue, refresh the opportunity data to get latest info
         if (errorMessage.includes('full') || errorMessage.includes('capacity')) {
           await loadOpportunity(true);
+          // Re-assert it: loadOpportunity opens with setError(''), so the
+          // message set two lines up was cleared before it could ever render.
+          // This is the commonest real booking failure - two participants
+          // racing for the last slot - and the loser was seeing nothing at all,
+          // just a slot that stopped responding. Not a swallowed exception, but
+          // the same defect one layer up, and in the block this sweep is about.
+          setError(errorMessage);
         }
       } else if (axiosError.response?.status === 401) {
         setError('Please log in to book sessions');
@@ -355,6 +380,27 @@ const OpportunityDetail: React.FC = () => {
         const errorMessage = axiosError.response?.data?.error || axiosError.message || 'Failed to book session';
         setError(`Failed to book session: ${errorMessage}`);
       }
+
+      // Rethrow after displaying the message. This function owns the error
+      // MESSAGE, but CalendarGrid owns the optimistic "booked" mark it applied
+      // before calling in, and it can only unwind that if the failure reaches
+      // it - swallowing here resolved its await as though the booking had
+      // worked.
+      //
+      // Unconditional, and checked rather than assumed: bookSession is the only
+      // thing in the try above that can reject. loadOpportunity catches
+      // everything internally and never rethrows, and trackOpportunityClick is
+      // .catch()'d - so this cannot fire for a booking that actually worked.
+      // Guarding it on a "did the booking land" flag was tried and removed: the
+      // flag was unreachable, and its test passed against a build without it.
+      //
+      // What this does not fix: setError above trips the page-level
+      // `if (error)` early return, which replaces this whole page - grid
+      // included - on most failure paths, so the unwind is usually unmounted
+      // rather than seen. That early return is its own defect, and it is also
+      // why the inline Retry Booking banner further down is unreachable. Fixing
+      // it is a separate change.
+      throw err;
     } finally {
       setBookingLoading(null);
     }
@@ -488,7 +534,10 @@ const OpportunityDetail: React.FC = () => {
                     // Try to book a session
                     const sessionToRetry = opportunity?.sessions?.find(s => s.remaining > 0);
                     if (sessionToRetry) {
-                      handleBookSession(sessionToRetry.id);
+                      // handleBookSession rethrows so CalendarGrid can unwind
+                      // its optimistic mark. There is nothing to unwind here,
+                      // and the banner it sets is already the whole surface.
+                      await handleBookSession(sessionToRetry.id).catch(() => undefined);
                     }
                   }}
                   disabled={loading}
@@ -1009,7 +1058,9 @@ const OpportunityDetail: React.FC = () => {
         variant="primary"
         onConfirm={() => {
           if (confirmBooking.session) {
-            handleBookSession(confirmBooking.session.id);
+            // See the retry button above: the rethrow exists for CalendarGrid,
+            // and the error banner is already the surface for this path.
+            void handleBookSession(confirmBooking.session.id).catch(() => undefined);
           }
           setConfirmBooking({ show: false, session: null });
         }}
