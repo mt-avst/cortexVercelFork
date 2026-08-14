@@ -23,6 +23,7 @@ import {
 } from "../../lib/recording/session-recorder";
 import { describeTarget, getPrimaryTargetUrl } from "../../lib/recording/task-target";
 import { useTaskWindow, type TaskWindowStatus } from "../../lib/recording/task-window";
+import { useTaskPip } from "../../lib/recording/task-pip";
 import {
   type DirectRecordingUploadMode,
   sendRuntimeEvent
@@ -145,6 +146,9 @@ export function ParticipantSessionFlow({
     directRecordingUploadMode
   });
   const taskWindow = useTaskWindow();
+  // Owned here rather than in StudyRunner because the pane is opened from the
+  // start handler below, while the runner has not mounted yet.
+  const taskPip = useTaskPip();
   const sectionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const hasScrolledOnMountRef = useRef(false);
 
@@ -501,6 +505,25 @@ export function ParticipantSessionFlow({
                       const started = await recorder.startCapture();
 
                       if (started) {
+                        // Float the task pane immediately, the way
+                        // UserTesting's task widget appears once sharing
+                        // begins - the participant never has to ask for it.
+                        //
+                        // This is the ONLY reliable place to do it. Document
+                        // PiP demands transient user activation, and the
+                        // activation from this button survives the capture
+                        // prompts (verified in Chrome: requestWindow resolves
+                        // straight after getDisplayMedia, and is refused with
+                        // NotAllowedError from anywhere without a gesture).
+                        // Opening it from an effect after the phase flip, or
+                        // from the runner on mount, would fail.
+                        //
+                        // Only for studies with a task page: a questionnaire
+                        // with no target has nothing to float over.
+                        if (primaryTargetUrl) {
+                          await taskPip.openTaskPip();
+                        }
+
                         setPhase("running");
                       }
                     }}
@@ -559,7 +582,11 @@ export function ParticipantSessionFlow({
                       payload={payload}
                       captureStoppedExternally={recorder.state.captureStoppedExternally}
                       microphonePermission={recorder.state.microphonePermission}
+                      onCloseTaskPip={taskPip.closeTaskPip}
+                      onOpenTaskPip={taskPip.openTaskPip}
                       onOpenTaskWindow={(url) => taskWindow.openTaskWindow(url)}
+                      pipSupported={taskPip.isSupported}
+                      pipWindow={taskPip.pipWindow}
                       recordingStartedAt={recorder.state.recordingStartedAt}
                       recordingStatus={recorder.state.recordingStatus}
                       screenPermission={recorder.state.screenPermission}

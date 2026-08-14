@@ -51,7 +51,11 @@ function renderRunner(
       recordingStatus={overrides.recordingStatus ?? "active"}
       screenPermission="granted"
       onComplete={vi.fn()}
+      onCloseTaskPip={vi.fn()}
+      onOpenTaskPip={vi.fn().mockResolvedValue(true)}
       onOpenTaskWindow={vi.fn().mockReturnValue(true)}
+      pipSupported={false}
+      pipWindow={null}
     />
   );
 }
