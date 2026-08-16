@@ -1810,6 +1810,127 @@ describe('Opportunities API', () => {
       expect(response.body).not.toHaveProperty('owner_email');
     });
 
+    // The routes select `s.*`, so the session joining link was going out to
+    // anyone who could name a published opportunity id, with no login at all.
+    // It is closer to a credential than a detail - holding a Zoom or Meet link
+    // is usually the whole of what you need to walk into the call.
+    const sessionRow = {
+      id: 'sess-1',
+      opportunity_id: '1',
+      start_time: new Date('2026-09-01T10:00:00.000Z'),
+      end_time: new Date('2026-09-01T11:00:00.000Z'),
+      capacity: 3,
+      actual_booked_count: 0,
+      // The route calls .toISOString() on all four of these, so a fixture
+      // missing created_at/updated_at 500s rather than failing the assertion.
+      created_at: new Date('2026-08-01T00:00:00.000Z'),
+      updated_at: new Date('2026-08-01T00:00:00.000Z'),
+      location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij'
+    };
+
+    it('strips the session joining link from GET /:id for anonymous participants', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(response.body.sessions).toHaveLength(1);
+      expect(response.body.sessions[0]).not.toHaveProperty('location_or_meet_link_optional');
+      // Asserted on the value as well, so renaming the column cannot quietly
+      // turn the property check above into a tautology.
+      expect(JSON.stringify(response.body)).not.toContain('meet.google.com');
+      // The rest of the session still has to reach the participant, or they
+      // cannot see what they are booking.
+      // The whole participant-visible shape, not a token field or two: adding
+      // any of these to the destructure in toPublicSession would otherwise pass
+      // every test, and `remaining` is what drives the spots-left display and
+      // whether Book is enabled at all.
+      expect(response.body.sessions[0]).toMatchObject({
+        id: 'sess-1',
+        capacity: 3,
+        booked_count: 0,
+        remaining: 3,
+        start_time: '2026-09-01T10:00:00.000Z',
+        end_time: '2026-09-01T11:00:00.000Z'
+      });
+    });
+
+    it('strips the session joining link from GET /:id for authenticated non-admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
+
+      const response = await request(employeeApp)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      expect(JSON.stringify(response.body)).not.toContain('meet.google.com');
+    });
+
+    // GET /:id/sessions is the second door, and it stayed open through the
+    // first version of this fix: it is optionalAuth, selects s.* and returns
+    // bare session rows, so it never went near the opportunity serializer.
+    // Both gates found it independently. The opportunity id is not a secret
+    // either - GET / lists every published one to anonymous callers - so this
+    // was one enumeration plus one request away from every joining link.
+    it('strips the joining link from GET /:id/sessions for anonymous participants', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunity access check
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });   // sessions
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/sessions')
+        .expect(200);
+
+      expect(response.body).toHaveLength(1);
+      expect(response.body[0]).not.toHaveProperty('location_or_meet_link_optional');
+      expect(JSON.stringify(response.body)).not.toContain('meet.google.com');
+      expect(response.body[0]).toMatchObject({ id: 'sess-1', capacity: 3, remaining: 3 });
+    });
+
+    it('strips the joining link from GET /:id/sessions for authenticated non-admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
+
+      const response = await request(employeeApp)
+        .get('/api/opportunities/1/sessions')
+        .expect(200);
+
+      expect(JSON.stringify(response.body)).not.toContain('meet.google.com');
+    });
+
+    it('keeps the joining link on GET /:id/sessions for admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
+
+      const response = await request(app)
+        .get('/api/opportunities/1/sessions')
+        .expect(200);
+
+      // NOT optional, and the reason the strip is isAdmin-branched rather than
+      // unconditional: OpportunityForm loads sessions from THIS endpoint when
+      // editing (getSessions with include_past) and writes the location
+      // straight back when it recreates them. Strip it for admins and every
+      // session silently loses its location on the next edit.
+      expect(response.body[0].location_or_meet_link_optional).toBe(
+        'https://meet.google.com/abc-defg-hij'
+      );
+    });
+
+    it('keeps the session joining link on GET /:id for admins', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
+      mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
+
+      const response = await request(app)
+        .get('/api/opportunities/1')
+        .expect(200);
+
+      // Admins author it, and AdminSessionManager / SessionEditor render it.
+      expect(response.body.sessions[0].location_or_meet_link_optional).toBe(
+        'https://meet.google.com/abc-defg-hij'
+      );
+    });
+
     it('keeps owner fields on GET /:id for admins', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [] });

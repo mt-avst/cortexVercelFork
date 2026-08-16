@@ -1,0 +1,145 @@
+import { describe, it, expect } from '@jest/globals';
+
+import { toPublicOpportunity } from '../publicOpportunity';
+
+/**
+ * The serialiser had no test of its own - it was exercised only transitively
+ * through the opportunity routes, so nothing stated its contract and nobody
+ * noticed it was stripping owner identity while passing the session joining
+ * link straight through to anonymous callers.
+ *
+ * A shared predicate with only transitive coverage is exactly where that class
+ * of bug lives.
+ */
+
+const opportunity = {
+  id: 'opp-1',
+  title: 'Checkout flow walkthrough',
+  status: 'published',
+  external_link_optional: 'https://example.com/survey',
+  firsthand_study_id: 'study_abc',
+  owner_user_id: 'user-1',
+  owner_name: 'A Researcher',
+  owner_email: 'researcher@example.com',
+  sessions: [
+    {
+      id: 'sess-1',
+      start_time: '2026-09-01T10:00:00.000Z',
+      capacity: 3,
+      location_or_meet_link_optional: 'https://meet.google.com/abc-defg-hij',
+    },
+    {
+      id: 'sess-2',
+      start_time: '2026-09-02T10:00:00.000Z',
+      capacity: 3,
+      location_or_meet_link_optional: 'Room 4, Second Floor',
+    },
+  ],
+};
+
+describe('toPublicOpportunity', () => {
+  it('removes the owner identity', () => {
+    const view = toPublicOpportunity(opportunity) as Record<string, unknown>;
+
+    expect(view).not.toHaveProperty('owner_user_id');
+    expect(view).not.toHaveProperty('owner_name');
+    expect(view).not.toHaveProperty('owner_email');
+  });
+
+  it('removes the joining link from every session, not just the first', () => {
+    const view = toPublicOpportunity(opportunity) as { sessions: Record<string, unknown>[] };
+
+    expect(view.sessions).toHaveLength(2);
+    for (const session of view.sessions) {
+      expect(session).not.toHaveProperty('location_or_meet_link_optional');
+    }
+    // A joining link is close to a credential: anyone holding it can usually
+    // walk into the call. Assert on the values too, so a rename of the column
+    // cannot quietly turn the check above into a tautology.
+    expect(JSON.stringify(view)).not.toContain('meet.google.com');
+    expect(JSON.stringify(view)).not.toContain('Room 4');
+  });
+
+  it('keeps everything a participant actually needs', () => {
+    const view = toPublicOpportunity(opportunity) as Record<string, unknown>;
+
+    expect(view.id).toBe('opp-1');
+    expect(view.title).toBe('Checkout flow walkthrough');
+    // external_link_optional is the link an external-link study IS, and
+    // firsthand_study_id is what OpportunityDetail reads to decide whether the
+    // study can be started at all. Stripping either breaks the participant.
+    expect(view.external_link_optional).toBe('https://example.com/survey');
+    expect(view.firsthand_study_id).toBe('study_abc');
+
+    const sessions = view.sessions as Record<string, unknown>[];
+    expect(sessions[0].id).toBe('sess-1');
+    expect(sessions[0].capacity).toBe(3);
+    expect(sessions[0].start_time).toBe('2026-09-01T10:00:00.000Z');
+  });
+
+  it('does not mutate the callers object', () => {
+    const input = JSON.parse(JSON.stringify(opportunity));
+    toPublicOpportunity(input);
+
+    // The admin branch of every route returns the SAME object this is called
+    // with elsewhere in the request, so mutating here would strip the admin
+    // view too - and only under whichever ordering happened to run first.
+    expect(input.owner_email).toBe('researcher@example.com');
+    expect(input.sessions[0].location_or_meet_link_optional).toBe(
+      'https://meet.google.com/abc-defg-hij'
+    );
+  });
+
+  it('copes with an opportunity that carries no sessions', () => {
+    const { sessions, ...withoutSessions } = opportunity;
+    void sessions;
+
+    const view = toPublicOpportunity(withoutSessions) as Record<string, unknown>;
+
+    expect(view).not.toHaveProperty('owner_email');
+    expect(view).not.toHaveProperty('sessions');
+  });
+
+  it('passes through an opportunity that simply has no sessions key', () => {
+    // A real shape: addMockOpportunity takes `any` and unshifts it verbatim, so
+    // a mock-created opportunity can genuinely lack the key.
+    const missing = toPublicOpportunity({ ...opportunity, sessions: undefined }) as Record<
+      string,
+      unknown
+    >;
+    expect(missing.sessions).toBeUndefined();
+    expect(missing).not.toHaveProperty('owner_email');
+  });
+
+  it('WITHHOLDS sessions of an unrecognised shape rather than passing them through', () => {
+    // The first version of this returned an unknown shape untouched, and a
+    // test pinned that as the contract. Wrong way round for a control whose
+    // whole job is withholding a credential: if sessions ever arrive as
+    // something other than an array - the keyed object the list endpoint
+    // builds internally, say - passing it through means every joining link
+    // goes out and nothing fails. Fail closed.
+    const shaped = toPublicOpportunity({
+      ...opportunity,
+      sessions: { 'sess-1': { location_or_meet_link_optional: 'https://meet.google.com/xyz' } },
+    }) as Record<string, unknown>;
+
+    expect(shaped.sessions).toEqual([]);
+    expect(JSON.stringify(shaped)).not.toContain('meet.google.com');
+
+    const nulled = toPublicOpportunity({ ...opportunity, sessions: null }) as Record<
+      string,
+      unknown
+    >;
+    expect(nulled.sessions).toEqual([]);
+  });
+
+  it('tolerates a null entry inside the sessions array', () => {
+    const view = toPublicOpportunity({
+      ...opportunity,
+      sessions: [null, opportunity.sessions[0]],
+    }) as { sessions: unknown[] };
+
+    expect(view.sessions[0]).toBeNull();
+    expect(view.sessions[1]).not.toHaveProperty('location_or_meet_link_optional');
+  });
+});
