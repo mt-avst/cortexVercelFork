@@ -14,7 +14,7 @@ import {
   validateSessionData
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
-import { toPublicOpportunity } from '../utils/publicOpportunity';
+import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
 import {
   claimStudyIfUnowned,
@@ -1174,7 +1174,7 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
         new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
       );
       
-      return res.json(filteredSessions);
+      return res.json(isAdmin ? filteredSessions : filteredSessions.map(toPublicSession));
     }
     
     // Check if opportunity exists and user has access - LEFT JOIN for demo/session-only owners
@@ -1237,7 +1237,10 @@ router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res:
       updated_at: session.updated_at.toISOString(),
     }));
     
-    res.json(sessions);
+    // Same strip as the opportunity routes: this endpoint is optionalAuth and
+    // returns bare session rows, so without this the joining link goes out to
+    // anonymous callers by a different door.
+    res.json(isAdmin ? sessions : sessions.map(toPublicSession));
   } catch (error) {
     if (error instanceof AppError) {
       throw error;
