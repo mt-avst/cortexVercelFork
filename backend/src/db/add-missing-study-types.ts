@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { applyDbTls } from '../config/dbTls';
 
 /**
  * Add missing study types to production database
@@ -18,11 +19,10 @@ async function addMissingStudyTypes() {
   }
 
   console.log('🔌 Connecting to database...');
+  const tls = applyDbTls(cleanUrl, process.env, 'add-missing-study-types');
   const pool = new Pool({
-    connectionString: cleanUrl,
-    ssl: {
-      rejectUnauthorized: false
-    }
+    connectionString: tls.connectionString,
+    ssl: tls.ssl
   });
 
   const client = await pool.connect();

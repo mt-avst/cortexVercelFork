@@ -320,16 +320,6 @@
       "count": 2
     }
   },
-  "scripts/reset-keep-two-users.js": {
-    "@typescript-eslint/no-require-imports": {
-      "count": 1
-    }
-  },
-  "scripts/set-superadmin.js": {
-    "@typescript-eslint/no-require-imports": {
-      "count": 1
-    }
-  },
   "shared/config/environment.ts": {
     "@typescript-eslint/no-explicit-any": {
       "count": 2

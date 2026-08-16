@@ -32,7 +32,11 @@ WORKDIR /app/backend
 
 COPY backend/package*.json .
 RUN npm ci
-# Copy backend source
+# Copy backend source. This includes backend/certs/rds-global-bundle.pem, the
+# AWS RDS trust store - the RDS roots are private and self-signed, so Node
+# cannot verify an RDS certificate without it. Shipping it in the image is what
+# makes DB_TLS_VERIFY=1 a one-variable change rather than a piece of cluster
+# work. See backend/src/config/dbTls.ts.
 COPY backend/ .
 
 # Build the application with increased memory

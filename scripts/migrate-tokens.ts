@@ -5,15 +5,23 @@
  * Run this script after deploying the security hardening changes.
  * 
  * Usage:
- *   npx ts-node scripts/migrate-tokens.ts
+ *   npx tsx scripts/migrate-tokens.ts
  * 
  * Environment variables required:
  *   - DATABASE_URL: PostgreSQL connection string
  *   - ENCRYPTION_KEY: 64-character hex key for AES-256-GCM
  *   - GOOGLE_OAUTH_CLIENT_SECRET: Used by legacy XOR encryption
+ *
+ * Against a remote database this verifies the server certificate, so it also
+ * needs the CA bundle:
+ *   curl -o ~/.postgresql/rds-global-bundle.pem \
+ *     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+ *   export PGSSLROOTCERT=~/.postgresql/rds-global-bundle.pem
  */
 
 import { Pool } from 'pg';
+
+import { buildPgSslConfig } from './lib/pg-ssl';
 
 // Configuration
 const BATCH_SIZE = 100;
@@ -76,7 +84,8 @@ async function migrateTokens() {
   console.log('');
 
   // Validate environment
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
     console.error('❌ DATABASE_URL environment variable is required');
     process.exit(1);
   }
@@ -89,10 +98,29 @@ async function migrateTokens() {
     process.exit(1);
   }
 
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  });
+  // Verified TLS, or no connection at all.
+  //
+  // What this replaced was worse than the sibling scripts' version, in two
+  // ways. It gated TLS on NODE_ENV rather than on the host, so running this
+  // against a remote database with NODE_ENV unset - the normal case for an
+  // operator on a laptop - opened a CLEARTEXT connection. And what crosses
+  // this particular connection is OAuth token material: legacy rows are read
+  // out, decrypted here with GOOGLE_OAUTH_CLIENT_SECRET, and written back
+  // re-encrypted, so an unverified connection exposes both the ciphertext and
+  // the credentials that reach it.
+  //
+  // BOTH halves of the result go to the Pool. The returned connection string
+  // has the TLS parameters stripped out, because pg lets the string override
+  // the ssl option rather than the other way round. See pg-ssl.js.
+  let poolConfig;
+  try {
+    poolConfig = buildPgSslConfig(databaseUrl, process.env);
+  } catch (error) {
+    console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  }
+
+  const pool = new Pool(poolConfig);
 
   try {
     // Check if user_calendars table exists

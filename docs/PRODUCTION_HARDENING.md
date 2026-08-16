@@ -34,6 +34,66 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **Session cookies** – `httpOnly`, `secure` and `sameSite: strict` under `NODE_ENV=production` (`backend/src/index.ts`).
 - [x] **Security headers** – Served by nginx in the frontend image, see [frontend/nginx.conf](../frontend/nginx.conf): X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy. CSP is optional (report-only first if added later). Permissions-Policy is not currently set.
 
+## Database TLS verification
+
+The backend connects to RDS over TLS but does **not** verify the server's
+certificate until this is switched on. Until then, anything able to answer as
+the database can read the credentials on that connection and alter what it
+returns.
+
+The code for verification is shipped and tested; only the switch is off. The AWS
+RDS trust store is committed at `backend/certs/rds-global-bundle.pem` and copied
+into the image, so **no cluster or AWS access is needed** - the RDS roots are
+private and self-signed, so Node cannot verify RDS without them.
+
+- [ ] **Enable verification** - set `DB_TLS_VERIFY=1` in `.kubera/playground-backend.yaml`
+      `config.data` and deploy. It is not a secret.
+- [ ] **If `DB_URL` reaches the pod as a bare single-label hostname**, verification
+      will refuse to treat it as local and will try to verify it. That is
+      deliberate - a name resolved through a DNS search suffix is a remote host -
+      but if it genuinely is a plaintext in-cluster database, name it in
+      `DB_TLS_LOCAL_HOSTS` (comma-separated) rather than turning verification off.
+- [ ] **Confirm from the pod log**, which is the evidence that matters. Every
+      pool logs one line at startup, prefixed `[db-tls:<pool>]`:
+      - `verified TLS to <host> against <path>` - working.
+      - `UNVERIFIED TLS to <host> ...` - the variable did not reach the pod.
+      - `local host (<host>); no TLS` - the resolver thinks the database is
+        local. On the deployment that would be wrong; check `DB_URL`.
+      - `<host> is exempted from verification by DB_TLS_LOCAL_HOSTS` - warned,
+        not informational: verification is on but this host was deliberately
+        excluded from it, so that connection has no TLS at all.
+      Expect one line each for `backend`, `firsthand-runtime` and
+      `firsthand-migrate` (the last from the initContainer).
+
+**The residual risk is hostname verification**, and nothing in this repo can
+rule it out: `rejectUnauthorized: true` makes Node check the certificate's SAN
+against the host in `DB_URL`, so a CNAME, a private alias, an RDS Proxy under a
+custom name or a bare IP would fail the handshake even though the CA is correct.
+If you have cluster access, the cheap way to settle it before anything
+long-lived depends on it is a one-off Job on the same image that does nothing
+but connect with `DB_TLS_VERIFY=1` - proving the handshake rather than flipping
+the switch and watching. Neither Nick nor this repo's CI has that access today,
+which is why the procedure below is "flip and read the log" instead.
+
+**Why it is not on by default.** Turning it on decides whether the application
+can reach its database at all: a certificate that fails to verify fails at
+connect time, and the same code runs in the deploy initContainer, so a bad
+outcome CrashLoops the pod rather than degrading quietly. That cannot be tested
+from outside the cluster. Rolling back is unsetting the variable and
+redeploying - no code change.
+
+**Expected to work**, on this reasoning: the initContainer succeeds on every
+rollout today, and its previous code only enabled TLS for a host ending
+`.rds.amazonaws.com` with no `sslmode` in the URL. Since pg does not negotiate
+TLS on its own and RDS forces it, `DB_URL` must already be exactly that shape.
+
+If it does fail, the likely causes in order: the CA bundle missing from the
+image (the log names the path it looked for), `DB_URL` reaching the pod as
+something other than an RDS hostname, or an `sslmode` having been added to
+`DB_URL` - which is now stripped rather than honoured, deliberately, because
+the connection string used to be able to override the ssl option and quietly
+weaken the connection.
+
 ## Reliability and errors
 
 - [x] **Error boundary** – Frontend `App` wrapped in `ErrorBoundary` (`frontend/src/components/ErrorBoundary.tsx`).

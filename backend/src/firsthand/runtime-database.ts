@@ -2,6 +2,7 @@
 import { Pool, type PoolClient } from "pg";
 
 import { attachPoolErrorLogging } from "../utils/poolErrorLogging";
+import { applyDbTls } from "../config/dbTls";
 
 const FIRSTHAND_RUNTIME_SCHEMA = "firsthand";
 const REQUIRED_RUNTIME_RELATIONS = [
@@ -48,29 +49,25 @@ export function isPostgresRuntimeConfigured() {
   return Boolean(getRuntimeDatabaseUrl());
 }
 
-function requiresRdsSsl(databaseUrl: string) {
-  try {
-    const url = new URL(databaseUrl);
-    if (url.searchParams.has("sslmode")) {
-      return false;
-    }
-    return url.hostname.endsWith(".rds.amazonaws.com");
-  } catch {
-    return false;
-  }
-}
-
 export function getRuntimePoolConfig(databaseUrl: string) {
+  // RDS postgres 15+ parameter-group families default rds.force_ssl to on, and
+  // the RDS CA is genuinely not in Node's default trust store - the roots are
+  // private and self-signed - so this needs a CA supplied, not just a flag.
+  // dbTls.ts holds that decision and the reason verification is opt-in.
+  //
+  // The old version deferred to an explicit ?sslmode= in the URL by declining
+  // to set ssl at all. That override is closed ONLY WHEN DB_TLS_VERIFY IS SET,
+  // which is when the TLS parameters are stripped from the string. On the
+  // default path pg still applies the string over the ssl option, exactly as
+  // before - the log line names any parameter that is doing so.
+  const tls = applyDbTls(databaseUrl, process.env, "firsthand-runtime");
   return {
-    connectionString: databaseUrl,
+    connectionString: tls.connectionString,
     max: 5,
     // pg waits forever by default; in the migrate initContainer an
     // unreachable database would hang silently until Kubernetes kills it.
     connectionTimeoutMillis: 10_000,
-    // RDS postgres 15+ parameter-group families default rds.force_ssl to on,
-    // and the RDS CA is not in Node's trust store, so a bare DB_URL needs
-    // encrypt-without-verify. An explicit ?sslmode= in the URL wins.
-    ...(requiresRdsSsl(databaseUrl) ? { ssl: { rejectUnauthorized: false } } : {})
+    ssl: tls.ssl
   };
 }
 

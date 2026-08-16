@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import pg from "pg";
 
+import { applyDbTls } from "./db-tls.mjs";
+
 const { Pool } = pg;
 
 const FIRSTHAND_SCHEMA = "firsthand";
@@ -53,26 +55,22 @@ const databaseUrl = resolvedConnection.url;
 // from the log alone.
 console.info(`[firsthand-migrate] connection source: ${resolvedConnection.label}`);
 
-function requiresRdsSsl(url) {
-  try {
-    const parsed = new URL(url);
-    if (parsed.searchParams.has("sslmode")) {
-      return false;
-    }
-    return parsed.hostname.endsWith(".rds.amazonaws.com");
-  } catch {
-    return false;
-  }
-}
+// RDS postgres 15+ defaults rds.force_ssl on, and the RDS CA genuinely is not
+// in Node's default trust store - those roots are private and self-signed - so
+// this needs a CA supplied rather than a flag flipped. See db-tls.mjs, and
+// dbTls.ts for why verification is opt-in via DB_TLS_VERIFY.
+//
+// This is the deploy initContainer, which is exactly why it is not on by
+// default: a certificate that does not verify here CrashLoops the pod rather
+// than degrading quietly.
+const tls = applyDbTls(databaseUrl, process.env, "firsthand-migrate");
 
 const pool = new Pool({
-  connectionString: databaseUrl,
+  connectionString: tls.connectionString,
   max: 1,
   // Fail loudly instead of hanging until Kubernetes kills the init container.
   connectionTimeoutMillis: 10_000,
-  // RDS postgres 15+ defaults rds.force_ssl on; the RDS CA is not in Node's
-  // trust store, so encrypt without verification. Explicit ?sslmode= wins.
-  ...(requiresRdsSsl(databaseUrl) ? { ssl: { rejectUnauthorized: false } } : {})
+  ssl: tls.ssl
 });
 
 try {
