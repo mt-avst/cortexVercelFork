@@ -128,6 +128,7 @@ export default tseslint.config(
   {
     files: [
       'backend/src/**/*.ts',
+      'backend/scripts/**/*.{js,mjs,cjs,ts}',
       'shared/**/*.ts',
       'scripts/**/*.{js,mjs,cjs,ts}',
       'e2e/**/*.{ts,js}',
@@ -144,6 +145,22 @@ export default tseslint.config(
       '**/*.test.{ts,tsx,js,jsx,mjs,cjs}',
       '**/*.spec.{ts,tsx,js,jsx,mjs,cjs}',
     ],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  {
+    // The root package.json declares no "type", so a .js file under scripts/ IS
+    // a CommonJS module and `require` is the only module system it has. The
+    // rule is aimed at TypeScript and ESM code reaching for require anyway;
+    // here it flags the language rather than a style slip, and the alternative
+    // - renaming these to .mjs - would break the invocations written down in
+    // the operator runbooks under archive/summaries-and-fixes/.
+    //
+    // Deliberately .js ONLY. scripts/*.ts and scripts/*.mjs both have real
+    // module syntax available, so the rule still applies to them.
+    files: ['scripts/**/*.js'],
     rules: {
       '@typescript-eslint/no-require-imports': 'off',
     },

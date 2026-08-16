@@ -16,11 +16,23 @@ vi.mock("pg", () => ({
   Pool: poolConstructorMock
 }));
 
+/**
+ * What pg would actually connect with. `pg` is mocked in this file, so this
+ * reaches for the real module - the Pool config alone cannot answer the
+ * question, because pg merges the parsed connection string over the ssl option.
+ */
+async function effectiveSsl(poolConfig: unknown) {
+  const actualPg = await vi.importActual<typeof import("pg")>("pg");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (new actualPg.Client(poolConfig as any) as any).connectionParameters.ssl;
+}
+
 describe("runtime database verification", () => {
   afterEach(() => {
     delete process.env.DATABASE_URL;
     delete process.env.POSTGRES_URL;
     delete process.env.DB_URL;
+    delete process.env.DB_TLS_VERIFY;
     delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
       .__firsthandRuntimePool;
     delete (
@@ -143,17 +155,23 @@ describe("Kubera database environment", () => {
     );
   });
 
-  it("does not force ssl for non-RDS hosts such as local docker postgres", async () => {
+  it("does not use TLS for a local host such as docker postgres", async () => {
     process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
     connectMock.mockResolvedValue(createMockClient({ missingRelations: [] }));
 
     const runtimeDatabase = await import("./runtime-database");
     runtimeDatabase.getRuntimeDatabasePool();
 
+    // This used to assert `ssl` was UNDEFINED. It is now explicitly `false`,
+    // which is a deliberate change: leaving it undefined lets pg fall back to
+    // readSSLConfigFromEnvironment(), so a stray PGSSLMODE in the environment
+    // could turn TLS on against a plaintext local postgres and break dev with
+    // no signal. The decision is made in one place now.
     const poolConfig = (
       poolConstructorMock.mock.calls as unknown as Array<[{ ssl?: unknown }]>
     )[0]?.[0];
-    expect(poolConfig?.ssl).toBeUndefined();
+    expect(poolConfig?.ssl).toBe(false);
+    expect(await effectiveSsl(poolConfig)).toBe(false);
   });
 
   it("registers an error listener on the runtime pool so a failover cannot kill the process", async () => {
@@ -189,9 +207,29 @@ describe("Kubera database environment", () => {
     expect(onMock.mock.calls.filter(([event]) => event === "error")).toHaveLength(1);
   });
 
-  it("lets an explicit sslmode in the URL win over host-based ssl detection", async () => {
+  it("still lets an explicit sslmode in the URL win while verification is off", async () => {
     process.env.DB_URL =
       "postgresql://firsthand:secret@firsthand.abc123.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=disable";
+    connectMock.mockResolvedValue(createMockClient({ missingRelations: [] }));
+
+    const runtimeDatabase = await import("./runtime-database");
+    runtimeDatabase.getRuntimeDatabasePool();
+
+    // The old assertion was that `ssl` was undefined, which is the WRONG LAYER:
+    // pg merges the parsed connection string over the ssl option, so what the
+    // Pool was handed never settled what it connected with. Assert the outcome
+    // instead. With DB_TLS_VERIFY unset the string still wins, so behaviour is
+    // unchanged - see the DB_TLS_VERIFY case below for where it stops winning.
+    const poolConfig = (
+      poolConstructorMock.mock.calls as unknown as Array<[{ ssl?: unknown }]>
+    )[0]?.[0];
+    expect(await effectiveSsl(poolConfig)).toBe(false);
+  });
+
+  it("stops an sslmode in the URL winning once DB_TLS_VERIFY is set", async () => {
+    process.env.DB_URL =
+      "postgresql://firsthand:secret@firsthand.abc123.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=disable";
+    process.env.DB_TLS_VERIFY = "1";
     connectMock.mockResolvedValue(createMockClient({ missingRelations: [] }));
 
     const runtimeDatabase = await import("./runtime-database");
@@ -200,7 +238,10 @@ describe("Kubera database environment", () => {
     const poolConfig = (
       poolConstructorMock.mock.calls as unknown as Array<[{ ssl?: unknown }]>
     )[0]?.[0];
-    expect(poolConfig?.ssl).toBeUndefined();
+    const ssl = await effectiveSsl(poolConfig);
+    expect(ssl).not.toBe(false);
+    expect(ssl.rejectUnauthorized).toBe(true);
+    expect(ssl.ca).toBeTruthy();
   });
 });
 

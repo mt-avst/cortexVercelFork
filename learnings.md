@@ -158,6 +158,95 @@ Shipped as 7.33.0 (MR !106) and hardened as 7.33.1 (MR !107). The current task n
 - **React 18 batching makes "did this run before the state flip?" assertions vacuous.** A test that the runner had not yet mounted when the pane opened passed identically against the correct code and against the mutation that broke it, because `setPhase` had not flushed either way. Assert the behaviour that matters instead - here, that a never-resolving `openTaskPip` still lets the session proceed
 - **A one-shot mock rejection lands on the wrong call.** A test for "the pane survives a failed completion" used `mockRejectedValueOnce`, which was consumed by the `step_exited` event preceding completion, so completion was never reached and the test proved nothing. Reject conditionally on the event you actually mean
 
+## Database TLS, and three ways a test can lie (2026-08-15)
+
+Every database connection in the repo that carries credentials now goes through
+one TLS decision - `backend/src/config/dbTls.ts` for the backend,
+`scripts/lib/pg-ssl.js` for the operator scripts. What made it hard was not the
+crypto; it was that four separate assertions about it were false.
+
+- **pg merges a parsed connection string OVER the explicit `ssl` option.**
+  `connection-parameters.js` does `config = Object.assign({}, config,
+  parse(config.connectionString))`, so `new Pool({connectionString, ssl})` lets
+  the STRING win. Measured on pg 8.18.0: `?ssl=0` gives a plaintext connection
+  and `?sslmode=verify-full` silently discards the CA you supplied. The first
+  version of this fix carried a comment asserting the opposite. **If you pass
+  both, strip the TLS parameters from the string, or the option is decoration.**
+- **`URLSearchParams.get` returns the FIRST value; pg-connection-string keeps
+  the LAST.** So `?sslmode=verify-full&sslmode=no-verify` shows an approving
+  gate one value and hands the driver another. This bit the same fix twice -
+  first on `sslmode`, then on `host`, where it is worse: `host` cannot be
+  stripped because pg needs it, and a duplicate sends the credentials to a
+  server the gate never judged, with no interception position required.
+- **`?host=` beats the URL authority.** A `postgres://…@localhost/…?host=<remote>`
+  string dials the remote one. Any gate reading `url.hostname` judges a
+  different server from the one that gets connected to.
+- **An empty CA file is falsy, so Node falls back to its DEFAULT PUBLIC ROOT
+  STORE.** That is the shape a truncated `curl` leaves behind, and it is the one
+  failure that degrades silently - garbage content fails closed on its own.
+- **The RDS roots are private and self-signed** (verified: `Amazon RDS
+  eu-west-1 Root CA RSA2048/RSA4096/ECC384`, expiring 2061/2121/2121, none of
+  them in Node's store - the four "RDS" hits there are base64 coincidences). So
+  `rejectUnauthorized: true` alone cannot work against RDS; a CA must be
+  supplied. The bundle is committed at `backend/certs/` and ships in the image,
+  which is what makes `DB_TLS_VERIFY=1` a one-variable change instead of
+  cluster work.
+
+**Verification is opt-in, behind `DB_TLS_VERIFY=1`, and that is deliberate.** A
+certificate that fails to verify fails at connect time, and the same code runs
+in the deploy initContainer, so a wrong guess CrashLoops the pod rather than
+degrading quietly - and it cannot be tested from outside the cluster. The
+residual risk is not the CA but **hostname verification**: `rejectUnauthorized`
+also checks the certificate SAN against the host in `DB_URL`, so a CNAME,
+private alias, RDS Proxy name or bare IP fails the handshake even with a correct
+CA. `docs/PRODUCTION_HARDENING.md` has the enable-and-confirm procedure.
+
+**A single-label hostname is treated as local** - no dot means no public DNS -
+because docker-compose reaches postgres at `postgres` and `postgres-dev`, which
+are plaintext containers. Forcing TLS on them breaks local development outright.
+The exemption stops once verification is requested, because a name resolved
+through a DNS search suffix IS remote; `DB_TLS_LOCAL_HOSTS` is the named escape
+hatch, and it is bounded to single-label names so it cannot exempt the real
+endpoint.
+
+### The testing lesson, which generalises past TLS
+
+**Three separate times, a test passed because it asserted on an intermediate
+value rather than the outcome.** Assert on what the system actually does:
+
+- Asserting on the object handed to `new Pool()` passes against a build where
+  the connection is cleartext. Assert on
+  `new Client(config).connectionParameters.ssl` - the config that reaches
+  `tls.connect`.
+- A test that drove a real TLS connection over a URL carrying
+  `?sslmode=verify-full` proved only that pg-connection-string works:
+  **pg-connection-string is secure by default**, so the library supplied the
+  verification and the test passed with our own `ssl` option deleted entirely.
+- Matching an error message on the offending value cannot distinguish two code
+  paths when both messages echo that value. Match the phrase that only one path
+  produces.
+
+**A surviving mutation means an assertion is vacuous more often than it means a
+layer is redundant.** Three survivors were written off as belt-and-braces; two
+were vacuous assertions. The tell: mutate the layer AND the layer that backs it
+up - if the pair dies but each alone survives, it is genuine redundancy.
+
+**Test the wiring, not just the helper.** Mutating four call sites back to
+`rejectUnauthorized: false` left the whole backend suite green, because the
+helper was tested and nothing pinned that anything used it. At the application
+pool the difference was invisible under jest specifically because `NODE_ENV` is
+`test` and the resolved database is local, so old and new agreed - **check
+whether your test environment is hiding the case that matters.**
+
+**A test can be the dangerous thing.** The wiring test drove
+`reset-production-db.ts` using `docker-compose.yml`'s `DATABASE_URL` verbatim -
+same host, credentials and database. Inside the compose network that resolves,
+and the assertion under test fires *before* the connection is attempted, so it
+would have passed whether or not the deletes ran. No behavioural assertion can
+catch that class; the guard has to be on the test itself, and there is now one
+checking that no connection string in that file shares a host with any compose
+database.
+
 ## Links
 
 - Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net

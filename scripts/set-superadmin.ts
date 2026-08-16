@@ -1,12 +1,29 @@
 #!/usr/bin/env node
 /**
  * Set superadmin role for a specific user
- * Usage: npx ts-node scripts/set-superadmin.ts <email>
+ * Usage: npx tsx scripts/set-superadmin.ts <email>
+ *
+ * The email is required - there is no default.
+ *
+ * Against RDS this verifies the server certificate, so it needs the CA bundle:
+ *   curl -o ~/.postgresql/rds-global-bundle.pem \
+ *     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+ *   export PGSSLROOTCERT=~/.postgresql/rds-global-bundle.pem
  */
 
 import { Pool } from 'pg';
 
-const email = process.argv[2] || 'nfine@adaptavist.com';
+import { buildPgSslConfig } from './lib/pg-ssl';
+
+// No default. This grants superadmin, so a dropped or mistyped argument has to
+// stop the script rather than quietly promote whoever the default named.
+const email = (process.argv[2] || '').trim();
+if (!email) {
+  console.error('Usage: npx tsx scripts/set-superadmin.ts <email>');
+  console.error('Example: npx tsx scripts/set-superadmin.ts someone@adaptavist.com');
+  process.exit(1);
+}
+
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
 if (!databaseUrl) {
@@ -23,12 +40,23 @@ if (cleanUrl.startsWith("psql '")) {
   cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
 }
 
-const pool = new Pool({
-  connectionString: cleanUrl,
-  ssl: {
-    rejectUnauthorized: false
-  }
-});
+// Verified TLS, or no connection at all. buildPgSslConfig throws with the
+// remedy when it cannot verify, rather than falling back to an unverified
+// connection carrying these credentials.
+//
+// BOTH halves of the result go to the Pool. The returned connection string has
+// the TLS parameters stripped out, because pg lets the string override the ssl
+// option rather than the other way round - passing the original string back
+// here would reopen the hole. See pg-ssl.js.
+let poolConfig;
+try {
+  poolConfig = buildPgSslConfig(cleanUrl, process.env);
+} catch (error) {
+  console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
+
+const pool = new Pool(poolConfig);
 
 async function setSuperadmin() {
   const client = await pool.connect();

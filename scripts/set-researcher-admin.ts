@@ -1,19 +1,33 @@
 #!/usr/bin/env node
 /**
  * Set researcher_admin role for one or more users by email.
- * Usage: npx ts-node scripts/set-researcher-admin.ts <email1> [email2 ...]
- * Example: npx ts-node scripts/set-researcher-admin.ts choward@adaptavist.com gbaisch@adaptavist.com
+ * Usage: npx tsx scripts/set-researcher-admin.ts <email1> [email2 ...]
+ * Example: npx tsx scripts/set-researcher-admin.ts choward@adaptavist.com gbaisch@adaptavist.com
  *
  * Users must exist in the database (e.g. have logged in once with Google) before running.
  * For production: use DATABASE_URL from Vercel (e.g. vercel env pull, then run this script).
+ *
+ * Against a remote database this verifies the server certificate, so it needs
+ * the CA bundle:
+ *   curl -o ~/.postgresql/rds-global-bundle.pem \
+ *     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+ *   export PGSSLROOTCERT=~/.postgresql/rds-global-bundle.pem
  */
 
 import { Pool } from 'pg';
 
-const emails = process.argv.slice(2).filter(Boolean);
+import { buildPgSslConfig } from './lib/pg-ssl';
+
+// Trimmed for parity with set-superadmin. A whitespace-only argument used to
+// pass the length check, match no row, and exit 0 reporting "Done." having
+// promoted nobody - which reads as success.
+const emails = process.argv
+  .slice(2)
+  .map((email) => email.trim())
+  .filter(Boolean);
 if (emails.length === 0) {
-  console.error('Usage: npx ts-node scripts/set-researcher-admin.ts <email1> [email2 ...]');
-  console.error('Example: npx ts-node scripts/set-researcher-admin.ts choward@adaptavist.com gbaisch@adaptavist.com');
+  console.error('Usage: npx tsx scripts/set-researcher-admin.ts <email1> [email2 ...]');
+  console.error('Example: npx tsx scripts/set-researcher-admin.ts choward@adaptavist.com gbaisch@adaptavist.com');
   process.exit(1);
 }
 
@@ -31,10 +45,22 @@ if (cleanUrl.startsWith("psql '")) {
   cleanUrl = cleanUrl.replace(/^psql ['"]/, '').replace(/['"]$/, '');
 }
 
-const pool = new Pool({
-  connectionString: cleanUrl,
-  ssl: { rejectUnauthorized: false },
-});
+// Verified TLS, or no connection at all. buildPgSslConfig throws with the
+// remedy when it cannot verify, rather than falling back to an unverified
+// connection carrying these credentials.
+//
+// BOTH halves of the result go to the Pool. The returned connection string has
+// the TLS parameters stripped out, because pg lets the string override the ssl
+// option rather than the other way round. See pg-ssl.js.
+let poolConfig;
+try {
+  poolConfig = buildPgSslConfig(cleanUrl, process.env);
+} catch (error) {
+  console.error(`❌ ${error instanceof Error ? error.message : String(error)}`);
+  process.exit(1);
+}
+
+const pool = new Pool(poolConfig);
 
 async function setResearcherAdmins() {
   const client = await pool.connect();

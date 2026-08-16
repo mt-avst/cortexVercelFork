@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { applyDbTls } from '../config/dbTls';
 
 /**
  * Reset production database: Remove all bookings and opportunities, create fresh studies
@@ -21,11 +22,10 @@ async function resetProductionDatabase() {
   }
 
   console.log('🔌 Connecting to database...');
+  const tls = applyDbTls(cleanUrl, process.env, 'reset-production-db');
   const pool = new Pool({
-    connectionString: cleanUrl,
-    ssl: {
-      rejectUnauthorized: false
-    }
+    connectionString: tls.connectionString,
+    ssl: tls.ssl
   });
 
   const client = await pool.connect();
