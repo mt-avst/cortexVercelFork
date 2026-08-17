@@ -18,7 +18,7 @@ const UnderDevelopment = lazy(() => import('./pages/UnderDevelopment'));
 const MyBookings = lazy(() => import('./pages/MyBookings'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Settings = lazy(() => import('./pages/Settings'));
-const Poll = lazy(() => import('./pages/Poll'));
+const SurveySession = lazy(() => import('./pages/SurveySession'));
 const GamificationPage = lazy(() => import('./pages/Gamification'));
 const OpportunityAnalyticsPage = lazy(() => import('./pages/OpportunityAnalytics'));
 const SessionReviewPage = lazy(() => import('./pages/SessionReview'));
@@ -82,7 +82,13 @@ function App() {
                 <Route element={<AppChromeLayout />}>
                   <Route path="/" element={<Home />} />
                   <Route path="/opportunities/:id" element={<OpportunityDetail />} />
-                  <Route path="/poll/:id" element={<Poll />} />
+                  {/* The native poll and survey runner. Keyed on a session
+                      token, because every answer is written against a runtime
+                      session and there is nothing to store into until one
+                      exists. This replaces `/poll/:id`, a placeholder present
+                      since v6.0.0, linked from nowhere, which an opportunity id
+                      alone could never have made work. */}
+                  <Route path="/survey/:token" element={<SurveySession />} />
                   <Route path="/submit-research-request" element={<UnderDevelopment />} />
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/settings" element={<Settings />} />

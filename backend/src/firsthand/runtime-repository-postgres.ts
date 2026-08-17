@@ -247,6 +247,49 @@ export async function resetRuntimeSessionPostgres(payload: SessionPayload) {
   return session;
 }
 
+/**
+ * The session this participant already has for this opportunity, if any.
+ *
+ * Exists because minting is otherwise a multiplier on the results. Every mint
+ * creates a runtime_sessions row, and the results aggregation counts one
+ * respondent per session - so an ordinary employee pressing Start repeatedly
+ * could move a poll's numbers as far as they liked, with each fake respondent
+ * indistinguishable from a real one. Proven end to end before this existed:
+ * three extra mints took a rating question from 3 respondents to 6.
+ *
+ * That is a survey problem specifically. Sixty junk recorded sessions are
+ * obvious to whoever reviews them; sixty junk poll votes are just a number.
+ *
+ * Returns the most recent, so a participant who abandoned a survey and came
+ * back resumes rather than starting again - which is also why the completed
+ * case is answered here rather than filtered out: the route needs to tell the
+ * two apart.
+ */
+export async function findParticipantSessionForOpportunityPostgres(input: {
+  opportunityId: string;
+  participantId: string;
+}): Promise<{ token: string; sessionStatus: string } | null> {
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query<{
+      token: string;
+      session_status: string;
+    }>(
+      `
+        SELECT token, session_status
+        FROM runtime_sessions
+        WHERE opportunity_id = $1
+          AND participant_id = $2
+        ORDER BY created_at DESC
+        LIMIT 1
+      `,
+      [input.opportunityId, input.participantId]
+    );
+
+    const row = result.rows[0];
+    return row ? { token: row.token, sessionStatus: row.session_status } : null;
+  });
+}
+
 export async function getRuntimeSessionPostgres(
   sessionId: string,
   input?: {

@@ -17,6 +17,7 @@ import {
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
+import { findParticipantSessionForOpportunity } from '../firsthand/runtime-repository';
 import {
   claimStudyIfUnowned,
   countStudyTasks,
@@ -1343,6 +1344,170 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
 
   const sessionUrl = `${frontendUrl}/session/${result.session.session_token}`;
   return res.json({ session_url: sessionUrl });
+}));
+
+// POST /api/opportunities/:id/survey-session - Create a native survey session.
+//
+// The survey counterpart of /recorded-study-session, and deliberately a
+// separate route rather than a mode of it. That one mints a RECORDED session -
+// screen and microphone capture, a consent screen that says so - and its guard
+// is `type === 'unmoderated'`. A survey records nothing, so the two have
+// different preconditions and answer different failures; sharing a route would
+// mean one handler whose every branch asks which of two products it is in.
+router.post('/:id/survey-session', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  const { id } = req.params;
+  const dbAvailable = await isDatabaseAvailable();
+
+  let studyId: string | null = null;
+  let canonicalOpportunityId: string | null = null;
+
+  if (dbAvailable) {
+    const result = await pool.query(
+      'SELECT id, type, firsthand_study_id, status, delivery_mode FROM opportunities WHERE id = $1',
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      throw new NotFoundError('Opportunity');
+    }
+
+    const row = result.rows[0];
+
+    // BOTH conditions, not either. `delivery_mode` says the researcher meant
+    // this to run in Cortex; the study's `kind` says the questions are actually
+    // written in a vocabulary this runner can draw. A switch to external
+    // delivery leaves the study linked, so the mode alone would let a stale
+    // link run; and a recorded task list on a native survey would render
+    // instructions meant to be performed aloud with nothing recording.
+    if (row.type !== 'poll' && row.type !== 'survey') {
+      throw new NotFoundError('Survey');
+    }
+
+    if ((row.delivery_mode ?? 'external') !== 'native') {
+      throw new NotFoundError('Survey');
+    }
+
+    if (row.status !== 'published') {
+      return res.status(403).json({ error: 'Opportunity is not published' });
+    }
+
+    studyId = row.firsthand_study_id;
+    const parsedId = row.id;
+    canonicalOpportunityId = parsedId == null ? null : String(parsedId);
+  }
+
+  if (!studyId) {
+    return res.status(400).json({ error: 'Opportunity has no questions linked' });
+  }
+
+  // Re-checked here for the same reason the recorded route re-checks: the
+  // studies API takes a client-supplied id, so a study can be planted at a
+  // previously dangling id or replaced at the same one long after the link was
+  // made. The moment that matters is the one where a participant is about to be
+  // shown the questions.
+  if (isStudiesPersistenceConfigured()) {
+    const linked = await getStudyById(studyId);
+
+    // A missing study is a refusal, not a fall-through: without this the mint
+    // continued and createSession answered a less specific error.
+    if (!linked) {
+      throw new NotFoundError('Survey');
+    }
+
+    if (linked.study.kind !== 'survey') {
+      logger.warn('Refused a survey session on a study that is a task list', {
+        opportunityId: canonicalOpportunityId ?? id,
+        studyId,
+        kind: linked.study.kind
+      });
+      throw new NotFoundError('Survey');
+    }
+
+    // The study's OWN status, which the opportunity's says nothing about. A
+    // published opportunity can link a draft study, and without this its
+    // unfinished question wording was served to participants and their answers
+    // counted in the results.
+    if (linked.study.status !== 'launched') {
+      logger.warn('Refused a survey session on a study that is not launched', {
+        opportunityId: canonicalOpportunityId ?? id,
+        studyId,
+        status: linked.study.status
+      });
+      throw new NotFoundError('Survey');
+    }
+  }
+
+  /**
+   * One session per participant per opportunity.
+   *
+   * Minting is otherwise a multiplier on the results: every mint is a new
+   * runtime_sessions row and the aggregation counts one respondent per session,
+   * so pressing Start repeatedly moves a poll's numbers as far as the
+   * participant likes, with each fake respondent indistinguishable from a real
+   * one. Demonstrated end to end as an ordinary employee before this existed -
+   * three extra mints took a rating question from 3 respondents to 6.
+   *
+   * An unfinished session is RESUMED rather than replaced, so closing the tab
+   * and coming back does not lose the answers already given. A finished one is
+   * refused outright: re-answering would rewrite the stored responses, and the
+   * survey runtime keeps no history of what they were.
+   */
+  const existing = await findParticipantSessionForOpportunity({
+    opportunityId: canonicalOpportunityId ?? id,
+    participantId: req.user.id
+  });
+
+  if (existing) {
+    if (existing.sessionStatus === 'completed' || existing.sessionStatus === 'uploading') {
+      return res.status(409).json({ error: 'You have already answered this' });
+    }
+
+    return res.json({
+      session_url: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/survey/${existing.token}`
+    });
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+  const returnUrl = `${frontendUrl}/opportunities/${encodeURIComponent(id)}?completed=1`;
+  const participant = {
+    participant_id: req.user.id,
+    display_name: req.user.name,
+    email: req.user.email,
+    external_ref: canonicalOpportunityId ?? id,
+  };
+
+  const result = await createSession({
+    studyId,
+    participant,
+    ...(canonicalOpportunityId ? { opportunityId: canonicalOpportunityId } : {}),
+    returnUrl
+  });
+
+  if (!result.ok) {
+    switch (result.error) {
+      case 'persistence_not_configured':
+        return res.status(503).json({ error: 'Surveys are not available' });
+      case 'study_not_found':
+        return res.status(404).json({ error: 'Linked questions not found' });
+      case 'study_has_no_steps':
+        return res.status(400).json({ error: 'This survey has no questions' });
+      case 'payload_assembly_failed':
+        throw new AppError('Failed to assemble the survey', 500, 'SESSION_ASSEMBLY_FAILED');
+      default: {
+        // Exhaustiveness guard, and the raw value must NOT reach the
+        // participant-visible message: errorHandler serialises it verbatim.
+        const unexpected: never = result.error;
+        logger.error('Unhandled survey session-create error', { error: String(unexpected) });
+        throw new AppError('Failed to assemble the survey', 500, 'SESSION_ASSEMBLY_FAILED');
+      }
+    }
+  }
+
+  return res.json({ session_url: `${frontendUrl}/survey/${result.session.session_token}` });
 }));
 
 // GET /api/opportunities/:id/session-events - List FirstHand session events for an opportunity

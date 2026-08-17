@@ -23,6 +23,12 @@ jest.mock('../../firsthand/session-create', () => ({
 
 // The create route builds a study from an inline payload. Mocked so these tests
 // stay on the app pool and never reach the FirstHand runtime pool.
+jest.mock('../../firsthand/runtime-repository', () => ({
+  // Defaults to "this participant has no session yet", which is the common
+  // case. Tests that care about resuming or refusing queue their own.
+  findParticipantSessionForOpportunity: jest.fn(async () => null),
+}));
+
 jest.mock('../../firsthand/studies-repository', () => ({
   createStudy: jest.fn(),
   countStudyTasks: jest.fn(),
@@ -63,6 +69,7 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
+import { findParticipantSessionForOpportunity } from '../../firsthand/runtime-repository';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
@@ -70,6 +77,13 @@ const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
 const mockIsDatabaseAvailable = isDatabaseAvailable as jest.MockedFunction<any>;
 const mockCreateSession = createSession as jest.MockedFunction<any>;
+// Typed against the real signature rather than `any`: this file's
+// no-explicit-any budget is held per file in eslint-suppressions.json, so one
+// more untyped mock turns every existing one into an error.
+const mockFindParticipantSession =
+  findParticipantSessionForOpportunity as jest.MockedFunction<
+    typeof findParticipantSessionForOpportunity
+  >;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
 const mockClaimStudyIfUnowned = claimStudyIfUnowned as jest.MockedFunction<any>;
 const mockDeleteStudyUnchecked = deleteStudyUnchecked as jest.MockedFunction<any>;
@@ -2363,6 +2377,196 @@ describe('Opportunities API', () => {
       await request(unauthenticatedApp)
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(404);
+    });
+  });
+
+  describe('POST /api/opportunities/:id/survey-session', () => {
+    const surveyRow = (overrides: Record<string, unknown> = {}) => ({
+      id: '1',
+      type: 'survey',
+      firsthand_study_id: 'study_questions',
+      status: 'published',
+      delivery_mode: 'native',
+      ...overrides
+    });
+
+    const surveyStudy = {
+      study: {
+        id: 'study_questions',
+        title: 'Questions',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        status: 'launched' as const,
+        kind: 'survey' as const,
+        owner_user_id: 'test-user-id',
+        created_at: '2026-08-17T10:00:00.000Z',
+        updated_at: '2026-08-17T10:00:00.000Z',
+      },
+      steps: []
+    };
+
+    it('mints a session and returns a same-origin survey URL', async () => {
+      process.env.FRONTEND_URL = 'https://cortex.example.com';
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 's', session_token: 'fh_tok', expires_at: '2026-09-01T00:00:00.000Z' }
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/survey-session')
+        .expect(200);
+
+      expect(response.body.session_url).toBe('https://cortex.example.com/survey/fh_tok');
+      expect(mockCreateSession).toHaveBeenCalledWith(
+        expect.objectContaining({ studyId: 'study_questions', opportunityId: '1' })
+      );
+    });
+
+    it('rejects an unauthenticated request', async () => {
+      await request(unauthenticatedApp)
+        .post('/api/opportunities/1/survey-session')
+        .expect(401);
+    });
+
+    /**
+     * BOTH conditions, not either. The mode says the researcher meant this to
+     * run in Cortex; the study's kind says the questions are written in a
+     * vocabulary this runner can draw. A switch to external leaves the study
+     * linked, so the mode alone would let a stale link run.
+     */
+    it('refuses a survey that hands off externally, even with questions linked', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ delivery_mode: 'external' })]
+      });
+      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+
+      // The guard has to be the SOURCE of the 404, and asserting the study
+      // was never read is what proves it: the file-level getStudyById
+      // default is a recorded study, so the kind re-check would produce the
+      // same 404 - which is why this passed with the guard deleted.
+      expect(mockGetStudyById).not.toHaveBeenCalled();
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses when the linked study is a recorded task list', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce({
+        ...surveyStudy,
+        study: { ...surveyStudy.study, kind: 'recorded' as const }
+      });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses a recorded study, which has its own route', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ type: 'unmoderated' })]
+      });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+
+      expect(mockGetStudyById).not.toHaveBeenCalled();
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('mints for a poll too, not only a survey', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow({ type: 'poll' })] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 's', session_token: 'fh_poll', expires_at: '2026-09-01T00:00:00.000Z' }
+      });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(200);
+
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    /**
+     * One session per participant per opportunity. Every mint is a row the
+     * results aggregation counts as a respondent, so minting freely is vote
+     * stuffing - proven end to end as an ordinary employee, three extra mints
+     * taking a rating question from 3 respondents to 6.
+     */
+    it('resumes an unfinished session instead of minting a second one', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_existing',
+        sessionStatus: 'link_opened'
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/survey-session')
+        .expect(200);
+
+      expect(response.body.session_url).toContain('fh_existing');
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses a second answer once the participant has finished', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockFindParticipantSession.mockResolvedValueOnce({
+        token: 'fh_done',
+        sessionStatus: 'completed'
+      });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(409);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
+     * A published opportunity can link a study that is still a draft, and the
+     * opportunity's own status says nothing about it. Without this the
+     * unfinished question wording was served to participants and their answers
+     * counted in the results.
+     */
+    it('refuses a study that is still a draft', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce({
+        ...surveyStudy,
+        study: { ...surveyStudy.study, status: 'draft' as const }
+      });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses a study id that resolves to nothing', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
+      mockGetStudyById.mockResolvedValueOnce(null as never);
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses a draft', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow({ status: 'draft' })] });
+
+      await request(app).post('/api/opportunities/1/survey-session').expect(403);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('says so when nothing is linked yet', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ firsthand_study_id: null })]
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/survey-session')
+        .expect(400);
+
+      expect(response.body.error).toBe('Opportunity has no questions linked');
     });
   });
 
