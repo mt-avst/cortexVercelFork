@@ -148,10 +148,15 @@ VALUES
    now() - interval '20 days', now() + interval '10 days', 'single', now() - interval '21 days'),
 
   -- surveys
+  --
+  -- Do NOT describe responses as anonymous in this copy. Cortex does not
+  -- provide anonymity: the results carry session_id, and the opportunity
+  -- owner can join it to a named employee through /:id/session-events. See
+  -- the note in backend/src/db/reset-demo-data.ts.
   ('0aa00001-0000-4000-8000-000000000009', 'survey',
    'Developer experience pulse, Q3',
    'Ten minutes on tooling, build times and the things that break your flow each week.',
-   E'Anonymous. Results go to the platform team and are shared back in the engineering all-hands.\n\nWe run this every quarter, so trends matter more than any single answer.',
+   E'Results go to the platform team and are shared back in the engineering all-hands.\n\nWe run this every quarter, so trends matter more than any single answer.',
    NULL, 10, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    'https://forms.gle/example-devex-pulse-q3', NULL, 'internal', NULL,
    now() - interval '12 days', now() + interval '8 days', 'single', now() - interval '13 days'),

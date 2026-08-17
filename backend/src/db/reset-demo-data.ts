@@ -161,6 +161,16 @@ export async function resetDemoData() {
     // ==========================================
     // 3. SURVEY - External link
     // ==========================================
+    //
+    // Do NOT describe responses as anonymous here, or in any participant-facing
+    // copy. Cortex does not provide anonymity and this description is the
+    // promise a participant reads before answering: the results carry
+    // `session_id`, and GET /api/opportunities/:id/session-events - open to the
+    // same opportunity owner - carries that same id beside the participant's
+    // name and email, so the join back to a named employee is exact. The owner
+    // is entitled to both sets; the word was simply a claim we do not honour.
+    // If real anonymity is ever wanted, it is a salted per-opportunity digest
+    // of the session id in the results projection, not a wording change.
     const surveyResult = await client.query(
       `INSERT INTO opportunities (
         type, title, purpose_one_liner, description_optional, product_optional,
@@ -171,7 +181,7 @@ export async function resetDemoData() {
         'survey',
         'Atlassian Design System Usage Survey',
         'Tell us how you use the Atlassian Design System in your apps',
-        'Help us understand how developers and designers are using the Atlassian Design System (ADS) in their Forge apps, Jira customizations, and Confluence macros. This survey covers component usage patterns, design token adoption, documentation quality, and what\'s missing. Your anonymous responses help us prioritize improvements to ADS.',
+        'Help us understand how developers and designers are using the Atlassian Design System (ADS) in their Forge apps, Jira customizations, and Confluence macros. This survey covers component usage patterns, design token adoption, documentation quality, and what\'s missing. Your responses help us prioritize improvements to ADS.',
         'Atlassian Design System',
         15,
         'published',
