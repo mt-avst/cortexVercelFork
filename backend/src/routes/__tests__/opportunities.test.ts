@@ -1317,7 +1317,7 @@ describe('Opportunities API', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -1343,9 +1343,75 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe('Authentication required');
     });
 
+    /**
+     * The opportunity a session is attributed to is the authorisation key for
+     * reading that study's answers per opportunity. Two things have to hold,
+     * and neither did.
+     *
+     * It has to be WIRED - deleting `opportunityId` from the createSession call
+     * removed the feature at its only production entry point with the whole
+     * suite still green.
+     *
+     * And it has to be CANONICAL. opportunities.id is a `uuid` column, so
+     * Postgres matches several textual spellings of the same value - braces,
+     * upper case, hyphens after any group of four digits - while the column
+     * this lands in is TEXT and compares by bytes. Passing the path segment
+     * through let a participant mint a family of distinct keys for one
+     * opportunity and drop their own answers out of the researcher's results by
+     * writing the URL differently. A route path parameter is caller-supplied;
+     * only the id Postgres parsed is not.
+     */
+    it('attributes the session to the opportunity id the database parsed, not the one in the URL', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '97bfe613-4e1f-472c-917e-b90d1c0326b8',
+          firsthand_study_id: 'study_abc123',
+          status: 'published'
+        }]
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
+      });
+
+      await request(app)
+        .post('/api/opportunities/{97BFE613-4E1F-472C-917E-B90D1C0326B8}/recorded-study-session')
+        .expect(200);
+
+      expect(mockCreateSession).toHaveBeenCalledWith(expect.objectContaining({
+        opportunityId: '97bfe613-4e1f-472c-917e-b90d1c0326b8'
+      }));
+      // Same treatment for the correlation field, so a future reader cannot
+      // pick the unnormalised one of the two.
+      expect(mockCreateSession).toHaveBeenCalledWith(expect.objectContaining({
+        participant: expect.objectContaining({
+          external_ref: '97bfe613-4e1f-472c-917e-b90d1c0326b8'
+        })
+      }));
+    });
+
+    it('ignores an opportunity id supplied in the request body', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+      });
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
+      });
+
+      await request(app)
+        .post('/api/opportunities/1/recorded-study-session')
+        .send({ opportunity_id: 'someone-elses-opportunity' })
+        .expect(200);
+
+      expect(mockCreateSession).toHaveBeenCalledWith(expect.objectContaining({
+        opportunityId: '1'
+      }));
+    });
+
     it('maps a study-without-steps result to 400', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
@@ -1360,7 +1426,7 @@ describe('Opportunities API', () => {
       ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
@@ -1374,7 +1440,7 @@ describe('Opportunities API', () => {
 
     it('maps payload_assembly_failed to a 500 with a neutral error code', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
@@ -1389,7 +1455,7 @@ describe('Opportunities API', () => {
 
     it('maps an unmodelled createSession error through the default branch without leaking the raw value', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       // A value outside the CreateSessionError union drives the exhaustiveness
       // guard. Its message must be static, not the interpolated raw value.
@@ -1412,7 +1478,7 @@ describe('Opportunities API', () => {
     it('still serves the deprecated /:id/firsthand-handoff alias path', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -1484,6 +1550,7 @@ describe('Opportunities API', () => {
           consent_text: 'Consent',
           estimated_duration_minutes: 25,
           status: 'launched' as const,
+          kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
           created_at: '2026-08-16T10:00:00.000Z',
           updated_at: '2026-08-16T10:00:00.000Z',
@@ -1511,6 +1578,7 @@ describe('Opportunities API', () => {
           consent_text: 'Consent',
           estimated_duration_minutes: undefined,
           status: 'launched' as const,
+          kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
           created_at: '2026-08-16T10:00:00.000Z',
           updated_at: '2026-08-16T10:00:00.000Z',

@@ -9,6 +9,11 @@ import {
   type Study,
   type StudyStep
 } from "../../../shared/firsthand/contract";
+import {
+  findStepVocabularyProblem,
+  STEP_VOCABULARY_MESSAGES,
+  type StudyKind
+} from "../../../shared/firsthand/study-input";
 
 import {
   isPostgresRuntimeConfigured,
@@ -39,6 +44,12 @@ export type StudyStatus = "draft" | "launched" | "archived";
 
 export type StudyRecord = Study & {
   status: StudyStatus;
+  /**
+   * Which authoring vocabulary the study is written in, and so which runner its
+   * participant gets. See migration 0009 for why this is stored rather than
+   * derived from the step types present.
+   */
+  kind: StudyKind;
   // Null for a study created before owners existed and not claimable from an
   // opportunity by migration 0007. See canWriteStudy for what that permits.
   owner_user_id: string | null;
@@ -85,6 +96,13 @@ export type CreateStudyInput = {
   estimated_duration_minutes?: number | null;
   locale?: string;
   status?: StudyStatus;
+  /**
+   * Defaults to `recorded` when absent, which is what every caller predating
+   * the survey vocabulary means. Not present on UpdateStudyInput: a study's
+   * vocabulary is fixed at create, because changing it would leave the stored
+   * steps written for a runner that no longer reads them.
+   */
+  kind?: StudyKind;
   // The authoring user. Optional in the type only so a caller with no user
   // context (a script, a fixture) can still insert; every HTTP path passes one.
   owner_user_id?: string | null;
@@ -114,6 +132,7 @@ type StudyRow = {
   estimated_duration_minutes: number | null;
   locale: string | null;
   status: string;
+  kind: string;
   owner_user_id: string | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -147,7 +166,7 @@ export async function listStudies(): Promise<StudyRecord[]> {
     const result = await client.query<StudyRow>(
       `
         SELECT id, title, intro_text, consent_text, brand_name,
-               estimated_duration_minutes, locale, status, owner_user_id,
+               estimated_duration_minutes, locale, status, kind, owner_user_id,
                created_at, updated_at
         FROM studies
         ORDER BY updated_at DESC, title ASC
@@ -235,8 +254,8 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
         `
           INSERT INTO studies (
             id, title, intro_text, consent_text, brand_name,
-            estimated_duration_minutes, locale, status, owner_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            estimated_duration_minutes, locale, status, kind, owner_user_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
         [
           studyId,
@@ -247,6 +266,7 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
           input.estimated_duration_minutes ?? null,
           input.locale ?? null,
           status,
+          input.kind ?? "recorded",
           input.owner_user_id ?? null
         ]
       );
@@ -287,8 +307,11 @@ export async function updateStudy(
       // the same unowned study would both see NULL and both claim it, and the
       // loser's authorisation decision would have been taken against an owner
       // that no longer holds by the time their UPDATE lands.
-      const ownerResult = await client.query<{ owner_user_id: string | null }>(
-        `SELECT owner_user_id FROM studies WHERE id = $1 FOR UPDATE`,
+      const ownerResult = await client.query<{
+        owner_user_id: string | null;
+        kind: string;
+      }>(
+        `SELECT owner_user_id, kind FROM studies WHERE id = $1 FOR UPDATE`,
         [studyId]
       );
       const ownerRow = ownerResult.rows[0];
@@ -303,6 +326,25 @@ export async function updateStudy(
         // FOR UPDATE lock promptly matters more than the empty transaction.
         await client.query("ROLLBACK");
         return { ok: false, reason: "forbidden" } as const;
+      }
+
+      // The vocabulary check that create does from its payload. An update
+      // carries no kind - it is fixed at create - so this is the only place
+      // that knows which vocabulary applies, and without it `PUT` was simply
+      // the way round the create-time rule. Inside the transaction and after
+      // the row lock, so the kind cannot change between reading and writing.
+      if (input.steps) {
+        const problem = findStepVocabularyProblem(
+          ownerRow.kind === "survey" ? "survey" : "recorded",
+          input.steps
+        );
+
+        if (problem) {
+          await client.query("ROLLBACK");
+          throw new Error(
+            `Step "${input.steps[problem.index]?.step_id}" ${STEP_VOCABULARY_MESSAGES[problem.code]}`
+          );
+        }
       }
 
       const updates: string[] = [];
@@ -541,7 +583,7 @@ async function loadStudyWithSteps(
   const studyResult = await client.query<StudyRow>(
     `
       SELECT id, title, intro_text, consent_text, brand_name,
-             estimated_duration_minutes, locale, status, owner_user_id,
+             estimated_duration_minutes, locale, status, kind, owner_user_id,
              created_at, updated_at
       FROM studies
       WHERE id = $1
@@ -612,6 +654,11 @@ function mapStudyRow(row: StudyRow): StudyRecord {
     estimated_duration_minutes: row.estimated_duration_minutes ?? undefined,
     locale: row.locale ?? undefined,
     status: normalizeStudyStatus(row.status),
+    // The column carries a CHECK constraint, so anything else is unreachable
+    // through the application. Normalising rather than trusting the string
+    // means a row that somehow held one would be served the conservative
+    // vocabulary, not offered survey widgets in a runner that cannot draw them.
+    kind: row.kind === "survey" ? "survey" : "recorded",
     owner_user_id: row.owner_user_id ?? null,
     created_at: toIsoString(row.created_at),
     updated_at: toIsoString(row.updated_at)

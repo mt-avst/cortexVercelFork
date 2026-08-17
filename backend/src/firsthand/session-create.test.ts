@@ -159,3 +159,62 @@ describe('createSession', () => {
     expect(ttlMinutes).toBeGreaterThan(MAX_SESSION_EXPIRES_IN_MINUTES - 1);
   });
 });
+
+/**
+ * Which opportunity a session was started from.
+ *
+ * This is the authorisation key for reading a study's answers per opportunity,
+ * so it has to be set by the server from the route it was called on, and it has
+ * to survive into storage. It travels in the payload rather than by a follow-up
+ * UPDATE because the payload is the only channel the seed and the re-seed on
+ * GET /:token/runtime both read, and because sessionSchema strips unknown keys -
+ * a field carried outside it would be silently discarded, which is the exact
+ * failure that lost every survey answer before 7.36.2.
+ */
+describe('createSession - opportunity attribution', () => {
+  beforeEach(() => {
+    isStudiesPersistenceConfiguredMock.mockReturnValue(true);
+    getStudyByIdMock.mockResolvedValue(validStudy);
+    seedRuntimeSessionMock.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('carries the opportunity id into the seeded payload', async () => {
+    await createSession({
+      studyId: 'study_abc',
+      participant,
+      opportunityId: 'opp-77',
+    });
+
+    const seeded = seedRuntimeSessionMock.mock.calls[0][0];
+    expect(seeded.session.opportunity_id).toBe('opp-77');
+  });
+
+  it('survives contract validation, so it is not stripped before storage', async () => {
+    const result = await createSession({
+      studyId: 'study_abc',
+      participant,
+      opportunityId: 'opp-77',
+    });
+
+    // The payload seeded is the VALIDATED one, so a field the schema does not
+    // know about would be gone by the time it reaches storage while every
+    // assertion on the input object still passed.
+    expect(result.ok).toBe(true);
+    expect(seedRuntimeSessionMock.mock.calls[0][0].session).toHaveProperty(
+      'opportunity_id',
+      'opp-77'
+    );
+  });
+
+  it('omits it entirely when the session did not come from an opportunity', async () => {
+    await createSession({ studyId: 'study_abc', participant });
+
+    expect(seedRuntimeSessionMock.mock.calls[0][0].session).not.toHaveProperty(
+      'opportunity_id'
+    );
+  });
+});

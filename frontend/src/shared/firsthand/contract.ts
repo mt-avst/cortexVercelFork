@@ -56,11 +56,21 @@ export const RATING_SCALE_BOUNDS = { min: 2, max: 10 } as const;
  * studies-repository, so overloading it would break the existing reader for
  * every step type that already uses it.
  */
+/**
+ * The scale's end labels are participant-facing and author-supplied, so they
+ * are bounded like every other authored string. They were the one uncapped
+ * string reachable through the study API - 80KB of labels on a single step went
+ * straight in, bounded only by express.json's 100kb body limit - which is
+ * storage bloat and a broken question screen rather than a breach, but there is
+ * no reason for a scale label to be longer than an answer option.
+ */
+export const SCALE_LABEL_MAX_LENGTH = 500;
+
 export const stepConfigSchema = z
   .object({
     scale_max: z.number().int().optional(),
-    min_label: z.string().min(1).optional(),
-    max_label: z.string().min(1).optional(),
+    min_label: z.string().min(1).max(SCALE_LABEL_MAX_LENGTH).optional(),
+    max_label: z.string().min(1).max(SCALE_LABEL_MAX_LENGTH).optional(),
     min_selections: z.number().int().positive().optional(),
     max_selections: z.number().int().positive().optional()
   })
@@ -190,6 +200,24 @@ export const sessionSchema = z.object({
   participant_id: z.string().min(1),
   expires_at: z.string().datetime().optional(),
   single_use: z.boolean().optional(),
+  /**
+   * The Cortex opportunity this session was started from.
+   *
+   * Server-set, from the route the participant actually used, and never taken
+   * from a caller. It is the authorisation key for reading a study's answers
+   * scoped to one opportunity - a study is reusable by an opportunity its
+   * author did not create, so the study's own owner is the wrong holder of its
+   * participants' answers.
+   *
+   * Distinct from `participant.external_ref`, which carries the same value
+   * today but means "whatever the caller wants to correlate on". Correlation
+   * hints and authorisation keys must not be the same field.
+   *
+   * Optional because a session can legitimately exist without one, and every
+   * session that pre-dates this field has none. Those stay superadmin-only
+   * rather than being attributed by guesswork.
+   */
+  opportunity_id: z.string().min(1).optional(),
   callback_url: z
     .string()
     .url()

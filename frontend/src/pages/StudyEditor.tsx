@@ -367,7 +367,13 @@ export function StudyEditorForm({
 
     try {
       if (isEditing) {
-        const parsed = updateStudyRequestSchema.safeParse(payload);
+        // The id is dropped rather than sent and ignored. The update route
+        // takes it from its own path, and the update schema is now strict, so
+        // sending a field the server does not act on is exactly the kind of
+        // thing strictness exists to surface. The schema still tolerates it,
+        // deliberately, so a bundle cached across a deploy keeps working.
+        const { id: _unusedOnUpdate, ...updatePayload } = payload;
+        const parsed = updateStudyRequestSchema.safeParse(updatePayload);
         if (!parsed.success) {
           setError(parsed.error.issues[0]?.message ?? 'The task list is not valid.');
           return;

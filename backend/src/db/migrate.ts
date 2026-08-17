@@ -816,6 +816,40 @@ export async function runMigrations() {
       ADD COLUMN IF NOT EXISTS firsthand_study_id TEXT
     `);
 
+    // Whether a poll or survey runs inside Cortex or hands off to an external
+    // service. Polls and surveys were external-link-only, forced by the publish
+    // guard rather than by anything about the types themselves, so this turns a
+    // fixed behaviour into a choice.
+    //
+    // DEFAULT 'external' is a correct backfill rather than a guess: every poll
+    // and survey that exists when this runs carries an external link, because
+    // the guard would not let it publish without one. Ignored for every other
+    // type - a recorded study has no external mode and a bookable one has no
+    // link at all.
+    await client.query(`
+      ALTER TABLE opportunities
+      ADD COLUMN IF NOT EXISTS delivery_mode TEXT NOT NULL DEFAULT 'external'
+    `);
+
+    // Constrained for the same reason firsthand.studies.kind is: two code paths
+    // will switch on this value, and the zod schema only guards the ones that
+    // arrive through the API. Guarded because ADD CONSTRAINT has no
+    // IF NOT EXISTS and this file re-runs on every deploy.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'opportunities_delivery_mode_check'
+            AND conrelid = 'opportunities'::regclass
+        ) THEN
+          ALTER TABLE opportunities
+            ADD CONSTRAINT opportunities_delivery_mode_check
+            CHECK (delivery_mode IN ('native', 'external'));
+        END IF;
+      END $$;
+    `);
+
     // Create opportunity_session_events table for FirstHand lifecycle callbacks (Phase 6)
     await client.query(`
       CREATE TABLE IF NOT EXISTS opportunity_session_events (

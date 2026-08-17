@@ -937,9 +937,23 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
   const dbAvailable = await isDatabaseAvailable();
 
   let studyId: string | null = null;
+  // The CANONICAL id, read back from the row, not the raw path segment.
+  //
+  // opportunities.id is `uuid` and Postgres normalises on parse, so
+  // `{97BFE613-4E1F-472C-917E-B90D1C0326B8}` and
+  // `97bfe613-4e1f-472c-917e-b90d1c0326b8` both match this WHERE clause - as do
+  // several other textual forms, because the parser also tolerates braces,
+  // case, and hyphens after any group of four digits. The column this ends up
+  // in (firsthand.runtime_sessions.opportunity_id) is TEXT, chosen so the
+  // firsthand schema needs no cross-schema foreign key, and TEXT compares by
+  // bytes. So passing the path segment through would let a participant mint a
+  // family of distinct keys for one opportunity and drop their own answers out
+  // of the researcher's per-opportunity results by writing the URL differently.
+  // A route path parameter is caller-supplied; only the parsed row is not.
+  let canonicalOpportunityId: string | null = null;
   if (dbAvailable) {
     const result = await pool.query(
-      'SELECT firsthand_study_id, status FROM opportunities WHERE id = $1',
+      'SELECT id, firsthand_study_id, status FROM opportunities WHERE id = $1',
       [id]
     );
     if (result.rows.length === 0) {
@@ -949,6 +963,12 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
       return res.status(403).json({ error: 'Opportunity is not published' });
     }
     studyId = result.rows[0].firsthand_study_id;
+    // Null rather than a stringified absence. If the row somehow carries no id
+    // the session is stored unattributed - which is refused to everyone but a
+    // superadmin - instead of attributed to a literal "undefined" that a later
+    // gate would compare against and quietly fail.
+    const parsedId = result.rows[0].id;
+    canonicalOpportunityId = parsedId == null ? null : String(parsedId);
   }
 
   if (!studyId) {
@@ -961,14 +981,28 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     participant_id: req.user.id,
     display_name: req.user.name,
     email: req.user.email,
-    external_ref: id,
+    // Canonicalised for the same reason as opportunityId above. This one is a
+    // correlation hint rather than an authorisation key, and its only reader
+    // (completion-events.ts) writes it into a `uuid` column that normalises
+    // again - so nothing is broken today. Keeping the two fields spelled
+    // identically is what stops a future reader picking the unnormalised one.
+    external_ref: canonicalOpportunityId ?? id,
   };
 
   // Mint the session in-process and return a same-origin Cortex URL. No
   // callback_url: the internalised runtime writes lifecycle events directly to
   // opportunity_session_events (B4), so there is no HMAC callback hop back into
   // Cortex. (The HMAC handoff to the standalone app was removed with the flag.)
-  const result = await createSession({ studyId, participant, returnUrl });
+  // opportunityId is the id Postgres parsed, never the request body and never
+  // the raw path segment: it is the key the per-opportunity results gate
+  // authorises against, so it has to be one value per opportunity rather than
+  // whichever spelling the caller used. See canonicalOpportunityId above.
+  const result = await createSession({
+    studyId,
+    participant,
+    ...(canonicalOpportunityId ? { opportunityId: canonicalOpportunityId } : {}),
+    returnUrl
+  });
 
   if (!result.ok) {
     switch (result.error) {
