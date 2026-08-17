@@ -9,6 +9,8 @@ import { asyncHandler } from '../utils/errorHandler';
 import { parseSessionAttemptNumber } from '../firsthand/session-attempts';
 import { runtimeMutationSchema } from '../firsthand/runtime-records';
 import { findAnswerValidityProblem } from '../../../shared/firsthand/survey-answers';
+import { isSurveySession } from '../../../shared/firsthand/contract';
+import { logger } from '../utils/logger';
 import {
   applyRuntimeMutation,
   getRuntimeSession,
@@ -85,6 +87,43 @@ function parseUploadFileName(headerValue: string | null): string {
 
 const guard = [requireAuth, bindParticipantSession];
 
+/**
+ * Refuses a native poll or survey the recording machinery.
+ *
+ * A survey session is an ordinary runtime session, so until the payload
+ * carried `kind` nothing narrowed what its token could do: it could set
+ * recording state and reach the three upload routes, which in the deployed
+ * environment means a presigned S3 PUT, an asset row and a transcript job.
+ * Bounded to the participant's own session - so storage and compute, plus a
+ * session record claiming a recording on a survey, rather than a way to reach
+ * anyone else's data.
+ *
+ * `requireRecordedSession` rather than `refuseSurveySession` would read
+ * better, but would be the wrong rule: see isSurveySession on why an absent
+ * `kind` must not be treated as a survey. This refuses only what positively
+ * says it is one.
+ *
+ * 404 rather than 403, matching how the mint routes answer a survey/recorded
+ * mismatch: the recording surface does not exist for this session, which is
+ * more accurate than telling the caller they lack permission for something
+ * that was never theirs to have.
+ */
+function refusesRecording(req: Request, res: Response): boolean {
+  const payload = req.firsthandSession!;
+
+  if (!isSurveySession(payload)) {
+    return false;
+  }
+
+  logger.warn('Refused recording machinery to a survey session', {
+    sessionId: payload.session.session_id,
+    studyId: payload.study.id
+  });
+
+  res.status(404).json({ error: 'not_found' });
+  return true;
+}
+
 // GET /:token - resolve the bound session payload for the participant surface.
 router.get(
   '/:token',
@@ -127,6 +166,20 @@ router.post(
         error: 'invalid_runtime_mutation',
         issues: parsedMutation.error.flatten()
       });
+    }
+
+    // Events and responses are exactly what a survey session is for, so only
+    // the recording_state variant is refused here rather than the whole route.
+    // Without this a survey could drive its own row to recordingStatus:
+    // "active" and uploadStatus: "complete" - a session record claiming a
+    // recording that does not and cannot exist, on a surface whose consent
+    // text says nothing is recorded.
+    if (parsedMutation.data.type === 'recording_state' && isSurveySession(payload)) {
+      logger.warn('Refused a recording-state mutation on a survey session', {
+        sessionId: payload.session.session_id,
+        studyId: payload.study.id
+      });
+      return res.status(404).json({ error: 'not_found' });
     }
 
     // A response must answer a question this session was actually asked. The
@@ -184,6 +237,8 @@ router.post(
   '/:token/recording',
   guard,
   asyncHandler(async (req: Request, res: Response) => {
+    if (refusesRecording(req, res)) return;
+
     const payload = req.firsthandSession!;
     const attempt = attemptFromQuery(req);
     const maximumRecordingSizeBytes = getMaximumRecordingSizeBytes();
@@ -286,6 +341,8 @@ router.post(
   '/:token/recording/client-upload',
   guard,
   asyncHandler(async (req: Request, res: Response) => {
+    if (refusesRecording(req, res)) return;
+
     const payload = req.firsthandSession!;
     const attempt = attemptFromQuery(req);
     const parsedBody = s3UploadRequestSchema.safeParse(req.body);
@@ -336,6 +393,8 @@ router.post(
   '/:token/recording/finalize',
   guard,
   asyncHandler(async (req: Request, res: Response) => {
+    if (refusesRecording(req, res)) return;
+
     const payload = req.firsthandSession!;
     const attempt = attemptFromQuery(req);
     const parsedBody = s3FinalizeSchema.safeParse(req.body);

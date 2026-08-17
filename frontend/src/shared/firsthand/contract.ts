@@ -179,6 +179,22 @@ export const studySchema = z.object({
   title: z.string().min(1),
   intro_text: z.string().min(1),
   consent_text: z.string().min(1),
+  /**
+   * Which of the two products this session is: a recorded task list, or a
+   * native poll/survey that records nothing.
+   *
+   * Carried here so the runtime can tell them apart from the token alone. A
+   * survey session is otherwise an ordinary runtime session, so nothing
+   * narrowed what its token could do - it could set recording state and reach
+   * the recording upload routes, which in the deployed environment means a
+   * presigned S3 PUT, an asset row and a transcript job.
+   *
+   * OPTIONAL, and it has to be. A payload is minted once and stored as JSONB
+   * on the session row, so every session that existed before this field did
+   * carries a study block without it. Absent means "minted before this
+   * existed", not "recorded" - see isSurveySession.
+   */
+  kind: z.enum(["recorded", "survey"]).optional(),
   status: z.string().min(1).optional(),
   brand_name: z.string().min(1).optional(),
   estimated_duration_minutes: z.number().int().positive().optional(),
@@ -325,3 +341,32 @@ export type Participant = z.infer<typeof participantSchema>;
 export type SessionContext = z.infer<typeof sessionSchema>;
 export type StudyStep = z.infer<typeof stepSchema>;
 export type SessionPayload = z.infer<typeof sessionPayloadSchema>;
+
+/**
+ * Whether this session is a native poll or survey, and so must never reach the
+ * recording machinery.
+ *
+ * Deliberately `=== "survey"` rather than `!== "recorded"`. `kind` is optional
+ * because every session minted before the field existed carries a study block
+ * without it, and those are recorded sessions in flight - a payload that
+ * predates this must keep working, not be refused mid-recording. So absent
+ * reads as "not known to be a survey", and the refusal below is driven only by
+ * a positive statement that it is one.
+ *
+ * The cost of that choice is mostly a window: session payloads are minted with
+ * an expiry, so pre-existing sessions age out and every payload minted from now
+ * on carries the field.
+ *
+ * MOSTLY, not entirely, and the difference was measured rather than assumed.
+ * `isExpired` in session-store.ts returns false when `expires_at` is absent, and
+ * the loader does not refuse a terminal session either - so a payload minted
+ * before expiry was recorded is a token that never ages out. Locally that is
+ * three rows of the forty-five, all terminal, all from before this feature
+ * existed. Those keep today's behaviour: their tokens can still reach the
+ * recording machinery, bounded as ever to their own session. Closing that means
+ * either backfilling an expiry onto expiry-less rows or looking the study up at
+ * the recording routes, and neither belongs in the same change as this.
+ */
+export function isSurveySession(payload: SessionPayload): boolean {
+  return payload.study.kind === "survey";
+}
