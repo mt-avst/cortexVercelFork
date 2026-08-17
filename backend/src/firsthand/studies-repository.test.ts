@@ -1164,3 +1164,355 @@ describe("survey question storage", () => {
     expect(stepInserts[0][stepInserts[0].length - 1]).toBeNull();
   });
 });
+
+/**
+ * A study's authoring vocabulary.
+ *
+ * `kind` decides which set of question types may be authored into a study, and
+ * which runner a participant gets. It is stored rather than derived from the
+ * step types present, because an instruction-only study is ambiguous between
+ * the two vocabularies and because deriving it would let a step edit silently
+ * reclassify a study an opportunity is already linked to.
+ */
+describe("studies repository - study kind", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL =
+      "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const wireStudy = (storedKind: string) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const studyInserts: Array<{ sql: string; params: unknown[] }> = [];
+    const studySelects: string[] = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql === "BEGIN" || sql === "COMMIT") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO studies")) {
+          studyInserts.push({ sql, params: params ?? [] });
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO study_steps")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("FROM studies")) {
+          studySelects.push(sql);
+
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc",
+                title: "Pulse",
+                intro_text: "Intro",
+                consent_text: "Consent",
+                brand_name: null,
+                estimated_duration_minutes: null,
+                locale: null,
+                status: "draft",
+                kind: storedKind,
+                owner_user_id: null,
+                created_at: "2026-08-17T00:00:00.000Z",
+                updated_at: "2026-08-17T00:00:00.000Z"
+              }
+            ]
+          };
+        }
+
+        if (sql.includes("FROM study_steps")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc_step_1",
+                study_id: "study_abc",
+                step_order: 1,
+                type: "nps",
+                prompt: "Would you recommend it?",
+                target_url: null,
+                helper_text: null,
+                is_required: true,
+                options: null,
+                config: null
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query in test: ${sql}`);
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { studyInserts, studySelects };
+  };
+
+  const create = async (kind?: "recorded" | "survey") => {
+    const studiesRepository = await import("./studies-repository");
+
+    return studiesRepository.createStudy({
+      id: "study_abc",
+      title: "Pulse",
+      intro_text: "Intro",
+      consent_text: "Consent",
+      ...(kind ? { kind } : {}),
+      steps: [
+        {
+          step_id: "study_abc_step_1",
+          order: 1,
+          type: "nps",
+          prompt: "Would you recommend it?"
+        }
+      ]
+    });
+  };
+
+  it("stores the kind it was given", async () => {
+    const { studyInserts } = wireStudy("survey");
+
+    await create("survey");
+
+    expect(studyInserts[0].sql).toContain("kind");
+    expect(studyInserts[0].params).toContain("survey");
+  });
+
+  /**
+   * Every caller that predates the survey vocabulary - the inline task-list
+   * path, the hand-authored editor, fixtures - passes no kind, and every one of
+   * them means a recorded task list. Defaulting anywhere else would put survey
+   * question types into the recorded runner, which renders no widget for them.
+   */
+  it("defaults to a recorded task list when no kind is given", async () => {
+    const { studyInserts } = wireStudy("recorded");
+
+    await create();
+
+    expect(studyInserts[0].params).toContain("recorded");
+    expect(studyInserts[0].params).not.toContain("survey");
+  });
+
+  it("reports the stored kind on the record", async () => {
+    wireStudy("survey");
+
+    const result = await create("survey");
+
+    expect(result.study.kind).toBe("survey");
+  });
+
+  it("reads kind back out of the table rather than echoing the input", async () => {
+    const { studySelects } = wireStudy("survey");
+
+    await create("survey");
+
+    expect(studySelects.length).toBeGreaterThan(0);
+    studySelects.forEach((sql) => expect(sql).toMatch(/\bkind\b/));
+  });
+
+  /**
+   * The picker filters on this, so a list that omits it cannot tell a survey
+   * from a recorded task list without loading every study's steps.
+   */
+  it("selects kind when listing studies", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const selects: string[] = [];
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") {
+        return { rowCount: null, rows: [] };
+      }
+
+      selects.push(sql);
+      return { rowCount: 0, rows: [] };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    await studiesRepository.listStudies();
+
+    expect(selects.some((sql) => /\bkind\b/.test(sql))).toBe(true);
+  });
+
+  /**
+   * The column carries a CHECK constraint, so an unrecognised value should be
+   * unreachable. Normalising anyway costs one comparison and means a row that
+   * somehow holds one is treated as the conservative vocabulary rather than
+   * offering survey widgets in a recorded runner.
+   */
+  it("treats an unrecognised stored kind as recorded", async () => {
+    wireStudy("something_else");
+
+    const result = await create("survey");
+
+    expect(result.study.kind).toBe("recorded");
+  });
+});
+
+/**
+ * Replacing a study's steps must respect the vocabulary the study already
+ * declares.
+ *
+ * `createStudyRequestSchema` can check this from the payload because the kind
+ * is in it. An update payload carries no kind - the vocabulary is fixed at
+ * create - so the only place that knows it is the transaction that has just
+ * locked the row. Without this, `PUT` was the way round the create-time rule.
+ */
+describe("studies repository - update respects the stored vocabulary", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL =
+      "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const wireStored = (storedKind: string) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const stepInserts: unknown[][] = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql.includes("FOR UPDATE")) {
+          return {
+            rowCount: 1,
+            rows: [{ owner_user_id: "user-author", kind: storedKind }]
+          };
+        }
+
+        if (sql.includes("INSERT INTO study_steps")) {
+          stepInserts.push(params ?? []);
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("FROM studies")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc",
+                title: "Pulse",
+                intro_text: "Intro",
+                consent_text: "Consent",
+                brand_name: null,
+                estimated_duration_minutes: null,
+                locale: null,
+                status: "draft",
+                kind: storedKind,
+                owner_user_id: "user-author",
+                created_at: "2026-08-17T00:00:00.000Z",
+                updated_at: "2026-08-17T00:00:00.000Z"
+              }
+            ]
+          };
+        }
+
+        return { rowCount: 0, rows: [] };
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { stepInserts };
+  };
+
+  const npsStep = {
+    step_id: "study_abc_step_1",
+    order: 1,
+    type: "nps" as const,
+    prompt: "Would you recommend it?"
+  };
+
+  const requester = { userId: "user-author", isSuperadmin: false };
+
+  it("refuses survey question types on a recorded study", async () => {
+    const { stepInserts } = wireStored("recorded");
+    const studiesRepository = await import("./studies-repository");
+
+    await expect(
+      studiesRepository.updateStudy(
+        "study_abc",
+        { steps: [npsStep] },
+        requester
+      )
+    ).rejects.toThrow(/not available in this kind of study/i);
+
+    // The refusal has to come before anything is written, not after.
+    expect(stepInserts).toHaveLength(0);
+  });
+
+  it("accepts survey question types on a survey study", async () => {
+    wireStored("survey");
+    const studiesRepository = await import("./studies-repository");
+
+    const result = await studiesRepository.updateStudy(
+      "study_abc",
+      { steps: [npsStep] },
+      requester
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("refuses a target_url on a survey study's steps", async () => {
+    wireStored("survey");
+    const studiesRepository = await import("./studies-repository");
+
+    await expect(
+      studiesRepository.updateStudy(
+        "study_abc",
+        { steps: [{ ...npsStep, target_url: "https://example.com/x" }] },
+        requester
+      )
+    ).rejects.toThrow(/no page to open/i);
+  });
+});

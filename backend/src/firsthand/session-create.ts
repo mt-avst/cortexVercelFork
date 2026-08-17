@@ -37,6 +37,12 @@ export type CreateSessionParticipant = {
 export type CreateSessionInput = {
   studyId: string;
   participant: CreateSessionParticipant;
+  /**
+   * The opportunity the participant started from. Supplied by the route from
+   * its own path parameter, never from a request body: this is what the
+   * per-opportunity results gate authorises against.
+   */
+  opportunityId?: string;
   callbackUrl?: string;
   returnUrl?: string;
   expiresInMinutes?: number;
@@ -106,6 +112,9 @@ export async function createSession(
       participant_id: input.participant.participant_id,
       expires_at: expiresAt,
       single_use: true,
+      // Omitted rather than set to undefined when absent, so a session with no
+      // opportunity stores no key rather than a null one.
+      ...(input.opportunityId ? { opportunity_id: input.opportunityId } : {}),
       callback_url: input.callbackUrl,
       return_url: input.returnUrl
     },

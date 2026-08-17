@@ -74,6 +74,13 @@ export interface Opportunity {
   // Nullable: the column is nullable, the update schema accepts null to clear
   // the link, and the API returns null for an opportunity with no study.
   firsthand_study_id?: string | null;
+  // Whether a poll or survey runs inside Cortex or hands off to an external
+  // service. Declared because the opportunity routes return the row with
+  // `SELECT *` / `RETURNING *`, so this column is already on every response -
+  // including the types that ignore it - and an undeclared response field is
+  // how a client ends up depending on one nobody meant to publish. Not on the
+  // request interfaces yet: it becomes writable with the authoring toggle.
+  delivery_mode?: 'native' | 'external';
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;

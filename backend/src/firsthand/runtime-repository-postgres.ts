@@ -833,7 +833,7 @@ async function insertRuntimeSessionAttemptRow(
         recording_status, upload_status, current_step_id, started_at, completed_at,
         transcript, transcript_failure_message, steps,
         callback_url, return_url, external_ref, participant_email,
-        expires_at, session_payload,
+        expires_at, session_payload, opportunity_id,
         created_at, updated_at
       ) VALUES (
         $1, $2, $3, $4, $5, $6,
@@ -841,7 +841,7 @@ async function insertRuntimeSessionAttemptRow(
         $11, $12, $13, $14, $15,
         $16, $17, $18, $19, $20,
         $21, $22, $23, $24,
-        $25, $26,
+        $25, $26, $27,
         NOW(), NOW()
       )
       ON CONFLICT (session_id) DO NOTHING
@@ -873,7 +873,12 @@ async function insertRuntimeSessionAttemptRow(
       payload.participant.external_ref ?? null,
       payload.participant.email ?? null,
       payload.session.expires_at ?? null,
-      JSON.stringify(payload)
+      JSON.stringify(payload),
+      // Its own column rather than left to session_payload's JSONB. This is the
+      // key the per-opportunity results gate filters and joins on, and a value
+      // reachable only by digging into a JSONB blob is not one an index or an
+      // authorisation check can rely on.
+      payload.session.opportunity_id ?? null
     ]
   );
 

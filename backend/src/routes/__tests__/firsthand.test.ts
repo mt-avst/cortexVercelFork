@@ -93,6 +93,9 @@ const storedStudy = {
     id: 'study_abc',
     ...validStudyBody,
     status: 'draft' as const,
+    // Every study that predates the survey vocabulary is a recorded task list,
+    // which is what the column defaults to.
+    kind: 'recorded' as const,
     created_at: '2026-06-08T00:00:00.000Z',
     updated_at: '2026-06-08T00:00:00.000Z',
   },
