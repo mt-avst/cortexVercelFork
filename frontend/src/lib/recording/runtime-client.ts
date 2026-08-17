@@ -3,6 +3,7 @@ import { CSRF_HEADER, CSRF_ERROR_CODE, ensureCsrfToken } from "../../api/csrf";
 import { normalizeRecordingMimeType } from "./recording-mime";
 import type { RuntimeEventType } from "./runtime-events";
 import type { StudyStep } from "../../shared/firsthand/contract";
+import type { SurveyAnswer } from "../../shared/firsthand/survey-answers";
 
 // Ported from FirstHand `src/lib/runtime-client.ts` (B6). Two deliberate
 // changes from the original:
@@ -20,16 +21,12 @@ import type { StudyStep } from "../../shared/firsthand/contract";
 // 403, matching the axios interceptor's contract. The S3 PUT is cross-origin
 // to S3 and correctly carries neither cookies nor CSRF.
 
-type ResponsePayload = {
-  text?: string;
-  selectedOption?: string;
-  // The native survey types answer into the same
-  // participant_responses.response_payload as the recorded flow. The column is
-  // JSONB, so this type and SurveyAnswer are the only description of the shape
-  // - keep them structurally compatible.
-  selectedOptions?: string[];
-  rating?: number;
-};
+// The shared schema is the single description of an answer's shape - the
+// backend parses submissions against it strictly, so a field this client
+// sends that the schema does not carry is a 422, not a key zod silently
+// strips. Aliased rather than redeclared so this file can never hold a
+// drifted hand-kept copy again.
+type ResponsePayload = SurveyAnswer;
 
 // Which direct-to-store upload protocol the participant browser should use;
 // null routes uploads through the app server.
