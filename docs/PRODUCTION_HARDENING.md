@@ -62,8 +62,8 @@ RDS trust store is committed at `backend/certs/rds-global-bundle.pem` and copied
 into the image, so **no cluster or AWS access is needed** - the RDS roots are
 private and self-signed, so Node cannot verify RDS without them.
 
-- [ ] **Enable verification** - set `DB_TLS_VERIFY=1` in `.kubera/playground-backend.yaml`
-      `config.data` and deploy. It is not a secret.
+- [x] **Enable verification** - `DB_TLS_VERIFY: "1"` is set in `.kubera/playground-backend.yaml`
+      `config.data`. It is not a secret.
 - [ ] **If `DB_URL` reaches the pod as a bare single-label hostname**, verification
       will refuse to treat it as local and will try to verify it. That is
       deliberate - a name resolved through a DNS search suffix is a remote host -
