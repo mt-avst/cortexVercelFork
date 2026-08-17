@@ -385,6 +385,82 @@ describe("consent", () => {
     });
   });
 
+  /**
+   * The researcher's funnel reads `opportunity_session_events`, and
+   * `resolveLifecycleEvent` writes a row only for session_started,
+   * session_completed, session_abandoned and session_failed. Without a start
+   * event a native survey showed completions with no starts - people finishing
+   * something they never began.
+   */
+  it("tells the funnel the session started, not just that consent was given", async () => {
+    const user = userEvent.setup();
+    render(<SurveyRunner payload={payload} />);
+
+    await user.click(screen.getByRole("button", { name: "Agree and start" }));
+
+    await waitFor(() => {
+      expect(sendRuntimeEvent).toHaveBeenCalledWith("tok-1", {
+        eventType: "session_started",
+        metadata: { source: "survey_runner" }
+      });
+    });
+  });
+
+  it("does not claim a session started when consent was refused", async () => {
+    const user = userEvent.setup();
+    render(<SurveyRunner payload={payload} />);
+
+    await user.click(screen.getByRole("button", { name: "Do not agree" }));
+
+    await waitFor(() => {
+      expect(sendRuntimeEvent).toHaveBeenCalledWith("tok-1", {
+        eventType: "consent_declined"
+      });
+    });
+    // A refusal is a session_abandoned in the funnel. A start beside it would
+    // count someone who saw the consent text and left as a participant.
+    expect(sendRuntimeEvent).not.toHaveBeenCalledWith(
+      "tok-1",
+      expect.objectContaining({ eventType: "session_started" })
+    );
+  });
+
+  it("still starts the session when the consent event fails to send", async () => {
+    const user = userEvent.setup();
+    // Only the first call fails. Chained in one try, this would have taken the
+    // start with it and lost the funnel entry for someone now answering.
+    sendRuntimeEvent.mockRejectedValueOnce(new Error("network"));
+    render(<SurveyRunner payload={payload} />);
+
+    await user.click(screen.getByRole("button", { name: "Agree and start" }));
+
+    await waitFor(() => {
+      expect(sendRuntimeEvent).toHaveBeenCalledWith("tok-1", {
+        eventType: "session_started",
+        metadata: { source: "survey_runner" }
+      });
+    });
+    expect(
+      screen.getByRole("textbox", { name: "First question" })
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the participant moving when the start event fails to send", async () => {
+    const user = userEvent.setup();
+    sendRuntimeEvent
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("network"));
+    render(<SurveyRunner payload={payload} />);
+
+    await user.click(screen.getByRole("button", { name: "Agree and start" }));
+
+    // Telemetry is not a gate. Someone who has just agreed must not be held on
+    // the consent screen because an analytics write failed.
+    expect(
+      screen.getByRole("textbox", { name: "First question" })
+    ).toBeInTheDocument();
+  });
+
   it("records a decline and ends the session there", async () => {
     const user = userEvent.setup();
     render(<SurveyRunner payload={payload} />);
