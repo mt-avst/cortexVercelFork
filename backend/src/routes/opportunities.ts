@@ -27,6 +27,8 @@ import {
 } from '../firsthand/studies-repository';
 import type { RecordedStudyBrief } from '../../../shared/types';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
+import type { StudyKind } from '../../../shared/firsthand/study-input';
+import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
@@ -43,6 +45,90 @@ const UNMODERATED_STUDY_REQUIRED =
   'Add at least one prompt to the task list, or link an existing task list, before publishing';
 
 /**
+ * The native counterpart. A poll or survey delivered inside Cortex has no
+ * external link to require, so what it needs instead is the questions.
+ */
+export const NATIVE_SURVEY_STUDY_REQUIRED =
+  'Add questions, or link an existing set of questions, before publishing';
+
+/**
+ * Which study vocabulary an opportunity of this shape can run.
+ *
+ * An `unmoderated` opportunity runs the recorded runner, which draws no widget
+ * for a rating or a multi-choice and stores nothing for them. A native poll or
+ * survey runs SurveyRunner, which has no recording, no task window and nothing
+ * to do with a step carrying a page to open. Linking the wrong one produces a
+ * participant-facing screen that looks authored and collects nothing.
+ *
+ * Checked at the API boundary rather than only in the picker, because the
+ * picker is not the boundary: create and update both accept
+ * `firsthand_study_id` from the body, so a hand-crafted call bypasses any
+ * amount of UI filtering.
+ */
+const requiredStudyKindFor = (
+  type: string,
+  deliveryMode: string
+): StudyKind | null => {
+  if (type === 'unmoderated') return 'recorded';
+  if ((type === 'poll' || type === 'survey') && deliveryMode === 'native') {
+    return 'survey';
+  }
+  // Every other shape links no study at all.
+  return null;
+};
+
+/**
+ * Exported so a test can assert on the exact message rather than on a word.
+ * Both refusals originally named BOTH vocabularies, so a matcher for "survey"
+ * or "task list" matched either one - swapping the two record values left every
+ * refusal stating the opposite of what happened and all seven tests still
+ * green. Keyed by the kind that was REQUIRED, which is what the reader needs.
+ */
+export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
+  recorded:
+    'This opportunity needs a recorded task list, and that is a set of survey questions',
+  survey:
+    'This opportunity needs a set of survey questions, and that is a recorded task list'
+};
+
+/**
+ * Refuses a linked study whose vocabulary does not match the opportunity.
+ *
+ * Silent on a study that cannot be read - persistence unconfigured, or a study
+ * id that resolves to nothing. Neither is this check's job: the first is a
+ * deployment without the runtime database, and the second is already handled
+ * where a missing study surfaces to the participant. Failing the save here
+ * would turn both into a confusing validation error about question types.
+ */
+async function assertLinkedStudyKindMatches(
+  studyId: string,
+  type: string,
+  deliveryMode: string
+): Promise<void> {
+  const required = requiredStudyKindFor(type, deliveryMode);
+
+  if (!required || !isStudiesPersistenceConfigured()) {
+    return;
+  }
+
+  const stored = await getStudyById(studyId);
+
+  // An id resolving to nothing is refused, not skipped. Skipping made the whole
+  // check optional: link an id that does not exist yet, then create a study at
+  // that exact id with whichever vocabulary you like - POST /api/firsthand/
+  // studies takes a client-supplied id. Two calls, demonstrated end to end.
+  // There is no legitimate case for linking a study that is not there: it fails
+  // at participant start time instead, which is a worse place to find out.
+  if (!stored) {
+    throw new ValidationError('That task list could not be found');
+  }
+
+  if (stored.study.kind !== required) {
+    throw new ValidationError(STUDY_KIND_MISMATCH[required]);
+  }
+}
+
+/**
  * Body of POST /api/opportunities.
  *
  * `inline_study` is validated by CreateOpportunitySchema but is not part of the
@@ -52,10 +138,16 @@ const UNMODERATED_STUDY_REQUIRED =
  */
 type CreateOpportunityBody = CreateOpportunityRequest & {
   inline_study?: InlineStudy;
+  // Accepted by the validation schema but not on the shared request interfaces
+  // yet, for the same flattening reason as inline_study above: the authoring
+  // toggle that sets it lands with the form, and declaring a writable field
+  // before anything can write it invites a client to send one nothing reads.
+  delivery_mode?: DeliveryMode;
 };
 
 type UpdateOpportunityBody = UpdateOpportunityRequest & {
   inline_study?: InlineStudy;
+  delivery_mode?: DeliveryMode;
 };
 
 // Validation helper
@@ -385,15 +477,33 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
 
   const inlineStudy = data.inline_study;
 
+  // Every existing poll and survey is external, and the column defaults to it,
+  // so an absent value means external here too.
+  const deliveryMode = data.delivery_mode ?? 'external';
+
   // Additional validation for published opportunities
   if (data.status === 'published' && data.type === 'unmoderated') {
     if (!linkedStudyId && !inlineStudy) {
       throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
     }
   } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
-    if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
+    // The external link is required only where the participant is actually
+    // being sent somewhere else. It used to be required unconditionally, which
+    // is what made these types external-only.
+    if (deliveryMode === 'native') {
+      if (!linkedStudyId) {
+        throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
+      }
+    } else if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
       throw new ValidationError('External link is required for published polls and surveys');
     }
+  }
+
+  // Checked whatever the status, not only on publish: a draft carrying a
+  // mismatched study is a draft that cannot be published, and saying so now is
+  // better than saying it later.
+  if (linkedStudyId) {
+    await assertLinkedStudyKindMatches(linkedStudyId, data.type, deliveryMode);
   }
 
   // Ensure session user exists in DB (demo/session-only users may not be persisted)
@@ -421,8 +531,8 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       type, title, purpose_one_liner, description_optional,
       product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
-      participant_type_specific_details, start_date, end_date, display_width
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      participant_type_specific_details, start_date, end_date, display_width, delivery_mode
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
     RETURNING *
   `;
 
@@ -500,7 +610,12 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
     data.end_date || null,
-    finalDisplayWidth
+    finalDisplayWidth,
+    // Stored for every type, not only poll and survey. The column is NOT NULL
+    // and the other types ignore it, so writing the resolved value keeps the
+    // row honest rather than relying on the DDL default for some paths and the
+    // request for others.
+    deliveryMode
   ];
 
   let result;
@@ -596,7 +711,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const existingOpp = await pool.query(
     // title and purpose_one_liner are read so an inline study created on this
     // path can inherit them when the request does not also change them.
-    'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required FROM opportunities WHERE id = $1',
+    'SELECT type, title, purpose_one_liner, status, external_link_optional, firsthand_study_id, participant_type_required, delivery_mode FROM opportunities WHERE id = $1',
     [id]
   );
   // Same delete-mid-request race the UPDATE below now handles: without this the
@@ -613,6 +728,12 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   const newParticipantType = data.participant_type_required !== undefined
     ? data.participant_type_required
     : existingOpp.rows[0].participant_type_required;
+  // The mode this request leaves behind, for the same reason the publish guard
+  // below reads the resulting state rather than only what the request sets.
+  const newDeliveryMode =
+    data.delivery_mode !== undefined
+      ? data.delivery_mode
+      : existingOpp.rows[0].delivery_mode ?? 'external';
 
   // Unmoderated studies run with logged-in Cortex users, so an external
   // participant type is not representable. Only enforce when this request
@@ -673,7 +794,13 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     data.type !== undefined ||
     data.firsthand_study_id !== undefined ||
     inlineStudyInput !== undefined ||
-    data.external_link_optional !== undefined;
+    data.external_link_optional !== undefined ||
+    // Switching delivery mode changes WHICH of the two things is required, so
+    // it changes the publish shape as surely as clearing the link does. Without
+    // this, `PATCH { delivery_mode: 'native' }` on a published external survey
+    // produced a live native survey with no questions - the same hole the type
+    // flip above opened, through a different door.
+    data.delivery_mode !== undefined;
 
   const publishGuardApplies = willBePublished && changesPublishShape;
 
@@ -697,9 +824,41 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     // Same reasoning as the unmoderated branch above: gating on the request's
     // own status let `PATCH { type: 'poll' }` against a published opportunity
     // produce a published poll with no link, which is what this rejects.
-    if (!newLink || !validateUrl(newLink)) {
+    //
+    // Which of the two things is required now depends on where the participant
+    // is being sent. A native poll needs its questions; an external one needs
+    // the link it hands off to.
+    if (newDeliveryMode === 'native') {
+      if (!newFirstHandStudyId?.trim()) {
+        throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
+      }
+    } else if (!newLink || !validateUrl(newLink)) {
       throw new ValidationError('External link is required for published polls and surveys');
     }
+  }
+
+  // Same boundary check as create, against the resulting state, so switching a
+  // published external survey to native cannot adopt a recorded task list on
+  // the way through.
+  //
+  // Gated on the request actually changing the link or what the link has to be,
+  // for the reason the publish guard above states for itself: an unrelated edit
+  // to a row already in a bad state must stay allowed, or the row can never be
+  // repaired. Unconditionally, this refused `PATCH { title }`, refused
+  // `PATCH { status: 'draft' }` - so the misleading page could not even be
+  // taken down - and answered every one of them with a message about question
+  // types the caller had not touched. DELETE was the only way out.
+  const changesLinkage =
+    data.firsthand_study_id !== undefined ||
+    data.delivery_mode !== undefined ||
+    data.type !== undefined;
+
+  if (changesLinkage && newFirstHandStudyId?.trim()) {
+    await assertLinkedStudyKindMatches(
+      newFirstHandStudyId.trim(),
+      existingType,
+      newDeliveryMode
+    );
   }
   
   // Build the study before the update, for the same reason as create: the row
@@ -953,11 +1112,21 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
   let canonicalOpportunityId: string | null = null;
   if (dbAvailable) {
     const result = await pool.query(
-      'SELECT id, firsthand_study_id, status FROM opportunities WHERE id = $1',
+      'SELECT id, type, firsthand_study_id, status FROM opportunities WHERE id = $1',
       [id]
     );
     if (result.rows.length === 0) {
       throw new NotFoundError('Opportunity');
+    }
+    // The guard the sibling brief route has carried all along, and this one
+    // never did. Without it the route mints a RECORDED session - screen and
+    // microphone capture, a consent screen saying so - for any published
+    // opportunity that happens to carry a study, whatever its type. That was an
+    // oddity while every study was a recorded task list; a native poll or
+    // survey linking a study is now the designed state, so it becomes routine.
+    // A survey is served by its own route, not this one.
+    if (result.rows[0].type !== 'unmoderated') {
+      throw new NotFoundError('Recorded study');
     }
     if (result.rows[0].status !== 'published') {
       return res.status(403).json({ error: 'Opportunity is not published' });
@@ -973,6 +1142,29 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
 
   if (!studyId) {
     return res.status(400).json({ error: 'Opportunity has no recorded study linked' });
+  }
+
+  // Re-checked HERE, not only where the link was made.
+  //
+  // Checking at link time alone is a time-of-check problem with a wide window:
+  // POST /api/firsthand/studies accepts a client-supplied id, so an id that
+  // resolved to nothing when it was linked can be filled in afterwards, and a
+  // linked study can be deleted and re-created at the same id with a different
+  // vocabulary. Both were demonstrated end to end. The moment that actually
+  // matters is this one - a participant is about to be shown a consent screen
+  // promising screen and microphone capture - so this is where the question is
+  // asked again, against the study as it is now.
+  if (isStudiesPersistenceConfigured()) {
+    const linked = await getStudyById(studyId);
+
+    if (linked && linked.study.kind !== 'recorded') {
+      logger.warn('Refused a recorded session on a study that is not a task list', {
+        opportunityId: canonicalOpportunityId ?? id,
+        studyId,
+        kind: linked.study.kind
+      });
+      throw new NotFoundError('Recorded study');
+    }
   }
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';

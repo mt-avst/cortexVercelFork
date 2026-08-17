@@ -35,6 +35,10 @@ jest.mock('../../firsthand/studies-repository', () => ({
         title: 'A study',
         intro_text: 'Intro',
         consent_text: 'Consent',
+        // Every real study row has one: the column is NOT NULL and the
+        // repository normalises it on read. A fixture without it made the
+        // opportunity linkage check refuse a perfectly good recorded study.
+        kind: 'recorded',
         estimated_duration_minutes: undefined,
         status: 'launched' as const,
         owner_user_id: 'test-user-id',
@@ -54,7 +58,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
   isStudiesPersistenceConfigured: jest.fn(() => true),
 }));
 
-import opportunitiesRouter from '../opportunities';
+import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED } from '../opportunities';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
@@ -275,6 +279,209 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe(
         'External link is required for published polls and surveys'
       );
+    });
+
+    /**
+     * Polls and surveys were external-link-only, forced by this guard rather
+     * than by anything about the types themselves. `delivery_mode` turns that
+     * fixed behaviour into a choice, so the external link is required only
+     * where the participant is actually being sent somewhere else.
+     */
+    it('still requires an external link for a published poll delivered externally', async () => {
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'poll',
+          title: 'Valid Poll Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'external',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'External link is required for published polls and surveys'
+      );
+    });
+
+    it('does not ask a native survey for an external link, but does ask for a study', async () => {
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'survey',
+          title: 'Valid Survey Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'native',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(NATIVE_SURVEY_STUDY_REQUIRED);
+    });
+
+    /**
+     * The picker gap found in review: create and update accept the full
+     * widened contract, so a hand-crafted API call could link a RECORDED
+     * opportunity to a survey-vocabulary study whose prompts render with no
+     * widget and persist nothing. Filtering the picker in the UI does not close
+     * it, because the UI is not the boundary.
+     */
+    it('refuses to link a survey study to a recorded opportunity', async () => {
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_survey',
+          title: 'A survey',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          firsthand_study_id: 'study_survey',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toMatch(/needs a recorded task list/);
+    });
+
+    it('refuses to link a recorded task list to a native survey', async () => {
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_recorded',
+          title: 'A task list',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'recorded' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'survey',
+          title: 'Valid Survey Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_recorded',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toMatch(/needs a set of survey questions/);
+    });
+
+    /**
+     * The mode has to reach the ROW. The publish guard has just accepted a
+     * native survey without an external link on the strength of this value, so
+     * storing 'external' anyway produces exactly the state the guard exists to
+     * refuse - an external survey with nothing to hand off to.
+     */
+    it('stores the delivery mode it was given', async () => {
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_questions',
+          title: 'Questions',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '9', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+      });
+
+      await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'survey',
+          title: 'Valid Survey Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_questions',
+          status: 'published'
+        })
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const columns = String(insert![0])
+        .slice(String(insert![0]).indexOf('('), String(insert![0]).indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const index = columns.indexOf('delivery_mode');
+
+      expect(index).toBeGreaterThan(-1);
+      expect((insert![1] as unknown[])[index]).toBe('native');
+    });
+
+    it('stores external when the request says nothing, rather than leaving it to chance', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '10', type: 'poll', created_at: new Date(), updated_at: new Date() }]
+      });
+
+      await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'poll',
+          title: 'Valid Poll Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          external_link_optional: 'https://example.com/poll',
+          status: 'published'
+        })
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      expect(insert![1]).toContain('external');
+    });
+
+    /**
+     * Linking an id that resolves to nothing used to be a silent skip of the
+     * whole vocabulary check - and POST /api/firsthand/studies takes a
+     * client-supplied id, so the missing study is a slot to be filled
+     * afterwards rather than a transient state.
+     */
+    it('refuses a study id that resolves to nothing rather than skipping the check', async () => {
+      mockGetStudyById.mockResolvedValueOnce(null as never);
+
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          firsthand_study_id: 'study_not_created_yet',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('That task list could not be found');
     });
 
     it('should require a study to publish an unmoderated opportunity (A1)', async () => {
@@ -1000,6 +1207,191 @@ describe('Opportunities API', () => {
       );
     });
 
+    /**
+     * The update half of the native-or-external choice. Evaluated against the
+     * state the request LEAVES BEHIND, like every other branch of this guard,
+     * so flipping an already-published survey to native without questions is
+     * refused rather than producing a live survey that asks nothing.
+     */
+    it('refuses to switch a published survey to native with no questions linked', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            type: 'survey',
+            title: 'A survey',
+            purpose_one_liner: 'Purpose',
+            status: 'published',
+            external_link_optional: 'https://example.com/form',
+            firsthand_study_id: null,
+            participant_type_required: 'any',
+            delivery_mode: 'external'
+          }
+        ]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ delivery_mode: 'native' })
+        .expect(400);
+
+      expect(response.body.error).toBe(NATIVE_SURVEY_STUDY_REQUIRED);
+    });
+
+    it('does not demand an external link once a survey is delivered natively', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            type: 'survey',
+            title: 'A survey',
+            purpose_one_liner: 'Purpose',
+            status: 'published',
+            external_link_optional: null,
+            firsthand_study_id: 'study_questions',
+            participant_type_required: 'any',
+            delivery_mode: 'external'
+          }
+        ]
+      });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_questions',
+          title: 'Questions',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            type: 'survey',
+            delivery_mode: 'native',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ delivery_mode: 'native' })
+        .expect(200);
+    });
+
+    /**
+     * The switch itself must not be a way past the linkage check: an external
+     * survey could hold a recorded task list from some earlier edit, and going
+     * native would then serve survey participants a task list.
+     */
+    /**
+     * A row already in a bad state must stay repairable. Unconditionally, the
+     * linkage check refused a title edit, refused unpublishing - so the
+     * misleading live page could not even be taken down - and answered each one
+     * with a message about question types the caller had not touched. DELETE
+     * was the only way out, which loses the opportunity and its analytics.
+     */
+    it('lets an unrelated edit through on a row whose study does not match', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            type: 'survey',
+            title: 'A survey',
+            purpose_one_liner: 'Purpose',
+            status: 'published',
+            external_link_optional: null,
+            firsthand_study_id: 'study_tasks',
+            participant_type_required: 'any',
+            delivery_mode: 'native'
+          }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ title: 'A slightly better survey title' })
+        .expect(200);
+    });
+
+    it('lets a mismatched row be unpublished so the page can be taken down', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            type: 'survey',
+            title: 'A survey',
+            purpose_one_liner: 'Purpose',
+            status: 'published',
+            external_link_optional: null,
+            firsthand_study_id: 'study_tasks',
+            participant_type_required: 'any',
+            delivery_mode: 'native'
+          }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'draft' })
+        .expect(200);
+    });
+
+    it('refuses to go native while holding a recorded task list', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            type: 'survey',
+            title: 'A survey',
+            purpose_one_liner: 'Purpose',
+            status: 'published',
+            external_link_optional: null,
+            firsthand_study_id: 'study_tasks',
+            participant_type_required: 'any',
+            delivery_mode: 'external'
+          }
+        ]
+      });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_tasks',
+          title: 'Task list',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'recorded' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ delivery_mode: 'native' })
+        .expect(400);
+
+      expect(response.body.error).toMatch(/needs a set of survey questions/);
+    });
+
     it('says "not both" rather than "already has one" when neither is stored', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
@@ -1317,7 +1709,7 @@ describe('Opportunities API', () => {
     it('mints an in-process session and returns a same-origin URL', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -1344,6 +1736,84 @@ describe('Opportunities API', () => {
     });
 
     /**
+     * The guard the sibling brief route always had and this one never did.
+     * Minting here starts a RECORDED session - a consent screen promising
+     * screen and microphone capture - so it must be reachable only from the one
+     * type that actually records. A native survey is served by its own route.
+     */
+    it('refuses to mint a recorded session for a native survey', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '1',
+          type: 'survey',
+          firsthand_study_id: 'study_questions',
+          status: 'published'
+        }]
+      });
+
+      await request(app)
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    it('refuses to mint a recorded session for an interview carrying a study', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '1',
+          type: 'interview',
+          firsthand_study_id: 'study_abc123',
+          status: 'published'
+        }]
+      });
+
+      await request(app)
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
+     * Re-checked at mint, not only where the link was made. The link-time check
+     * alone is a time-of-check problem with a wide window: the studies API
+     * takes a client-supplied id, so a study can be planted at a previously
+     * dangling id, or deleted and re-created with a different vocabulary, long
+     * after the opportunity was published.
+     */
+    it('refuses when the linked study has become a set of survey questions', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '1',
+          type: 'unmoderated',
+          firsthand_study_id: 'study_swapped',
+          status: 'published'
+        }]
+      });
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_swapped',
+          title: 'Planted',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'someone-else',
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      await request(app)
+        .post('/api/opportunities/1/recorded-study-session')
+        .expect(404);
+
+      expect(mockCreateSession).not.toHaveBeenCalled();
+    });
+
+    /**
      * The opportunity a session is attributed to is the authorisation key for
      * reading that study's answers per opportunity. Two things have to hold,
      * and neither did.
@@ -1365,6 +1835,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({
         rows: [{
           id: '97bfe613-4e1f-472c-917e-b90d1c0326b8',
+          type: 'unmoderated',
           firsthand_study_id: 'study_abc123',
           status: 'published'
         }]
@@ -1392,7 +1863,7 @@ describe('Opportunities API', () => {
 
     it('ignores an opportunity id supplied in the request body', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,
@@ -1411,7 +1882,7 @@ describe('Opportunities API', () => {
 
     it('maps a study-without-steps result to 400', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
@@ -1426,7 +1897,7 @@ describe('Opportunities API', () => {
       ['study_not_found', 404, 'Linked recorded study not found'],
     ])('maps createSession error %s to HTTP %i', async (error, status, message) => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
@@ -1440,7 +1911,7 @@ describe('Opportunities API', () => {
 
     it('maps payload_assembly_failed to a 500 with a neutral error code', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
@@ -1455,7 +1926,7 @@ describe('Opportunities API', () => {
 
     it('maps an unmodelled createSession error through the default branch without leaking the raw value', async () => {
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       // A value outside the CreateSessionError union drives the exhaustiveness
       // guard. Its message must be static, not the interpolated raw value.
@@ -1478,7 +1949,7 @@ describe('Opportunities API', () => {
     it('still serves the deprecated /:id/firsthand-handoff alias path', async () => {
       process.env.FRONTEND_URL = 'https://cortex.example.com';
       mockQuery.mockResolvedValueOnce({
-        rows: [{ id: '1', firsthand_study_id: 'study_abc123', status: 'published' }]
+        rows: [{ id: '1', type: 'unmoderated', firsthand_study_id: 'study_abc123', status: 'published' }]
       });
       mockCreateSession.mockResolvedValueOnce({
         ok: true,

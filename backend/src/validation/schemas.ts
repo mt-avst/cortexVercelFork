@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { SESSION_CAPACITY } from '../../../shared/constants';
 import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
+import type { Opportunity } from '../../../shared/types';
 
 // Base schemas
 export const UUIDSchema = z.string().uuid();
@@ -33,6 +34,34 @@ export const OpportunityTypeSchema = z.enum(['test', 'poll', 'survey', 'question
 export const OpportunityStatusSchema = z.enum(['draft', 'published', 'closed']);
 export const ParticipantTypeSchema = z.enum(['any', 'internal', 'external', 'specific']);
 
+/**
+ * Whether a poll or survey runs inside Cortex or hands off to an external
+ * service. Ignored by every other type. Absent means external, matching both
+ * the column default and every poll and survey that existed before the choice
+ * did.
+ */
+export const DeliveryModeSchema = z.enum(['native', 'external']);
+
+export type DeliveryMode = z.infer<typeof DeliveryModeSchema>;
+
+/**
+ * The same vocabulary is declared twice - as this enum, which is the gate, and
+ * as a union on the shared Opportunity type, which is the published contract.
+ * They cannot be one declaration: shared/types is flattened when it is copied
+ * to the frontend, so it carries no zod. This assertion fails the build if the
+ * two ever disagree, which is the part a comment cannot do.
+ */
+type SharedDeliveryMode = NonNullable<Opportunity['delivery_mode']>;
+type MutuallyAssignable<A, B> = [A] extends [B]
+  ? [B] extends [A]
+    ? true
+    : never
+  : never;
+export const DELIVERY_MODE_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
+  DeliveryMode,
+  SharedDeliveryMode
+> = true;
+
 // Trimmed BEFORE the length checks, not after.
 //
 // The handlers already store `title.trim()`, so validating the untrimmed value
@@ -49,6 +78,7 @@ export const CreateOpportunitySchema = z.object({
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
+  delivery_mode: DeliveryModeSchema.optional(),
   firsthand_study_id: z.string().min(1).optional(),
   // Unmoderated only: the study's content authored on the opportunity form
   // itself. The handler creates the study from this and links it, so the author
@@ -71,6 +101,7 @@ export const UpdateOpportunitySchema = z.object({
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
   external_link_optional: z.string().url().optional(),
+  delivery_mode: DeliveryModeSchema.optional(),
   firsthand_study_id: z.string().min(1).optional().nullable(),
   // Unmoderated only, and only when the opportunity has no study yet. Saving a
   // draft before writing any tasks is legitimate, so the author has to be able
@@ -96,6 +127,7 @@ export const OpportunitySchema = z.object({
   status: OpportunityStatusSchema,
   owner_user_id: UUIDSchema,
   external_link_optional: z.string().optional(),
+  delivery_mode: DeliveryModeSchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   start_date: z.string().datetime().optional().nullable(),
