@@ -9,6 +9,17 @@ service:
 config:
   data:
     NODE_ENV: production
+    # Verify the database server certificate on every backend pool AND the
+    # deploy initContainer's migration runner. The trust store is baked into
+    # the image at backend/certs/rds-global-bundle.pem (the RDS roots are
+    # private and self-signed, so Node's public store cannot verify them).
+    # Not a secret. A certificate that fails to verify fails at connect time,
+    # so a wrong CA or a DB_URL naming anything but the real RDS hostname
+    # CrashLoops the pod rather than degrading quietly - rollback is reverting
+    # this line. Procedure and the exact [db-tls:<pool>] log lines that
+    # distinguish "verifying" from "the variable never reached the pod" are in
+    # docs/PRODUCTION_HARDENING.md "Database TLS verification".
+    DB_TLS_VERIFY: "1"
     # App-level Okta OIDC (see auth.okta_app below). The chart injects clientID and
     # clientSecret via the <app>-okta-secret; the app discovers everything else from
     # the issuer's /.well-known/openid-configuration.
