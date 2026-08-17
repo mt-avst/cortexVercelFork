@@ -933,3 +933,234 @@ function createMockClient(input: { missingRelations: string[] }): MockClient {
     release: vi.fn()
   };
 }
+
+/**
+ * The repository is the third boundary that enforces step shape, after the
+ * runtime contract and the authoring schema. It had its own hand-written copy
+ * of the single_choice rule, which is why the rules now come from
+ * findStepShapeProblem and only the wording is local.
+ *
+ * `config` carries the per-type question settings for the native survey types:
+ * the rating scale and its end labels, and the multi-choice selection range. It
+ * is a separate JSONB column rather than a widening of `options`, which is read
+ * as string[] here and by every existing caller.
+ */
+describe("survey question storage", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete process.env.POSTGRES_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const createWithStep = async (step: Record<string, unknown>) => {
+    const studiesRepository = await import("./studies-repository");
+
+    return studiesRepository.createStudy({
+      title: "Survey",
+      intro_text: "Intro",
+      consent_text: "Consent",
+      steps: [step as never]
+    });
+  };
+
+  it("rejects a rating step with no scale", async () => {
+    await expect(
+      createWithStep({
+        step_id: "step_001",
+        order: 1,
+        type: "rating",
+        prompt: "How easy was that?"
+      })
+    ).rejects.toThrow(/scale/i);
+
+    // Rejected before a client is taken from the pool, like every other shape
+    // rule here, so a malformed study never opens a transaction.
+    expect(connectMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a rating step whose scale is out of range", async () => {
+    await expect(
+      createWithStep({
+        step_id: "step_001",
+        order: 1,
+        type: "rating",
+        prompt: "How easy was that?",
+        config: { scale_max: 11 }
+      })
+    ).rejects.toThrow(/scale/i);
+  });
+
+  it("rejects an nps step carrying options", async () => {
+    await expect(
+      createWithStep({
+        step_id: "step_001",
+        order: 1,
+        type: "nps",
+        prompt: "How likely are you to recommend us?",
+        options: ["Yes", "No"]
+      })
+    ).rejects.toThrow(/options/i);
+  });
+
+  it("rejects a multi_choice step with one option", async () => {
+    await expect(
+      createWithStep({
+        step_id: "step_001",
+        order: 1,
+        type: "multi_choice",
+        prompt: "Which do you use?",
+        options: ["Only one"]
+      })
+    ).rejects.toThrow(/at least two options/);
+  });
+
+  // The existing rule has to keep biting with the same wording: a route test
+  // asserts on it, and single_choice now shares the multi_choice code path.
+  it("still rejects a single_choice step with one option", async () => {
+    await expect(
+      createWithStep({
+        step_id: "step_001",
+        order: 1,
+        type: "single_choice",
+        prompt: "Pick one",
+        options: ["Only one"]
+      })
+    ).rejects.toThrow(/at least two options/);
+  });
+
+  const wireRoundTrip = (storedConfig: unknown) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const stepInserts: unknown[][] = [];
+    const stepSelects: string[] = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql === "BEGIN" || sql === "COMMIT") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO study_steps")) {
+          stepInserts.push(params ?? []);
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO studies")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("FROM studies")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc",
+                title: "Survey",
+                intro_text: "Intro",
+                consent_text: "Consent",
+                brand_name: null,
+                estimated_duration_minutes: null,
+                locale: null,
+                status: "draft",
+                created_at: "2026-08-16T00:00:00.000Z",
+                updated_at: "2026-08-16T00:00:00.000Z"
+              }
+            ]
+          };
+        }
+
+        if (sql.includes("FROM study_steps")) {
+          stepSelects.push(sql);
+
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "step_001",
+                study_id: "study_abc",
+                step_order: 1,
+                type: "rating",
+                prompt: "How easy was that?",
+                target_url: null,
+                helper_text: null,
+                is_required: true,
+                options: null,
+                config: storedConfig
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query in test: ${sql}`);
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { stepInserts, stepSelects };
+  };
+
+  it("writes config into the insert and reads it back out", async () => {
+    const config = { scale_max: 5, min_label: "Very hard", max_label: "Very easy" };
+    const { stepInserts, stepSelects } = wireRoundTrip(config);
+
+    const created = await createWithStep({
+      step_id: "step_001",
+      order: 1,
+      type: "rating",
+      prompt: "How easy was that?",
+      is_required: true,
+      config
+    });
+
+    // Serialised like `options` is: node-postgres will not infer JSONB from a
+    // plain object parameter.
+    expect(stepInserts[0]).toContain(JSON.stringify(config));
+    expect(created.steps[0].config).toEqual(config);
+
+    // The column has to be in the SELECT, not merely in the row type.
+    //
+    // Added because a mutation that dropped `config` from the select list
+    // survived the round-trip assertions above: the mock returns its row
+    // whatever is asked for, so nothing here noticed. In production that
+    // mutation returns undefined config for every step, and every rating
+    // question renders with no scale.
+    expect(stepSelects).not.toHaveLength(0);
+    stepSelects.forEach((sql) => expect(sql).toMatch(/\bconfig\b/));
+  });
+
+  it("writes null when the step has no config", async () => {
+    const { stepInserts } = wireRoundTrip(null);
+
+    await createWithStep({
+      step_id: "step_001",
+      order: 1,
+      type: "open_text",
+      prompt: "What did you think?",
+      is_required: true
+    });
+
+    // Last parameter is config, and it must be null rather than undefined:
+    // node-postgres sends undefined as NULL but the column list has to line up
+    // with the placeholder count either way.
+    expect(stepInserts[0][stepInserts[0].length - 1]).toBeNull();
+  });
+});

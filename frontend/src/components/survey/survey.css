@@ -1,0 +1,192 @@
+/*
+ * Native poll and survey runner.
+ *
+ * Scoped under .survey-runner rather than reusing the recorded flow's styles:
+ * those are all scoped under .fh-recording, which carries a light, branded,
+ * participant-facing surface built around a live recording. A survey is its
+ * own surface and should not inherit rules from a component it has no
+ * relationship to - .fh-recording h1 { max-width: 12ch } was inherited by the
+ * task pane once and rendered its prompt in a third of the available width.
+ *
+ * Colours come from the semantic tokens, never from the brand accent directly:
+ * #dd6e42 fails AA in every text role (3.29:1 on white, 2.95:1 as text on
+ * cream), so it is used for fills and borders here and never for text.
+ */
+
+.survey-runner {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+  color: var(--text-primary);
+}
+
+.survey-progress {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* fieldset carries a browser default border and padding that would draw a box
+   round every question. The element is here for its grouping semantics, not
+   its appearance. */
+.survey-question {
+  display: grid;
+  gap: 0.85rem;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.survey-prompt {
+  display: block;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-primary);
+  padding: 0;
+}
+
+.survey-helper,
+.survey-optional-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.survey-error {
+  margin: 0;
+  color: var(--text-danger, #ff6b6b);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.survey-runner .choice-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.survey-runner .choice-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.survey-runner .choice-item:hover {
+  background: var(--bg-hover);
+}
+
+.survey-runner .choice-item.is-selected {
+  border-color: var(--accent-coral);
+  background: color-mix(in srgb, var(--accent-coral) 12%, transparent);
+}
+
+.survey-runner .choice-item input,
+.survey-runner .scale-point input {
+  margin: 0;
+  /* Kept in the layout rather than hidden: these are the real controls, and a
+     visually hidden input takes the focus ring with it. */
+  flex: none;
+}
+
+.scale-field {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.scale-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scale-point {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  /* Wide enough for a comfortable touch target at the 11 points NPS needs,
+     and allowed to wrap rather than shrink below it on a narrow screen. */
+  min-width: 2.75rem;
+  padding: 0.6rem 0.4rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.scale-point.is-selected {
+  border-color: var(--accent-coral);
+  background: color-mix(in srgb, var(--accent-coral) 12%, transparent);
+}
+
+.scale-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.survey-runner .response-input {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  resize: vertical;
+}
+
+.survey-runner .actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+/* The local preview harness banner. Not part of the participant surface. */
+.survey-preview-banner {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.survey-preview-rule {
+  max-width: 44rem;
+  margin: 2rem auto 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.survey-preview-results {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 3rem;
+}
+
+/* Consent gate. Given its own surface so it reads as something to consider
+   rather than a paragraph to scroll past on the way to the first question. */
+.survey-consent {
+  padding: 1.25rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.survey-consent h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.survey-consent p {
+  margin: 0;
+}

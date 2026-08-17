@@ -1,7 +1,30 @@
 import { z } from "zod";
 
-import type { StudyStep } from "./contract";
+import type { StepShapeProblem, StudyStep } from "./contract";
+import { findStepShapeProblem } from "./contract";
 import { isSafeTargetUrl } from "./url-safety";
+
+/**
+ * Wording for the authoring boundary. Same rules as the runtime contract, but
+ * addressed to the person editing the question rather than to whoever is
+ * debugging a rejected payload - which is why the messages are duplicated here
+ * rather than shared. The rules themselves are not: see findStepShapeProblem.
+ */
+export const AUTHORING_STEP_SHAPE_MESSAGES: Record<
+  StepShapeProblem["code"],
+  string
+> = {
+  choice_needs_options: "A choice step needs at least two options",
+  selection_range_inverted:
+    "The most selections allowed cannot be fewer than the fewest required",
+  selection_min_exceeds_options:
+    "This asks for more selections than there are options",
+  rating_needs_scale: "Choose how many points the rating scale has",
+  rating_scale_out_of_range: "A rating scale can have between 2 and 10 points",
+  nps_scale_not_authorable:
+    "An NPS question is always 0 to 10, so it has no scale to set",
+  nps_takes_no_options: "An NPS question does not take options"
+};
 
 /**
  * Inline study authoring for unmoderated opportunities.
@@ -26,6 +49,13 @@ import { isSafeTargetUrl } from "./url-safety";
  * appended by `toStudySteps` rather than authored. Spelled out rather than
  * derived from `stepTypeSchema` so that adding a machine-only step type later
  * cannot silently expose it in the authoring UI.
+ */
+/**
+ * Deliberately NOT widened with the native survey types (`multi_choice`,
+ * `rating`, `nps`). This set is the vocabulary of a recorded first-hand task
+ * list, where answers are now spoken aloud rather than typed, so a rating
+ * widget has nothing to render into. Native surveys author from their own set,
+ * which is why the contract's `stepTypes` is wider than this one.
  */
 export const authorableStepTypes = [
   "instruction",
@@ -130,14 +160,13 @@ export const inlineStudySchema = z
     // here so the author gets the error against the step they are editing
     // rather than a generic create failure after submit.
     value.steps.forEach((step, index) => {
-      if (
-        step.type === "single_choice" &&
-        (!step.options || step.options.length < 2)
-      ) {
+      const problem = findStepShapeProblem(step);
+
+      if (problem) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "A choice step needs at least two options",
-          path: ["steps", index, "options"]
+          message: AUTHORING_STEP_SHAPE_MESSAGES[problem.code],
+          path: ["steps", index, problem.field]
         });
       }
     });

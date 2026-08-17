@@ -1,0 +1,29 @@
+-- Per-type question settings for the native poll and survey types.
+--
+-- `rating` needs a scale and its end labels; `multi_choice` needs a selection
+-- range. Neither fits the columns already here: `prompt` and `helper_text` are
+-- prose, and `options` is the list of answers.
+--
+-- A new column rather than a widening of `options`. `options` is typed and read
+-- as string[] in studies-repository (StudyStepRow.options, mapStudyStepRow) and
+-- every existing caller treats it that way, so overloading it to sometimes hold
+-- an object would break the reader for single_choice - a step type that is
+-- already live and already carries participant-facing answers.
+--
+-- JSONB rather than discrete columns because the shape is per-type and will
+-- grow with the question set. The gate on that shape is stepConfigSchema in
+-- shared/firsthand/contract.ts, which is `.strict()`, so an unknown key is
+-- rejected at the contract before it can reach this column. That gate is the
+-- real one: study_steps.type is TEXT and this column is JSONB, so storage
+-- constrains almost nothing by itself.
+--
+-- NULL for every existing row and every step type that has no settings, which
+-- is why there is no default and no backfill. A step whose type needs config
+-- and has none is rejected by validateSteps before insert.
+--
+-- No index: every step read in studies-repository is by study_id and ordered by
+-- step_order, and nothing queries inside config. A migration's checksum is
+-- frozen once applied, so a speculative index would cost another migration to
+-- remove.
+ALTER TABLE firsthand.study_steps
+  ADD COLUMN IF NOT EXISTS config JSONB NULL;
