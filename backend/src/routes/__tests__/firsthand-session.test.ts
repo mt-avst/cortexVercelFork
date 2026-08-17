@@ -596,3 +596,136 @@ describe('B4 CSRF seam — header-based, GET exempt', () => {
     expect(res.status).toBe(200);
   });
 });
+
+// A survey session is an ordinary runtime session, so until the payload carried
+// `kind` nothing narrowed what its token could do: it could set recording state
+// and reach all three upload routes, which in the deployed environment means a
+// presigned S3 PUT, an asset row and a transcript job. Bounded to the
+// participant's own session - storage and compute, not a way to anyone else's
+// data - which is why this was a deferral rather than a blocker.
+describe('B4 a survey token cannot drive the recording machinery', () => {
+  const surveyPayload = () => ({
+    ...payloadFor(PARTICIPANT_ID),
+    study: {
+      id: 'study_1',
+      title: 'S',
+      intro_text: 'i',
+      consent_text: 'c',
+      kind: 'survey'
+    }
+  });
+
+  const surveySession = () => {
+    mockLoad.mockResolvedValue({ kind: 'ok', payload: surveyPayload() });
+  };
+
+  it('refuses the direct recording upload', async () => {
+    surveySession();
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/recording`)
+      .set('Content-Type', 'video/webm')
+      .send(Buffer.from('x'));
+
+    expect(res.status).toBe(404);
+    // The status alone would pass with the guard moved below the write.
+    expect(mockStore).not.toHaveBeenCalled();
+    expect(mockSaveAsset).not.toHaveBeenCalled();
+  });
+
+  it('refuses to presign an S3 upload, so no write capability is issued', async () => {
+    surveySession();
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
+
+    expect(res.status).toBe(404);
+    expect(mockPresign).not.toHaveBeenCalled();
+    expect(mockRegisterPending).not.toHaveBeenCalled();
+  });
+
+  it('refuses to finalize, so no asset row and no transcript job', async () => {
+    surveySession();
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
+      .send({ durationSeconds: 1, objectKey: 'recordings/session_1/a.webm' });
+
+    expect(res.status).toBe(404);
+    expect(mockSaveAsset).not.toHaveBeenCalled();
+    expect(mockTranscript).not.toHaveBeenCalled();
+  });
+
+  it('refuses a recording-state mutation, so the row cannot claim a recording', async () => {
+    surveySession();
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/runtime`)
+      .send({ type: 'recording_state', recordingStatus: 'active', uploadStatus: 'complete' });
+
+    expect(res.status).toBe(404);
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  // The guard must not be wider than the problem. These are what a survey
+  // session exists to do, and refusing the whole route would have broken it.
+  it('still accepts an event, which is how the funnel learns the survey started', async () => {
+    surveySession();
+    mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
+
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/runtime`)
+      .send({ type: 'event', eventType: 'session_started' });
+
+    expect(res.status).toBe(200);
+    expect(mockApply).toHaveBeenCalled();
+  });
+
+  it('still accepts an answer', async () => {
+    mockLoad.mockResolvedValue({
+      kind: 'ok',
+      payload: {
+        ...surveyPayload(),
+        steps: [{ step_id: 's1', order: 1, type: 'open_text', prompt: 'Why?' }]
+      }
+    });
+    mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
+
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/runtime`)
+      .send({ type: 'response', stepId: 's1', stepType: 'open_text', responsePayload: { text: 'Because' } });
+
+    expect(res.status).toBe(200);
+    expect(mockApply).toHaveBeenCalled();
+  });
+
+  // The load-bearing half of isSurveySession. A payload minted before `kind`
+  // existed has no kind, and those are recorded sessions in flight - treating
+  // absent as "survey" would refuse a live recording mid-upload.
+  it('leaves a payload minted before `kind` existed able to record', async () => {
+    okSession();
+    mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
+
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
+
+    expect(res.status).toBe(200);
+    expect(mockPresign).toHaveBeenCalled();
+  });
+
+  it('leaves a recorded session able to record', async () => {
+    mockLoad.mockResolvedValue({
+      kind: 'ok',
+      payload: {
+        ...payloadFor(PARTICIPANT_ID),
+        study: { id: 'study_1', title: 'S', intro_text: 'i', consent_text: 'c', kind: 'recorded' }
+      }
+    });
+    mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
+
+    const res = await request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
+
+    expect(res.status).toBe(200);
+    expect(mockPresign).toHaveBeenCalled();
+  });
+});

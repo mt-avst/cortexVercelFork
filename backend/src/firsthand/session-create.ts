@@ -93,6 +93,12 @@ export async function createSession(
       title: study.study.title,
       intro_text: study.study.intro_text,
       consent_text: study.study.consent_text,
+      // Snapshotting this is safe in a way snapshotting the study's steps or
+      // status would not be: `kind` is fixed at create and is absent from
+      // UpdateStudyInput, precisely because changing it would orphan steps
+      // written for the other runner. So the value cannot drift away from the
+      // study underneath a live session.
+      kind: study.study.kind,
       brand_name: study.study.brand_name,
       estimated_duration_minutes: study.study.estimated_duration_minutes,
       locale: study.study.locale,

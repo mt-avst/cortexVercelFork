@@ -129,6 +129,40 @@ describe('createSession', () => {
     expect(seeded.session.callback_url).toBeUndefined();
   });
 
+  /**
+   * The field the runtime's recording guard reads.
+   *
+   * Every route-level test of that guard builds its own payload, so all of them
+   * passed with this stamp deleted - the guard was correct and could never
+   * fire, because no minted payload would ever say `survey`. Caught by mutation
+   * testing, which is the only thing that could have caught it.
+   */
+  it('stamps the study kind onto the payload, so the runtime can tell the two apart', async () => {
+    getStudyByIdMock.mockResolvedValue({
+      ...validStudy,
+      study: { ...validStudy.study, kind: 'survey' as const }
+    });
+
+    const result = await createSession({ studyId: 'study_abc', participant });
+    if (!result.ok) throw new Error('expected success');
+
+    expect(seedRuntimeSessionMock.mock.calls[0][0].study.kind).toBe('survey');
+  });
+
+  it('carries a recorded study as recorded rather than dropping the field', async () => {
+    getStudyByIdMock.mockResolvedValue({
+      ...validStudy,
+      study: { ...validStudy.study, kind: 'recorded' as const }
+    });
+
+    const result = await createSession({ studyId: 'study_abc', participant });
+    if (!result.ok) throw new Error('expected success');
+
+    // Asserted separately from the survey case: a stamp hardcoded to 'survey'
+    // would satisfy the test above and refuse every real recording.
+    expect(seedRuntimeSessionMock.mock.calls[0][0].study.kind).toBe('recorded');
+  });
+
   it('mints unique tokens across calls', async () => {
     const a = await createSession({ studyId: 'study_abc', participant });
     const b = await createSession({ studyId: 'study_abc', participant });
