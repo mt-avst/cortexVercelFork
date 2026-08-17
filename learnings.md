@@ -6,7 +6,8 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 
 ## Project overview
 
-- **Name**: AdaptaLabs (adaptalabs-root), **version**: 7.3.23
+- **Name**: AdaptaLabs (adaptalabs-root), product name **Cortex**
+- **Released version is the git tag, not `package.json`.** semantic-release cuts the tag on merge to `main` and does not write the version back, so `package.json` (7.4.0) lags the released version badly. Check `git tag --sort=-creatordate | head -1`, currently **7.36.0**.
 - **Purpose**: Internal recruitment app — researchers post opportunities (studies/sessions), employees browse and book sessions. Includes polls/surveys, dashboard, feedback, notifications.
 - **Production**: Kubera playground — https://adaptalabs.kubera-playground.adaptavist.net (the old Vercel deployment at adapta-labs-p62q.vercel.app is retired)  
 - **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E results in `archive/test-results/`.
@@ -61,7 +62,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Accessibility**: Axe tests in `e2e/accessibility.test.ts` cover Home, Opportunity detail, Admin, Create opportunity, My Bookings, Feedback, Settings. Run with dev server up: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`.
 - **E2E checklist**: `archive/test-results/END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `archive/test-results/`.
 - **M6 E2E**: `e2e/m6-poll-click-tracking.test.ts` — publish poll → click "Open Poll" → verify click tracked and analytics shows action. Run with ports 3000/3001 free.
-- **API health**: `GET /api/health` returns `{"ok":true}` when API is deployed.
+- **API health**: `GET /api/health` returns `{"status":"ok","database":"up","databaseLatencyMs":N,"timestamp":...}`. Reach it on the **app origin** (`https://adaptalabs.kubera-playground.adaptavist.net/api/health`); the backend host is cluster-internal and refuses connections from outside. Note it is **not** a deploy check - Kubernetes keeps the old pod serving during a failed roll, so health stays green while the new pod crashloops.
 - **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
 - **Admin / User view toggle (Playwright MCP, 2026-02-03)**: Admins and superadmins can switch between Admin Dashboard (`/admin`) and User View (`/`) without auto-redirect. Admin dashboard has "Browse Studies" button (navigates to `/`); when on user view, header shows "Admin" link (navigates to `/admin`). Verified with user-playwright MCP: Admin login → /admin → "Browse Studies" → / (study cards) → "Admin" → /admin.
 - **Feedback footer above neural background (Playwright MCP, 2026-02-03)**: `.feedback-footer` has `position: relative` and `z-index: 10` so it renders above the full-screen fixed neural canvas (z-index 0) on the user dashboard. Verified: landing and user dashboard (dark mode, User login) show full footer (prompt, textarea, Send feedback); textarea focusable and button enables when text entered.
@@ -305,59 +306,9 @@ Shipped on `feat/participant-welcome-expectations`.
   Grepping `index-*.css` for them returns zero for every marker, which is indistinguishable from a failed build.
   A sanity marker that must be present caught it.
 
-## Links
-
-- Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net
-- Backend (public ingress, server-to-server callbacks): https://adaptalabs-backend.kubera-playground.adaptavist.net
-- Retired: adapta-labs-p62q.vercel.app (Vercel, pre-Kubera)
-
----
-
-## Continuation (for new sessions)
-
-When continuing work on this project, use the following in new chats.
-
-**MCPs available**
-
-| MCP | Use |
-|-----|-----|
-| **cursor-ide-browser** | Navigate and interact with the app for frontend dev and manual testing |
-| **cursor-browser-extension** | Similar browser automation; prefer for frontend/webapp work |
-| **user-chrome-devtools** | Inspect browser console, network, and DOM |
-| **user-playwright** | Playwright-based E2E tests |
-| **user-vercel** | Vercel deployment and config |
-| **user-figma** | Figma design integration |
-| **user-clerk** | Clerk auth (if used) |
-| **user-convex** | Convex backend (if used) |
-| **user-supabase** | Supabase backend (if used) |
-| **user-atlassian** | Atlassian (Jira, etc.) |
-| **user-forge-knowledge** | Forge Knowledge base queries |
-
-**Learnings**
-
-- Use `learnings.md` (this file) in the project root as a reference for prior discoveries, gotchas, and conventions.
-- When you find something reusable (fixes, patterns, pitfalls), add it to `learnings.md` with a short, actionable note.
-
-**Suggested follow-ups**
-
-- **M6 End-to-End Click Tracking Test** – Publish poll → click "Open Poll" → verify click is tracked.
-- **Analytics Dashboard Verification** – Confirm analytics for published polls.
-- **Production readiness (M6)** – Error handling, env vars, README for M6.
-
-**Short continuation prompt (copy for future sessions)**
-
-```
-When continuing work on this project:
-MCPs available: cursor-ide-browser, cursor-browser-extension, user-chrome-devtools, user-playwright, user-vercel, user-figma, user-clerk, user-convex, user-supabase, user-atlassian, user-forge-knowledge
-Learnings: Use learnings.md in the project root as a reference for prior discoveries, gotchas, and conventions. When you find something reusable (fixes, patterns, pitfalls), add it to learnings.md with a short, actionable note.
-Suggested follow-ups: M6 End-to-End Click Tracking Test (publish poll → click "Open Poll" → verify click tracked); Analytics Dashboard Verification (confirm analytics for published polls); Production readiness for M6 (error handling, env vars, README for M6).
-```
-
----
-
 ## 2026-08-16 — UX pass: participant journey, admin surfaces, and a contrast audit
 
-Branch `feat/participant-browse-cards`, 17 commits off `main`, unpushed.
+Branch `feat/participant-browse-cards`, merged 2026-08-17 and released as 7.35.0.
 
 ### The pattern that produced most of the real findings
 
@@ -385,7 +336,7 @@ The method: walk every element, composite the background up the ancestor chain, 
 - **`npx eslint <changed files>` is not the lint gate.** The backlog is per-file-per-rule in `eslint-suppressions.json`, so four clean files can sit over a red repo. Run `npm run lint` from the root. A suppression also **hid code I thought I had deleted** — my regex removed only a comment line.
 - **A mutation that fails to compile prints "Tests: 0" and reads exactly like a kill.** Re-run it in a form that compiles.
 - **`git checkout --` inside a mutation script destroys uncommitted work.** Commit before mutating.
-- **Do not edit a file the unpushed branch rewrites.** `ResponsesSection.tsx` already carries its fix on `feat/participant-welcome-expectations`; the `end`-step filter went into `SessionReview.tsx` instead. Check `git diff main..<branch> -- <file>` first.
+- **Do not edit a file another live branch rewrites.** `ResponsesSection.tsx` already carried its fix on `feat/participant-welcome-expectations`, so the `end`-step filter went into `SessionReview.tsx` instead. Check `git diff main..<branch> -- <file>` first. Both branches are merged now, but the rule holds whenever two branches are open at once.
 - **Seed gaps read exactly like product bugs.** The reviewer 404'd ("the session may not have started yet") for want of `opportunity_session_events` rows; the leaderboard was empty because it reads `user_profiles`, not `points_transactions`.
 - **A seed guard outside a transaction fails open** — psql's `ON_ERROR_STOP` is off by default, and two `BEGIN/COMMIT` pairs defeat `psql -1`. `SUM(...) FILTER` over zero rows is NULL into a `NOT NULL` column, which would have fired on the 1st of a month.
 - **`SELECT b.*`** on `/bookings/my/bookings` sent `admin_notes` — a researcher's written judgement of a participant — to that participant.
@@ -485,3 +436,109 @@ The dashboard's STUDY TYPE filter also had **no `unmoderated` option at all**, s
 Any `researcher_admin` could read every other researcher's completed sessions - participant names, participant emails, and `admin_notes`.
 It also listed rows the reader could not act on, since approving another researcher's session 403s.
 Filtered in SQL, not after the fetch: filtering in JS still pulls the notes and emails across the wire, which is the disclosure rather than the rendering of it.
+
+## Shipping a stack of five branches at once (2026-08-17)
+
+`fix/public-opportunity-leak`, `fix/superadmin-script-tls`, `feat/participant-welcome-expectations`, `feat/participant-browse-cards` and `feat/native-poll-survey` went in as 7.33.7, 7.33.8, 7.34.0, 7.35.0 and 7.36.0.
+All five had been finished and verified green independently. Landing them was still not mechanical.
+
+### Merging a stack
+
+- **"Conflicts with nothing" is a statement about a base, not about a branch.**
+  All five were measured against `main` at `77a8c52` and genuinely conflicted with nothing *there*.
+  Three of the four remaining branches then conflicted as soon as their predecessor landed.
+  Squashing each branch separately does **not** avoid this - the second branch to reach `main` still meets the first one's code.
+  Re-measure after every merge with `git merge-tree --write-tree --name-only origin/main origin/<branch>`, which needs no checkout and changes nothing.
+- **GitLab reports this as a bare `405 Method Not Allowed` from the merge API**, which says nothing about the cause. Read `detailed_merge_status` on the MR before concluding the call failed.
+- **Keeping both sides of a conflict in a test file can produce a file that will not parse.**
+  In `OpportunityForm.test.tsx` both sides' final test was left unclosed, because they shared the single `});` that sat *after* the conflict marker.
+  Concatenating the two sides gave two open tests and one closing brace.
+  vitest reports that as `Test Files 1 failed` / `Tests no tests`, which reads almost exactly like a resolution that merely broke some assertions - the same misleading signature as a mutation that fails to compile.
+  Check brace balance, and confirm a real test count, before believing a resolution.
+- **Confirm a resolution with a number somebody predicted, not with "it compiles".**
+  The resolved test file had 37 tests and the frontend suite totalled 548, both figures recorded in advance for exactly that combination.
+  For prose conflicts, byte-compare each kept section against its source with `git show <ref>:<file>`.
+- **Generated files: regenerate, never pick a side.**
+  `frontend/src/shared/firsthand/{contract,inline-study}.ts` conflicted while their `shared/` sources merged cleanly, which is the tell that the clash is churn rather than disagreement.
+  Clear the markers, then run `node copy-shared-types.js` from `frontend/` so the result is derived. `shared-copies-are-current.test.ts` passing is the proof.
+- **Re-run the whole matrix on every merge.** Each branch was green alone and no two had ever been tested together, and CI runs lint only. The counts climbed as the stack landed: backend jest 470, 504, 517; frontend 388, 548, 631.
+- **The matrix itself grew mid-stack.** `fix/superadmin-script-tls` added `npm run test:scripts` (111 tests) and widened root lint to cover `backend/scripts`. Read the merged `package.json` rather than trusting a list written before the merge.
+- Resolve in a throwaway worktree (`git worktree add`) so no other checkout is disturbed. A fresh worktree needs its own `npm ci` at the root as well as in `backend/` and `frontend/`, root first, because `shared/` resolves zod from there.
+- Wait for each release before merging the next. A tag that fails to cut is invisible on a green pipeline, and four merges stacked on top make it far harder to see which one broke it.
+
+### Verifying the deploy, where two obvious checks both lie
+
+- **Grepping `assets/index-*.js` for a marker proves nothing.**
+  The frontend is code-split, so page code is not in the entry bundle, and a marker from a page component is absent whether or not the deploy landed.
+  `index.html` is no help either - it references only the entry JS and CSS, with no modulepreload links.
+  The chunk list is in `const __vite__mapDeps=(...)` at the very top of the entry bundle: read that, then fetch the chunk that owns the code you changed.
+  A chunk whose *file* is new is proof on its own - `SurveyPreview-*.js` existed nowhere before 7.36.0.
+- **`/api/health` is a false positive during a failed roll.**
+  Kubernetes keeps the old pod serving, so health stays `{"status":"ok","database":"up"}` while the new pod crashloops.
+  Use a route that only the new code answers. Unauthenticated, `/api/firsthand/studies/:id/results` returned `404 Cannot GET` before 7.36.0 and `401` after, while the pre-existing `/api/firsthand/studies` returned `401` throughout.
+  That flip also proves a **migration** applied, because the initContainer gates the pod, and it is the only evidence available without kubectl or ArgoCD access.
+- Both the app and its API answer on the app origin. The separate `adaptalabs-backend.…` host refused connections from a workstation, so use `adaptalabs.kubera-playground.adaptavist.net/api/…`.
+
+### One security rule worth keeping
+
+**Answer a 403 before `res.setHeader`, not merely before `res.send`.**
+Express keeps an already-set `Content-Type`, so a refusal placed after the CSV download headers still carries `text/csv` and `Content-Disposition` and hands the file over.
+Assert the *absence* of those headers in the test, not just the status code - a status-only assertion passes the broken ordering.
+
+The related ownership rule for participant data, and the open study-versus-opportunity question behind it, are in [docs/PRODUCTION_HARDENING.md](docs/PRODUCTION_HARDENING.md) and the product description.
+
+---
+
+## Links
+
+- Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net
+- Backend (public ingress, server-to-server callbacks): https://adaptalabs-backend.kubera-playground.adaptavist.net
+- Retired: adapta-labs-p62q.vercel.app (Vercel, pre-Kubera)
+
+---
+
+## Continuation (for new sessions)
+
+When continuing work on this project, use the following in new chats.
+
+**MCPs available**
+
+| MCP | Use |
+|-----|-----|
+| **cursor-ide-browser** | Navigate and interact with the app for frontend dev and manual testing |
+| **cursor-browser-extension** | Similar browser automation; prefer for frontend/webapp work |
+| **user-chrome-devtools** | Inspect browser console, network, and DOM |
+| **user-playwright** | Playwright-based E2E tests |
+| **user-vercel** | Vercel deployment and config |
+| **user-figma** | Figma design integration |
+| **user-clerk** | Clerk auth (if used) |
+| **user-convex** | Convex backend (if used) |
+| **user-supabase** | Supabase backend (if used) |
+| **user-atlassian** | Atlassian (Jira, etc.) |
+| **user-forge-knowledge** | Forge Knowledge base queries |
+
+**Learnings**
+
+- Use `learnings.md` (this file) in the project root as a reference for prior discoveries, gotchas, and conventions.
+- When you find something reusable (fixes, patterns, pitfalls), add it to `learnings.md` with a short, actionable note.
+
+**Suggested follow-ups**
+
+The M6 items that used to sit here are done - click tracking, poll analytics and the M6 production-readiness work all shipped. Current open items, as of 2026-08-17:
+
+- **A real "Stop and end this session" control** in the recording flow. The copy now describes stopping truthfully, but there is still no stop, withdraw or exit control anywhere in it. Build it on top of the participant launch flow, which is where those files live.
+- **A one-way "convert to instruction" control** for legacy `open_text` / `single_choice` steps. Typed answers are gone from authoring and runtime, so a legacy typed step currently has no way to be edited or converted.
+- **Phase 4 of native polls and surveys** - the authoring toggle, the publish-guard change, CTA labels and `OpportunityDetail` routing. Settle the study-versus-opportunity ownership question for results first, see [docs/PRODUCTION_HARDENING.md](docs/PRODUCTION_HARDENING.md).
+- **Server-side consent gating** (GDPR Art. 7(1)), tracked and deliberately deferred.
+- **Never walked at all:** the superadmin surfaces (admin requests, admins list, feedback), AdaptaBits and gamification, My Bookings end to end, and the session review and playback surface.
+
+**Short continuation prompt (copy for future sessions)**
+
+```
+When continuing work on this project:
+MCPs available: cursor-ide-browser, cursor-browser-extension, user-chrome-devtools, user-playwright, user-vercel, user-figma, user-clerk, user-convex, user-supabase, user-atlassian, user-forge-knowledge
+Learnings: Use learnings.md in the project root as a reference for prior discoveries, gotchas, and conventions. When you find something reusable (fixes, patterns, pitfalls), add it to learnings.md with a short, actionable note.
+Suggested follow-ups: M6 End-to-End Click Tracking Test (publish poll → click "Open Poll" → verify click tracked); Analytics Dashboard Verification (confirm analytics for published polls); Production readiness for M6 (error handling, env vars, README for M6).
+```
+
+---

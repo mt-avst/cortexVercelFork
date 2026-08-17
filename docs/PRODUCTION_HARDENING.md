@@ -33,6 +33,14 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **CSRF protection** – Double-submit cookie via `csrf-csrf`; on by default under `NODE_ENV=production`. Tokens are issued by `GET /api/csrf-token` and echoed in the `x-csrf-token` header on mutating requests. `ENABLE_CSRF=false` disables it in an emergency.
 - [x] **Session cookies** – `httpOnly`, `secure` and `sameSite: strict` under `NODE_ENV=production` (`backend/src/index.ts`).
 - [x] **Security headers** – Served by nginx in the frontend image, see [frontend/nginx.conf](../frontend/nginx.conf): X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy. CSP is optional (report-only first if added later). Permissions-Policy is not currently set.
+- [x] **Ownership gating on participant data** – Every route returning participants' own answers, events or recordings requires the **owner or a superadmin**, not just `requireAdmin`.
+  Covered: recording playback and transcripts (`backend/src/routes/session-outputs.ts`), per-session events (`GET /api/opportunities/:id/session-events`), pending approvals, and survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`, via `mayReadStudyResults`).
+  The survey results pair was the last gap and was closed in 7.36.0; before that any `researcher_admin` could read and CSV-export another researcher's participants' answers, and it was reachable in practice because `participant_responses` is populated by the recorded-session runtime.
+  Study *copy* is deliberately readable by every admin (an opportunity may reuse a study it did not author) - the boundary is participant data, so gate new routes accordingly.
+- [ ] **Decide the ownership model for survey results before phase 4** – `mayReadStudyResults` gates on *study* ownership while the surfaces above gate on *opportunity* ownership.
+  Because study reuse across owners is a designed feature these disagree: the researcher who ran the opportunity cannot read the results they collected, while the study author can read answers gathered by another researcher's opportunity.
+  It fails closed, so nothing is exposed, but the semantics should be settled when native surveys are switched on.
+  Results also aggregate across every opportunity using the study, which is the part that makes either answer arguable.
 
 ## Database TLS verification
 
