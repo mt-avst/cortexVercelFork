@@ -480,29 +480,49 @@ describe('FirstHand Express router', () => {
       mockListResponsesForStudy.mockResolvedValue([]);
     });
 
-    it('lets the owner read the aggregate', async () => {
-      studyOwnedBy('admin-1');
-      const res = await request(app)
+    it('lets a superadmin read the aggregate', async () => {
+      studyOwnedBy('other-admin-9');
+      const res = await request(superadminApp)
         .get('/api/firsthand/studies/study_abc/results')
         .expect(200);
       expect(res.body.study).toMatchObject({ id: 'study_abc' });
       expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
     });
 
-    it('lets the owner export the CSV', async () => {
-      studyOwnedBy('admin-1');
-      const res = await request(app)
+    it('lets a superadmin export the CSV', async () => {
+      studyOwnedBy('other-admin-9');
+      const res = await request(superadminApp)
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(200);
       expect(res.headers['content-type']).toContain('text/csv');
     });
 
-    it('lets a superadmin read another admin owner\'s aggregate', async () => {
-      studyOwnedBy('other-admin-9');
-      await request(superadminApp)
+    // These results aggregate across EVERY opportunity using the study, and a
+    // study is reusable by an opportunity its author did not create. So the
+    // study's own owner is refused too: granting them would hand them answers
+    // from participants another researcher recruited. Per-opportunity results
+    // are phase 4's job and need an opportunity_id on runtime_sessions, which
+    // does not exist yet - until then this is superadmin-only.
+    it('refuses even the study owner, because results span other researchers opportunities', async () => {
+      studyOwnedBy('admin-1');
+      const res = await request(app)
         .get('/api/firsthand/studies/study_abc/results')
-        .expect(200);
-      expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
+        .expect(403);
+      expect(res.body).toMatchObject({
+        error: 'forbidden',
+        message: 'Only a superadmin can view survey responses at present',
+      });
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
+    });
+
+    it('refuses the study owner the CSV as well, and serves no CSV body', async () => {
+      studyOwnedBy('admin-1');
+      const res = await request(app)
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(403);
+      expect(res.headers['content-type']).not.toContain('text/csv');
+      expect(res.headers['content-disposition']).toBeUndefined();
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
 
     // The defect this block exists for: a researcher_admin reading a colleague's
@@ -514,7 +534,7 @@ describe('FirstHand Express router', () => {
         .expect(403);
       expect(res.body).toMatchObject({
         error: 'forbidden',
-        message: 'Only the owner of this task list can view its responses',
+        message: 'Only a superadmin can view survey responses at present',
       });
       // Refusing after loading the answers would still have read them.
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
@@ -532,14 +552,11 @@ describe('FirstHand Express router', () => {
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
 
-    // Deliberately STRICTER than canWriteStudy, which fails open on a null
-    // owner so legacy rows stay editable by whoever authored them. A read
-    // cannot adopt the row the way a write does, and responses only exist for a
-    // study that reached a participant through an opportunity - which claims
-    // ownership atomically - so an unowned study with answers should not occur.
-    // If one does, refusing is the recoverable direction: a superadmin can
-    // assign an owner, whereas leaked answers cannot be recalled.
-    it('refuses an unowned study rather than falling open like the write path', async () => {
+    // canWriteStudy fails OPEN on a null owner so legacy rows stay editable by
+    // whoever authored them. Reads of participant answers must not inherit that:
+    // a read cannot adopt the row the way a write does, and an unowned study is
+    // the case where nobody can be held accountable for the data at all.
+    it('refuses an unowned study, which the write path would have let through', async () => {
       studyOwnedBy(null);
       await request(app)
         .get('/api/firsthand/studies/study_abc/results')
@@ -554,18 +571,18 @@ describe('FirstHand Express router', () => {
         .expect(200);
     });
 
-    it('logs the refusal, so a cross-owner attempt is not silent', async () => {
+    it('logs the refusal, so an attempt on participant answers is not silent', async () => {
       studyOwnedBy('other-admin-9');
       await request(app)
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
       expect(mockLogger.warn).toHaveBeenCalledWith(
-        'Refused a cross-owner study results read',
+        'Refused a study results read below superadmin',
         expect.objectContaining({ studyId: 'study_abc', userId: 'admin-1' })
       );
     });
 
-    it('answers 404 for a missing study before any ownership decision', async () => {
+    it('answers 404 for a missing study before any access decision', async () => {
       mockGetStudyById.mockResolvedValue(null);
       const res = await request(app)
         .get('/api/firsthand/studies/missing/results')

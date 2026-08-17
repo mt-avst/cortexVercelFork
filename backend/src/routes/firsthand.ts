@@ -87,49 +87,54 @@ function sendStudyWriteFailure(
  * The read boundary for participants' answers. Answers true when this requester
  * may see them; otherwise answers the response itself and returns false.
  *
- * requireAdmin is not sufficient on its own. The study list and the single
- * study GET above stay open to every admin on purpose - study copy is authoring
- * metadata, and an opportunity is meant to reuse a study it did not author -
- * but responses are participant data, and the reason those reads are open is
- * precisely that they are not. Without this, any researcher_admin could read,
- * and CSV-export, every other researcher's survey responses.
+ * **Superadmin only, deliberately, and this is an interim position.**
  *
- * Deliberately STRICTER than the repository's canWriteStudy, which fails OPEN
- * on a null owner so that legacy rows predating owners stay editable by the
- * people who authored them. That reasoning does not carry over:
+ * requireAdmin is nowhere near sufficient: the study list and the single study
+ * GET above stay open to every admin on purpose, because study copy is
+ * authoring metadata and an opportunity is meant to reuse a study it did not
+ * author. Responses are the opposite of that, so they need their own boundary.
  *
- * - A write adopts the row it touches, so the unowned population shrinks. A
- *   read must not claim ownership, so it has no equivalent way to close.
- * - Responses only exist for a study that reached a participant, a study only
- *   reaches a participant through an opportunity, and linking one claims
- *   ownership atomically (claimStudyIfUnowned). So an unowned study holding
- *   answers should not arise.
+ * The obvious boundary - the study's owner - is wrong here, which is why this
+ * is stricter than it looks like it should be. These routes aggregate every
+ * response for a study, across **every opportunity that used it**, and a study
+ * is reusable by an opportunity its author did not create. So:
  *
- * If one does arise anyway, refusing is the recoverable direction: a superadmin
- * can assign an owner, whereas answers handed to the wrong researcher cannot be
- * recalled.
+ * - Granting the study's owner hands them answers from participants another
+ *   researcher recruited, under that researcher's consent wording.
+ * - Granting the opportunity's owner is what the neighbouring surfaces do
+ *   (session-outputs.ts, and GET /api/opportunities/:id/session-events), and is
+ *   almost certainly the right long-term answer - but it is not implementable
+ *   yet. `firsthand.runtime_sessions` records `study_id` and no
+ *   `opportunity_id`, so a response cannot be attributed to an opportunity at
+ *   all without a migration.
+ *
+ * Phase 4 should add that column, populate it where the session is created from
+ * an opportunity, and move these to per-opportunity routes gated the same way
+ * as session-events. Until then, refusing everyone below superadmin is the only
+ * answer that is not quietly wrong: it fails closed, and no researcher loses
+ * anything they can currently reach, because the results view is mounted only
+ * under VITE_SURVEY_PREVIEW and is absent from every real build.
+ *
+ * Note this also refuses a study with no owner at all, where the write path
+ * (canWriteStudy) fails OPEN so legacy rows stay editable by whoever wrote
+ * them. A read cannot adopt the row the way a write does, and an unowned study
+ * is precisely the case where nobody can be held accountable for the data.
  */
-function mayReadStudyResults(
-  res: Response,
-  study: { owner_user_id: string | null },
-  req: Request
-): boolean {
-  const requester = studyRequester(req);
-
-  if (requester.isSuperadmin || study.owner_user_id === requester.userId) {
+function mayReadStudyResults(res: Response, req: Request): boolean {
+  if (studyRequester(req).isSuperadmin) {
     return true;
   }
 
   // Mirrors sendStudyWriteFailure's warning for the same reason: these handlers
   // answer directly rather than throwing, so nothing else logs the attempt.
-  logger.warn('Refused a cross-owner study results read', {
+  logger.warn('Refused a study results read below superadmin', {
     studyId: req.params.studyId,
     userId: req.user?.id
   });
 
   res.status(403).json({
     error: 'forbidden',
-    message: 'Only the owner of this task list can view its responses'
+    message: 'Only a superadmin can view survey responses at present'
   });
 
   return false;
@@ -255,7 +260,7 @@ router.get('/studies/:studyId/results', requireAdmin, asyncHandler(async (req: R
     return res.status(404).json({ error: 'not_found' });
   }
 
-  if (!mayReadStudyResults(res, stored.study, req)) return;
+  if (!mayReadStudyResults(res, req)) return;
 
   const responses = await listResponsesForStudy(req.params.studyId);
 
@@ -276,7 +281,7 @@ router.get('/studies/:studyId/results.csv', requireAdmin, asyncHandler(async (re
 
   // Gated before the download headers are set, not just before the send: a
   // refusal that had already set Content-Disposition would still offer a file.
-  if (!mayReadStudyResults(res, stored.study, req)) return;
+  if (!mayReadStudyResults(res, req)) return;
 
   const responses = await listResponsesForStudy(req.params.studyId);
 
