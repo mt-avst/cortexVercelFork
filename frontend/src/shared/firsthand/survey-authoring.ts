@@ -138,6 +138,19 @@ export const inlineSurveySchema = z
     });
   });
 
+/**
+ * Pre-filled into the required Consent field on every new native survey.
+ *
+ * NOT `DEFAULT_CONSENT_TEXT` from inline-study.ts, which is about a session that
+ * records screen and microphone. A survey records nothing, so reusing that text
+ * would have participants agreeing to a capture that never happens - consent
+ * copy is the last place to describe something the product does not do.
+ */
+export const DEFAULT_SURVEY_CONSENT_TEXT =
+  "Your answers are stored for research analysis and are visible to the research team. " +
+  "Nothing is recorded: no screen, no microphone and no camera. " +
+  "You can close the page at any point, and anything you have already answered is kept.";
+
 export type SurveyQuestion = z.infer<typeof surveyQuestionSchema>;
 export type InlineSurvey = z.infer<typeof inlineSurveySchema>;
 

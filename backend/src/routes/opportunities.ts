@@ -27,6 +27,7 @@ import {
 } from '../firsthand/studies-repository';
 import type { RecordedStudyBrief } from '../../../shared/types';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
+import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/survey-authoring';
 import type { StudyKind } from '../../../shared/firsthand/study-input';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
@@ -138,6 +139,7 @@ async function assertLinkedStudyKindMatches(
  */
 type CreateOpportunityBody = CreateOpportunityRequest & {
   inline_study?: InlineStudy;
+  inline_survey?: InlineSurvey;
   // Accepted by the validation schema but not on the shared request interfaces
   // yet, for the same flattening reason as inline_study above: the authoring
   // toggle that sets it lands with the form, and declaring a writable field
@@ -147,6 +149,7 @@ type CreateOpportunityBody = CreateOpportunityRequest & {
 
 type UpdateOpportunityBody = UpdateOpportunityRequest & {
   inline_study?: InlineStudy;
+  inline_survey?: InlineSurvey;
   delivery_mode?: DeliveryMode;
 };
 
@@ -469,13 +472,34 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     throw new ValidationError('Only unmoderated opportunities can carry a task list');
   }
 
+  // The survey counterpart, with the mirror-image restriction. A recorded study
+  // cannot carry questions and a poll or survey cannot carry a task list: the
+  // two vocabularies are not interchangeable, which is the whole reason `kind`
+  // exists.
+  if (data.inline_survey && data.type !== 'poll' && data.type !== 'survey') {
+    throw new ValidationError('Only polls and surveys can carry questions');
+  }
+
+  if (data.inline_survey && (data.delivery_mode ?? 'external') !== 'native') {
+    throw new ValidationError(
+      'Questions are only used when the poll or survey runs in Cortex; set delivery_mode to native'
+    );
+  }
+
   if (linkedStudyId && data.inline_study) {
     throw new ValidationError(
       'Send either firsthand_study_id or inline_study, not both'
     );
   }
 
+  if (linkedStudyId && data.inline_survey) {
+    throw new ValidationError(
+      'Send either firsthand_study_id or inline_survey, not both'
+    );
+  }
+
   const inlineStudy = data.inline_study;
+  const inlineSurvey = data.inline_survey;
 
   // Every existing poll and survey is external, and the column defaults to it,
   // so an absent value means external here too.
@@ -491,7 +515,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
     // being sent somewhere else. It used to be required unconditionally, which
     // is what made these types external-only.
     if (deliveryMode === 'native') {
-      if (!linkedStudyId) {
+      if (!linkedStudyId && !inlineSurvey) {
         throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
       }
     } else if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
@@ -575,6 +599,31 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       // two sides of the same authoring action agree on who may edit them.
       owner_user_id: req.user!.id,
       steps: toStudySteps(inlineStudy.steps, studyId, inlineStudy.target_url)
+    });
+    createdStudyId = stored.study.id;
+  } else if (inlineSurvey) {
+    if (!isStudiesPersistenceConfigured()) {
+      throw new AppError('Questions require a configured PostgreSQL database.', 503);
+    }
+
+    const studyId = `study_${crypto.randomUUID()}`;
+
+    const stored = await createStudy({
+      id: studyId,
+      title: data.title.trim(),
+      intro_text: data.purpose_one_liner.trim(),
+      consent_text: inlineSurvey.consent_text.trim(),
+      estimated_duration_minutes: resolveStudyDuration(
+        inlineSurvey.estimated_duration_minutes
+      ),
+      status: 'launched',
+      owner_user_id: req.user!.id,
+      // The one line that makes this a survey rather than a task list. Without
+      // it the study is stored as `recorded` - the repository's default - and
+      // the linkage check would then refuse the very opportunity that authored
+      // it, which is a confusing way to find out.
+      kind: 'survey',
+      steps: toSurveySteps(inlineSurvey.steps, studyId)
     });
     createdStudyId = stored.study.id;
   } else if (linkedStudyId && isStudiesPersistenceConfigured()) {
@@ -687,7 +736,11 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   // inline_study is consumed to build a study and must NOT survive into the
   // generic field loop below, which maps every remaining key straight to a
   // column name - it is not a column on opportunities.
-  const { inline_study: inlineStudyInput, ...data }: UpdateOpportunityBody = req.body;
+  const {
+    inline_study: inlineStudyInput,
+    inline_survey: inlineSurveyInput,
+    ...data
+  }: UpdateOpportunityBody = req.body;
   // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
   
   // Check ownership (only owner or global admin can edit)
@@ -748,10 +801,24 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     throw new ValidationError('Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users');
   }
 
+  if (inlineSurveyInput && newDeliveryMode !== 'native') {
+    throw new ValidationError(
+      'Questions are only used when the poll or survey runs in Cortex; set delivery_mode to native'
+    );
+  }
+
   // An inline study can only fill a gap, never replace a link. Rejected rather
   // than resolved by precedence, matching create.
   if (inlineStudyInput && existingType !== 'unmoderated') {
     throw new ValidationError('Only unmoderated opportunities can carry a task list');
+  }
+
+  if (
+    inlineSurveyInput &&
+    existingType !== 'poll' &&
+    existingType !== 'survey'
+  ) {
+    throw new ValidationError('Only polls and surveys can carry questions');
   }
 
   // Two distinct refusals, kept apart so each says something true. Checked
@@ -768,6 +835,26 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   if (inlineStudyInput && data.firsthand_study_id?.trim()) {
     throw new ValidationError(
       'Send either firsthand_study_id or inline_study, not both'
+    );
+  }
+
+  // The survey twins of the two guards above, and they are not optional.
+  // Without the first, `PATCH { inline_survey }` on an opportunity that already
+  // had questions minted a THIRD study and re-pointed the row at it, leaving
+  // the previous one launched, orphaned, and holding every answer collected so
+  // far - readable only by knowing a study id nothing references. Without the
+  // second, a body carrying both an explicit id and authored questions was
+  // resolved by precedence, silently discarding the caller's id, where create
+  // refuses the identical body.
+  if (inlineSurveyInput && existingFirstHandStudyId?.trim()) {
+    throw new ValidationError(
+      'This opportunity already has questions; edit them in the Task Lists area'
+    );
+  }
+
+  if (inlineSurveyInput && data.firsthand_study_id?.trim()) {
+    throw new ValidationError(
+      'Send either firsthand_study_id or inline_survey, not both'
     );
   }
 
@@ -794,6 +881,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     data.type !== undefined ||
     data.firsthand_study_id !== undefined ||
     inlineStudyInput !== undefined ||
+    inlineSurveyInput !== undefined ||
     data.external_link_optional !== undefined ||
     // Switching delivery mode changes WHICH of the two things is required, so
     // it changes the publish shape as surely as clearing the link does. Without
@@ -829,7 +917,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     // is being sent. A native poll needs its questions; an external one needs
     // the link it hands off to.
     if (newDeliveryMode === 'native') {
-      if (!newFirstHandStudyId?.trim()) {
+      if (!newFirstHandStudyId?.trim() && !inlineSurveyInput) {
         throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
       }
     } else if (!newLink || !validateUrl(newLink)) {
@@ -893,6 +981,32 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
     createdStudyId = stored.study.id;
     // Routed through the same field loop as everything else so the id lands in
     // the UPDATE without a second code path.
+    data.firsthand_study_id = createdStudyId;
+  } else if (inlineSurveyInput) {
+    if (!isStudiesPersistenceConfigured()) {
+      throw new AppError('Questions require a configured PostgreSQL database.', 503);
+    }
+
+    const studyId = `study_${crypto.randomUUID()}`;
+    const stored = await createStudy({
+      // Same `||` reasoning as the task-list branch above: a legacy row can
+      // hold '', which `??` would carry into a study whose session payload then
+      // fails to assemble.
+      id: studyId,
+      title: (data.title || existingOpp.rows[0].title || 'Untitled survey').trim(),
+      intro_text: (
+        data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Survey'
+      ).trim(),
+      consent_text: inlineSurveyInput.consent_text.trim(),
+      estimated_duration_minutes: resolveStudyDuration(
+        inlineSurveyInput.estimated_duration_minutes
+      ),
+      status: 'launched',
+      owner_user_id: req.user!.id,
+      kind: 'survey',
+      steps: toSurveySteps(inlineSurveyInput.steps, studyId)
+    });
+    createdStudyId = stored.study.id;
     data.firsthand_study_id = createdStudyId;
   } else if (data.firsthand_study_id !== undefined) {
     // Normalise before the loop, which stores `value.trim()` verbatim and would

@@ -81,8 +81,14 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               <div id="type-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
                 {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
                 {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
-                {formData.type === 'poll' && 'Opens external poll tool for quick responses'}
-                {formData.type === 'survey' && 'Opens external survey tool for detailed feedback'}
+                {formData.type === 'poll' &&
+                  (formData.delivery_mode === 'native'
+                    ? 'Quick responses, answered in Cortex'
+                    : 'Opens an external poll tool for quick responses')}
+                {formData.type === 'survey' &&
+                  (formData.delivery_mode === 'native'
+                    ? 'Detailed feedback, answered in Cortex'
+                    : 'Opens an external survey tool for detailed feedback')}
                 {formData.type === 'unmoderated' && 'Self-guided recorded study'}
                 {!formData.type && ' '}
               </div>
@@ -117,6 +123,67 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               )}
             </div>
           </div>
+
+          {/*
+            Where the participant answers. Only polls and surveys have the
+            choice - a recorded study has nowhere external to go, and the
+            bookable types have no link at all.
+
+            A radio pair rather than a checkbox: neither option is the
+            "unticked" state of the other, and "external" is a real, supported
+            choice for a team that already licenses SurveyMonkey rather than a
+            fallback. External stays the default so an author who never looks at
+            this gets exactly today's behaviour.
+          */}
+          {(formData.type === 'poll' || formData.type === 'survey') && (
+            <div className="row mb-4">
+              <div className="col-12">
+                <fieldset>
+                  <legend className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
+                    Where participants answer
+                  </legend>
+                  <div className="form-check">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="delivery_mode"
+                      id="delivery_mode_external"
+                      value="external"
+                      checked={(formData.delivery_mode ?? 'external') === 'external'}
+                      onChange={() => handleInputChange('delivery_mode', 'external')}
+                    />
+                    <label className="form-check-label" htmlFor="delivery_mode_external">
+                      In an external tool
+                      <span className="form-text d-block">
+                        You give Cortex the link. SurveyMonkey, Google Forms,
+                        Typeform and the rest - Cortex sends people there and
+                        counts the clicks, and the answers live in that tool.
+                      </span>
+                    </label>
+                  </div>
+                  <div className="form-check mt-2">
+                    <input
+                      className="form-check-input"
+                      type="radio"
+                      name="delivery_mode"
+                      id="delivery_mode_native"
+                      value="native"
+                      checked={formData.delivery_mode === 'native'}
+                      onChange={() => handleInputChange('delivery_mode', 'native')}
+                    />
+                    <label className="form-check-label" htmlFor="delivery_mode_native">
+                      In Cortex
+                      <span className="form-text d-block">
+                        You write the questions here and the answers come back
+                        in Cortex. Nothing is recorded - no screen, no
+                        microphone, no camera.
+                      </span>
+                    </label>
+                  </div>
+                </fieldset>
+              </div>
+            </div>
+          )}
           
           {!allowUserSubmission && (
             <div className="col-md-6">
