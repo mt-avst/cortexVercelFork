@@ -18,6 +18,9 @@ import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler 
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
 import { findParticipantSessionForOpportunity } from '../firsthand/runtime-repository';
+import { listResponsesForOpportunity } from '../firsthand/survey-results-repository';
+import { aggregateSurveyResults } from '../firsthand/survey-results';
+import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
 import {
   claimStudyIfUnowned,
   countStudyTasks,
@@ -27,6 +30,7 @@ import {
   isStudiesPersistenceConfigured
 } from '../firsthand/studies-repository';
 import type { RecordedStudyBrief } from '../../../shared/types';
+import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/survey-authoring';
 import type { StudyKind } from '../../../shared/firsthand/study-input';
@@ -1558,6 +1562,147 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
   // (/admin/opportunities/:id/sessions/:sessionId/review); the old cross-origin
   // firsthand_review_url was retired with the HMAC seam.
   res.json(result.rows);
+}));
+
+// ─── Native survey results, scoped to the opportunity ────────────────────────
+//
+// The researcher-facing counterpart to GET /api/firsthand/studies/:id/results,
+// which stays superadmin-only. That route aggregates a study across EVERY
+// opportunity that used it, and reusing a study you did not author is a
+// designed feature - so its owner would be handed answers from participants
+// another researcher recruited, under that researcher's consent wording.
+//
+// An opportunity is the unit a researcher actually owns, so it is the unit
+// these read. Gated exactly like /:id/session-events above.
+
+/**
+ * BOTH pools, because these routes read across both.
+ *
+ * The opportunity and its owner come from the main Cortex pool; the questions
+ * and the answers come from the FirstHand runtime pool, which is configured
+ * separately. Checking only the first meant an unconfigured runtime pool made
+ * `getStudyById` answer null, and the route reported "Survey not found" - which
+ * tells a researcher their survey does not exist during an outage. The
+ * study-wide twin has always answered 503 for the same condition.
+ */
+async function surveyResultsAreReadable(): Promise<boolean> {
+  return (await isDatabaseAvailable()) && isStudiesPersistenceConfigured();
+}
+
+type OpportunityResultsContext = {
+  /** The id Postgres parsed, which is what runtime_sessions stores. */
+  canonicalOpportunityId: string;
+  steps: StudyStep[];
+  studyId: string;
+  title: string;
+};
+
+/**
+ * Resolves the opportunity, enforces the gate, and loads the linked questions.
+ *
+ * Throws rather than writing to `res`, and every caller must await it BEFORE
+ * setting a single response header. Express keeps an already-set Content-Type,
+ * so a refusal placed after the CSV headers still hands over the file.
+ */
+async function loadOpportunityResultsContext(
+  req: Request
+): Promise<OpportunityResultsContext> {
+  const { id } = req.params;
+
+  const opportunityResult = await pool.query(
+    'SELECT id, owner_user_id, firsthand_study_id FROM opportunities WHERE id = $1',
+    [id]
+  );
+
+  if (opportunityResult.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  const row = opportunityResult.rows[0];
+
+  // Owner or superadmin, and refused before anything is read - not after.
+  const isSuperadmin = req.user!.role === 'superadmin';
+  if (!isSuperadmin && row.owner_user_id !== req.user!.id) {
+    logger.warn('Refused a survey results read below the opportunity owner', {
+      opportunityId: id,
+      userId: req.user!.id
+    });
+    throw new ForbiddenError('Only the opportunity owner can view survey responses');
+  }
+
+  if (!row.firsthand_study_id) {
+    throw new NotFoundError('Survey');
+  }
+
+  const stored = await getStudyById(row.firsthand_study_id);
+  if (!stored) {
+    throw new NotFoundError('Survey');
+  }
+
+  // Deliberately NOT gated on delivery_mode or type. Answers already collected
+  // natively survive a switch to external delivery, and they are still this
+  // researcher's data - refusing would hide it from the only person entitled
+  // to it, without unpublishing anything.
+  return {
+    // String(), not req.params.id: `opportunities.id` is uuid so Postgres
+    // matched braces, case and odd hyphens, while `runtime_sessions
+    // .opportunity_id` is TEXT and compares bytes. Filtering on the raw path
+    // segment would silently return no answers for a URL written any other way.
+    canonicalOpportunityId: String(row.id),
+    steps: stored.steps,
+    studyId: row.firsthand_study_id,
+    title: stored.study.title
+  };
+}
+
+// GET /api/opportunities/:id/survey-results - aggregated answers
+router.get('/:id/survey-results', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  if (!(await surveyResultsAreReadable())) {
+    // Not an empty result set: zero respondents is a finding, and one this
+    // route would have no evidence for.
+    return res.status(503).json({ error: 'Survey results are not available' });
+  }
+
+  const context = await loadOpportunityResultsContext(req);
+
+  const responses = await listResponsesForOpportunity({
+    opportunityId: context.canonicalOpportunityId,
+    studyId: context.studyId
+  });
+
+  return res.json({
+    title: context.title,
+    results: aggregateSurveyResults(context.steps, responses)
+  });
+}));
+
+// GET /api/opportunities/:id/survey-results.csv - raw answers for export
+router.get('/:id/survey-results.csv', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  if (!(await surveyResultsAreReadable())) {
+    return res.status(503).json({ error: 'Survey results are not available' });
+  }
+
+  // Everything that can refuse happens here, before the first setHeader below.
+  // Express keeps an already-set Content-Type through an error, so a 403
+  // written after these headers would still have offered the download.
+  const context = await loadOpportunityResultsContext(req);
+
+  const responses = await listResponsesForOpportunity({
+    opportunityId: context.canonicalOpportunityId,
+    studyId: context.studyId
+  });
+
+  // Everything that can throw is done BEFORE the first setHeader, not just
+  // everything that can refuse. Express keeps an already-set Content-Type
+  // through the error handler, so a throw below this line would have served a
+  // JSON error object as a file called "<title> responses.csv".
+  const disposition = toCsvContentDisposition(context.title);
+  const body = toResponsesCsv(context.steps, responses);
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', disposition);
+
+  return res.send(body);
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity

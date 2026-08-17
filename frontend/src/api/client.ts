@@ -292,6 +292,32 @@ export const getOpportunitySessionEvents = async (opportunityId: string): Promis
   return response.data;
 };
 
+/**
+ * The answers this opportunity collected, for its owner.
+ *
+ * Scoped to the opportunity rather than the study on purpose: a study is
+ * reusable by an opportunity its author did not create, so the study-wide
+ * results span participants recruited by other researchers and stay
+ * superadmin-only.
+ */
+export const getOpportunitySurveyResults = async (
+  opportunityId: string
+): Promise<{ title: string; results: import('../components/survey/SurveyResults').SurveyResultsData }> => {
+  const response = await api.get(
+    `/opportunities/${encodeURIComponent(opportunityId)}/survey-results`
+  );
+  return response.data;
+};
+
+/**
+ * The CSV export is a plain link rather than an axios call, so the browser
+ * performs the download with the session cookie attached and honours the
+ * Content-Disposition filename. That means building the absolute URL the same
+ * way the client's baseURL is built, not reusing a relative path.
+ */
+export const opportunitySurveyResultsCsvUrl = (opportunityId: string): string =>
+  `${getApiBaseUrl()}/api/opportunities/${encodeURIComponent(opportunityId)}/survey-results.csv`;
+
 export const getMySessionEvents = async (): Promise<import('./types').MySessionEvent[]> => {
   const response = await api.get('/me/session-events');
   return response.data;

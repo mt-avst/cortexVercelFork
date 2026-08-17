@@ -50,13 +50,33 @@ Identity is SSO (e.g. company Google); no separate Cortex account. Demo logins (
 
 A research “study” or activity. Key attributes:
 
-- **Type:** `test`, `poll`, `survey`, `interview`, `question`, `unmoderated`. `poll`, `survey` and `question` point at an external tool; `unmoderated` does **not** — it is a self-guided study that Cortex records in the browser (see *Unmoderated studies* below). `test` and `interview` are bookable.
+- **Type:** `test`, `poll`, `survey`, `interview`, `question`, `unmoderated`. `question` points at an external tool. `poll` and `survey` do either, per `delivery_mode` (see *Native polls and surveys* below): `external` hands off to SurveyMonkey and friends, `native` runs the questions inside Cortex. `unmoderated` is a self-guided study that Cortex records in the browser (see *Unmoderated studies* below). `test` and `interview` are bookable.
 - **Content:** title, purpose one-liner, optional description, optional product, default duration.
   `default_duration_minutes` is `NOT NULL DEFAULT 30` and is only *asked for* on bookable types.
   A recorded study carries its own **optional** duration on the Task List instead (`firsthand.studies.estimated_duration_minutes`, nullable, no default).
   Null means the researcher did not say, and every surface renders that as nothing - never as 30.
 - **Status:** draft (admin-only), published (visible to all), closed (visible but not bookable).
 - **Sessions:** For bookable types (test, interview), one or more time slots with capacity, location/meeting link; for poll/survey/question, an optional external link and click tracking only. `unmoderated` has neither — no time slots to book and no external link; it carries a **Task List** instead.
+
+### Native polls and surveys
+
+A poll or survey can run **inside Cortex** rather than handing the participant to an external tool. The researcher chooses on the opportunity form under *Where participants answer*; `external` is the default and is a supported choice, not a fallback, for teams that already licence a survey tool.
+
+Native delivery collects the questions on the form itself (a Questions tab replaces the External Link tab) and stores them as a **study**, exactly like an unmoderated task list — but written in a different vocabulary. That is what `firsthand.studies.kind` records:
+
+- `recorded` — a first-hand task list. The participant works through tasks while their screen and voice are captured, so they answer **out loud** and the authorable types are instruction, open text and single choice only
+- `survey` — a native poll or survey. Nothing is recorded and everything is typed, so it also authors multi-choice, rating and NPS
+
+The two are not interchangeable and the API refuses a mismatch: a recorded opportunity cannot link survey questions, and a native survey cannot link a task list. Question types are edited afterwards in the Task Lists area, which speaks both vocabularies.
+
+A participant answers at `/survey/:token`, reached from the study page's call to action. Nothing is recorded — no screen, no microphone, no camera — and the consent text says so. One answer per participant per opportunity: an unfinished survey resumes where they left off, a finished one cannot be answered again.
+
+A researcher reads the answers on their opportunity's analytics page, under a **Responses** tab beside Overview (`/admin/opportunities/:id/analytics`), with a CSV export beside the tallies.
+Both are gated on **opportunity ownership** — the owner or a superadmin — like every other surface that returns participants' own data.
+
+The unit is the opportunity, not the study, and that distinction is the whole point.
+A study is reusable by an opportunity its author did not create, so the study-wide read spans participants that other researchers recruited under their own consent wording; those routes (`GET /api/firsthand/studies/:id/results` and `.../results.csv`) stay **superadmin-only** and are not what a researcher sees.
+Answers recorded before the opportunity was tracked on the session — anything minted before 7.37.0 — have no opportunity to be attributed to, and are left readable only through that superadmin route rather than being guessed at.
 
 ### Unmoderated studies
 

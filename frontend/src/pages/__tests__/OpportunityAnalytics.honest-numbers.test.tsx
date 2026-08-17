@@ -70,10 +70,15 @@ vi.mock('../../contexts/AuthContext', () => ({
 vi.mock('../../contexts/ThemeContext', () => ({ useTheme: () => ({ theme: 'light' }) }));
 vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 
+// Every export the page imports has to be here. A factory that omits one
+// leaves that import `undefined`, and the page then fails for a reason no
+// assertion in this file names.
 vi.mock('../../api/client', () => ({
   getOpportunityAnalytics: vi.fn(),
   getOpportunity: vi.fn(),
   getOpportunitySessionEvents: vi.fn(),
+  getOpportunitySurveyResults: vi.fn(),
+  opportunitySurveyResultsCsvUrl: vi.fn(() => '/api/opportunities/opp-1/survey-results.csv'),
 }));
 
 const renderPage = () =>

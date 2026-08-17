@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { StudyStep } from "../../../shared/firsthand/contract";
-import { toResponsesCsv } from "./survey-csv";
+import { toCsvContentDisposition, toResponsesCsv } from "./survey-csv";
 import type { StoredResponse } from "./survey-results";
 
 const step = (over: Partial<StudyStep> & Pick<StudyStep, "type" | "step_id">) =>
@@ -174,5 +174,73 @@ describe("formula injection", () => {
     );
 
     expect(rows(csv)[1]).toBe("s1,4");
+  });
+});
+
+/**
+ * Node THROWS on a header value it cannot encode as latin1 rather than
+ * mangling it, so this is the difference between an export that works and one
+ * that 500s until somebody guesses the title is at fault.
+ */
+describe("toCsvContentDisposition", () => {
+  // The header is written by res.setHeader, which is where the throw happens.
+  // Reproducing that check here is what makes this a test of the real failure
+  // rather than of a regex.
+  const isLatin1Encodable = (value: string) =>
+    Buffer.from(value, "latin1").toString("latin1") === value;
+
+  it("survives a title Node could not put in a header", () => {
+    // A curly apostrophe, which is what pasting from Word produces.
+    const header = toCsvContentDisposition("Nick’s survey");
+
+    expect(isLatin1Encodable(header)).toBe(true);
+  });
+
+  it("still carries the real title, in the encoded form clients prefer", () => {
+    const header = toCsvContentDisposition("Nick’s survey");
+
+    expect(header).toContain("filename*=UTF-8''");
+    expect(header).toContain(encodeURIComponent("Nick’s survey responses.csv"));
+  });
+
+  it("keeps an ordinary title readable in the plain filename", () => {
+    expect(toCsvContentDisposition("Pulse check")).toContain(
+      'filename="Pulse check responses.csv"'
+    );
+  });
+
+  it("strips a quote that would close the filename early", () => {
+    const header = toCsvContentDisposition('Ple"ase');
+
+    expect(header).toContain('filename="Please responses.csv"');
+  });
+
+  // The cap is applied in code points. `slice` counts UTF-16 code units, so a
+  // title whose 80th unit was the first half of an emoji left a lone surrogate
+  // and encodeURIComponent threw URIError - a 500 on the export, which is the
+  // failure this function exists to remove, reached another way.
+  it("does not break an emoji in half at the length cap", () => {
+    const title = `${"A".repeat(79)}\u{1F600}`;
+
+    expect(() => toCsvContentDisposition(title)).not.toThrow();
+  });
+
+  it("keeps the whole emoji rather than dropping it at the cap", () => {
+    const header = toCsvContentDisposition(`${"A".repeat(79)}\u{1F600}`);
+
+    expect(header).toContain(encodeURIComponent("\u{1F600}"));
+  });
+
+  it("still caps a long title", () => {
+    const header = toCsvContentDisposition("B".repeat(200));
+
+    expect(header).toContain(`filename="${"B".repeat(80)} responses.csv"`);
+  });
+
+  it("falls back to a usable name when nothing printable survives", () => {
+    // Every character non-latin1, so the ASCII fallback empties out.
+    expect(toCsvContentDisposition("你好")).toContain(
+      'filename="survey responses.csv"'
+    );
   });
 });

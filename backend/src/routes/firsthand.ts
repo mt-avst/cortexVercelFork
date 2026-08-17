@@ -19,7 +19,7 @@ import {
 } from '../../../shared/firsthand/study-input';
 import { listResponsesForStudy } from '../firsthand/survey-results-repository';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
-import { toResponsesCsv } from '../firsthand/survey-csv';
+import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
 
 const router: Router = Router();
 
@@ -285,16 +285,16 @@ router.get('/studies/:studyId/results.csv', requireAdmin, asyncHandler(async (re
 
   const responses = await listResponsesForStudy(req.params.studyId);
 
-  // The study title is admin-authored free text, and an unescaped quote or
-  // newline in a Content-Disposition header splits it, so it is stripped
-  // before being interpolated into the quoted filename.
-  const safeTitle =
-    stored.study.title.replace(/["\\\r\n]/g, '').slice(0, 80).trim() || 'survey';
+  // Both the header and the body are built before either header is set. A
+  // throw after setHeader would be served as text/csv, so the browser would
+  // download the error rather than show it.
+  const disposition = toCsvContentDisposition(stored.study.title);
+  const body = toResponsesCsv(stored.steps, responses);
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-  res.setHeader('Content-Disposition', `attachment; filename="${safeTitle} responses.csv"`);
+  res.setHeader('Content-Disposition', disposition);
 
-  return res.send(toResponsesCsv(stored.steps, responses));
+  return res.send(body);
 }));
 
 // The HMAC callback receiver (POST /api/firsthand/callbacks) is gone: the merge
