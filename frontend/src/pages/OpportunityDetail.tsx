@@ -123,6 +123,24 @@ const OpportunityDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [firstHandLoading, setFirstHandLoading] = useState(false);
+
+  /**
+   * Whether pressing the call to action will actually do anything.
+   *
+   * The handoff branch runs only for an unmoderated opportunity with a linked
+   * study; everything else falls through to opening the external link. A native
+   * poll or survey has a study and no link, so it satisfied the old
+   * "has one or the other" test, rendered an ENABLED button, and did nothing at
+   * all on click - not even recording the click, so analytics showed a view and
+   * no action. The backend can now publish that state, and the participant
+   * runner for it arrives with the survey routing, so until then the honest
+   * thing is to say it is not available rather than to offer a dead control.
+   */
+  const hasStartablePath = Boolean(
+    opportunity?.type === 'unmoderated'
+      ? opportunity?.firsthand_study_id
+      : opportunity?.external_link_optional
+  );
   const [recordedStudyBrief, setRecordedStudyBrief] = useState<RecordedStudyBrief | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -1116,8 +1134,7 @@ const OpportunityDetail: React.FC = () => {
                             }
                           }}
                           disabled={
-                            firstHandLoading ||
-                            (!opportunity.firsthand_study_id && !opportunity.external_link_optional)
+                            firstHandLoading || !hasStartablePath
                           }
                           aria-label={
                             opportunity.type === 'poll' ? 'Open poll in new tab' :
@@ -1132,9 +1149,7 @@ const OpportunityDetail: React.FC = () => {
                             opportunity.firsthand_study_id ? 'Start recorded study' : 'Open study in new tab'
                           }
                           title={
-                            !opportunity.firsthand_study_id && !opportunity.external_link_optional
-                              ? 'Not available yet'
-                              : undefined
+                            !hasStartablePath ? 'Not available yet' : undefined
                           }
                         >
                           {firstHandLoading

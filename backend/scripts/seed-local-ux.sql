@@ -322,7 +322,12 @@ INSERT INTO firsthand.study_steps (id, study_id, step_order, type, prompt, targe
   ('study_seed0001-pipeline-triage_step_3', 'study_seed0001-pipeline-triage', 3, 'instruction', 'Work out which step failed and read out the line of the log that told you.', 'https://bitbucket.org/', NULL, false, NULL),
   ('study_seed0001-pipeline-triage_step_4', 'study_seed0001-pipeline-triage', 4, 'instruction', 'Say what you would do next if this were your own repository.', 'https://bitbucket.org/', NULL, false, NULL),
   ('study_seed0001-pipeline-triage_step_end', 'study_seed0001-pipeline-triage', 5, 'end', 'Thanks - that is the end of the study.', NULL, NULL, false, NULL)
-ON CONFLICT (id) DO NOTHING;
+-- (study_id, id), not (id). study_steps.id used to be a global primary key and
+-- migration 0010 scoped it to its study, so an ON CONFLICT naming `id` alone
+-- now matches no constraint and the whole statement errors. Found by running
+-- this file, not by reading it - no application query upserts study_steps, so
+-- nothing else in the repo pointed at it.
+ON CONFLICT (study_id, id) DO NOTHING;
 
 INSERT INTO opportunities
   (id, type, title, purpose_one_liner, description_optional, product_optional,
@@ -339,12 +344,18 @@ VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- --------------------------------------------------- completed session #1
+--
+-- opportunity_id is set on every seeded session deliberately. It is the key the
+-- per-opportunity results gate reads, and a NULL there means "cannot be
+-- attributed", which is refused to everyone but a superadmin. Seeding NULL
+-- would make a local pass show a researcher zero results for their own study
+-- and read as a broken gate rather than as missing seed data.
 INSERT INTO firsthand.runtime_sessions (
   session_id, token, study_id, study_title, participant_id, participant_display_name,
   session_status, transcript_status, microphone_permission, screen_permission,
   recording_status, upload_status, current_step_id, started_at, completed_at,
   transcript, transcript_failure_message, steps, logical_session_id, attempt_number,
-  participant_email, created_via, created_at, updated_at
+  participant_email, created_via, opportunity_id, created_at, updated_at
 ) VALUES (
   'fhs_seed_0001', 'tok_seed_0001', 'study_seed0001-pipeline-triage', 'Triage a failing Bitbucket pipeline',
   'aa000001-0000-4000-8000-000000000002', 'Priya Raman',
@@ -373,9 +384,9 @@ INSERT INTO firsthand.runtime_sessions (
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_4','order',4,'type','instruction','prompt','Say what you would do next if this were your own repository.'),
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_end','order',5,'type','end','prompt','Thanks - that is the end of the study.')
   ),
-  'fhs_seed_0001', 1, 'priya.raman@adaptavist.com', 'manual',
+  'fhs_seed_0001', 1, 'priya.raman@adaptavist.com', 'manual', '0aa00001-0000-4000-8000-00000000000c',
   now() - interval '4 days 2 hours', now() - interval '4 days 1 hour 40 minutes'
-) ON CONFLICT (session_id) DO NOTHING;
+) ON CONFLICT (session_id) DO UPDATE SET opportunity_id = EXCLUDED.opportunity_id;
 
 INSERT INTO firsthand.recording_assets (id, session_id, file_name, mime_type, file_size_bytes, duration_seconds, storage_provider, relative_path, object_url, uploaded_at)
 VALUES ('rec_seed_0001', 'fhs_seed_0001', 'session-fhs_seed_0001.webm', 'video/webm', 48213004, 1043.5, 's3', 'firsthand/recordings/fhs_seed_0001.webm', NULL, now() - interval '4 days 1 hour 41 minutes')
@@ -387,7 +398,7 @@ INSERT INTO firsthand.runtime_sessions (
   session_status, transcript_status, microphone_permission, screen_permission,
   recording_status, upload_status, current_step_id, started_at, completed_at,
   transcript, transcript_failure_message, steps, logical_session_id, attempt_number,
-  participant_email, created_via, created_at, updated_at
+  participant_email, created_via, opportunity_id, created_at, updated_at
 ) VALUES (
   'fhs_seed_0002', 'tok_seed_0002', 'study_seed0001-pipeline-triage', 'Triage a failing Bitbucket pipeline',
   'aa000001-0000-4000-8000-000000000003', 'Tom Okafor',
@@ -403,9 +414,9 @@ INSERT INTO firsthand.runtime_sessions (
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_4','order',4,'type','instruction','prompt','Say what you would do next if this were your own repository.'),
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_end','order',5,'type','end','prompt','Thanks - that is the end of the study.')
   ),
-  'fhs_seed_0002', 1, 'tom.okafor@adaptavist.com', 'manual',
+  'fhs_seed_0002', 1, 'tom.okafor@adaptavist.com', 'manual', '0aa00001-0000-4000-8000-00000000000c',
   now() - interval '2 days 5 hours', now() - interval '2 days 4 hours 30 minutes'
-) ON CONFLICT (session_id) DO NOTHING;
+) ON CONFLICT (session_id) DO UPDATE SET opportunity_id = EXCLUDED.opportunity_id;
 
 INSERT INTO firsthand.recording_assets (id, session_id, file_name, mime_type, file_size_bytes, duration_seconds, storage_provider, relative_path, object_url, uploaded_at)
 VALUES ('rec_seed_0002', 'fhs_seed_0002', 'session-fhs_seed_0002.webm', 'video/webm', 31880122, 726.0, 's3', 'firsthand/recordings/fhs_seed_0002.webm', NULL, now() - interval '2 days 4 hours 35 minutes')
@@ -417,7 +428,7 @@ INSERT INTO firsthand.runtime_sessions (
   session_status, transcript_status, microphone_permission, screen_permission,
   recording_status, upload_status, current_step_id, started_at, completed_at,
   transcript, transcript_failure_message, steps, logical_session_id, attempt_number,
-  participant_email, created_via, created_at, updated_at
+  participant_email, created_via, opportunity_id, created_at, updated_at
 ) VALUES (
   'fhs_seed_0003', 'tok_seed_0003', 'study_seed0001-pipeline-triage', 'Triage a failing Bitbucket pipeline',
   'aa000001-0000-4000-8000-000000000005', 'Marcus Bell',
@@ -432,9 +443,9 @@ INSERT INTO firsthand.runtime_sessions (
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_4','order',4,'type','instruction','prompt','Say what you would do next if this were your own repository.'),
     jsonb_build_object('stepId','study_seed0001-pipeline-triage_step_end','order',5,'type','end','prompt','Thanks - that is the end of the study.')
   ),
-  'fhs_seed_0003', 1, 'marcus.bell@adaptavist.com', 'manual',
+  'fhs_seed_0003', 1, 'marcus.bell@adaptavist.com', 'manual', '0aa00001-0000-4000-8000-00000000000c',
   now() - interval '1 day 3 hours', now() - interval '1 day 2 hours 51 minutes'
-) ON CONFLICT (session_id) DO NOTHING;
+) ON CONFLICT (session_id) DO UPDATE SET opportunity_id = EXCLUDED.opportunity_id;
 
 -- ------------------------------------------- link the sessions to the opportunity
 -- The reviewer reaches a recording through opportunity_session_events, not
