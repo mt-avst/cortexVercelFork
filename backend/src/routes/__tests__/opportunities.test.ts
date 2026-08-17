@@ -80,7 +80,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
   isStudiesPersistenceConfigured: jest.fn(() => true),
 }));
 
-import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED } from '../opportunities';
+import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED, resetParticipantRouteLimits } from '../opportunities';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
@@ -148,6 +148,14 @@ describe('Opportunities API', () => {
     mockQuery.mockResolvedValue({ rows: [] });
     mockIsDatabaseAvailable.mockResolvedValue(true);
     delete process.env.FRONTEND_URL;
+    // The mint and results routes are rate limited per user, and the counters
+    // live in an in-process store that outlives a test. Without this, a suite
+    // that exercises them hundreds of times as one user starts answering 429
+    // partway through and every later assertion fails for a reason none of
+    // them names.
+    for (const userId of ['test-user-id', 'superadmin-id', 'employee-id']) {
+      resetParticipantRouteLimits(userId);
+    }
   });
 
   describe('GET /api/opportunities', () => {
@@ -2934,6 +2942,103 @@ describe('Opportunities API', () => {
       expect(response.headers['content-disposition']).toContain('How was it responses.csv');
       expect(response.text).toContain('How easy was that?');
       expect(response.text).toContain('s1');
+    });
+  });
+
+  // The limiter runs between the auth middleware and the handler, so every
+  // request that gets past auth spends a token whatever the handler then
+  // answers. These fire requests that 404 cheaply, which is enough to count.
+  describe('rate limiting on the participant and results routes', () => {
+    const appAsUser = (id: string, role: string) => {
+      const scoped = express();
+      scoped.use(express.json());
+      scoped.use((req, _res, next) => {
+        (req as unknown as { session: { user: unknown } }).session = {
+          user: { id, name: id, email: `${id}@example.com`, role }
+        };
+        next();
+      });
+      scoped.use('/api/opportunities', opportunitiesRouter);
+      scoped.use(errorHandler);
+      return scoped;
+    };
+
+    const fire = async (target: express.Express, path: string, times: number) => {
+      const codes: number[] = [];
+      for (let i = 0; i < times; i += 1) {
+        codes.push((await request(target).get(path)).status);
+      }
+      return codes;
+    };
+
+    it('refuses a researcher who loops the results read', async () => {
+      const codes = await fire(app, '/api/opportunities/opp-1/survey-results', 61);
+
+      // 60 through, then the ceiling. Not a quota on a person - a backstop on
+      // a loop, because the projection has no LIMIT and runs on the
+      // 5-connection runtime pool that live participant sessions share.
+      expect(codes.slice(0, 60).every((code) => code !== 429)).toBe(true);
+      expect(codes[60]).toBe(429);
+    });
+
+    it('counts the CSV export against the same ceiling as the JSON read', async () => {
+      await fire(app, '/api/opportunities/opp-1/survey-results', 60);
+
+      // Deliberately one bucket: they read the same rows off the same pool, so
+      // separate ceilings would double the exposure the limit exists to cap.
+      const response = await request(app).get('/api/opportunities/opp-1/survey-results.csv');
+
+      expect(response.status).toBe(429);
+    });
+
+    it('refuses a participant who loops the survey mint', async () => {
+      const participant = appAsUser('participant-a', 'employee');
+      const codes: number[] = [];
+      for (let i = 0; i < 21; i += 1) {
+        codes.push((await request(participant).post('/api/opportunities/opp-1/survey-session')).status);
+      }
+
+      // 60 sessions in under a second from one cookie was measured before this
+      // existed. Idempotent minting removed the vote-stuffing value of that;
+      // the ceiling removes the cost.
+      expect(codes.slice(0, 20).every((code) => code !== 429)).toBe(true);
+      expect(codes[20]).toBe(429);
+      resetParticipantRouteLimits('participant-a');
+    });
+
+    it('gives each caller their own bucket, so one cannot refuse another', async () => {
+      // The substance of the design. `trust proxy: 1` resolves req.ip to the
+      // ingress behind two proxy hops, so an IP-keyed limiter would be ONE
+      // bucket shared by every external caller and this flood would 429 an
+      // unrelated researcher. These routes are authenticated, so the key is
+      // the session's user id instead - not spoofable, and not collapsible by
+      // a proxy.
+      const noisy = appAsUser('noisy-researcher', 'researcher_admin');
+      const quiet = appAsUser('quiet-researcher', 'researcher_admin');
+
+      const noisyCodes = await fire(noisy, '/api/opportunities/opp-1/survey-results', 61);
+      expect(noisyCodes[60]).toBe(429);
+
+      const quietResponse = await request(quiet).get('/api/opportunities/opp-1/survey-results');
+      expect(quietResponse.status).not.toBe(429);
+
+      resetParticipantRouteLimits('noisy-researcher');
+      resetParticipantRouteLimits('quiet-researcher');
+    });
+
+    it('spends no budget on requests that never got past auth', async () => {
+      const anonymous = express();
+      anonymous.use(express.json());
+      anonymous.use('/api/opportunities', opportunitiesRouter);
+      anonymous.use(errorHandler);
+
+      const codes = await fire(anonymous, '/api/opportunities/opp-1/survey-results', 70);
+
+      // Every one is a 401, and none reached the limiter - which is why it is
+      // mounted AFTER the auth middleware. Mounted before, an unauthenticated
+      // flood would fill a bucket and lock out the real caller.
+      expect(codes.every((code) => code === 401)).toBe(true);
+      expect((await request(app).get('/api/opportunities/opp-1/survey-results')).status).not.toBe(429);
     });
   });
 
