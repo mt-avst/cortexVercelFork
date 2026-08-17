@@ -92,6 +92,10 @@ export function SurveyRunner({
   const recordConsent = async (accepted: boolean) => {
     setPhase(accepted ? "questions" : "declined");
 
+    // Two separate awaits, each with its own catch, rather than one try around
+    // both. Chained, a transient failure on the consent event would take
+    // session_started with it, and the funnel would lose the start for a
+    // participant who is now answering questions.
     try {
       await transport.recordEvent(payload.session.session_token, {
         eventType: accepted ? "consent_accepted" : "consent_declined"
@@ -100,6 +104,41 @@ export function SurveyRunner({
       // The phase has already moved. Telemetry failing is not a reason to
       // strand someone on the consent screen who has just agreed, nor to keep
       // someone in a survey they have just refused.
+    }
+
+    if (!accepted) return;
+
+    /**
+     * The start of the session, as the researcher's funnel counts it.
+     *
+     * Agreeing is the moment the survey begins - it is when the questions
+     * appear - so it is the moment to say so. Without this the runner emitted
+     * consent and completion and nothing between, and `resolveLifecycleEvent`
+     * only writes an `opportunity_session_events` row for `session_started`,
+     * `session_completed`, `session_abandoned` and `session_failed`. So a
+     * native survey's funnel showed completions with no starts, which reads as
+     * people finishing something they never began.
+     *
+     * `link_opened` is deliberately NOT sent here: the server already emits it
+     * when it seeds the session row (`source: "server_seed"`), and it is a
+     * runtime status rather than an analytics event - resolveLifecycleEvent
+     * returns null for it, so it never reaches the funnel either way.
+     *
+     * Re-firing on a refresh is harmless and not guarded client-side. This
+     * runner keeps no local state, so a refresh returns to the consent gate and
+     * a participant who agrees again sends this again - but the analytics write
+     * is `ON CONFLICT (firsthand_session_id, event_type) DO NOTHING`, backed by
+     * `uq_session_event_dedup`, so the funnel counts one start per session
+     * however many times it arrives.
+     */
+    try {
+      await transport.recordEvent(payload.session.session_token, {
+        eventType: "session_started",
+        metadata: { source: "survey_runner" }
+      });
+    } catch {
+      // Same reasoning: a participant who has agreed must not be held on the
+      // consent screen because an analytics write failed.
     }
   };
 
