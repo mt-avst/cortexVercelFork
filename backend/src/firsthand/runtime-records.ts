@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { stepTypeSchema } from "../../../shared/firsthand/contract";
+import { surveyAnswerSchema } from "../../../shared/firsthand/survey-answers";
 import {
   sessionLifecycleStates,
   transcriptStates
@@ -33,10 +34,14 @@ export const runtimeEventTypes = [
 
 export const runtimeEventTypeSchema = z.enum(runtimeEventTypes);
 
-export const responsePayloadSchema = z.object({
-  text: z.string().optional(),
-  selectedOption: z.string().optional()
-});
+// The shared schema is the single description of an answer's shape - the
+// client type and this record schema both derive from it, so the two cannot
+// drift apart again. (They did: the survey feature taught the client to send
+// `selectedOptions` and `rating` while this schema still knew only the
+// recorded flow's two fields, and zod's default key-stripping turned every
+// multi_choice, rating and nps answer into `{}` on write - accepted with 200,
+// stored empty, unrecoverable.)
+export const responsePayloadSchema = surveyAnswerSchema;
 
 export const runtimeEventRecordSchema = z.object({
   id: z.string().min(1),
@@ -52,7 +57,7 @@ export const participantResponseRecordSchema = z.object({
   sessionId: z.string().min(1),
   stepId: z.string().min(1),
   stepType: stepTypeSchema,
-  responsePayload: responsePayloadSchema,
+  responsePayload: responsePayloadSchema.strict(),
   savedAt: z.string().datetime()
 });
 
@@ -206,7 +211,10 @@ export const runtimeMutationSchema = z.discriminatedUnion("type", [
     type: z.literal("response"),
     stepId: z.string().min(1),
     stepType: stepTypeSchema,
-    responsePayload: responsePayloadSchema,
+    // Strict at the mutation boundary only: an unknown key in a submission is
+    // client/schema drift and must 422, not be silently stripped. Stored
+    // records stay lenient so a historical row with an extra key still loads.
+    responsePayload: responsePayloadSchema.strict(),
     savedAt: z.string().datetime().optional()
   }),
   z.object({

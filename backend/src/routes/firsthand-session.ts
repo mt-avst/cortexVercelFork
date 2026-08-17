@@ -8,6 +8,7 @@ import { bindParticipantSession } from '../middleware/firsthand-session';
 import { asyncHandler } from '../utils/errorHandler';
 import { parseSessionAttemptNumber } from '../firsthand/session-attempts';
 import { runtimeMutationSchema } from '../firsthand/runtime-records';
+import { findAnswerValidityProblem } from '../../../shared/firsthand/survey-answers';
 import {
   applyRuntimeMutation,
   getRuntimeSession,
@@ -126,6 +127,40 @@ router.post(
         error: 'invalid_runtime_mutation',
         issues: parsedMutation.error.flatten()
       });
+    }
+
+    // A response must answer a question this session was actually asked. The
+    // schema above checks shape, not truth: without these checks a participant
+    // can POST an option that was never offered, a score off the scale, or an
+    // answer against a stepId the study does not contain, and it lands in the
+    // researcher's aggregate and CSV as attacker-chosen text. The rules are
+    // the shared module's - the same ones the participant UI enforces - so
+    // anything that passes here is an answer the UI could have produced.
+    if (parsedMutation.data.type === 'response') {
+      const mutation = parsedMutation.data;
+      const step = payload.steps.find(
+        (candidate) => candidate.step_id === mutation.stepId
+      );
+
+      if (!step) {
+        return res.status(422).json({ error: 'unknown_step' });
+      }
+
+      if (step.type !== mutation.stepType) {
+        return res.status(422).json({ error: 'step_type_mismatch' });
+      }
+
+      const validityProblem = findAnswerValidityProblem(
+        step,
+        mutation.responsePayload
+      );
+
+      if (validityProblem) {
+        return res.status(422).json({
+          error: 'invalid_answer',
+          code: validityProblem.code
+        });
+      }
     }
 
     const session = await applyRuntimeMutation(payload, parsedMutation.data, {

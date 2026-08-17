@@ -25,9 +25,14 @@ const QUESTION_TYPES = new Set([
  * readable, and the tab is inside the quoted field so it does not disturb
  * parsing.
  *
- * Applied only to participant-authored text. A rating is an integer we
- * generated within a bounded scale, and prefixing it would stop it being a
- * number in the sheet - which is the entire reason to export it.
+ * Applied to every cell of human-authored text, not only the participant's:
+ * question prompts are free text written by any researcher_admin, and the
+ * person who opens this export is a superadmin - a prompt of
+ * `=HYPERLINK(...)` would make the header row a formula aimed at the
+ * highest-privileged user in the system. The only cells exempted are the ones
+ * we generate ourselves within a known shape: a rating is a bounded integer,
+ * and prefixing it would stop it being a number in the sheet - which is the
+ * entire reason to export it.
  */
 const neutralise = (value: string) =>
   /^[=+\-@]/.test(value) ? `\t${value}` : value;
@@ -35,8 +40,8 @@ const neutralise = (value: string) =>
 const escape = (value: string) =>
   /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 
-const cell = (value: string, participantAuthored: boolean) =>
-  escape(participantAuthored ? neutralise(value) : value);
+const cell = (value: string, humanAuthored: boolean) =>
+  escape(humanAuthored ? neutralise(value) : value);
 
 function answerFor(step: StudyStep, payload: Record<string, unknown>) {
   if (step.type === "rating" || step.type === "nps") {
@@ -77,11 +82,13 @@ export function toResponsesCsv(
   const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
 
   // Every question keeps its column even when nobody answered it: an absent
-  // column reads as a question that was never asked.
+  // column reads as a question that was never asked. Prompts are
+  // researcher-authored free text, so they are neutralised like any other
+  // human-authored cell; the fixed "Participant" label is ours.
   const header = [
-    "Participant",
-    ...questions.map((step) => step.prompt)
-  ].map((value) => cell(value, false));
+    cell("Participant", false),
+    ...questions.map((step) => cell(step.prompt, true))
+  ];
 
   const byParticipant = new Map<string, Map<string, Record<string, unknown>>>();
 

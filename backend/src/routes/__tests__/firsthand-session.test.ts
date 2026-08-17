@@ -251,6 +251,104 @@ describe('B4 POST /:token/runtime', () => {
   });
 });
 
+// Server-side answer validation. Every rule here is unreachable through the
+// UI - these states arrive only by a tampered request - and each would land
+// attacker-chosen content in the researcher's aggregate and CSV export. The
+// rules are shared/firsthand/survey-answers.ts, the same module the
+// participant UI words its messages from, so the two boundaries cannot drift.
+describe('B4 POST /:token/runtime — a response must answer a question the session was asked', () => {
+  function okSurveySession() {
+    mockLoad.mockResolvedValue({
+      kind: 'ok',
+      payload: {
+        ...payloadFor(PARTICIPANT_ID),
+        steps: [
+          { step_id: 's_single', order: 1, type: 'single_choice', prompt: 'Pick one', options: ['Red', 'Blue'] },
+          { step_id: 's_multi', order: 2, type: 'multi_choice', prompt: 'Pick some', options: ['A', 'B', 'C'], config: { max_selections: 2 } },
+          { step_id: 's_nps', order: 3, type: 'nps', prompt: 'Recommend?' }
+        ]
+      }
+    });
+  }
+
+  const submit = (body: Record<string, unknown>) =>
+    request(ownerApp)
+      .post(`/api/firsthand/session/${TOKEN}/runtime`)
+      .send({ type: 'response', ...body });
+
+  beforeEach(() => {
+    okSurveySession();
+    mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'recording_in_progress', logicalSessionId: 'session_1' });
+  });
+
+  it('accepts a valid answer for each native survey type and stores it untouched', async () => {
+    const answers = [
+      { stepId: 's_single', stepType: 'single_choice', responsePayload: { selectedOption: 'Red' } },
+      { stepId: 's_multi', stepType: 'multi_choice', responsePayload: { selectedOptions: ['A', 'C'] } },
+      // Zero is a real NPS score - a detractor, not an absent answer.
+      { stepId: 's_nps', stepType: 'nps', responsePayload: { rating: 0 } }
+    ];
+
+    for (const answer of answers) {
+      const res = await submit(answer);
+      expect(res.status).toBe(200);
+    }
+
+    expect(mockApply).toHaveBeenCalledTimes(3);
+    // The payload must reach the repository exactly as submitted: the defect
+    // this suite guards against was zod stripping the survey fields so every
+    // answer was stored as {}.
+    expect(mockApply.mock.calls[2][1]).toMatchObject({
+      responsePayload: { rating: 0 }
+    });
+  });
+
+  it('rejects a response against a stepId the study does not contain', async () => {
+    const res = await submit({ stepId: 's_forged', stepType: 'single_choice', responsePayload: { selectedOption: 'Red' } });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe('unknown_step');
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stepType that disagrees with the step it names', async () => {
+    const res = await submit({ stepId: 's_nps', stepType: 'open_text', responsePayload: { text: 'free text into a score column' } });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe('step_type_mismatch');
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects an option that was never offered', async () => {
+    const res = await submit({ stepId: 's_single', stepType: 'single_choice', responsePayload: { selectedOption: 'Adaptavist is unsafe to work with' } });
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({ error: 'invalid_answer', code: 'option_not_offered' });
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects a score off the scale', async () => {
+    const res = await submit({ stepId: 's_nps', stepType: 'nps', responsePayload: { rating: 11 } });
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({ error: 'invalid_answer', code: 'score_off_scale' });
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects more selections than the question allows', async () => {
+    const res = await submit({ stepId: 's_multi', stepType: 'multi_choice', responsePayload: { selectedOptions: ['A', 'B', 'C'] } });
+    expect(res.status).toBe(422);
+    expect(res.body).toEqual({ error: 'invalid_answer', code: 'too_many_selections' });
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown answer key as schema drift rather than stripping it', async () => {
+    // Pre-fix, zod silently stripped unknown keys, which is exactly how the
+    // legitimate survey fields were being discarded. Strict parsing turns
+    // drift into a 422 on first submission.
+    const res = await submit({ stepId: 's_nps', stepType: 'nps', responsePayload: { score: 9 } });
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe('invalid_runtime_mutation');
+    expect(mockApply).not.toHaveBeenCalled();
+  });
+});
+
 describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
   it('presigns a server-derived S3 key and returns it', async () => {
     okSession();
