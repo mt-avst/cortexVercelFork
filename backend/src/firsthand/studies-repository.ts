@@ -53,7 +53,8 @@ export type CreateStudyInput = {
   intro_text: string;
   consent_text: string;
   brand_name?: string;
-  estimated_duration_minutes?: number;
+  /** null is meaningful: the researcher did not state a duration. */
+  estimated_duration_minutes?: number | null;
   locale?: string;
   status?: StudyStatus;
   // The authoring user. Optional in the type only so a caller with no user
@@ -133,6 +134,58 @@ export async function getStudyById(studyId: string): Promise<StudyWithSteps | nu
 
   return withRuntimeDatabaseClient(async (client) => {
     return loadStudyWithSteps(client, studyId);
+  });
+}
+
+/**
+ * How many tasks a participant will actually be asked to do, or null when the
+ * study does not exist.
+ *
+ * Deliberately NOT `getStudyById(...).steps.length`. This is the only study
+ * read reachable without a credential (the recorded-study brief on a published
+ * opportunity), and every other consumer of this pool is behind requireAdmin or
+ * a session token. Two consequences follow:
+ *
+ * 1. **Cost.** The runtime pool is `max: 5` and is the same pool serving live
+ *    participant sessions - response writes, upload finalisation. Loading a
+ *    whole study plus every step, on an anonymous route with no rate limit,
+ *    puts a public endpoint in contention with recordings already in progress.
+ * 2. **Exposure.** Holding every prompt and target_url in a local variable of a
+ *    public handler is a latent leak: one careless spread turns the brief into
+ *    a study-prompt dump. The prompts are withheld on purpose - a participant
+ *    who reads the tasks up front rehearses the route - so the safest handler
+ *    is one that never has them.
+ *
+ * The terminal `end` marker is appended automatically and never rendered, so
+ * counting it would promise one more task than the participant is asked to do.
+ */
+export async function countStudyTasks(studyId: string): Promise<number | null> {
+  if (!isPostgresRuntimeConfigured()) {
+    return null;
+  }
+
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query<{ task_count: string }>(
+      `
+        SELECT count(*) FILTER (WHERE type <> 'end') AS task_count
+        FROM study_steps
+        WHERE study_id = $1
+      `,
+      [studyId]
+    );
+
+    // count(*) over no rows is 0, which is indistinguishable from a study that
+    // exists and has no steps. Ask the studies table which of the two it is,
+    // so a missing study 404s rather than reporting "0 tasks".
+    const exists = await client.query<{ one: number }>(
+      `SELECT 1 AS one FROM studies WHERE id = $1`,
+      [studyId]
+    );
+    if (exists.rows.length === 0) {
+      return null;
+    }
+
+    return Number(result.rows[0]?.task_count ?? 0);
   });
 }
 

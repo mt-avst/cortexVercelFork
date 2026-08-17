@@ -57,12 +57,14 @@ The dashboard shows:
 Fill in the required fields:
 
 - **Type**: Select from:
-  - 🧪 **Test**: User testing sessions
-  - 📊 **Poll**: Quick questions/voting
+  - 🧪 **Usability test**: Interactive session with participants
+  - 📊 **Quick poll**: Quick questions/voting
   - 📋 **Survey**: Detailed feedback collection
   - 💬 **Interview**: One-on-one interviews
-  - ❓ **Question**: Single question opportunities
-  - 🖥️ **Unmoderated Testing**: Self-guided study recorded in the participant's browser. See [Unmoderated Studies](#unmoderated-studies)
+  - ❓ **One question**: Single question opportunities
+  - 🖥️ **Recorded study**: Self-guided study recorded in the participant's browser. See [Unmoderated Studies](#unmoderated-studies)
+
+  These are the same names participants see. Cortex uses one name per type everywhere now; the older admin-only labels ("App Testing", "Unmoderated Testing") are gone.
 
 - **Title**: Clear, descriptive title (required)
 - **Purpose (One-liner)**: Brief description shown on list (required)
@@ -157,7 +159,7 @@ Use a **Test** or **Interview** instead when you need to be in the room.
 
 1. Go to Admin Dashboard
 2. Click **"Create New Opportunity"**
-3. On **Basic Information**, set **Research Study Type** to **"🖥️ Unmoderated Testing - Self-guided recorded study"**
+3. On **Basic Information**, set **Research Study Type** to **"🖥️ Recorded study - Self-guided, recorded in the browser"**
 4. Fill in Title and Purpose as usual on **Basic Information** and **Content & Details**
 
 Choosing Unmoderated replaces the External Link tab with a **Task List** tab.

@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getMyBookings, cancelBooking, rescheduleBooking, getMySessionEvents } from '../api/client';
+// rescheduleBooking is deliberately not imported: the control was removed
+// (it shipped permanently disabled) and the endpoint stays live and guarded
+// server-side for a future rebuild.
+import { getMyBookings, cancelBooking, getMySessionEvents } from '../api/client';
 import { BookingWithDetails, MySessionEvent } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { logger } from '../utils/logger';
+import { getParticipantFacingType } from '../utils/opportunityUtils';
+import {
+  formatStudyDate,
+  formatTimeRange,
+  formatTimeZoneLabel,
+  formatDateTime,
+} from '../utils/datetime';
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
@@ -20,7 +30,6 @@ const MyBookings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<{ show: boolean; bookingId: string | null }>({ show: false, bookingId: null });
-  const [rescheduleConfirm, setRescheduleConfirm] = useState<{ show: boolean; bookingId: string | null; targetSessionId: string | null }>({ show: false, bookingId: null, targetSessionId: null });
   const [sessionEvents, setSessionEvents] = useState<MySessionEvent[]>([]);
 
   useEffect(() => {
@@ -108,51 +117,14 @@ const MyBookings: React.FC = () => {
     setCancelConfirm({ show: false, bookingId: null });
   };
 
-  const handleRescheduleBooking = (bookingId: string, targetSessionId: string) => {
-    setRescheduleConfirm({ show: true, bookingId, targetSessionId });
-  };
 
-  const confirmRescheduleBooking = async () => {
-    if (!rescheduleConfirm.bookingId || !rescheduleConfirm.targetSessionId) return;
-    
-    try {
-      setActionLoading(rescheduleConfirm.bookingId);
-      await rescheduleBooking(rescheduleConfirm.bookingId, { target_session_id: rescheduleConfirm.targetSessionId });
-      await loadBookings(); // Reload to update the list
-      setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
-    } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
-      const errorMessage = axiosError?.response?.data?.error || axiosError?.message || 'Failed to reschedule booking';
-      setError(`Failed to reschedule booking: ${errorMessage}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
-  const cancelRescheduleBooking = () => {
-    setRescheduleConfirm({ show: false, bookingId: null, targetSessionId: null });
-  };
 
-  // Date formatting helpers
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  const formatTime = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  // Human-readable date format: "Nov 25, 2:29 PM"
-  const formatHumanDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).format(date);
-  };
+  // Formatting comes from utils/datetime so this page cannot drift into its own
+  // dialect again. It previously carried THREE: toLocaleDateString() for the
+  // session date (DD/MM/YYYY here), a 24-hour toLocaleTimeString for the range,
+  // and an en-US "Jul 25, 12:13 PM" for the cancellation - the last two on the
+  // same card.
 
   // URL detection helper
   const isUrl = (str: string): boolean => {
@@ -207,17 +179,32 @@ const MyBookings: React.FC = () => {
     }
   };
 
-  // Type badge with premium styling
-  const getTypeBadge = (type: string) => {
-    switch (type) {
-      case 'test':
-        return <span className="booking-badge booking-badge-test ms-2">Test</span>;
-      case 'poll':
-        return <span className="booking-badge booking-badge-poll ms-2">Poll</span>;
-      case 'survey':
-        return <span className="booking-badge booking-badge-survey ms-2">Survey</span>;
+  // Participant vocabulary, from the same helper the browse index and the
+  // filter chips use. This said "Test" while the index said "Usability test".
+  const getTypeBadge = (type: string) => (
+    <span className={`booking-badge booking-badge-${type} ms-2`}>
+      {getParticipantFacingType(type)}
+    </span>
+  );
+
+  /**
+   * What became of a past booking.
+   *
+   * The database has carried this all along and the page showed none of it, so
+   * a session you turned up to and one you missed looked identical - and this
+   * is what AdaptaBits points hang off.
+   */
+  const getOutcome = (booking: BookingWithDetails) => {
+    if (booking.status === 'cancelled') return null;
+    switch (booking.completion_status) {
+      case 'approved':
+        return <span className="booking-outcome booking-outcome-approved">Attendance confirmed</span>;
+      case 'completed':
+        return <span className="booking-outcome booking-outcome-completed">Marked complete, awaiting confirmation</span>;
+      case 'rejected':
+        return <span className="booking-outcome booking-outcome-rejected">Not confirmed</span>;
       default:
-        return <span className="booking-badge ms-2">{type}</span>;
+        return <span className="booking-outcome">Awaiting confirmation</span>;
     }
   };
 
@@ -285,7 +272,7 @@ const MyBookings: React.FC = () => {
         )}
 
         {/* Upcoming Bookings Section */}
-        <section className="my-bookings-section">
+        <section className="my-bookings-section" data-testid="upcoming-bookings">
           <h2 className="my-bookings-section-title">Upcoming bookings</h2>
           {bookings.upcoming.length === 0 ? (
             <Card className="booking-card booking-card-empty">
@@ -320,14 +307,20 @@ const MyBookings: React.FC = () => {
                     {/* Metadata Grid */}
                     <dl className="booking-metadata">
                       <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Date</dt>
-                        <dd className="booking-metadata-value">{formatDate(booking.session_start_time)}</dd>
+                        <dt className="booking-metadata-label">When</dt>
+                        <dd className="booking-metadata-value">
+                          {formatStudyDate(booking.session_start_time)}
+                          <br />
+                          {formatTimeRange(booking.session_start_time, booking.session_end_time)}{' '}
+                          <span className="booking-timezone">
+                            {formatTimeZoneLabel(booking.session_start_time)}
+                          </span>
+                        </dd>
                       </div>
-                      <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Time</dt>
-                        <dd className="booking-metadata-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</dd>
-                      </div>
-                      {booking.session_location && (
+                      {/* The meeting link is NOT repeated here. It was rendered
+                          as both this field and the button below, eight pixels
+                          apart. Non-URL locations (a room name) still show. */}
+                      {booking.session_location && !isUrl(booking.session_location) && (
                         <div className="booking-metadata-row">
                           <dt className="booking-metadata-label">Location</dt>
                           <dd className="booking-metadata-value">
@@ -336,14 +329,13 @@ const MyBookings: React.FC = () => {
                         </div>
                       )}
                       <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Owner</dt>
+                        <dt className="booking-metadata-label">Researcher</dt>
                         <dd className="booking-metadata-value">{booking.owner_name}</dd>
                       </div>
                     </dl>
                   </CardBody>
                   <CardFooter className="booking-card-footer">
                     <div className="booking-actions">
-                      {/* Primary action: Join meeting link (if available) */}
                       {booking.session_location && isUrl(booking.session_location) && (
                         <a 
                           href={booking.session_location} 
@@ -355,15 +347,10 @@ const MyBookings: React.FC = () => {
                           <ExternalLink size={14} />
                         </a>
                       )}
-                      {/* Secondary action: Reschedule */}
-                      <button
-                        className="btn-booking-reschedule"
-                        disabled
-                        title="Reschedule functionality coming soon"
-                      >
-                        Reschedule
-                      </button>
-                      {/* Tertiary action: Cancel */}
+                      {/* No Reschedule. It shipped permanently `disabled` with
+                          title="Reschedule functionality coming soon" - a
+                          feature promised on every card and never built. The
+                          path that does work is named instead. */}
                       <button
                         className="btn-booking-cancel"
                         onClick={() => handleCancelBooking(booking.id)}
@@ -372,6 +359,9 @@ const MyBookings: React.FC = () => {
                         {actionLoading === booking.id ? 'Cancelling...' : 'Cancel'}
                       </button>
                     </div>
+                    <p className="booking-reschedule-note">
+                      Need a different time? Cancel this and book another slot.
+                    </p>
                   </CardFooter>
                 </Card>
               ))}
@@ -380,7 +370,7 @@ const MyBookings: React.FC = () => {
         </section>
 
         {/* Past Bookings Section */}
-        <section className="my-bookings-section my-bookings-section-past">
+        <section className="my-bookings-section my-bookings-section-past" data-testid="past-bookings">
           <h2 className="my-bookings-section-title">Past bookings</h2>
           {bookings.past.length === 0 ? (
             <Card className="booking-card booking-card-empty">
@@ -406,29 +396,34 @@ const MyBookings: React.FC = () => {
                     {/* Metadata Grid */}
                     <dl className="booking-metadata">
                       <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Date</dt>
-                        <dd className="booking-metadata-value">{formatDate(booking.session_start_time)}</dd>
+                        <dt className="booking-metadata-label">When</dt>
+                        <dd className="booking-metadata-value">
+                          {formatStudyDate(booking.session_start_time)}
+                          <br />
+                          {formatTimeRange(booking.session_start_time, booking.session_end_time)}{' '}
+                          <span className="booking-timezone">
+                            {formatTimeZoneLabel(booking.session_start_time)}
+                          </span>
+                        </dd>
                       </div>
+                      {/* No meeting link on a past booking. A session that
+                          finished three weeks ago was still offering a live
+                          "Join via Google Meet" as its only affordance -
+                          including the cancelled one. */}
                       <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Time</dt>
-                        <dd className="booking-metadata-value">{formatTime(booking.session_start_time)} - {formatTime(booking.session_end_time)}</dd>
-                      </div>
-                      {booking.session_location && (
-                        <div className="booking-metadata-row">
-                          <dt className="booking-metadata-label">Location</dt>
-                          <dd className="booking-metadata-value">
-                            {renderLocation(booking.session_location)}
-                          </dd>
-                        </div>
-                      )}
-                      <div className="booking-metadata-row">
-                        <dt className="booking-metadata-label">Owner</dt>
+                        <dt className="booking-metadata-label">Researcher</dt>
                         <dd className="booking-metadata-value">{booking.owner_name}</dd>
                       </div>
                       {booking.cancelled_at && (
                         <div className="booking-metadata-row">
                           <dt className="booking-metadata-label">Cancelled</dt>
-                          <dd className="booking-metadata-value">{formatHumanDate(booking.cancelled_at)}</dd>
+                          <dd className="booking-metadata-value">{formatDateTime(booking.cancelled_at)}</dd>
+                        </div>
+                      )}
+                      {getOutcome(booking) && (
+                        <div className="booking-metadata-row">
+                          <dt className="booking-metadata-label">Outcome</dt>
+                          <dd className="booking-metadata-value">{getOutcome(booking)}</dd>
                         </div>
                       )}
                     </dl>
@@ -461,7 +456,7 @@ const MyBookings: React.FC = () => {
                     <dl className="booking-metadata">
                       <div className="booking-metadata-row">
                         <dt className="booking-metadata-label">Date</dt>
-                        <dd className="booking-metadata-value">{formatDate(event.occurred_at)}</dd>
+                        <dd className="booking-metadata-value">{formatDateTime(event.occurred_at)}</dd>
                       </div>
                       <div className="booking-metadata-row">
                         <dt className="booking-metadata-label">Type</dt>
@@ -498,16 +493,7 @@ const MyBookings: React.FC = () => {
           onCancel={cancelCancelBooking}
         />
 
-        <ConfirmationModal
-          show={rescheduleConfirm.show}
-          title="Reschedule Booking"
-          message="Are you sure you want to reschedule this booking? This action will move your booking to the selected time slot, free up your current slot, and cannot be undone."
-          confirmLabel="Yes, Reschedule"
-          cancelLabel="Cancel"
-          variant="warning"
-          onConfirm={confirmRescheduleBooking}
-          onCancel={cancelRescheduleBooking}
-        />
+        
       </div>
     </div>
   );

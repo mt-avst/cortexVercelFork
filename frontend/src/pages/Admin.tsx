@@ -5,7 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv } from '../api/client';
 import { Opportunity } from '../api/types';
-import { formatOpportunityType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { getParticipantFacingType, getTypeBadgeClass } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
@@ -13,6 +13,7 @@ import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { Settings, ClipboardList, CalendarCheck, Users, Clock, CheckCircle, List, History, MessageSquare, Calendar, Download, Clapperboard } from 'lucide-react';
 
+import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
   const { user, loading, initialAuthCheck } = useAuth();
   const { theme } = useTheme();
@@ -324,10 +325,21 @@ const Admin: React.FC = () => {
               </div>
             )}
 
-            {/* Dashboard Statistics Cards */}
+            {/* Dashboard Statistics Cards.
+                These numbers are OWNER-SCOPED for a researcher admin - the
+                backend filters every query on owner_user_id - and global for a
+                superadmin. Same cards, different meaning, and the page used to
+                say neither, so "Research Studies 11" read as the platform
+                total to the person who owned 11 of 15. */}
             {dashboardStats && (
-              <div className="row mb-3 g-2">
-                <div className="col-6 col-sm-3">
+              <>
+              <p className="stat-scope-note">
+                {user?.role === 'superadmin'
+                  ? 'Across every researcher on Cortex'
+                  : 'Your studies only'}
+              </p>
+              <div className="admin-stat-grid mb-3">
+                <div className="stat-card-col">
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
@@ -339,11 +351,13 @@ const Admin: React.FC = () => {
                       <h2 className="mb-0 stat-value">{dashboardStats.total_opportunities}</h2>
                       <small className="stat-subtitle">
                         {dashboardStats.published_opportunities} live · {dashboardStats.draft_opportunities} draft
+                        {dashboardStats.closed_opportunities > 0 &&
+                          ` · ${dashboardStats.closed_opportunities} closed`}
                       </small>
                     </div>
                   </div>
                 </div>
-                <div className="col-6 col-sm-3">
+                <div className="stat-card-col">
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
@@ -359,39 +373,39 @@ const Admin: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="col-6 col-sm-3">
+                <div className="stat-card-col">
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Users</span>
+                        <span className="text-uppercase stat-label">Participants</span>
                         <div className="stat-icon-wrapper">
                           <Users size={20} className="stat-icon" />
                         </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
                       <small className="stat-subtitle">
-                        Unique participants
+                        People who booked
                       </small>
                     </div>
                   </div>
                 </div>
-                <div className="col-6 col-sm-3">
+                <div className="stat-card-col">
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Slots</span>
+                        <span className="text-uppercase stat-label">Slots free</span>
                         <div className="stat-icon-wrapper">
                           <Clock size={20} className="stat-icon" />
                         </div>
                       </div>
                       <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
                       <small className="stat-subtitle">
-                        {dashboardStats.booked_slots}/{dashboardStats.total_slots} booked
+of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                       </small>
                     </div>
                   </div>
                 </div>
-                <div className="col-6 col-sm-3">
+                <div className="stat-card-col">
                   <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
                     <div className="card-body stat-card-body">
                       <div className="stat-card-header">
@@ -408,6 +422,7 @@ const Admin: React.FC = () => {
                   </div>
                 </div>
               </div>
+              </>
             )}
 
             {/* M7: Recent bookings list (with session times) */}
@@ -434,11 +449,15 @@ const Admin: React.FC = () => {
                       <div className="table-responsive">
                         <table className="table table-hover mb-0">
                           <thead>
+                            {/* Named columns. This table shares `.admin-dashboard` with the
+                                Research Studies table, so anything addressed by POSITION
+                                lands on whichever table has a cell there - which is how this
+                                one inherited the other's Type-column geometry. */}
                             <tr>
-                              <th scope="col">Study</th>
-                              <th scope="col">Session</th>
-                              <th scope="col">Participant</th>
-                              <th scope="col">Status</th>
+                              <th scope="col" className="col-recent-study">Study</th>
+                              <th scope="col" className="col-recent-session">Session</th>
+                              <th scope="col" className="col-recent-participant">Participant</th>
+                              <th scope="col" className="col-recent-status">Status</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -448,20 +467,46 @@ const Admin: React.FC = () => {
                               </tr>
                             ) : (dashboardStats.recent_bookings || []).map((b) => (
                               <tr key={b.id}>
-                                <td>
+                                <td className="col-recent-study">
                                   <button
                                     type="button"
-                                    className="btn btn-link p-0 text-start text-decoration-none"
+                                    className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
                                     onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
                                   >
                                     {b.opportunity_title}
                                   </button>
                                 </td>
-                                <td>{b.session_start ? new Date(b.session_start).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' }) : '—'}</td>
-                                <td>
+                                {/* The zone is per ROW, not a column header. A header computed once at page
+                                    load states the offset NOW, while each row is formatted at its own
+                                    instant - so a December session listed in August rendered under a
+                                    GMT+1 header while actually being GMT+0. Recent bookings are ordered
+                                    by created_at, so rows routinely straddle a DST boundary. */}
+                                {/* Two units, not one string. Above 992px this table is
+                                    `table-layout: fixed` with `overflow-x: hidden`, so a cell
+                                    that cannot wrap does not widen its column - it draws over
+                                    the next one, which is how "…23:00 GMT+1" ended up on top of
+                                    the participant's name. The date and its time stay together,
+                                    and the zone is what drops to a second line when the column
+                                    is tight. A time and its zone never split. */}
+                                <td className="admin-recent-session col-recent-session">
+                                  {b.session_start ? (
+                                    <>
+                                      <span className="admin-recent-session-date">
+                                        {formatStudyDate(b.session_start)} ·
+                                      </span>{' '}
+                                      <span className="admin-recent-session-time">
+                                        {formatClockTime(b.session_start)}{' '}
+                                        <span className="admin-recent-session-zone">
+                                          {formatTimeZoneLabel(b.session_start)}
+                                        </span>
+                                      </span>
+                                    </>
+                                  ) : '—'}
+                                </td>
+                                <td className="col-recent-participant">
                                   <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
                                 </td>
-                                <td>
+                                <td className="col-recent-status">
                                   <span className={`badge ${b.status === 'booked' ? 'bg-success' : 'bg-secondary'}`}>
                                     {b.status === 'booked' ? 'Booked' : b.status}
                                   </span>
@@ -571,12 +616,17 @@ const Admin: React.FC = () => {
                         value={typeFilter}
                         onChange={(e) => setTypeFilter(e.target.value)}
                       >
+                        {/* Every type a researcher can create, named the way
+                            every other surface names them. `unmoderated` was
+                            missing outright, so recorded studies - the whole
+                            reason the type exists - could not be filtered for. */}
                         <option value="">All Types</option>
-                        <option value="test">🧪 User Test</option>
+                        <option value="test">🧪 Usability test</option>
                         <option value="interview">💼 Interview</option>
-                        <option value="poll">📊 Poll</option>
+                        <option value="unmoderated">🖥️ Recorded study</option>
+                        <option value="poll">📊 Quick poll</option>
                         <option value="survey">📋 Survey</option>
-                        <option value="question">❓ Question</option>
+                        <option value="question">❓ One question</option>
                       </select>
                     </div>
                   </div>
@@ -638,8 +688,12 @@ const Admin: React.FC = () => {
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
                             <th className="admin-th col-metric col-numeric">Clicks</th>
-                            <th className="admin-th col-metric col-numeric">Capacity</th>
-                            <th className="admin-th col-metric col-numeric">Booked</th>
+                            {/* No Capacity column. It reduced `sessions` over `capacity` and
+                                printed the result one cell to the left of Booked, which renders
+                                that same sum as its own denominator - the same number twice,
+                                side by side. Dropping it also gives Booked the width its ratio
+                                needs: at 9% every "2 / 3" wrapped after the slash. */}
+                            <th className="admin-th col-metric col-booked col-numeric">Booked</th>
                             <th className="admin-th col-date" onClick={() => handleSort('created_at')}>
                               Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
@@ -692,7 +746,7 @@ const Admin: React.FC = () => {
                               </td>
                               <td className="col-type">
                                 <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
-                                  {formatOpportunityType(opportunity.type)}
+                                  {getParticipantFacingType(opportunity.type)}
                                 </span>
                               </td>
                               <td className="col-status">
@@ -710,18 +764,7 @@ const Admin: React.FC = () => {
                                   ''
                                 )}
                               </td>
-                              <td className="col-metric col-numeric">
-                                {(opportunity.type === 'test' || opportunity.type === 'interview') ? (
-                                  opportunity.sessions && opportunity.sessions.length > 0 ? (
-                                    opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0)
-                                  ) : (
-                                    ''
-                                  )
-                                ) : (
-                                  ''
-                                )}
-                              </td>
-                              <td className="col-metric col-numeric">
+                              <td className="col-metric col-booked col-numeric">
                                 {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 ? (
                                   (() => {
                                     const totalSlots = opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0);
@@ -745,7 +788,7 @@ const Admin: React.FC = () => {
                               </td>
                               <td className="col-date">
                                 <small className="admin-cell-metadata">
-                                  {new Date(opportunity.created_at).toLocaleDateString()}
+                                  {formatStudyDate(opportunity.created_at)}
                                 </small>
                               </td>
                               <td className="col-actions">

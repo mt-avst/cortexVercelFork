@@ -51,7 +51,7 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 - The home page shows all available opportunities
 - Each opportunity card shows:
-  - **Type**: App Testing, Unmoderated, Poll, Survey, Interview or Question
+  - **Type**: Usability test, Recorded study, Quick poll, Survey, Interview or One question
   - **Title**: Name of the opportunity
   - **Purpose**: Brief description
   - **Available Sessions**: Number of remaining slots, on the types you book. Unmoderated, polls and surveys show roughly how long they take instead
@@ -60,10 +60,10 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 - Use the **type filter** buttons above the list to filter by:
   - All
-  - App Testing
-  - Unmoderated
+  - Usability test
+  - Recorded study
   - Survey
-  - Poll
+  - Quick poll
   - Interview
   - Question
 
@@ -144,20 +144,15 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 **Note**: You cannot cancel past bookings. If you added this session to your own calendar (e.g. via the confirmation email link), remove it from your calendar after cancelling—the app only removes the event from the researcher's calendar.
 
-### Rescheduling a Booking
+### Changing a Booking to a Different Time
 
-1. Go to **"My Bookings"**
-2. Find the booking you want to reschedule
-3. Click **"Reschedule"**
-4. Select a new available session time
-5. Confirm the reschedule
-6. Your original booking is cancelled and a new one is created
+There is no Reschedule button. Cancel the booking, then book the slot you want
+from the study page.
 
-**Note**: You can only reschedule to sessions for the same opportunity.
-
----
-
-## Polls and Surveys
+Cortex used to show a **Reschedule** control on every upcoming booking, but it
+was permanently disabled - the feature behind it was never built - so it has
+been removed rather than left promising something it could not do. My Bookings
+now tells you the working route in place of the dead button.
 
 ### What Are Polls and Surveys?
 

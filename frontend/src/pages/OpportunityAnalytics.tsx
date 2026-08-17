@@ -3,6 +3,7 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
+import { getActionMeaning } from '../utils/opportunityUtils';
 import { Opportunity, SessionEvent } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -357,6 +358,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const hourlyData = getHourlyData();
   const weekdayData = getWeekdayData();
 
+  // Null means the previous week had nothing, so there is no percentage change
+  // to state. `?? 0` here would have been the same lie in a different place.
+  const weekChange = analytics?.week_over_week_change ?? null;
+
   return (
     <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
       {/* Theme-aware Background: Dark Mode gets neural particles on black */}
@@ -387,6 +392,15 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <p>
             Context: <span className="cortex-highlight-orange">{opportunity.title}</span>
           </p>
+          {/* Say which zone the day boundaries are in. These charts are quoted
+              at other people, so they are cut in ONE organisation zone rather
+              than reshaping themselves for whoever opened them - and a reader
+              in another zone needs to be told that, not left to assume. */}
+          {analytics?.time_zone && (
+            <p className="cortex-stat-subtitle" style={{ marginTop: '-4px' }}>
+              Days and hours are counted in {analytics.time_zone.replace(/_/g, ' ')} time
+            </p>
+          )}
         </div>
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -480,7 +494,12 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <span className="cortex-analytics-card-icon">🎯</span>
               </div>
               <div className="cortex-analytics-card-content">
-                <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>Clicked link / Booked</p>
+                {/* What an action IS depends on the type. This said "Clicked
+                    link / Booked" for every study, including recorded ones,
+                    which have no link and nothing to book. */}
+                <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>
+                  {getActionMeaning(opportunity.type)}
+                </p>
                 <h2 className="cortex-stat-value">
                   {analytics?.actions_total ?? 0}
                 </h2>
@@ -499,17 +518,32 @@ const OpportunityAnalyticsPage: React.FC = () => {
                 <span className="cortex-analytics-card-icon">📈</span>
               </div>
               <div className="cortex-analytics-card-content">
+                {/* Left as "Actions" deliberately. The line under it reads
+                    "N views → N actions", so naming the type's action here
+                    instead made the card disagree with itself. The ACTIONS
+                    TAKEN card is where an action gets its meaning. */}
                 <p className="cortex-stat-subtitle" style={{ marginBottom: '8px' }}>Views → Actions</p>
                 <h2 className="cortex-stat-value cortex-stat-value--accent">
                   {analytics?.conversion_rate ?? 0}%
                 </h2>
                 <div className="cortex-stat-metrics" style={{ flexDirection: 'column', gap: '4px' }}>
                   <span>{analytics?.views_total ?? 0} views → {analytics?.actions_total ?? 0} actions</span>
+                  {/* A study with no previous week has no week-over-week figure.
+                      It used to render "+100%" in green with an arrow, which is
+                      what every study said from its first click, and what two
+                      clicks claimed just as loudly as two thousand would. */}
                   <span>
-                    Week change: 
-                    <strong className={`cortex-stat-trend ${(analytics?.week_over_week_change ?? 0) >= 0 ? 'cortex-stat-trend--positive' : 'cortex-stat-trend--negative'}`} style={{ marginLeft: '4px' }}>
-                      {(analytics?.week_over_week_change ?? 0) >= 0 ? '+' : ''}{analytics?.week_over_week_change ?? 0}%
-                    </strong>
+                    Week change:{' '}
+                    {weekChange === null ? (
+                      <span className="cortex-stat-trend--none">no previous week to compare</span>
+                    ) : (
+                      <strong
+                        className={`cortex-stat-trend ${weekChange >= 0 ? 'cortex-stat-trend--positive' : 'cortex-stat-trend--negative'}`}
+                        style={{ marginLeft: '4px' }}
+                      >
+                        {weekChange >= 0 ? '+' : ''}{weekChange}%
+                      </strong>
+                    )}
                   </span>
                 </div>
               </div>
@@ -541,7 +575,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <StatCard 
               title="Last 7 Days" 
               value={analytics?.clicks_7d ?? 0}
-              subtitle={`${(analytics?.week_over_week_change ?? 0) >= 0 ? '+' : ''}${analytics?.week_over_week_change ?? 0}% vs prev week`}
+              subtitle={weekChange === null ? 'no previous week to compare' : `${weekChange >= 0 ? '+' : ''}${weekChange}% vs prev week`}
               trend={analytics?.week_over_week_change ?? 0}
               icon="📅"
             />
@@ -563,8 +597,12 @@ const OpportunityAnalyticsPage: React.FC = () => {
             {/* Views Chart - Span 2 columns */}
             <div className="cortex-analytics-card span-2">
               <div className="cortex-chart-header">
+                {/* The total follows the SELECTED period. It was pinned to
+                    seven days while the title tracked the selector, so a 30-day
+                    chart carried a 7-day number - and at 7d they agreed by
+                    coincidence, which is exactly when nobody notices. */}
                 <h5 className="cortex-chart-title">Study Views ({selectedPeriod}d)</h5>
-                <span className="cortex-chart-subtitle">Total: {analytics?.views_7d ?? 0} (7d)</span>
+                <span className="cortex-chart-subtitle">Total: {analytics?.period_views_total ?? 0} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
                 {viewsChartData.length > 0 && viewsChartData.some(d => d.value > 0) ? (
@@ -586,7 +624,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
             <div className="cortex-analytics-card span-2">
               <div className="cortex-chart-header">
                 <h5 className="cortex-chart-title">Actions Taken ({selectedPeriod}d)</h5>
-                <span className="cortex-chart-subtitle">Total: {analytics?.actions_7d ?? 0} (7d)</span>
+                <span className="cortex-chart-subtitle">Total: {analytics?.period_actions_total ?? 0} ({selectedPeriod}d)</span>
               </div>
               <div className="cortex-chart-container">
                 {actionsChartData.length > 0 && actionsChartData.some(d => d.value > 0) ? (
@@ -739,14 +777,16 @@ const OpportunityAnalyticsPage: React.FC = () => {
                       : '0'} clicks/user
                   </span>
                 </div>
-                <div className="d-flex justify-content-between align-items-center">
-                  <span className="cortex-stat-subtitle">Week-over-Week:</span>
-                  <span className={`cortex-badge ${(analytics?.week_over_week_change ?? 0) >= 0 ? 'cortex-badge--best' : ''}`}
-                    style={(analytics?.week_over_week_change ?? 0) < 0 ? { background: 'rgba(239, 68, 68, 0.15)', color: '#EF4444' } : undefined}
-                  >
-                    {(analytics?.week_over_week_change ?? 0) >= 0 ? '+' : ''}{analytics?.week_over_week_change ?? 0}%
-                  </span>
-                </div>
+                {weekChange !== null && (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="cortex-stat-subtitle">Week-over-Week:</span>
+                    <span className={`cortex-badge ${weekChange >= 0 ? 'cortex-badge--best' : ''}`}
+                      style={weekChange < 0 ? { background: 'rgba(239, 68, 68, 0.15)', color: '#EF4444' } : undefined}
+                    >
+                      {weekChange >= 0 ? '+' : ''}{weekChange}%
+                    </span>
+                  </div>
+                )}
                 {analytics?.peak_hour && (
                   <div className="d-flex justify-content-between align-items-center">
                     <span className="cortex-stat-subtitle">Peak Hour:</span>

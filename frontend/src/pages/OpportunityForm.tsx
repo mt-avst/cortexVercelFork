@@ -49,6 +49,7 @@ export const clearTypeConditionalErrors = (
     delete next.firsthand_study_id;
     delete next.inline_study_consent_text;
     delete next.inline_study_target_url;
+    delete next.inline_study_duration_minutes;
     Object.keys(next)
       .filter((key) => key.startsWith('inline_study_steps'))
       .forEach((key) => delete next[key]);
@@ -79,6 +80,7 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   external_link_optional: { tab: 3, label: 'External Link' },
   firsthand_study_id: { tab: 3, label: 'Existing task list' },
   inline_study_target_url: { tab: 3, label: 'Starting URL' },
+  inline_study_duration_minutes: { tab: 3, label: 'How long it takes' },
   inline_study_steps: { tab: 3, label: 'Task List' },
   inline_study_consent_text: { tab: 3, label: 'Consent text' }
 };
@@ -191,6 +193,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Unmoderated study authored inline. The backend creates and launches the
     // study from these on save, so a study is not a separate errand.
     inline_study_target_url: '' as string,
+    // Undefined, never 30: an unset duration must stay unset all the way to
+    // the database, where the column is nullable and null means "not stated".
+    inline_study_duration_minutes: undefined as number | undefined,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
     inline_study_steps: [] as InlineStudyStep[],
     reuse_existing_study: false
@@ -248,6 +253,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
         inline_study_target_url: '',
+        inline_study_duration_minutes: undefined,
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [],
         // Only pre-tick reuse when a study is actually linked; otherwise the
@@ -276,6 +282,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
         inline_study_target_url: '',
+        inline_study_duration_minutes: undefined,
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [] as InlineStudyStep[],
         reuse_existing_study: Boolean(opportunity.firsthand_study_id)
@@ -491,6 +498,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // submit that somehow skipped it must not be rejected for a missing
       // scheme we would have added. Normalising is idempotent, so running it
       // again here costs nothing.
+      const duration = formData.inline_study_duration_minutes;
+      if (duration !== undefined) {
+        if (!Number.isFinite(duration) || duration < 1) {
+          errors.inline_study_duration_minutes =
+            'Give a length of at least 1 minute, or leave it empty';
+        } else if (duration > INLINE_STUDY_LIMITS.maxDurationMinutes) {
+          errors.inline_study_duration_minutes =
+            `Keep it under ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes`;
+        }
+      }
+
       const targetUrl = normaliseTargetUrl(formData.inline_study_target_url);
       if (targetUrl && !isSafeTargetUrl(targetUrl)) {
         errors.inline_study_target_url = UNSAFE_TARGET_URL_MESSAGE;
@@ -721,7 +739,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // the contract rejects an empty string.
             ...(targetUrl ? { target_url: targetUrl } : {}),
             consent_text: formData.inline_study_consent_text.trim(),
-            estimated_duration_minutes: formData.default_duration_minutes || undefined,
+            // The study's OWN duration, not the opportunity's. This used to
+            // send `default_duration_minutes`, which unmoderated never shows,
+            // so every recorded study inherited that field's default and told
+            // participants a length nobody had chosen.
+            estimated_duration_minutes: formData.inline_study_duration_minutes || undefined,
             steps: formData.inline_study_steps.map((step) => ({
               type: step.type,
               prompt: step.prompt.trim(),

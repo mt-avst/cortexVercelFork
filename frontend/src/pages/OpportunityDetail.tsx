@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, startRecordedStudySession } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession } from '../api/client';
+import type { RecordedStudyBrief } from '../shared/types';
+import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatDateTime } from '../utils/datetime';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -9,7 +11,8 @@ import CalendarGrid, { CALENDAR_LEGEND_ITEMS } from '../components/CalendarGrid'
 import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import ShareOpportunityLink from '../components/ShareOpportunityLink';
-import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
+import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
+import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -120,6 +123,7 @@ const OpportunityDetail: React.FC = () => {
   const [bookingLoading, setBookingLoading] = useState<string | null>(null);
   const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
   const [firstHandLoading, setFirstHandLoading] = useState(false);
+  const [recordedStudyBrief, setRecordedStudyBrief] = useState<RecordedStudyBrief | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
   const [userCalendarEvents, setUserCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loadingCalendar, setLoadingCalendar] = useState(false);
@@ -228,6 +232,40 @@ const OpportunityDetail: React.FC = () => {
       // Silently fail - tracking shouldn't block user experience
     });
   }, [opportunity?.id]);
+
+  // Load the shape of a recorded study - how many tasks, how long - so the page
+  // can state it rather than relying on the description mentioning it.
+  //
+  // A failure here is deliberately silent and leaves the brief null. The
+  // expectations block still renders its constant promises without it, and the
+  // alternative - an error banner about a panel the participant has never seen
+  // - would be noise on the one page that has to stay calm.
+  useEffect(() => {
+    let isMounted = true;
+    const loadedId = opportunity?.id;
+
+    if (!loadedId || opportunity?.type !== 'unmoderated' || !opportunity?.firsthand_study_id) {
+      setRecordedStudyBrief(null);
+      return;
+    }
+
+    getRecordedStudyBrief(loadedId)
+      .then((brief) => {
+        if (isMounted) setRecordedStudyBrief(brief);
+      })
+      .catch((err) => {
+        // Silent to the PARTICIPANT, not to operators. An error banner about a
+        // panel they have never seen would be noise on the one page that has to
+        // stay calm, but if this endpoint starts failing every recorded-study
+        // landing page quietly drops its task count and nothing reports it.
+        logger.warn('Recorded study brief failed to load', { opportunityId: loadedId, err });
+        if (isMounted) setRecordedStudyBrief(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [opportunity?.id, opportunity?.type, opportunity?.firsthand_study_id]);
 
   // Fetch calendar events when sessions are available
   useEffect(() => {
@@ -528,6 +566,11 @@ const OpportunityDetail: React.FC = () => {
     );
   }
 
+  // Null whenever eligibility does not actually narrow, which is most studies.
+  // Safe to compute here: every early return above has already handled a
+  // missing opportunity.
+  const eligibilityNote = getEligibilityNote(opportunity);
+
   return (
     <div className="container-fluid py-4 opportunity-detail-page mission-control">
       {/* Living Neural Background - Dark Mode Only */}
@@ -638,8 +681,13 @@ const OpportunityDetail: React.FC = () => {
               {/* Left Column: Content (60%) */}
               <div className="mission-brief-content">
                 <div className="d-flex align-items-center gap-2 mb-3">
+                  {/* This page is where the shareable link lands, so for most
+                      participants it is the ONLY page they see - and it used to
+                      print the raw type, which is the one word participant copy
+                      is not allowed to use. The status badge below stays
+                      admin-only and keeps its real value. */}
                   <span className={getTypeBadgeClass(opportunity?.type)}>
-                    {formatOpportunityType(opportunity?.type)}
+                    {getParticipantFacingType(opportunity?.type)}
                   </span>
                   {(user?.role === 'researcher_admin' || user?.role === 'superadmin') && (
                     <span className={getStatusBadgeClass(opportunity.status)}>
@@ -670,7 +718,14 @@ const OpportunityDetail: React.FC = () => {
                   opportunityId={opportunity.id}
                   role={user?.role}
                   startable={Boolean(
-                    opportunity.firsthand_study_id || opportunity.external_link_optional
+                    // Bookable types start by BOOKING A SLOT - they have neither a
+                    // task list nor an external link, so the old test called every
+                    // usability test and interview unstartable and told the
+                    // researcher to "link a task list before sharing" a study with
+                    // four open sessions.
+                    opportunity.type === 'test' || opportunity.type === 'interview'
+                      ? opportunity.sessions && opportunity.sessions.length > 0
+                      : opportunity.firsthand_study_id || opportunity.external_link_optional
                   )}
                   status={opportunity.status}
                 />
@@ -687,30 +742,57 @@ const OpportunityDetail: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Duration - only show for test and interview types */}
+                  {/* Duration. For bookable types it comes from the opportunity,
+                      which asks for it. For a recorded study it comes from the
+                      STUDY, and only when a researcher actually set one - the
+                      authoring form now has the field, and leaving it empty
+                      stores null. It was suppressed entirely for unmoderated
+                      until that field existed, because the opportunity's
+                      default_duration_minutes is NOT NULL DEFAULT 30 and
+                      printing it above a consent CTA stated a figure nobody
+                      chose. */}
                   {(opportunity.type === 'test' || opportunity.type === 'interview') && (
                     <div className="mission-data-item">
                       <span className="mission-data-label">DURATION</span>
                       <span className="mission-data-value">{opportunity.default_duration_minutes} min</span>
                     </div>
                   )}
+                  {opportunity.type === 'unmoderated' &&
+                    recordedStudyBrief?.estimated_duration_minutes != null && (
+                      <div className="mission-data-item">
+                        <span className="mission-data-label">DURATION</span>
+                        <span className="mission-data-value">
+                          {recordedStudyBrief.estimated_duration_minutes} min
+                        </span>
+                      </div>
+                    )}
 
-                  {/* Participants */}
-                  <div className="mission-data-item">
-                    <span className="mission-data-label">PARTICIPANTS</span>
-                    <span className="mission-data-value">
-                      {(() => {
-                        switch (opportunity.participant_type_required) {
-                          case 'any': return 'Any';
-                          case 'internal': return 'Internal only';
-                          case 'external': return 'External only';
-                          case 'specific':
-                            return opportunity.participant_type_specific_details || 'Specific';
-                          default: return 'Any';
-                        }
-                      })()}
-                    </span>
-                  </div>
+                  {/* Task count - recorded studies only, and only once known.
+                      The COUNT, never the prompts: reading the tasks up front
+                      turns the recording into a rehearsed performance. */}
+                  {opportunity.type === 'unmoderated' && recordedStudyBrief && (
+                    <div className="mission-data-item">
+                      <span className="mission-data-label">TASKS</span>
+                      <span className="mission-data-value">
+                        {recordedStudyBrief.task_count}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Participants - only when eligibility actually narrows.
+                      This printed "Any" on every study that had not restricted
+                      itself, including recorded studies, which need a Cortex
+                      account and refuse external participants outright. The
+                      panel already hides PRODUCT, DURATION and TASKS when they
+                      carry nothing; this is the same rule, and the rule lives
+                      in getEligibilityNote so the browse row and this page
+                      cannot answer the same question two different ways. */}
+                  {eligibilityNote && (
+                    <div className="mission-data-item">
+                      <span className="mission-data-label">PARTICIPANTS</span>
+                      <span className="mission-data-value">{eligibilityNote}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -933,25 +1015,13 @@ const OpportunityDetail: React.FC = () => {
                                     const startDate = new Date(session.start_time);
                                     const endDate = new Date(session.end_time);
 
-                                    // Format date (e.g., "Nov 5, 2025")
-                                    const dateStr = startDate.toLocaleDateString('en-US', {
-                                      month: 'short',
-                                      day: 'numeric',
-                                      year: 'numeric'
-                                    });
-
-                                    // Format timeslot (e.g., "9:00 AM to 9:30 AM")
-                                    const startTimeStr = startDate.toLocaleTimeString('en-US', {
-                                      hour: 'numeric',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    });
-                                    const endTimeStr = endDate.toLocaleTimeString('en-US', {
-                                      hour: 'numeric',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    });
-                                    const timeSlotStr = `${startTimeStr} to ${endTimeStr}`;
+                                    // This is the screen the complaint is about: "The session
+                                    // times on the opportunity page do not say which timezone
+                                    // they are in. I booked an hour out." Shipping the zone on
+                                    // My Bookings while the screen where the decision is MADE
+                                    // still had none would have left the reported bug unfixed.
+                                    const dateStr = formatStudyDate(startDate);
+                                    const timeSlotStr = `${formatTimeRange(startDate, endDate)} ${formatTimeZoneLabel(startDate)}`;
 
                                     return (
                                       <tr key={session.id}>
@@ -1004,6 +1074,12 @@ const OpportunityDetail: React.FC = () => {
               {/* External link for polls, surveys, questions, and unmoderated - only show if not test or interview */}
               {opportunity.type !== 'test' && opportunity.type !== 'interview' && (
                 <div className="mb-4">
+                  {/* What the next click actually does, stated before it is
+                      clicked. Gated on a linked study rather than on the brief,
+                      so a failed brief fetch still discloses the recording. */}
+                  {opportunity.type === 'unmoderated' && opportunity.firsthand_study_id && (
+                    <RecordedStudyExpectations brief={recordedStudyBrief} />
+                  )}
                   <div className="row">
                     <div className="col-md-4">
                       {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' ? (
@@ -1046,7 +1122,14 @@ const OpportunityDetail: React.FC = () => {
                           aria-label={
                             opportunity.type === 'poll' ? 'Open poll in new tab' :
                             opportunity.type === 'survey' ? 'Open survey in new tab' :
-                            'Start unmoderated test'
+                            // Participant vocabulary: "recorded study", never
+                            // "test" and never "Task List" - but ONLY where a
+                            // study is actually linked. An unmoderated
+                            // opportunity carrying an external link and no task
+                            // list falls through to window.open and records
+                            // nothing, so calling that "recorded study" is the
+                            // one thing on the page that would be lying.
+                            opportunity.firsthand_study_id ? 'Start recorded study' : 'Open study in new tab'
                           }
                           title={
                             !opportunity.firsthand_study_id && !opportunity.external_link_optional
@@ -1060,7 +1143,9 @@ const OpportunityDetail: React.FC = () => {
                             ? 'Open Poll'
                             : opportunity.type === 'survey'
                             ? 'Open Survey'
-                            : 'Start Test'}
+                            : opportunity.firsthand_study_id
+                            ? 'Start recorded study'
+                            : 'Open Study'}
                         </button>
                       ) : (
                         <a
@@ -1111,16 +1196,9 @@ const OpportunityDetail: React.FC = () => {
       <ConfirmationModal
         show={confirmBooking.show}
         title="Confirm Booking"
-        message={confirmBooking.session ? `Book this session?\n\n${new Date(confirmBooking.session.start_time).toLocaleDateString('en-US', {
-          weekday: 'long',
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric'
-        })} at ${new Date(confirmBooking.session.start_time).toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        })}` : 'Book this session?'}
+        message={confirmBooking.session
+          ? `Book this session?\n\n${formatDateTime(confirmBooking.session.start_time)}`
+          : 'Book this session?'}
         confirmLabel="Confirm"
         cancelLabel="Cancel"
         variant="primary"

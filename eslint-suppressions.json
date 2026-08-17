@@ -239,11 +239,6 @@
       "count": 6
     }
   },
-  "frontend/src/components/SpotlightGrid.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "frontend/src/contexts/AuthContext.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 4
@@ -259,17 +254,9 @@
       "count": 2
     }
   },
-  "frontend/src/pages/Home.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "frontend/src/pages/MyBookings.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 3
+      "count": 2
     }
   },
   "frontend/src/pages/OpportunityDetail.tsx": {

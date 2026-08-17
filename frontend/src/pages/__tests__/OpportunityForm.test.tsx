@@ -187,6 +187,70 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
 
+  // Duration used to be taken from `default_duration_minutes`, the OPPORTUNITY's
+  // field - which unmoderated never shows, so it sat at its default and every
+  // recorded study told participants a length nobody had chosen, above a consent
+  // button. These two pin the payload: it comes from the study's own field, and
+  // an untouched field sends nothing at all.
+  // Typed rather than `as any`: this file's per-file suppression budget for
+  // no-explicit-any is full, and one more would fail the repo lint.
+  type SubmittedPayload = {
+    default_duration_minutes?: number;
+    inline_study?: { estimated_duration_minutes?: number };
+  };
+  const submittedPayload = (): SubmittedPayload =>
+    vi.mocked(createOpportunity).mock.calls[0][0] as unknown as SubmittedPayload;
+
+  const fillMinimalStudy = async () => {
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+  };
+
+  it('sends the duration the researcher typed, not the opportunity default', async () => {
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    fireEvent.change(screen.getByLabelText(/how long it takes/i), {
+      target: { value: '18' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const payload = submittedPayload();
+    expect(payload.inline_study?.estimated_duration_minutes).toBe(18);
+    // 30 is the column default that used to be sent for every recorded study.
+    expect(payload.inline_study?.estimated_duration_minutes).not.toBe(
+      payload.default_duration_minutes
+    );
+  });
+
+  it('sends no duration at all when the field is left empty', async () => {
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    expect(submittedPayload().inline_study?.estimated_duration_minutes).toBeUndefined();
+  });
+
   it('authors every task as a spoken-answer instruction - no response type to pick', async () => {
     renderForm();
     selectType('unmoderated');

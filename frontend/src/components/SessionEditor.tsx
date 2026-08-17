@@ -4,6 +4,7 @@ import { createSessions, updateSession, deleteSession } from '../api/client';
 import { SESSION_CAPACITY } from '../shared/constants';
 import ConfirmationModal from './ConfirmationModal';
 
+import { formatDateTime } from '../utils/datetime';
 interface SessionEditorProps {
   opportunityId: string;
   sessions: Session[];
@@ -44,7 +45,7 @@ const SessionEditor: React.FC<SessionEditorProps> = ({
 
   // Helper function to format date for display
   const formatDateForDisplay = (date: Date | string): string => {
-    return new Date(date).toLocaleString();
+    return formatDateTime(date) ?? '';
   };
 
   // Helper function to check if session is in the past

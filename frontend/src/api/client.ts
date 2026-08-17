@@ -260,6 +260,11 @@ export const duplicateOpportunity = async (id: string): Promise<Opportunity> => 
   return response.data;
 };
 
+export const getRecordedStudyBrief = async (opportunityId: string): Promise<import('../shared/types').RecordedStudyBrief> => {
+  const response = await api.get(`/opportunities/${opportunityId}/recorded-study-brief`);
+  return response.data;
+};
+
 export const startRecordedStudySession = async (opportunityId: string): Promise<{ session_url: string }> => {
   const response = await api.post(`/opportunities/${opportunityId}/recorded-study-session`);
   return response.data;
@@ -502,7 +507,8 @@ export interface OpportunityAnalytics {
   clicks_7d: number;
   unique_users: number;
   avg_clicks_per_day: number;
-  week_over_week_change: number;
+  /** null when the previous week had nothing: there is no percentage change from zero. */
+  week_over_week_change: number | null;
   
   // Views (user clicked to view study details)
   views_total: number;
@@ -535,6 +541,12 @@ export interface OpportunityAnalytics {
   
   // Period info
   period: number;
+  /** Totals for the SELECTED period, so a chart header stops quoting 7 days beside a 30-day chart. */
+  period_clicks_total: number;
+  period_views_total: number;
+  period_actions_total: number;
+  /** The zone days and hours were bucketed in. One organisation zone, not the reader's. */
+  time_zone: string;
 }
 
 export type AnalyticsPeriod = 7 | 14 | 30;

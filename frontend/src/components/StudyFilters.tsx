@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { getParticipantFacingType } from '../utils/opportunityUtils';
+
 /**
  * StudyFilters Component
  * 
@@ -22,16 +24,12 @@ const styleMap: Record<string, string> = {
   'unmoderated': 'unmoderated'
 };
 
-// Display labels for each filter option
-const labelMap: Record<string, string> = {
-  'all': 'All',
-  'test': 'App Testing',
-  'survey': 'Survey',
-  'poll': 'Poll',
-  'interview': 'Interview',
-  'question': 'Question',
-  'unmoderated': 'Unmoderated'
-};
+// Display labels. These are PARTICIPANT-facing, so they come from
+// getParticipantFacingType rather than being spelled out again here - a chip
+// reading "Unmoderated" above rows reading "Recorded study" is the same list
+// describing itself two ways.
+const labelFor = (category: string): string =>
+  category === 'all' ? 'All' : getParticipantFacingType(category);
 
 // Filter categories in display order
 const categories = ['all', 'test', 'unmoderated', 'survey', 'poll', 'interview', 'question'];
@@ -55,7 +53,7 @@ const StudyFilters: React.FC<StudyFiltersProps> = ({ currentFilter, onFilterChan
             onClick={() => onFilterChange(category)}
             aria-pressed={isActive}
           >
-            {labelMap[category] || category}
+            {labelFor(category)}
           </button>
         );
       })}

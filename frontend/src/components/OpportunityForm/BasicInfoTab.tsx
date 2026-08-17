@@ -99,11 +99,18 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               >
                 <option value="" disabled>Please select research study type</option>
                 <option value="interview" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>💼 Interview - Research interview session</option>
-                <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📊 Poll - Quick opinion gathering</option>
-                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ Question - Single question session</option>
+                {/* The gloss after the dash may say anything useful; the NAME
+                    must be the one every other surface uses. This form used to
+                    say "User Test" and "Unmoderated Testing" while the dashboard
+                    badged them "APP TESTING" and "UNMODERATED" and browse called
+                    them "Usability test" and "Recorded study" - three names for
+                    one thing, so a researcher and a participant could not talk
+                    about the same study without translating. */}
+                <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📊 Quick poll - Quick opinion gathering</option>
+                <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ One question - Single question session</option>
                 <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
-                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 User Test - Interactive session with participants</option>
-                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Unmoderated Testing - Self-guided recorded study</option>
+                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 Usability test - Interactive session with participants</option>
+                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Recorded study - Self-guided, recorded in the browser</option>
               </select>
                 {validationErrors.type && (
                 <div id="type-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.type}</div>

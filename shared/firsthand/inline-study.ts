@@ -153,10 +153,25 @@ export type InlineStudy = z.infer<typeof inlineStudySchema>;
  */
 export const END_STEP_PROMPT = "Thanks - that is the end of the study.";
 
+/**
+ * Pre-filled into the required Consent field on every new unmoderated study.
+ * Unless a researcher rewrites boilerplate the product handed them, this IS the
+ * consent a participant accepts before recording starts - so it has to be true
+ * about the thing it is hardest to be true about.
+ *
+ * It used to end "You can stop at any time." There is no stop, withdraw or exit
+ * control anywhere in the recording flow: recording ends when the shared
+ * display track fires `ended` (session-recorder.ts), which only the browser's
+ * own Stop sharing does, and the partial recording is uploaded regardless.
+ * Consent is exactly the wrong place to overstate a participant's control, and
+ * the sentence also contradicted Cortex's own non-authorable "Before you start"
+ * panel further down the same page.
+ */
 export const DEFAULT_CONSENT_TEXT =
   "This session records your screen and microphone while you complete the tasks. " +
   "The recording is used for research analysis and is visible to the research team. " +
-  "You can stop at any time.";
+  "You can end the recording whenever you want by stopping the screen share, and " +
+  "anything recorded up to that point is still sent to the research team.";
 
 /**
  * Expand authored steps into contract-shaped `StudyStep`s.

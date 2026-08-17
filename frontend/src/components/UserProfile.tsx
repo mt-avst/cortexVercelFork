@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { gamificationApi, gamificationUtils, UserProfile } from '../api/gamification';
 import LoadingSpinner from '../components/LoadingSpinner';
-import Sparkline from '../components/Sparkline';
-import { AlertTriangle, Info, UserCircle, Clock, Trophy, Gift, TrendingUp } from 'lucide-react';
+import { AlertTriangle, Info, UserCircle, Clock, Trophy, Gift } from 'lucide-react';
 
 interface UserProfileProps {
   userId?: string;
@@ -74,32 +73,6 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
 
   // Generate sparkline data from profile activity
   // This creates a visual representation of activity distribution
-  const activitySparklineData = useMemo(() => {
-    if (!profile) return [];
-    
-    // Create a simple activity trend based on completed activities
-    // In a real app, this would come from historical data
-    const totalActivity = 
-      profile.sessions_completed + 
-      profile.surveys_completed + 
-      profile.polls_completed + 
-      profile.questions_completed;
-    
-    if (totalActivity === 0) return [];
-    
-    // Generate sample trend data (simulating weekly activity)
-    // In production, this would be actual historical data from the API
-    const baseValue = Math.max(1, Math.floor(totalActivity / 7));
-    return [
-      Math.max(0, baseValue - 2),
-      Math.max(0, baseValue + 1),
-      Math.max(0, baseValue - 1),
-      Math.max(0, baseValue + 3),
-      Math.max(0, baseValue + 2),
-      Math.max(0, baseValue - 1),
-      totalActivity > 0 ? Math.max(1, baseValue + 4) : 0, // Current (higher to show growth)
-    ];
-  }, [profile]);
 
   if (loading) {
     return (
@@ -171,27 +144,19 @@ const UserProfileComponent: React.FC<UserProfileProps> = ({ userId }) => {
           </div>
         </div>
 
-        {/* Activity Sparkline */}
-        <div 
-          className="mt-4 pt-3" 
-          style={{ borderTop: '1px solid rgba(255, 255, 255, 0.05)' }}
-        >
-          <div className="d-flex align-items-center gap-2 mb-2">
-            <TrendingUp size={14} style={{ color: 'var(--color-brand-orange)' }} />
-            <span style={{ 
-              fontSize: 'var(--font-size-xs)', 
-              color: 'var(--text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em'
-            }}>
-              Activity Trend
-            </span>
-          </div>
-          <Sparkline 
-            data={activitySparklineData} 
-            height={40}
-          />
-        </div>
+        {/* The "Activity Trend" sparkline was removed, not restyled.
+            It did not plot anything: activitySparklineData derived seven points
+            from a single scalar, and its own comments said so - "Generate
+            sample trend data (simulating weekly activity)", "In production,
+            this would be actual historical data from the API" - with the last
+            point hardcoded higher "to show growth". So it drew a rising curve
+            for someone whose real activity was flat, or a single session.
+
+            The honest version of that chart is the breakdown directly below,
+            which is real. A manufactured trend beside a real zero is the same
+            defect as the invented duration on the study page: a number nobody
+            generated, presented as fact. Restore a trend when the API actually
+            serves historical points. */}
 
         {/* Activity Stats */}
         <div className="stat-hud-activity">

@@ -15,6 +15,7 @@ type FormFieldValue = string | number | boolean | undefined;
 export type InlineStudyFormFields = {
   firsthand_study_id?: string;
   inline_study_target_url?: string;
+  inline_study_duration_minutes?: number;
   inline_study_consent_text?: string;
   inline_study_steps?: InlineStudyStep[];
   reuse_existing_study?: boolean;
@@ -279,6 +280,52 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                     The page the participant opens and shares before recording starts.
                     Leave it empty for a questionnaire with no page to test - they will
                     get a single start button instead.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Optional, and optional on purpose. Before this field existed the
+                create path fell back to the opportunity's default_duration_minutes
+                - NOT NULL, DEFAULT 30 - so every recorded study told participants
+                "about 30 minutes" above a consent button, chosen by nobody. An
+                empty field now means nobody said, and every surface renders that
+                as nothing. A wrong number is worse than no number here. */}
+            <div className="row">
+              <div className="col-12 col-md-4">
+                <div className="form-group mb-4">
+                  <label
+                    htmlFor="inline_study_duration_minutes"
+                    className="form-label mb-2"
+                    style={{ fontSize: '1rem', fontWeight: '600' }}
+                  >
+                    How long it takes (optional)
+                  </label>
+                  <input
+                    id="inline_study_duration_minutes"
+                    type="number"
+                    min={1}
+                    max={1440}
+                    className={`form-control ${validationErrors.inline_study_duration_minutes ? 'is-invalid' : ''}`}
+                    style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem' }}
+                    value={formData.inline_study_duration_minutes ?? ''}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'inline_study_duration_minutes',
+                        e.target.value === '' ? undefined : Number(e.target.value)
+                      )
+                    }
+                    placeholder="e.g. 20"
+                  />
+                  {validationErrors.inline_study_duration_minutes && (
+                    <div className="invalid-feedback d-block">
+                      {validationErrors.inline_study_duration_minutes}
+                    </div>
+                  )}
+                  <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
+                    Minutes. Shown to participants before they agree to be recorded.
+                    Leave it empty if you are not sure - they will simply not be told
+                    a length, which is better than being told the wrong one.
                   </div>
                 </div>
               </div>

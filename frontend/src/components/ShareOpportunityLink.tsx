@@ -162,8 +162,9 @@ export function ShareOpportunityLink({
 
         {!startable ? (
           <p className="text-danger mb-0 mt-2" style={{ fontSize: '0.875rem' }}>
-            Nothing is linked for participants to start yet, so the start button
-            on this page is disabled. Link a task list before sharing.
+            Participants cannot start this yet, so the button on this page is
+            disabled. Add a session, a task list or a link before sharing,
+            depending on the study type.
           </p>
         ) : null}
 

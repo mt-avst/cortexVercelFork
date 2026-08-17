@@ -165,6 +165,15 @@ export interface Booking {
   user_id: string;
   session_id: string;
   status: 'booked' | 'cancelled';
+  /**
+   * Whether the participant actually took part, and whether a researcher has
+   * confirmed it. Returned by GET /bookings/my/bookings (the query is
+   * `SELECT b.*`) and by the approvals endpoints, but it was missing from this
+   * type, so My Bookings could not show a participant whether the session they
+   * attended had been confirmed - which is what AdaptaBits points hang off.
+   */
+  completion_status?: 'pending' | 'completed' | 'approved' | 'rejected';
+  completed_at?: string;
   gcal_event_id?: string;
   cancelled_at?: string;
   reminder_sent_at?: string; // ISO timestamp when reminder email was sent
@@ -476,6 +485,32 @@ export type FirstHandTranscriptStatus =
   | 'processing'
   | 'complete'
   | 'failed';
+
+/**
+ * What a participant is told about a recorded study before they start it,
+ * served by GET /api/opportunities/:id/recorded-study-brief.
+ *
+ * Counts and constants only. It carries no step prompt and no target_url by
+ * design: a participant who reads the tasks up front rehearses the route, and
+ * the recording captures a performance instead of a first encounter.
+ *
+ * There is deliberately no duration here. Unmoderated studies have no duration
+ * field in the authoring form, so `opportunities.default_duration_minutes`
+ * falls to its column default for every one of them - stating that number to a
+ * participant above a consent button would be inventing a figure no researcher
+ * chose. Add it back when a researcher can actually set it.
+ */
+export interface RecordedStudyBrief {
+  task_count: number;
+  records_screen_and_voice: boolean;
+  requires_chromium: boolean;
+  /**
+   * Minutes, or null when the researcher did not state one. Null is the common
+   * case for studies authored before the field existed, and it must render as
+   * nothing rather than as a number: this figure sits above a consent button.
+   */
+  estimated_duration_minutes: number | null;
+}
 
 export interface FirstHandStepResponse {
   text: string | null;

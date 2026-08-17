@@ -36,9 +36,9 @@ Cortex is described in-product as Adaptavist’s **collective intelligence engin
 | Role | Who | Capabilities |
 |------|-----|--------------|
 | **Visitor** | Anyone (unauthenticated) | Browse all published opportunities; view details; open poll/survey links. Cannot book. |
-| **Employee** | Authenticated staff (e.g. Google SSO) | Everything a visitor can do; book, cancel, reschedule sessions; view “My Bookings”; earn AdaptaBits; request admin access; submit feedback. |
-| **Researcher admin** | Researcher / PM with admin role | Create, edit, delete, duplicate opportunities and sessions; publish/draft/close; view dashboard and per-opportunity analytics; manage notification preferences; optional demo login for testing. |
-| **Superadmin** | Platform owner | All admin capabilities; approve/deny admin and superadmin requests; manage admins; handle feedback (list, delete, export). |
+| **Employee** | Authenticated staff (e.g. Google SSO) | Everything a visitor can do; book and cancel sessions; view “My Bookings”; earn AdaptaBits; request admin access; submit feedback. **There is no reschedule** — the control was removed because it shipped permanently disabled; the route is cancel and re-book. |
+| **Researcher admin** | Researcher / PM with admin role | Create, edit, delete, duplicate opportunities and sessions; publish/draft/close; view dashboard and per-opportunity analytics; **read and export user feedback**; manage notification preferences; optional demo login for testing. |
+| **Superadmin** | Platform owner | All admin capabilities; approve/deny admin and superadmin requests; manage admins; **delete** feedback. |
 
 Identity is SSO (e.g. company Google); no separate Cortex account. Demo logins (User, Admin, Superadmin) exist for development/demo when enabled.
 
@@ -52,6 +52,9 @@ A research “study” or activity. Key attributes:
 
 - **Type:** `test`, `poll`, `survey`, `interview`, `question`, `unmoderated`. `poll`, `survey` and `question` point at an external tool; `unmoderated` does **not** — it is a self-guided study that Cortex records in the browser (see *Unmoderated studies* below). `test` and `interview` are bookable.
 - **Content:** title, purpose one-liner, optional description, optional product, default duration.
+  `default_duration_minutes` is `NOT NULL DEFAULT 30` and is only *asked for* on bookable types.
+  A recorded study carries its own **optional** duration on the Task List instead (`firsthand.studies.estimated_duration_minutes`, nullable, no default).
+  Null means the researcher did not say, and every surface renders that as nothing - never as 30.
 - **Status:** draft (admin-only), published (visible to all), closed (visible but not bookable).
 - **Sessions:** For bookable types (test, interview), one or more time slots with capacity, location/meeting link; for poll/survey/question, an optional external link and click tracking only. `unmoderated` has neither — no time slots to book and no external link; it carries a **Task List** instead.
 
@@ -74,7 +77,7 @@ Time-bound slots for an opportunity: start/end time, capacity, booked count, opt
 
 ### Bookings
 
-A user’s reservation of one session slot. States: booked, cancelled. Booking creates a Google Calendar event on the opportunity owner’s calendar and sends confirmation (and optional reminder) to the participant. User can cancel or reschedule from “My Bookings.”
+A user’s reservation of one session slot. States: booked, cancelled. Booking creates a Google Calendar event on the opportunity owner’s calendar and sends confirmation (and optional reminder) to the participant. User can cancel from “My Bookings”, then book a different slot. Reschedule is **not** implemented: `POST /api/bookings/:id/reschedule` exists and is guarded, but no UI calls it.
 
 ### Polls and surveys
 
@@ -84,16 +87,30 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
 
 ## 5. Main features (by area)
 
+### Dates, times and time zones
+
+**One format across the whole app, from `frontend/src/utils/datetime.ts`. Never call `toLocaleDateString`/`toLocaleTimeString` directly in a component.**
+
+- Dates: `Tue 18 Aug 2026`. The month is always **named** — `08/07` reads as July to half of Adaptavist and August to the rest, and a booking is the one thing nobody can afford to misread.
+- Times: 24-hour, `21:00 – 21:45`.
+- Time zone: always available, as an **offset** (`GMT+1`), never an abbreviation. `timeZoneName: 'short'` hands `BST` to a British reader and `GMT-4` to an American one *from the same call*, so two colleagues would see one slot labelled two ways.
+- Every helper returns `null` for an unusable value, so a bad date renders as nothing rather than as "Invalid Date".
+
+**Exception:** the admin session **calendar** grid is local throughout — geometry and labels — but any grid whose layout encodes a zone must have its labels in that same zone. Changing one without the other puts every caption an hour out of its own row.
+
 ### For everyone
 
-- **Browse:** Single list of published opportunities with filters (type) and search (title/description).
+- **Browse:** A single **index of rows** (not a card grid) of published opportunities, filtered by type. Sorted **closing soonest first**, with unknown deadlines after those and ended studies last. Each row carries a verb for what taking part involves (*Book a time*, *Open poll*, *Start recorded study*), and participant-facing type names — **Recorded study**, not "unmoderated".
+  Those names are now used on **admin surfaces too**: `getParticipantFacingType` is the single place a type becomes words, and the old admin formatter (`formatOpportunityType`, which produced "APP TESTING" / "UNMODERATED") is deleted.
+  One name per type, everywhere.
 - **Opportunity detail:** Full description, sessions with remaining slots, Book button (bookable types) or Open Poll/Survey (external link types).
+  Eligibility is stated **only when it narrows** who can take part (`external`, or `specific` with the researcher's criteria) — `getEligibilityNote`, shared with the browse row. "Any" is never shown: every route to taking part needs a signed-in Cortex account, and a recorded study refuses external participants outright.
 - **Calendar conflict detection:** When logged in, sessions can show a conflict indicator if the user’s calendar is busy (where integrated).
 
 ### For employees
 
-- **Book / cancel / reschedule:** Book a session; cancel or reschedule from “My Bookings” (upcoming and past).
-- **My Bookings:** Tabs for upcoming and past; cancel and reschedule actions.
+- **Book / cancel:** Book a session; cancel from “My Bookings” (upcoming and past). To change time, cancel and re-book.
+- **My Bookings:** Upcoming and past; cancel action; each booking shows its date, time **and time zone**, and past bookings show their outcome (awaiting confirmation / attendance confirmed / not confirmed).
 - **AdaptaBits (gamification):** Points for participation (e.g. completed tests/interviews); levels; achievements; global and monthly leaderboards; points history. Access via “AdaptaBits” in the header.
 - **Submit Research Request:** Link out to service desk (e.g. Atlassian) for formal requests.
 - **Send Feedback:** In-app feedback (category, text, URL, etc.); visible to admins/superadmins.
@@ -106,6 +123,9 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
 - **Sessions:** Add, edit, delete sessions (start/end, capacity, location/meeting link); sessions with existing bookings require care when editing.
 - **Publish workflow:** Save as draft or publish; draft only visible to admins.
 - **Analytics (per opportunity):** For poll/survey/unmoderated (and relevant types): views/actions, time-series, conversion; period 7/14/30 days. Admin/owner only. Unmoderated additionally has per-session review — recording playback and transcript (answers are spoken, so no typed responses are stored).
+  **Days and hours are bucketed in one fixed organisation zone** (`ANALYTICS_TIME_ZONE`, default `Europe/London`), cut in SQL, and the page states which zone it counted in. Analytics gets quoted between people, so a chart that reshaped itself per viewer would be worse than one explicitly in UK time.
+  **Week-over-week is `null` when the previous week was empty**, and the card reads "no previous week to compare". There is no percentage change from zero, and 0% would read as flat — which is a measurement.
+  Chart totals follow the selected period rather than a fixed seven days, and what counts as an "action" is named per type: *Started the study*, *Booked a time*, *Opened the poll*.
 - **Click tracking:** Back-end records view (detail opened) and action (e.g. “Open Poll” / “Book” clicked); optional auth; IP hashed for privacy.
 - **Settings:** Notification preferences (on_book_email, on_cancel_email); optional reminder timing.
 
@@ -113,7 +133,8 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
 
 - **Admin requests:** List and approve/deny requests for researcher_admin or superadmin.
 - **Admins:** List current admins; revoke access.
-- **Feedback:** List and delete (and optionally export) user feedback.
+- **Feedback:** Delete user feedback.
+  NOTE: *reading* and exporting feedback is open to **every admin**, not just superadmins - `Admin.tsx` says so deliberately, twice ("Feedback tab - all admins (researcher_admin and superadmin)"), and the API matches it. This document previously claimed superadmin-only and was wrong; it was nearly the subject of a security sweep on that basis.
 
 ### Platform / UX
 
@@ -170,7 +191,7 @@ When editing copy, UX, or features:
 - **Product name in user-facing text:** Cortex (Collective Intelligence); parent brand Adaptavist.
 - **User types:** Visitor, Employee, Researcher admin, Superadmin.
 - **Opportunity types:** test, poll, survey, interview, question, unmoderated. Three shapes, not two: **bookable** (test, interview), **external link** (poll, survey, question), and **recorded self-guided** (unmoderated). Do not describe unmoderated as external-link.
-- **Flows:** Browse → Detail → Book (or Open Poll/Survey); My Bookings for cancel/reschedule; Admin for create/publish/analytics; superadmin for admin requests and feedback.
+- **Flows:** Browse → Detail → Book (or Open Poll/Survey); My Bookings for cancel; Admin for create/publish/analytics; superadmin for admin requests and feedback.
 - **Rewards:** AdaptaBits (points, levels, leaderboards, achievements).
 - **Support:** In-app “Send Feedback”; service desk link; contact (e.g. cortex@adaptavist.com, nfine@adaptavist.com for support).
 
