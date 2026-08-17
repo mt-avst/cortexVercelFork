@@ -247,6 +247,64 @@ catch that class; the guard has to be on the test itself, and there is now one
 checking that no connection string in that file shares a host with any compose
 database.
 
+## The participant launch rework (2026-08-16)
+
+The floating pane became the participant's whole control surface, the Cortex page became a status board behind it, and typed answers were removed from authoring and runtime alike.
+Shipped on `feat/participant-welcome-expectations`.
+
+### Browser platform rules, each verified live after a wrong assumption
+
+- **One click carries ONE transient activation, and both `window.open` and `documentPictureInPicture.requestWindow` consume it.**
+  Opening the pane and the task-page popup from a single click is therefore impossible in either order: pane first and the popup is blocked, popup first and the pane is refused.
+  Both orders were tested in real Chrome after each was assumed to work.
+  The pane is now opened by its own control, so every window has its own click.
+- **A click INSIDE the Document PiP pane does carry activation for the OPENER's `window.open` and `getDisplayMedia`.**
+  A code review argued from first principles that it could not, because the pane is an auxiliary top-level traversable rather than a same-origin descendant.
+  That was wrong, and a stale comment of ours saying the popup "may be refused" is what led the reviewer there.
+  Treat a review finding as a hypothesis: this is the second one on this project refuted by a ten-minute experiment.
+- **`window.open` with the NAME of a window that already exists returns that window and silently ignores the requested position and size.**
+  A task window surviving from an earlier session was being re-adopted, so a window-placement fix appeared to do nothing at all and looked like a stale build.
+  The name is now unique per page load, and the window closes on unmount and on `pagehide`, so a survivor can never be adopted.
+
+### CSS and component boundaries
+
+- **A page-level element selector reaches into every small component that renders that element.**
+  `.fh-recording h1 { max-width: 12ch }` styles the page's display headings, and the floating pane's task prompt is an `h1`, so the single most important sentence in the product was rendering at about a third of a 380px panel.
+  The component's own rule set the font size and never the width, so nothing looked wrong in the file.
+  When a component renders a bare `h1`, `h2` or `p`, check what the page already says about that element.
+- **Do not claim a surface is non-authorable while rendering authored content inside it.**
+  The pane's trust strip is an anti-phishing control, and its own comment said nothing in it could be authored - while it rendered the researcher-authored study title.
+  The strip now carries only the wordmark and recorder state; the title sits below it, below every recorder alert, and clamped, so no title length can push a warning out of view.
+- **Reserve the danger colour for danger.**
+  The recording indicator had two states doing the work of three, so "nothing has started yet" rendered in the same red as "your recording stopped mid-session".
+  After minutes of red on the resting state the colour stops meaning anything.
+  Three states now: idle muted, live accent plus dot, stopped danger.
+
+### Testing
+
+- **A surviving mutation is nearly always a vacuous assertion rather than redundant code.**
+  Four survived in this work and every one was a bad test.
+  The shapes are worth recognising: `getByText` matches hidden elements, so assert `toBeVisible` when visibility is the point; an assertion that queries copy the same change deleted passes whether or not the code still runs; gating logic is unguarded when the test harness always satisfies the gate; a prop is untested when no fixture ever varies it.
+- **A mutation that fails to compile proves nothing and reads exactly like a kill.**
+  Watch for "no tests" in the vitest output rather than a failure count.
+- **A mutation script whose pattern does not match prints a clean pass, which reads exactly like a survivor.**
+  Print the mutated lines or count the marker before believing either result.
+- **When a feature is removed, its tests fail because their premise is gone, not because their subject is wrong.**
+  Rewrite them to the guarantee that survives instead of deleting them: an auto-open suite became a launch-ordering suite, and "shared response state" became "shared task position" once there were no responses to share.
+- **Removing an input means removing the validation that guarded it.**
+  A required-answer gate left in place after the answer field was removed would have wedged a participant on the task, being recorded, with nothing on screen able to satisfy it.
+
+### Verifying a local change
+
+- **`vite preview` serves `dist/`, and neither vitest nor a commit rebuilds it.**
+  Two changes were reported as not working when the browser was simply showing the previous build.
+  Always `npm run build` after committing, then confirm a new marker string in the served chunk.
+- **Minifiers rewrite literals, so grep for marker copy rather than numbers.**
+  `0.65` is served as `.65` and named constants disappear entirely.
+- **The recording styles are code-split into their own `RecordingSession-*.css` chunk.**
+  Grepping `index-*.css` for them returns zero for every marker, which is indistinguishable from a failed build.
+  A sanity marker that must be present caught it.
+
 ## Links
 
 - Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net

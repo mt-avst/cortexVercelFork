@@ -6,19 +6,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
 import type { SessionPayload } from "../../../shared/firsthand/contract";
 
-// The floating task pane must be opened from the start handler, inside the
-// user activation that the "Start recording" click created. Document PiP
-// refuses to open without one, and no later moment - an effect after the phase
-// flip, or the runner mounting - still carries it. These tests pin that.
+// The launch handler's ordering rules. The panel is no longer opened from
+// here at all - it is the participant's to ask for on the setup step's own
+// control - but two constraints in this handler are load-bearing and easy to
+// break, so they keep their coverage:
+//
+// 1. the task window must exist BEFORE getDisplayMedia, or it cannot appear
+//    in the browser's share picker, which is the whole reason the launch is
+//    two steps rather than one;
+// 2. nothing may be awaited between capture going live and the phase flip -
+//    that paints an enabled "Start recording" button over a running
+//    recording, and startCapture has no re-entrancy guard.
 
 const startCapture = vi.fn();
 const openTaskPip = vi.fn();
 const openTaskWindow = vi.fn().mockReturnValue(true);
 
+// Unsupported, so the page keeps the whole launch sequence and these tests
+// drive the handler directly. Whether the panel opens is another suite's
+// subject (ParticipantSessionFlow.open-pane.test.tsx).
 vi.mock("../../../lib/recording/task-pip", () => ({
+  isTaskPipSupported: () => false,
   useTaskPip: () => ({
     pipWindow: null,
-    isSupported: true,
+    isSupported: false,
     openTaskPip,
     closeTaskPip: vi.fn()
   })
@@ -158,7 +169,7 @@ async function walkToLaunch(token: string, withTarget = true) {
   return screen.findByRole("button", { name: startLabel });
 }
 
-describe("ParticipantSessionFlow floating pane auto-open", () => {
+describe("ParticipantSessionFlow launch ordering", () => {
   beforeEach(() => {
     window.localStorage.clear();
     startCapture.mockReset().mockResolvedValue(true);
@@ -167,16 +178,16 @@ describe("ParticipantSessionFlow floating pane auto-open", () => {
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it("opens the pane for the participant once recording starts", async () => {
-    const start = await walkToLaunch("token_auto_open");
+  it("springs no window of its own when recording starts", async () => {
+    const start = await walkToLaunch("token_no_spring");
 
     fireEvent.click(start);
 
     await waitFor(() => {
-      expect(openTaskPip).toHaveBeenCalledTimes(1);
+      expect(startCapture).toHaveBeenCalledTimes(1);
     });
-    // Nothing was pressed to ask for it: capture start is the only trigger.
-    expect(startCapture).toHaveBeenCalledTimes(1);
+    // The panel is asked for, never sprung - including from here.
+    expect(openTaskPip).not.toHaveBeenCalled();
   });
 
   it("never gates the phase flip on the pane, even if the window never appears", async () => {
@@ -195,44 +206,39 @@ describe("ParticipantSessionFlow floating pane auto-open", () => {
     fireEvent.click(start);
 
     await screen.findByTestId("study-runner");
-    expect(openTaskPip).toHaveBeenCalledTimes(1);
     // And the button that could restart capture is gone with the setup card.
     expect(screen.queryByRole("button", { name: "Start recording" })).toBeNull();
   });
 
-  it("opens the pane only after capture is live, and only after the task window exists", async () => {
+  it("opens the task window before capture, so it reaches the share picker", async () => {
     const start = await walkToLaunch("token_ordering");
 
     fireEvent.click(start);
 
     await waitFor(() => {
-      expect(openTaskPip).toHaveBeenCalled();
+      expect(startCapture).toHaveBeenCalled();
     });
 
-    // The task window must be opened BEFORE getDisplayMedia or it cannot
-    // appear in the browser's share picker - the rule the whole two-step
-    // launch exists to satisfy, and which nothing else asserts.
+    // The task window must exist BEFORE getDisplayMedia or it cannot appear
+    // in the browser's share picker - the rule the whole two-step launch
+    // exists to satisfy, and which nothing else asserts.
     expect(openTaskWindow.mock.invocationCallOrder[0]).toBeLessThan(
       startCapture.mock.invocationCallOrder[0]
     );
-    // The pane comes last: its activation is spent by the capture prompts.
-    expect(startCapture.mock.invocationCallOrder[0]).toBeLessThan(
-      openTaskPip.mock.invocationCallOrder[0]
-    );
   });
 
-  it("does not open a pane for a study with no task page", async () => {
+  it("runs a questionnaire with no task page at all", async () => {
     const start = await walkToLaunch("token_no_target", false);
 
     fireEvent.click(start);
 
+    // No target means no window to open and nothing to share beside the
+    // tasks themselves - the launch collapses to one action.
     await screen.findByTestId("study-runner");
-    // A questionnaire has nothing to float over: the tasks are already the
-    // only thing on screen.
-    expect(openTaskPip).not.toHaveBeenCalled();
+    expect(openTaskWindow).not.toHaveBeenCalled();
   });
 
-  it("does not open a pane when capture never starts", async () => {
+  it("does not enter the task phase when capture never starts", async () => {
     startCapture.mockResolvedValue(false);
 
     const start = await walkToLaunch("token_capture_failed");
@@ -242,7 +248,8 @@ describe("ParticipantSessionFlow floating pane auto-open", () => {
     await waitFor(() => {
       expect(startCapture).toHaveBeenCalled();
     });
-    expect(openTaskPip).not.toHaveBeenCalled();
+    // A refused microphone or a cancelled picker must leave the participant
+    // on setup, not in a task phase with nothing recording.
     expect(screen.queryByTestId("study-runner")).toBeNull();
   });
 

@@ -13,6 +13,7 @@ import {
 } from "../../lib/recording/runtime-client";
 import type { RuntimeEventType } from "../../lib/recording/runtime-events";
 import { Modal } from "./Modal";
+import { PipTrustHeader } from "./PipTrustHeader";
 
 type StudyRunnerProps = {
   attemptNumber: number;
@@ -101,7 +102,6 @@ export function StudyRunner({
   // They shared one channel and one hardcoded "We hit a save issue." heading,
   // so leaving a required question blank accused the system of breaking.
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [isReturnModalDismissed, setIsReturnModalDismissed] = useState(false);
   const hasAutoCompletedRef = useRef(false);
   const runnerShellRef = useRef<HTMLDivElement | null>(null);
@@ -120,8 +120,6 @@ export function StudyRunner({
     (response) => Boolean(response.text?.trim()) || Boolean(response.selectedOption)
   ).length;
   const currentTargetUrl = currentStep?.target_url ?? null;
-  const isAnswerable =
-    currentStep?.type === "open_text" || currentStep?.type === "single_choice";
   const shouldShowReturnModal =
     captureStoppedExternally &&
     recordingStatus === "stopped" &&
@@ -239,26 +237,6 @@ export function StudyRunner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [completedAt, isHydrated, startedAt, taskSteps.length]);
 
-  function handleTextChange(step: StudyStep, text: string) {
-    setValidationError(null);
-    setResponses((currentResponses) => ({
-      ...currentResponses,
-      [step.step_id]: {
-        text
-      }
-    }));
-  }
-
-  function handleChooseOption(step: StudyStep, option: string) {
-    setValidationError(null);
-    setResponses((currentResponses) => ({
-      ...currentResponses,
-      [step.step_id]: {
-        selectedOption: option
-      }
-    }));
-  }
-
   if (!isHydrated) {
     return (
       <div className="runner-shell">
@@ -303,16 +281,11 @@ export function StudyRunner({
       return;
     }
 
-    const validationMessage = validateStepResponse(currentStep, responses[currentStep.step_id]);
-
-    if (validationMessage) {
-      setValidationError(validationMessage);
-      return;
-    }
-
+    // No answer is ever collected here, so there is nothing to validate.
+    // Leaving the old required-field gate in place would have wedged a
+    // participant on a legacy required step with no input to satisfy it.
     const isLastTask = safeTaskIndex >= taskSteps.length - 1;
 
-    setValidationError(null);
     setSubmissionError(null);
     setIsSubmitting(true);
 
@@ -405,6 +378,27 @@ export function StudyRunner({
         </div>
       </div>
 
+      {/*
+        While the pane is live it IS the control surface: the participant is
+        working over the task window and never looks back at this page, so a
+        second copy of the task here is dead weight that can also drift out of
+        sync with the one they are using.
+
+        DEFERRED, never deleted. `pipWindow` is null on Firefox and Safari
+        (no Document PiP), when the pane is refused, and the instant the
+        participant closes the pane from its own title bar - and in each case
+        everything below is the ONLY copy of the task. The recording callout
+        above stays either way: it is a security signal, not a control.
+      */}
+      {pipWindow ? (
+        <div className="runner-header runner-header--lean">
+          <p className="status-copy">
+            Your task is in the floating panel, on top of the task window.
+            Carry on there - this page will take over if you close it.
+          </p>
+        </div>
+      ) : (
+      <>
       <div className="runner-header runner-header--lean">
         {taskSteps.length > 1 ? (
           <p className="status-copy">
@@ -426,44 +420,20 @@ export function StudyRunner({
       ) : null}
 
       <article className="runner-card runner-card--instruction">
+        {/* Answers are spoken, so every step reads as an instruction now -
+            including a legacy open_text or single_choice one. */}
         {currentStep.helper_text ? (
           <p className="runner-instruction-hint">{currentStep.helper_text}</p>
-        ) : currentStep.type === "instruction" ? (
-          <p className="runner-instruction-hint">
-            Do the task in the task window, then confirm below.
-          </p>
         ) : (
           <p className="runner-instruction-hint">
-            Type your answer below. It is saved with this step.
+            Do the task in the task window, say what you are thinking as you
+            go, then confirm below.
           </p>
         )}
 
-        {/* Independent of the helper-text branch above: authored steps
-            usually carry helper_text, which would otherwise hide this. */}
-        {isAnswerable && currentStep.is_required === false ? (
-          <p className="runner-optional-hint">This one is optional.</p>
-        ) : null}
-
-        {currentStep.type === "instruction" ? (
-          <div className="alert-banner alert-neutral alert-banner--inline">
-            <strong>Use the button below once you have finished the task</strong>
-          </div>
-        ) : null}
-
-        <TaskResponseFields
-          onChooseOption={(option) => handleChooseOption(currentStep, option)}
-          onTextChange={(text) => handleTextChange(currentStep, text)}
-          response={responses[currentStep.step_id]}
-          step={currentStep}
-        />
-
-        {validationError ? (
-          // Beside the input the participant needs to act on, not in the
-          // system-fault banner at the foot of the page.
-          <p className="response-validation" role="alert">
-            {validationError}
-          </p>
-        ) : null}
+        <div className="alert-banner alert-neutral alert-banner--inline">
+          <strong>Use the button below once you have finished the task</strong>
+        </div>
       </article>
 
       {submissionError ? (
@@ -485,6 +455,8 @@ export function StudyRunner({
           {isSubmitting ? "Saving..." : "I’ve completed this task"}
         </button>
       </div>
+      </>
+      )}
 
       {pipWindow
         ? createPortal(
@@ -493,16 +465,15 @@ export function StudyRunner({
               count={taskSteps.length}
               index={safeTaskIndex}
               isSubmitting={isSubmitting}
-              onChooseOption={(option) => handleChooseOption(currentStep, option)}
               onComplete={() => {
                 void handleCompleteTask();
               }}
-              onTextChange={(text) => handleTextChange(currentStep, text)}
+              onOpenTaskWindow={onOpenTaskWindow}
               recordingActive={recordingStatus === "active"}
-              response={responses[currentStep.step_id]}
+              submissionError={submissionError}
+              targetUrl={currentTargetUrl}
               step={currentStep}
               studyTitle={payload.study.title}
-              validationError={validationError}
             />,
             pipWindow.document.body
           )
@@ -541,25 +512,6 @@ export function StudyRunner({
       ) : null}
     </div>
   );
-}
-
-function validateStepResponse(
-  step: StudyStep,
-  response: StoredResponseMap[string] | undefined
-) {
-  if (!step.is_required) {
-    return null;
-  }
-
-  if (step.type === "open_text" && !response?.text?.trim()) {
-    return "Please enter a response before continuing.";
-  }
-
-  if (step.type === "single_choice" && !response?.selectedOption) {
-    return "Please choose one option before continuing.";
-  }
-
-  return null;
 }
 
 function getRecordingCalloutTitle(recordingStatus: StudyRunnerProps["recordingStatus"]) {
@@ -767,63 +719,6 @@ function TaskWindowPanel({
 }
 
 /**
- * The response inputs, shared by the in-page task card and the floating PiP
- * pane so there is exactly one implementation of each input type. Both render
- * the same controlled state; whichever surface the participant types into,
- * the other reflects it.
- */
-function TaskResponseFields({
-  onChooseOption,
-  onTextChange,
-  response,
-  step
-}: {
-  onChooseOption: (option: string) => void;
-  onTextChange: (text: string) => void;
-  response: { text?: string; selectedOption?: string } | undefined;
-  step: StudyStep;
-}) {
-  return (
-    <>
-      {step.type === "open_text" ? (
-        <textarea
-          className="response-input"
-          onChange={(event) => {
-            onTextChange(event.target.value);
-          }}
-          placeholder="Type your response here"
-          rows={7}
-          value={response?.text ?? ""}
-        />
-      ) : null}
-
-      {step.type === "single_choice" ? (
-        <div className="choice-list">
-          {step.options?.map((option) => {
-            const checked = response?.selectedOption === option;
-
-            return (
-              <label className={`choice-item ${checked ? "is-selected" : ""}`} key={option}>
-                <input
-                  checked={checked}
-                  name={step.step_id}
-                  onChange={() => {
-                    onChooseOption(option);
-                  }}
-                  type="radio"
-                  value={option}
-                />
-                <span>{option}</span>
-              </label>
-            );
-          })}
-        </div>
-      ) : null}
-    </>
-  );
-}
-
-/**
  * The whole current task, rendered into the floating Document PiP window so
  * the participant can read the prompt and answer without leaving the page
  * under test. Same state and same completion handler as the in-page card -
@@ -834,64 +729,38 @@ function PipTaskCard({
   count,
   index,
   isSubmitting,
-  onChooseOption,
   onComplete,
-  onTextChange,
+  onOpenTaskWindow,
+  submissionError,
+  targetUrl,
   recordingActive,
-  response,
   step,
   studyTitle,
-  validationError
 }: {
   completedAt: string | null;
   count: number;
   index: number;
   isSubmitting: boolean;
-  onChooseOption: (option: string) => void;
   onComplete: () => void;
-  onTextChange: (text: string) => void;
+  onOpenTaskWindow: (url: string) => boolean;
   recordingActive: boolean;
-  response: { text?: string; selectedOption?: string } | undefined;
+  submissionError: string | null;
+  targetUrl: string | null;
   step: StudyStep;
   studyTitle: string;
-  validationError: string | null;
 }) {
-  const isAnswerable = step.type === "open_text" || step.type === "single_choice";
-
   return (
     <section aria-label="Floating task panel" className="pip-card">
-      {/*
-        A NON-AUTHORABLE header, and it is a security control rather than
-        decoration. This window has no browser chrome, no nav and no study
-        context, and the prompt below is researcher-authored text rendered as
-        its only heading - so without this, a one-step study is a bare window
-        containing an attacker's sentence, a text input and a button, floating
-        above every application and attributed by the OS to Cortex. That is a
-        credible surface for "re-enter your SSO password to continue", whose
-        answer would be stored as a study response and typed into the recording.
-        Everything in this strip comes from Cortex or from recorder state; none
-        of it can be authored.
-      */}
-      <header className="pip-trust">
-        <span className="pip-trust-brand">Cortex</span>
-        <span className={`pip-trust-rec is-${recordingActive ? "live" : "stopped"}`}>
-          {recordingActive ? (
-            <>
-              <span aria-hidden="true" className="recording-dot" />
-              Recording
-            </>
-          ) : (
-            "Not recording"
-          )}
-        </span>
-      </header>
-      <p className="pip-trust-study">{studyTitle}</p>
+      {/* The non-authorable trust strip - a security control; the why lives
+          with the component. */}
+      <PipTrustHeader state={recordingActive ? "live" : "stopped"} />
 
       {/*
         The whole point of this pane is that the participant stops looking at
         the Cortex tab - which is exactly where the "your recording stopped"
         modal renders. Without this they could answer their way through an
-        entire study that captured nothing.
+        entire study that captured nothing. It renders ABOVE the authored
+        title so no amount of authored text can push it below the fold.
       */}
       {!recordingActive ? (
         <div className="alert-banner alert-danger" role="alert">
@@ -902,6 +771,10 @@ function PipTaskCard({
           </p>
         </div>
       ) : null}
+
+      {/* Researcher-authored, so below the trust strip and every recorder
+          alert, clamped by CSS - never inside the trust band. */}
+      <p className="pip-trust-study">{studyTitle}</p>
 
       {count > 1 ? (
         <p className="status-copy pip-counter">
@@ -915,21 +788,29 @@ function PipTaskCard({
         <p className="runner-instruction-hint">{step.helper_text}</p>
       ) : null}
 
-      {isAnswerable && step.is_required === false ? (
-        <p className="runner-optional-hint">This one is optional.</p>
+      {/* Bringing a buried or closed task window back has to live HERE. The
+          page carries the same recovery, but the page is precisely what the
+          participant has stopped looking at while this pane is up. */}
+      {targetUrl ? (
+        <button
+          className="journey-inline-link"
+          onClick={() => {
+            onOpenTaskWindow(targetUrl);
+          }}
+          type="button"
+        >
+          Bring the task page back
+        </button>
       ) : null}
 
-      <TaskResponseFields
-        onChooseOption={onChooseOption}
-        onTextChange={onTextChange}
-        response={response}
-        step={step}
-      />
 
-      {validationError ? (
-        <p className="response-validation" role="alert">
-          {validationError}
-        </p>
+      {/* A save failure is ours, not the participant's, and while this pane is
+          up the page's copy of this alert is not being looked at. */}
+      {submissionError ? (
+        <div className="alert-banner alert-danger" role="alert">
+          <strong>Something went wrong at our end</strong>
+          <p className="status-copy">{submissionError}</p>
+        </div>
       ) : null}
 
       <button

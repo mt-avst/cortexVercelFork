@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   canRetryRecordingUpload,
@@ -230,3 +230,55 @@ function createMockStream(stop: () => void) {
     }
   } as unknown as MediaStream;
 }
+
+describe("startCapture camera promise", () => {
+  const originalMediaDevices = Object.getOwnPropertyDescriptor(
+    navigator,
+    "mediaDevices"
+  );
+
+  afterEach(() => {
+    if (originalMediaDevices) {
+      Object.defineProperty(navigator, "mediaDevices", originalMediaDevices);
+    } else {
+      delete (navigator as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+
+  it("asks for the microphone only - never the camera", async () => {
+    // The welcome card promises "never your camera" immediately before the
+    // consent gate. This pins the behaviour behind that promise: if camera
+    // capture is ever added, the copy must change with it.
+    const getUserMedia = vi
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new Error("denied"), { name: "NotAllowedError" })
+      );
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      value: { getUserMedia },
+      configurable: true
+    });
+
+    const { renderHook, act } = await import("@testing-library/react");
+    const { useSessionRecorder } = await import("./session-recorder");
+
+    const { result } = renderHook(() =>
+      useSessionRecorder("token_camera", {
+        attemptNumber: 1,
+        directRecordingUploadMode: "disabled"
+      })
+    );
+
+    let started = true;
+
+    await act(async () => {
+      started = await result.current.startCapture();
+    });
+
+    // The rejection aborts capture before any screen request; the assertion
+    // that matters is the constraint shape of the one call that happened.
+    expect(started).toBe(false);
+    expect(getUserMedia).toHaveBeenCalledWith({ audio: true, video: false });
+  });
+});

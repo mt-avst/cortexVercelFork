@@ -642,9 +642,12 @@
   color: var(--muted);
 }
 
+/* Content-driven columns: the welcome grid carries three cells, consent and
+   the completion details carry two - each fills its row without a dangling
+   empty track. The narrow-viewport media query still collapses all to one. */
 .fh-recording .journey-infogrid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 14px;
   margin-top: 14px;
 }
@@ -672,39 +675,6 @@
 
 .fh-recording .journey-infocell--explainer {
   margin-top: 14px;
-}
-
-.fh-recording .journey-orderlist {
-  margin: 14px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.fh-recording .journey-orderlist li {
-  display: flex;
-  gap: 12px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.fh-recording .journey-orderlist li:last-child {
-  border-bottom: 0;
-}
-
-.fh-recording .journey-order-n {
-  flex: none;
-  padding-top: 2px;
-  font-family: var(--font-mono), monospace;
-  font-size: 10px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--j-ink-3);
-}
-
-.fh-recording .journey-order-copy {
-  min-width: 0;
 }
 
 .fh-recording .journey-actions {
@@ -914,11 +884,15 @@
   overflow: auto;
 }
 
+/* Content flows top-down and the window is sized to fit it. The action was
+   briefly pinned to the bottom edge, which was right while a response
+   textarea filled the card - with typed capture gone it just opened a gap in
+   the middle of a short card. */
 .fh-recording .pip-card {
   padding: 16px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
-  align-content: start;
 }
 
 .fh-recording .pip-counter {
@@ -953,6 +927,13 @@
   text-transform: uppercase;
 }
 
+/* Idle is the resting state - quiet. Live carries the accent and the dot.
+   Danger is reserved for a recording that stopped mid-session, the only one
+   of the three states where something is actually wrong. */
+.fh-recording .pip-trust-rec.is-idle {
+  color: var(--muted);
+}
+
 .fh-recording .pip-trust-rec.is-live {
   color: var(--accent-strong);
 }
@@ -967,17 +948,34 @@
   font-size: 11.5px;
   line-height: 1.4;
   color: var(--muted);
+  /* Researcher-authored text: clamp it so no title, however long, can push
+     the recorder alerts or the confirm button out of the 380x600 pane. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.fh-recording .pip-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .fh-recording .pip-prompt {
   margin: 0;
   font-family: var(--font-display), serif;
-  font-size: 19px;
-  line-height: 1.3;
+  font-size: 21px;
+  line-height: 1.25;
+  /* .fh-recording h1 sets max-width: 12ch for the page's display headings.
+     Inherited here it squeezed the task prompt - the single most important
+     sentence in the product - into roughly a third of a 380px panel. The
+     panel IS the measure; nothing narrower is wanted. */
+  max-width: none;
 }
 
 .fh-recording .pip-complete {
-  justify-self: start;
+  width: 100%;
 }
 
 .fh-recording .journey-verdict {

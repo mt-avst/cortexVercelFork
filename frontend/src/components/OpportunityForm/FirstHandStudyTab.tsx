@@ -2,10 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
 import { FirstHandStudy, OpportunityFormData } from '../../api/types';
-import {
-  authorableStepTypes,
-  type InlineStudyStep
-} from '../../shared/firsthand/inline-study';
+import { type InlineStudyStep } from '../../shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
 
 type FormFieldValue = string | number | boolean | undefined;
@@ -39,12 +36,6 @@ interface FirstHandStudyTabProps {
    */
   lockedToExistingStudy: boolean;
 }
-
-const STEP_TYPE_LABELS: Record<(typeof authorableStepTypes)[number], string> = {
-  instruction: 'Instruction - something to read or do, no answer captured',
-  open_text: 'Open text - participant types an answer',
-  single_choice: 'Choice - participant picks one option'
-};
 
 /**
  * Authoring surface for an unmoderated opportunity's task list.
@@ -113,7 +104,11 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   };
 
   const addStep = () => {
-    handleStepsChange([...steps, { type: 'open_text', prompt: '' }]);
+    // Always an instruction: sessions record screen and voice, so
+    // participants answer OUT LOUD. Typed-response step types invited them to
+    // stop talking and type - the opposite of think-aloud - so authoring no
+    // longer offers them. Legacy typed steps still run and stay editable.
+    handleStepsChange([...steps, { type: 'instruction', prompt: '' }]);
   };
 
   const removeStep = (index: number) => {
@@ -336,37 +331,10 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                     </div>
                   </div>
 
-                  <div className="mb-3">
-                    <label
-                      className="form-label mb-1"
-                      htmlFor={`step_type_${index}`}
-                      style={{ fontSize: '0.9rem', fontWeight: 600 }}
-                    >
-                      Type
-                    </label>
-                    <select
-                      id={`step_type_${index}`}
-                      className="form-select"
-                      value={step.type}
-                      onChange={(e) =>
-                        updateStep(index, {
-                          type: e.target.value as InlineStudyStep['type'],
-                          // Options only mean anything for a choice step. Drop
-                          // them on switch away so a stale list cannot be sent.
-                          options:
-                            e.target.value === 'single_choice'
-                              ? (step.options ?? ['', ''])
-                              : undefined
-                        })
-                      }
-                    >
-                      {authorableStepTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {STEP_TYPE_LABELS[type]}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                  {/* No response-type selector: sessions record screen and voice, so
+                      participants answer out loud. See addStep. Legacy typed
+                      steps keep their type, and the options editor below still
+                      renders for a legacy choice step so it stays editable. */}
 
                   <div className="mb-3">
                     <label

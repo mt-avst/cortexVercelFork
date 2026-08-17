@@ -187,6 +187,21 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
 
+  it('authors every task as a spoken-answer instruction - no response type to pick', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+
+    // Sessions record screen and voice, so participants answer out loud.
+    // Offering typed-response types invited them to stop talking and type;
+    // there is deliberately no type selector any more.
+    expect(
+      screen.queryByRole('combobox', { name: /^Type$/i })
+    ).toBeNull();
+  });
+
   it('sends the starting url, and blocks one that could run against the session', async () => {
     renderForm();
     selectType('unmoderated');
@@ -367,7 +382,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
     expect(payload.firsthand_study_id).toBeUndefined();
     expect(payload.inline_study.steps).toEqual([
-      { type: 'open_text', prompt: 'Find the export button' }
+      { type: 'instruction', prompt: 'Find the export button' }
     ]);
   });
 

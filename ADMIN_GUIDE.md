@@ -168,10 +168,8 @@ There is no Sessions tab, because there is nothing to book.
 Open the **Task List** tab. It is headed *"What the participant is asked to do while their screen is recorded"*.
 
 - **Starting URL**: the page the participant is asked to open and record. Optional, but leave it blank only for a survey-style study with nothing to test. Without it, participants share their screen with nothing pre-opened and never see the guided open-and-share step
-- **Add task**: adds a task. Each one has **"What the participant sees"** and a **Type**, which defaults to Open text:
-  - **Instruction** - something to read or do, no answer captured
-  - **Open text** - participant types an answer
-  - **Choice** - participant picks one option
+- **Add task**: adds a task. Each one is just **"What the participant sees"** - there is no response type to choose. Sessions record screen and voice, so participants answer **out loud** as they work; a typed answer box invited them to stop talking and type, which is the opposite of thinking aloud
+  - Task Lists written before this still hold typed steps. Those run and stay editable, but no participant is asked to type any more, and their answers are in the recording
 - **Up**, **Down** and **Remove** on each task card reorder or delete it. Order matters: participants work through the list top to bottom
 - **Consent text**: pre-filled with wording that covers screen and microphone recording, who sees it and the right to stop. Edit it if your study needs something different, but do not delete it
 

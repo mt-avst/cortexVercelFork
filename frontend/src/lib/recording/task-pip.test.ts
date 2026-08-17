@@ -99,7 +99,7 @@ describe("useTaskPip", () => {
       });
 
       expect(opened).toBe(true);
-      expect(requestWindow).toHaveBeenCalledWith({ width: 380, height: 440 });
+      expect(requestWindow).toHaveBeenCalledWith({ width: 380, height: 420 });
       expect(result.current.pipWindow).toBe(fakeWin);
       // Scoped styles only reach the portal content through this class.
       expect(fakeWin.document.body.className).toBe("fh-recording pip-body");

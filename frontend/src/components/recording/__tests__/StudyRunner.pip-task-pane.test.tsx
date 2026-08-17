@@ -122,16 +122,21 @@ describe("StudyRunner floating task pane", () => {
         name: "Find a pair of running shoes under £80."
       })
     ).toBeTruthy();
-    // While it is up, the panel says where the tasks went instead of offering
-    // to open something already open.
+    // While it is up, the page defers entirely - no rival copy of the task,
+    // and no reopen offer for something already open.
     expect(screen.queryByRole("button", { name: REOPEN_LABEL })).toBeNull();
-    expect(screen.getByText(/small window on top/i)).toBeTruthy();
+    expect(screen.getByText(/floating panel/i)).toBeTruthy();
+    // The task-window recovery moved INTO the pane with the task, because the
+    // page is what the participant has stopped looking at.
+    expect(
+      within(pane).getByRole("button", { name: /bring the task page back/i })
+    ).toBeTruthy();
   });
 
   it("advances the task from inside the pane and shares response state with the page", async () => {
     const pipWindow = createFakePipWindow();
 
-    renderRunner("token_pane_advances", { pipWindow });
+    const { rerender } = renderRunner("token_pane_advances", { pipWindow });
 
     const pipBody = pipWindow.document.body;
 
@@ -148,20 +153,32 @@ describe("StudyRunner floating task pane", () => {
     });
     within(pipBody).getByRole("heading", { name: "How easy was that to do?" });
 
-    // One controlled state, two views: typing in the pane must show up in the
-    // in-page card too.
-    fireEvent.change(
-      within(pipBody).getByPlaceholderText("Type your response here"),
-      { target: { value: "Really easy" } }
+    // ONE controlled state, rendered wherever the participant is - never a
+    // copy. Answers are spoken now, so the state that has to survive is the
+    // POSITION: advance in the panel, close it, and the page must pick up on
+    // the same task rather than sending them back to the first one.
+    rerender(
+      <StudyRunner
+        attemptNumber={1}
+        captureStoppedExternally={false}
+        microphonePermission="granted"
+        payload={payload("token_pane_advances")}
+        recordingStartedAt={Date.parse("2026-08-14T10:00:00.000Z")}
+        recordingStatus="active"
+        screenPermission="granted"
+        onComplete={vi.fn()}
+        onCloseTaskPip={vi.fn()}
+        onOpenTaskPip={vi.fn().mockResolvedValue(true)}
+        onOpenTaskWindow={vi.fn().mockReturnValue(true)}
+        pipSupported
+        pipWindow={null}
+      />
     );
 
-    const pageInputs = screen.getAllByPlaceholderText("Type your response here");
-
-    expect(pageInputs.length).toBeGreaterThan(0);
-
-    for (const input of pageInputs) {
-      expect((input as HTMLTextAreaElement).value).toBe("Really easy");
-    }
+    expect(
+      await screen.findByRole("heading", { name: "How easy was that to do?" })
+    ).toBeInTheDocument();
+    expect(screen.getByText("Task 2 of 2")).toBeInTheDocument();
   });
 
   it("takes the pane down when the session completes", async () => {
@@ -265,7 +282,10 @@ describe("StudyRunner floating task pane", () => {
 
     expect(within(pane).getByText(/recording has stopped/i)).toBeTruthy();
     expect(within(pane).getByText(/nothing you do here is being recorded/i)).toBeTruthy();
-    expect(within(pane).getByText("Not recording")).toBeTruthy();
+    // The strip distinguishes a mid-session stop from "not started yet" -
+    // it used to render both as the same danger-red "Not recording", which
+    // spent the alarm colour on the resting state.
+    expect(within(pane).getByText("Recording stopped")).toBeTruthy();
   });
 
   it("keeps the pane up when the completion request fails", async () => {
@@ -306,7 +326,10 @@ describe("StudyRunner floating task pane", () => {
       within(pipBody).getByRole("button", { name: /completed this task/i })
     );
 
-    await screen.findByText(/could not finish the session/i);
+    // The failure has to reach the participant IN THE PANE: the page's copy
+    // of this alert is deferred while the pane is up, so surfacing it only
+    // there would leave them pressing a dead button.
+    await within(pipBody).findByText(/could not finish the session/i);
     expect(onCloseTaskPip).not.toHaveBeenCalled();
   });
 
