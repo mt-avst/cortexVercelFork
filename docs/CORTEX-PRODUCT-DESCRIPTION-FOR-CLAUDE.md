@@ -137,11 +137,12 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
   **Week-over-week is `null` when the previous week was empty**, and the card reads "no previous week to compare". There is no percentage change from zero, and 0% would read as flat — which is a measurement.
   Chart totals follow the selected period rather than a fixed seven days, and what counts as an "action" is named per type: *Started the study*, *Booked a time*, *Opened the poll*.
 - **Survey results (built, not yet reachable):** `GET /api/firsthand/studies/:studyId/results` returns an aggregate per question, and `.../results.csv` exports the raw answers.
-  Both require **the study owner or a superadmin** - `requireAdmin` alone is not enough, because these return participants' actual answers.
+  Both require a **superadmin**, and that is deliberately stricter than it looks.
+  These routes aggregate every response for a study across **every opportunity that used it**, and a study is reusable by an opportunity its author did not create - so granting the study's owner would hand them answers from participants another researcher recruited, under that researcher's consent wording.
   A refusal is answered before any answer is read, and before the CSV download headers are set, so a rejected export cannot still hand over a file.
-  **Open question for phase 4:** these gate on *study* ownership while every neighbouring surface gates on *opportunity* ownership.
-  Since reusing a study you did not author is a designed feature, the two disagree - the researcher who ran the opportunity and recruited the participants cannot read the results, while the study's author can read answers collected by someone else's opportunity.
-  It fails closed, so it is a semantics question rather than a hole, but it should be settled before surveys go live.
+  **Phase 4 must fix the model, not just relax the gate.** Opportunity ownership is what the neighbouring surfaces use and is almost certainly right here, but it is not implementable yet: `firsthand.runtime_sessions` records `study_id` and no `opportunity_id`, so a response cannot be attributed to an opportunity at all.
+  The work is a migration adding that column, populating it where a session is created from an opportunity, then per-opportunity routes gated like `/:id/session-events`.
+  Nothing is lost meanwhile, because the results view is mounted only under `VITE_SURVEY_PREVIEW`.
 - **Click tracking:** Back-end records view (detail opened) and action (e.g. “Open Poll” / “Book” clicked); optional auth; IP hashed for privacy.
 - **Settings:** Notification preferences (on_book_email, on_cancel_email); optional reminder timing.
 
@@ -174,7 +175,7 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 - **Analytics:** Click tracking with hashed IP; views/actions and conversion for research use only.
 - **Security:** Role checks server-side; CORS; secure cookies; rate limiting on auth; internal/VPC deployment expectations.
 - **Participants' own answers and recordings are owner-gated, not merely admin-gated.**
-  Being a `researcher_admin` is not sufficient: recording playback and transcripts (`session-outputs.ts`), per-session events (`GET /api/opportunities/:id/session-events`) and survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`) all require the owner or a superadmin.
+  Being a `researcher_admin` is not sufficient: recording playback and transcripts (`session-outputs.ts`) and per-session events (`GET /api/opportunities/:id/session-events`) require the **opportunity owner** or a superadmin, and survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`) currently require a **superadmin** because they cannot yet be scoped to an opportunity - see the survey results entry above.
   Study *copy* is treated differently on purpose - the study list and single-study read stay open to every admin, because an opportunity is meant to reuse a study it did not author.
   The line is drawn at participant data, so when adding any route that returns answers, events or recordings, gate it on ownership and not on `requireAdmin` alone.
 

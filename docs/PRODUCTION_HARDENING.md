@@ -33,14 +33,17 @@ Before go-live, confirm each item (ops / project owner):
 - [x] **CSRF protection** – Double-submit cookie via `csrf-csrf`; on by default under `NODE_ENV=production`. Tokens are issued by `GET /api/csrf-token` and echoed in the `x-csrf-token` header on mutating requests. `ENABLE_CSRF=false` disables it in an emergency.
 - [x] **Session cookies** – `httpOnly`, `secure` and `sameSite: strict` under `NODE_ENV=production` (`backend/src/index.ts`).
 - [x] **Security headers** – Served by nginx in the frontend image, see [frontend/nginx.conf](../frontend/nginx.conf): X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy. CSP is optional (report-only first if added later). Permissions-Policy is not currently set.
-- [x] **Ownership gating on participant data** – Every route returning participants' own answers, events or recordings requires the **owner or a superadmin**, not just `requireAdmin`.
-  Covered: recording playback and transcripts (`backend/src/routes/session-outputs.ts`), per-session events (`GET /api/opportunities/:id/session-events`), pending approvals, and survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`, via `mayReadStudyResults`).
-  The survey results pair was the last gap and was closed in 7.36.0; before that any `researcher_admin` could read and CSV-export another researcher's participants' answers, and it was reachable in practice because `participant_responses` is populated by the recorded-session runtime.
+- [x] **Ownership gating on participant data** – No route returning participants' own answers, events or recordings is satisfied by `requireAdmin` alone.
+  Recording playback and transcripts (`backend/src/routes/session-outputs.ts`), per-session events (`GET /api/opportunities/:id/session-events`) and pending approvals all require the **opportunity owner** or a superadmin.
+  Survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`, via `mayReadStudyResults`) require a **superadmin**.
+  The survey results pair was the last gap: before 7.36.0 any `researcher_admin` could read and CSV-export another researcher's participants' answers, and that was reachable in practice, because `participant_responses` is populated today by the recorded-session runtime rather than waiting on native surveys.
   Study *copy* is deliberately readable by every admin (an opportunity may reuse a study it did not author) - the boundary is participant data, so gate new routes accordingly.
-- [ ] **Decide the ownership model for survey results before phase 4** – `mayReadStudyResults` gates on *study* ownership while the surfaces above gate on *opportunity* ownership.
-  Because study reuse across owners is a designed feature these disagree: the researcher who ran the opportunity cannot read the results they collected, while the study author can read answers gathered by another researcher's opportunity.
-  It fails closed, so nothing is exposed, but the semantics should be settled when native surveys are switched on.
-  Results also aggregate across every opportunity using the study, which is the part that makes either answer arguable.
+- [ ] **Scope survey results to an opportunity (phase 4)** – Superadmin-only is an interim position, not the intended model.
+  These routes aggregate every response for a study across **every opportunity that used it**, and a study is reusable by an opportunity its author did not create, so granting the study's owner would hand them answers from participants another researcher recruited.
+  Opportunity ownership is the right model and is what the surfaces above already use, but it is not implementable yet: `firsthand.runtime_sessions` records `study_id` and **no `opportunity_id`**, so a response cannot be attributed to an opportunity at all.
+  The work: a migration adding `opportunity_id` (nullable, indexed), populating it where a session is created from an opportunity (`POST /api/opportunities/:id/recorded-study-session`), then per-opportunity routes gated exactly like `/:id/session-events`.
+  Leave pre-existing rows with a `NULL` opportunity as superadmin-only rather than backfilling by heuristic - migration `0007` did attribute studies to the earliest referencing opportunity and documents that it can be wrong, and mis-attributing participants' answers is a worse error than mis-attributing a study.
+  Nothing is blocked meanwhile: the results view is mounted only under `VITE_SURVEY_PREVIEW` and is absent from every real build.
 
 ## Database TLS verification
 
