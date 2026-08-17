@@ -83,6 +83,16 @@ A user’s reservation of one session slot. States: booked, cancelled. Booking c
 
 Opportunities with an external link (e.g. Google Forms, Typeform). User clicks “Open Poll” / “Open Survey”; the app records a click (view vs action) for analytics and opens the link. No in-app form; participation is tracked for engagement/analytics (e.g. views, actions, conversion).
 
+**A native in-app path exists in the code but is deliberately switched off.**
+`poll` and `survey` have always been opportunity types - they were only ever *forced* external by the publish guard in `backend/src/routes/opportunities.ts`.
+Phases 1 to 3 of the native work shipped in 7.36.0: question types on the study contract, per-step question config (migration `0008_firsthand_step_config.sql`), answer validation rules, a participant runner, and results aggregation with CSV export.
+None of it is reachable yet - the publish guard is untouched, so no opportunity can be native, and the preview harness is behind `VITE_SURVEY_PREVIEW === '1'`, which no real build sets.
+The behaviour described above is therefore still exactly what users get.
+
+Read this before building anything here: most of it already exists, and a previous session nearly rebuilt it from scratch.
+Phase 4 is the part that is missing - the authoring toggle, the publish-guard change, the CTA labels and the routing in `OpportunityDetail`.
+Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a *recorded* task list, and the frontend typecheck refuses the change.
+
 ---
 
 ## 5. Main features (by area)
@@ -126,6 +136,12 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
   **Days and hours are bucketed in one fixed organisation zone** (`ANALYTICS_TIME_ZONE`, default `Europe/London`), cut in SQL, and the page states which zone it counted in. Analytics gets quoted between people, so a chart that reshaped itself per viewer would be worse than one explicitly in UK time.
   **Week-over-week is `null` when the previous week was empty**, and the card reads "no previous week to compare". There is no percentage change from zero, and 0% would read as flat — which is a measurement.
   Chart totals follow the selected period rather than a fixed seven days, and what counts as an "action" is named per type: *Started the study*, *Booked a time*, *Opened the poll*.
+- **Survey results (built, not yet reachable):** `GET /api/firsthand/studies/:studyId/results` returns an aggregate per question, and `.../results.csv` exports the raw answers.
+  Both require **the study owner or a superadmin** - `requireAdmin` alone is not enough, because these return participants' actual answers.
+  A refusal is answered before any answer is read, and before the CSV download headers are set, so a rejected export cannot still hand over a file.
+  **Open question for phase 4:** these gate on *study* ownership while every neighbouring surface gates on *opportunity* ownership.
+  Since reusing a study you did not author is a designed feature, the two disagree - the researcher who ran the opportunity and recruited the participants cannot read the results, while the study's author can read answers collected by someone else's opportunity.
+  It fails closed, so it is a semantics question rather than a hole, but it should be settled before surveys go live.
 - **Click tracking:** Back-end records view (detail opened) and action (e.g. “Open Poll” / “Book” clicked); optional auth; IP hashed for privacy.
 - **Settings:** Notification preferences (on_book_email, on_cancel_email); optional reminder timing.
 
@@ -157,6 +173,10 @@ Opportunities with an external link (e.g. Google Forms, Typeform). User clicks �
 - **Minimal PII:** e.g. name, email, business unit, role/title; SSO as source of truth.
 - **Analytics:** Click tracking with hashed IP; views/actions and conversion for research use only.
 - **Security:** Role checks server-side; CORS; secure cookies; rate limiting on auth; internal/VPC deployment expectations.
+- **Participants' own answers and recordings are owner-gated, not merely admin-gated.**
+  Being a `researcher_admin` is not sufficient: recording playback and transcripts (`session-outputs.ts`), per-session events (`GET /api/opportunities/:id/session-events`) and survey results (`GET /api/firsthand/studies/:studyId/results` and `.../results.csv`) all require the owner or a superadmin.
+  Study *copy* is treated differently on purpose - the study list and single-study read stay open to every admin, because an opportunity is meant to reuse a study it did not author.
+  The line is drawn at participant data, so when adding any route that returns answers, events or recordings, gate it on ownership and not on `requireAdmin` alone.
 
 ---
 
