@@ -30,13 +30,6 @@ type StepDraft = {
   options: string;
 };
 
-const stepTypeOptions: StepType[] = [
-  'instruction',
-  'open_text',
-  'single_choice',
-  'end',
-];
-
 /**
  * Step ids are namespaced by their study, because they are NOT scoped to it in
  * storage: `firsthand.study_steps.id` is a global `TEXT PRIMARY KEY`
@@ -575,26 +568,11 @@ export function StudyEditorForm({
                     />
                   </div>
 
-                  <div className="form-group mb-3">
-                    <label className="form-label" htmlFor={`step-type-${index}`}>
-                      Type
-                    </label>
-                    <select
-                      className="form-select"
-                      id={`step-type-${index}`}
-                      onChange={(event) =>
-                        updateStep(index, 'type', event.target.value as StepType)
-                      }
-                      value={step.type}
-                    >
-                      {stepTypeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
+                  {/* No response-type selector: sessions record screen and
+                      voice, so participants answer out loud. New steps are
+                      instructions (see defaultStep). Legacy typed steps keep
+                      their type, and the options editor below still renders
+                      for a legacy choice step so it stays editable. */}
                   <div className="form-group mb-3">
                     <label
                       className="form-label"

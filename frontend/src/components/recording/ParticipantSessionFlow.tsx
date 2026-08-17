@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 import type { SessionPayload } from "../../shared/firsthand/contract";
@@ -35,6 +36,7 @@ import {
   type SetupCheck,
   type SetupCheckId
 } from "../../lib/recording/setup-checks";
+import { PipStandbyCard } from "./PipStandbyCard";
 import { StudyRunner } from "./StudyRunner";
 
 type ParticipantSessionFlowProps = {
@@ -82,16 +84,6 @@ const FLOW_SECTION_LABELS = [
   "Task",
   "Upload",
   "Done"
-] as const;
-
-// Gate copy per block, exactly as the prototype words each placeholder.
-const FLOW_SECTION_GATES = [
-  "",
-  "Unlocks after welcome",
-  "Unlocks after consent",
-  "Unlocks once recording is live",
-  "Unlocks when the task is completed",
-  "Unlocks after upload succeeds"
 ] as const;
 
 // The page is one continuous scroll, not a series of full-screen swaps: every
@@ -375,6 +367,55 @@ export function ParticipantSessionFlow({
     duration != null ? `~${duration} min · ` : ""
   }${taskSteps.length} task${taskSteps.length === 1 ? "" : "s"}`;
 
+  // Shared by the page's launch step AND the floating pane's standby card, so
+  // the participant can start from whichever window is in front of them.
+  const startRecording = async () => {
+    setRecoveryMessage(null);
+    // If the participant closed the task window after opening it, reopen it
+    // before the picker appears - otherwise the window they are told to share
+    // is not in the list. A pane click's activation DOES cover the opener's
+    // window.open - verified live in Chrome 2026-08-16 (the pane's own "Open
+    // the task page" button opens the popup unblocked). If a browser ever
+    // refuses it, the whole-screen share option still works and the page's
+    // own button covers it.
+    if (primaryTargetUrl && !taskWindow.isOpen()) {
+      taskWindow.openTaskWindow(primaryTargetUrl);
+    }
+    const started = await recorder.startCapture();
+
+    if (started) {
+      // No window is opened here. The panel is the participant's to ask for
+      // (the setup step's own control), and re-springing one they chose to
+      // close would be exactly the unbidden behaviour that control exists to
+      // remove. Nothing is awaited between capture going live and the phase
+      // flip either: suspending here paints an ENABLED "Start recording"
+      // button over a running recording, and startCapture has no re-entrancy
+      // guard, so a second press orphans the first recording's chunks.
+      setPhase("running");
+    }
+  };
+
+  // A panel the browser refused must not leave the participant pressing a
+  // dead button, so the page takes the whole launch sequence back.
+  const [paneRefused, setPaneRefused] = useState(false);
+
+  const openTaskPane = async () => {
+    const opened = await taskPip.openTaskPip();
+
+    if (!opened) {
+      setPaneRefused(true);
+    }
+  };
+
+  // ONE computation, passed to both the page's launch step and the pane's
+  // standby card, so the pane can never start what the page's own button
+  // could not - the invariant holds by construction, not by two expressions
+  // happening to agree.
+  const canStart =
+    setupRunState === "complete" &&
+    !checkError &&
+    Boolean(assessment?.canProceed);
+
   return (
     <div className="journey-frame">
       <div className="journey-app">
@@ -426,7 +467,6 @@ export function ParticipantSessionFlow({
                     isActive={getSectionStatus(0, phase) === "current"}
                     onContinue={() => setPhase("consent")}
                     payload={payload}
-                    taskSteps={taskSteps}
                   />
                 </JourneyBlock>
 
@@ -458,6 +498,11 @@ export function ParticipantSessionFlow({
                           attemptNumber,
                           eventType: "consent_accepted"
                         }).catch(() => null);
+                        // Deliberately opens NO window. The floating panel is
+                        // asked for on its own control in the setup step - an
+                        // always-on-top, chrome-less window appearing over
+                        // every application unbidden is not something to do to
+                        // someone who has just pressed "I agree".
                         setPhase("setup");
                       }}
                       onDecline={() => {
@@ -480,6 +525,14 @@ export function ParticipantSessionFlow({
                 >
                   <SetupAndStartStage
                     assessment={assessment}
+                    canStart={canStart}
+                    paneIsPrimary={Boolean(taskPip.pipWindow)}
+                    canOfferPane={
+                      taskPip.isSupported && !paneRefused && !taskPip.pipWindow
+                    }
+                    onOpenPane={() => {
+                      void openTaskPane();
+                    }}
                     checkError={checkError}
                     hasTarget={Boolean(primaryTargetUrl)}
                     isActive={getSectionStatus(2, phase) === "current"}
@@ -490,54 +543,14 @@ export function ParticipantSessionFlow({
                     taskWindowStatus={taskWindow.state.status}
                     onCheckAgain={runSetupChecks}
                     onOpenTaskPage={() => {
+                      // ONLY the popup here: this click's activation must be
+                      // spent on window.open. The pane opened at consent (see
+                      // onAccept) - opening both from one click is impossible.
                       if (primaryTargetUrl) {
                         taskWindow.openTaskWindow(primaryTargetUrl);
                       }
                     }}
-                    onStart={async () => {
-                      setRecoveryMessage(null);
-                      // If the participant closed the task window after opening
-                      // it, reopen it before the picker appears - otherwise the
-                      // window they are told to share is not in the list.
-                      if (primaryTargetUrl && !taskWindow.isOpen()) {
-                        taskWindow.openTaskWindow(primaryTargetUrl);
-                      }
-                      const started = await recorder.startCapture();
-
-                      if (started) {
-                        // Float the task pane immediately, the way
-                        // UserTesting's task widget appears once sharing
-                        // begins - the participant never has to ask for it.
-                        //
-                        // This is the ONLY reliable place to do it. Document
-                        // PiP demands transient user activation, and the
-                        // activation from this button survives the capture
-                        // prompts (verified in Chrome: requestWindow resolves
-                        // straight after getDisplayMedia, and is refused with
-                        // NotAllowedError from anywhere without a gesture).
-                        // Opening it from an effect after the phase flip, or
-                        // from the runner on mount, would fail.
-                        //
-                        // Only for studies with a task page: a questionnaire
-                        // with no target has nothing to float over.
-                        //
-                        // Deliberately NOT awaited. requestWindow is invoked
-                        // synchronously inside openTaskPip, so the activation
-                        // is spent either way - but awaiting the window's
-                        // creation suspends this handler with capture already
-                        // live and the phase not yet flipped, which paints an
-                        // ENABLED "Start recording" button over a running
-                        // recording. startCapture has no re-entrancy guard, so
-                        // a second press restarts capture and orphans the first
-                        // recording's chunks. Never gate the phase flip on a
-                        // browser API.
-                        if (primaryTargetUrl) {
-                          void taskPip.openTaskPip();
-                        }
-
-                        setPhase("running");
-                      }
-                    }}
+                    onStart={startRecording}
                   />
                 </JourneyBlock>
 
@@ -717,6 +730,30 @@ export function ParticipantSessionFlow({
           </aside>
         </div>
       </div>
+
+      {/* The pane opens on the consent click (setup phase), before the
+          runner exists to fill it. Until recording is live it carries the
+          standby card - trust header, recording state, the start button and
+          deliberately NO task. StudyRunner's own portal takes over when the
+          running phase mounts it. */}
+      {phase === "setup" && taskPip.pipWindow
+        ? createPortal(
+            <PipStandbyCard
+              canStart={canStart}
+              errorMessage={recorder.state.errorMessage}
+              isStarting={recorder.state.recordingStatus === "starting"}
+              studyTitle={payload.study.title}
+              taskWindowStatus={taskWindow.state.status}
+              onOpenTaskPage={() => {
+                if (primaryTargetUrl) {
+                  taskWindow.openTaskWindow(primaryTargetUrl);
+                }
+              }}
+              onStart={startRecording}
+            />,
+            taskPip.pipWindow.document.body
+          )
+        : null}
     </div>
   );
 }
@@ -732,6 +769,14 @@ function JourneyBlock({
   sectionRef: (element: HTMLDivElement | null) => void;
   status: SectionStatus;
 }) {
+  // A step the participant has not reached renders NOTHING here. The Journey
+  // rail names all six and tracks them; a second, taller, dashed restatement
+  // of the same list was the page's biggest single waste of space. Nothing
+  // scrolls to a locked block either - the scroll target is always current.
+  if (status === "locked") {
+    return null;
+  }
+
   const badgeVariant =
     status === "done" ? "done" : status === "current" ? "key" : "idle";
 
@@ -752,29 +797,41 @@ function JourneyBlock({
         <h2 className="journey-block-title">{FLOW_SECTION_LABELS[index]}</h2>
       </div>
 
-      {status === "locked" ? (
-        <div className="journey-gate">{FLOW_SECTION_GATES[index]}</div>
-      ) : (
+      {/*
+        A status board, not a workspace. Once control moves to the floating
+        pane the participant reads this page at a glance, so only the live
+        step carries its body:
+
+        - locked: nothing at all. The Journey rail already names every step,
+          and a card repeating "Unlocks after upload succeeds" spent ~180px
+          to say less than the rail's one line.
+        - done: the head alone, which is already a tick, a number and a
+          title - a completed line.
+        - current: the full body.
+      */}
+      {status === "current" || status === "ended" ? (
         <div className="journey-block-body">{children}</div>
-      )}
+      ) : null}
     </section>
   );
 }
 
+// Deliberately no task list here. A participant who reads every prompt before
+// consenting rehearses their route, and the recording captures a performance
+// instead of a first encounter. Tasks are revealed one at a time once
+// recording is live - the same order UserTesting uses.
 function WelcomeStage({
   deviceSupport,
   isActive,
   payload,
   duration,
-  onContinue,
-  taskSteps
+  onContinue
 }: {
   deviceSupport: DeviceSupport;
   isActive: boolean;
   payload: SessionPayload;
   duration?: number;
   onContinue: () => void;
-  taskSteps: SessionPayload["steps"];
 }) {
   return (
     <div className="journey-stage">
@@ -805,6 +862,14 @@ function WelcomeStage({
           </p>
         </article>
         <article className="journey-infocell">
+          <h4>Think out loud</h4>
+          <p>
+            Say what you are thinking as you go - what you expect, what
+            surprises you. We record your screen and your voice, never your
+            camera.
+          </p>
+        </article>
+        <article className="journey-infocell">
           <h4>Before you begin</h4>
           <p>
             You will agree to being recorded, then a quick automatic check
@@ -812,15 +877,6 @@ function WelcomeStage({
           </p>
         </article>
       </div>
-
-      <ul className="journey-orderlist">
-        {taskSteps.map((step) => (
-          <li key={step.step_id}>
-            <span className="journey-order-n">Step {step.order}</span>
-            <span className="journey-order-copy">{step.prompt}</span>
-          </li>
-        ))}
-      </ul>
 
       {isActive ? (
         <div className="journey-actions">
@@ -935,6 +991,10 @@ const setupCheckOrder: SetupCheckId[] = [
 
 function SetupAndStartStage({
   assessment,
+  canOfferPane,
+  canStart,
+  onOpenPane,
+  paneIsPrimary,
   checkError,
   hasTarget,
   isActive,
@@ -957,15 +1017,27 @@ function SetupAndStartStage({
   targetLabel: string | null;
   taskWindowStatus: TaskWindowStatus;
   onCheckAgain: () => Promise<void>;
+  onOpenPane: () => void;
   onOpenTaskPage: () => void;
   onStart: () => Promise<void>;
+  // The panel is available and not yet up, so the page offers to open it
+  // rather than rendering the sequence it is about to hand over. False on
+  // Firefox and Safari, and after a refusal, where the page keeps the lot.
+  canOfferPane: boolean;
+  // Computed ONCE by the parent and shared with the pane's standby card, so
+  // the two start buttons can never disagree about readiness. Do not derive
+  // it locally again.
+  canStart: boolean;
+  // True while the floating pane is up and carrying the same two actions.
+  // The page then points at it instead of rendering rival buttons - but it
+  // takes the sequence straight back the moment the pane goes (Firefox and
+  // Safari never have one, and the participant can close it).
+  paneIsPrimary: boolean;
 }) {
   const isChecking = runState !== "complete";
   const isStarting = recorderState.recordingStatus === "starting";
   const failedChecks =
     assessment?.checks.filter((check) => check.status === "fail") ?? [];
-  const canStart =
-    !isChecking && !checkError && Boolean(assessment?.canProceed);
 
   const verdict = isChecking
     ? "Checking your setup…"
@@ -1068,6 +1140,41 @@ function SetupAndStartStage({
 
       {hasTarget ? (
         isActive ? (
+          canOfferPane ? (
+            <div className="journey-actions">
+              <button className="button" onClick={onOpenPane} type="button">
+                Open the task window
+              </button>
+              <span className="journey-hint">
+                Your tasks open in a small window that stays on top while you
+                work.
+              </span>
+            </div>
+          ) : paneIsPrimary ? (
+            <>
+              <p className="journey-launch-copy">
+                Your controls are in the floating panel. Open the task page and
+                start recording from there - this page takes over if you close
+                it.
+              </p>
+              {/* The checks and their re-run stay HERE even while deferring:
+                  the pane reports "waiting for the setup checks in the Cortex
+                  tab", so the tab must keep the button that clears them or a
+                  failed check is a dead end. */}
+              <div className="journey-actions journey-actions--secondary">
+                <button
+                  className="button secondary"
+                  disabled={isChecking || isStarting}
+                  onClick={() => {
+                    void onCheckAgain();
+                  }}
+                  type="button"
+                >
+                  Check again
+                </button>
+              </div>
+            </>
+          ) : (
           <TaskLaunch
             canStart={canStart}
             isChecking={isChecking}
@@ -1079,6 +1186,7 @@ function SetupAndStartStage({
             onOpenTaskPage={onOpenTaskPage}
             onStart={onStart}
           />
+          )
         ) : (
           <DoneLine />
         )

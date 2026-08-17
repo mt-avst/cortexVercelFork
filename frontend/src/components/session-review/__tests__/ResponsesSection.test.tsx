@@ -32,6 +32,13 @@ const steps: FirstHandOutputStep[] = [
     type: 'open_text',
     prompt: 'Anything else?',
     response: null
+  },
+  {
+    step_id: 'step_4',
+    order: 4,
+    type: 'instruction',
+    prompt: 'Find a holiday offer on the front page',
+    response: null
   }
 ];
 
@@ -44,10 +51,25 @@ describe('ResponsesSection', () => {
     expect(screen.getByText('Excellent')).toBeInTheDocument();
   });
 
-  it('shows a muted state for unanswered steps', () => {
+  it('reads an unanswered step as spoken, not as missing data', () => {
     render(<ResponsesSection steps={steps} />);
 
-    expect(screen.getByText('No response recorded')).toBeInTheDocument();
+    // Two unanswered steps here - one legacy open_text, one instruction -
+    // and neither is data loss: capture of typed answers was removed, so
+    // the recording holds them both.
+    expect(
+      screen.getAllByText('Answered out loud - in the recording')
+    ).toHaveLength(2);
+    expect(screen.queryByText('No response recorded')).toBeNull();
+  });
+
+  it('still shows answers stored by sessions run before the change', () => {
+    render(<ResponsesSection steps={steps} />);
+
+    // Historic data is not rewritten: a session that did capture typed
+    // answers still shows them.
+    expect(screen.getByText('It was straightforward.')).toBeInTheDocument();
+    expect(screen.getByText('Excellent')).toBeInTheDocument();
   });
 
   it('shows an empty state when there are no steps', () => {

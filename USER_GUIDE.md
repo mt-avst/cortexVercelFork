@@ -205,7 +205,9 @@ You cannot take part on a phone or tablet.
 
 - **Your screen**, and only the window or screen you choose when the browser asks
 - **Your microphone**, so you can think aloud as you work
-- **Your typed answers** to each task
+
+You are never asked to type an answer.
+Say what you are thinking as you go - that is the answer, and it is in the recording.
 
 Your camera is never used.
 Nothing is recorded until you have agreed to it and pressed start.
@@ -216,17 +218,19 @@ The session page is one long page of six numbered blocks: Welcome, Consent, Setu
 Each unlocks as you finish the one before it.
 
 1. Open the opportunity and click **Start Test**. The session opens in the same tab and takes over the page
-2. **Welcome**: read the brief and the list of tasks, then click **Continue to consent**
+2. **Welcome**: read the brief and what to expect, then click **Continue to consent**. The tasks themselves come one at a time once recording starts, so you meet each page as you would normally
 3. **Consent**: read what you are agreeing to, then click **I agree and want to continue**. Choosing **I do not agree** ends the study there and nothing is recorded
 4. **Setup and start**: Cortex checks your browser, window size, microphone and screen sharing. If something fails, fix it and click **Check again**
-5. **Start recording**, which works one of two ways:
-   - If the study has a page for you to use, click **Open the task page** first. It opens in its own window. Then click **Start recording**, allow your microphone, and pick the task page in the browser's sharing chooser. In Chrome and Edge it is under the **Window** tab. Sharing your whole screen works just as well if you cannot find it
-   - If the study has no page to use, there is a single **Start recorded study** button instead
-6. **Task**: work through the tasks one at a time. Each task either asks you to do something, to type an answer or to choose an option. Click **I’ve completed this task** to move on. A banner at the top of the page shows that recording is live
-   - **Your tasks follow you.** If the study has a page for you to use, Cortex opens a small floating window holding the current task and keeps it above your other windows, so you can read the task and answer it without switching back and forth. It appears on its own when recording starts, and closes itself when you finish
-   - Move or resize it like any other window, or drag it to a second screen. If you would rather not have it, close it - **Keep tasks on top** in the task panel brings it back
-   - It shows **Cortex**, the study name and whether recording is live. If it ever says **Recording has stopped**, go back to the Cortex tab to see what happened, because nothing you do after that point is being recorded
-   - This needs Chrome, Edge, Arc or Opera. In Firefox there is no floating window and you work from the Cortex tab as before
+5. **Open the task window**: this opens a small panel that floats above your other windows and holds your tasks. Everything from here happens in that panel
+   - In the panel, click **Open the task page**. It opens in its own window
+   - Then click **Start recording** in the panel, allow your microphone, and pick the task page in the browser's sharing chooser. In Chrome and Edge it is under the **Window** tab. Sharing your whole screen works just as well if you cannot find it
+   - If the study has no page for you to use, there is a single **Start recorded study** button on the Cortex page instead
+6. **Task**: work through the tasks one at a time in the floating panel. Do what the task asks in the task window, saying what you are thinking as you go, then click **I’ve completed this task** to move on
+   - **Your tasks follow you.** The panel stays above your other windows, so you can read the task without switching back and forth, and it closes itself when you finish
+   - Move or resize it like any other window, or drag it to a second screen. **Bring the task page back** in the panel re-opens the task window if you lose it behind something
+   - It shows **Cortex** and whether recording is live. If it ever says **Recording stopped**, go back to the Cortex tab to see what happened, because nothing you do after that point is being recorded
+   - If you close the panel, the Cortex page takes the tasks back and you carry on there
+   - The panel needs Chrome, Edge, Arc or Opera. In Firefox you work from the Cortex tab throughout, which does the same job
 7. **Upload**: stay on the page while your recording uploads. Recording itself has already stopped by this point
 8. **Done**: you will see **Recording captured**, and nothing further is needed from you
 

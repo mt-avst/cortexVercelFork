@@ -42,8 +42,12 @@ const ResponsesSection: React.FC<{ steps: FirstHandOutputStep[] }> = ({ steps })
                 {step.response.text ?? step.response.selected_option}
               </p>
             ) : (
+              // Nothing typed is captured any more - participants answer out
+              // loud, so the recording IS the answer. A step with no stored
+              // response is not missing data, whatever its type says: only
+              // sessions run before that change carry one.
               <p style={{ margin: '0 0 0 26px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                No response recorded
+                Answered out loud - in the recording
               </p>
             )}
           </li>

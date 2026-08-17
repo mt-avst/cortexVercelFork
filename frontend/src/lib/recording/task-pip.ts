@@ -32,10 +32,13 @@ declare global {
   }
 }
 
-// Sized for one task card: counter, prompt, an answer input and the confirm
-// button. The participant can resize the window natively afterwards.
+// Sized for one full task card: trust strip, study title, counter, prompt,
+// hint, the task-page recovery link and the confirm button. 600 was sized
+// around a response textarea that no longer exists - answers are spoken - and
+// left a third of the window empty. The participant can resize natively, and
+// .pip-body scrolls as the backstop for an unusually long prompt.
 const PIP_WIDTH = 380;
-const PIP_HEIGHT = 440;
+const PIP_HEIGHT = 420;
 
 export function isTaskPipSupported(): boolean {
   // Check the method, not just the object: an embedder policy can expose the
