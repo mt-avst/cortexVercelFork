@@ -17,6 +17,9 @@ import {
   createStudyRequestSchema,
   updateStudyRequestSchema
 } from '../../../shared/firsthand/study-input';
+import { listResponsesForStudy } from '../firsthand/survey-results-repository';
+import { aggregateSurveyResults } from '../firsthand/survey-results';
+import { toResponsesCsv } from '../firsthand/survey-csv';
 
 const router: Router = Router();
 
@@ -78,6 +81,58 @@ function sendStudyWriteFailure(
     error: 'forbidden',
     message: `Only the owner of this task list can ${verb} it`
   });
+}
+
+/**
+ * The read boundary for participants' answers. Answers true when this requester
+ * may see them; otherwise answers the response itself and returns false.
+ *
+ * requireAdmin is not sufficient on its own. The study list and the single
+ * study GET above stay open to every admin on purpose - study copy is authoring
+ * metadata, and an opportunity is meant to reuse a study it did not author -
+ * but responses are participant data, and the reason those reads are open is
+ * precisely that they are not. Without this, any researcher_admin could read,
+ * and CSV-export, every other researcher's survey responses.
+ *
+ * Deliberately STRICTER than the repository's canWriteStudy, which fails OPEN
+ * on a null owner so that legacy rows predating owners stay editable by the
+ * people who authored them. That reasoning does not carry over:
+ *
+ * - A write adopts the row it touches, so the unowned population shrinks. A
+ *   read must not claim ownership, so it has no equivalent way to close.
+ * - Responses only exist for a study that reached a participant, a study only
+ *   reaches a participant through an opportunity, and linking one claims
+ *   ownership atomically (claimStudyIfUnowned). So an unowned study holding
+ *   answers should not arise.
+ *
+ * If one does arise anyway, refusing is the recoverable direction: a superadmin
+ * can assign an owner, whereas answers handed to the wrong researcher cannot be
+ * recalled.
+ */
+function mayReadStudyResults(
+  res: Response,
+  study: { owner_user_id: string | null },
+  req: Request
+): boolean {
+  const requester = studyRequester(req);
+
+  if (requester.isSuperadmin || study.owner_user_id === requester.userId) {
+    return true;
+  }
+
+  // Mirrors sendStudyWriteFailure's warning for the same reason: these handlers
+  // answer directly rather than throwing, so nothing else logs the attempt.
+  logger.warn('Refused a cross-owner study results read', {
+    studyId: req.params.studyId,
+    userId: req.user?.id
+  });
+
+  res.status(403).json({
+    error: 'forbidden',
+    message: 'Only the owner of this task list can view its responses'
+  });
+
+  return false;
 }
 
 // GET /api/firsthand/studies - list studies for the Cortex study picker
@@ -184,6 +239,57 @@ router.delete('/studies/:studyId', requireAdmin, asyncHandler(async (req: Reques
   }
 
   return res.json({ ok: true });
+}));
+
+// ─── Survey results ──────────────────────────────────────────────────────────
+// Aggregated answers for a natively-run poll or survey. requireAdmin like every
+// other route here: responses are participant data and must never be reachable
+// without an admin session.
+
+// GET /api/firsthand/studies/:studyId/results - aggregated answers
+router.get('/studies/:studyId/results', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  if (!ensureStudiesPersistence(res)) return;
+
+  const stored = await getStudyById(req.params.studyId);
+  if (!stored) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  if (!mayReadStudyResults(res, stored.study, req)) return;
+
+  const responses = await listResponsesForStudy(req.params.studyId);
+
+  return res.json({
+    study: { id: stored.study.id, title: stored.study.title },
+    results: aggregateSurveyResults(stored.steps, responses)
+  });
+}));
+
+// GET /api/firsthand/studies/:studyId/results.csv - raw answers for export
+router.get('/studies/:studyId/results.csv', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+  if (!ensureStudiesPersistence(res)) return;
+
+  const stored = await getStudyById(req.params.studyId);
+  if (!stored) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  // Gated before the download headers are set, not just before the send: a
+  // refusal that had already set Content-Disposition would still offer a file.
+  if (!mayReadStudyResults(res, stored.study, req)) return;
+
+  const responses = await listResponsesForStudy(req.params.studyId);
+
+  // The study title is admin-authored free text, and an unescaped quote or
+  // newline in a Content-Disposition header splits it, so it is stripped
+  // before being interpolated into the quoted filename.
+  const safeTitle =
+    stored.study.title.replace(/["\\\r\n]/g, '').slice(0, 80).trim() || 'survey';
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${safeTitle} responses.csv"`);
+
+  return res.send(toResponsesCsv(stored.steps, responses));
 }));
 
 // The HMAC callback receiver (POST /api/firsthand/callbacks) is gone: the merge

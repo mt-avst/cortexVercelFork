@@ -12,6 +12,9 @@ jest.mock('../../firsthand/studies-repository', () => ({
   updateStudy: jest.fn(),
   deleteStudy: jest.fn(),
 }));
+jest.mock('../../firsthand/survey-results-repository', () => ({
+  listResponsesForStudy: jest.fn(),
+}));
 jest.mock('../../utils/database', () => ({ isDatabaseAvailable: jest.fn() }));
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -27,6 +30,7 @@ import {
   updateStudy,
   deleteStudy,
 } from '../../firsthand/studies-repository';
+import { listResponsesForStudy } from '../../firsthand/survey-results-repository';
 import { isDatabaseAvailable } from '../../utils/database';
 import { logger } from '../../utils/logger';
 
@@ -36,6 +40,7 @@ const mockCreateStudy = (createStudy as jest.MockedFunction<typeof createStudy>)
 const mockGetStudyById = (getStudyById as jest.MockedFunction<typeof getStudyById>);
 const mockUpdateStudy = (updateStudy as jest.MockedFunction<typeof updateStudy>);
 const mockDeleteStudy = (deleteStudy as jest.MockedFunction<typeof deleteStudy>);
+const mockListResponsesForStudy = (listResponsesForStudy as jest.MockedFunction<typeof listResponsesForStudy>);
 const mockIsDatabaseAvailable = (isDatabaseAvailable as jest.MockedFunction<typeof isDatabaseAvailable>);
 const mockLogger = logger as unknown as {
   info: jest.Mock;
@@ -135,6 +140,10 @@ describe('FirstHand Express router', () => {
       { method: 'get', path: '/api/firsthand/studies/study_abc' },
       { method: 'put', path: '/api/firsthand/studies/study_abc' },
       { method: 'delete', path: '/api/firsthand/studies/study_abc' },
+      // Survey results are participant data. Both the aggregate and the CSV
+      // export belong in this table for the same reason as the rest.
+      { method: 'get', path: '/api/firsthand/studies/study_abc/results' },
+      { method: 'get', path: '/api/firsthand/studies/study_abc/results.csv' },
     ];
 
     function fire(app: express.Express, method: string, path: string) {
@@ -150,6 +159,7 @@ describe('FirstHand Express router', () => {
       expect(mockGetStudyById).not.toHaveBeenCalled();
       expect(mockUpdateStudy).not.toHaveBeenCalled();
       expect(mockDeleteStudy).not.toHaveBeenCalled();
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     }
 
     it.each(guardedRoutes)('rejects unauthenticated $method $path with 401', async ({ method, path }) => {
@@ -437,6 +447,131 @@ describe('FirstHand Express router', () => {
         error: 'forbidden',
         message: 'Only the owner of this task list can delete it',
       });
+    });
+  });
+
+  // ── Survey results ownership ───────────────────────────────────────────────
+  // requireAdmin alone is not the boundary here. The study LIST and the single
+  // study GET are deliberately open to every admin (study copy is authoring
+  // metadata, reused across opportunities), but these two routes return
+  // participants' actual answers, so they carry the same owner-or-superadmin
+  // rule the writes do.
+  describe('survey results ownership', () => {
+    // Asserted through the repository's own return type rather than through an
+    // explicit any. This file's explicit-any count is a lint backlog held per
+    // file, and it is meant to shrink - new tests should not spend against it.
+    type StoredStudy = NonNullable<Awaited<ReturnType<typeof getStudyById>>>;
+
+    function studyOwnedBy(owner_user_id: string | null) {
+      mockGetStudyById.mockResolvedValue({
+        ...storedStudy,
+        study: { ...storedStudy.study, owner_user_id },
+      } as StoredStudy);
+    }
+
+    const superadminApp = buildApp({
+      id: 'root-1',
+      name: 'Root',
+      email: 'root@test.com',
+      role: 'superadmin',
+    });
+
+    beforeEach(() => {
+      mockListResponsesForStudy.mockResolvedValue([]);
+    });
+
+    it('lets the owner read the aggregate', async () => {
+      studyOwnedBy('admin-1');
+      const res = await request(app)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(200);
+      expect(res.body.study).toMatchObject({ id: 'study_abc' });
+      expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
+    });
+
+    it('lets the owner export the CSV', async () => {
+      studyOwnedBy('admin-1');
+      const res = await request(app)
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(200);
+      expect(res.headers['content-type']).toContain('text/csv');
+    });
+
+    it('lets a superadmin read another admin owner\'s aggregate', async () => {
+      studyOwnedBy('other-admin-9');
+      await request(superadminApp)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(200);
+      expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
+    });
+
+    // The defect this block exists for: a researcher_admin reading a colleague's
+    // participant answers.
+    it('refuses a non-owner admin the aggregate, without reading any responses', async () => {
+      studyOwnedBy('other-admin-9');
+      const res = await request(app)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(403);
+      expect(res.body).toMatchObject({
+        error: 'forbidden',
+        message: 'Only the owner of this task list can view its responses',
+      });
+      // Refusing after loading the answers would still have read them.
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
+    });
+
+    it('refuses a non-owner admin the CSV, and serves no CSV body', async () => {
+      studyOwnedBy('other-admin-9');
+      const res = await request(app)
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(403);
+      expect(res.body).toMatchObject({ error: 'forbidden' });
+      // A refusal that still set the download headers would hand over a file.
+      expect(res.headers['content-type']).not.toContain('text/csv');
+      expect(res.headers['content-disposition']).toBeUndefined();
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
+    });
+
+    // Deliberately STRICTER than canWriteStudy, which fails open on a null
+    // owner so legacy rows stay editable by whoever authored them. A read
+    // cannot adopt the row the way a write does, and responses only exist for a
+    // study that reached a participant through an opportunity - which claims
+    // ownership atomically - so an unowned study with answers should not occur.
+    // If one does, refusing is the recoverable direction: a superadmin can
+    // assign an owner, whereas leaked answers cannot be recalled.
+    it('refuses an unowned study rather than falling open like the write path', async () => {
+      studyOwnedBy(null);
+      await request(app)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(403);
+      expect(mockListResponsesForStudy).not.toHaveBeenCalled();
+    });
+
+    it('still lets a superadmin read an unowned study', async () => {
+      studyOwnedBy(null);
+      await request(superadminApp)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(200);
+    });
+
+    it('logs the refusal, so a cross-owner attempt is not silent', async () => {
+      studyOwnedBy('other-admin-9');
+      await request(app)
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(403);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Refused a cross-owner study results read',
+        expect.objectContaining({ studyId: 'study_abc', userId: 'admin-1' })
+      );
+    });
+
+    it('answers 404 for a missing study before any ownership decision', async () => {
+      mockGetStudyById.mockResolvedValue(null);
+      const res = await request(app)
+        .get('/api/firsthand/studies/missing/results')
+        .expect(404);
+      expect(res.body).toMatchObject({ error: 'not_found' });
+      expect(mockLogger.warn).not.toHaveBeenCalled();
     });
   });
 

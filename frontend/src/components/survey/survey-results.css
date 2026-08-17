@@ -1,0 +1,119 @@
+/*
+ * Survey results.
+ *
+ * Nothing here encodes data in colour or length alone: every bar sits beside
+ * a count and a percentage rendered as text, so the tables stay readable in
+ * monochrome, at any zoom, and to a screen reader.
+ */
+
+.survey-results {
+  display: grid;
+  gap: 2rem;
+  color: var(--text-primary);
+}
+
+.survey-results-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.survey-results-header h2 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.result-question {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.result-question h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
+.result-headline {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.result-note,
+.result-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.result-table th,
+.result-table td {
+  text-align: left;
+  padding: 0.5rem 0.75rem 0.5rem 0;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.result-table thead th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.result-table tbody th {
+  font-weight: 500;
+}
+
+.result-table tfoot th,
+.result-table tfoot td {
+  border-bottom: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.result-share {
+  display: inline-block;
+  min-width: 3.5rem;
+}
+
+.result-bar {
+  display: inline-block;
+  vertical-align: middle;
+  width: min(18rem, 45%);
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--bg-card);
+  overflow: hidden;
+}
+
+.result-bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent-coral);
+}
+
+.result-answers {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result-answers li {
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  /* Participant free text, so it must wrap rather than stretch the table
+     beside it. */
+  overflow-wrap: anywhere;
+}

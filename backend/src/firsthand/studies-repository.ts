@@ -1,11 +1,39 @@
 
 import type { PoolClient } from "pg";
 
-import { stepTypeSchema, type Study, type StudyStep } from "../../../shared/firsthand/contract";
+import {
+  findStepShapeProblem,
+  stepTypeSchema,
+  type StepConfig,
+  type StepShapeProblem,
+  type Study,
+  type StudyStep
+} from "../../../shared/firsthand/contract";
+
 import {
   isPostgresRuntimeConfigured,
   withRuntimeDatabaseClient
 } from "./runtime-database";
+
+/**
+ * Wording for the repository boundary, where the message names the offending
+ * step and surfaces to an admin as a failed save. Phrased to complete the
+ * sentence `<type> step "<id>" ...`.
+ *
+ * The single_choice wording is unchanged and must stay that way: a route test
+ * and an opportunity-form test both assert on "at least two options".
+ */
+const REPOSITORY_STEP_SHAPE_MESSAGES: Record<StepShapeProblem["code"], string> = {
+  choice_needs_options: "must include at least two options",
+  selection_range_inverted:
+    "has a maximum number of selections below its minimum",
+  selection_min_exceeds_options:
+    "requires more selections than it offers options",
+  rating_needs_scale: "must include a config.scale_max giving the rating scale",
+  rating_scale_out_of_range: "has a config.scale_max outside the usable range",
+  nps_scale_not_authorable: "is fixed at 0 to 10 and cannot set config.scale_max",
+  nps_takes_no_options: "must not include options"
+};
 
 export type StudyStatus = "draft" | "launched" | "archived";
 
@@ -101,6 +129,9 @@ type StudyStepRow = {
   helper_text: string | null;
   is_required: boolean;
   options: string[] | null;
+  // Per-type question settings for the native survey types. Separate from
+  // `options` because that is read as string[] here and by every caller.
+  config: StepConfig | null;
 };
 
 export function isStudiesPersistenceConfigured() {
@@ -526,7 +557,7 @@ async function loadStudyWithSteps(
   const stepResult = await client.query<StudyStepRow>(
     `
       SELECT id, study_id, step_order, type, prompt, target_url,
-             helper_text, is_required, options
+             helper_text, is_required, options, config
       FROM study_steps
       WHERE study_id = $1
       ORDER BY step_order ASC
@@ -550,8 +581,8 @@ async function insertStudySteps(
       `
         INSERT INTO study_steps (
           id, study_id, step_order, type, prompt, target_url,
-          helper_text, is_required, options
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          helper_text, is_required, options, config
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         step.step_id,
@@ -562,7 +593,10 @@ async function insertStudySteps(
         step.target_url ?? null,
         step.helper_text ?? null,
         step.is_required ?? false,
-        step.options ? JSON.stringify(step.options) : null
+        step.options ? JSON.stringify(step.options) : null,
+        // Serialised like `options`: node-postgres will not infer JSONB from a
+        // plain object parameter.
+        step.config ? JSON.stringify(step.config) : null
       ]
     );
   }
@@ -595,7 +629,8 @@ function mapStudyStepRow(row: StudyStepRow): StudyStep {
     target_url: row.target_url ?? undefined,
     helper_text: row.helper_text ?? undefined,
     is_required: row.is_required,
-    options: row.options ?? undefined
+    options: row.options ?? undefined,
+    config: row.config ?? undefined
   };
 }
 
@@ -632,9 +667,15 @@ function validateSteps(steps: StudyStep[]) {
       throw new Error(`Duplicate step order: ${step.order}`);
     }
 
-    if (step.type === "single_choice" && (!step.options || step.options.length < 2)) {
+    // The rules come from the contract rather than being restated here. This
+    // function held its own copy of the single_choice check, which is exactly
+    // the kind of duplicate that goes stale the first time a question type is
+    // added. Only the wording is local, because it names the offending step.
+    const shapeProblem = findStepShapeProblem(step);
+
+    if (shapeProblem) {
       throw new Error(
-        `single_choice step "${step.step_id}" must include at least two options.`
+        `${step.type} step "${step.step_id}" ${REPOSITORY_STEP_SHAPE_MESSAGES[shapeProblem.code]}.`
       );
     }
 
