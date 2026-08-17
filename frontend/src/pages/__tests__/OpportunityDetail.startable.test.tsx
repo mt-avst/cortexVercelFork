@@ -1,21 +1,26 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityDetail from '../OpportunityDetail';
-import { getOpportunity, getRecordedStudyBrief } from '../../api/client';
+import {
+  getOpportunity,
+  getRecordedStudyBrief,
+  startSurveySession,
+  trackOpportunityClick
+} from '../../api/client';
 
 /**
  * The call to action must not be offered when pressing it does nothing.
  *
  * The handoff branch runs only for an unmoderated opportunity with a linked
  * study, and everything else falls through to opening the external link. A
- * NATIVE poll or survey has a study and no link, so it satisfied the old "has
- * one or the other" test: the button rendered enabled and the click fell
- * through both branches and returned silently, without even recording the
- * click. The backend can publish that state now, so the page has to be honest
- * about it until the survey runner is routed.
+ * NATIVE poll or survey used to have a study and no link, so it satisfied the
+ * old "has one or the other" test: the button rendered enabled and the click
+ * fell through both branches and returned silently, without even recording the
+ * click. It has its own branch and its own route now, so what this file pins is
+ * that each type reaches the right one.
  */
 
 const base = {
@@ -46,6 +51,11 @@ vi.mock('../../api/client', () => ({
   bookSession: vi.fn(),
   getMyCalendarEvents: vi.fn(async () => []),
   startRecordedStudySession: vi.fn(),
+  // Without this the import is undefined at the call site, and a click test
+  // passes by asserting the GENERIC error message - the TypeError has no
+  // err.response.status, so it never reaches the API at all. A naive click test
+  // reads as coverage it does not have.
+  startSurveySession: vi.fn(),
 }));
 
 const renderDetail = () =>
@@ -72,12 +82,32 @@ beforeEach(() => {
 });
 
 describe('OpportunityDetail call to action', () => {
-  it('does not offer a working button for a native survey with no runner yet', async () => {
+  /**
+   * The premise of this test changed rather than disappearing. It used to
+   * assert the button was DISABLED, because a native survey had no runner and
+   * an enabled control would have done nothing on click. Now there is one, so
+   * the surviving guarantee is that the button is offered, says it starts here,
+   * and does not claim to open a new tab.
+   */
+  it('offers a native survey a start button that stays in Cortex', async () => {
     load({ delivery_mode: 'native', firsthand_study_id: 'study_questions' });
     renderDetail();
     await screen.findByText(base.title);
 
-    expect(screen.getByRole('button', { name: /open survey/i })).toBeDisabled();
+    expect(
+      screen.getByRole('button', { name: /start survey in Cortex/i })
+    ).toBeEnabled();
+    expect(screen.queryByText(/Opens in a new tab/i)).toBeNull();
+  });
+
+  it('still refuses a native survey with no questions linked', async () => {
+    load({ delivery_mode: 'native', firsthand_study_id: undefined });
+    renderDetail();
+    await screen.findByText(base.title);
+
+    expect(
+      screen.getByRole('button', { name: /start survey in Cortex/i })
+    ).toBeDisabled();
   });
 
   it('offers it for an external survey, which is what the link is for', async () => {
@@ -115,5 +145,58 @@ describe('OpportunityDetail call to action', () => {
     await screen.findByText(base.title);
 
     expect(screen.getByRole('button', { name: /open study/i })).toBeDisabled();
+  });
+});
+
+describe('OpportunityDetail starting a native survey', () => {
+  beforeEach(() => {
+    load({ delivery_mode: 'native', firsthand_study_id: 'study_questions' });
+  });
+
+  const start = async () => {
+    renderDetail();
+    await screen.findByText(base.title);
+    fireEvent.click(screen.getByRole('button', { name: /start survey in Cortex/i }));
+  };
+
+  /**
+   * The endpoint matters and nothing else asserted it: pointing this at
+   * startRecordedStudySession passed all 659 tests while 404ing in production,
+   * because that route refuses anything that is not an unmoderated study.
+   */
+  it('mints through the survey route, not the recorded one', async () => {
+    vi.mocked(startSurveySession).mockResolvedValue({ session_url: '/survey/fh_tok' });
+
+    await start();
+
+    await waitFor(() => expect(startSurveySession).toHaveBeenCalledWith('opp-1'));
+    expect(trackOpportunityClick).toHaveBeenCalledWith('opp-1', 'action');
+  });
+
+  it('says the survey is unavailable when the API refuses it', async () => {
+    vi.mocked(startSurveySession).mockRejectedValue({ response: { status: 404 } });
+
+    await start();
+
+    expect(await screen.findByText(/survey is not available/i)).toBeInTheDocument();
+  });
+
+  it('distinguishes an opportunity that is not open yet', async () => {
+    vi.mocked(startSurveySession).mockRejectedValue({ response: { status: 403 } });
+
+    await start();
+
+    expect(await screen.findByText(/not yet available/i)).toBeInTheDocument();
+  });
+
+  it('falls back to a generic message, and re-enables the button', async () => {
+    vi.mocked(startSurveySession).mockRejectedValue(new Error('offline'));
+
+    await start();
+
+    expect(await screen.findByText(/Could not open the survey/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /start survey in Cortex/i })
+    ).toBeEnabled();
   });
 });

@@ -193,8 +193,17 @@ export function applyDerivedStatusFromEvent(
       }
       break;
     case "session_completed":
+      // `uploading` is the right answer only when there is an upload to wait
+      // for. A survey records nothing, so its uploadStatus never leaves
+      // `not_started` and the session sat in `uploading` forever - which also
+      // gated the analytics write, so a finished survey produced no
+      // session_completed row at all and the researcher's view showed answers
+      // with no completions. `not_started` means nothing was ever begun, so
+      // there is nothing outstanding to wait on.
       session.sessionStatus =
-        session.uploadStatus === "complete" ? "completed" : "uploading";
+        session.uploadStatus === "complete" || session.uploadStatus === "not_started"
+          ? "completed"
+          : "uploading";
       session.completedAt = eventRecord.timestamp;
       session.currentStepId = null;
       break;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession } from '../api/client';
+import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
 import type { RecordedStudyBrief } from '../shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatDateTime } from '../utils/datetime';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
@@ -136,8 +136,12 @@ const OpportunityDetail: React.FC = () => {
    * runner for it arrives with the survey routing, so until then the honest
    * thing is to say it is not available rather than to offer a dead control.
    */
+  const isNativeSurvey =
+    (opportunity?.type === 'poll' || opportunity?.type === 'survey') &&
+    opportunity?.delivery_mode === 'native';
+
   const hasStartablePath = Boolean(
-    opportunity?.type === 'unmoderated'
+    opportunity?.type === 'unmoderated' || isNativeSurvey
       ? opportunity?.firsthand_study_id
       : opportunity?.external_link_optional
   );
@@ -1104,7 +1108,30 @@ const OpportunityDetail: React.FC = () => {
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {
-                            if (opportunity.type === 'unmoderated' && opportunity.firsthand_study_id) {
+                            if (isNativeSurvey && opportunity.firsthand_study_id) {
+                              setFirstHandLoading(true);
+                              try {
+                                await trackOpportunityClick(opportunity.id, 'action');
+                                const { session_url } = await startSurveySession(opportunity.id);
+                                window.location.assign(session_url);
+                              } catch (err: unknown) {
+                                const status = (err as { response?: { status?: number } }).response?.status;
+                                // 404 is the API's answer for every "this is
+                                // not a runnable native survey" case - wrong
+                                // type, external delivery, a task list linked
+                                // by mistake. The participant cannot act on any
+                                // of them, so they get one honest sentence.
+                                if (status === 404) {
+                                  setError('This survey is not available. Please contact your research team.');
+                                } else if (status === 403) {
+                                  setError('This opportunity is not yet available. Please try again later.');
+                                } else {
+                                  setError('Could not open the survey. Please try again or contact support.');
+                                }
+                              } finally {
+                                setFirstHandLoading(false);
+                              }
+                            } else if (opportunity.type === 'unmoderated' && opportunity.firsthand_study_id) {
                               setFirstHandLoading(true);
                               try {
                                 await trackOpportunityClick(opportunity.id, 'action');
@@ -1137,6 +1164,7 @@ const OpportunityDetail: React.FC = () => {
                             firstHandLoading || !hasStartablePath
                           }
                           aria-label={
+                            isNativeSurvey ? 'Start survey in Cortex' :
                             opportunity.type === 'poll' ? 'Open poll in new tab' :
                             opportunity.type === 'survey' ? 'Open survey in new tab' :
                             // Participant vocabulary: "recorded study", never
@@ -1154,6 +1182,10 @@ const OpportunityDetail: React.FC = () => {
                         >
                           {firstHandLoading
                             ? 'Starting session...'
+                            : isNativeSurvey
+                            ? opportunity.type === 'poll'
+                              ? 'Start poll'
+                              : 'Start survey'
                             : opportunity.type === 'poll'
                             ? 'Open Poll'
                             : opportunity.type === 'survey'
@@ -1178,7 +1210,9 @@ const OpportunityDetail: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {(opportunity.type === 'poll' || opportunity.type === 'survey' ||
+                  {/* Not for a native one: it opens in this tab, in Cortex. */}
+                  {((!isNativeSurvey &&
+                    (opportunity.type === 'poll' || opportunity.type === 'survey')) ||
                     (opportunity.type === 'unmoderated' && !opportunity.firsthand_study_id)) && (
                     <div className="row mt-2">
                       <div className="col-md-4">

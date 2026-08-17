@@ -270,6 +270,18 @@ export const startRecordedStudySession = async (opportunityId: string): Promise<
   return response.data;
 };
 
+/**
+ * Mint a session for a NATIVE poll or survey.
+ *
+ * Separate from startRecordedStudySession because the routes are separate: that
+ * one mints a recorded session with screen and microphone capture, and refuses
+ * anything that is not an unmoderated study. A survey records nothing.
+ */
+export const startSurveySession = async (opportunityId: string): Promise<{ session_url: string }> => {
+  const response = await api.post(`/opportunities/${opportunityId}/survey-session`);
+  return response.data;
+};
+
 export const getFirstHandStudies = async (): Promise<import('./types').FirstHandStudy[]> => {
   const response = await api.get('/firsthand/studies');
   return response.data.studies ?? [];
