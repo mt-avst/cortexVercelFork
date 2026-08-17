@@ -26,7 +26,6 @@ const Feedback = lazy(() => import('./pages/Feedback'));
 const Studies = lazy(() => import('./pages/Studies'));
 const StudyEditor = lazy(() => import('./pages/StudyEditor'));
 const RecordingSession = lazy(() => import('./pages/RecordingSession'));
-const SurveyPreview = lazy(() => import('./pages/SurveyPreview'));
 
 // Page loading fallback component
 const PageLoader = () => (
@@ -102,27 +101,6 @@ function App() {
                   <Route path="/my-bookings" element={<MyBookings />} />
                   <Route path="/gamification" element={<GamificationPage />} />
                   <Route path="/feedback" element={<Feedback />} />
-                  {/*
-                    Local harness for the native survey runner, which has no
-                    real route yet: the wiring that reaches it - the authoring
-                    toggle, the publish guard, the detail page - lives in files
-                    being rewritten on other branches. Remove once that lands.
-
-                    Gated on an explicit build flag rather than import.meta.env
-                    .DEV because the dev server does not boot this app at all:
-                    shared/config/environment.ts reads a bare `process.env`,
-                    which is undefined in the browser, so every dev page dies on
-                    `process is not defined` before React mounts. The working
-                    local recipe is a production build served by vite preview,
-                    where DEV is false. Absent from any build that does not set
-                    the flag, which is every real one.
-
-                    Run it with:
-                      VITE_SURVEY_PREVIEW=1 npm run build && npx vite preview
-                  */}
-                  {import.meta.env.VITE_SURVEY_PREVIEW === '1' ? (
-                    <Route path="/dev/survey-preview" element={<SurveyPreview />} />
-                  ) : null}
                   {/* C1: catch-all so an unmatched route (previously blank) lands
                       somewhere sensible rather than rendering nothing. */}
                   <Route path="*" element={<Navigate to="/" replace />} />
