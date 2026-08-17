@@ -484,6 +484,233 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe('That task list could not be found');
     });
 
+    /**
+     * Authoring questions on the opportunity form itself, the survey
+     * counterpart of the inline task list. The handler creates the study and
+     * links it in one request, so a researcher never has to create one
+     * separately, launch it, and come back to pick it from a dropdown.
+     */
+    describe('inline survey authoring', () => {
+      const questions = {
+        consent_text: 'Your answers are stored for research analysis.',
+        steps: [
+          { type: 'nps', prompt: 'Would you recommend it?' },
+          { type: 'open_text', prompt: 'What would you change?' }
+        ]
+      };
+
+      const body = (overrides: Record<string, unknown> = {}) => ({
+        type: 'survey',
+        title: 'Developer experience pulse',
+        purpose_one_liner: 'Ten short questions about the tools you use every day',
+        delivery_mode: 'native',
+        status: 'published',
+        inline_survey: questions,
+        ...overrides
+      });
+
+      it('creates a survey-kind study and links it, in one request', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_new' },
+          steps: []
+        } as never);
+        mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '11', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(body()).expect(201);
+
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'survey', status: 'launched' })
+        );
+      });
+
+      it('namespaces the step ids by study, so a second survey cannot collide', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_new' },
+          steps: []
+        } as never);
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '13', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(body()).expect(201);
+
+        const call = mockCreateStudy.mock.calls[0][0] as { id: string; steps: { step_id: string }[] };
+        call.steps.forEach((step) => expect(step.step_id.startsWith(call.id)).toBe(true));
+      });
+
+      it('publishes a native survey on authored questions alone, with no link', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_new' },
+          steps: []
+        } as never);
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '14', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send(body({ external_link_optional: undefined }))
+          .expect(201);
+      });
+
+      it('refuses questions on a recorded study', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(body({ type: 'unmoderated', delivery_mode: undefined }))
+          .expect(400);
+
+        expect(response.body.error).toBe('Only polls and surveys can carry questions');
+      });
+
+      /**
+       * A survey carrying a task list is refused by the type rule, which says
+       * something more precise than a generic "not both" could: the two
+       * vocabularies are not interchangeable, so there is no type that admits
+       * both and nothing to disambiguate.
+       */
+      it('refuses a task list on a survey', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(body({
+            inline_study: {
+              consent_text: 'Consent',
+              steps: [{ type: 'instruction', prompt: 'Do a thing' }]
+            }
+          }))
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Only unmoderated opportunities can carry a task list'
+        );
+      });
+
+      it('refuses questions alongside a linked study, rather than picking one', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(body({ firsthand_study_id: 'study_existing' }))
+          .expect(400);
+
+        expect(response.body.error).toBe(
+          'Send either firsthand_study_id or inline_survey, not both'
+        );
+      });
+
+      /**
+       * Questions on an externally delivered survey would be stored and never
+       * reached by anything, because the participant is sent to the external
+       * link instead.
+       */
+      it('refuses questions when the survey hands off externally', async () => {
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(body({
+            delivery_mode: 'external',
+            external_link_optional: 'https://example.com/form'
+          }))
+          .expect(400);
+
+        expect(response.body.error).toMatch(/runs in Cortex/);
+      });
+
+      describe('on update', () => {
+        const existing = (studyId: string | null) => ({
+          type: 'survey',
+          title: 'A survey',
+          purpose_one_liner: 'Purpose',
+          status: 'draft',
+          external_link_optional: null,
+          firsthand_study_id: studyId,
+          participant_type_required: 'any',
+          delivery_mode: 'native'
+        });
+
+        /**
+         * `expectUpdate` decides whether the UPDATE result is queued at all.
+         * `jest.clearAllMocks()` clears calls but NOT queued once-values, so a
+         * refusal test that queues a row it never reaches leaves it for the
+         * next test to consume - which poisons tests that have nothing to do
+         * with this one, and reads as an unrelated failure.
+         */
+        const patch = (
+          body: Record<string, unknown>,
+          studyId: string | null,
+          expectUpdate = false
+        ) => {
+          mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+          mockQuery.mockResolvedValueOnce({ rows: [existing(studyId)] });
+          if (expectUpdate) {
+            mockQuery.mockResolvedValueOnce({
+              rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+              rowCount: 1
+            });
+          }
+          return request(app).patch('/api/opportunities/1').send(body);
+        };
+
+        it('writes the questions on a draft that has none yet', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_new' },
+            steps: []
+          } as never);
+
+          await patch({ inline_survey: questions }, null, true).expect(200);
+
+          expect(mockCreateStudy).toHaveBeenCalledWith(
+            expect.objectContaining({ kind: 'survey' })
+          );
+        });
+
+        /**
+         * Authoring over questions that already exist minted a THIRD study and
+         * re-pointed the row at it, leaving the previous one launched, orphaned
+         * and holding every answer collected so far. The task-list path has
+         * refused this all along.
+         */
+        it('refuses to author over questions the opportunity already has', async () => {
+          const response = await patch(
+            { inline_survey: questions },
+            'study_existing'
+          ).expect(400);
+
+          expect(response.body.error).toBe(
+            'This opportunity already has questions; edit them in the Task Lists area'
+          );
+          expect(mockCreateStudy).not.toHaveBeenCalled();
+        });
+
+        it('refuses questions alongside an explicit id, rather than picking one', async () => {
+          const response = await patch(
+            { firsthand_study_id: 'study_chosen', inline_survey: questions },
+            null
+          ).expect(400);
+
+          expect(response.body.error).toBe(
+            'Send either firsthand_study_id or inline_survey, not both'
+          );
+          expect(mockCreateStudy).not.toHaveBeenCalled();
+        });
+      });
+
+      it('refuses a rating question with no scale, at the API not just the form', async () => {
+        await request(app)
+          .post('/api/opportunities')
+          .send(body({
+            inline_survey: {
+              consent_text: 'Consent',
+              steps: [{ type: 'rating', prompt: 'Rate it' }]
+            }
+          }))
+          .expect(400);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+    });
+
     it('should require a study to publish an unmoderated opportunity (A1)', async () => {
       const response = await request(app)
         .post('/api/opportunities')

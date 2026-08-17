@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { SESSION_CAPACITY } from '../../../shared/constants';
 import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
+import { inlineSurveySchema } from '../../../shared/firsthand/survey-authoring';
 import type { Opportunity } from '../../../shared/types';
 
 // Base schemas
@@ -85,6 +86,11 @@ export const CreateOpportunitySchema = z.object({
   // never has to create and launch one separately. Sending it alongside
   // firsthand_study_id is rejected, not resolved by precedence.
   inline_study: inlineStudySchema.optional(),
+  // Native poll and survey only: the questions authored on the opportunity
+  // form itself, the survey counterpart of inline_study. Same rules - the
+  // handler creates the study from this and links it, and a body carrying both
+  // this and firsthand_study_id is refused rather than resolved by precedence.
+  inline_survey: inlineSurveySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: z.enum(['draft', 'published']).optional(),
@@ -108,6 +114,10 @@ export const UpdateOpportunitySchema = z.object({
   // to write them on the way back in - otherwise the errand this feature
   // removes reappears for exactly that path.
   inline_study: inlineStudySchema.optional(),
+  // Same as create, and only where the opportunity has no questions yet: saving
+  // a draft before writing them is legitimate, so they have to be writable on
+  // the way back in.
+  inline_survey: inlineSurveySchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),

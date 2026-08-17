@@ -10,7 +10,25 @@ import {
 import { Alert, Button, Card, CardBody } from '../components/ui';
 import { isStudyReadOnly, type StudyViewer } from '../utils/studyOwnership';
 import type { FirstHandStudy } from '../api/types';
-import type { StudyStep } from '../shared/firsthand/contract';
+import {
+  RATING_SCALE_BOUNDS,
+  type StepConfig,
+  type StudyStep
+} from '../shared/firsthand/contract';
+import { authorableSurveyStepTypes } from '../shared/firsthand/survey-authoring';
+
+/** What a researcher calls each survey question type, keyed on the vocabulary. */
+const SURVEY_TYPE_LABELS: Record<
+  (typeof authorableSurveyStepTypes)[number],
+  string
+> = {
+  instruction: 'Section text (no answer)',
+  open_text: 'Free text',
+  single_choice: 'Choose one',
+  multi_choice: 'Choose several',
+  rating: 'Rating scale',
+  nps: 'Recommendation score (0 to 10)'
+};
 import {
   createStudyRequestSchema,
   updateStudyRequestSchema,
@@ -28,6 +46,13 @@ type StepDraft = {
   helper_text: string;
   is_required: boolean;
   options: string;
+  /**
+   * Per-type question settings, for the survey vocabulary. Held as the object
+   * rather than flattened into strings like `options` is, because the contract
+   * validates its shape and a round-trip through text would have to reconstruct
+   * it exactly.
+   */
+  config?: StepConfig;
 };
 
 /**
@@ -130,6 +155,7 @@ const defaultStep = (order: number, stepId: string): StepDraft => ({
   helper_text: '',
   is_required: false,
   options: '',
+  config: undefined,
 });
 
 const stepDraftFromStep = (step: StudyStep): StepDraft => ({
@@ -141,6 +167,7 @@ const stepDraftFromStep = (step: StudyStep): StepDraft => ({
   helper_text: step.helper_text ?? '',
   is_required: step.is_required ?? false,
   options: step.options ? step.options.join('\n') : '',
+  config: step.config,
 });
 
 const stepDraftToPayload = (draft: StepDraft): StudyStep => {
@@ -163,11 +190,19 @@ const stepDraftToPayload = (draft: StepDraft): StudyStep => {
     base.is_required = true;
   }
 
-  if (draft.type === 'single_choice') {
+  if (draft.type === 'single_choice' || draft.type === 'multi_choice') {
     base.options = draft.options
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
+  }
+
+  // Carried through rather than dropped. Without this, opening a survey study
+  // here and saving it silently stripped every rating's scale - and the
+  // contract then refuses the save for a field the editor never showed, so the
+  // study becomes uneditable with no way to see why.
+  if (draft.config) {
+    base.config = draft.config;
   }
 
   return base;
@@ -232,6 +267,14 @@ export function StudyEditorForm({
   // No `isEditing &&` guard: the create form has no initialStudy, so
   // isStudyReadOnly already answers false for it.
   const readOnly = isStudyReadOnly(initialStudy, viewer);
+  /**
+   * Which vocabulary this study is written in, and so which controls the editor
+   * offers. A study created before the column existed reads as `recorded`,
+   * which is what it is. New studies made here are recorded too - a survey is
+   * authored on its opportunity, where the questions belong to the thing being
+   * asked rather than to a reusable script.
+   */
+  const isSurvey = initialStudy?.kind === 'survey';
   const [title, setTitle] = useState(initialStudy?.title ?? '');
   const [introText, setIntroText] = useState(initialStudy?.intro_text ?? '');
   const [consentText, setConsentText] = useState(
@@ -267,7 +310,12 @@ export function StudyEditorForm({
   const [acknowledgedNoTaskPageUrl, setAcknowledgedNoTaskPageUrl] =
     useState(false);
 
-  const missingTaskPageUrl = studyMissingTaskPageUrl(steps);
+  // A SURVEY has no page under test, so the missing-task-page warning does not
+  // apply to it - and unacknowledged it blocks the save outright, which made
+  // every survey study unsaveable here. The warning exists because a recorded
+  // study with no target degrades to a start button with no open-and-share
+  // sequence; a survey never had that sequence to lose.
+  const missingTaskPageUrl = !isSurvey && studyMissingTaskPageUrl(steps);
 
   const addStep = () => {
     setSteps((current) => [
@@ -310,6 +358,57 @@ export function StudyEditorForm({
       current
         .filter((_, idx) => idx !== index)
         .map((step, idx) => ({ ...step, order: idx + 1 }))
+    );
+  };
+
+  /**
+   * Change a survey question's type, dropping the settings that no longer
+   * apply. Hiding them is not enough: an NPS question carrying a rating's
+   * scale_max is refused by the contract, so a leftover fails the save with an
+   * error about a control the editor is no longer showing.
+   */
+  const changeStepType = (
+    index: number,
+    type: (typeof authorableSurveyStepTypes)[number]
+  ) => {
+    setSteps((current) =>
+      current.map((step, idx) =>
+        idx === index
+          ? {
+              ...step,
+              type,
+              options:
+                type === 'single_choice' || type === 'multi_choice'
+                  ? step.options
+                  : '',
+              // Dropped on an instruction for the same reason as the config: it
+              // cannot be answered, so a required flag on one is stored state
+              // that means nothing.
+              is_required: type === 'instruction' ? false : step.is_required,
+              config: type === 'rating' ? { scale_max: step.config?.scale_max ?? 5 } : undefined
+            }
+          : step
+      )
+    );
+  };
+
+  /**
+   * The one-way repair for a legacy typed step in a RECORDED study. Keeps the
+   * step_id, so responses already stored against it are not orphaned.
+   *
+   * `config` is cleared because stepDraftToPayload emits it for any type. The
+   * options are NOT cleared, and that is deliberate rather than an oversight:
+   * both the payload and the editor key off the type, so once the step is an
+   * instruction the options are unreachable either way. A mutation proved a
+   * clear here changes nothing observable.
+   */
+  const convertToInstruction = (index: number) => {
+    setSteps((current) =>
+      current.map((step, idx) =>
+        idx === index
+          ? { ...step, type: 'instruction', config: undefined }
+          : step
+      )
     );
   };
 
@@ -574,11 +673,74 @@ export function StudyEditorForm({
                     />
                   </div>
 
-                  {/* No response-type selector: sessions record screen and
-                      voice, so participants answer out loud. New steps are
-                      instructions (see defaultStep). Legacy typed steps keep
-                      their type, and the options editor below still renders
-                      for a legacy choice step so it stays editable. */}
+                  {/* A RECORDED study has no response-type selector: sessions
+                      record screen and voice, so participants answer out loud.
+                      New steps are instructions (see defaultStep). Legacy typed
+                      steps keep their type, and the options editor below still
+                      renders for a legacy choice step so it stays editable.
+
+                      A SURVEY is the opposite - everything is typed - so it
+                      gets the full survey vocabulary here. */}
+                  {isSurvey && step.type !== 'end' ? (
+                    <div className="form-group mb-3">
+                      <label className="form-label" htmlFor={`step-type-${index}`}>
+                        Type
+                      </label>
+                      <select
+                        className="form-control form-select"
+                        id={`step-type-${index}`}
+                        value={step.type}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          changeStepType(
+                            index,
+                            event.target
+                              .value as (typeof authorableSurveyStepTypes)[number]
+                          )
+                        }
+                      >
+                        {authorableSurveyStepTypes.map((type) => (
+                          <option key={type} value={type}>
+                            {SURVEY_TYPE_LABELS[type]}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    /**
+                     * A one-way repair for a legacy typed step.
+                     *
+                     * The type selector is gone from recorded authoring, so an
+                     * inherited open_text or single_choice step could have its
+                     * prompt edited but never its type - and those steps are
+                     * unanswerable now, because the runner renders no inputs.
+                     * Delete-and-re-add would lose the step_id and orphan every
+                     * response already stored against it.
+                     *
+                     * One way on purpose: there is no route back to a type this
+                     * editor cannot otherwise produce.
+                     */
+                    step.type !== 'instruction' &&
+                    step.type !== 'end' && (
+                      <div className="alert alert-warning py-2 px-3 mb-3">
+                        <div className="mb-2">
+                          This task asks for a typed answer, which a recorded
+                          session cannot collect - participants answer out loud.
+                        </div>
+                        <button
+                          className="btn btn-sm btn-outline-secondary"
+                          disabled={readOnly}
+                          onClick={() => convertToInstruction(index)}
+                          type="button"
+                        >
+                          Convert to a spoken instruction
+                        </button>
+                        <div className="form-text mt-1">
+                          Keeps the task and its answers. Cannot be undone.
+                        </div>
+                      </div>
+                    )
+                  )}
                   <div className="form-group mb-3">
                     <label
                       className="form-label"
@@ -598,6 +760,7 @@ export function StudyEditorForm({
                     />
                   </div>
 
+                  {isSurvey ? null : (
                   <div className="form-group mb-3">
                     <label
                       className="form-label"
@@ -619,6 +782,7 @@ export function StudyEditorForm({
                       for a survey-style step with no product to test.
                     </div>
                   </div>
+                  )}
 
                   <div className="form-group mb-3">
                     <label
@@ -655,7 +819,34 @@ export function StudyEditorForm({
                     </label>
                   </div>
 
-                  {step.type === 'single_choice' ? (
+                  {isSurvey && step.type === 'rating' ? (
+                    <div className="form-group mb-3">
+                      <label
+                        className="form-label"
+                        htmlFor={`step-scale-${index}`}
+                      >
+                        Points on the scale
+                      </label>
+                      <input
+                        className="form-control"
+                        id={`step-scale-${index}`}
+                        max={RATING_SCALE_BOUNDS.max}
+                        min={RATING_SCALE_BOUNDS.min}
+                        disabled={readOnly}
+                        onChange={(event) =>
+                          updateStep(index, 'config', {
+                            ...step.config,
+                            scale_max: Number(event.target.value)
+                          })
+                        }
+                        style={{ maxWidth: '8rem' }}
+                        type="number"
+                        value={step.config?.scale_max ?? ''}
+                      />
+                    </div>
+                  ) : null}
+
+                  {step.type === 'single_choice' || step.type === 'multi_choice' ? (
                     <div className="form-group mb-3">
                       <label
                         className="form-label"

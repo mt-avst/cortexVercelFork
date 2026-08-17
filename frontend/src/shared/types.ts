@@ -420,6 +420,10 @@ export interface OpportunityFormData {
 
   // Task List tab (unmoderated type)
   firsthand_study_id?: string;
+
+  // Questions tab (native poll and survey). Whether the participant answers
+  // inside Cortex or is handed off to an external service.
+  delivery_mode?: 'native' | 'external';
 }
 
 export interface FirstHandStudy {
@@ -431,6 +435,14 @@ export interface FirstHandStudy {
   estimated_duration_minutes?: number | null;
   locale?: string;
   status?: 'draft' | 'launched' | 'archived';
+  /**
+   * Which authoring vocabulary the study is written in, and so which
+   * opportunities can run it. Optional only for rows serialised before the
+   * column existed; the API always sends it now. The reuse pickers filter on
+   * it, and the API refuses a mismatch regardless - the picker is not the
+   * boundary.
+   */
+  kind?: 'recorded' | 'survey';
   // The authoring user. Null on a study created before owners existed: those
   // stay editable by any admin until the first save claims them. See
   // canWriteStudy in backend/src/firsthand/studies-repository.ts.

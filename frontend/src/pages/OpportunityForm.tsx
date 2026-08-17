@@ -7,7 +7,13 @@ import { createOpportunity, updateOpportunity, getOpportunity, getSessions } fro
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
+import {
+  DEFAULT_SURVEY_CONSENT_TEXT,
+  type InlineSurvey as InlineSurveyPayload,
+  type SurveyQuestion
+} from '../shared/firsthand/survey-authoring';
 import {
   DEFAULT_CONSENT_TEXT,
   INLINE_STUDY_LIMITS,
@@ -54,6 +60,13 @@ export const clearTypeConditionalErrors = (
       .filter((key) => key.startsWith('inline_study_steps'))
       .forEach((key) => delete next[key]);
   }
+  if (newType !== 'poll' && newType !== 'survey') {
+    delete next.inline_survey_consent_text;
+    delete next.inline_survey_duration_minutes;
+    Object.keys(next)
+      .filter((key) => key.startsWith('inline_survey_questions'))
+      .forEach((key) => delete next[key]);
+  }
   // The unmoderated + external participant (M2) rule only applies to
   // unmoderated, and switching to unmoderated coerces an external participant
   // type back to 'any', so this error is stale after any type change.
@@ -78,11 +91,20 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   participant_type_required: { tab: 2, label: 'Participant Type' },
   participant_type_specific_details: { tab: 2, label: 'Specific Criteria' },
   external_link_optional: { tab: 3, label: 'External Link' },
-  firsthand_study_id: { tab: 3, label: 'Existing task list' },
+  // One key, two controls: the task list picker and the questions picker both
+  // set it. Named for neither, because naming one makes the banner lie on the
+  // other half of the time.
+  firsthand_study_id: { tab: 3, label: 'Existing study content' },
   inline_study_target_url: { tab: 3, label: 'Starting URL' },
   inline_study_duration_minutes: { tab: 3, label: 'How long it takes' },
   inline_study_steps: { tab: 3, label: 'Task List' },
-  inline_study_consent_text: { tab: 3, label: 'Consent text' }
+  inline_study_consent_text: { tab: 3, label: 'Consent text' },
+  inline_survey_questions: { tab: 3, label: 'Questions' },
+  // No entry for inline_survey_duration_minutes: nothing validates it. Its
+  // task-list counterpart has one because an emptied duration IS refused
+  // there; a survey's is optional with no rule, and the completeness test in
+  // both directions is what says so.
+  inline_survey_consent_text: { tab: 3, label: 'Consent text' }
 };
 
 /**
@@ -102,6 +124,13 @@ export const locateField = (key: string): { tab: number; label: string } => {
   const step = /^inline_study_steps\.(\d+)\./.exec(key);
   if (step) {
     return { tab: 3, label: `Task ${Number(step[1]) + 1}` };
+  }
+
+  // Questions have no other identity on screen either, so they are named by
+  // position for the same reason tasks are.
+  const question = /^inline_survey_questions\.(\d+)\./.exec(key);
+  if (question) {
+    return { tab: 3, label: `Question ${Number(question[1]) + 1}` };
   }
   // `Object.hasOwn` would read better but needs the es2022 lib, and widening
   // the compiler target for one call is not a trade worth making.
@@ -141,13 +170,27 @@ export const describeValidationFailure = (
  * Tab 3 is type-dependent and simply absent until a type is chosen, which is
  * why the Continue button has to handle there being no tab to continue to.
  */
-export const getTabsForType = (type: string) => {
+export const getTabsForType = (
+  type: string,
+  deliveryMode: 'native' | 'external' = 'external'
+) => {
   const tabs = [
     { id: 1, title: 'Basic Information', description: 'Configure type and status' },
     { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
   ];
 
-  if (['poll', 'survey', 'question'].includes(type)) {
+  // A poll or survey has two shapes now. Native delivery collects the questions
+  // here; external delivery collects the link it hands off to. `question` has
+  // no native path yet and keeps the link tab unconditionally.
+  if (type === 'poll' || type === 'survey') {
+    tabs.push(
+      deliveryMode === 'native'
+        ? { id: 3, title: 'Questions', description: 'What the participant is asked' }
+        : { id: 3, title: 'External Link', description: 'Configure external tool' }
+    );
+  }
+
+  if (type === 'question') {
     tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
   }
 
@@ -198,7 +241,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     inline_study_duration_minutes: undefined as number | undefined,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
     inline_study_steps: [] as InlineStudyStep[],
-    reuse_existing_study: false
+    reuse_existing_study: false,
+    // Native poll and survey. Defaults to external so an author who never opens
+    // the choice gets exactly today's behaviour.
+    delivery_mode: 'external' as 'native' | 'external',
+    inline_survey_duration_minutes: undefined as number | undefined,
+    inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT as string,
+    inline_survey_questions: [] as SurveyQuestion[],
+    reuse_existing_survey: false
   });
 
   // Whether the opportunity already pointed at a study when it loaded. Only
@@ -225,8 +275,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [activeTab, setActiveTab] = useState<number>(1);
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
 
+  // Absent means external, matching the column default and every poll and
+  // survey that existed before the choice did.
+  const deliveryMode = formData.delivery_mode ?? 'external';
+
   // Define tabs based on opportunity type
-  const tabs = getTabsForType(formData.type);
+  const tabs = getTabsForType(formData.type, deliveryMode);
 
   const loadOpportunity = useCallback(async () => {
     if (!id) return;
@@ -258,7 +312,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         inline_study_steps: [],
         // Only pre-tick reuse when a study is actually linked; otherwise the
         // author gets the same choice they had when creating.
-        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id),
+        // Read from the row rather than defaulted, so editing a native survey
+        // does not silently switch it back to an external handoff on save.
+        delivery_mode: opportunity.delivery_mode ?? 'external',
+        inline_survey_duration_minutes: undefined,
+        inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
+        inline_survey_questions: [],
+        reuse_existing_survey: Boolean(opportunity.firsthand_study_id)
       });
 
       setLockedToExistingStudy(Boolean(opportunity.firsthand_study_id));
@@ -285,7 +346,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         inline_study_duration_minutes: undefined,
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
         inline_study_steps: [] as InlineStudyStep[],
-        reuse_existing_study: Boolean(opportunity.firsthand_study_id)
+        reuse_existing_study: Boolean(opportunity.firsthand_study_id),
+        // Read from the row rather than defaulted, so editing a native survey
+        // does not silently switch it back to an external handoff on save.
+        delivery_mode: opportunity.delivery_mode ?? 'external',
+        inline_survey_duration_minutes: undefined,
+        inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
+        inline_survey_questions: [] as SurveyQuestion[],
+        reuse_existing_survey: Boolean(opportunity.firsthand_study_id)
       };
       setOriginalFormData(originalData);
 
@@ -367,13 +435,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
   }, [isEdit, id, loadOpportunity]);
 
-  // Ensure activeTab is valid when opportunity type changes
+  // Ensure activeTab is valid when the type - or the delivery mode, which also
+  // decides the tab set - changes.
   useEffect(() => {
-    const maxTabId = Math.max(...getTabsForType(formData.type).map(tab => tab.id));
+    const maxTabId = Math.max(...getTabsForType(formData.type, deliveryMode).map(tab => tab.id));
     if (activeTab > maxTabId) {
       setActiveTab(1);
     }
-  }, [formData.type, activeTab]);
+  }, [formData.type, deliveryMode, activeTab]);
 
   // Set active tab when editing existing opportunity
   // Only user tests and interviews should go to tab 3 (Session Management)
@@ -453,6 +522,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // backend rejects the same state with an equivalent message.
         errors.inline_study_steps = 'Add at least one task before publishing';
       }
+    } else if (
+      formData.status === 'published' &&
+      (formData.type === 'poll' || formData.type === 'survey') &&
+      deliveryMode === 'native'
+    ) {
+      // A native poll or survey needs its questions, not a link. Mirrors the
+      // backend guard, which refuses the same state.
+      if (formData.reuse_existing_survey || lockedToExistingStudy) {
+        if (!formData.firsthand_study_id?.trim()) {
+          errors.firsthand_study_id = lockedToExistingStudy
+            ? 'Select a launched set of questions before publishing'
+            : 'Select a launched set of questions, or untick the reuse box and write them here';
+        }
+      } else if (formData.inline_survey_questions.length === 0) {
+        errors.inline_survey_questions = 'Add at least one question before publishing';
+      }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
         errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
@@ -463,6 +548,59 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           errors.external_link_optional = 'External link must be a valid URL';
         }
       }
+    }
+
+    // Gated exactly like the task-list loop below: only when these questions
+    // are the thing being authored. Ungated, a question abandoned before the
+    // author switched to an external tool refused every later save, naming a
+    // field on a tab that is no longer rendered.
+    const authoringQuestions =
+      (formData.type === 'poll' || formData.type === 'survey') &&
+      deliveryMode === 'native' &&
+      !formData.reuse_existing_survey &&
+      !lockedToExistingStudy;
+
+    (authoringQuestions ? formData.inline_survey_questions : []).forEach((question, index) => {
+      if (!question.prompt.trim()) {
+        errors[`inline_survey_questions.${index}.prompt`] =
+          question.type === 'instruction'
+            ? 'Add what the participant should read'
+            : 'Add what the participant is asked';
+      }
+
+      if (question.type === 'single_choice' || question.type === 'multi_choice') {
+        const answers = (question.options ?? []).map((o) => o.trim()).filter(Boolean);
+        if (answers.length < 2) {
+          errors[`inline_survey_questions.${index}.options`] =
+            'A choice question needs at least two answers';
+        }
+      }
+
+      // The number input's min/max never runs: the save controls are
+      // type="button" and call handleSubmit directly, and the Questions tab is
+      // unmounted while the author is on another tab. Without this the contract
+      // refuses the save instead, naming config on a step the form numbers
+      // differently.
+      if (question.type === 'rating') {
+        const scale = question.config?.scale_max;
+        if (
+          scale === undefined ||
+          !Number.isInteger(scale) ||
+          scale < RATING_SCALE_BOUNDS.min ||
+          scale > RATING_SCALE_BOUNDS.max
+        ) {
+          errors[`inline_survey_questions.${index}.config`] =
+            `A rating scale needs between ${RATING_SCALE_BOUNDS.min} and ${RATING_SCALE_BOUNDS.max} points`;
+        }
+      }
+    });
+
+    if (
+      authoringQuestions &&
+      formData.inline_survey_questions.length > 0 &&
+      !formData.inline_survey_consent_text.trim()
+    ) {
+      errors.inline_survey_consent_text = 'Consent text is required';
     }
 
     // Task content is checked whenever tasks exist, not only at publish: the
@@ -639,6 +777,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.default_duration_minutes !== originalFormData.default_duration_minutes ||
       formData.external_link_optional.trim() !== originalFormData.external_link_optional.trim() ||
       (formData.firsthand_study_id || '') !== (originalFormData.firsthand_study_id || '') ||
+      // The survey fields, or switching delivery mode alone hid the Save
+      // Changes buttons on the first two tabs and the author had to reach the
+      // last tab to save a change they had already made.
+      (formData.delivery_mode || 'external') !== (originalFormData.delivery_mode || 'external') ||
+      formData.inline_survey_questions.length !== originalFormData.inline_survey_questions.length ||
+      JSON.stringify(formData.inline_survey_questions) !==
+        JSON.stringify(originalFormData.inline_survey_questions) ||
+      formData.inline_survey_consent_text.trim() !==
+        originalFormData.inline_survey_consent_text.trim() ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
@@ -688,6 +835,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       const data: Partial<CreateOpportunityRequest & {
         display_width?: 'single' | 'double';
         inline_study?: InlineStudyPayload;
+        // Same reason as inline_study: the survey contract cannot be imported
+        // into the flattened shared types, so it is added at the call site.
+        inline_survey?: InlineSurveyPayload;
+        delivery_mode?: 'native' | 'external';
       }> = {
         type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
@@ -755,6 +906,72 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             }))
           };
         }
+      }
+
+      if (formData.type === 'poll' || formData.type === 'survey') {
+        // Sent only when it actually CHANGED.
+        //
+        // The backend deliberately gates its publish and linkage checks on the
+        // request changing the shape, so an unrelated edit to a row already in
+        // a bad state stays allowed and the row can be repaired. Sending this
+        // on every save made both conditions permanently true for polls and
+        // surveys: a published poll whose external link was somehow null could
+        // no longer have its TITLE corrected through the form, and a native
+        // survey whose study had been deleted was refused every edit. That is
+        // the same lock-out the backend guard was gated to prevent,
+        // reintroduced from the client.
+        if (
+          !isEdit ||
+          deliveryMode !== (originalFormData?.delivery_mode ?? 'external')
+        ) {
+          data.delivery_mode = deliveryMode;
+        }
+
+        if (deliveryMode === 'native') {
+          // Same shape as the task-list branch above, and the same reason for
+          // exactly one of the two: a study id can survive in state after the
+          // author ticks reuse, picks one, then unticks and writes questions
+          // instead. The backend refuses both rather than guessing.
+          const authoringInline =
+            !lockedToExistingStudy &&
+            !formData.reuse_existing_survey &&
+            formData.inline_survey_questions.length > 0;
+
+          data.firsthand_study_id = authoringInline
+            ? undefined
+            : formData.firsthand_study_id?.trim() || undefined;
+
+          if (authoringInline) {
+            data.inline_survey = {
+              consent_text: formData.inline_survey_consent_text.trim(),
+              estimated_duration_minutes:
+                formData.inline_survey_duration_minutes || undefined,
+              steps: formData.inline_survey_questions.map((question) => ({
+                type: question.type,
+                prompt: question.prompt.trim(),
+                // Blank rows are UI scaffolding, not content: dropped so a
+                // trailing empty answer cannot fail the contract's min(1).
+                ...(question.type === 'single_choice' || question.type === 'multi_choice'
+                  ? {
+                      options: (question.options ?? [])
+                        .map((option) => option.trim())
+                        .filter(Boolean)
+                    }
+                  : {}),
+                ...(question.config ? { config: question.config } : {}),
+                ...(question.helper_text ? { helper_text: question.helper_text } : {}),
+                ...(question.is_required !== undefined
+                  ? { is_required: question.is_required }
+                  : {})
+              }))
+            };
+          }
+        }
+        // No `else` clearing inline_survey: the payload is built fresh on every
+        // submit and only the native branch above ever sets it, so an external
+        // handoff cannot carry authored questions. A defensive assignment here
+        // was dead code, and the mutation proved it - the test asserting their
+        // absence passes without it, because the absence is structural.
       }
 
       // Only superadmins can set display_width
@@ -919,6 +1136,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     });
   };
 
+  const handleQuestionsChange = (questions: SurveyQuestion[]) => {
+    setFormData(prev => ({ ...prev, inline_survey_questions: questions }));
+    setValidationErrors(prev => {
+      // Same reasoning as handleStepsChange: indices shift when a question is
+      // added, removed or moved, so a kept per-question error would point at
+      // the wrong question.
+      const next = { ...prev };
+      Object.keys(next)
+        .filter(key => key.startsWith('inline_survey_questions'))
+        .forEach(key => delete next[key]);
+      return next;
+    });
+  };
+
   // One place that turns a refusal on, so every path reports it identically.
   const showRefusal = () => {
     setRefusalShown(true);
@@ -934,6 +1165,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         return { ...prev, reuse_existing_study: false, firsthand_study_id: '' };
       }
 
+      // The survey twin. Without it the id survived the untick and was
+      // submitted alongside authored questions - and worse, the behaviour
+      // flipped on whether the author had typed anything yet, because the
+      // payload only drops the id once at least one question exists. That is
+      // precedence resolution of exactly the kind the backend refuses.
+      if (field === 'reuse_existing_survey' && value === false) {
+        return { ...prev, reuse_existing_survey: false, firsthand_study_id: '' };
+      }
+
       // Unmoderated is FirstHand-only and runs with logged-in Cortex users, so
       // drop any external link and coerce an 'external' participant type when
       // the type switches to unmoderated (a stale value must not persist).
@@ -944,6 +1184,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           external_link_optional: '',
           participant_type_required:
             prev.participant_type_required === 'external' ? 'any' : prev.participant_type_required,
+        };
+      }
+
+      // The reverse coercion. A task list picked before the author switched the
+      // type to a poll or survey stayed in state with no picker on screen, and
+      // was submitted - so the API refused the save with a message about a task
+      // list the form was no longer showing.
+      if (field === 'type' && (value === 'poll' || value === 'survey')) {
+        return {
+          ...prev,
+          type: value,
+          firsthand_study_id: '',
+          reuse_existing_study: false,
+          reuse_existing_survey: false,
         };
       }
       return { ...prev, [field]: value };
@@ -1303,7 +1557,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             className="btn btn-primary px-5 py-2 fw-semibold"
                             onClick={() => {
                               // Determine next tab based on opportunity type
-                              const tabs = getTabsForType(formData.type);
+                              const tabs = getTabsForType(formData.type, deliveryMode);
                               const nextTab = tabs.find(tab => tab.id > 2)?.id;
                               if (!nextTab) {
                                 // There is no third tab until a type is chosen,
@@ -1341,6 +1595,57 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   )}
 
                   {/* Task List tab - only for unmoderated */}
+                  {activeTab === 3 &&
+                    (formData.type === 'poll' || formData.type === 'survey') &&
+                    deliveryMode === 'native' && (
+                      <>
+                        <SurveyQuestionsTab
+                          formData={formData}
+                          validationErrors={validationErrors}
+                          handleInputChange={handleInputChange}
+                          handleQuestionsChange={handleQuestionsChange}
+                          lockedToExistingStudy={lockedToExistingStudy}
+                        />
+
+                        {/* Navigation buttons for the Questions tab. Same shape
+                            as every other tab's: this is the last tab for a
+                            native survey, so without them there is no way to
+                            save at all - which is how it shipped until a test
+                            went looking for the button. */}
+                        <div className="border-top mt-4 pt-4">
+                          <div className="d-flex justify-content-between align-items-center gap-2">
+                            <button
+                              type="button"
+                              className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                              onClick={() => setActiveTab(2)}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              <ArrowLeft size={16} className="me-2" />
+                              Back
+                            </button>
+                            <button
+                              type="submit"
+                              className="btn btn-primary px-5 py-2 fw-semibold"
+                              disabled={saving || !!successMessage}
+                              style={{ fontSize: '0.95rem' }}
+                            >
+                              {saving ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
+                                  {isEdit ? 'Updating...' : 'Creating...'}
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle size={16} className="me-2" />
+                                  {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
                   {activeTab === 3 && formData.type === 'unmoderated' && (
                     <>
                       <FirstHandStudyTab
@@ -1409,7 +1714,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                   )}
 
                   {/* External Link Tab - for polls, surveys, and questions (not unmoderated) */}
-                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && (
+                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && !(deliveryMode === 'native' && formData.type !== 'question') && (
                     <>
                       <ExternalLinkTab
                         formData={formData}
