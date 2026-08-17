@@ -87,7 +87,9 @@ function sendStudyWriteFailure(
  * The read boundary for participants' answers. Answers true when this requester
  * may see them; otherwise answers the response itself and returns false.
  *
- * **Superadmin only, deliberately, and this is an interim position.**
+ * **Superadmin only, deliberately, and this is the END STATE - not an interim
+ * position.** It used to be one; phase 4e resolved it, and resolved it by
+ * building a different route rather than by loosening this one.
  *
  * requireAdmin is nowhere near sufficient: the study list and the single study
  * GET above stay open to every admin on purpose, because study copy is
@@ -97,23 +99,20 @@ function sendStudyWriteFailure(
  * The obvious boundary - the study's owner - is wrong here, which is why this
  * is stricter than it looks like it should be. These routes aggregate every
  * response for a study, across **every opportunity that used it**, and a study
- * is reusable by an opportunity its author did not create. So:
+ * is reusable by an opportunity its author did not create. Granting the study's
+ * owner would hand them answers from participants another researcher recruited,
+ * under that researcher's consent wording. No narrowing of THIS route fixes
+ * that, because the breadth is the route's whole purpose.
  *
- * - Granting the study's owner hands them answers from participants another
- *   researcher recruited, under that researcher's consent wording.
- * - Granting the opportunity's owner is what the neighbouring surfaces do
- *   (session-outputs.ts, and GET /api/opportunities/:id/session-events), and is
- *   almost certainly the right long-term answer - but it is not implementable
- *   yet. `firsthand.runtime_sessions` records `study_id` and no
- *   `opportunity_id`, so a response cannot be attributed to an opportunity at
- *   all without a migration.
+ * What a researcher gets instead is
+ * `GET /api/opportunities/:id/survey-results` (and `.csv`), gated on the
+ * opportunity owner exactly like `/:id/session-events`, filtered to the
+ * answers that opportunity collected. That is the surface to extend when a
+ * researcher cannot see something they should. Leave this one alone.
  *
- * Phase 4 should add that column, populate it where the session is created from
- * an opportunity, and move these to per-opportunity routes gated the same way
- * as session-events. Until then, refusing everyone below superadmin is the only
- * answer that is not quietly wrong: it fails closed, and no researcher loses
- * anything they can currently reach, because the results view is mounted only
- * under VITE_SURVEY_PREVIEW and is absent from every real build.
+ * Sessions minted before 7.37.0 carry no `opportunity_id`, so they are
+ * unattributable and reachable only from here - which is the other reason this
+ * route still exists.
  *
  * Note this also refuses a study with no owner at all, where the write path
  * (canWriteStudy) fails OPEN so legacy rows stay editable by whoever wrote

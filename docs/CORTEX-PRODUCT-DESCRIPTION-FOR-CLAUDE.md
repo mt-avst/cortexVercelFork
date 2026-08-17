@@ -103,11 +103,11 @@ A user’s reservation of one session slot. States: booked, cancelled. Booking c
 
 Opportunities with an external link (e.g. Google Forms, Typeform). User clicks “Open Poll” / “Open Survey”; the app records a click (view vs action) for analytics and opens the link. No in-app form; participation is tracked for engagement/analytics (e.g. views, actions, conversion).
 
-**A native in-app path exists in the code but is deliberately switched off.**
-`poll` and `survey` have always been opportunity types - they were only ever *forced* external by the publish guard in `backend/src/routes/opportunities.ts`.
-Phases 1 to 3 of the native work shipped in 7.36.0: question types on the study contract, per-step question config (migration `0008_firsthand_step_config.sql`), answer validation rules, a participant runner, and results aggregation with CSV export.
-None of it is reachable yet - the publish guard is untouched, so no opportunity can be native, and the preview harness is behind `VITE_SURVEY_PREVIEW === '1'`, which no real build sets.
-The behaviour described above is therefore still exactly what users get.
+**The native in-app path is live and complete**, as of phase 4 (releases 7.37.0 to 7.40.0 plus 4e).
+`poll` and `survey` have always been opportunity types - they were only ever *forced* external by the publish guard in `backend/src/routes/opportunities.ts`, and that guard now accepts native delivery.
+Phases 1 to 3 shipped the machinery in 7.36.0, inert: question types on the study contract, per-step question config (migration `0008_firsthand_step_config.sql`), answer validation rules, a participant runner, and results aggregation with CSV export.
+Phase 4 wired all of it up - the delivery toggle, the publish guard, the authoring UI, the participant route at `/survey/:token`, and finally the researcher's Responses tab.
+See *Native polls and surveys* above for how it behaves.
 
 Read this before building anything here: most of it already exists, and a previous session nearly rebuilt it from scratch.
 Phase 4 is the part that is missing - the authoring toggle, the publish-guard change, the CTA labels and the routing in `OpportunityDetail`.
@@ -160,9 +160,9 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
   Both require a **superadmin**, and that is deliberately stricter than it looks.
   These routes aggregate every response for a study across **every opportunity that used it**, and a study is reusable by an opportunity its author did not create - so granting the study's owner would hand them answers from participants another researcher recruited, under that researcher's consent wording.
   A refusal is answered before any answer is read, and before the CSV download headers are set, so a rejected export cannot still hand over a file.
-  **Phase 4 must fix the model, not just relax the gate.** Opportunity ownership is what the neighbouring surfaces use and is almost certainly right here, but it is not implementable yet: `firsthand.runtime_sessions` records `study_id` and no `opportunity_id`, so a response cannot be attributed to an opportunity at all.
-  The work is a migration adding that column, populating it where a session is created from an opportunity, then per-opportunity routes gated like `/:id/session-events`.
-  Nothing is lost meanwhile, because the results view is mounted only under `VITE_SURVEY_PREVIEW`.
+  **Phase 4e fixed the model rather than relaxing the gate**, and the superadmin restriction on these two routes is now the end state.
+  A researcher reads their own answers at `GET /api/opportunities/:id/survey-results` (and `.csv`), gated on opportunity ownership like `/:id/session-events` and filtered to the answers that opportunity collected - `firsthand.runtime_sessions.opportunity_id` was added in 7.37.0 for exactly this.
+  Extend that surface, not this one, when a researcher cannot see something they should.
 - **Click tracking:** Back-end records view (detail opened) and action (e.g. “Open Poll” / “Book” clicked); optional auth; IP hashed for privacy.
 - **Settings:** Notification preferences (on_book_email, on_cancel_email); optional reminder timing.
 
