@@ -94,6 +94,28 @@ body.theme-light {
   --brand-orange-700: #b9552d;
   --brand-orange-800: #9a4524;
 
+  /* ------------------------------------------------------------------
+     ACCESSIBLE ACCENT ROLES (light mode)
+
+     #dd6e42 - brand-orange-500, the identity colour - fails WCAG AA in
+     every text role it was being used in, measured in the live DOM:
+       white text ON it .................. 3.29  (needs 4.5)
+       it as text on the cream page ...... 2.95
+       it as text on a white card ........ 3.29
+     That hit the skip link (an accessibility feature failing contrast),
+     the active filter chip, the active leaderboard tab, leaderboard
+     scores and the hero italic.
+
+     The ramp already had passing steps - components were simply reaching
+     for 500. No new colours introduced:
+       800 as text on cream 5.80 / on white 6.46
+       700 under white text 4.77
+     500 stays exactly as it is for fills, borders, icons and the logo,
+     where nothing has to be read off it.
+     ------------------------------------------------------------------ */
+  --accent-text-on-light: var(--brand-orange-800);
+  --accent-fill-on-light: var(--brand-orange-700);
+
   /* Background Colors — warm paper field + translucent cards */
   --bg-app: var(--fs-bg);
   --bg-app-gradient-top: #fbf6f0;
@@ -707,9 +729,11 @@ body.theme-light .filter-chip--all:hover {
 }
 
 body.theme-light .filter-chip--all.is-active {
-  background-color: var(--brand-orange-600);
+  /* was --brand-orange-600, which the light ramp aliases to 500 (#dd6e42):
+     white on it measures 3.29 against a 4.5 floor */
+  background-color: var(--accent-fill-on-light);
   color: #FFFFFF;
-  border-color: var(--brand-orange-600);
+  border-color: var(--accent-fill-on-light);
 }
 
 /* Home Intro Text - Light Mode */
@@ -3094,7 +3118,8 @@ body.theme-light .leaderboard-row-number {
 }
 
 body.theme-light .leaderboard-row-score {
-  color: var(--brand-primary);
+  /* orange text on a white row: 3.29 at 500, 6.46 at 800 */
+  color: var(--accent-text-on-light);
 }
 
 body.theme-light .leaderboard-row-score--zero {
@@ -3252,7 +3277,9 @@ body.theme-light .prize-card-cta {
 /* Leaderboard Tabs - Light Mode */
 body.theme-light .leaderboard-tab {
   background: #F3F4F6;
-  color: #6B7280;
+  /* #6B7280 on this fill measures 4.39 against a 4.5 floor - close enough to
+     look deliberate and still a fail. #5B6270 is 5.57 and visually identical. */
+  color: #5B6270;
   border: 1px solid #E5E7EB;
 }
 
@@ -3262,9 +3289,9 @@ body.theme-light .leaderboard-tab:hover {
 }
 
 body.theme-light .leaderboard-tab--active {
-  background: var(--brand-primary);
+  background: var(--accent-fill-on-light);
   color: #FFFFFF;
-  border-color: var(--brand-primary);
+  border-color: var(--accent-fill-on-light);
 }
 
 /* ============================================================

@@ -1792,7 +1792,10 @@ body.theme-light .badge--question {
   position: absolute;
   top: -40px;
   left: 0;
-  background: var(--brand-primary);
+  /* An accessibility feature that failed contrast: white on --brand-primary
+     resolves to 3.29 in light mode. Falls back to --brand-primary where the
+     light-only token is undefined (i.e. dark mode, where it already passes). */
+  background: var(--accent-fill-on-light, var(--brand-primary));
   color: #FFFFFF;
   padding: var(--spacing-2) var(--spacing-4);
   text-decoration: none;
@@ -2499,9 +2502,21 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Status and clicks columns spacing */
-.admin-dashboard table tbody td:nth-child(3),
-.admin-dashboard table tbody td:nth-child(4) {
+/* Named columns, not positions. A bare positional selector hits BOTH tables in
+   .admin-dashboard - Recent bookings' third column is the participant, not the
+   status - and it silently re-targets itself whenever a column is added or
+   removed. A closed study carries two badges, `closed` and `Auto-closed`, which
+   need 184px; nowrap held them on one line in an 84px cell and spilled them
+   100px into the neighbouring column, so the status cell wraps and the second
+   badge drops underneath. The badges keep their own nowrap. */
+.admin-dashboard table.admin-data-table tbody td.col-status {
+  white-space: normal;
+  overflow: visible;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.admin-dashboard table.admin-data-table tbody td.col-metric {
   white-space: nowrap;
   overflow: visible;
   padding-left: 8px;
@@ -2509,11 +2524,11 @@ body.admin-page .header .container {
 }
 
 /* Type badges visibility */
-.admin-dashboard table tbody td:nth-child(2) {
+.admin-dashboard table.admin-data-table tbody td.col-type {
   overflow: visible;
 }
 
-.admin-dashboard table tbody td:nth-child(2) .badge {
+.admin-dashboard table.admin-data-table tbody td.col-type .badge {
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
@@ -2521,11 +2536,11 @@ body.admin-page .header .container {
 }
 
 /* Status column isolation */
-.admin-dashboard table tbody td:nth-child(3) {
+.admin-dashboard table.admin-data-table tbody td.col-status {
   isolation: isolate;
 }
 
-.admin-dashboard table tbody td:nth-child(3) > * {
+.admin-dashboard table.admin-data-table tbody td.col-status > * {
   display: inline-block;
   margin-right: 0.25rem;
 }
@@ -2944,14 +2959,20 @@ body.admin-page .header .container {
    ============================================================ */
 
 /* Column 1: Title - generous space for title + description */
+/* NB: under `table-layout: fixed` these percentages are the whole story -
+   min-width is not honoured, so a column gets exactly its share and no more.
+   Title gives up the 3% that Status needs for its widest badge. */
 .admin-data-table .col-title {
-  width: 32%;
+  width: 25%;
   min-width: 320px;
 }
 
-/* Column 2: Type - centered lozenges */
+/* Column 2: Type - centered lozenges. Sized for "Recorded study", the longest
+   participant-facing type name, which at 14% overflowed its cell by 4px the
+   moment the badge stopped saying "Unmoderated". Renaming a type is a layout
+   change in a `table-layout: fixed` table. */
 .admin-data-table .col-type {
-  width: 14%;
+  width: 15%;
   min-width: 140px;
   text-align: center;
 }
@@ -2974,9 +2995,10 @@ body.admin-page .header .container {
   margin: 0;
 }
 
-/* Column 3: Status - centered badges */
+/* Column 3: Status - centered badges. Wide enough for "Auto-closed", the widest
+   badge that can appear here, which a closed study renders under its status. */
 .admin-data-table .col-status {
-  width: 9%;
+  width: 12%;
   min-width: 100px;
   text-align: center;
 }
@@ -2986,11 +3008,19 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Columns 4, 5, 6: Metrics (Clicks, Capacity, Booked) */
+/* Columns 4, 5: Metrics (Clicks, Booked) */
 .admin-data-table .col-metric {
   width: 9%;
   min-width: 90px;
   text-align: right;
+}
+
+/* Booked carries a ratio AND a progress bar, so it needs more than a bare count
+   column. It inherits the 9% above and every "2 / 3" wrapped after the slash;
+   the width freed by dropping the duplicate Capacity column goes here. */
+.admin-data-table .col-booked {
+  width: 14%;
+  min-width: 150px;
 }
 
 .admin-data-table td.col-metric {
@@ -2998,9 +3028,10 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Column 7: Created Date */
+/* Column 6: Created Date. Wide enough for a full "Sun 16 Aug 2026" on one line -
+   at 11% the year wrapped underneath the month. */
 .admin-data-table .col-date {
-  width: 11%;
+  width: 14%;
   min-width: 110px;
 }
 
@@ -3495,73 +3526,32 @@ body.theme-dark .admin-data-table td.col-date {
   }
 }
 
-/* Optimize column widths for opportunities table - Desktop */
+/* Column widths are owned by the semantic .col-* classes above (.col-title,
+   .col-type, .col-status, .col-metric, .col-booked, .col-date, .col-actions).
+ *
+ * There used to be a SECOND width system here: a block of
+ * `table.table-hover thead th:nth-child(N)` rules, one per column, which
+ * outranked every .col-* class and therefore silently owned the layout. It
+ * caused both of the defects this commit fixes.
+ *
+ * 1. It addressed columns by POSITION on a selector that matches every table
+ *    in .admin-dashboard, and there are two. Recent bookings has four columns
+ *    and a different order, so its Session column inherited the Type column's
+ *    geometry - `width: 10%; max-width: 10%; white-space: nowrap` - which is
+ *    186px that cannot wrap, holding a 225px value, in a `table-layout: fixed`
+ *    table that cannot scroll. The value was painted over the participant's
+ *    name. The class on that cell could never have fixed it: at (0,1,0) it
+ *    loses to (0,3,3) in the same cascade layer.
+ * 2. Hard-coding eight positions makes any column change wrong by
+ *    construction. Removing the duplicate Capacity column shifts every
+ *    position after it, so Booked would have been handed Clicks' width.
+ *
+ * Table layout stays `fixed` via the .table-responsive rule above; without
+ * per-position widths the four-column table simply divides evenly, which is
+ * what it wanted all along. */
 @media (min-width: 992px) {
   .admin-dashboard table.table-hover {
-    table-layout: fixed;
     width: 100%;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(1),
-  .admin-dashboard table.table-hover tbody td:nth-child(1) {
-    width: 26%;
-    min-width: 180px;
-    max-width: 26%;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(2),
-  .admin-dashboard table.table-hover tbody td:nth-child(2) {
-    width: 10%;
-    min-width: 100px;
-    max-width: 10%;
-    white-space: nowrap;
-    text-align: center;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(3),
-  .admin-dashboard table.table-hover tbody td:nth-child(3) {
-    width: 8%;
-    min-width: 80px;
-    max-width: 8%;
-    white-space: nowrap;
-    text-align: center;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(4),
-  .admin-dashboard table.table-hover tbody td:nth-child(4) {
-    width: 8%;
-    min-width: 70px;
-    max-width: 8%;
-    text-align: center;
-    white-space: nowrap;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(5),
-  .admin-dashboard table.table-hover tbody td:nth-child(5) {
-    width: 8%;
-    min-width: 75px;
-    max-width: 8%;
-    text-align: center;
-    white-space: nowrap;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(6),
-  .admin-dashboard table.table-hover tbody td:nth-child(6) {
-    width: 8%;
-    min-width: 75px;
-    max-width: 8%;
-    text-align: center;
-    white-space: normal;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(7),
-  .admin-dashboard table.table-hover tbody td:nth-child(7) {
-    width: 11%;
-    min-width: 110px;
-    max-width: 11%;
-    white-space: nowrap;
-    text-align: center;
-  }
-  .admin-dashboard table.table-hover thead th:nth-child(8),
-  .admin-dashboard table.table-hover tbody td:nth-child(8) {
-    width: 11%;
-    min-width: 120px;
-    max-width: 11%;
-    white-space: nowrap;
-    text-align: center;
   }
 }
 
@@ -6239,6 +6229,14 @@ body.theme-light .atmospheric-orb-secondary {
 
 .cortex-stat-trend--negative {
   color: var(--status-danger);
+}
+
+/* No previous week to compare against. Deliberately muted and unemphasised -
+   the absence of a measurement is not a result, and it must not read as one
+   next to the figures that are. */
+.cortex-stat-trend--none {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ----------------------------------------------------------
@@ -10242,7 +10240,11 @@ body.theme-light .admin-subtitle {
 .stat-hud-activity-value {
   font-size: var(--font-size-h3);
   font-weight: var(--font-weight-semibold);
-  color: #FFFFFF;
+  /* Was a hard-coded #FFFFFF, which is white text on the white AdaptaBits card
+     in light mode - contrast 1:1, so the tests/surveys/polls/questions counts
+     were literally invisible and their labels floated with nothing above them.
+     Only readable in dark mode, where the value happened to match. */
+  color: var(--text-primary);
   line-height: 1.2;
   font-variant-numeric: tabular-nums;
 }
@@ -12432,4 +12434,441 @@ body.theme-light .btn-ghost-danger {
 
 .tab-description-dynamic.active {
   font-size: 0.9rem;
+}
+
+/* ============================================================
+   RECORDED STUDY EXPECTATIONS
+   What the participant is agreeing to, stated above the CTA.
+
+   Deliberately quiet: this sits directly above the button that
+   starts a screen-and-voice recording, and an alarm-coloured
+   panel there would read as a warning about a fault rather than
+   as the ordinary terms of taking part.
+   ============================================================ */
+.recorded-study-expectations {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  border-radius: 10px;
+  max-width: 640px;
+}
+
+body.theme-dark .recorded-study-expectations {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+body.theme-light .recorded-study-expectations {
+  background: #F8FAFC;
+  border: 1px solid #E5E7EB;
+}
+
+.recorded-study-expectations__heading {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 14px;
+  /* The page's h1 sets a display max-width for its own measure. Reset it here:
+     a small-caps label inheriting a 12ch clamp wraps to three words a line. */
+  max-width: none;
+}
+
+body.theme-dark .recorded-study-expectations__heading {
+  color: #9CA3AF;
+}
+
+body.theme-light .recorded-study-expectations__heading {
+  color: #6B7280;
+}
+
+/* Attribution for the block, so a participant can tell the product's promise
+   from the researcher's prose above it. Deliberately quieter than the items:
+   it is provenance, not a term. */
+.recorded-study-expectations__source {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin: 0 0 14px;
+  /* Stops a single short word orphaning onto its own line, which this sentence
+     did at 640px. */
+  text-wrap: pretty;
+}
+
+body.theme-dark .recorded-study-expectations__source {
+  color: #9CA3AF;
+}
+
+body.theme-light .recorded-study-expectations__source {
+  color: #6B7280;
+}
+
+.recorded-study-expectations__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.recorded-study-expectations__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.recorded-study-expectations__item > span {
+  text-wrap: pretty;
+}
+
+.recorded-study-expectations__item svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  opacity: 0.7;
+}
+
+body.theme-dark .recorded-study-expectations__item {
+  color: #E5E7EB;
+}
+
+body.theme-light .recorded-study-expectations__item {
+  color: #374151;
+}
+
+.recorded-study-expectations__item strong {
+  font-weight: 600;
+}
+
+/* ============================================================
+   OPPORTUNITY INDEX
+   Rows, not cards. Replaced a three-column fixed 352px bento
+   grid whose rows stretched to their tallest member, leaving
+   up to 155px of dead white inside the short ones.
+
+   The grid contains; the row does not. No fill, no radius, no
+   shadow, no per-row border - a hairline rule between rows is
+   the only chrome, so a row is exactly as tall as its content.
+   ============================================================ */
+.opportunity-index {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+  max-width: 900px;
+  /* ONE ground for the whole index, not one per row.
+     Removing the cards exposed the animated neural background, whose lines and
+     dots ran straight through the titles. The fix is a single field for the
+     list to sit on - which is still "the grid contains, the row does not" -
+     rather than giving twelve rows their fills back. */
+  background: var(--opportunity-index-ground);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+}
+
+body.theme-light {
+  --opportunity-index-ground: rgba(255, 255, 255, 0.72);
+}
+
+body.theme-dark {
+  --opportunity-index-ground: rgba(10, 14, 24, 0.72);
+}
+
+@supports not (backdrop-filter: blur(2px)) {
+  body.theme-light .opportunity-index { --opportunity-index-ground: rgba(255, 255, 255, 0.94); }
+  body.theme-dark .opportunity-index { --opportunity-index-ground: rgba(10, 14, 24, 0.94); }
+}
+
+.opportunity-row + .opportunity-row {
+  border-top: 1px solid var(--opportunity-row-rule);
+}
+
+body.theme-light {
+  --opportunity-row-rule: rgba(20, 33, 61, 0.12);
+  /* NOT the brand accent. #DD6E42 measures 3.07:1 against this ground, under
+     the 4.5:1 AA floor, and this is the page's only urgency signal - the one
+     colour a participant is meant to notice. Darkened until it passes (5.07:1)
+     while staying recognisably the same warm orange. Dark mode keeps the brand
+     value, which already measures 5.86:1 there. */
+  /* Now the shared token rather than a one-off hex - the same problem, solved
+     once for the whole app. */
+  --opportunity-row-urgent: var(--accent-text-on-light);
+  --opportunity-row-kind: #6B7280;
+  --opportunity-row-title: #14213D;
+  --opportunity-row-purpose: #374151;
+  --opportunity-row-meta: #6B7280;
+  --opportunity-row-hover: rgba(20, 33, 61, 0.035);
+}
+
+body.theme-dark {
+  --opportunity-row-rule: rgba(255, 255, 255, 0.12);
+  --opportunity-row-urgent: #DD6E42;
+  --opportunity-row-kind: #9CA3AF;
+  --opportunity-row-title: #FFFFFF;
+  --opportunity-row-purpose: #D1D5DB;
+  --opportunity-row-meta: #9CA3AF;
+  --opportunity-row-hover: rgba(255, 255, 255, 0.045);
+}
+
+.opportunity-row__link {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 16px;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 6px;
+  transition: background-color 0.15s ease;
+}
+
+.opportunity-row__link:hover,
+.opportunity-row__link:focus-visible {
+  background: var(--opportunity-row-hover);
+  text-decoration: none;
+  color: inherit;
+}
+
+.opportunity-row__link:focus-visible {
+  /* --accent-primary is defined nowhere in the repo, so this always fell to its
+     literal. Use the token that is actually defined. */
+  outline: 2px solid var(--opportunity-row-urgent);
+  outline-offset: 2px;
+}
+
+.opportunity-row__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Small caps carries the taxonomy so a coloured pill does not have to. Six
+   pastel badges at equal weight ranked nothing and added six colours. */
+.opportunity-row__kind {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--opportunity-row-kind);
+  margin: 0 0 6px;
+}
+
+.opportunity-row__status {
+  opacity: 0.75;
+}
+
+.opportunity-row__title {
+  font-size: 1.25rem;
+  line-height: 1.25;
+  margin: 0 0 6px;
+  color: var(--opportunity-row-title);
+  /* The page's h1 clamps its own measure; a row title inheriting that wraps to
+     three words a line. Named explicitly so it cannot be inherited away. */
+  max-width: none;
+  text-wrap: pretty;
+}
+
+.opportunity-row__purpose {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0;
+  color: var(--opportunity-row-purpose);
+  text-wrap: pretty;
+  /* Two lines, so one researcher's essay cannot set the height of the row and
+     an index stays scannable. The full text is on the study page. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.opportunity-row__meta {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+  margin: 10px 0 0;
+  padding: 0;
+  font-size: 0.8rem;
+  color: var(--opportunity-row-meta);
+}
+
+.opportunity-row__meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.opportunity-row__meta-item svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* The one accent on the page, spent on the only thing that decays. */
+.opportunity-row__closing--urgent {
+  color: var(--opportunity-row-urgent);
+  font-weight: 600;
+}
+
+.opportunity-row__closing--urgent svg {
+  opacity: 1;
+}
+
+/* Same place on every row. Reads as a button, is not one - it lives inside the
+   row's link, and a real button there would be a second tab stop for the same
+   destination. */
+.opportunity-row__action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--opportunity-row-title);
+}
+
+.opportunity-row__action svg {
+  transition: transform 0.15s ease;
+}
+
+.opportunity-row__link:hover .opportunity-row__action svg {
+  transform: translateX(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opportunity-row__link,
+  .opportunity-row__action svg {
+    transition: none;
+  }
+  .opportunity-row__link:hover .opportunity-row__action svg {
+    transform: none;
+  }
+}
+
+/* Under ~640px the action drops below the text rather than squeezing the
+   title into a column two words wide. */
+@media (max-width: 640px) {
+  .opportunity-row__link {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+}
+
+/* ============================================================
+   BOOKING CARD ADDITIONS
+   ============================================================ */
+
+/* The zone sits with the time, quieter than it, because it is a
+   qualifier rather than the fact. Times were rendered with no zone
+   at all for a company spread across the UK and the US. */
+.booking-timezone {
+  font-size: 0.8em;
+  opacity: 0.7;
+  white-space: nowrap;
+}
+
+/* Replaces a permanently disabled "Reschedule" button. The path that
+   works, stated in words, rather than a control that never will. */
+.booking-reschedule-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.7;
+}
+
+/* What became of a past booking - previously not shown at all, so an
+   attended session and a no-show looked identical. */
+.booking-outcome {
+  display: inline-flex;
+  align-items: center;
+  font-weight: 600;
+}
+
+body.theme-light .booking-outcome-approved { color: #1D7A4C; }
+body.theme-dark  .booking-outcome-approved { color: #4ADE80; }
+body.theme-light .booking-outcome-rejected { color: #B4471F; }
+body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
+
+/* Whose numbers these are. A researcher admin's dashboard is filtered to the
+   studies they own; a superadmin's is not. Same cards, different meaning, and
+   the page said neither - so "Research studies 11" read as a platform total to
+   the person who happened to own 11 of the 15. */
+.stat-scope-note {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  opacity: 0.6;
+  margin: 0 0 8px;
+}
+
+/* Five stat cards in a four-up grid orphaned the fifth onto its own row with a
+   three-column gap beside it. */
+
+/* Own the stat layout rather than fighting Bootstrap's grid for it: five cards
+   in a four-up row orphaned the fifth with a three-column gap beside it, and
+   .col-md-4 was beating a .stat-card-col override on source order. */
+.admin-stat-grid {
+  display: grid;
+  /* min() so the track cannot overflow a container narrower than 280px */
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
+}
+
+/* The full "Wed 19 Aug 2026, 23:00 GMT+1" overflowed the SESSION column into
+   PARTICIPANT. In a table the zone is said once, in the header. */
+.admin-col-zone {
+  font-weight: 400;
+  opacity: 0.6;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* The cell itself MUST be allowed to wrap. `white-space: nowrap` on the whole
+   cell was the defect: this table is `table-layout: fixed` above 992px with
+   `overflow-x: hidden`, so an unwrappable cell cannot widen its own column and
+   instead paints over the one beside it. Only the parts that must never split
+   are nowrap - the date, and the time with its zone. */
+.admin-recent-session {
+  white-space: normal;
+}
+
+.admin-recent-session-date,
+.admin-recent-session-time {
+  white-space: nowrap;
+}
+
+/* Recent bookings column widths. Its own, because it is its own table: four
+   columns, in a different order, sharing only an ancestor with the eight-column
+   Research Studies table. Session is sized for the widest value it can hold -
+   "Wed 19 Aug 2026 · 23:00 GMT+1" - and Study takes the remainder, being the
+   only column with free text in it. */
+/* One padding for the header and its cells, so the column reads as a column:
+   the th carried 12px and the td 8px, leaving "STUDY" indented past the titles
+   underneath it. */
+.admin-dashboard .col-recent-study {
+  width: 36%;
+  text-align: left;
+  padding-left: 12px;
+}
+
+.admin-dashboard .col-recent-session {
+  width: 26%;
+}
+
+.admin-dashboard .col-recent-participant {
+  width: 24%;
+}
+
+.admin-dashboard .col-recent-status {
+  width: 14%;
+}
+
+/* `.text-start` is a Bootstrap utility this build does not ship, so the study
+   link kept `.btn`'s centred text. Invisible while every title fitted on one
+   line; a wrapped title centred its second line under its first. */
+.admin-recent-study-link {
+  justify-content: flex-start;
+  text-align: left;
 }

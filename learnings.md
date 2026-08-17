@@ -352,3 +352,136 @@ MCPs available: cursor-ide-browser, cursor-browser-extension, user-chrome-devtoo
 Learnings: Use learnings.md in the project root as a reference for prior discoveries, gotchas, and conventions. When you find something reusable (fixes, patterns, pitfalls), add it to learnings.md with a short, actionable note.
 Suggested follow-ups: M6 End-to-End Click Tracking Test (publish poll → click "Open Poll" → verify click tracked); Analytics Dashboard Verification (confirm analytics for published polls); Production readiness for M6 (error handling, env vars, README for M6).
 ```
+
+---
+
+## 2026-08-16 — UX pass: participant journey, admin surfaces, and a contrast audit
+
+Branch `feat/participant-browse-cards`, 17 commits off `main`, unpushed.
+
+### The pattern that produced most of the real findings
+
+**Judge what is on screen, then check the claim against the code that has to keep it.** Four separate defects this session were the product stating something untrue, and three of them were introduced *by me* while fixing the others:
+
+- "You can stop at any time" — there is no stop control anywhere in the recording flow. The only exit is the browser's own Stop sharing, and the partial recording uploads anyway.
+- "About 30 minutes" — unmoderated has **no duration field in the authoring form**, so every such study carries the `DEFAULT 30` column value. The figure was above a consent button.
+- "You will need Google Chrome" — Chromium is required for the *floating pane* only. Firefox and Safari run the study with two windows.
+- An "Activity Trend" sparkline in AdaptaBits that plotted **nothing**: seven points derived from one scalar, its own comments reading "simulating weekly activity", last point hardcoded higher "to show growth".
+
+### Dates and time zones
+
+36 formatting call sites across `en-US`, `en-GB` and the browser default produced **three formats, two of them on one booking card**. Now one utility, `frontend/src/utils/datetime.ts`. Month always named; zone always an **offset**, because `timeZoneName: 'short'` returns `BST` to a British reader and `GMT-4` to an American one from the same call.
+
+🔥 **A global formatting sweep is unsafe wherever the LAYOUT encodes a zone.** `AdminSessionManager`'s calendar positions slots with `getUTCHours()` and bounds day columns with `setUTCHours()`. The sweep replaced its forced-UTC labels with local ones and left the explanatory comment behind — every caption an hour out of its own row in BST. The grid is now local end to end (geometry, weekday exclusion, default range, both date pickers). Note `toISOString().split('T')[0]` is **wrong** for a local-midnight date in a positive offset: it renders the previous day.
+
+### Contrast: measure, do not read
+
+A grep found 104 hard-coded `color: #FFFFFF`. **Almost none of them were the problem** — most sit on dark fills and `_themes.css` overrides the rest. The real defect was the brand colour: `#dd6e42` fails AA in **every** text role (white on it 3.29, as text on cream 2.95, on white 3.29). The ramp already contained passing steps; components were reaching for 500. Added `--accent-text-on-light` (800) and `--accent-fill-on-light` (700) — **no new colours**. The **skip link** was among the failures: an accessibility feature failing contrast.
+
+The method: walk every element, composite the background up the ancestor chain, apply the large-text exemption, report anything under the floor. Guessing from CSS would have missed the orange and "fixed" 100 innocent whites.
+
+### Traps
+
+- **`npx eslint <changed files>` is not the lint gate.** The backlog is per-file-per-rule in `eslint-suppressions.json`, so four clean files can sit over a red repo. Run `npm run lint` from the root. A suppression also **hid code I thought I had deleted** — my regex removed only a comment line.
+- **A mutation that fails to compile prints "Tests: 0" and reads exactly like a kill.** Re-run it in a form that compiles.
+- **`git checkout --` inside a mutation script destroys uncommitted work.** Commit before mutating.
+- **Do not edit a file the unpushed branch rewrites.** `ResponsesSection.tsx` already carries its fix on `feat/participant-welcome-expectations`; the `end`-step filter went into `SessionReview.tsx` instead. Check `git diff main..<branch> -- <file>` first.
+- **Seed gaps read exactly like product bugs.** The reviewer 404'd ("the session may not have started yet") for want of `opportunity_session_events` rows; the leaderboard was empty because it reads `user_profiles`, not `points_transactions`.
+- **A seed guard outside a transaction fails open** — psql's `ON_ERROR_STOP` is off by default, and two `BEGIN/COMMIT` pairs defeat `psql -1`. `SUM(...) FILTER` over zero rows is NULL into a `NOT NULL` column, which would have fired on the 1st of a month.
+- **`SELECT b.*`** on `/bookings/my/bookings` sent `admin_notes` — a researcher's written judgement of a participant — to that participant.
+- **A test comment recorded a decision I was reversing.** `Admin.test.tsx` said MR !77 renamed "Studies" to "Research Studies" *because the short form was ambiguous*; I had shortened it to fit five cards across. A layout constraint is not a reason to reverse a content decision.
+
+## Admin surfaces, honest numbers, and one name per type (2026-08-16, later)
+
+A second pass over `feat/participant-browse-cards`, walking the admin dashboard, the authoring form and the analytics tab rather than reading them.
+Nine commits.
+Every finding below started as something visible on screen and was only then checked against the code.
+
+### The pattern, again: the product stating something untrue
+
+- **The default consent text promised a control that does not exist.**
+  `DEFAULT_CONSENT_TEXT` pre-fills the required Consent field on every new unmoderated study, and it ended "You can stop at any time."
+  There is no stop, withdraw or exit control anywhere in the recording flow, and the partial recording uploads regardless.
+  Creating a study without touching the field wrote that sentence into the database, which is how it was found.
+  It also contradicted Cortex's own non-authorable "Before you start" panel on the same page, which already said it correctly.
+- **The study page showed participants the admin type name.**
+  The hero badge called `formatOpportunityType`, so a recorded study read "UNMODERATED" - the one word participant copy is not allowed to use.
+  This page matters more than browse: the shareable link lands here, so for most participants it is the only page they see.
+- **"PARTICIPANTS: Any" sat above a panel saying the study needs a Cortex account.**
+  Every route to taking part requires a signed-in account, and a recorded study refuses external participants outright when it is saved.
+  The browse row had already reasoned this out and said nothing for `any`; the detail page had reached the opposite conclusion because it was deciding separately.
+  Both now call one `getEligibilityNote`.
+- **Every recorded study claimed "about 30 minutes", chosen by nobody.**
+  There was no duration field in the authoring form, so both write paths fell back to `opportunities.default_duration_minutes` - NOT NULL, DEFAULT 30 - and the figure was printed above a consent button.
+  The form was doing the same thing on its side, sending `default_duration_minutes` as the study's duration.
+  Fixed by adding an OPTIONAL field: `firsthand.studies.estimated_duration_minutes` was already nullable with no default, so null already meant "not stated" and no migration was needed.
+
+### Analytics was reporting numbers that were not measurements
+
+- 🔥 **`toISOString().split('T')[0]` on a Postgres `date` loses a day, and the backend was never swept for it.**
+  The endpoint returned `clicks_by_day: ["2026-08-15"]` and `peak_day: 2026-08-15` for two clicks whose own `first_click` it returned as 16 August - one response contradicting itself.
+  `SELECT DATE(clicked_at)` cuts the day in the DATABASE session's zone, then node-postgres hands JS a Date at LOCAL midnight, which reads back in UTC as the previous day in any positive offset.
+  Days, hours and weekdays are now cut in SQL in one organisation zone and returned as TEXT, so nothing downstream can re-read a calendar day as an instant.
+- **Peak Hour read 11:00 beside a First Click of 12:30**, from the same two clicks, because `EXTRACT(HOUR ...)` ran in UTC while the timeline rendered locally.
+- **A percentage change from a zero baseline is not 100%.**
+  `week_over_week_change` returned 100 whenever the previous week was empty, so every study announced "+100%" in green with an up arrow from its first click, and two clicks claimed exactly what two thousand would.
+  It returns null now and the card says "no previous week to compare".
+  Zero was not an option either: zero reads as flat, which is a measurement.
+- **A chart titled "(30d)" carried a total labelled "(7d)".**
+  The title tracked the period selector while the total was pinned to seven days; at 7d they agreed by coincidence, which is exactly when nobody notices.
+- **The zone is a product decision, not a technical one.**
+  Buckets are cut in one fixed organisation zone rather than the reader's, because analytics is quoted between people and a chart that reshapes itself per viewer is worse than one that is explicitly in UK time.
+  The page says which zone it counted in.
+
+### Two tables, two competing width systems
+
+- 🔥 **A positional column-width block silently owned the layout and beat every semantic class.**
+  `.admin-dashboard table.table-hover thead th:nth-child(N)` at (0,3,3) outranked `.admin-recent-session` at (0,1,0) in the same cascade layer, so the class-based fix could never have worked.
+  Measuring the computed style found it; reading the diff never would have.
+- **It addressed columns by POSITION on a selector matching every table in `.admin-dashboard`, and there are two.**
+  Recent bookings has four columns in a different order, so its Session column inherited the Type column's geometry - `width: 10%; max-width: 10%; white-space: nowrap` - which is 186px that cannot wrap holding a 225px value, in a `table-layout: fixed` table that cannot scroll.
+  The value was painted over the participant's name.
+- **Positional widths are wrong by construction the moment a column moves.**
+  Removing the duplicate Capacity column - which printed `sum(capacity)` one cell to the left of Booked, which renders that same sum as its own denominator - shifted every position after it.
+- 🔥 **Renaming a type is a layout change.**
+  "Recorded study" is wider than "Unmoderated" and overflowed the type column by 4px in the same fixed table.
+  jsdom has no layout engine, so none of 528 tests could see it; only re-measuring in the browser did.
+
+### One name per type
+
+`test` was "User Test" in the authoring form, "APP TESTING" on the dashboard badge and "Usability test" on browse - three words for one thing, so a researcher and a participant could not discuss the same study without translating.
+`getParticipantFacingType` is now the only place a type becomes words, on admin surfaces as well as participant ones, and `formatOpportunityType` is deleted rather than kept: a second formatter is exactly how three names happened.
+The dashboard's STUDY TYPE filter also had **no `unmoderated` option at all**, so recorded studies could not be filtered for - found only because the test enumerates `OPPORTUNITY_TYPES` instead of listing types by hand.
+
+### Traps that cost real time
+
+- 🔥 **`frontend/src/shared/**` is a COMMITTED COPY of `shared/**` and NOTHING regenerates it.**
+  Not `npm run build`, not CI - while the banner stamped into every one of those files claimed it was copied "during the build process".
+  A corrected `shared/` constant passed all 177 backend specs and left the frontend still shipping the old one, with a green suite either side.
+  The banner now says what actually happens, its generation timestamp is gone so a regeneration is a no-op unless content changed, and `shared-copies-are-current.test.ts` fails the moment a source and its copy disagree.
+- 🔥 **`cmd | grep && echo OK` reports success on a failing command**, because the exit status is grep's.
+  A failing test suite and 15 lint errors both passed a gate this way.
+  Redirect to a file and echo `$?`.
+- 🔥 **Resolving a cherry-pick conflict by taking the incoming side wholesale imported the SIBLING branch's tests onto this one.**
+  The incoming commit had been made on the merged walk branch, so its hunk carried content that only exists there.
+  Caught because the imported test failed against this branch's component.
+  Reset and re-applied only the intended tests onto this branch's own file.
+- **A new test file has NO suppression budget**, so a single `as any` copied from a neighbouring grandfathered file fails the repo lint.
+- **RTL's `findBy*`/`waitFor` returned without the DOM having advanced** on the analytics page, resolving against a body holding nothing but "Loading...".
+  Four real assertions looked like component bugs.
+  A plain poll on the container the render owns is dull and correct.
+- **Driving the analytics period selector in jsdom re-enters the load effect and the run never terminates** - it hangs rather than failing.
+- **A mutation that fails to compile prints "Tests: 0" and reads exactly like a kill.**
+  Hit three times in one session; re-run it in a form that compiles before believing it.
+- **Two mutations survived and both were real gaps rather than redundant layers.**
+  Reverting the form to send `default_duration_minutes`, and restoring the backend's `?? default_duration_minutes` fallback, each passed every existing test because nothing asserted what the form submits or what the create path stores.
+- **Asserting a phrase appears "somewhere in the query" is not enough.**
+  Stripping `AT TIME ZONE` from the daily SELECT survived, because the GROUP BY still carried it and the query still read as zone-aware.
+  Pin the projected column.
+
+### Also fixed
+
+`GET /api/bookings/pending-approvals` gated on the admin role and nothing else, while approve and reject beside it both check ownership.
+Any `researcher_admin` could read every other researcher's completed sessions - participant names, participant emails, and `admin_notes`.
+It also listed rows the reader could not act on, since approving another researcher's session 403s.
+Filtered in SQL, not after the fetch: filtering in JS still pulls the notes and emails across the wire, which is the disclosure rather than the rendering of it.

@@ -300,6 +300,134 @@ describe("studies repository", () => {
 // is then served to employees while screen and microphone recording runs. The
 // route-level tests only prove the 403 is relayed; the decision itself is
 // taken here, inside the transaction, and this is where it has to be pinned.
+describe("countStudyTasks", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL = "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete process.env.POSTGRES_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const wireClient = (
+    handler: (sql: string, params?: unknown[]) => Promise<{ rows: unknown[] }>
+  ) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    operationClient.query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (sql === "SET search_path TO firsthand") {
+        return { rowCount: null, rows: [] };
+      }
+      return handler(sql, params);
+    });
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+    return operationClient;
+  };
+
+  it("returns null when persistence is not configured, rather than a misleading zero", async () => {
+    delete process.env.DATABASE_URL;
+    delete process.env.POSTGRES_URL;
+
+    const studiesRepository = await import("./studies-repository");
+
+    await expect(studiesRepository.countStudyTasks("study_abc")).resolves.toBeNull();
+  });
+
+  // The count and the existence check are separate queries on purpose: count(*)
+  // over no rows is 0, which would otherwise report "0 tasks" for a study that
+  // does not exist at all.
+  it("distinguishes a study with no tasks from a study that is not there", async () => {
+    wireClient(async (sql) => {
+      if (sql.includes("FROM study_steps")) return { rows: [{ task_count: "0" }] };
+      if (sql.includes("FROM studies")) return { rows: [] };
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    const studiesRepository = await import("./studies-repository");
+
+    await expect(studiesRepository.countStudyTasks("study_missing")).resolves.toBeNull();
+  });
+
+  it("reports zero for a study that exists and has only the end marker", async () => {
+    wireClient(async (sql) => {
+      if (sql.includes("FROM study_steps")) return { rows: [{ task_count: "0" }] };
+      if (sql.includes("FROM studies")) return { rows: [{ one: 1 }] };
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    const studiesRepository = await import("./studies-repository");
+
+    await expect(studiesRepository.countStudyTasks("study_abc")).resolves.toBe(0);
+  });
+
+  // pg returns count(*) as a string. Without the Number() the route would ship
+  // task_count: "4" and the frontend's `brief.task_count ? ...` would render
+  // the string, which happens to look right and is not.
+  it("coerces the driver's string count to a number", async () => {
+    wireClient(async (sql) => {
+      if (sql.includes("FROM study_steps")) return { rows: [{ task_count: "4" }] };
+      if (sql.includes("FROM studies")) return { rows: [{ one: 1 }] };
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    const studiesRepository = await import("./studies-repository");
+
+    const result = await studiesRepository.countStudyTasks("study_abc");
+    expect(result).toBe(4);
+    expect(typeof result).toBe("number");
+  });
+
+  // pg is mocked here, so this pins the clause rather than proving the SQL
+  // semantics - those were checked against the real database, where a study
+  // with two steps plus an end marker reports 2 and one with four reports 4.
+  // Without the clause the participant is promised one more task than they get.
+  it("excludes the terminal end marker from the count", async () => {
+    const client = wireClient(async (sql) => {
+      if (sql.includes("FROM study_steps")) return { rows: [{ task_count: "4" }] };
+      if (sql.includes("FROM studies")) return { rows: [{ one: 1 }] };
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    const studiesRepository = await import("./studies-repository");
+    await studiesRepository.countStudyTasks("study_abc");
+
+    const countSql = client.query.mock.calls
+      .map((call) => String(call[0]))
+      .find((sql) => sql.includes("FROM study_steps"));
+    expect(countSql).toContain("FILTER (WHERE type <> 'end')");
+  });
+
+  // The prompts must never be read by this path: the only public caller is the
+  // recorded-study brief, and a handler that never holds them cannot leak them.
+  it("selects no prompt or target_url", async () => {
+    const client = wireClient(async (sql) => {
+      if (sql.includes("FROM study_steps")) return { rows: [{ task_count: "4" }] };
+      if (sql.includes("FROM studies")) return { rows: [{ one: 1 }] };
+      throw new Error(`Unexpected query in test: ${sql}`);
+    });
+
+    const studiesRepository = await import("./studies-repository");
+    await studiesRepository.countStudyTasks("study_abc");
+
+    for (const call of client.query.mock.calls) {
+      expect(String(call[0])).not.toContain("prompt");
+      expect(String(call[0])).not.toContain("target_url");
+    }
+  });
+});
+
 describe("studies repository ownership", () => {
   const owner = { userId: "user-owner", isSuperadmin: false };
   const intruder = { userId: "user-intruder", isSuperadmin: false };

@@ -1,108 +1,18 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import { getOpportunities } from '../api/client';
 import { Opportunity } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { formatOpportunityType, getTypeBadgeClass, getCardHoverColor, getCardHoverBgColor, getStudyDateRange, getTimeRemaining, isExternalLinkType, getDirectDateRange, getDirectTimeRemaining, filterOpportunitiesForPresentationListing } from '../utils/opportunityUtils';
+import { filterOpportunitiesForPresentationListing, getParticipantFacingType, sortByClosingSoonest } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
 import Landing from './Landing';
 import ErrorState from '../components/ErrorState';
 import StudyFilters from '../components/StudyFilters';
-import { SpotlightCard } from '../components/SpotlightGrid';
+import { OpportunityRow } from '../components/OpportunityRow';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { Lock, Globe, Calendar, Clock, Timer, CheckCircle, Inbox, Filter } from 'lucide-react';
+import { CheckCircle, Inbox, Filter } from 'lucide-react';
 
-// Helper function to render poll description with checkbox indicators
-const renderPollDescription = (description: string) => {
-  if (!description) return null;
-  
-  const lines = description.split('\n');
-  const result: React.ReactNode[] = [];
-  
-  // Patterns that indicate header/footer/question text, not options
-  const excludePatterns = [
-    '**',                    // Bold text (headers)
-    'Click below',           // Footer text
-    'Takes',                 // Time estimates
-    'should we prioritize',  // Question text
-    'Your vote',             // Footer text
-    'roadmap',               // Footer text
-    '?',                     // Question marks (questions)
-    'Which',                 // Question starters
-    'What',                  // Question starters
-    'How',                   // Question starters
-  ];
-  
-  // Find where the question ends (usually after first question mark or "next?")
-  let questionEndIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (trimmed.includes('?') && (trimmed.includes('Which') || trimmed.includes('should'))) {
-      questionEndIndex = i;
-      break;
-    }
-  }
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmedLine = line.trim();
-    
-    // Skip empty lines but add spacing
-    if (!trimmedLine) {
-      result.push(<br key={`br-${i}`} />);
-      continue;
-    }
-    
-    // Check if this is excluded text (header, footer, or question)
-    const isExcluded = excludePatterns.some(pattern => 
-      trimmedLine.toLowerCase().includes(pattern.toLowerCase())
-    );
-    
-    // Check if this is before or at the question line
-    const isQuestion = i <= questionEndIndex;
-    
-    // This is a poll option if:
-    // 1. It's not excluded text
-    // 2. It comes after the question
-    // 3. It's reasonably long (more than just a few words)
-    // 4. It comes after an empty line (typical poll structure)
-    const isOption = !isExcluded && 
-                     !isQuestion &&
-                     trimmedLine.length > 15 &&
-                     (i > 0 && lines[i - 1]?.trim() === ''); // Must come after empty line
-    
-    if (isOption) {
-      // This is a poll option - render with checkbox
-      result.push(
-        <div key={`option-${i}`} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: '6px' }}>
-          <div style={{
-            width: '16px',
-            height: '16px',
-            border: '2px solid currentColor',
-            borderRadius: '3px',
-            marginRight: '8px',
-            marginTop: '2px',
-            flexShrink: 0,
-            opacity: 0.6
-          }} />
-          <span style={{ fontSize: '0.875rem' }}>{trimmedLine}</span>
-        </div>
-      );
-    } else {
-      // Regular text line (header, question, footer)
-      result.push(
-        <span key={`text-${i}`} style={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>{line}</span>
-      );
-      if (i < lines.length - 1) {
-        result.push(<br key={`br-after-${i}`} />);
-      }
-    }
-  }
-  
-  return <div>{result}</div>;
-};
 
 /**
  * Home Page Component
@@ -219,76 +129,24 @@ const Home: React.FC = memo(() => {
   }, [location.pathname, showBookingSuccess]);
 
   // Memoized status badge class getter
-  const getStatusBadgeClass = useCallback((status: string) => {
-    switch (status) {
-      case 'published': return 'badge bg-success text-white';
-      case 'draft': return 'badge bg-warning text-white';
-      case 'closed': return 'badge bg-secondary text-white';
-      default: return 'badge bg-secondary text-white';
-    }
-  }, []);
 
-  // Memoized filtered and arranged opportunities
+  // Memoized filtered and sorted opportunities
   const filteredOpportunities = useMemo(() => {
     const safeOpportunities = Array.isArray(opportunities) ? opportunities : [];
-    
+
     // Filter by type
-    const filteredByType = selectedType === 'all' 
-      ? safeOpportunities 
+    const filteredByType = selectedType === 'all'
+      ? safeOpportunities
       : safeOpportunities.filter(opp => {
           const baseType = opp.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
           return baseType === selectedType.toLowerCase();
         });
-    
-    // Sort by type (test first)
-    const sortedByType = [...filteredByType].sort((a, b) => {
-      const aType = a.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-      const bType = b.type?.toLowerCase().replace(/published|draft|closed$/, '') || '';
-      const aIsTest = aType === 'test';
-      const bIsTest = bType === 'test';
-      if (aIsTest && !bIsTest) return -1;
-      if (!aIsTest && bIsTest) return 1;
-      return 0;
-    });
-    
-    // Arrange for bento grid layout
-    const doubles = sortedByType.filter(o => o.display_width === 'double');
-    const singles = sortedByType.filter(o => o.display_width !== 'double');
-    const result: Array<Opportunity & { _gridPosition?: 'left' | 'right' }> = [];
-    
-    let doubleIndex = 0;
-    let singleIndex = 0;
-    let rowNumber = 0;
-    
-    while (doubleIndex < doubles.length || singleIndex < singles.length) {
-      rowNumber++;
-      
-      if (rowNumber % 2 === 1) {
-        if (doubleIndex < doubles.length) {
-          result.push({ ...doubles[doubleIndex++], _gridPosition: 'left' as const });
-          if (singleIndex < singles.length) {
-            result.push(singles[singleIndex++]);
-          }
-        } else {
-          for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
-            result.push(singles[singleIndex++]);
-          }
-        }
-      } else {
-        if (doubleIndex < doubles.length) {
-          if (singleIndex < singles.length) {
-            result.push(singles[singleIndex++]);
-          }
-          result.push({ ...doubles[doubleIndex++], _gridPosition: 'right' as const });
-        } else {
-          for (let i = 0; i < 3 && singleIndex < singles.length; i++) {
-            result.push(singles[singleIndex++]);
-          }
-        }
-      }
-    }
-    
-    return result;
+
+    // Closing soonest first. The list used to sort tests to the top and put the
+    // study with "4 days left" twelfth, so it rendered urgency and then sorted
+    // against it. The bento arrangement that followed - interleaving
+    // double-width rows into a three-column grid - went with the grid.
+    return sortByClosingSoonest(filteredByType);
   }, [opportunities, selectedType]);
 
   return (
@@ -341,9 +199,15 @@ const Home: React.FC = memo(() => {
               {/* Study summary and type filter chips */}
               {!loading && !error && opportunities.length > 0 && (
                 <>
+                  {/* Counts what is on screen, and names the filter the way the
+                      chip does. It read "12 active studies · Showing unmoderated"
+                      over a two-row list, one line above a chip reading
+                      "Recorded study". */}
                   <p className="study-summary-line">
-                    {opportunities.length} active {opportunities.length === 1 ? 'study' : 'studies'}
-                    {selectedType !== 'all' && ` · Showing ${selectedType}`}
+                    {filteredOpportunities.length} active{' '}
+                    {filteredOpportunities.length === 1 ? 'study' : 'studies'}
+                    {selectedType !== 'all' &&
+                      ` · ${getParticipantFacingType(selectedType)}`}
                   </p>
                   <StudyFilters 
                     currentFilter={selectedType} 
@@ -420,203 +284,22 @@ const Home: React.FC = memo(() => {
                 </div>
               )}
               
+              {/* A plain list. The motion.ul that was here staggered nothing:
+                  staggerChildren only reaches motion children, these are plain
+                  list items, and the parent had no `hidden` variant to animate
+                  from. An inert animation wrapper reads as intent that is not
+                  actually there. role="list" because `list-style: none` drops
+                  the list semantics in Safari + VoiceOver. */}
               {!loading && !error && opportunities.length > 0 && filteredOpportunities.length > 0 && (
-                <motion.div 
-                  className="bento-grid spotlight-grid"
-                  initial="hidden"
-                  animate="visible"
-                  variants={{
-                    visible: {
-                      transition: {
-                        staggerChildren: 0.08
-                      }
-                    }
-                  }}
-                >
-                  <AnimatePresence mode="popLayout">
-                    {filteredOpportunities.map((opportunity, index) => {
-                      // Use display_width from database (set by superadmin), default to single
-                      const isWide = opportunity.display_width === 'double';
-                      // Use _gridPosition to determine if double-width should be on left or right
-                      const gridPosition = (opportunity as any)._gridPosition;
-                      const gridClass = isWide 
-                        ? (gridPosition === 'right' ? 'bento-grid-item-wide-right' : 'bento-grid-item-wide')
-                        : 'bento-grid-item';
-                      
-                      // Featured cards get glassmorphism treatment (first test type)
-                      const isFeatured = index === 0 && opportunity.type === 'test';
-                      
-                      return (
-                        <div 
-                          key={opportunity.id} 
-                          className={gridClass}
-                        >
-                          <SpotlightCard
-                            index={index}
-                            isFeatured={isFeatured}
-                            style={{ 
-                              '--dynamic-hover-color': getCardHoverColor(opportunity.type),
-                              '--dynamic-hover-bg': getCardHoverBgColor(opportunity.type)
-                            } as React.CSSProperties}
-                            onClick={() => navigate(`/opportunities/${opportunity.id}`)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                navigate(`/opportunities/${opportunity.id}`);
-                              }
-                            }}
-                            aria-label={`View ${opportunity.title}`}
-                          >
-                            <div className="card-body opportunity-card-body">
-                              <div className="mb-4">
-                                <span className={getTypeBadgeClass(opportunity.type)}>
-                                  {formatOpportunityType(opportunity.type)}
-                                </span>
-                              </div>
-                              
-                              <h2 className="card-title h5">{opportunity.title}</h2>
-                              <p className="card-text">{opportunity.purpose_one_liner}</p>
-                              
-                              {opportunity.description_optional && (
-                                <div className="card-text small" style={{ alignSelf: 'stretch' }}>
-                                  {opportunity.type === 'poll' 
-                                    ? renderPollDescription(opportunity.description_optional)
-                                    : <p style={{ whiteSpace: 'pre-wrap', marginBottom: 0 }}>{opportunity.description_optional}</p>
-                                  }
-                                </div>
-                              )}
-                              
-                              <div className="card-content-bottom">
-                                {/* Timing Info Section - Bookable Types (Test/Interview) */}
-                                {(opportunity.type === 'test' || opportunity.type === 'interview') && (
-                                  <>
-                                    {/* Study Period, Time Remaining, Duration and Slots */}
-                                    {(() => {
-                                      const hasSessions = opportunity.sessions && opportunity.sessions.length > 0;
-                                      const dateRange = hasSessions ? getStudyDateRange(opportunity.sessions!) : { formatted: null };
-                                      const timeRemaining = hasSessions ? getTimeRemaining(opportunity.sessions!) : { text: null, urgency: 'normal' };
-                                      
-                                      return (
-                                        <div className="timing-info">
-                                          {/* Duration Row */}
-                                          <div className="d-flex align-items-center">
-                                            <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                            <small className="text-muted">{opportunity.default_duration_minutes} min session</small>
-                                          </div>
-
-                                          {/* Date Range Row */}
-                                          {hasSessions && dateRange.formatted && (
-                                            <div className="d-flex align-items-center">
-                                              <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                              <small className="text-muted">{dateRange.formatted}</small>
-                                            </div>
-                                          )}
-                                          
-                                          {/* Time Remaining Row */}
-                                          {hasSessions && timeRemaining.text && (
-                                            <div className="d-flex align-items-center">
-                                              <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                              <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
-                                                {timeRemaining.text}
-                                              </small>
-                                            </div>
-                                          )}
-                                          
-                                          {/* Participant Type */}
-                                          {opportunity.participant_type_required !== 'specific' && (
-                                            <div className="d-flex align-items-center">
-                                              {(() => {
-                                                switch (opportunity.participant_type_required) {
-                                                  case 'any': 
-                                                    return (
-                                                      <>
-                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                        <small className="text-muted">Open To All</small>
-                                                      </>
-                                                    );
-                                                  case 'internal': 
-                                                    return (
-                                                      <>
-                                                        <Lock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                        <small className="text-muted">Internal</small>
-                                                      </>
-                                                    );
-                                                  case 'external': 
-                                                    return (
-                                                      <>
-                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                        <small className="text-muted">External</small>
-                                                      </>
-                                                    );
-                                                  default: 
-                                                    return (
-                                                      <>
-                                                        <Globe size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                                        <small className="text-muted">Open To All</small>
-                                                      </>
-                                                    );
-                                                }
-                                              })()}
-                                            </div>
-                                          )}
-                                        </div>
-                                      );
-                                    })()}
-                                  </>
-                                )}
-                                
-                                {/* Timing Info Section - External Link Types (Poll/Survey/Question/Unmoderated) */}
-                                {isExternalLinkType(opportunity.type) && (() => {
-                                  const dateRange = getDirectDateRange(opportunity);
-                                  const timeRemaining = getDirectTimeRemaining(opportunity);
-                                  
-                                  return (
-                                    <div className="timing-info">
-                                      {/* Date Range Row - only if dates are set */}
-                                      {dateRange.formatted && (
-                                        <div className="d-flex align-items-center">
-                                          <Calendar size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                          <small className="text-muted">{dateRange.formatted}</small>
-                                        </div>
-                                      )}
-                                      {/* Time Remaining Row - only if end date is set */}
-                                      {timeRemaining.text && (
-                                        <div className="d-flex align-items-center">
-                                          <Timer size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                          <small className={`timing-urgency-${timeRemaining.urgency} fw-medium`}>
-                                            {timeRemaining.text}
-                                          </small>
-                                        </div>
-                                      )}
-                                      {/* Duration Row */}
-                                      <div className="d-flex align-items-center">
-                                        <Clock size={14} className="me-2 opacity-75 flex-shrink-0" />
-                                        <small className="text-muted">
-                                          ~{opportunity.default_duration_minutes || 5} min to complete
-                                        </small>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-                                
-                                {opportunity.participant_type_required === 'specific' && opportunity.participant_type_specific_details && (
-                                  <div className="timing-info">
-                                    <div className="d-flex align-items-center">
-                                      <small className="text-muted">🎯 {opportunity.participant_type_specific_details}</small>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                              </div>
-                            </div>
-                          </SpotlightCard>
-                        </div>
-                      );
-                    })}
-                  </AnimatePresence>
-                </motion.div>
+                <ul className="opportunity-index" role="list">
+                  {filteredOpportunities.map((opportunity: Opportunity) => (
+                    <OpportunityRow
+                      key={opportunity.id}
+                      opportunity={opportunity}
+                      role={user?.role}
+                    />
+                  ))}
+                </ul>
               )}
               </div>
             </div>

@@ -25,6 +25,25 @@ jest.mock('../../firsthand/session-create', () => ({
 // stay on the app pool and never reach the FirstHand runtime pool.
 jest.mock('../../firsthand/studies-repository', () => ({
   createStudy: jest.fn(),
+  countStudyTasks: jest.fn(),
+  // Defaults to a study with no stated duration, which is the common case and
+  // the one the brief must render as nothing rather than as a number.
+  getStudyById: jest.fn(() =>
+    Promise.resolve({
+      study: {
+        id: 'study_abc123',
+        title: 'A study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        estimated_duration_minutes: undefined,
+        status: 'launched' as const,
+        owner_user_id: 'test-user-id',
+        created_at: '2026-08-16T10:00:00.000Z',
+        updated_at: '2026-08-16T10:00:00.000Z',
+      },
+      steps: [],
+    })
+  ),
   // Defaults to false: most tests link nothing, or link a study that already
   // has an owner, and only a real claim is worth reporting.
   claimStudyIfUnowned: jest.fn(() => Promise.resolve(false)),
@@ -40,7 +59,7 @@ import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
-import { claimStudyIfUnowned, createStudy, deleteStudyUnchecked, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
+import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
@@ -50,6 +69,8 @@ const mockCreateSession = createSession as jest.MockedFunction<any>;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
 const mockClaimStudyIfUnowned = claimStudyIfUnowned as jest.MockedFunction<any>;
 const mockDeleteStudyUnchecked = deleteStudyUnchecked as jest.MockedFunction<any>;
+const mockCountStudyTasks = countStudyTasks as jest.MockedFunction<typeof countStudyTasks>;
+const mockGetStudyById = getStudyById as jest.MockedFunction<typeof getStudyById>;
 const mockIsStudiesPersistenceConfigured = isStudiesPersistenceConfigured as jest.MockedFunction<any>;
 
 const app = express();
@@ -319,6 +340,47 @@ describe('Opportunities API', () => {
           steps: [{ type: 'open_text', prompt: 'What did you expect to happen?' }]
         }
       };
+
+      // The inline body above omits estimated_duration_minutes, which is the
+      // common case: the field is optional and most researchers will leave it.
+      it('stores no duration when the author did not give one', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_generated' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+
+        // NOT 30, and not `default_duration_minutes`. That column is NOT NULL
+        // DEFAULT 30, and falling back to it gave every recorded study a length
+        // nobody chose, printed above a consent button.
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ estimated_duration_minutes: null })
+        );
+        // Belt and braces: 30 is the column default that used to be substituted.
+        expect(mockCreateStudy.mock.calls[0][0].estimated_duration_minutes).not.toBe(30);
+      });
+
+      it('stores the duration the author did give', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_generated' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: { ...inlineBody.inline_study, estimated_duration_minutes: 18 }
+          })
+          .expect(201);
+
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ estimated_duration_minutes: 18 })
+        );
+      });
 
       it('publishes without a study id by creating a launched study from the inline payload', async () => {
         mockCreateStudy.mockResolvedValueOnce({
@@ -1365,6 +1427,179 @@ describe('Opportunities API', () => {
     });
   });
 
+  describe('GET /api/opportunities/:id/recorded-study-brief', () => {
+    const publishedUnmoderatedRow = {
+      status: 'published',
+      type: 'unmoderated',
+      firsthand_study_id: 'study_abc123'
+    };
+
+    it('reports the task count the study actually carries', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
+      mockCountStudyTasks.mockResolvedValueOnce(4);
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(200);
+
+      expect(response.body.task_count).toBe(4);
+      expect(response.body.records_screen_and_voice).toBe(true);
+      expect(mockCountStudyTasks).toHaveBeenCalledWith('study_abc123');
+    });
+
+    // An ALLOWLIST, not a denylist. Asserting "does not contain the prompt text"
+    // passes against any fixture that happens not to include it, so a handler
+    // spreading the whole study record would ship intro_text and consent_text
+    // with every test still green. Pinning the exact key set is the only form
+    // of this assertion that cannot rot.
+    it('returns counts and constants, and nothing else', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
+      mockCountStudyTasks.mockResolvedValueOnce(4);
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(200);
+
+      expect(Object.keys(response.body).sort()).toEqual([
+        'estimated_duration_minutes',
+        'records_screen_and_voice',
+        'requires_chromium',
+        'task_count'
+      ]);
+    });
+
+    // Duration was removed from this payload entirely, because unmoderated had
+    // no duration field in the authoring form and every such opportunity
+    // carried the column default - stating it above a consent CTA invented a
+    // figure no researcher chose. The field exists now, so the figure comes
+    // back, but ONLY when someone actually set it.
+    it('states the duration a researcher chose', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
+      mockCountStudyTasks.mockResolvedValueOnce(4);
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_abc123',
+          title: 'A study',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          estimated_duration_minutes: 25,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(200);
+
+      expect(response.body.estimated_duration_minutes).toBe(25);
+    });
+
+    it('states no duration when nobody set one, rather than the opportunity default', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
+      mockCountStudyTasks.mockResolvedValueOnce(4);
+      mockGetStudyById.mockResolvedValueOnce({
+        // undefined, not null: the repository maps a NULL column to undefined,
+        // and the route turns that into the null the API contract carries.
+        study: {
+          id: 'study_abc123',
+          title: 'A study',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          estimated_duration_minutes: undefined,
+          status: 'launched' as const,
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const response = await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(200);
+
+      expect(response.body.estimated_duration_minutes).toBeNull();
+      // The original guard, kept: the figure must never be sourced from
+      // `opportunities.default_duration_minutes`, which is NOT NULL DEFAULT 30.
+      expect(mockQuery.mock.calls[0][0]).not.toContain('default_duration_minutes');
+    });
+
+    // Asserting only on the 404 here would be vacuous: the harness feeds the
+    // route an empty row set, so the status merely echoes the fixture and the
+    // published filter could be deleted with every test still green (it was,
+    // and this mutation survived). The gate lives in the SQL, so the SQL is
+    // what has to be asserted on.
+    it('filters a non-admin to published opportunities in the query itself', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+
+      await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(404);
+
+      expect(mockQuery.mock.calls[0][0]).toContain("status = 'published'");
+      expect(mockCountStudyTasks).not.toHaveBeenCalled();
+    });
+
+    it('lets an admin read the brief for their unpublished study so they can preview it', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...publishedUnmoderatedRow, status: 'draft' }]
+      });
+      mockCountStudyTasks.mockResolvedValueOnce(4);
+
+      const response = await request(app)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(200);
+
+      expect(mockQuery.mock.calls[0][0]).not.toContain("status = 'published'");
+      expect(response.body.task_count).toBe(4);
+    });
+
+    it('answers 404 without looking up a study when none is linked', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ ...publishedUnmoderatedRow, firsthand_study_id: null }]
+      });
+
+      await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(404);
+
+      // Without this the guard is untestable: a null id falls through to the
+      // count, which also misses, and the 404 looks identical.
+      expect(mockCountStudyTasks).not.toHaveBeenCalled();
+    });
+
+    // An opportunity authored as unmoderated and later switched to another type
+    // keeps its firsthand_study_id. Without the type guard the API would tell an
+    // anonymous caller that a poll records their screen and voice.
+    it.each(['poll', 'survey', 'question', 'test', 'interview'])(
+      'refuses to describe a %s as a recorded study, even with a study still linked',
+      async (type) => {
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ ...publishedUnmoderatedRow, type }]
+        });
+
+        await request(unauthenticatedApp)
+          .get('/api/opportunities/1/recorded-study-brief')
+          .expect(404);
+
+        expect(mockCountStudyTasks).not.toHaveBeenCalled();
+      }
+    );
+
+    it('answers 404 when the linked study has gone missing', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
+      mockCountStudyTasks.mockResolvedValueOnce(null);
+
+      await request(unauthenticatedApp)
+        .get('/api/opportunities/1/recorded-study-brief')
+        .expect(404);
+    });
+  });
+
   describe('GET /api/opportunities/:id/session-events', () => {
     const sessionEventRows = [{
       id: 'evt-1',
@@ -1496,6 +1731,24 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ count: 4 }] });
     };
 
+    const queueAnalyticsMocksWithDailyRows = (dailyRows: unknown[]) => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ owner_user_id: 'test-user-id', created_at: new Date('2026-01-01T00:00:00.000Z') }]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          total: 8, unique_users: 5, count_24h: 2, count_7d: 6,
+          first_click: new Date('2026-08-16T11:30:00.000Z'),
+          last_click: new Date('2026-08-16T11:58:00.000Z')
+        }]
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: dailyRows });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({ rows: [{ count: 4 }] });
+    };
+
     it('should return the full analytics breakdown for the opportunity owner', async () => {
       queueFullAnalyticsMocks();
 
@@ -1600,16 +1853,103 @@ describe('Opportunities API', () => {
         actions_total: 0,
         conversion_rate: 0,
         avg_clicks_per_day: 0,
-        week_over_week_change: 0,
+        // Null, not 0. Zero reads as "flat" - a measurement - when there is no
+        // previous week to have measured anything against.
+        week_over_week_change: null,
         first_click: null,
         last_click: null,
         peak_day: null,
         peak_hour: null,
-        clicks_by_day: []
+        clicks_by_day: [],
+        period_clicks_total: 0,
+        period_views_total: 0,
+        period_actions_total: 0
       });
       expect(response.body.clicks_by_hour).toHaveLength(24);
       expect(response.body.clicks_by_hour.every((h: { count: number }) => h.count === 0)).toBe(true);
       expect(response.body.clicks_by_weekday).toHaveLength(7);
+    });
+
+    it('cuts days, hours and weekdays in the analytics zone rather than the database session zone', async () => {
+      // The bucketing has to happen where the data is. `DATE(clicked_at)` cut
+      // the day in the DB session's zone - UTC everywhere Cortex runs - so a
+      // click at 00:30 London on the 17th landed in the 16th, and the reverse
+      // at the other end of the day.
+      queueFullAnalyticsMocks();
+
+      await request(app).get('/api/opportunities/1/analytics').expect(200);
+
+      const sql: string[] = mockQuery.mock.calls.map((call: unknown[]) => String(call[0]));
+      const daily = sql.find((q: string) => q.includes('AS date'));
+      const hourly = sql.find((q: string) => q.includes('AS hour'));
+      const weekday = sql.find((q: string) => q.includes('AS weekday_num'));
+
+      // Every bucketing query, not just the one that was reported.
+      expect(daily).toBeDefined();
+      expect(hourly).toBeDefined();
+      expect(weekday).toBeDefined();
+      expect(daily).toContain('AT TIME ZONE');
+      expect(hourly).toContain('AT TIME ZONE');
+      expect(weekday).toContain('AT TIME ZONE');
+
+      // ...and the zone is passed as a parameter, not interpolated.
+      const dailyCall = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('AS date')
+      );
+      expect(dailyCall?.[1]).toContain('Europe/London');
+    });
+
+    it('returns the day as text, so nothing downstream re-reads it as an instant', async () => {
+      // A `date` column arrives in JS as LOCAL midnight; reading that back in
+      // UTC is the previous day in any positive offset. Casting in SQL removes
+      // the round trip that lost the day.
+      queueFullAnalyticsMocks();
+
+      await request(app).get('/api/opportunities/1/analytics').expect(200);
+
+      const daily = mockQuery.mock.calls
+        .map((call: unknown[]) => String(call[0]))
+        .find((q: string) => q.includes('AS date'));
+      expect(daily).toContain('to_char');
+      expect(daily).not.toMatch(/DATE\(clicked_at\)/);
+      // The PROJECTED column, specifically. Asserting only that the query
+      // mentions AT TIME ZONE somewhere let a mutation strip it from the SELECT
+      // and survive on the GROUP BY, which would have returned UTC days under a
+      // query that still looked zone-aware.
+      expect(daily).toMatch(/to_char\(\s*clicked_at AT TIME ZONE/);
+      expect(daily).not.toMatch(/to_char\(\s*clicked_at\s*,/);
+    });
+
+    it('keeps the calendar day it was given, even if the driver hands back a Date', async () => {
+      queueAnalyticsMocksWithDailyRows([
+        { date: new Date(2026, 7, 16, 0, 0, 0), count: 2, views: 2, actions: 0 }
+      ]);
+
+      const response = await request(app).get('/api/opportunities/1/analytics').expect(200);
+
+      expect(response.body.clicks_by_day).toEqual([
+        { date: '2026-08-16', count: 2, views: 2, actions: 0 }
+      ]);
+      expect(response.body.peak_day).toMatchObject({ date: '2026-08-16' });
+    });
+
+    it('totals the selected period, not a fixed seven days', async () => {
+      queueAnalyticsMocksWithDailyRows([
+        { date: '2026-08-01', count: 4, views: 3, actions: 1 },
+        { date: '2026-08-16', count: 6, views: 4, actions: 2 }
+      ]);
+
+      const response = await request(app).get('/api/opportunities/1/analytics?period=30').expect(200);
+
+      expect(response.body.period_clicks_total).toBe(10);
+      expect(response.body.period_views_total).toBe(7);
+      expect(response.body.period_actions_total).toBe(3);
+    });
+
+    it('names the zone its buckets were cut in', async () => {
+      queueFullAnalyticsMocks();
+      const response = await request(app).get('/api/opportunities/1/analytics').expect(200);
+      expect(response.body.time_zone).toBe('Europe/London');
     });
 
     it('should reject a non-owner, non-superadmin user with 403', async () => {
@@ -1647,7 +1987,8 @@ describe('Opportunities API', () => {
         clicks_7d: 0,
         unique_users: 0,
         avg_clicks_per_day: 0,
-        week_over_week_change: 0,
+        // Matches the live path: there is no week-over-week figure to give.
+        week_over_week_change: null,
         views_total: 0,
         views_24h: 0,
         views_7d: 0,
@@ -1665,6 +2006,10 @@ describe('Opportunities API', () => {
         clicks_by_day: [],
         clicks_by_hour: [],
         clicks_by_weekday: [],
+        period_clicks_total: 0,
+        period_views_total: 0,
+        period_actions_total: 0,
+        time_zone: 'Europe/London',
         period: 14
       });
     });

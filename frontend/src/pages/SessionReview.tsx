@@ -135,7 +135,12 @@ const SessionReviewPage: React.FC = () => {
           outputs={outputs}
           onSelectAttempt={setSelectedAttempt}
         />
-        <ResponsesSection steps={outputs.steps} />
+        {/* The terminal `end` marker is appended automatically and is never shown
+            to the participant, so showing it to the reviewer invents a fifth
+            task that nobody was asked to do - and then reports it as having no
+            response. Filtered HERE rather than inside ResponsesSection, which
+            the unpushed participant-launch branch rewrites. */}
+        <ResponsesSection steps={outputs.steps.filter((step) => step.type !== 'end')} />
         <TranscriptSection
           transcript={outputs.transcript}
           transcriptStatus={outputs.session.transcript_status}

@@ -816,8 +816,20 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
     const now = new Date();
 
     // Get upcoming bookings (only active bookings for future sessions)
+    // NOT `b.*`. The bookings row carries admin_notes - a researcher's free-text
+    // judgement about this participant, written on a surface labelled "Admin
+    // Notes (Optional)" - plus approved_by and approved_at. Spreading the row
+    // sent all of it to the participant's browser; nothing rendered it, so it
+    // was invisible in the UI and fully readable in the Network tab. The two
+    // fields the participant-facing page actually needs are completion_status
+    // and completed_at, so narrowing costs nothing.
+    const participantBookingColumns = `
+      b.id, b.user_id, b.session_id, b.status, b.completion_status, b.completed_at,
+      b.cancelled_at, b.gcal_event_id, b.reminder_sent_at, b.created_at, b.updated_at
+    `;
+
     const upcomingResult = await pool.query(`
-      SELECT b.*, s.start_time as session_start_time, s.end_time as session_end_time, s.capacity as session_capacity,
+      SELECT ${participantBookingColumns}, s.start_time as session_start_time, s.end_time as session_end_time, s.capacity as session_capacity,
              s.location_or_meet_link_optional as session_location,
              o.title as opportunity_title, o.type as opportunity_type,
              o.purpose_one_liner as opportunity_purpose,
@@ -832,7 +844,7 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
 
     // Get past bookings (cancelled bookings OR completed sessions)
     const pastResult = await pool.query(`
-      SELECT b.*, s.start_time as session_start_time, s.end_time as session_end_time, s.capacity as session_capacity,
+      SELECT ${participantBookingColumns}, s.start_time as session_start_time, s.end_time as session_end_time, s.capacity as session_capacity,
              s.location_or_meet_link_optional as session_location,
              o.title as opportunity_title, o.type as opportunity_type,
              o.purpose_one_liner as opportunity_purpose,
@@ -1039,6 +1051,22 @@ router.get('/pending-approvals', requireAuth, asyncHandler(async (req: Request, 
     throw new ForbiddenError('Only admins can view pending approvals');
   }
 
+  // Scoped to the caller's own opportunities, exactly as approve and reject
+  // beside it already are ("You can only approve sessions for your own
+  // opportunities"). This gated on the admin ROLE alone, so every
+  // researcher_admin could read every other researcher's completed sessions -
+  // participant names, participant EMAILS, and `admin_notes`, which is a
+  // researcher's written judgement of a named colleague. `o.owner_user_id` was
+  // already in the SELECT; nothing ever compared it to the reader.
+  //
+  // Filtered in SQL rather than after the fetch: filtering in JS would still
+  // pull every other researcher's notes and emails across the wire and into
+  // this process, which is the disclosure, not the rendering of it.
+  //
+  // Superadmins are exempt, because they can approve any session anyway - the
+  // list would otherwise hide work they are expected to act on.
+  const isSuperadmin = userResult.rows[0].role === 'superadmin';
+
   const result = await pool.query(`
     SELECT 
       b.id as booking_id,
@@ -1058,8 +1086,9 @@ router.get('/pending-approvals', requireAuth, asyncHandler(async (req: Request, 
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE b.completion_status = 'completed'
+      ${isSuperadmin ? '' : 'AND o.owner_user_id = $1'}
     ORDER BY b.completed_at ASC
-  `);
+  `, isSuperadmin ? [] : [userId]);
 
   res.json(result.rows);
 }));

@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 
 import { pool } from '../config';
@@ -18,12 +19,17 @@ import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity
 import { createSession } from '../firsthand/session-create';
 import {
   claimStudyIfUnowned,
+  countStudyTasks,
   createStudy,
+  getStudyById,
   deleteStudyUnchecked,
   isStudiesPersistenceConfigured
 } from '../firsthand/studies-repository';
+import type { RecordedStudyBrief } from '../../../shared/types';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
+import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
+import { resolveStudyDuration } from '../firsthand/study-duration';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
@@ -444,8 +450,12 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
       title: data.title.trim(),
       intro_text: data.purpose_one_liner.trim(),
       consent_text: inlineStudy.consent_text.trim(),
-      estimated_duration_minutes:
-        inlineStudy.estimated_duration_minutes ?? data.default_duration_minutes,
+      // NOT `?? data.default_duration_minutes`. That column is NOT NULL with a
+      // DEFAULT of 30, so falling back to it gave every recorded study a
+      // duration nobody chose - and put it above a consent button. Null means
+      // the researcher did not say, and every surface already handles null by
+      // saying nothing.
+      estimated_duration_minutes: resolveStudyDuration(inlineStudy.estimated_duration_minutes),
       // Launched rather than draft: only launched studies are selectable, and a
       // study authored as part of an opportunity has no separate review step to
       // wait for. Leaving it draft would publish an opportunity pointing at a
@@ -713,8 +723,7 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
         data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded study'
       ).trim(),
       consent_text: inlineStudyInput.consent_text.trim(),
-      estimated_duration_minutes:
-        inlineStudyInput.estimated_duration_minutes ?? data.default_duration_minutes,
+      estimated_duration_minutes: resolveStudyDuration(inlineStudyInput.estimated_duration_minutes),
       status: 'launched',
       // The editing user, not the opportunity's owner: a superadmin editing
       // someone else's opportunity is the author of the study they just wrote,
@@ -808,6 +817,111 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   };
 
   res.json(opportunity);
+}));
+
+// Anonymous, and it touches the FirstHand runtime pool - which is `max: 5` and is the
+// same pool serving live participant sessions. Without a limiter, sustained requests to
+// a public endpoint can starve recordings already in progress of connections, which is
+// the failure mode that loses a session someone has already sat through. Same reasoning
+// as healthLimiter; generous, because a participant legitimately reloads a landing page.
+const recordedStudyBriefLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  // Behind two proxy hops `trust proxy: 1` resolves req.ip to the INGRESS, so
+  // this is one bucket shared by every external caller - the same reality
+  // healthLimiter documents, and why it sits at 600. At 60 a single
+  // participant reloading a landing page could 429 everyone else, and the
+  // brief failing silently means the task count would vanish platform-wide.
+  // Raised to match healthLimiter's ceiling: still a backstop against a
+  // runaway loop hammering the 5-connection runtime pool, without being a
+  // self-inflicted outage. Per-caller keying needs `trust proxy` to match the
+  // real hop count first - getting that wrong makes the limiter
+  // header-spoofable, which is worse than a shared bucket.
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests' }
+});
+
+// GET /api/opportunities/:id/recorded-study-brief - What the participant is agreeing to,
+// before they agree to it.
+//
+// A recorded study begins the moment the CTA is clicked, and until now the landing page
+// said nothing the researcher had not typed by hand. This serves what the study itself
+// knows, so the page can state it rather than hoping the description mentions it.
+//
+// It serves COUNTS AND CONSTANTS, NOTHING ELSE. The prompts are withheld on purpose: a
+// participant who reads all the tasks up front rehearses the route, and the recording
+// captures a performance instead of a first encounter. That is the same reason the
+// welcome screen stopped listing them. The handler never loads them at all - see
+// countStudyTasks - so a careless spread cannot turn this into a prompt dump.
+//
+// NO DURATION. Unmoderated has no duration field anywhere in the authoring form, so
+// `default_duration_minutes` falls to its column default of 30 for every such study and
+// the inline study copies its estimate from that same never-displayed field. Stating
+// that number above a consent button would be inventing a figure no researcher chose.
+// It comes back when a researcher can actually set one.
+//
+// Visibility mirrors GET /:id on the database path - non-admins are filtered to
+// published - so this cannot expose a draft the detail page would 404. It diverges in
+// the no-database branch, where GET /:id serves mock fixtures and this 404s: mock data
+// has no linked studies, and a brief without counts is a better failure than a brief
+// with invented ones.
+router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  let query = `
+    SELECT status, type, firsthand_study_id
+    FROM opportunities
+    WHERE id = $1
+  `;
+  if (!isAdmin) {
+    query += ` AND status = 'published'`;
+  }
+
+  const result = await pool.query(query, [id]);
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  const { type, firsthand_study_id: studyId } = result.rows[0];
+
+  // `unmoderated` is the only type that records anything. An opportunity authored as
+  // unmoderated and later switched to `poll` keeps its firsthand_study_id, and without
+  // this guard the API would tell an anonymous caller that a poll records their screen
+  // and voice. The frontend gates on type too, but the API is the contract.
+  if (type !== 'unmoderated' || !studyId) {
+    throw new NotFoundError('Recorded study');
+  }
+
+  const taskCount = await countStudyTasks(studyId);
+  if (taskCount === null) {
+    throw new NotFoundError('Recorded study');
+  }
+
+  // Study status is deliberately not checked. A published opportunity linked to a draft
+  // study can genuinely be run - createSession does not gate on it either - so refusing
+  // the brief would describe less than the participant is about to be given.
+  const study = await getStudyById(studyId);
+
+  const brief: RecordedStudyBrief = {
+    task_count: taskCount,
+    // Null unless a researcher actually chose one. It used to be the
+    // opportunity's NOT NULL default of 30 for every study.
+    estimated_duration_minutes: resolveStudyDuration(study?.study.estimated_duration_minutes),
+    // Constants rather than configurable: every recorded study captures screen and voice,
+    // and none of them capture the camera. A participant-facing promise that a researcher
+    // could switch off is not a promise.
+    records_screen_and_voice: true,
+    requires_chromium: true
+  };
+
+  res.json(brief);
 }));
 
 // POST /api/opportunities/:id/recorded-study-session - Create a recorded-study session for this opportunity.
@@ -1578,7 +1692,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
       clicks_7d: 0,
       unique_users: 0,
       avg_clicks_per_day: 0,
-      week_over_week_change: 0,
+      week_over_week_change: null,
       views_total: 0,
       views_24h: 0,
       views_7d: 0,
@@ -1596,6 +1710,10 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
       clicks_by_day: [],
       clicks_by_hour: [],
       clicks_by_weekday: [],
+      period_clicks_total: 0,
+      period_views_total: 0,
+      period_actions_total: 0,
+      time_zone: ANALYTICS_TIME_ZONE,
       period
     });
   }
@@ -1649,38 +1767,50 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   const viewStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'view') || {};
   const actionStats = byTypeResult.rows.find((r: { click_type: string }) => r.click_type === 'action') || {};
 
-  // Daily breakdown (views/actions split) over the selected period
+  // Daily breakdown (views/actions split) over the selected period.
+  //
+  // Bucketed in the analytics zone, and returned as TEXT. Both halves matter.
+  // `DATE(clicked_at)` alone cut the day in the DATABASE session's zone (UTC in
+  // every deployment), and node-postgres then handed the result to JS as a Date
+  // at LOCAL midnight, which `toISOString().split('T')[0]` read back as the
+  // previous day in any positive offset. The endpoint reported clicks on the
+  // 15th whose own first_click it reported as the 16th. `to_char` hands back a
+  // string, so there is nothing left to reinterpret.
   const dailyResult = await pool.query(
     `SELECT
-      DATE(clicked_at) AS date,
+      to_char(clicked_at AT TIME ZONE $3, 'YYYY-MM-DD') AS date,
       COUNT(*)::int AS count,
       COUNT(*) FILTER (WHERE click_type = 'view')::int AS views,
       COUNT(*) FILTER (WHERE click_type = 'action')::int AS actions
      FROM opportunity_clicks
      WHERE opportunity_id = $1
        AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
-     GROUP BY DATE(clicked_at)
+     GROUP BY to_char(clicked_at AT TIME ZONE $3, 'YYYY-MM-DD')
      ORDER BY date ASC`,
-    [opportunityId, period]
+    [opportunityId, period, ANALYTICS_TIME_ZONE]
   );
-  const clicks_by_day = dailyResult.rows.map((row: { date: Date; count: number; views: number; actions: number }) => ({
-    date: row.date.toISOString().split('T')[0],
-    count: row.count,
-    views: row.views,
-    actions: row.actions
-  }));
+  const clicks_by_day = dailyResult.rows
+    .map((row: { date: string | Date; count: number; views: number; actions: number }) => ({
+      date: toAnalyticsDateString(row.date),
+      count: row.count,
+      views: row.views,
+      actions: row.actions
+    }))
+    .filter((day): day is { date: string; count: number; views: number; actions: number } =>
+      day.date !== null
+    );
 
   // Hourly breakdown over the selected period
   const hourlyResult = await pool.query(
     `SELECT
-      EXTRACT(HOUR FROM clicked_at)::int AS hour,
+      EXTRACT(HOUR FROM clicked_at AT TIME ZONE $3)::int AS hour,
       COUNT(*)::int AS count
      FROM opportunity_clicks
      WHERE opportunity_id = $1
        AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
      GROUP BY hour
      ORDER BY hour ASC`,
-    [opportunityId, period]
+    [opportunityId, period, ANALYTICS_TIME_ZONE]
   );
   const hourCounts = new Map<number, number>(hourlyResult.rows.map((r: { hour: number; count: number }) => [r.hour, r.count]));
   const clicks_by_hour = Array.from({ length: 24 }, (_, hour) => ({
@@ -1691,14 +1821,14 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
   // Day-of-week breakdown over the selected period (0 = Sunday, matching Postgres DOW)
   const weekdayResult = await pool.query(
     `SELECT
-      EXTRACT(DOW FROM clicked_at)::int AS weekday_num,
+      EXTRACT(DOW FROM clicked_at AT TIME ZONE $3)::int AS weekday_num,
       COUNT(*)::int AS count
      FROM opportunity_clicks
      WHERE opportunity_id = $1
        AND clicked_at >= NOW() - ($2 * INTERVAL '1 day')
      GROUP BY weekday_num
      ORDER BY weekday_num ASC`,
-    [opportunityId, period]
+    [opportunityId, period, ANALYTICS_TIME_ZONE]
   );
   const weekdayCounts = new Map<number, number>(weekdayResult.rows.map((r: { weekday_num: number; count: number }) => [r.weekday_num, r.count]));
   const clicks_by_weekday = ANALYTICS_WEEKDAY_NAMES.map((weekday, weekday_num) => ({
@@ -1741,9 +1871,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
     clicks_7d,
     unique_users: overall.unique_users || 0,
     avg_clicks_per_day: Math.round((periodClicksTotal / period) * 10) / 10,
-    week_over_week_change: prevWeekCount > 0
-      ? Math.round(((clicks_7d - prevWeekCount) / prevWeekCount) * 100)
-      : (clicks_7d > 0 ? 100 : 0),
+    week_over_week_change: weekOverWeekChange(clicks_7d, prevWeekCount),
 
     views_total,
     views_24h: viewStats.count_24h || 0,
@@ -1763,6 +1891,17 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
 
     peak_day,
     peak_hour,
+
+    // The chart cards used to print a 7-day total beside a 30-day chart. The
+    // period totals travel with the period so the header can stop disagreeing
+    // with its own title.
+    period_clicks_total: periodClicksTotal,
+    period_views_total: clicks_by_day.reduce((sum, day) => sum + day.views, 0),
+    period_actions_total: clicks_by_day.reduce((sum, day) => sum + day.actions, 0),
+
+    // Days and hours are cut in this zone, not the reader's. Named so the page
+    // can say so rather than leaving everyone to assume it is theirs.
+    time_zone: ANALYTICS_TIME_ZONE,
 
     clicks_by_day,
     clicks_by_hour,

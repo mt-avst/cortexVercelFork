@@ -1,6 +1,7 @@
 import React from 'react';
 import { FirstHandSessionOutputs } from '../../api/types';
 
+import { formatDateTime } from '../../utils/datetime';
 const SESSION_STATUS_LABELS: Record<string, string> = {
   created: 'Created',
   link_opened: 'Link opened',
@@ -23,13 +24,10 @@ const SESSION_STATUS_BADGE: Record<string, string> = {
 
 function formatTimestamp(value: string | null): string {
   if (!value) return 'Not recorded';
-  return new Date(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+  // Shared formatter, so a reviewer reading a recording and a participant
+  // reading their booking see the same shape of date - and so this one carries
+  // a zone, which it did not.
+  return formatDateTime(value) ?? 'Not recorded';
 }
 
 const SessionSummaryCard: React.FC<{

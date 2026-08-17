@@ -6,6 +6,7 @@ import { createSessions, deleteAllSessions } from '../api/client';
 import { navigation } from '../utils/navigation';
 import { logger } from '../utils/logger';
 
+import { formatDateTime, formatClockTime, formatStudyDate } from '../utils/datetime';
 /**
  * Safely convert a potentially Date or string value to ISO string
  * This handles runtime type inconsistencies from API responses
@@ -88,6 +89,19 @@ interface CalendarViewProps {
   sessions: Session[];
 }
 
+/**
+ * Local YYYY-MM-DD for an <input type="date">.
+ *
+ * NOT toISOString().split('T')[0]: the calendar's dates are local midnight, and
+ * a positive offset pushes the ISO form onto the PREVIOUS day - local midnight
+ * on 19 Aug in BST is 18 Aug 23:00Z - so the picker would show the day before
+ * the one the calendar is displaying.
+ */
+const toDateInputValue = (date: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
 const CalendarView: React.FC<CalendarViewProps> = ({
   events,
   availableSlots,
@@ -114,24 +128,17 @@ const CalendarView: React.FC<CalendarViewProps> = ({
    */
   const reportedLabelFailures = useRef<Set<string>>(new Set());
 
-  const formatTime = (dateString: string) => {
-    // Ensure consistent UTC time formatting
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-      timeZone: 'UTC' // Force UTC to ensure consistency
-    });
-  };
+  // The reader's own zone, like the rest of the app - and the GRID BELOW now
+  // agrees with it. This calendar used to position slots by getUTCHours() and
+  // bound its day columns with setUTCHours() while labelling them locally,
+  // which put every caption an hour out of its own row in BST and four or five
+  // in the US. Geometry and labels are both local now; the header states which
+  // zone, because a grid of times that does not say whose they are is the
+  // defect this whole branch exists to remove.
+  const formatTime = (dateString: string) => formatClockTime(dateString) ?? '';
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const formatDate = (dateString: string) => formatStudyDate(dateString) ?? '';
+
 
   const isSlotSelected = (slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
@@ -196,7 +203,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return session;
   }, [sessions]);
 
-  // Generate all days in the selected range (UTC)
+  // Generate all days in the selected range, in the reader's local zone.
   const generateDaysInRange = (): Date[] => {
     const days: Date[] = [];
     const current = new Date(startDate);
@@ -205,7 +212,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     // Simple approach: just iterate through the date range and filter weekends if needed
     while (current <= end) {
       if (excludeWeekends) {
-        const dayOfWeek = current.getUTCDay(); // Use UTC
+        const dayOfWeek = current.getDay();
         // Only include weekdays (Monday = 1, Tuesday = 2, ..., Friday = 5)
         if (dayOfWeek >= 1 && dayOfWeek <= 5) {
           days.push(new Date(current));
@@ -213,7 +220,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       } else {
         days.push(new Date(current));
       }
-      current.setUTCDate(current.getUTCDate() + 1); // Use UTC
+      current.setDate(current.getDate() + 1);
     }
     return days;
   };
@@ -323,9 +330,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   
   // Filtered slots ready (debug logging removed for production)
   
-  // Group all slots by date first (UTC)
+  // Group by LOCAL date. toDateString() has always been local, so this half of
+  // the calendar was already local while the boundaries and positions were UTC
+  // - the two only agree now.
   const allSlotsByDate = cleanedSlots.reduce((acc, slot) => {
-    const date = new Date(slot.start).toDateString(); // slot.start is already UTC from backend
+    const date = new Date(slot.start).toDateString();
     if (!acc[date]) {
       acc[date] = [];
     }
@@ -333,10 +342,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return acc;
   }, {} as Record<string, AvailableSlot[]>);
 
-  // Helper function to get slots for specific days (UTC)
+  // Helper function to get slots for specific days
   const getSlotsForDays = (days: Date[]) => {
     return days.reduce((acc: Record<string, AvailableSlot[]>, day: Date) => {
-      const dateString = day.toDateString(); // day is already UTC
+      const dateString = day.toDateString();
       if (allSlotsByDate[dateString]) {
         acc[dateString] = allSlotsByDate[dateString];
       } else {
@@ -354,7 +363,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   // Helper function to get hour from slot time
   const getHourFromSlot = (slotStart: string): number => {
     const date = new Date(slotStart);
-    return date.getUTCHours() + (date.getUTCMinutes() / 60); // Returns hour as decimal (e.g., 9.5 for 9:30)
+    return date.getHours() + (date.getMinutes() / 60); // decimal hour, e.g. 9.5 for 09:30
   };
 
   // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
@@ -1073,8 +1082,8 @@ const ListView: React.FC<{
                 <tbody>
                   {sessions.map((session) => (
                     <tr key={session.id}>
-                      <td>{new Date(session.start_time).toLocaleString()}</td>
-                      <td>{new Date(session.end_time).toLocaleString()}</td>
+                      <td>{formatDateTime(session.start_time)}</td>
+                      <td>{formatDateTime(session.end_time)}</td>
                       <td>{session.capacity}</td>
                       <td>{session.booked_count}</td>
                       <td>
@@ -1214,18 +1223,20 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     }
   }, [getStorageKey]);
   
-  // Calendar view controls - use UTC to match backend
+  // Calendar view controls. Local day boundaries: these are absolute instants
+  // by the time they reach the API (toISOString below), so "tomorrow through
+  // next week" now means the admin's own days rather than UTC's.
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
-    date.setUTCDate(date.getUTCDate() + 1); // Start from tomorrow
-    date.setUTCHours(0, 0, 0, 0); // Start at midnight UTC for consistent day boundaries
+    date.setDate(date.getDate() + 1); // Start from tomorrow
+    date.setHours(0, 0, 0, 0);
     logger.debug('Calendar startDate initialized', { date: date.toISOString() });
     return date;
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setUTCDate(date.getUTCDate() + 7); // 7 days from today (1 week)
-    date.setUTCHours(23, 59, 59, 999); // End at end of day UTC
+    date.setDate(date.getDate() + 7); // 7 days from today (1 week)
+    date.setHours(23, 59, 59, 999);
     logger.debug('Calendar endDate initialized', { date: date.toISOString() });
     return date;
   });
@@ -1423,15 +1434,15 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       let totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       
       if (excludeWeekends) {
-        // Count only weekdays in the range (UTC)
+        // Count only weekdays in the range
         let weekdayCount = 0;
         const tempCurrent = new Date(startDate);
         while (tempCurrent <= endDate) {
-          const dayOfWeek = tempCurrent.getUTCDay(); // Use UTC to match backend
+          const dayOfWeek = tempCurrent.getDay();
           if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Monday to Friday
             weekdayCount++;
           }
-          tempCurrent.setUTCDate(tempCurrent.getUTCDate() + 1); // Use UTC date operations
+          tempCurrent.setDate(tempCurrent.getDate() + 1);
         }
         totalDays = weekdayCount;
       }
@@ -1937,7 +1948,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   {sessions.slice(0, 5).map((session) => (
                     <li key={session.id} className="text-muted">
                       <small>
-                        {new Date(session.start_time).toLocaleString()} - {new Date(session.end_time).toLocaleString()}
+                        {formatDateTime(session.start_time)} – {formatDateTime(session.end_time)}
                         {' '}({session.capacity} slots)
                       </small>
                     </li>
@@ -1994,10 +2005,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 <input
                   type="date"
                   className="form-control form-control-sm"
-                  value={startDate.toISOString().split('T')[0]}
+                  value={toDateInputValue(startDate)}
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
-                    const newDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0));
+                    const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0);
                     
                     // Validate that start date is not after end date
                     if (newDate <= endDate) {
@@ -2016,10 +2027,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 <input
                   type="date"
                   className="form-control form-control-sm"
-                  value={endDate.toISOString().split('T')[0]}
+                  value={toDateInputValue(endDate)}
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
-                    const newDate = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59));
+                    const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59);
                     
                     // Validate that end date is not before start date
                     if (newDate >= startDate) {

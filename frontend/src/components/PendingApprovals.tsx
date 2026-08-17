@@ -5,6 +5,7 @@ import { AppError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { RefreshCw, CheckCircle, UserCheck, XCircle } from 'lucide-react';
 
+import { formatDateTime } from '../utils/datetime';
 interface PendingApproval {
   booking_id: string;
   user_id: string;
@@ -104,7 +105,7 @@ const PendingApprovals: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return formatDateTime(dateString) ?? '';
   };
 
   if (loading) {

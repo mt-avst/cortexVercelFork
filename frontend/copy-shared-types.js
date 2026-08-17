@@ -24,15 +24,27 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Auto-generated header to add to copied files
+// Auto-generated header to add to copied files.
+//
+// NOT stamped with a generation timestamp, deliberately. A timestamp makes
+// every regeneration rewrite all nine files whether or not their content
+// changed, which buries a real content change in noise and makes it impossible
+// to tell a stale copy from a fresh one by looking. Without it, re-running this
+// script is a no-op unless a shared source actually changed - which is what
+// `shared-copies-are-current.test.ts` relies on.
+//
+// The old header also claimed the copy happened "during the build process". It
+// does not: nothing invokes this script - not `npm run build`, not CI. An edit
+// to shared/ therefore did NOT reach the frontend bundle, and the file that
+// said otherwise was the reason nobody noticed.
 const AUTO_GENERATED_HEADER = `/**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
- * 
- * This file is automatically copied from the shared/ directory during the build process.
- * Any changes should be made to the source file in the shared/ directory.
- * 
+ *
+ * Copied from the shared/ directory by frontend/copy-shared-types.js. Nothing
+ * runs that script for you: edit the source under shared/, then run
+ * \`node copy-shared-types.js\` from frontend/ and commit the result.
+ *
  * Source: See copy-shared-types.js for the source path
- * Generated: ${new Date().toISOString()}
  */
 
 `;

@@ -7,6 +7,7 @@ import { AppError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { AlertTriangle, RefreshCw, Download, Inbox, ChevronRight, Trash2, X, Calendar, Link2, ChevronLeft } from 'lucide-react';
 
+import { formatDateTime } from '../utils/datetime';
 const AdminFeedback: React.FC = () => {
   const { user } = useAuth();
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
@@ -141,7 +142,7 @@ const AdminFeedback: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+    return formatDateTime(dateString) ?? '';
   };
 
   // Get first two lines of feedback text

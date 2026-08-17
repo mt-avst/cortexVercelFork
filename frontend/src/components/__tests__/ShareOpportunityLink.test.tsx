@@ -285,14 +285,19 @@ describe('ShareOpportunityLink - copy', () => {
 // Published, but nobody can start it
 // ---------------------------------------------------------------------------
 describe('ShareOpportunityLink - unstartable', () => {
-  it('warns when nothing is linked for participants to start', () => {
+  it('warns when participants cannot start it', () => {
     // Mirrors the CTA's own disabled rule on the host page. Sharing a link to a
     // page whose start button is dead is the exact dead end the published-only
     // gate exists to prevent, just arrived at a different way.
+    //
+    // The copy no longer names a task list as THE cause: a bookable study
+    // starts by booking a slot, so "link a task list" was wrong advice for a
+    // usability test with four open sessions.
     render(<ShareOpportunityLink {...PUBLISHED} startable={false} />);
     expect(
-      screen.getByText(/Nothing is linked for participants to start yet/i)
+      screen.getByText(/Participants cannot start this yet/i)
     ).toBeInTheDocument();
+    expect(screen.queryByText(/link a task list before sharing/i)).toBeNull();
   });
 
   it('says nothing when it is startable', () => {

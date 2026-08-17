@@ -1,11 +1,11 @@
 /**
  * AUTO-GENERATED FILE - DO NOT EDIT DIRECTLY
- * 
- * This file is automatically copied from the shared/ directory during the build process.
- * Any changes should be made to the source file in the shared/ directory.
- * 
+ *
+ * Copied from the shared/ directory by frontend/copy-shared-types.js. Nothing
+ * runs that script for you: edit the source under shared/, then run
+ * `node copy-shared-types.js` from frontend/ and commit the result.
+ *
  * Source: See copy-shared-types.js for the source path
- * Generated: 2026-07-23T01:54:59.771Z
  */
 
 // Shared Constants for Adaptalabs Application

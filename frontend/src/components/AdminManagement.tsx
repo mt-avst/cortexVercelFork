@@ -4,6 +4,7 @@ import { User, AdminRequest } from '../api/types';
 import ConfirmationModal from './ConfirmationModal';
 import { AlertTriangle, Users, History, ListChecks, XCircle, CheckCircle } from 'lucide-react';
 
+import { formatDateTime } from '../utils/datetime';
 const AdminManagement: React.FC = () => {
   const [admins, setAdmins] = useState<User[]>([]);
   const [requests, setRequests] = useState<AdminRequest[]>([]);
@@ -82,13 +83,11 @@ const AdminManagement: React.FC = () => {
   const historyRequests = requests.filter(r => r.status !== 'pending');
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    // formatDateTime, not formatStudyDate: this labels who requested
+    // researcher_admin and when a superadmin granted it. Date-only makes three
+    // approvals on one afternoon indistinguishable and unorderable by eye, on
+    // a privilege-escalation record.
+    return formatDateTime(dateString) ?? '';
   };
 
   if (loading) {
