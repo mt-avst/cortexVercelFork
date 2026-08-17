@@ -29,6 +29,22 @@ jest.mock('../../firsthand/runtime-repository', () => ({
   findParticipantSessionForOpportunity: jest.fn(async () => null),
 }));
 
+// Defaults to "nobody answered". Every results test that cares queues its own
+// rows; the point of the default is that a test which never reaches the read
+// still gets a call count of zero to assert on.
+jest.mock('../../firsthand/survey-results-repository', () => ({
+  listResponsesForOpportunity: jest.fn(async () => []),
+}));
+
+// Real implementations, but spy-able: one test needs the CSV serialiser to
+// throw, to prove nothing that can throw runs after res.setHeader.
+jest.mock('../../firsthand/survey-csv', () => {
+  const actual = jest.requireActual<typeof import('../../firsthand/survey-csv')>(
+    '../../firsthand/survey-csv'
+  );
+  return { ...actual, toResponsesCsv: jest.fn(actual.toResponsesCsv) };
+});
+
 jest.mock('../../firsthand/studies-repository', () => ({
   createStudy: jest.fn(),
   countStudyTasks: jest.fn(),
@@ -71,6 +87,8 @@ import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
 import { findParticipantSessionForOpportunity } from '../../firsthand/runtime-repository';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
+import { listResponsesForOpportunity } from '../../firsthand/survey-results-repository';
+import { toResponsesCsv } from '../../firsthand/survey-csv';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
@@ -90,6 +108,9 @@ const mockDeleteStudyUnchecked = deleteStudyUnchecked as jest.MockedFunction<any
 const mockCountStudyTasks = countStudyTasks as jest.MockedFunction<typeof countStudyTasks>;
 const mockGetStudyById = getStudyById as jest.MockedFunction<typeof getStudyById>;
 const mockIsStudiesPersistenceConfigured = isStudiesPersistenceConfigured as jest.MockedFunction<any>;
+const mockListResponsesForOpportunity =
+  listResponsesForOpportunity as jest.MockedFunction<typeof listResponsesForOpportunity>;
+const mockToResponsesCsv = toResponsesCsv as jest.MockedFunction<typeof toResponsesCsv>;
 
 const app = express();
 app.use(express.json());
@@ -2653,6 +2674,266 @@ describe('Opportunities API', () => {
         .expect(200);
 
       expect(response.body).toHaveLength(1);
+    });
+  });
+
+  // Phase 4e. The researcher-facing results read, scoped to one opportunity.
+  // Its superadmin-only twin (GET /api/firsthand/studies/:id/results) spans
+  // every opportunity that used the study, which is why it cannot be the one a
+  // researcher gets.
+  describe('GET /api/opportunities/:id/survey-results', () => {
+    // Deliberately unlike each other, and unlike the path segment used below.
+    // Fixtures that share a value cannot tell "read the parsed id" apart from
+    // "read the path segment", and this file has shipped that mistake before.
+    const CANONICAL_ID = 'canonical-parsed-id';
+    const PATH_SEGMENT = 'PATH-SEGMENT-ID';
+    const STUDY_ID = 'study_linked_by_the_row';
+
+    const storedStudy = {
+      study: {
+        id: STUDY_ID,
+        title: 'How was it',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        kind: 'survey' as const,
+        estimated_duration_minutes: undefined,
+        status: 'launched' as const,
+        owner_user_id: 'someone-else',
+        created_at: '2026-08-16T10:00:00.000Z',
+        updated_at: '2026-08-16T10:00:00.000Z',
+      },
+      steps: [
+        {
+          step_id: 'q1',
+          order: 1,
+          type: 'rating' as const,
+          prompt: 'How easy was that?',
+          config: { scale_max: 5 },
+        },
+      ],
+    };
+
+    const queueOpportunity = (ownerUserId: string, studyId: string | null = STUDY_ID) => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: CANONICAL_ID, owner_user_id: ownerUserId, firsthand_study_id: studyId }]
+      });
+    };
+
+    beforeEach(() => {
+      // jest.clearAllMocks() clears CALLS, not an implementation installed by
+      // mockReturnValue. Without this, the "runtime database unconfigured"
+      // test below leaves it false for every test after it, and three
+      // unrelated 404 assertions fail as 503 - which reads as a route bug.
+      mockIsStudiesPersistenceConfigured.mockReturnValue(true);
+    });
+
+    it('refuses an admin who does not own the opportunity, without reading any answers', async () => {
+      queueOpportunity('a-different-researcher');
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+        .expect(403);
+
+      expect(response.body.error).toBe('Only the opportunity owner can view survey responses');
+      // The status alone would still pass with the gate moved below the read.
+      // Participants' answers must not have been loaded at all.
+      expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+    });
+
+    it('refuses the CSV export before any download header is set', async () => {
+      queueOpportunity('a-different-researcher');
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
+        .expect(403);
+
+      // The substance of this test. Express keeps an already-set Content-Type
+      // through an error, so a refusal written after res.setHeader still hands
+      // over a file with a 403 on it. Asserting the status would not see that.
+      expect(response.headers['content-disposition']).toBeUndefined();
+      expect(response.headers['content-type']).toMatch(/application\/json/);
+      expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+    });
+
+    it('reads the answers of the id Postgres parsed, not the path segment', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+      await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+        .expect(200);
+
+      // `opportunities.id` is uuid and `runtime_sessions.opportunity_id` is
+      // TEXT, so filtering on the raw segment returns nothing for a URL written
+      // with different casing or braces - and silently, as an empty result.
+      expect(mockListResponsesForOpportunity).toHaveBeenCalledWith({
+        opportunityId: CANONICAL_ID,
+        studyId: STUDY_ID,
+      });
+    });
+
+    it('gives the owner the aggregated answers', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+      mockListResponsesForOpportunity.mockResolvedValueOnce([
+        { session_id: 's1', step_id: 'q1', step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's2', step_id: 'q1', step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
+      ]);
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+        .expect(200);
+
+      expect(response.body.title).toBe('How was it');
+      expect(response.body.results.respondents).toBe(2);
+      expect(response.body.results.questions[0].mean).toBe(4.5);
+    });
+
+    it('gives a superadmin who does not own the opportunity the answers', async () => {
+      // Typed rather than `(req: any)`: this file's no-explicit-any allowance
+      // is held per file in eslint-suppressions.json, so one more untyped
+      // request handler turns all fourteen existing ones into errors.
+      const superadminApp = express();
+      superadminApp.use(express.json());
+      superadminApp.use((req, _res, next) => {
+        // Through `unknown`, because express-session's declaration merging
+        // types req.session as a full Session and an intersection cannot
+        // widen it back to the plain stub these routes actually read.
+        (req as unknown as { session: { user: unknown } }).session = {
+          user: { id: 'superadmin-id', name: 'Super Admin', email: 'super@example.com', role: 'superadmin' }
+        };
+        next();
+      });
+      superadminApp.use('/api/opportunities', opportunitiesRouter);
+      superadminApp.use(errorHandler);
+
+      queueOpportunity('a-different-researcher');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+      await request(superadminApp)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+        .expect(200);
+
+      expect(mockListResponsesForOpportunity).toHaveBeenCalled();
+    });
+
+    // Run against BOTH routes. They share one resolver, so they refuse
+    // identically by construction - but only the CSV one can hand over a file
+    // with a refusal on it, so its refusal paths are the ones worth pinning.
+    // Before this, every path but the 403 was proven on the JSON route alone,
+    // and deleting the CSV route's 503 guard left all 165 tests passing.
+    describe.each([
+      ['/survey-results'],
+      ['/survey-results.csv'],
+    ])('refusals on %s', (suffix) => {
+      const get = () => request(app).get(`/api/opportunities/${PATH_SEGMENT}${suffix}`);
+
+      // Asserted on every refusal, not only the 403: any status that arrives
+      // with these set has already offered the file.
+      const expectNoDownload = (response: request.Response) => {
+        expect(response.headers['content-disposition']).toBeUndefined();
+        expect(response.headers['content-type']).not.toMatch(/text\/csv/);
+      };
+
+      it('answers 404 for an opportunity that does not exist', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+
+        expectNoDownload(await get().expect(404));
+        expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+      });
+
+      it('answers 404 when the opportunity links no questions', async () => {
+        queueOpportunity('test-user-id', null);
+
+        expectNoDownload(await get().expect(404));
+        expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+      });
+
+      it('answers 404 when the linked study has been deleted', async () => {
+        // Reachable: DELETE /api/firsthand/studies/:studyId does not clear the
+        // opportunity's firsthand_study_id, so the link outlives the study.
+        // Without this, a missing study could return 200 with no questions -
+        // zero respondents reported for a survey nobody could read.
+        queueOpportunity('test-user-id');
+        mockGetStudyById.mockResolvedValueOnce(null);
+
+        expectNoDownload(await get().expect(404));
+        expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+      });
+
+      it('answers 503 rather than an empty result when the database is unavailable', async () => {
+        mockIsDatabaseAvailable.mockResolvedValue(false);
+
+        const response = await get().expect(503);
+
+        // Zero respondents is a finding. Reporting it without having looked
+        // would be a wrong one.
+        expect(response.body.error).toBe('Survey results are not available');
+        expectNoDownload(response);
+      });
+
+      it('answers 503, not 404, when the runtime database is unconfigured', async () => {
+        // The questions and answers live on the FirstHand runtime pool, which
+        // is configured separately from the main one. Checking only the main
+        // pool made getStudyById answer null, and the route then told the
+        // researcher their survey did not exist.
+        mockIsStudiesPersistenceConfigured.mockReturnValue(false);
+
+        const response = await get().expect(503);
+
+        expect(response.body.error).toBe('Survey results are not available');
+        expectNoDownload(response);
+      });
+    });
+
+    it('serves a failure as JSON, not as a file, if serialising the CSV throws', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+      mockToResponsesCsv.mockImplementationOnce(() => {
+        throw new Error('serialisation blew up');
+      });
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
+        .expect(500);
+
+      // The same hazard the 403 ordering guards against, one line lower down:
+      // Express keeps an already-set Content-Type through the error handler,
+      // so headers set before the body was built would have made the browser
+      // download the error object as "<title> responses.csv".
+      expect(response.headers['content-disposition']).toBeUndefined();
+      expect(response.headers['content-type']).not.toMatch(/text\/csv/);
+    });
+
+    it('reports zero respondents as a real answer once it has looked', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+        .expect(200);
+
+      // The state every survey starts in, and the one the 503 above exists to
+      // stay distinguishable from.
+      expect(response.body.results.respondents).toBe(0);
+      expect(response.body.results.questions[0].answered).toBe(0);
+    });
+
+    it('exports the CSV to the owner with both download headers', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+      mockListResponsesForOpportunity.mockResolvedValueOnce([
+        { session_id: 's1', step_id: 'q1', step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+      ]);
+
+      const response = await request(app)
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
+        .expect(200);
+
+      expect(response.headers['content-type']).toMatch(/text\/csv/);
+      expect(response.headers['content-disposition']).toContain('How was it responses.csv');
+      expect(response.text).toContain('How easy was that?');
+      expect(response.text).toContain('s1');
     });
   });
 

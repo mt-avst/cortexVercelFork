@@ -18,6 +18,40 @@ const QUESTION_TYPES = new Set([
 ]);
 
 /**
+ * The `Content-Disposition` value for a study's export.
+ *
+ * Titles are researcher-authored free text and reach a header, which imposes
+ * two separate constraints that are easy to mistake for one:
+ *
+ * - A quote, backslash or newline would end or split the quoted filename, so
+ *   they are stripped.
+ * - Node refuses to write a header value it cannot encode as latin1, and
+ *   THROWS rather than mangling it. A curly apostrophe pasted from Word is
+ *   enough, so a title carrying one used to 500 the export until somebody
+ *   edited the title - with no message saying that was why.
+ *
+ * So the quoted `filename` is reduced to ASCII as the fallback every client
+ * understands, and the real title is carried in RFC 5987 `filename*`, which
+ * every current browser prefers.
+ *
+ * The length cap is taken in CODE POINTS. `slice` counts UTF-16 code units, so
+ * a title whose 80th unit is the first half of an emoji left a lone surrogate
+ * behind, and `encodeURIComponent` throws `URIError` on one - a 500 on the
+ * export, which is the same failure this function exists to remove, reached by
+ * a different route. Reported by the phase 4e security gate, reproduced with a
+ * 79-character title followed by an emoji.
+ */
+export function toCsvContentDisposition(title: string): string {
+  const cleaned = [...title.replace(/["\\\r\n]/g, "")].slice(0, 80).join("").trim();
+
+  const ascii = cleaned.replace(/[^\x20-\x7E]/g, "").trim() || "survey";
+  const filename = `${ascii} responses.csv`;
+  const encoded = encodeURIComponent(`${cleaned || "survey"} responses.csv`);
+
+  return `attachment; filename="${filename}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
  * Excel and Google Sheets execute a cell beginning =, +, - or @ as a formula.
  * Participant free text reaches these cells verbatim, so an answer of
  * `=HYPERLINK("http://evil.test")` becomes a live formula in a researcher's

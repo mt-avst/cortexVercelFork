@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
+import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
+import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
 import { Opportunity, SessionEvent } from '../api/types';
 import ErrorState from '../components/ErrorState';
@@ -149,9 +150,12 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string>('');
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(30);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sessions'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'results'>('overview');
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
   const [loadingSessionEvents, setLoadingSessionEvents] = useState(false);
+  const [surveyResults, setSurveyResults] = useState<{ title: string; results: SurveyResultsData } | null>(null);
+  const [loadingSurveyResults, setLoadingSurveyResults] = useState(false);
+  const [surveyResultsError, setSurveyResultsError] = useState('');
 
   const loadAnalytics = useCallback(async (period: AnalyticsPeriod) => {
     if (!id) return;
@@ -179,6 +183,29 @@ const OpportunityAnalyticsPage: React.FC = () => {
       // Non-fatal: session events tab will show empty state
     } finally {
       setLoadingSessionEvents(false);
+    }
+  }, [id]);
+
+  const loadSurveyResults = useCallback(async () => {
+    if (!id) return;
+    setLoadingSurveyResults(true);
+    setSurveyResultsError('');
+    try {
+      setSurveyResults(await getOpportunitySurveyResults(id));
+    } catch (err: unknown) {
+      // Said out loud rather than swallowed into an empty state. "No answers
+      // yet" and "you are not allowed to see the answers" are different
+      // findings, and rendering the first for the second is a lie a researcher
+      // would act on.
+      const status = (err as { response?: { status?: number } }).response?.status;
+      setSurveyResultsError(
+        status === 403
+          ? 'Only the opportunity owner can view these responses'
+          : 'Could not load the responses'
+      );
+      setSurveyResults(null);
+    } finally {
+      setLoadingSurveyResults(false);
     }
   }, [id]);
 
@@ -362,6 +389,26 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // to state. `?? 0` here would have been the same lie in a different place.
   const weekChange = analytics?.week_over_week_change ?? null;
 
+  const showsSessions =
+    opportunity.type === 'unmoderated' && Boolean(opportunity.firsthand_study_id);
+
+  // A linked study is the condition, NOT `delivery_mode === 'native'`.
+  //
+  // Switching a survey to external delivery leaves the study linked and leaves
+  // every answer already collected exactly where it was - and the backend
+  // serves them regardless of delivery mode, deliberately, because they are
+  // still this researcher's data. Gating the tab on the mode meant a survey
+  // that collected answers natively and later moved to SurveyMonkey lost the
+  // only route to its own results, silently, with the rows still in the
+  // database and the endpoint still answering. Found by the phase 4e code
+  // review, which noticed this contradicted the backend's own comment.
+  //
+  // An externally-delivered poll that never ran natively has no linked study
+  // at all, so it does not reach this either way.
+  const showsResults =
+    (opportunity.type === 'poll' || opportunity.type === 'survey') &&
+    Boolean(opportunity.firsthand_study_id);
+
   return (
     <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
       {/* Theme-aware Background: Dark Mode gets neural particles on black */}
@@ -404,8 +451,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* Sessions tab - only for FirstHand-linked unmoderated opportunities */}
-          {opportunity.type === 'unmoderated' && opportunity.firsthand_study_id && (
+          {/* Sessions for a FirstHand-linked unmoderated study; Responses for a
+              natively-answered poll or survey. Mutually exclusive by type, so
+              the strip carries Overview plus whichever applies. */}
+          {(showsSessions || showsResults) && (
             <div className="cortex-date-selector" role="tablist" aria-label="Analytics section">
               <button
                 role="tab"
@@ -416,20 +465,40 @@ const OpportunityAnalyticsPage: React.FC = () => {
               >
                 Overview
               </button>
-              <button
-                role="tab"
-                type="button"
-                className={`cortex-period-btn ${activeTab === 'sessions' ? 'cortex-period-btn--active' : ''}`}
-                aria-selected={activeTab === 'sessions'}
-                onClick={() => {
-                  setActiveTab('sessions');
-                  if (sessionEvents.length === 0) {
-                    void loadSessionEvents();
-                  }
-                }}
-              >
-                Sessions
-              </button>
+              {showsSessions && (
+                <button
+                  role="tab"
+                  type="button"
+                  className={`cortex-period-btn ${activeTab === 'sessions' ? 'cortex-period-btn--active' : ''}`}
+                  aria-selected={activeTab === 'sessions'}
+                  onClick={() => {
+                    setActiveTab('sessions');
+                    if (sessionEvents.length === 0) {
+                      void loadSessionEvents();
+                    }
+                  }}
+                >
+                  Sessions
+                </button>
+              )}
+              {showsResults && (
+                <button
+                  role="tab"
+                  type="button"
+                  className={`cortex-period-btn ${activeTab === 'results' ? 'cortex-period-btn--active' : ''}`}
+                  aria-selected={activeTab === 'results'}
+                  onClick={() => {
+                    setActiveTab('results');
+                    // Refetched on every visit rather than cached on first
+                    // load: answers arrive while the researcher has the page
+                    // open, and a stale tally is the one thing this view must
+                    // not show.
+                    void loadSurveyResults();
+                  }}
+                >
+                  Responses
+                </button>
+              )}
             </div>
           )}
 
@@ -451,7 +520,28 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
       </div>
 
-      {activeTab === 'sessions' ? (
+      {activeTab === 'results' ? (
+        loadingSurveyResults ? (
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status">
+              <span className="visually-hidden">Loading responses...</span>
+            </div>
+          </div>
+        ) : surveyResultsError ? (
+          <ErrorState
+            title="Unable to Load Responses"
+            message={surveyResultsError}
+            onAction={() => loadSurveyResults()}
+            actionLabel="Retry"
+          />
+        ) : surveyResults ? (
+          <SurveyResults
+            csvHref={opportunitySurveyResultsCsvUrl(id!)}
+            results={surveyResults.results}
+            title={surveyResults.title}
+          />
+        ) : null
+      ) : activeTab === 'sessions' ? (
         <SessionsTab
           opportunityId={id!}
           events={sessionEvents}
