@@ -50,6 +50,18 @@ export const mapDatabaseError = (error: any): AppError => {
     
     case DB_ERROR_CODES.CONNECTION_FAILURE:
       return new AppError('Database connection failed', 503, 'DB_CONNECTION_FAILED');
+
+    // A path segment that is not a uuid reaching a `uuid` column raised 22P02
+    // and fell through to the 500 below, so every route keyed on an id told a
+    // caller the server had broken when the caller had sent nonsense.
+    //
+    // 400 rather than 404, deliberately. 404 would be the tidier match for the
+    // well-formed-but-absent case beside it, but 22P02 is raised by ANY
+    // unparseable literal, including one this codebase passed in itself - and
+    // silently reporting our own bad value as "not found" would hide a real
+    // bug. A 400 is right for the caller and still visibly wrong for us.
+    case DB_ERROR_CODES.INVALID_TEXT_REPRESENTATION:
+      return new ValidationError('Malformed identifier');
     
     default:
       return new AppError('Database operation failed', 500, 'DB_ERROR');

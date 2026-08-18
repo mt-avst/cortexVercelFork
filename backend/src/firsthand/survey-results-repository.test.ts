@@ -109,6 +109,57 @@ describe("survey results readers", () => {
     });
   });
 
+  describe("the row bound", () => {
+    /**
+     * A loop, not `push(...rowsOf(n))`. Spreading two hundred thousand items
+     * into a call exceeds the argument limit and throws RangeError, which
+     * surfaces as "Maximum call stack size exceeded" and reads as a fault in
+     * the repository rather than in the fixture.
+     */
+    const pushRows = (count: number) => {
+      for (let index = 0; index < count; index += 1) {
+        rowsToReturn.push({
+          session_id: `session_${index}`,
+          step_id: "q1",
+          step_type: "rating",
+          response_payload: { rating: 4 },
+          saved_at: "2026-08-17T10:00:00.000Z"
+        });
+      }
+    };
+
+    it("asks the database for one row more than it will return", async () => {
+      await listResponsesForOpportunity({ opportunityId: "o", studyId: "s" });
+
+      // The +1 is the detector. Without it a full page is indistinguishable
+      // from a complete result set.
+      expect(captured[0].sql).toContain("LIMIT 200001");
+    });
+
+    it("refuses rather than truncating when the bound is passed", async () => {
+      pushRows(200_001);
+
+      // A mean, an NPS and a CSV computed over part of the data, with nothing
+      // saying so, is a wrong finding presented as a finding.
+      await expect(
+        listResponsesForOpportunity({ opportunityId: "o", studyId: "s" })
+      ).rejects.toMatchObject({ statusCode: 413 });
+    });
+
+    it("returns a result set that exactly fills the bound", async () => {
+      pushRows(200_000);
+
+      const responses = await listResponsesForOpportunity({
+        opportunityId: "o",
+        studyId: "s"
+      });
+
+      // Off-by-one in the other direction: refusing at the bound rather than
+      // past it would refuse a study that fits.
+      expect(responses).toHaveLength(200_000);
+    });
+  });
+
   describe("listResponsesForStudy", () => {
     it("spans every opportunity, which is why its route stays superadmin-only", async () => {
       await listResponsesForStudy("study_abc");

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { requireAuth } from '../middleware/authenticate';
 import { bindParticipantSession } from '../middleware/firsthand-session';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import { asyncHandler } from '../utils/errorHandler';
 import { parseSessionAttemptNumber } from '../firsthand/session-attempts';
 import { runtimeMutationSchema } from '../firsthand/runtime-records';
@@ -85,7 +86,38 @@ function parseUploadFileName(headerValue: string | null): string {
   }
 }
 
+/**
+ * Every mutating runtime route, per participant.
+ *
+ * Each POST /:token/runtime DELETES AND REINSERTS the session's entire event,
+ * response and asset set, so a looping participant makes their own writes
+ * progressively more expensive - on the 5-connection FirstHand runtime pool
+ * that every other live session shares. The recording routes on the same
+ * bucket reach S3 and the transcript queue.
+ *
+ * 120 a minute because this one is genuinely chatty: a participant working
+ * through a long survey sends an event and a response per question, and the
+ * runner also emits step and consent events. Two a second is far above a human
+ * answering questions and still an actual ceiling on a loop.
+ *
+ * Reads are left alone. GET /:token and GET /:token/runtime do not write, and
+ * the runner polls neither.
+ */
+const runtimeWriteLimiter = perUserLimiter(
+  120,
+  'Too many requests. Wait a minute and try again.'
+);
+
+/** Test seam, for the same reason as the one in routes/opportunities.ts. */
+export function resetRuntimeRouteLimits(userId: string): void {
+  runtimeWriteLimiter.resetKey(userId);
+}
+
 const guard = [requireAuth, bindParticipantSession];
+
+// Mounted AFTER `guard` on every mutating route, so req.user is present and an
+// unauthenticated flood cannot fill a real participant's bucket.
+const writeGuard = [...guard, runtimeWriteLimiter];
 
 /**
  * Refuses a native poll or survey the recording machinery.
@@ -155,7 +187,7 @@ router.get(
 // into a clean 400 by the global error handler's body-parser mapping.
 router.post(
   '/:token/runtime',
-  guard,
+  writeGuard,
   asyncHandler(async (req: Request, res: Response) => {
     const payload = req.firsthandSession!;
     const attempt = attemptFromQuery(req);
@@ -235,7 +267,7 @@ router.post(
 // kept for parity and local/dev where a direct PUT is unavailable.
 router.post(
   '/:token/recording',
-  guard,
+  writeGuard,
   asyncHandler(async (req: Request, res: Response) => {
     if (refusesRecording(req, res)) return;
 
@@ -339,7 +371,7 @@ router.post(
 // another's recording.
 router.post(
   '/:token/recording/client-upload',
-  guard,
+  writeGuard,
   asyncHandler(async (req: Request, res: Response) => {
     if (refusesRecording(req, res)) return;
 
@@ -391,7 +423,7 @@ router.post(
 // its own registered uploads to finalize.
 router.post(
   '/:token/recording/finalize',
-  guard,
+  writeGuard,
   asyncHandler(async (req: Request, res: Response) => {
     if (refusesRecording(req, res)) return;
 
