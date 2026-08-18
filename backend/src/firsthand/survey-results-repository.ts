@@ -139,3 +139,48 @@ export async function listResponsesForOpportunity(input: {
     input.opportunityId
   ]);
 }
+
+/**
+ * Whether a study has collected any answer at all.
+ *
+ * Existence, not a count and not the rows: the only question the caller has is
+ * "would rewriting this study's steps put someone's answer under a different
+ * question", and for that one matters exactly as much as ten thousand.
+ * `listResponsesForStudy` would load every stored answer to decide it, on the
+ * five-connection runtime pool that live participant sessions share, and the
+ * projection it builds is bounded elsewhere precisely because it can be large.
+ *
+ * `LIMIT 1` and `SELECT 1`, so Postgres stops at the first matching row.
+ *
+ * Same join as every other read here, for the same reason:
+ * `participant_responses` has no `study_id` of its own and hangs off
+ * `runtime_sessions`, which does.
+ *
+ * Fails CLOSED when the runtime database is unconfigured - it answers `true`,
+ * "assume there are answers". Every other read in this file answers `[]` for
+ * that case, because an empty result is the honest answer to "show me the
+ * answers" when there is nowhere to read them from. This one drives a REFUSAL,
+ * so the same instinct would invert its meaning: "no answers" would read as
+ * "safe to rewrite the steps", and the guard would be disabled by exactly the
+ * misconfiguration that makes it impossible to check.
+ */
+export async function studyHasResponses(studyId: string): Promise<boolean> {
+  if (!isPostgresRuntimeConfigured()) {
+    return true;
+  }
+
+  return withRuntimeDatabaseClient(async (client) => {
+    const result = await client.query(
+      `
+        SELECT 1
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE s.study_id = $1
+        LIMIT 1
+      `,
+      [studyId]
+    );
+
+    return result.rows.length > 0;
+  });
+}

@@ -21,7 +21,8 @@ vi.mock("./runtime-database", () => ({
 
 import {
   listResponsesForOpportunity,
-  listResponsesForStudy
+  listResponsesForStudy,
+  studyHasResponses
 } from "./survey-results-repository";
 
 /**
@@ -167,5 +168,61 @@ describe("survey results readers", () => {
       expect(whereClauseOf(captured[0].sql)).toBe("s.study_id = $1");
       expect(captured[0].params).toEqual(["study_abc"]);
     });
+  });
+});
+
+/**
+ * The existence check that decides whether a study's questions may be
+ * rewritten in place. It is a refusal predicate, not a reader, so its failure
+ * direction is the opposite of everything above.
+ */
+describe("studyHasResponses", () => {
+  beforeEach(() => {
+    captured.length = 0;
+    rowsToReturn.length = 0;
+    isPostgresRuntimeConfigured.mockReturnValue(true);
+  });
+
+  it("reports false when the study has no stored answers", async () => {
+    expect(await studyHasResponses("study_abc")).toBe(false);
+  });
+
+  it("reports true as soon as one answer exists", async () => {
+    rowsToReturn.push({ "?column?": 1 });
+
+    expect(await studyHasResponses("study_abc")).toBe(true);
+  });
+
+  it("filters on the study, through the session that carries it", async () => {
+    await studyHasResponses("study_abc");
+
+    // participant_responses has no study_id of its own, so the join IS the
+    // filter. Asserted as literals rather than against the module's strings.
+    expect(captured[0].sql).toContain(
+      "JOIN runtime_sessions AS s ON s.session_id = r.session_id"
+    );
+    expect(captured[0].sql.split(/\bWHERE\b/)[1]).toContain("s.study_id = $1");
+    expect(captured[0].params[0]).toBe("study_abc");
+  });
+
+  it("stops at the first row rather than loading the answers", async () => {
+    await studyHasResponses("study_abc");
+
+    // The whole point of not reusing listResponsesForStudy: this runs on the
+    // five-connection pool that live participant sessions share, and the
+    // answer set it would otherwise materialise is unbounded.
+    expect(captured[0].sql).toContain("LIMIT 1");
+    expect(captured[0].sql).not.toContain("response_payload");
+  });
+
+  it("assumes there ARE answers when the runtime database is not configured", async () => {
+    // Fails CLOSED, unlike every reader above, and that inversion is the
+    // point. This drives a refusal, so answering "no answers" would read as
+    // "safe to rewrite the questions" and disable the guard by exactly the
+    // misconfiguration that makes it impossible to check.
+    isPostgresRuntimeConfigured.mockReturnValue(false);
+
+    expect(await studyHasResponses("study_abc")).toBe(true);
+    expect(captured).toHaveLength(0);
   });
 });

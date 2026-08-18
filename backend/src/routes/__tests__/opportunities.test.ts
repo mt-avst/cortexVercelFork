@@ -34,6 +34,13 @@ jest.mock('../../firsthand/runtime-repository', () => ({
 // still gets a call count of zero to assert on.
 jest.mock('../../firsthand/survey-results-repository', () => ({
   listResponsesForOpportunity: jest.fn(async () => []),
+  // Defaults to "nobody has answered yet", which is the state in which an
+  // in-place study rewrite is safe. Every test that cares queues its own.
+  //
+  // Omitting it from this factory does not fail with a missing-mock message:
+  // the route awaits `undefined(...)` and answers 500, which reads as a route
+  // bug. Fourth occurrence of that shape in this repo.
+  studyHasResponses: jest.fn(async () => false),
 }));
 
 // Real implementations, but spy-able: one test needs the CSV serialiser to
@@ -73,6 +80,31 @@ jest.mock('../../firsthand/studies-repository', () => ({
   // Defaults to false: most tests link nothing, or link a study that already
   // has an owner, and only a real claim is worth reporting.
   claimStudyIfUnowned: jest.fn(() => Promise.resolve(false)),
+  // Omitting this from the factory does not fail with a missing-mock message:
+  // the route calls `updateStudy(...)` on `undefined` and answers 500, which
+  // reads as a route bug. Third occurrence of that shape in this repo, so it
+  // is worth the comment. Defaults to a successful in-place update by an
+  // owner, which is the common case now that the opportunity form can edit a
+  // linked study; every test that cares about a refusal queues its own.
+  updateStudy: jest.fn(() =>
+    Promise.resolve({
+      ok: true as const,
+      claimed: false,
+      study: {
+        id: 'study_abc123',
+        title: 'A study',
+        intro_text: 'Intro',
+        consent_text: 'Consent',
+        kind: 'recorded' as const,
+        estimated_duration_minutes: undefined,
+        status: 'launched' as const,
+        owner_user_id: 'test-user-id',
+        created_at: '2026-08-16T10:00:00.000Z',
+        updated_at: '2026-08-16T10:00:00.000Z',
+      },
+      steps: [],
+    })
+  ),
   deleteStudyUnchecked: jest.fn(),
   // Default true so the inline path runs; the route checks this before
   // building a study so a misconfigured runtime pool answers 503 rather than
@@ -80,16 +112,19 @@ jest.mock('../../firsthand/studies-repository', () => ({
   isStudiesPersistenceConfigured: jest.fn(() => true),
 }));
 
-import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED, resetParticipantRouteLimits } from '../opportunities';
+import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED, STUDY_KIND_MISMATCH, resetParticipantRouteLimits } from '../opportunities';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
 import { createSession } from '../../firsthand/session-create';
 import { findParticipantSessionForOpportunity } from '../../firsthand/runtime-repository';
-import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured } from '../../firsthand/studies-repository';
-import { listResponsesForOpportunity } from '../../firsthand/survey-results-repository';
+import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured, updateStudy } from '../../firsthand/studies-repository';
+import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
 import { toResponsesCsv } from '../../firsthand/survey-csv';
 import { errorHandler, AppError } from '../../utils/errorHandler';
+// The real serialiser, so the unchanged-sequence fixture is what the route
+// actually computes rather than a hand-built shape that could never match.
+import { toStudySteps } from '../../../../shared/firsthand/inline-study';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
@@ -104,12 +139,18 @@ const mockFindParticipantSession =
   >;
 const mockCreateStudy = createStudy as jest.MockedFunction<any>;
 const mockClaimStudyIfUnowned = claimStudyIfUnowned as jest.MockedFunction<any>;
+// Typed against the real signature rather than `any`: this file holds a
+// per-file no-explicit-any budget in eslint-suppressions.json, so one more
+// untyped mock turns every existing one into an error.
+const mockUpdateStudy = updateStudy as jest.MockedFunction<typeof updateStudy>;
 const mockDeleteStudyUnchecked = deleteStudyUnchecked as jest.MockedFunction<any>;
 const mockCountStudyTasks = countStudyTasks as jest.MockedFunction<typeof countStudyTasks>;
 const mockGetStudyById = getStudyById as jest.MockedFunction<typeof getStudyById>;
 const mockIsStudiesPersistenceConfigured = isStudiesPersistenceConfigured as jest.MockedFunction<any>;
 const mockListResponsesForOpportunity =
   listResponsesForOpportunity as jest.MockedFunction<typeof listResponsesForOpportunity>;
+const mockStudyHasResponses =
+  studyHasResponses as jest.MockedFunction<typeof studyHasResponses>;
 const mockToResponsesCsv = toResponsesCsv as jest.MockedFunction<typeof toResponsesCsv>;
 
 const app = express();
@@ -686,6 +727,11 @@ describe('Opportunities API', () => {
         ) => {
           mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
           mockQuery.mockResolvedValueOnce({ rows: [existing(studyId)] });
+          if (studyId) {
+            // "Is any OTHER opportunity linked to this study?" - only asked
+            // when there is a link to rewrite in place.
+            mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+          }
           if (expectUpdate) {
             mockQuery.mockResolvedValueOnce({
               rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
@@ -709,20 +755,74 @@ describe('Opportunities API', () => {
         });
 
         /**
-         * Authoring over questions that already exist minted a THIRD study and
-         * re-pointed the row at it, leaving the previous one launched, orphaned
-         * and holding every answer collected so far. The task-list path has
-         * refused this all along.
+         * Authoring over questions that already exist was refused outright,
+         * because `inline_survey` only ever created - so honouring it would
+         * have minted a second study and repointed the row at it, leaving the
+         * first launched, orphaned and holding every answer collected so far.
+         * It now updates the linked study in place instead, which is the only
+         * way an author can correct their own questions from the form that
+         * wrote them.
          */
-        it('refuses to author over questions the opportunity already has', async () => {
+        it('rewrites the linked questions in place rather than minting a second study', async () => {
+          // The linked study has to be a survey, or the vocabulary guard
+          // refuses it - the factory default is a recorded task list.
+          mockGetStudyById.mockResolvedValueOnce({
+            study: {
+              id: 'study_existing',
+              title: 'A survey',
+              intro_text: 'Intro',
+              consent_text: 'Consent',
+              kind: 'survey',
+              estimated_duration_minutes: undefined,
+              status: 'launched',
+              owner_user_id: 'test-user-id',
+              created_at: '2026-08-16T10:00:00.000Z',
+              updated_at: '2026-08-16T10:00:00.000Z',
+            },
+            steps: [],
+          } as never);
+
+          await patch({ inline_survey: questions }, 'study_existing', true).expect(200);
+
+          expect(mockCreateStudy).not.toHaveBeenCalled();
+          expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          expect(mockUpdateStudy.mock.calls[0][0]).toBe('study_existing');
+          // The steps carry the EXISTING study's id, not a fresh one - which
+          // is what keeps `${studyId}_step_N` pointing at the same study the
+          // answers were collected against.
+          const written = mockUpdateStudy.mock.calls[0][1] as {
+            steps: { step_id: string }[];
+          };
+          expect(written.steps[0].step_id.startsWith('study_existing_')).toBe(true);
+        });
+
+        it('refuses to rewrite questions belonging to another researcher', async () => {
+          mockGetStudyById.mockResolvedValueOnce({
+            study: {
+              id: 'study_existing',
+              title: 'A survey',
+              intro_text: 'Intro',
+              consent_text: 'Consent',
+              kind: 'survey',
+              estimated_duration_minutes: undefined,
+              status: 'launched',
+              owner_user_id: 'someone-else',
+              created_at: '2026-08-16T10:00:00.000Z',
+              updated_at: '2026-08-16T10:00:00.000Z',
+            },
+            steps: [],
+          } as never);
+          mockUpdateStudy.mockResolvedValueOnce({ ok: false, reason: 'forbidden' } as never);
+
           const response = await patch(
             { inline_survey: questions },
             'study_existing'
-          ).expect(400);
+          ).expect(403);
 
-          expect(response.body.error).toBe(
-            'This opportunity already has questions; edit them in the Task Lists area'
-          );
+          expect(response.body.error).toMatch(/belong to another researcher/);
+          // The dangerous failure is not the refusal itself but a fallback:
+          // minting a replacement here would repoint the opportunity away from
+          // a colleague's study without saying so.
           expect(mockCreateStudy).not.toHaveBeenCalled();
         });
 
@@ -1339,28 +1439,410 @@ describe('Opportunities API', () => {
       expect(mockClaimStudyIfUnowned).not.toHaveBeenCalled();
     });
 
-    it('refuses to author over an opportunity that already has a study', async () => {
-      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
-      mockQuery.mockResolvedValueOnce({
-        rows: [existingUnmoderated('study_already_linked')]
+    /**
+     * A0. Every one of these used to be a flat refusal - "edit its tasks in the
+     * Task Lists area" - because `inline_study` only ever created. Nothing
+     * downstream is safe until an edit can write the study it is already
+     * linked to: A1 makes authored content editable from this form, and every
+     * save would otherwise be refused.
+     */
+    describe('updating the linked task list in place', () => {
+      // Every case here starts from an opportunity that ALREADY has a study,
+      // which is the whole point. `expectUpdate` is queued only where the
+      // request reaches the opportunity write - a queued-but-unreached row
+      // survives clearAllMocks and poisons the next test.
+      const patchLinked = (
+        body: Record<string, unknown>,
+        expectUpdate = false,
+        sharedWithAnother = false
+      ) => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [existingUnmoderated('study_already_linked')]
+        });
+        // "Is any OTHER opportunity linked to this study?" - queued for every
+        // in-place attempt, because it runs before the write decision.
+        mockQuery.mockResolvedValueOnce(
+          sharedWithAnother ? { rows: [{ '?column?': 1 }], rowCount: 1 } : { rows: [], rowCount: 0 }
+        );
+        if (expectUpdate) {
+          mockQuery.mockResolvedValueOnce({
+            rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+            rowCount: 1
+          });
+        }
+        return request(app).patch('/api/opportunities/1').send(body);
+      };
+
+      /**
+       * The write against `opportunities`, found by what it IS rather than by
+       * its position in mockQuery.mock.calls. Index-based lookups here broke
+       * the moment a read was added ahead of them, and an index that silently
+       * points at a different query is exactly the shape of assertion that
+       * passes without reaching its subject. Asserting there is exactly one
+       * also catches a second write nobody intended.
+       */
+      const opportunityWrite = () => {
+        const calls = (mockQuery.mock.calls as unknown as [string, unknown[]][]).filter(
+          ([sql]) =>
+            typeof sql === 'string' &&
+            (sql.includes('UPDATE opportunities') ||
+              sql.includes('SELECT * FROM opportunities'))
+        );
+        expect(calls).toHaveLength(1);
+        return calls[0];
+      };
+
+      it('rewrites the linked study rather than minting a second one', async () => {
+        await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
+          .expect(200);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        expect(mockUpdateStudy.mock.calls[0][0]).toBe('study_already_linked');
+
+        const written = mockUpdateStudy.mock.calls[0][1] as {
+          consent_text: string;
+          steps: { step_id: string; prompt?: string }[];
+        };
+        expect(written.consent_text).toBe('We record your screen.');
+        // Namespaced against the study that already exists, so the ids the
+        // collected answers were written against keep resolving.
+        expect(written.steps[0].step_id.startsWith('study_already_linked_')).toBe(true);
       });
 
-      const response = await request(app)
-        .patch('/api/opportunities/1')
-        .send({ inline_study: inlineStudy })
-        .expect(400);
+      it('does not repoint the opportunity when it updates in place', async () => {
+        await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
+          .expect(200);
 
-      expect(response.body.error).toBe(
-        'This opportunity already has a task list; edit its tasks in the Task Lists area'
-      );
-      expect(mockCreateStudy).not.toHaveBeenCalled();
+        // The whole defect in one assertion: the link must be untouched, so
+        // firsthand_study_id must not appear in the UPDATE at all.
+        const [updateSql] = opportunityWrite();
+        expect(updateSql).toContain('UPDATE opportunities');
+        expect(updateSql).not.toContain('firsthand_study_id');
+      });
+
+      it('repeated saves never create a study', async () => {
+        // The count assertion the plan calls for, in the shape this suite can
+        // make it: across a sequence of saves, not the response of any one
+        // call. The row-count version runs against a real Postgres.
+        for (let i = 0; i < 5; i++) {
+          await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+        }
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(5);
+      });
+
+      it('answers 200 for a request whose only content was the task list', async () => {
+        // No column on `opportunities` changes, so the field loop is empty.
+        // Before this was handled the route answered "No fields to update" for
+        // a save that had written everything it carried - and that is exactly
+        // the body an autosave sends.
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [existingUnmoderated('study_already_linked')]
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+          rowCount: 1
+        });
+
+        const response = await request(app)
+          .patch('/api/opportunities/1')
+          .send({ inline_study: inlineStudy })
+          .expect(200);
+
+        // Read back rather than written, so the BEFORE UPDATE trigger does not
+        // stamp updated_at on a row that did not change.
+        const [sql, params] = opportunityWrite();
+        expect(sql).toContain('SELECT * FROM opportunities');
+        expect(sql).not.toContain('UPDATE opportunities');
+        // The parameters matter as much as the text: mockQuery never parses
+        // SQL, so a placeholder numbered $2 against a one-element list passes
+        // here and answers 500 in production for every autosave.
+        expect(sql).toContain('$1');
+        expect(params).toEqual(['1']);
+
+        // The response is still shaped by the same code the UPDATE path uses.
+        expect(response.body.created_at).toEqual(expect.any(String));
+        expect(response.body.sessions).toEqual([]);
+      });
+
+      it('passes the requesting user through as the study write authorisation', async () => {
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        // The route must not decide ownership itself: the decision is taken
+        // inside updateStudy's transaction, behind its row lock. All this
+        // asserts is that the requester reaching it is the real one.
+        expect(mockUpdateStudy.mock.calls[0][2]).toEqual({
+          userId: 'test-user-id',
+          isSuperadmin: false
+        });
+      });
+
+      it('reports a superadmin as one, so they are not refused their own override', async () => {
+        // The pair matters, not either half: asserting only the
+        // researcher_admin case above passes just as happily against a
+        // hardcoded `isSuperadmin: false`, which would silently take a
+        // superadmin's write on someone else's study away from them.
+        const superadminApp = express();
+        superadminApp.use(express.json());
+        superadminApp.use((req, res, next) => {
+          // Cast rather than `(req: any)`: same budget reason as mockUpdateStudy
+          // above. An intersection does not work here - express-session's
+          // declaration merging already types req.session as a full Session.
+          (req as unknown as { session: { user: unknown } }).session = {
+            user: {
+              id: 'superadmin-id',
+              name: 'Super Admin',
+              email: 'super@example.com',
+              role: 'superadmin'
+            }
+          };
+          next();
+        });
+        superadminApp.use('/api/opportunities', opportunitiesRouter);
+        superadminApp.use(errorHandler);
+
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'someone-else' }] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [existingUnmoderated('study_already_linked')]
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+          rowCount: 1
+        });
+
+        await request(superadminApp)
+          .patch('/api/opportunities/1')
+          .send({ inline_study: inlineStudy })
+          .expect(200);
+
+        expect(mockUpdateStudy.mock.calls[0][2]).toEqual({
+          userId: 'superadmin-id',
+          isSuperadmin: true
+        });
+      });
+
+      it('refuses to change the questions of a study that has collected answers', async () => {
+        // The defect this guard exists for: step ids are positional, so
+        // rewriting the steps re-attributes stored answers to whichever
+        // question now sits at that index. Nothing surfaces it afterwards.
+        mockStudyHasResponses.mockResolvedValueOnce(true);
+
+        const response = await patchLinked({ inline_study: inlineStudy }).expect(400);
+
+        expect(response.body.error).toMatch(/already collected answers/);
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        // And no mint either - a replacement study would repoint the
+        // opportunity away from the answers it has already collected.
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('still allows a consent edit on a study that has collected answers', async () => {
+        // The guard is on identity, not on the study. Refusing every save
+        // would make a study unfixable the moment one person answered, and a
+        // consent or duration edit moves no question onto another's id.
+        mockStudyHasResponses.mockResolvedValue(true);
+        mockGetStudyById.mockResolvedValueOnce({
+          study: {
+            id: 'study_already_linked',
+            title: 'A study',
+            intro_text: 'Intro',
+            consent_text: 'The old wording',
+            kind: 'recorded',
+            estimated_duration_minutes: undefined,
+            status: 'launched',
+            owner_user_id: 'test-user-id',
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-16T10:00:00.000Z',
+          },
+          // Exactly what inlineStudy serialises to, so the sequence is
+          // unchanged and only the consent differs.
+          steps: toStudySteps(inlineStudy.steps as never, 'study_already_linked', undefined),
+        } as never);
+
+        await patchLinked(
+          { inline_study: { ...inlineStudy, consent_text: 'New wording.' } },
+          true
+        ).expect(200);
+
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        expect(
+          (mockUpdateStudy.mock.calls[0][1] as { consent_text: string }).consent_text
+        ).toBe('New wording.');
+
+        mockStudyHasResponses.mockResolvedValue(false);
+      });
+
+      it('asks whether the study is shared, excluding this opportunity itself', async () => {
+        // The mock cannot tell a correct query from a wrong one - it returns
+        // whatever was queued - so the refusal test above passes just as
+        // happily against a query with no `id <> $2`. That version matches the
+        // opportunity's OWN row, so every in-place save would be refused as
+        // shared. This is the only assertion that can catch it.
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        const sharedCheck = (mockQuery.mock.calls as unknown as [string, unknown[]][]).find(
+          ([sql]) => typeof sql === 'string' && sql.includes('SELECT 1 FROM opportunities')
+        );
+
+        expect(sharedCheck).toBeDefined();
+        // Asserted as a literal rather than against the module's own string,
+        // which would move with it.
+        expect(sharedCheck![0].replace(/\s+/g, ' ').trim()).toBe(
+          'SELECT 1 FROM opportunities WHERE firsthand_study_id = $1 AND id <> $2 LIMIT 1'
+        );
+        // Positional: both values appear either way, so a swap is only visible
+        // by index.
+        expect(sharedCheck![1][0]).toBe('study_already_linked');
+        expect(sharedCheck![1][1]).toBe('1');
+      });
+
+      it('refuses to rewrite a task list another opportunity also uses', async () => {
+        // Ownership is not the question - the author may well own it. The
+        // question is what this surface implies: an author editing THIS
+        // opportunity would silently change what a colleague's live
+        // opportunity serves its participants.
+        const response = await patchLinked({ inline_study: inlineStudy }, false, true)
+          .expect(400);
+
+        expect(response.body.error).toMatch(/also used by another opportunity/);
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('never deletes the study it updated in place', async () => {
+        // The compensating delete exists to remove a study nothing ever
+        // referenced. On the in-place path the study is the researcher's live
+        // one, and deleting it would take its steps with it. Nothing else in
+        // this suite reaches the catch block with updatedStudyInPlace true, so
+        // without this a refactor that widened the guard to the linked id
+        // would destroy a live study and every test would still pass.
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [existingUnmoderated('study_already_linked')]
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+        // Deleted between the ownership check and the write.
+        mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+
+        await request(app)
+          .patch('/api/opportunities/1')
+          .send({ title: 'A new title', inline_study: inlineStudy })
+          .expect(404);
+
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        expect(mockDeleteStudyUnchecked).not.toHaveBeenCalled();
+      });
+
+      it('leaves a duration the request said nothing about alone', async () => {
+        // resolveStudyDuration(undefined) is null and updateStudy writes any
+        // key that is present, so passing it unconditionally erased an
+        // estimate set by hand in StudyEditor - the same silent loss the
+        // docblock refuses for title and intro_text.
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(mockUpdateStudy.mock.calls[0][1]).not.toHaveProperty(
+          'estimated_duration_minutes'
+        );
+      });
+
+      it('writes a duration the request did give', async () => {
+        // The pair matters: asserting only the omission above passes just as
+        // happily against a branch that never sends a duration at all.
+        await patchLinked(
+          { inline_study: { ...inlineStudy, estimated_duration_minutes: 12 } },
+          true
+        ).expect(200);
+
+        expect(mockUpdateStudy.mock.calls[0][1]).toHaveProperty(
+          'estimated_duration_minutes',
+          12
+        );
+      });
+
+      it('refuses to rewrite a task list belonging to another researcher', async () => {
+        mockUpdateStudy.mockResolvedValueOnce({ ok: false, reason: 'forbidden' } as never);
+
+        const response = await patchLinked({ inline_study: inlineStudy }).expect(403);
+
+        expect(response.body.error).toMatch(/belongs to another researcher/);
+        // The refusal is not the dangerous half. Falling back to a mint here
+        // would repoint the opportunity away from a colleague's study, which
+        // is the outcome the old blanket refusal existed to prevent.
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('refuses a task list whose linked study holds the other vocabulary', async () => {
+        mockGetStudyById.mockResolvedValueOnce({
+          study: {
+            id: 'study_already_linked',
+            title: 'A survey',
+            intro_text: 'Intro',
+            consent_text: 'Consent',
+            kind: 'survey',
+            estimated_duration_minutes: undefined,
+            status: 'launched',
+            owner_user_id: 'test-user-id',
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-16T10:00:00.000Z',
+          },
+          steps: [],
+        } as never);
+
+        const response = await patchLinked({ inline_study: inlineStudy }).expect(400);
+
+        expect(response.body.error).toBe(STUDY_KIND_MISMATCH.recorded);
+        // Refused BEFORE the write, so updateStudy's own vocabulary guard -
+        // which throws a raw Error this route answers as a 500 - is never the
+        // thing the author sees.
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('mints a study when the link points at one that no longer exists', async () => {
+        // A dangling link protects nothing and orphans nothing, so authoring
+        // repairs it rather than being refused. Without this the opportunity
+        // stays permanently unfixable from the form.
+        mockGetStudyById.mockResolvedValueOnce(null as never);
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_replacement' },
+          steps: []
+        } as never);
+
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+        expect(opportunityWrite()[1]).toContain('study_replacement');
+      });
+
+      it('mints a study when the linked one is deleted mid-request', async () => {
+        // Between getStudyById and updateStudy's FOR UPDATE lock. Same answer
+        // as never having existed - the alternative is a 403 or a 500 naming a
+        // study the caller can no longer see.
+        mockUpdateStudy.mockResolvedValueOnce({ ok: false, reason: 'not_found' } as never);
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_replacement' },
+          steps: []
+        } as never);
+
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+      });
     });
 
-    it('refuses to author over a linked study even when the request nulls the link', async () => {
+    it('refuses authored tasks alongside an explicit link, including a null one', async () => {
       // firsthand_study_id is nullable on the update schema, and null?.trim()
-      // is falsy - so checking only the merged value let a caller clear the
-      // link and author a replacement in one request, orphaning the study a
-      // live opportunity was running.
+      // is undefined - so a truthiness check let a caller clear the link and
+      // author into the study it pointed at in one request, leaving that study
+      // rewritten AND unreferenced. The blanket refusal on the stored link used
+      // to cover this; nothing else did, so the guard now tests for `undefined`.
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({
         rows: [existingUnmoderated('study_already_linked')]
@@ -1372,9 +1854,10 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'This opportunity already has a task list; edit its tasks in the Task Lists area'
+        'Send either firsthand_study_id or inline_study, not both'
       );
       expect(mockCreateStudy).not.toHaveBeenCalled();
+      expect(mockUpdateStudy).not.toHaveBeenCalled();
     });
 
     it('removes the created study when the opportunity vanished mid-update', async () => {
