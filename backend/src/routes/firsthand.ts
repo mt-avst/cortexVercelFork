@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 
 import { requireAdmin } from '../middleware/authenticate';
 import { logger } from '../utils/logger';
-import { asyncHandler } from '../utils/errorHandler';
+import { asyncHandler, ForbiddenError, NotFoundError } from '../utils/errorHandler';
 import {
   createStudy,
   deleteStudy,
@@ -84,8 +84,12 @@ function sendStudyWriteFailure(
 }
 
 /**
- * The read boundary for participants' answers. Answers true when this requester
- * may see them; otherwise answers the response itself and returns false.
+ * The read boundary for participants' answers. Returns for a requester who may
+ * see them, and throws ForbiddenError for one who may not - so the refusal goes
+ * through the shared error handler, the same as every other refusal in the
+ * opportunities routes. It used to write its own `{error:'forbidden'}` body,
+ * which made one logical resource answer two different shapes depending which
+ * route you asked.
  *
  * **Superadmin only, deliberately, and this is the END STATE - not an interim
  * position.** It used to be one; phase 4e resolved it, and resolved it by
@@ -119,24 +123,21 @@ function sendStudyWriteFailure(
  * them. A read cannot adopt the row the way a write does, and an unowned study
  * is precisely the case where nobody can be held accountable for the data.
  */
-function mayReadStudyResults(res: Response, req: Request): boolean {
+function requireSuperadminForStudyResults(req: Request): void {
   if (studyRequester(req).isSuperadmin) {
-    return true;
+    return;
   }
 
-  // Mirrors sendStudyWriteFailure's warning for the same reason: these handlers
-  // answer directly rather than throwing, so nothing else logs the attempt.
+  // Logged explicitly for the same reason sendStudyWriteFailure logs: an
+  // attempt on participant answers should never be silent.
   logger.warn('Refused a study results read below superadmin', {
     studyId: req.params.studyId,
     userId: req.user?.id
   });
 
-  res.status(403).json({
-    error: 'forbidden',
-    message: 'Only a superadmin can view survey responses at present'
-  });
-
-  return false;
+  throw new ForbiddenError(
+    'Only a superadmin can view survey responses across every opportunity'
+  );
 }
 
 // GET /api/firsthand/studies - list studies for the Cortex study picker
@@ -256,15 +257,17 @@ router.get('/studies/:studyId/results', requireAdmin, asyncHandler(async (req: R
 
   const stored = await getStudyById(req.params.studyId);
   if (!stored) {
-    return res.status(404).json({ error: 'not_found' });
+    throw new NotFoundError('Survey');
   }
 
-  if (!mayReadStudyResults(res, req)) return;
+  requireSuperadminForStudyResults(req);
 
   const responses = await listResponsesForStudy(req.params.studyId);
 
+  // The same envelope the per-opportunity reader returns. One logical resource
+  // answered two ways is how the two mint routes started drifting.
   return res.json({
-    study: { id: stored.study.id, title: stored.study.title },
+    title: stored.study.title,
     results: aggregateSurveyResults(stored.steps, responses)
   });
 }));
@@ -275,12 +278,12 @@ router.get('/studies/:studyId/results.csv', requireAdmin, asyncHandler(async (re
 
   const stored = await getStudyById(req.params.studyId);
   if (!stored) {
-    return res.status(404).json({ error: 'not_found' });
+    throw new NotFoundError('Survey');
   }
 
   // Gated before the download headers are set, not just before the send: a
   // refusal that had already set Content-Disposition would still offer a file.
-  if (!mayReadStudyResults(res, req)) return;
+  requireSuperadminForStudyResults(req);
 
   const responses = await listResponsesForStudy(req.params.studyId);
 

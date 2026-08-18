@@ -16,12 +16,19 @@ jest.mock('../../firsthand/survey-results-repository', () => ({
   listResponsesForStudy: jest.fn(),
 }));
 jest.mock('../../utils/database', () => ({ isDatabaseAvailable: jest.fn() }));
+// redactSensitiveUrl belongs here too: errorHandler imports it from this
+// module, so a factory listing only `logger` left it undefined, errorHandler
+// threw while handling the error, and Express fell through to the generic
+// handler below - turning every 403 and 404 into a 500. An omitted export in a
+// mock factory fails for a reason no assertion names.
 jest.mock('../../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
+  redactSensitiveUrl: (url: string) => url,
 }));
 
 // ─── Typed references to mocked functions ────────────────────────────────────
 import firsthandRouter from '../firsthand';
+import { errorHandler } from '../../utils/errorHandler';
 import {
   isStudiesPersistenceConfigured,
   listStudies,
@@ -66,6 +73,10 @@ function buildApp(user: { id: string; name: string; email: string; role: Session
     next();
   });
   app.use('/api/firsthand', firsthandRouter);
+  // The real app mounts this after the /api routes (index.ts), so without it
+  // here a thrown ForbiddenError surfaced as a 500 in tests and as a 403 in
+  // production - the harness disagreeing with the thing it tests.
+  app.use(errorHandler);
   app.use((err: any, _req: any, res: any, _next: any) => {
     res.status(err.status || 500).json({ error: err.message || 'server_error' });
   });
@@ -488,7 +499,10 @@ describe('FirstHand Express router', () => {
       const res = await request(superadminApp)
         .get('/api/firsthand/studies/study_abc/results')
         .expect(200);
-      expect(res.body.study).toMatchObject({ id: 'study_abc' });
+      expect(res.body).toMatchObject({ title: storedStudy.study.title });
+      // One envelope for one logical resource - the per-opportunity reader
+      // returns the same shape, and `study` is gone rather than duplicated.
+      expect(res.body.study).toBeUndefined();
       expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
     });
 
@@ -503,18 +517,18 @@ describe('FirstHand Express router', () => {
     // These results aggregate across EVERY opportunity using the study, and a
     // study is reusable by an opportunity its author did not create. So the
     // study's own owner is refused too: granting them would hand them answers
-    // from participants another researcher recruited. Per-opportunity results
-    // are phase 4's job and need an opportunity_id on runtime_sessions, which
-    // does not exist yet - until then this is superadmin-only.
+    // from participants another researcher recruited.
+    //
+    // Superadmin-only is the END STATE here, not an interim one. Phase 4e gave
+    // a researcher GET /api/opportunities/:id/survey-results instead, gated on
+    // opportunity ownership - it resolved this by building a different route
+    // rather than by loosening this one.
     it('refuses even the study owner, because results span other researchers opportunities', async () => {
       studyOwnedBy('admin-1');
       const res = await request(app)
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
-      expect(res.body).toMatchObject({
-        error: 'forbidden',
-        message: 'Only a superadmin can view survey responses at present',
-      });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
 
@@ -535,10 +549,7 @@ describe('FirstHand Express router', () => {
       const res = await request(app)
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
-      expect(res.body).toMatchObject({
-        error: 'forbidden',
-        message: 'Only a superadmin can view survey responses at present',
-      });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
       // Refusing after loading the answers would still have read them.
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
     });
@@ -548,7 +559,7 @@ describe('FirstHand Express router', () => {
       const res = await request(app)
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(403);
-      expect(res.body).toMatchObject({ error: 'forbidden' });
+      expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity' });
       // A refusal that still set the download headers would hand over a file.
       expect(res.headers['content-type']).not.toContain('text/csv');
       expect(res.headers['content-disposition']).toBeUndefined();
@@ -590,7 +601,7 @@ describe('FirstHand Express router', () => {
       const res = await request(app)
         .get('/api/firsthand/studies/missing/results')
         .expect(404);
-      expect(res.body).toMatchObject({ error: 'not_found' });
+      expect(res.body).toMatchObject({ error: 'Survey not found', code: 'NOT_FOUND' });
       expect(mockLogger.warn).not.toHaveBeenCalled();
     });
   });
