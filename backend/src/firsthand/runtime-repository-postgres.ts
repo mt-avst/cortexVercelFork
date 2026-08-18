@@ -2,6 +2,7 @@
 import type { PoolClient } from "pg";
 
 import type { SessionPayload } from "../../../shared/firsthand/contract";
+import { ConflictError } from "../../../shared/types";
 import type {
   PendingRecordingUploadRecord,
   ParticipantResponseRecord,
@@ -142,6 +143,52 @@ export async function createFreshRuntimeAttemptPostgres(payload: SessionPayload)
   });
 }
 
+/**
+ * Session states after which an answer may no longer be changed.
+ *
+ * `uploading` is deliberately NOT here. For a survey it does mean finished, and
+ * the mint route treats it that way - but for a recorded session it means the
+ * tasks are done and the video is still going up, and refusing writes during it
+ * would be a new failure mode on a live recording for no gain.
+ */
+const FINISHED_SESSION_STATES = new Set(["completed", "abandoned", "failed"]);
+
+/**
+ * Refuses to rewrite an answer once the session is over.
+ *
+ * `persistRuntimeSession` stores responses by deleting every row for the
+ * session and reinserting the current set, so a later submission does not
+ * supersede the earlier answer - it ERASES it, leaving nothing that says the
+ * answer ever differed. A researcher who reads their results twice could see
+ * two different findings with no record of a change between them, which is a
+ * problem about the trustworthiness of the finding rather than about the data.
+ *
+ * Enforced HERE, inside the row lock, rather than at the route. The route would
+ * have to read the status in a separate statement, and two submissions arriving
+ * together would both read "not finished" and both write. The `FOR UPDATE`
+ * above is what makes this decision hold under concurrency - the same reason
+ * the study-kind re-check in phase 4c sits inside its lock.
+ *
+ * Only responses. Events must still be accepted: `session_completed` itself is
+ * an event, and so are the abandonment and failure events that put a session
+ * into these states in the first place - refusing those would make the terminal
+ * states unreachable.
+ */
+function refuseAnswerToFinishedSession(
+  session: { sessionStatus: string },
+  mutation: RuntimeMutation
+): void {
+  if (mutation.type !== "response") {
+    return;
+  }
+
+  if (!FINISHED_SESSION_STATES.has(session.sessionStatus)) {
+    return;
+  }
+
+  throw new ConflictError("This session has finished and its answers can no longer be changed.");
+}
+
 export async function applyRuntimeMutationPostgres(
   payload: SessionPayload,
   mutation: RuntimeMutation,
@@ -171,6 +218,8 @@ export async function applyRuntimeMutationPostgres(
       if (!session) {
         throw new Error("Runtime session could not be loaded for mutation.");
       }
+
+      refuseAnswerToFinishedSession(session, mutation);
 
       applyRuntimeMutationToSession(session, mutation);
       await persistRuntimeSession(client, session);
