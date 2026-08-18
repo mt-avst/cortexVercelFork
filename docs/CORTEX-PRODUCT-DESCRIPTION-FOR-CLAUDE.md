@@ -72,7 +72,9 @@ The two are not interchangeable and the API refuses a mismatch: a recorded oppor
 A participant answers at `/survey/:token`, reached from the study page's call to action. Nothing is recorded — no screen, no microphone, no camera — and the consent text says so. One answer per participant per opportunity: an unfinished survey resumes where they left off, a finished one cannot be answered again.
 
 A researcher reads the answers on their opportunity's analytics page, under a **Responses** tab beside Overview (`/admin/opportunities/:id/analytics`), with a CSV export beside the tallies.
-Both are gated on **opportunity ownership** — the owner or a superadmin — like every other surface that returns participants' own data.
+Both are gated on **opportunity ownership** — the owner or a superadmin — like every other surface that returns participants' own data, and both are rate limited per user.
+
+The tab appears whenever the opportunity has questions linked, **including after a switch to external delivery**: answers already collected are still that researcher's data, and gating the tab on delivery mode lost them the only route to it. A participant can no longer change an answer once their session has finished, and a survey session's token cannot reach the recording machinery at all.
 
 The unit is the opportunity, not the study, and that distinction is the whole point.
 A study is reusable by an opportunity its author did not create, so the study-wide read spans participants that other researchers recruited under their own consent wording; those routes (`GET /api/firsthand/studies/:id/results` and `.../results.csv`) stay **superadmin-only** and are not what a researcher sees.
