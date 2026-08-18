@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSuperadmin } from '../middleware/authenticate';
+import { getAppliedDbTlsModes } from '../config/dbTls';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
@@ -442,6 +443,39 @@ router.delete('/admins', requireSuperadmin, asyncHandler(async (req: Request, re
   return res.status(200).json({
     success: true,
     message: 'Admin access revoked successfully'
+  });
+}));
+
+/**
+ * GET /api/admin/diagnostics/db-tls - is the database link actually verified?
+ *
+ * `DB_TLS_VERIFY` went live in 7.36.3, and until now the only evidence that it
+ * was doing anything was a line on the pod's stdout. That made the check
+ * impossible for anyone without cluster access - and a flag that shipped inert
+ * would have looked exactly like one that worked. This reports what each pool
+ * actually resolved, so the question can be answered from a browser.
+ *
+ * SUPERADMIN ONLY, and not on /api/health. Whether a database link verifies its
+ * certificate is a security posture detail: on an unauthenticated endpoint it
+ * would tell a stranger that a man-in-the-middle on that link is worth
+ * attempting. The people who need the answer are the ones who can already read
+ * the configuration.
+ *
+ * Modes only. `description` carries the database host and the CA bundle path,
+ * and neither is needed to answer the question.
+ */
+router.get('/diagnostics/db-tls', requireSuperadmin, asyncHandler(async (_req: Request, res: Response) => {
+  const pools = getAppliedDbTlsModes();
+
+  return res.json({
+    pools,
+    // Over the pools that have RESOLVED, which is not necessarily all of them.
+    allVerified: Object.keys(pools).length > 0 && Object.values(pools).every((mode) => mode === 'verified'),
+    // Spelled out in the response, not only in a comment: the FirstHand runtime
+    // pool connects lazily, so it is absent from this list until something has
+    // used it. A short list is an incomplete answer, not a clean one, and a
+    // human reading this JSON in a browser has no other way to know that.
+    note: 'Each pool appears once it has connected. A pool missing here has not resolved yet, which is not the same as unverified.'
   });
 }));
 

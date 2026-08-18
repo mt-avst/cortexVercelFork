@@ -15,11 +15,11 @@ Before go-live, confirm each item (ops / project owner):
 3. [ ] **Database** – RDS PostgreSQL provisioned by the chart (`database.postgresql`); the backend reads its connection string from `DB_URL`, injected by the chart (the resolver also accepts `DATABASE_URL`/`POSTGRES_URL`/`POSTGRESQL_URL`, but only `DB_URL` is set here).
 4. [ ] **CORS_ORIGIN** – Matches the production frontend URL (`https://adaptalabs.kubera-playground.adaptavist.net`).
 5. [x] **RDS backups declared** – `database.postgresql.rds.backupRetentionPeriod: 14` is set in `.kubera/playground-backend.yaml` rather than left to the chart default. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
-6. [ ] **RDS backups applied** – Confirm the running instance actually reports `BackupRetentionPeriod: 14`. Declared is not applied: Helm ignores unrecognised values keys silently, so a wrong key name would leave retention at the default while the line above still reads as done. Needs AWS RDS read access.
+6. [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS backups applied** – Confirm the running instance actually reports `BackupRetentionPeriod: 14`. Declared is not applied: Helm ignores unrecognised values keys silently, so a wrong key name would leave retention at the default while the line above still reads as done. Needs AWS RDS read access.
 7. [x] **RDS deletion protection declared** – `database.postgresql.rds.deletionProtection: true` is set in `.kubera/playground-backend.yaml`, matching FirstHand's own production manifest. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
-8. [ ] **RDS deletion protection applied** – Confirm the running instance actually reports `DeletionProtection: true`. Same declared-vs-applied caveat as retention. Needs AWS RDS read access.
+8. [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS deletion protection applied** – Confirm the running instance actually reports `DeletionProtection: true`. Same declared-vs-applied caveat as retention. Needs AWS RDS read access.
 9. [x] **RDS Multi-AZ declared** – `database.postgresql.rds.multiAz: true` is set in `.kubera/playground-backend.yaml`, matching the chart reference recorded in [docs/FIRSTHAND-KUBERA-MIGRATION-PLAN.md](FIRSTHAND-KUBERA-MIGRATION-PLAN.md) and FirstHand's own production manifest. Availability, not backup – see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
-10. [ ] **RDS Multi-AZ applied** – Confirm the running instance actually reports `MultiAZ: true`. Same declared-vs-applied caveat as retention. Read `PendingModifiedValues` and `DBInstanceStatus` in the same call and follow the four-state rule in [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md) before concluding anything: a `false` reading is only evidence of a wrong key name once the deploy has demonstrably reconciled, and reading inside the 15–30 minute ArgoCD lag will mislead you. Needs AWS RDS read access.
+10. [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS Multi-AZ applied** – Confirm the running instance actually reports `MultiAZ: true`. Same declared-vs-applied caveat as retention. Read `PendingModifiedValues` and `DBInstanceStatus` in the same call and follow the four-state rule in [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md) before concluding anything: a `false` reading is only evidence of a wrong key name once the deploy has demonstrably reconciled, and reading inside the 15–30 minute ArgoCD lag will mislead you. Needs AWS RDS read access.
 
 ## Environment and config
 
@@ -90,7 +90,7 @@ private and self-signed, so Node cannot verify RDS without them.
       deliberate - a name resolved through a DNS search suffix is a remote host -
       but if it genuinely is a plaintext in-cluster database, name it in
       `DB_TLS_LOCAL_HOSTS` (comma-separated) rather than turning verification off.
-- [ ] **Confirm from the pod log**, which is the evidence that matters. Every
+- [x] **Confirm the TLS mode WITHOUT a pod log** – `GET /api/admin/diagnostics/db-tls`, superadmin only, reports what each pool actually resolved (`disabled` / `unverified` / `verified`). Added because the decision was previously observable only on stdout, so nobody without cluster access could confirm it - and `DB_TLS_VERIFY` shipping inert would have looked identical to it working. Modes only: `description` names the database host and the CA bundle path and neither is needed. Not on `/api/health` - whether a link verifies its certificate tells a stranger whether a man-in-the-middle is worth attempting. **The FirstHand runtime pool connects lazily, so it is absent until something uses it; the response says so.** Original note:, which is the evidence that matters. Every
       pool logs one line at startup, prefixed `[db-tls:<pool>]`:
       - `verified TLS to <host> against <path>` - working.
       - `UNVERIFIED TLS to <host> ...` - the variable did not reach the pod.
@@ -138,14 +138,14 @@ weaken the connection.
 - [x] **Health check** – The backend serves `GET /health` (used by the Kubera liveness/readiness probes on port 3001); the frontend serves its own `/health` probe. These are internal probes, not a public JSON status page.
 - [x] **DB connectivity** – After deploy, verify `GET /api/opportunities` returns 200 (confirms DB + env through the nginx proxy).
 - [x] **RDS Multi-AZ declared** – `multiAz: true` in `.kubera/playground-backend.yaml`: a synchronous standby in a second AZ with automatic failover. Change it there, not in the AWS console, to avoid manifest/instance drift – it is the likeliest of the three to get toggled off to trim spend. Listed here rather than under Data and backups because it is an availability control, not a backup – it replicates mistakes as faithfully as it replicates good writes. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
-- [ ] **RDS Multi-AZ applied** – Unverified: confirming the live instance reports `MultiAZ: true` needs AWS RDS read access.
+- [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS Multi-AZ applied** – Unverified: confirming the live instance reports `MultiAZ: true` needs AWS RDS read access.
 
 ## Data and backups
 
 - [x] **RDS backups declared** – Retention is declared as 14 days in `.kubera/playground-backend.yaml`; see [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md). Change it there, not in the AWS console, to avoid manifest/instance drift.
-- [ ] **RDS backups applied** – Unverified: confirming the live instance reports 14 needs AWS RDS read access.
+- [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS backups applied** – Unverified: confirming the live instance reports 14 needs AWS RDS read access.
 - [x] **RDS deletion protection declared** – `deletionProtection: true` in `.kubera/playground-backend.yaml`. Change it there, not in the AWS console, to avoid manifest/instance drift. Deleting the instance deliberately means flipping the flag off in the manifest first.
-- [ ] **RDS deletion protection applied** – Unverified: confirming the live instance reports it needs AWS RDS read access.
+- [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS deletion protection applied** – Unverified: confirming the live instance reports it needs AWS RDS read access.
 - [x] **Migrations** – Run automatically on every deploy by the backend init container (`npm run migrate && npm run seed && npm run migrate:firsthand` against `DB_URL`); idempotent and checksum-guarded. There is no manual `run-migrations` endpoint.
 
 ## Performance and monitoring
@@ -161,7 +161,7 @@ weaken the connection.
 
 ## Residual decommission hygiene
 
-- [ ] **Delete the inert `FIRSTHAND_DATABASE_URL` entry from the backend secret store** - nothing reads it since the Phase C cutover, and the host it names was decommissioned on 2026-08-11 (see [FIRSTHAND-PHASE-C-ROLLBACK.md](FIRSTHAND-PHASE-C-ROLLBACK.md)). AWS-side action; requires AWS access.
+- [ ] ⛔ BLOCKED (needs AWS access, which Nick does not have) **Delete the inert `FIRSTHAND_DATABASE_URL` entry from the backend secret store** - nothing reads it since the Phase C cutover, and the host it names was decommissioned on 2026-08-11 (see [FIRSTHAND-PHASE-C-ROLLBACK.md](FIRSTHAND-PHASE-C-ROLLBACK.md)). AWS-side action; requires AWS access.
 
 ## Quick verification after deploy
 
