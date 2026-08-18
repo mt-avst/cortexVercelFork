@@ -199,4 +199,18 @@ describe('OpportunityDetail starting a native survey', () => {
       screen.getByRole('button', { name: /start survey in Cortex/i })
     ).toBeEnabled();
   });
+
+  // The API refuses a second mint once a session is completed or uploading
+  // (re-answering would silently overwrite the stored responses), but this
+  // fell through to the same unhelpful generic message as an actual failure -
+  // nothing here told the participant they had simply already answered.
+  it('says so when the participant has already answered', async () => {
+    vi.mocked(startSurveySession).mockRejectedValue({ response: { status: 409 } });
+
+    await start();
+
+    expect(
+      await screen.findByText(/already answered this survey/i)
+    ).toBeInTheDocument();
+  });
 });

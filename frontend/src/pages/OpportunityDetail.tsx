@@ -1125,6 +1125,14 @@ const OpportunityDetail: React.FC = () => {
                                   setError('This survey is not available. Please contact your research team.');
                                 } else if (status === 403) {
                                   setError('This opportunity is not yet available. Please try again later.');
+                                } else if (status === 409) {
+                                  // The backend refuses a second mint once a
+                                  // session is completed or uploading, rather
+                                  // than resetting it - re-answering would
+                                  // silently overwrite the stored responses,
+                                  // and the survey runtime keeps no history of
+                                  // what they were.
+                                  setError('You have already answered this survey.');
                                 } else {
                                   setError('Could not open the survey. Please try again or contact support.');
                                 }
