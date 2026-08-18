@@ -472,10 +472,18 @@ router.get('/diagnostics/db-tls', requireSuperadmin, asyncHandler(async (_req: R
     // Over the pools that have RESOLVED, which is not necessarily all of them.
     allVerified: Object.keys(pools).length > 0 && Object.values(pools).every((mode) => mode === 'verified'),
     // Spelled out in the response, not only in a comment: the FirstHand runtime
-    // pool connects lazily, so it is absent from this list until something has
+    // pool is built lazily, so it is absent from this list until something has
     // used it. A short list is an incomplete answer, not a clean one, and a
     // human reading this JSON in a browser has no other way to know that.
-    note: 'Each pool appears once it has connected. A pool missing here has not resolved yet, which is not the same as unverified.'
+    //
+    // "resolved", NOT "connected". applyDbTls records the mode when the pool's
+    // config is built - for `backend` that is at module load, before the Pool
+    // exists and long before it has spoken to the database. Saying "connected"
+    // invited the one wrong inference this endpoint can cause: that `verified`
+    // is proof of a completed handshake. It is proof of what was APPLIED. The
+    // handshake is proved by a query succeeding on the same pool, which is what
+    // /api/health does - see PRODUCTION_HARDENING.md.
+    note: 'A pool appears once its TLS configuration has resolved, which happens when the pool is built - not when it first connects. The mode is what was applied to the pool, not proof of a completed handshake. A pool missing here has not been built yet, which is not the same as unverified.'
   });
 }));
 

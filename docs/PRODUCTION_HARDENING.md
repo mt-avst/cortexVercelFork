@@ -73,15 +73,10 @@ Before go-live, confirm each item (ops / project owner):
 
 ## Database TLS verification
 
-The backend connects to RDS over TLS but does **not** verify the server's
-certificate until this is switched on. Until then, anything able to answer as
-the database can read the credentials on that connection and alter what it
-returns.
+**This is on, and confirmed applied.** `DB_TLS_VERIFY` shipped in 7.36.3 and the `backend` pool verifies the server's certificate; the reads that establish that are below.
+Without verification anything able to answer as the database could read the credentials on that connection and alter what it returns, so the switch is the whole control.
 
-The code for verification is shipped and tested; only the switch is off. The AWS
-RDS trust store is committed at `backend/certs/rds-global-bundle.pem` and copied
-into the image, so **no cluster or AWS access is needed** - the RDS roots are
-private and self-signed, so Node cannot verify RDS without them.
+The AWS RDS trust store is committed at `backend/certs/rds-global-bundle.pem` and copied into the image, so **no cluster or AWS access is needed** - the RDS roots are private and self-signed, so Node cannot verify RDS without them.
 
 - [x] **Enable verification** - `DB_TLS_VERIFY: "1"` is set in `.kubera/playground-backend.yaml`
       `config.data`. It is not a secret.
@@ -90,8 +85,22 @@ private and self-signed, so Node cannot verify RDS without them.
       deliberate - a name resolved through a DNS search suffix is a remote host -
       but if it genuinely is a plaintext in-cluster database, name it in
       `DB_TLS_LOCAL_HOSTS` (comma-separated) rather than turning verification off.
-- [x] **Confirm the TLS mode WITHOUT a pod log** – `GET /api/admin/diagnostics/db-tls`, superadmin only, reports what each pool actually resolved (`disabled` / `unverified` / `verified`). Added because the decision was previously observable only on stdout, so nobody without cluster access could confirm it - and `DB_TLS_VERIFY` shipping inert would have looked identical to it working. Modes only: `description` names the database host and the CA bundle path and neither is needed. Not on `/api/health` - whether a link verifies its certificate tells a stranger whether a man-in-the-middle is worth attempting. **The FirstHand runtime pool connects lazily, so it is absent until something uses it; the response says so.** Original note:, which is the evidence that matters. Every
-      pool logs one line at startup, prefixed `[db-tls:<pool>]`:
+- [x] **Confirm the TLS mode WITHOUT a pod log** - `GET /api/admin/diagnostics/db-tls`, superadmin only, reports what each pool resolved (`disabled` / `unverified` / `verified`).
+      Added because the decision was previously observable only on stdout, so nobody without cluster access could confirm it - and `DB_TLS_VERIFY` shipping inert would have looked identical to it working.
+      Modes only: `description` names the database host and the CA bundle path and neither is needed.
+      Not on `/api/health` - whether a link verifies its certificate tells a stranger whether a man-in-the-middle is worth attempting.
+      **The FirstHand runtime pool is built lazily, so it is absent until something uses it; the response says so.**
+- [x] **Read against the deployment, 2026-08-18**: both pools report `verified` - `{"pools":{"backend":"verified","firsthand-runtime":"verified"},"allVerified":true}`.
+      `DB_TLS_VERIFY` is therefore not inert, and it reaches both pools.
+      That matters for `firsthand-runtime` specifically because it takes its URL from `DATABASE_URL`, then `POSTGRES_URL`, then `DB_URL`, rather than `DB_URL` alone - a different URL in the pod would have been a different host, and this is the declared-vs-applied gap the endpoint exists to close.
+      `firsthand-runtime` is absent until something uses it: it is built on first use, and a bogus participant token 404s at the session guard before the pool is ever built, so it cannot be triggered by probing from outside.
+- [ ] **Prove the `firsthand-runtime` handshake** - `GET /api/opportunities/:id/survey-results` as superadmin, for an opportunity with a linked survey.
+      A 200 settles it: that route reaches `listResponsesForOpportunity` -> `withRuntimeDatabaseClient`, which connects and queries on that pool.
+      A `verified` mode alone does NOT settle it, and this pool is the sharper illustration of why: `verifyRuntimeDatabase()` calls `getRuntimeDatabasePool()` - which records the mode - and only then calls `pool.connect()`.
+      A pool whose handshake fails is therefore recorded as `verified` and still appears here, while every FirstHand request 500s.
+      The presumption is that it works, since whatever built the pool went through `ensureRuntimeDatabase()` and would have surfaced an error, but a presumption is not the read.
+- [ ] **Confirm from the pod log** - still the only way to see `firsthand-migrate`, and still blocked: that runs in the deploy initContainer, a separate process whose recorded modes die with it, so the endpoint structurally cannot report it.
+      Every pool logs one line at startup, prefixed `[db-tls:<pool>]`:
       - `verified TLS to <host> against <path>` - working.
       - `UNVERIFIED TLS to <host> ...` - the variable did not reach the pod.
       - `local host (<host>); no TLS` - the resolver thinks the database is
@@ -102,15 +111,20 @@ private and self-signed, so Node cannot verify RDS without them.
       Expect one line each for `backend`, `firsthand-runtime` and
       `firsthand-migrate` (the last from the initContainer).
 
-**The residual risk is hostname verification**, and nothing in this repo can
-rule it out: `rejectUnauthorized: true` makes Node check the certificate's SAN
-against the host in `DB_URL`, so a CNAME, a private alias, an RDS Proxy under a
-custom name or a bare IP would fail the handshake even though the CA is correct.
-If you have cluster access, the cheap way to settle it before anything
-long-lived depends on it is a one-off Job on the same image that does nothing
-but connect with `DB_TLS_VERIFY=1` - proving the handshake rather than flipping
-the switch and watching. Neither Nick nor this repo's CI has that access today,
-which is why the procedure below is "flip and read the log" instead.
+**Hostname verification was the residual risk, and it is settled for the `backend` pool** as of 2026-08-18, without cluster access.
+`rejectUnauthorized: true` makes Node check the certificate's SAN against the host in `DB_URL`, so a CNAME, a private alias, an RDS Proxy under a custom name or a bare IP would fail the handshake even though the CA is correct.
+That needed a one-off cluster Job to prove, which neither Nick nor this repo's CI can run.
+Two reads settle it instead, and neither needs a pod:
+
+- `GET /api/admin/diagnostics/db-tls` reports `backend: verified`, so that pool was built with `rejectUnauthorized: true` and the RDS bundle.
+- `GET /api/health` runs `SELECT 1` through that same exported pool - `createDatabaseHealthProbe(pool)` in `backend/src/index.ts` takes the pool from `backend/src/config/index.ts`, the one labelled `backend` - and returned `{"status":"ok","database":"up","databaseLatencyMs":97}`.
+
+A query cannot succeed on that pool without a completed TLS handshake, and a handshake cannot complete under `rejectUnauthorized: true` with a SAN that does not match the host.
+So the certificate verifies and the hostname matches.
+
+Neither read alone is sufficient, which is the point: the diagnostics endpoint knows only what was applied, and health knows only that a query worked.
+It is also an observation rather than a guarantee - it says the handshake worked when it was read, not that it always will.
+`firsthand-runtime` is confirmed `verified` but its handshake is not yet proved - see the open item above for the one request that would do it.
 
 **Why it is not on by default.** Turning it on decides whether the application
 can reach its database at all: a certificate that fails to verify fails at
