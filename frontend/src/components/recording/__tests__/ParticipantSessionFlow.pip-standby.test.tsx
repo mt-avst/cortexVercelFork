@@ -71,7 +71,8 @@ vi.mock("../../../lib/recording/task-window", async () => {
           setStatus("open");
 
           return true;
-        })
+        }),
+        closeTaskWindow: vi.fn()
       };
     }
   };

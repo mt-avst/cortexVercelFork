@@ -255,6 +255,33 @@ describe("useTaskWindow lifecycle", () => {
     expect(win.close).toHaveBeenCalledTimes(1);
   });
 
+  it("closes the task window and resets state when a caller asks explicitly", () => {
+    // The session flow calls this on session completion (alongside taking the
+    // pane down), not only on its own unmount - a finished session should not
+    // wait for the participant to navigate away before the task window goes.
+    stubPipSupport(true);
+    stubScreen({ availWidth: 1512, availHeight: 944 });
+
+    const win = fakeWindow();
+
+    vi.spyOn(window, "open").mockReturnValue(win as unknown as Window);
+
+    const { result } = renderHook(() => useTaskWindow());
+
+    act(() => {
+      result.current.openTaskWindow("https://shop.example.com/x");
+    });
+
+    expect(result.current.state.status).toBe("open");
+
+    act(() => {
+      result.current.closeTaskWindow();
+    });
+
+    expect(win.close).toHaveBeenCalledTimes(1);
+    expect(result.current.state).toEqual({ status: "idle", openedUrl: null });
+  });
+
   it("never adopts a task window left over from an earlier page load", async () => {
     // window.open with the name of a window that already exists returns that
     // window and silently IGNORES the requested features - so a survivor

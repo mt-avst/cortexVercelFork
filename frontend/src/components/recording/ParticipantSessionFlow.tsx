@@ -602,6 +602,18 @@ export function ParticipantSessionFlow({
                             captureUploadedAsset(asset);
                           })
                           .catch(() => null);
+                        // stopCaptureAndUpload sets its stop-in-flight guard
+                        // and calls recorder.stop() synchronously before its
+                        // first await, so by the time control reaches here the
+                        // task window is safe to close even if the
+                        // participant shared it: the recorder's own "ended"
+                        // handler will see the guard already set and skip
+                        // re-triggering a stop. Only on THIS branch - the
+                        // recorder-failure branch above never reaches this
+                        // line, so closing an abandoned attempt's task window
+                        // can never resurrect it as a fresh capture-stopped
+                        // upload.
+                        taskWindow.closeTaskWindow();
                       }}
                       payload={payload}
                       captureStoppedExternally={recorder.state.captureStoppedExternally}
