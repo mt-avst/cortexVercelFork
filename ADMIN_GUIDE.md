@@ -225,6 +225,18 @@ Editing a task list never changes a session already under way, so a participant 
 
 ### Editing a study that is already published
 
+> **Do not reorder, insert or delete tasks once anyone has taken part.**
+> A task's identity comes from its position in the list, not from the task itself, so changing the order re-attaches answers already collected to the wrong tasks - task 3's answers appear under task 1's prompt.
+> Nothing warns you and there is no way to tell afterwards that it happened.
+> If the questions genuinely need to change after data has been collected, make a new opportunity and leave the original alone.
+> This is a known defect (KNOWN_ISSUES.md, C1) and a fix is planned.
+
+> **Edit a task list in the Task Lists area, not on the opportunity form.**
+> Reopening an opportunity shows an empty task list and the default consent wording, as though nothing was ever written.
+> Nothing has been lost - the form simply does not read your content back.
+> Retyping it there and saving is refused, because the opportunity form has no way to update a task list it already has.
+> Known defects C2 and C3.
+
 - Editing the task list changes what **future** participants see. Sessions already started keep the tasks they began with
 - If someone else owns the task list you are reusing, the editor opens read only and says so. Ask the owner or a superadmin to make the change
 - Changing the Starting URL after people have taken part makes the recordings harder to compare. Prefer a new opportunity for a genuinely different study
@@ -235,6 +247,8 @@ Editing a task list never changes a session already under way, so a participant 
 - **Tasks written as click-by-click instructions** - you learn whether they can follow you, not whether the design works
 - **Publishing with no task list linked** - the Share panel warns you, and the participant's start button is disabled. Link one before sharing
 - **Assuming a colleague can edit your task list** - only its owner or a superadmin can
+- **Reordering tasks mid-study** - see the warning above. It silently corrupts the results
+- **Re-authoring tasks on the opportunity form because they look missing** - they are not missing, and the save is refused
 
 ---
 

@@ -93,6 +93,21 @@ An `unmoderated` opportunity is a **self-guided study that Cortex records in the
 - **Ownership** — a Task List records `owner_user_id`. Any admin may reuse one, but only its owner or a superadmin may edit or delete it.
 - **Review** — the research team gets recording playback and a transcript. There are no per-step responses to read any more: a step with none shows *"Answered out loud - in the recording"*, and only sessions run before typed capture was removed carry stored answers.
 
+### ⚠️ Known defects in the authoring path — read this before working on it
+
+Three of them, found by code review on 2026-08-18, none yet fixed.
+Do not assume the authoring path is sound: it has a data-integrity defect and two defects that make it look like content has been lost.
+Full detail in `KNOWN_ISSUES.md`; the rework plan is at `~/.claude/plans/cortex-authoring-ux-rework.md`.
+
+1. **Step ids are positional, so editing a study mis-attributes answers already collected.** Ids are `` `${studyId}_step_${index + 1}` `` (`shared/firsthand/survey-authoring.ts`, `shared/firsthand/inline-study.ts`) and `survey-results.ts` re-attaches responses by that key. Reordering questions makes the results view report one question's answers under another's prompt. `participant_responses.step_id` has **no foreign key**, so nothing catches it and there is no dangling reference to detect afterwards. This is the most serious defect in the product.
+2. **`loadOpportunity` does not read authored content back.** Editing an opportunity resets the steps, questions and both consent fields to empty/default, and seeds `originalFormData` from the same defaults — so `hasChanges()` compares against fiction. The content is intact on the study; only the form fails to load it.
+3. **There is no in-place update path from the opportunity route to a study it is already linked to.** A `PATCH` carrying `inline_study`/`inline_survey` against an opportunity that already has a `firsthand_study_id` is refused with a 400 (`backend/src/routes/opportunities.ts`, the two guards that precede the mint). `inline_*` only ever creates: it mints a study and links it, which is correct on `POST` and on a `PATCH` filling a gap, and is a dead end for every edit after that. So authored content is writable exactly once. Any autosave built before this is fixed would 400 every few seconds. Verified against `main` on 2026-08-18 by saving an inline-authored opportunity and then patching it - the study count did not move, and the second call was refused.
+
+Also worth knowing, not a defect but routinely misread: **reuse is a live link, not a copy.** `opportunities.firsthand_study_id` is a bare `TEXT` column with no FK, no unique constraint and no index, and many opportunities may point at one study. Editing that study changes what all of them serve. No copy mechanism exists.
+
+Nothing has gone live, so none of this has harmed real data — every study and response in the deployment is test data.
+Defect 1 becomes unfixable in retrospect once a real participant answers a real question.
+
 ### Sessions
 
 Time-bound slots for an opportunity: start/end time, capacity, booked count, optional location or meeting link. Sessions auto-close when full or when end time has passed. Bookable types only — `unmoderated` never has them.
