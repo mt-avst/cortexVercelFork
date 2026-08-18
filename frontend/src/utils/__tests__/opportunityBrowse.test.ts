@@ -116,11 +116,19 @@ describe('getClosingTime', () => {
 describe('sortByClosingSoonest', () => {
   // The list printed "4 days left" and then placed that study last. If urgency
   // is worth rendering it is worth sorting on.
+  // Offsets from now, never fixed dates. These three were written as literal
+  // 2026 dates chosen to be in the future, and `soon` was 2026-08-18 - so the
+  // test passed until that morning arrived and then failed, correctly, because
+  // the sort puts an ENDED study last and the fixture had quietly become one.
+  // The bug was the fixture, not the sort; moving the literals forward would
+  // only have re-armed it.
+  const inDays = (days: number) => new Date(Date.now() + days * 86400000).toISOString();
+
   it('puts the soonest deadline first', () => {
     const sorted = sortByClosingSoonest([
-      opp({ id: 'late', end_date: '2026-09-30T00:00:00.000Z' }),
-      opp({ id: 'soon', end_date: '2026-08-18T00:00:00.000Z' }),
-      opp({ id: 'middle', end_date: '2026-09-01T00:00:00.000Z' }),
+      opp({ id: 'late', end_date: inDays(44) }),
+      opp({ id: 'soon', end_date: inDays(1) }),
+      opp({ id: 'middle', end_date: inDays(15) }),
     ]);
     expect(sorted.map((o) => o.id)).toEqual(['soon', 'middle', 'late']);
   });
@@ -128,7 +136,7 @@ describe('sortByClosingSoonest', () => {
   it('puts studies with no known deadline last, not first', () => {
     const sorted = sortByClosingSoonest([
       opp({ id: 'undated' }),
-      opp({ id: 'dated', end_date: '2026-09-30T00:00:00.000Z' }),
+      opp({ id: 'dated', end_date: inDays(44) }),
     ]);
     expect(sorted.map((o) => o.id)).toEqual(['dated', 'undated']);
   });
