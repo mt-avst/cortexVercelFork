@@ -3,6 +3,7 @@ import {
   withRuntimeDatabaseClient
 } from "./runtime-database";
 import type { StoredResponse } from "./survey-results";
+import { AppError } from "../../../shared/types";
 
 type ResponseRow = {
   session_id: string;
@@ -23,6 +24,16 @@ type ResponseRow = {
 type ResponseFilter =
   | "s.study_id = $1"
   | "s.study_id = $1 AND s.opportunity_id = $2";
+
+/**
+ * The most answer rows either reader will return.
+ *
+ * A hundred questions answered by two thousand participants is 200,000 rows, so
+ * this is past any internal study rather than near one. It exists because the
+ * query is unpaginated and runs on the FirstHand runtime pool, which is capped
+ * at five connections and shared with live participant sessions.
+ */
+const MAX_RESPONSE_ROWS = 200_000;
 
 /**
  * The one projection both readers use.
@@ -49,9 +60,27 @@ async function listResponsesWhere(
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
         WHERE ${filter}
         ORDER BY r.saved_at ASC, r.id ASC
+        LIMIT ${MAX_RESPONSE_ROWS + 1}
       `,
       params
     );
+
+    /**
+     * REFUSED, NOT TRUNCATED - and that is the whole point of the +1 above.
+     *
+     * A capped read that quietly returned the first 200,000 rows would hand a
+     * researcher a mean, an NPS and a CSV computed over part of their data,
+     * with nothing on the page saying so. A wrong finding presented as a
+     * finding is worse than no finding: the limit exists to protect the
+     * database, and it must not buy that at the cost of the answer.
+     */
+    if (result.rows.length > MAX_RESPONSE_ROWS) {
+      throw new AppError(
+        "This study has collected more responses than can be read in one request. Ask for a database export.",
+        413,
+        "RESPONSE_SET_TOO_LARGE"
+      );
+    }
 
     return result.rows.map((row) => ({
       session_id: row.session_id,

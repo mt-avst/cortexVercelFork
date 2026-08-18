@@ -239,6 +239,48 @@ describe('Error Handler', () => {
       expect(result.statusCode).toBe(404);
     });
 
+    /**
+     * A path segment that is not a uuid reaching a `uuid` column raises 22P02.
+     * It used to fall through to the default and answer 500, so every route
+     * keyed on an id told the caller the SERVER had broken when the caller had
+     * sent nonsense - on GET /:id, /:id/analytics, /:id/session-events and both
+     * survey-results routes at once.
+     */
+    it('should map an unparseable value to ValidationError rather than a 500', () => {
+      const error = { code: DB_ERROR_CODES.INVALID_TEXT_REPRESENTATION };
+      const result = mapDatabaseError(error);
+
+      expect(result).toBeInstanceOf(ValidationError);
+      expect(result.statusCode).toBe(400);
+      expect(result.message).toBe('Malformed identifier');
+    });
+
+    /**
+     * 400 and not 404, deliberately. 22P02 is raised by ANY unparseable
+     * literal, including one this codebase passed in itself, and reporting our
+     * own bad value as "not found" would hide a real bug behind an ordinary
+     * looking response.
+     */
+    /**
+     * The pg code as a LITERAL, not via the constant. Every assertion above
+     * reads DB_ERROR_CODES, so they all move with it - repointing the constant
+     * at a code Postgres never raises leaves them green while the mapping is
+     * dead. This is the one that holds the value itself to account.
+     */
+    it('maps the code Postgres actually raises, 22P02', () => {
+      const result = mapDatabaseError({ code: '22P02' });
+
+      expect(result).toBeInstanceOf(ValidationError);
+      expect(result.statusCode).toBe(400);
+    });
+
+    it('does not report an unparseable value as a missing resource', () => {
+      const result = mapDatabaseError({ code: DB_ERROR_CODES.INVALID_TEXT_REPRESENTATION });
+
+      expect(result).not.toBeInstanceOf(NotFoundError);
+      expect(result.statusCode).not.toBe(404);
+    });
+
     it('should map check constraint violation to ValidationError', () => {
       const error = { code: DB_ERROR_CODES.CHECK_CONSTRAINT_VIOLATION };
       const result = mapDatabaseError(error);

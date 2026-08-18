@@ -36,12 +36,83 @@ import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/surv
 import type { StudyKind } from '../../../shared/firsthand/study-input';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
 const router: Router = Router();
+
+/**
+ * Minting is idempotent per participant per opportunity as of 4d - an
+ * unfinished session resumes and a finished one is refused - so the ceiling is
+ * not what stops vote stuffing. It stops the cost: 60 sessions were minted in
+ * under a second from one cookie when this was measured, and each mint writes
+ * a row on the 5-connection FirstHand runtime pool that live participant
+ * sessions share.
+ *
+ * 20 a minute is far above anything a person does. Starting a study is one
+ * click, and the honest worst case is a participant retrying a flaky network a
+ * few times across a few opportunities.
+ */
+const participantSessionMintLimiter = perUserLimiter(
+  20,
+  'Too many attempts to start a study. Wait a minute and try again.'
+);
+
+/**
+ * The results reads are the researcher's own surface, so this is a backstop
+ * against a runaway loop rather than against a person: the projection has no
+ * LIMIT and returns every answer the opportunity collected, again on the
+ * 5-connection runtime pool.
+ *
+ * 60 a minute leaves the real workflow untouched. The Responses tab refetches
+ * on every visit deliberately - a stale tally is the one thing that view must
+ * not show - so switching tabs repeatedly while reading is normal and must not
+ * trip it.
+ */
+const surveyResultsLimiter = perUserLimiter(
+  60,
+  'Too many requests for these responses. Wait a minute and try again.'
+);
+
+/**
+ * Writing an opportunity is not free. Each `inline_survey` write inserts a
+ * study plus up to 51 step rows on the 5-connection FirstHand runtime pool that
+ * live participant sessions share, and create, duplicate and delete all touch
+ * the main pool as well.
+ *
+ * 30 a minute is far above authoring: a researcher fills a form and saves, and
+ * even an autosave-shaped worst case is a few saves a minute.
+ */
+const opportunityWriteLimiter = perUserLimiter(
+  30,
+  'Too many changes in a short time. Wait a minute and try again.'
+);
+
+/**
+ * Clears both limiters for one caller. A test seam, and only that.
+ *
+ * The counters live in an in-process MemoryStore that outlives an individual
+ * test, so a suite exercising these routes hundreds of times as one user
+ * exhausts them and every later assertion fails as a 429 - which reads as a
+ * route bug rather than as the limiter doing its job. Resetting per test is
+ * the honest fix; lifting the ceilings or skipping the limiter under
+ * NODE_ENV=test would leave the control untested in the only place it can be
+ * tested at all.
+ *
+ * Worth knowing rather than fixing: that store is per PROCESS, so with more
+ * than one backend pod the effective ceiling is the limit times the pod count,
+ * and a caller can be balanced onto a fresh bucket. These are backstops
+ * against runaway loops, not quotas, so that is acceptable - but it is not
+ * what the numbers literally say.
+ */
+export function resetParticipantRouteLimits(userId: string): void {
+  participantSessionMintLimiter.resetKey(userId);
+  surveyResultsLimiter.resetKey(userId);
+  opportunityWriteLimiter.resetKey(userId);
+}
 
 // Shared by the create and update publish guards. Both endpoints accept an
 // inline study, and the guard only fires when no study is linked - which is
@@ -416,7 +487,7 @@ router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response
 }));
 
 // POST /api/opportunities - Create opportunity
-router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
+router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -703,7 +774,7 @@ router.post('/', requireAdmin, validateRequest(CreateOpportunitySchema), asyncHa
 }));
 
 // PATCH /api/opportunities/:id - Update opportunity
-router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
+router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(UpdateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -1097,92 +1168,6 @@ router.patch('/:id', requireAdmin, validateRequest(UpdateOpportunitySchema), asy
   res.json(opportunity);
 }));
 
-/**
- * A per-USER limiter, for routes that already require a session.
- *
- * The two limiters below this file's anonymous one sit at 600 for a reason
- * worth not repeating: behind two proxy hops `trust proxy: 1` resolves
- * `req.ip` to the INGRESS, so an IP-keyed bucket is shared by every external
- * caller, and a tight limit would let one participant 429 the entire estate.
- * That is a real constraint on anonymous routes and the reason the ceilings
- * there are generous enough to be barely a limit at all.
- *
- * It does not apply here. Every route using this one runs AFTER `requireAuth`
- * or `requireAdmin`, so there is a session, and `req.user.id` is a genuine
- * per-caller key that no proxy can collapse and no header can spoof - it comes
- * from the server-side session, not from the request. That buys a limit tight
- * enough to matter without any risk of one caller starving another.
- *
- * Mount it AFTER the auth middleware, never before: mounted first it would
- * spend a bucket on unauthenticated requests, and `req.user` would be absent.
- * The fallback key exists only because TypeScript cannot know the ordering; if
- * it were ever reached it fails restrictive (one shared bucket) rather than
- * open, which is the right direction for a control to fail in.
- */
-const perUserLimiter = (max: number, message: string) =>
-  rateLimit({
-    windowMs: 60 * 1000,
-    max,
-    standardHeaders: true,
-    legacyHeaders: false,
-    keyGenerator: (req: Request) => req.user?.id ?? 'unauthenticated',
-    message: { error: message }
-  });
-
-/**
- * Minting is idempotent per participant per opportunity as of 4d - an
- * unfinished session resumes and a finished one is refused - so the ceiling is
- * not what stops vote stuffing. It stops the cost: 60 sessions were minted in
- * under a second from one cookie when this was measured, and each mint writes
- * a row on the 5-connection FirstHand runtime pool that live participant
- * sessions share.
- *
- * 20 a minute is far above anything a person does. Starting a study is one
- * click, and the honest worst case is a participant retrying a flaky network a
- * few times across a few opportunities.
- */
-const participantSessionMintLimiter = perUserLimiter(
-  20,
-  'Too many attempts to start a study. Wait a minute and try again.'
-);
-
-/**
- * The results reads are the researcher's own surface, so this is a backstop
- * against a runaway loop rather than against a person: the projection has no
- * LIMIT and returns every answer the opportunity collected, again on the
- * 5-connection runtime pool.
- *
- * 60 a minute leaves the real workflow untouched. The Responses tab refetches
- * on every visit deliberately - a stale tally is the one thing that view must
- * not show - so switching tabs repeatedly while reading is normal and must not
- * trip it.
- */
-const surveyResultsLimiter = perUserLimiter(
-  60,
-  'Too many requests for these responses. Wait a minute and try again.'
-);
-
-/**
- * Clears both limiters for one caller. A test seam, and only that.
- *
- * The counters live in an in-process MemoryStore that outlives an individual
- * test, so a suite exercising these routes hundreds of times as one user
- * exhausts them and every later assertion fails as a 429 - which reads as a
- * route bug rather than as the limiter doing its job. Resetting per test is
- * the honest fix; lifting the ceilings or skipping the limiter under
- * NODE_ENV=test would leave the control untested in the only place it can be
- * tested at all.
- *
- * Worth knowing rather than fixing: that store is per PROCESS, so with more
- * than one backend pod the effective ceiling is the limit times the pod count,
- * and a caller can be balanced onto a fresh bucket. These are backstops
- * against runaway loops, not quotas, so that is acceptable - but it is not
- * what the numbers literally say.
- */
-export function resetParticipantRouteLimits(userId: string): void {
-  participantSessionMintLimiter.resetKey(userId);
-  surveyResultsLimiter.resetKey(userId);
-}
 
 // Anonymous, and it touches the FirstHand runtime pool - which is `max: 5` and is the
 // same pool serving live participant sessions. Without a limiter, sustained requests to
@@ -1793,7 +1778,7 @@ router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, asyncH
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity
-router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/:id', requireAdmin, opportunityWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -1846,7 +1831,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
 }));
 
 // POST /api/opportunities/:id/duplicate - Duplicate opportunity
-router.post('/:id/duplicate', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {

@@ -101,6 +101,11 @@ export const DB_ERROR_CODES = {
   UNDEFINED_COLUMN: '42703',
   LOCK_NOT_AVAILABLE: '55P03',
   CONNECTION_FAILURE: '08006',
+  /**
+   * A value could not be parsed as its column's type - most often a path
+   * segment reaching a `uuid` column. Caller error, not server error.
+   */
+  INVALID_TEXT_REPRESENTATION: '22P02',
 } as const;
 
 // ============================================================================

@@ -40,7 +40,7 @@ jest.mock('../../firsthand/recording-limits', () => ({
   getMaximumRecordingSizeBytes: jest.fn()
 }));
 
-import firsthandSessionRouter from '../firsthand-session';
+import firsthandSessionRouter, { resetRuntimeRouteLimits } from '../firsthand-session';
 import { errorHandler } from '../../utils/errorHandler';
 import { buildCsrfProtection } from '../../middleware/csrf';
 import { loadParticipantSession } from '../../firsthand/session-store';
@@ -116,6 +116,10 @@ function okSession(participantId = PARTICIPANT_ID) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The mutating runtime routes are rate limited per user and the counter
+  // outlives a test, so without this a long suite starts answering 429 partway
+  // through and every later assertion fails for a reason none of them names.
+  resetRuntimeRouteLimits(PARTICIPANT_ID);
   mockMaxBytes.mockReturnValue(2 * 1024 * 1024 * 1024);
   mockSeed.mockResolvedValue({ sessionId: 'session_1', attemptNumber: 1 });
   mockRecordEvent.mockResolvedValue(undefined);
@@ -727,5 +731,55 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
 
     expect(res.status).toBe(200);
     expect(mockPresign).toHaveBeenCalled();
+  });
+});
+
+
+/**
+ * Each POST here deletes and reinserts the session's whole event, response and
+ * asset set, on the 5-connection runtime pool every other live session shares.
+ * A looping participant makes their own writes progressively more expensive.
+ *
+ * The ceiling is exercised ONCE and the three claims asserted against that one
+ * exhausted state. Exhausting it per test opened a few hundred supertest
+ * sockets in a second and the suite failed with "socket hang up" - a harness
+ * limit reported as a test failure, which is worse than no test.
+ */
+describe('B4 the mutating runtime routes are rate limited per participant', () => {
+  it('refuses a looping participant, spares the reads, and spares everyone else', async () => {
+    okSession();
+    mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
+
+    const codes: number[] = [];
+    for (let i = 0; i < 121; i += 1) {
+      codes.push(
+        (await request(ownerApp)
+          .post(`/api/firsthand/session/${TOKEN}/runtime`)
+          .send({ type: 'event', eventType: 'session_started' })).status
+      );
+    }
+
+    expect(codes.slice(0, 120).every((code) => code !== 429)).toBe(true);
+    expect(codes[120]).toBe(429);
+
+    // Reads are not on this bucket. The participant surface fetches its payload
+    // on load, and a 429 there would strand someone whose only offence was
+    // answering a lot of questions.
+    expect((await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`)).status).not.toBe(429);
+    expect(
+      (await request(ownerApp).get(`/api/firsthand/session/${TOKEN}/runtime`)).status
+    ).not.toBe(429);
+
+    // And the key is the user, not the ingress - so one participant answering
+    // fast cannot refuse another.
+    okSession('other_participant');
+    const otherApp = buildApp({ id: 'other_participant', name: 'O', email: 'o2@x.com', role: 'employee' });
+    const other = await request(otherApp)
+      .post(`/api/firsthand/session/${TOKEN}/runtime`)
+      .send({ type: 'event', eventType: 'session_started' });
+    expect(other.status).not.toBe(429);
+
+    resetRuntimeRouteLimits(PARTICIPANT_ID);
+    resetRuntimeRouteLimits('other_participant');
   });
 });

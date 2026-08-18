@@ -3006,6 +3006,28 @@ describe('Opportunities API', () => {
       resetParticipantRouteLimits('participant-a');
     });
 
+    it('refuses a researcher who loops opportunity writes', async () => {
+      // Each inline_survey write inserts a study plus up to 51 step rows on the
+      // 5-connection runtime pool live participant sessions share.
+      const codes: number[] = [];
+      for (let i = 0; i < 31; i += 1) {
+        codes.push((await request(app).delete('/api/opportunities/opp-1')).status);
+      }
+
+      expect(codes.slice(0, 30).every((code) => code !== 429)).toBe(true);
+      expect(codes[30]).toBe(429);
+    });
+
+    it('keeps reading an opportunity off the write bucket', async () => {
+      for (let i = 0; i < 31; i += 1) {
+        await request(app).delete('/api/opportunities/opp-1');
+      }
+
+      // Browsing is not writing. A researcher who saved a lot must still be
+      // able to look at the list.
+      expect((await request(app).get('/api/opportunities')).status).not.toBe(429);
+    });
+
     it('gives each caller their own bucket, so one cannot refuse another', async () => {
       // The substance of the design. `trust proxy: 1` resolves req.ip to the
       // ingress behind two proxy hops, so an IP-keyed limiter would be ONE
