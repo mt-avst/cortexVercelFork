@@ -357,15 +357,18 @@ export type SessionPayload = z.infer<typeof sessionPayloadSchema>;
  * an expiry, so pre-existing sessions age out and every payload minted from now
  * on carries the field.
  *
- * MOSTLY, not entirely, and the difference was measured rather than assumed.
- * `isExpired` in session-store.ts returns false when `expires_at` is absent, and
- * the loader does not refuse a terminal session either - so a payload minted
- * before expiry was recorded is a token that never ages out. Locally that is
- * three rows of the forty-five, all terminal, all from before this feature
- * existed. Those keep today's behaviour: their tokens can still reach the
- * recording machinery, bounded as ever to their own session. Closing that means
- * either backfilling an expiry onto expiry-less rows or looking the study up at
- * the recording routes, and neither belongs in the same change as this.
+ * MOSTLY, not entirely. A payload that omits `expires_at` used to be honoured
+ * forever, so one carrying no `kind` either would have kept the recording
+ * machinery indefinitely. `isExpired` now refuses an absent expiry outright,
+ * which closes that.
+ *
+ * CORRECTING AN EARLIER NOTE HERE: it previously said three local rows were
+ * such tokens. They are not. Those three have no `session_payload` AT ALL, and
+ * `loadSessionPayloadFromDatabase` filters on `session_payload IS NOT NULL`, so
+ * they were already refused as not_found. The query behind that claim could not
+ * tell "no payload" from "payload without an expiry" - both make
+ * `session_payload->'session'->>'expires_at'` null. No row has the second
+ * shape. The defect was real in the code and absent from the data.
  */
 export function isSurveySession(payload: SessionPayload): boolean {
   return payload.study.kind === "survey";

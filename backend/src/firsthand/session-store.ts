@@ -88,9 +88,30 @@ async function loadSessionPayloadFromDatabase(
   });
 }
 
+/**
+ * A session token with no stated lifetime is refused, not honoured forever.
+ *
+ * This used to return false when `expires_at` was absent, which made such a
+ * payload a BEARER TOKEN THAT NEVER EXPIRES - the one kind of capability that
+ * should never exist by accident. Every session minted by `session-create` has
+ * carried an expiry for a long time, so the rows without one predate that;
+ * locally there are three of forty-five and all three are terminal. Refusing
+ * them costs a participant who has already finished nothing, and the refusal is
+ * the ordinary "this link has expired" message rather than an error.
+ *
+ * Failing closed is the right direction for the same reason `kind` fails open
+ * in the contract: there the absent value could not be distinguished from a
+ * legitimate live recording, and refusing would have broken it. Here the absent
+ * value IS the problem, and honouring it is what breaks.
+ *
+ * NOTE the `runtime_sessions.expires_at` COLUMN is not consulted, and is not
+ * authoritative: the loader selects only `session_payload`, and locally one row
+ * has a column expiry in the future while its payload says 2020. Anything that
+ * expires a session must write the payload, not the column.
+ */
 function isExpired(payload: SessionPayload) {
   if (!payload.session.expires_at) {
-    return false;
+    return true;
   }
 
   return new Date(payload.session.expires_at).getTime() < Date.now();

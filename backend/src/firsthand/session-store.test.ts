@@ -21,6 +21,13 @@ import { loadParticipantSession } from "./session-store";
 const FUTURE = "2999-01-01T00:00:00.000Z";
 const PAST = "2000-01-01T00:00:00.000Z";
 
+/** Omits expires_at entirely, which no fixture in this file used to do. */
+function payloadWithoutExpiry() {
+  const payload = validPayload();
+  delete (payload.session as { expires_at?: string }).expires_at;
+  return payload;
+}
+
 function validPayload(overrides: { expiresAt?: string } = {}) {
   return {
     contract_version: "1.0",
@@ -92,6 +99,32 @@ describe("loadParticipantSession", () => {
     mockRow(validPayload({ expiresAt: PAST }));
     const result = await loadParticipantSession("fh_token");
     expect(result.kind).toBe("expired");
+  });
+
+  /**
+   * A token with no stated lifetime is a bearer token that never expires - the
+   * one kind of capability that should never exist by accident. This used to
+   * return `ok`, and no fixture in this file omitted the field, which is
+   * exactly why it went unnoticed.
+   */
+  it("refuses a session whose payload states no expiry at all", async () => {
+    mockRow(payloadWithoutExpiry());
+    const result = await loadParticipantSession("fh_token");
+    expect(result.kind).toBe("expired");
+  });
+
+  it("tells the participant it expired rather than failing obscurely", async () => {
+    mockRow(payloadWithoutExpiry());
+    const result = await loadParticipantSession("fh_token");
+    if (result.kind === "ok") throw new Error("expected a refusal");
+    // BOTH, because the message travels with the branch rather than with the
+    // kind: swapping this return to invalid_contract leaves the wording
+    // untouched, so a message-only assertion cannot see it. The kind is what
+    // the binding middleware maps to 410 rather than 422.
+    expect(result.kind).toBe("expired");
+    // Not invalid_contract: the payload is well-formed, it just cannot say when
+    // it stops being valid. The participant gets the ordinary expiry message.
+    expect(result.message).toMatch(/expired/i);
   });
 
   it("returns invalid_contract for a malformed stored payload", async () => {
