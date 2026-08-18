@@ -291,6 +291,26 @@ export function resolveDbTls(databaseUrl: string, env: Env): DbTlsResult {
 }
 
 /**
+ * What each pool decided, kept so it can be reported without a pod log.
+ *
+ * The decision was previously observable ONLY as a line on stdout, so
+ * confirming that verification is actually on needed `kubectl logs` - which
+ * meant it could not be confirmed at all by anyone without cluster access, and
+ * `DB_TLS_VERIFY` shipping inert would have looked identical to it working.
+ * Recording the mode here lets a superadmin read it back over HTTP instead.
+ *
+ * The MODE only, never `description`: that carries the database host and the CA
+ * bundle path, and neither is needed to answer the question this exists to
+ * answer.
+ */
+const appliedTlsModes = new Map<string, DbTlsMode>();
+
+/** Every pool that has resolved TLS so far, as label to mode. */
+export function getAppliedDbTlsModes(): Record<string, DbTlsMode> {
+  return Object.fromEntries(appliedTlsModes);
+}
+
+/**
  * Apply the decision and log it once. Separated so the pools stay declarative
  * and every call site logs the same way.
  */
@@ -300,6 +320,7 @@ export function applyDbTls(
   label: string
 ): { connectionString: string; ssl: false | { rejectUnauthorized: boolean; ca?: string } } {
   const result = resolveDbTls(databaseUrl, env);
+  appliedTlsModes.set(label, result.mode);
   const line = `[db-tls:${label}] ${result.description}`;
   if (result.mode === 'unverified') {
     console.warn(line);
