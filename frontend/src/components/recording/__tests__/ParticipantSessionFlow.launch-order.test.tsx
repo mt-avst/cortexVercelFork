@@ -42,7 +42,8 @@ vi.mock("../../../lib/recording/task-window", () => ({
   useTaskWindow: () => ({
     state: { status: "open", openedUrl: "https://shop.example.com/running" },
     isOpen: () => false,
-    openTaskWindow
+    openTaskWindow,
+    closeTaskWindow: vi.fn()
   })
 }));
 

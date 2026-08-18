@@ -90,15 +90,15 @@ The AWS RDS trust store is committed at `backend/certs/rds-global-bundle.pem` an
       Modes only: `description` names the database host and the CA bundle path and neither is needed.
       Not on `/api/health` - whether a link verifies its certificate tells a stranger whether a man-in-the-middle is worth attempting.
       **The FirstHand runtime pool is built lazily, so it is absent until something uses it; the response says so.**
+      The report is per-process in-memory state, so **a deploy resets it**: immediately after a roll it shows `backend` only, and `firsthand-runtime` reappears the first time anything uses it. A short list after a deploy is normal, not a regression.
 - [x] **Read against the deployment, 2026-08-18**: both pools report `verified` - `{"pools":{"backend":"verified","firsthand-runtime":"verified"},"allVerified":true}`.
       `DB_TLS_VERIFY` is therefore not inert, and it reaches both pools.
       That matters for `firsthand-runtime` specifically because it takes its URL from `DATABASE_URL`, then `POSTGRES_URL`, then `DB_URL`, rather than `DB_URL` alone - a different URL in the pod would have been a different host, and this is the declared-vs-applied gap the endpoint exists to close.
       `firsthand-runtime` is absent until something uses it: it is built on first use, and a bogus participant token 404s at the session guard before the pool is ever built, so it cannot be triggered by probing from outside.
-- [ ] **Prove the `firsthand-runtime` handshake** - `GET /api/opportunities/:id/survey-results` as superadmin, for an opportunity with a linked survey.
-      A 200 settles it: that route reaches `listResponsesForOpportunity` -> `withRuntimeDatabaseClient`, which connects and queries on that pool.
-      A `verified` mode alone does NOT settle it, and this pool is the sharper illustration of why: `verifyRuntimeDatabase()` calls `getRuntimeDatabasePool()` - which records the mode - and only then calls `pool.connect()`.
-      A pool whose handshake fails is therefore recorded as `verified` and still appears here, while every FirstHand request 500s.
-      The presumption is that it works, since whatever built the pool went through `ensureRuntimeDatabase()` and would have surfaced an error, but a presumption is not the read.
+- [x] **`firsthand-runtime` handshake PROVED, 2026-08-18** - `GET /api/firsthand/studies` as an admin returned three studies.
+      `listStudies()` goes through `withRuntimeDatabaseClient`, so that is a completed query on the runtime pool, and re-reading the diagnostics endpoint immediately afterwards showed `firsthand-runtime` back in the report.
+      A `verified` mode alone would NOT have settled it, and this pool is the sharper illustration of why: `verifyRuntimeDatabase()` calls `getRuntimeDatabasePool()` - which records the mode - and only then calls `pool.connect()`, so a pool whose handshake fails is recorded `verified`, appears in the report, and 500s every FirstHand request.
+      `GET /api/opportunities/:id/survey-results` was the first candidate and is a worse one: it 404s from the MAIN pool when the opportunity has no linked study, without ever reaching the runtime pool, so a 404 there proves nothing either way.
 - [ ] **Confirm from the pod log** - still the only way to see `firsthand-migrate`, and still blocked: that runs in the deploy initContainer, a separate process whose recorded modes die with it, so the endpoint structurally cannot report it.
       Every pool logs one line at startup, prefixed `[db-tls:<pool>]`:
       - `verified TLS to <host> against <path>` - working.
@@ -124,7 +124,7 @@ So the certificate verifies and the hostname matches.
 
 Neither read alone is sufficient, which is the point: the diagnostics endpoint knows only what was applied, and health knows only that a query worked.
 It is also an observation rather than a guarantee - it says the handshake worked when it was read, not that it always will.
-`firsthand-runtime` is confirmed `verified` but its handshake is not yet proved - see the open item above for the one request that would do it.
+The same pairing settles `firsthand-runtime`: `verified` in the report, and `GET /api/firsthand/studies` returning rows through `withRuntimeDatabaseClient`. **Both database links are confirmed verified and confirmed connected.**
 
 **Why it is not on by default.** Turning it on decides whether the application
 can reach its database at all: a certificate that fails to verify fails at

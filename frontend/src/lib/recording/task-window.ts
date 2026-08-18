@@ -183,5 +183,5 @@ export function useTaskWindow() {
     return true;
   }, [state.openedUrl]);
 
-  return { state, isOpen, openTaskWindow };
+  return { state, isOpen, openTaskWindow, closeTaskWindow };
 }
