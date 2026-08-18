@@ -1274,6 +1274,89 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
   res.json(brief);
 }));
 
+/**
+ * The one place the participant-mint canonicalisation rule is written down.
+ *
+ * Both mint routes need the same three things from the opportunity row - does
+ * it exist, what study does it link, and what is its id AS POSTGRES PARSED IT -
+ * and both used to derive them from their own copy of this reasoning. The
+ * copies had already drifted: the recorded route carried the full explanation
+ * and the survey route carried two bare lines, which is how a rule stops being
+ * a rule.
+ *
+ * THE CANONICAL ID, read back from the row, never the raw path segment.
+ * `opportunities.id` is `uuid` and Postgres normalises on parse, so
+ * `{97BFE613-4E1F-472C-917E-B90D1C0326B8}` and
+ * `97bfe613-4e1f-472c-917e-b90d1c0326b8` both match this WHERE clause - as do
+ * several other textual forms, because the parser tolerates braces, case, and
+ * hyphens after any group of four digits. The column it ends up in
+ * (`firsthand.runtime_sessions.opportunity_id`) is TEXT, chosen so the
+ * firsthand schema needs no cross-schema foreign key, and TEXT compares by
+ * bytes. Passing the path segment through would let a participant mint a family
+ * of distinct keys for one opportunity and drop their own answers out of the
+ * researcher's per-opportunity results by writing the URL differently. A route
+ * path parameter is caller-supplied; only the parsed row is not.
+ *
+ * Null rather than a stringified absence: if the row somehow carries no id the
+ * session is stored unattributed - refused to everyone but a superadmin -
+ * instead of attributed to a literal "undefined" a later gate would compare
+ * against and quietly fail.
+ *
+ * What it deliberately does NOT do is decide whether this opportunity may be
+ * minted. The two routes have genuinely different preconditions - one requires
+ * `unmoderated`, the other requires a poll or survey AND native delivery - and
+ * folding those in would produce one handler whose every branch asks which of
+ * two products it is in. That separation is the right one; only the shared
+ * mechanics belong here.
+ */
+async function loadMintableOpportunity(id: string): Promise<{
+  canonicalOpportunityId: string | null;
+  row: { id: unknown; type: string; status: string; delivery_mode?: string | null; firsthand_study_id: string | null };
+} | null> {
+  if (!(await isDatabaseAvailable())) {
+    return null;
+  }
+
+  const result = await pool.query(
+    'SELECT id, type, firsthand_study_id, status, delivery_mode FROM opportunities WHERE id = $1',
+    [id]
+  );
+
+  if (result.rows.length === 0) {
+    throw new NotFoundError('Opportunity');
+  }
+
+  const row = result.rows[0];
+  const parsedId = row.id;
+
+  return {
+    canonicalOpportunityId: parsedId == null ? null : String(parsedId),
+    row
+  };
+}
+
+/**
+ * The participant block both mints send to createSession.
+ *
+ * `external_ref` is canonicalised for the same reason `opportunityId` is. It is
+ * a correlation hint rather than an authorisation key, and its only reader
+ * (completion-events.ts) writes it into a `uuid` column that normalises again,
+ * so nothing is broken today - but keeping the two fields spelled identically
+ * is what stops a future reader picking the unnormalised one.
+ */
+function mintParticipant(
+  user: { id: string; name: string; email: string },
+  canonicalOpportunityId: string | null,
+  requestedId: string
+) {
+  return {
+    participant_id: user.id,
+    display_name: user.name,
+    email: user.email,
+    external_ref: canonicalOpportunityId ?? requestedId
+  };
+}
+
 // POST /api/opportunities/:id/recorded-study-session - Create a recorded-study session for this opportunity.
 // The legacy path /:id/firsthand-handoff is kept as a deprecated-for-removal alias so a cached SPA can
 // still POST it after the backend rolls; remove the alias once no client references the old path.
@@ -1284,31 +1367,14 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
 
   const { id } = req.params;
 
-  const dbAvailable = await isDatabaseAvailable();
-
   let studyId: string | null = null;
-  // The CANONICAL id, read back from the row, not the raw path segment.
-  //
-  // opportunities.id is `uuid` and Postgres normalises on parse, so
-  // `{97BFE613-4E1F-472C-917E-B90D1C0326B8}` and
-  // `97bfe613-4e1f-472c-917e-b90d1c0326b8` both match this WHERE clause - as do
-  // several other textual forms, because the parser also tolerates braces,
-  // case, and hyphens after any group of four digits. The column this ends up
-  // in (firsthand.runtime_sessions.opportunity_id) is TEXT, chosen so the
-  // firsthand schema needs no cross-schema foreign key, and TEXT compares by
-  // bytes. So passing the path segment through would let a participant mint a
-  // family of distinct keys for one opportunity and drop their own answers out
-  // of the researcher's per-opportunity results by writing the URL differently.
-  // A route path parameter is caller-supplied; only the parsed row is not.
+  // See loadMintableOpportunity for why this is the parsed id and not the path
+  // segment. Null when the database is unavailable, which leaves the mock-data
+  // fallback below unchanged.
   let canonicalOpportunityId: string | null = null;
-  if (dbAvailable) {
-    const result = await pool.query(
-      'SELECT id, type, firsthand_study_id, status FROM opportunities WHERE id = $1',
-      [id]
-    );
-    if (result.rows.length === 0) {
-      throw new NotFoundError('Opportunity');
-    }
+
+  const loaded = await loadMintableOpportunity(id);
+  if (loaded) {
     // The guard the sibling brief route has carried all along, and this one
     // never did. Without it the route mints a RECORDED session - screen and
     // microphone capture, a consent screen saying so - for any published
@@ -1316,19 +1382,14 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     // oddity while every study was a recorded task list; a native poll or
     // survey linking a study is now the designed state, so it becomes routine.
     // A survey is served by its own route, not this one.
-    if (result.rows[0].type !== 'unmoderated') {
+    if (loaded.row.type !== 'unmoderated') {
       throw new NotFoundError('Recorded study');
     }
-    if (result.rows[0].status !== 'published') {
+    if (loaded.row.status !== 'published') {
       return res.status(403).json({ error: 'Opportunity is not published' });
     }
-    studyId = result.rows[0].firsthand_study_id;
-    // Null rather than a stringified absence. If the row somehow carries no id
-    // the session is stored unattributed - which is refused to everyone but a
-    // superadmin - instead of attributed to a literal "undefined" that a later
-    // gate would compare against and quietly fail.
-    const parsedId = result.rows[0].id;
-    canonicalOpportunityId = parsedId == null ? null : String(parsedId);
+    studyId = loaded.row.firsthand_study_id;
+    canonicalOpportunityId = loaded.canonicalOpportunityId;
   }
 
   if (!studyId) {
@@ -1360,17 +1421,7 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const returnUrl = `${frontendUrl}/opportunities/${encodeURIComponent(id)}?completed=1`;
-  const participant = {
-    participant_id: req.user.id,
-    display_name: req.user.name,
-    email: req.user.email,
-    // Canonicalised for the same reason as opportunityId above. This one is a
-    // correlation hint rather than an authorisation key, and its only reader
-    // (completion-events.ts) writes it into a `uuid` column that normalises
-    // again - so nothing is broken today. Keeping the two fields spelled
-    // identically is what stops a future reader picking the unnormalised one.
-    external_ref: canonicalOpportunityId ?? id,
-  };
+  const participant = mintParticipant(req.user, canonicalOpportunityId, id);
 
   // Mint the session in-process and return a same-origin Cortex URL. No
   // callback_url: the internalised runtime writes lifecycle events directly to
@@ -1436,22 +1487,14 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, a
   }
 
   const { id } = req.params;
-  const dbAvailable = await isDatabaseAvailable();
 
   let studyId: string | null = null;
+  // See loadMintableOpportunity: the parsed id, never the path segment.
   let canonicalOpportunityId: string | null = null;
 
-  if (dbAvailable) {
-    const result = await pool.query(
-      'SELECT id, type, firsthand_study_id, status, delivery_mode FROM opportunities WHERE id = $1',
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      throw new NotFoundError('Opportunity');
-    }
-
-    const row = result.rows[0];
+  const loaded = await loadMintableOpportunity(id);
+  if (loaded) {
+    const row = loaded.row;
 
     // BOTH conditions, not either. `delivery_mode` says the researcher meant
     // this to run in Cortex; the study's `kind` says the questions are actually
@@ -1472,8 +1515,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, a
     }
 
     studyId = row.firsthand_study_id;
-    const parsedId = row.id;
-    canonicalOpportunityId = parsedId == null ? null : String(parsedId);
+    canonicalOpportunityId = loaded.canonicalOpportunityId;
   }
 
   if (!studyId) {
@@ -1549,12 +1591,7 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, a
 
   const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const returnUrl = `${frontendUrl}/opportunities/${encodeURIComponent(id)}?completed=1`;
-  const participant = {
-    participant_id: req.user.id,
-    display_name: req.user.name,
-    email: req.user.email,
-    external_ref: canonicalOpportunityId ?? id,
-  };
+  const participant = mintParticipant(req.user, canonicalOpportunityId, id);
 
   const result = await createSession({
     studyId,
