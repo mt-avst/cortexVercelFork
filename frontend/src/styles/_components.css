@@ -2164,8 +2164,14 @@ body.landing-page .header .text-muted,
   color: var(--text-muted);
 }
 
-/* Custom toggle switches */
+/* Custom toggle switches. Unlike the plain checkbox base rule, this one draws
+   its own box via background-color/border-color rather than the browser's
+   native filled-checkbox rendering, so it still needs appearance suppressed -
+   the global reset that used to do this for every checkbox was narrowed
+   because it also broke ordinary checkboxes' filled checked state. */
 .settings-page .form-check-input {
+  appearance: none;
+  -webkit-appearance: none;
   background-color: var(--bg-input);
   border-color: var(--border-card);
   width: 3rem;

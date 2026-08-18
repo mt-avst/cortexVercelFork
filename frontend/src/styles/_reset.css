@@ -124,8 +124,15 @@ textarea {
   resize: vertical;
 }
 
-/* Remove iOS input shadow */
-input,
+/* Remove iOS input shadow. Excludes checkbox/radio: -webkit-appearance: none
+   strips WebKit/Blink's native filled-and-checkmarked rendering, and nothing
+   downstream restores it - _base.css's checkbox rule only sets accent-color,
+   never appearance, so under the reset/base/components @layer order the base
+   layer cannot override a property the reset layer never left unset. The
+   visible result was a checked checkbox rendering as a bare outline square in
+   Chrome/Edge/Safari; Firefox was unaffected because it ignores unprefixed
+   -webkit- rules. */
+input:not([type="checkbox"]):not([type="radio"]),
 textarea {
   -webkit-appearance: none;
 }
