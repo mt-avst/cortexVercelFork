@@ -50,7 +50,8 @@ vi.mock("../../../lib/recording/task-window", () => ({
   useTaskWindow: () => ({
     state: { status: "idle", openedUrl: null },
     isOpen: () => false,
-    openTaskWindow
+    openTaskWindow,
+    closeTaskWindow: vi.fn()
   })
 }));
 
