@@ -193,12 +193,23 @@ export function SurveyResults({
 }: {
   csvHref?: string;
   results: SurveyResultsData;
-  title: string;
+  /**
+   * Optional, and usually omitted. The surface embedding this already names
+   * what is being looked at - the analytics page header says which opportunity
+   * - so passing the STUDY's title here rendered the same words twice when they
+   * matched, which is every real case today, and two different names for one
+   * screen when they did not (a study reused by an opportunity its author did
+   * not create).
+   *
+   * The heading itself stays rather than being dropped: the page is h1, the
+   * questions are h3, and removing this would skip a level.
+   */
+  title?: string;
 }) {
   return (
     <div className="survey-results">
       <header className="survey-results-header">
-        <h2>{title}</h2>
+        <h2>{title ?? "Responses"}</h2>
         <p className="result-note">
           {results.respondents}{" "}
           {results.respondents === 1 ? "participant" : "participants"}

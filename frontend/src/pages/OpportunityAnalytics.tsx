@@ -538,7 +538,6 @@ const OpportunityAnalyticsPage: React.FC = () => {
           <SurveyResults
             csvHref={opportunitySurveyResultsCsvUrl(id!)}
             results={surveyResults.results}
-            title={surveyResults.title}
           />
         ) : null
       ) : activeTab === 'sessions' ? (

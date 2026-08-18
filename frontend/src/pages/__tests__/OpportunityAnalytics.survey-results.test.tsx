@@ -198,6 +198,34 @@ describe('reading the answers', () => {
     expect(screen.getByRole('heading', { name: 'How easy was that?' })).toBeTruthy();
   });
 
+  it('does not print the study title under the page title that already says it', async () => {
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    await screen.findByText('3 participants');
+
+    // The page header already says which opportunity this is - in its context
+    // line, not as a heading. Rendering the STUDY's title as an h2 here showed
+    // the same words twice when they matched, which is every real case, and two
+    // different names for one screen when they did not, on a study reused by an
+    // opportunity its author did not create.
+    expect(screen.queryByRole('heading', { name: OPPORTUNITY_TITLE })).toBeNull();
+
+    // Still named once, where it belongs.
+    expect(screen.getByText(OPPORTUNITY_TITLE)).toBeTruthy();
+  });
+
+  it('keeps a heading there, so the level is not skipped', async () => {
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    // The page is h1 and the questions are h3; dropping this outright would
+    // skip a level rather than fix the duplication.
+    expect(await screen.findByRole('heading', { level: 2, name: 'Responses' })).toBeTruthy();
+  });
+
   it('points the export at the per-opportunity CSV', async () => {
     renderPage();
     await settled();
