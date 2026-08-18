@@ -489,6 +489,17 @@ The related ownership rule for participant data, and the open study-versus-oppor
 
 ---
 
+## Closing the task window on completion, and a masked 409 (2026-08-18)
+
+Two small participant-facing fixes, `fix/close-task-window-on-complete` (MR !143) and `fix/survey-already-answered-message` (MR !144).
+
+- **A "close it too" fix is not safe at the call site the first close lives at.** `StudyRunner.finishSession()` already closes the floating pane unconditionally once `onComplete` resolves - including on the recorder-failure/abandoned branch, which resets the session to setup without stopping capture. Adding the task-window close there too passed every test, but a code-reviewer gate traced the actual runtime wiring: if the participant had shared the task window itself, closing it there would end a still-live `MediaStream` track, firing the recorder's `ended` listener and re-triggering `stopCaptureAndUpload` for an attempt that had just been marked abandoned. **Moved to `ParticipantSessionFlow`'s `onComplete` success branch only**, ordered after `stopCaptureAndUpload()` - which sets its `stopInFlightRef` guard and calls `recorder.stop()` synchronously before its first `await` - so the guard is already set by the time the window closes. Confirmed by mutation: removing the call, reordering it before the stop, and adding it to the failure branch each broke a dedicated integration test (`ParticipantSessionFlow.completion-cleanup.test.tsx`).
+- **A generic catch-all error message can hide a working refusal.** The native-survey start button showed "Could not open the survey. Please try again or contact support." for five distinct backend outcomes - a genuine 500, an unconfigured runtime, zero authored questions, a network failure, *and* the correctly-designed 409 a participant gets for re-answering a survey they already completed (one session per participant, by design - see the product description). Reported live against a real test survey; the fallback branch made a working refusal read as a bug. **Fixed by giving 409 its own branch**, same pattern as the existing 404/403 cases.
+- **Diagnosing a live report is faster through the user's own logged-in browser than from code alone.** The `claude-in-chrome` MCP drove the reporter's real Chrome session (already authenticated) to the failing opportunity and read the actual network response - one click, one `409`, no guessing between five candidate causes.
+- **Verifying a deploy for a lazily-loaded page**: same technique as the stack above - the page's code lives in its own chunk (`OpportunityDetail-<hash>.js`, found via `__vite__mapDeps` in the entry bundle, or just by grepping the entry bundle for the component name), not the entry bundle. Confirmed by grepping the deployed chunk directly for the new and old message strings, then reproducing the click in the browser to see the fixed copy render.
+
+---
+
 ## Links
 
 - Production (Kubera playground): https://adaptalabs.kubera-playground.adaptavist.net

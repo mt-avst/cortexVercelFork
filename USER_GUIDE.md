@@ -221,7 +221,7 @@ Each unlocks as you finish the one before it.
    - Then click **Start recording** in the panel, allow your microphone, and pick the task page in the browser's sharing chooser. In Chrome and Edge it is under the **Window** tab. Sharing your whole screen works just as well if you cannot find it
    - If the study has no page for you to use, there is a single **Start recorded study** button on the Cortex page instead
 6. **Task**: work through the tasks one at a time in the floating panel. Do what the task asks in the task window, saying what you are thinking as you go, then click **I’ve completed this task** to move on
-   - **Your tasks follow you.** The panel stays above your other windows, so you can read the task without switching back and forth, and it closes itself when you finish
+   - **Your tasks follow you.** The panel stays above your other windows, so you can read the task without switching back and forth, and it closes itself when you finish - along with the task window, so there is nothing left open once you are done
    - Move or resize it like any other window, or drag it to a second screen. **Bring the task page back** in the panel re-opens the task window if you lose it behind something
    - It shows **Cortex** and whether recording is live. If it ever says **Recording stopped**, go back to the Cortex tab to see what happened, because nothing you do after that point is being recorded
    - If you close the panel, the Cortex page takes the tasks back and you carry on there
