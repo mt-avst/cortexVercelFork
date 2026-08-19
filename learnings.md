@@ -461,7 +461,7 @@ All five had been finished and verified green independently. Landing them was st
 - **Generated files: regenerate, never pick a side.**
   `frontend/src/shared/firsthand/{contract,inline-study}.ts` conflicted while their `shared/` sources merged cleanly, which is the tell that the clash is churn rather than disagreement.
   Clear the markers, then run `node copy-shared-types.js` from `frontend/` so the result is derived. `shared-copies-are-current.test.ts` passing is the proof.
-- **Re-run the whole matrix on every merge.** Each branch was green alone and no two had ever been tested together, and CI runs lint only. The counts climbed as the stack landed: backend jest 470, 504, 517; frontend 388, 548, 631.
+- **Re-run the whole matrix on every merge.** Each branch was green alone and no two had ever been tested together, and CI ran lint only *at the time* (it now runs lint, typecheck and three test jobs - see the 2026-08-19 entry). The counts climbed as the stack landed: backend jest 470, 504, 517; frontend 388, 548, 631.
 - **The matrix itself grew mid-stack.** `fix/superadmin-script-tls` added `npm run test:scripts` (111 tests) and widened root lint to cover `backend/scripts`. Read the merged `package.json` rather than trusting a list written before the merge.
 - Resolve in a throwaway worktree (`git worktree add`) so no other checkout is disturbed. A fresh worktree needs its own `npm ci` at the root as well as in `backend/` and `frontend/`, root first, because `shared/` resolves zod from there.
 - Wait for each release before merging the next. A tag that fails to cut is invisible on a green pipeline, and four merges stacked on top make it far harder to see which one broke it.
@@ -499,6 +499,66 @@ Two small participant-facing fixes, `fix/close-task-window-on-complete` (MR !143
 - **Verifying a deploy for a lazily-loaded page**: same technique as the stack above - the page's code lives in its own chunk (`OpportunityDetail-<hash>.js`, found via `__vite__mapDeps` in the entry bundle, or just by grepping the entry bundle for the component name), not the entry bundle. Confirmed by grepping the deployed chunk directly for the new and old message strings, then reproducing the click in the browser to see the fixed copy render.
 
 ---
+
+## The tests that were never running (2026-08-19)
+
+Started as four hardcoded `localhost:3000` strings in Playwright specs. What it
+actually uncovered was a class: **work that reports success while verifying
+nothing.** None of it announced itself as broken - it presented as green,
+skipped, flaky, or hung.
+
+- **The whole e2e suite collected ZERO tests, and had since the initial commit.**
+  `e2e/critical-flows.test.ts` throws while Playwright transforms it, which
+  aborts collection for every spec in `testDir`. Four npm scripts were dead, not
+  one. Filtering to a single spec hides it, which is why nobody saw it.
+- **Two click-tracking tests passed with the button click deleted.** They matched
+  any POST to `/click`, and the detail page fires a `view` track on mount - so
+  the assertion was satisfied before the button was ever pressed. Proven by
+  deleting the click, not by reading the code.
+- **A test that had never executed once.** It browsed the home page anonymously
+  looking for study cards; signed out, that page is a marketing page with three
+  links. The count was always zero, so it skipped and reported green.
+- **`npm run test:a11y:prod` graded a different application.** It read its own
+  `BASE_URL` constant rather than the config's `baseURL`, so it tested whatever
+  sat on `localhost:3000`. It returned ten confident accessibility failures in
+  24 seconds about an unrelated app.
+- **Nothing type-checked any test file, in either app.** Both `tsconfig.json`s
+  exclude tests and no job ran `tsc`. That is how a fixture named
+  `transferredBytes` (real field: `loadedBytes`) silently disarmed the exact
+  assertion it was written for.
+
+### Two product defects fell out of chasing them
+
+- **The edit form was interactive before it hydrated.** `loadingOpportunity`
+  started `false` and only became `true` inside the effect, so one painted frame
+  showed a live, empty form. A value chosen in that frame was replaced when the
+  load resolved - no error - and the save reported success while storing the
+  loaded value. Same family as the A0/A1 silent-loss defects. Found as a ~50%
+  e2e flake, proven by A/B against two frontend builds: unfixed 2 of 6 runs
+  failed, fixed 0 of 6.
+- **The auth limiter's demo-route exemption was dead code.** It compared
+  `req.path` against `/auth/demo-login`, but Express reports `req.path` relative
+  to the mount point, so it never matched. Demo logins were rate limited in
+  development; a run of e2e specs exhausts 100 requests per 15 minutes and the
+  429s look like broken auth.
+
+### Rules worth keeping
+
+- **A green suite is not evidence it ran.** Check the collected count.
+- **Mutation-test the assertion, not the code.** Delete the action the test
+  claims to verify. If it still passes, it was never testing that.
+- **A fast, confident failure against a deployment is a smell** - check what it
+  connected to before believing it.
+- **`@testing-library`'s `render()` cannot see the first paint.** It wraps in
+  `act()`, which flushes effects before any assertion runs. A "is it gated
+  before load" test written that way passes with or without the fix - use
+  `renderToStaticMarkup`.
+- **Fix the generator, not the instance.** The suites are in CI now, and `tsc`
+  runs over the tests, because otherwise this recurs.
+- **Test files under `backend/` or `frontend/` are still deploy paths** to the
+  stranded-merge detector unless they match its non-deployed patterns, and a
+  `package.json` change always is. A test-only change there needs `test:` *and*
+  !173's filter; anything touching a manifest needs a releasing type.
 
 ## Links
 

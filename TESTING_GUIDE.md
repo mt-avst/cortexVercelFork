@@ -1,7 +1,7 @@
 # End-to-End Testing Guide
 
-**Version**: 7.3.23  
-**Date**: 2025-01-27
+**Version**: 7.43.x  
+**Date**: 2026-08-19
 
 ---
 
@@ -11,6 +11,35 @@ For alpha readiness, we'll test against the **production deployment** to ensure 
 
 > **Note:** the production host (`https://adaptalabs.kubera-playground.adaptavist.net`) is Okta-gated.
 > Suites reach the host, but anonymous flows redirect to Okta login rather than passing cleanly; public endpoints such as `GET /api/csrf-token` and `GET /api/opportunities` still respond without a session.
+
+### What actually runs against the deployment, measured 2026-08-19
+
+Only two suites are meaningful here, and one of them cannot fully pass:
+
+| Command | Result | Why |
+|---|---|---|
+| `npm run test:smoke` | 7 passed, 2 skipped | read-only, tolerates the signed-out view |
+| `npm run test:a11y:prod` | 11 passed, **3 failed** | the three failures are the Okta-gated pages |
+
+The three accessibility failures are **not** accessibility defects. Admin
+Dashboard, Forms and My Bookings navigate to the Okta sign-in page mid-scan,
+which destroys the axe execution context. Testing them needs a stored
+authenticated storage state, which nobody has set up. `test:a11y:prod`
+therefore exits non-zero by design until that exists.
+
+Everything else is unusable against the deployment: six specs depend on the
+demo-login routes, which return **404** outside development, and three create
+and publish studies - real content in a shared environment reachable from the
+Slack entry point. Do not point those at Kubera.
+
+> Both of these suites reported confidently wrong results until 2026-08-19.
+> `test:a11y:prod` read its own `BASE_URL` constant instead of the config's
+> `baseURL`, so it graded whatever was on `localhost:3000` - on one machine an
+> unrelated application, which it failed in 24 seconds with ten plausible-looking
+> violations. The smoke suite asserted `{ok: true}` from `/api/health`, which has
+> never returned an `ok` property. Neither was noticed because the whole e2e
+> suite collected zero tests. If a run against a deployment fails fast and
+> confidently, check what it actually connected to before believing it.
 
 ---
 
