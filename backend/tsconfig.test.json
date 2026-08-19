@@ -1,0 +1,9 @@
+{
+  // Type-checks the backend INCLUDING its tests. tsconfig.json excludes them so
+  // the build stays lean, which meant nothing ever checked them: a fixture
+  // naming a field that does not exist compiled, ran, and reported green while
+  // asserting nothing.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node", "jest"] },
+  "exclude": ["node_modules", "dist"]
+}

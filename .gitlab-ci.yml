@@ -204,6 +204,20 @@ test-frontend:
     # that detection ever changes is not worth the two saved characters.
     - npx vitest run
 
+typecheck:
+  extends: .test-base
+  script:
+    - npm ci
+    - cd backend && npm ci
+    - cd ../frontend && npm ci
+    # Checks BOTH apps including their test files. The apps' own tsconfig.json
+    # excludes tests so the builds stay lean, which meant nothing type-checked
+    # them at all - a fixture naming a field that does not exist compiled, ran,
+    # and reported green while asserting nothing. No other job runs tsc: the
+    # kaniko builds do compile the source, but later in the pipeline and never
+    # over the tests.
+    - cd "$CI_PROJECT_DIR" && npm run typecheck
+
 test-scripts:
   extends: .test-base
   script:

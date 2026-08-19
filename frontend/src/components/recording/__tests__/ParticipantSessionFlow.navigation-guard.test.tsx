@@ -125,7 +125,7 @@ function renderAt(phase: FlowPhase) {
     <MemoryRouter>
       <ParticipantSessionFlow
         attemptNumber={1}
-        directRecordingUploadMode="disabled"
+        directRecordingUploadMode={null}
         payload={payload()}
         token={TOKEN}
       />

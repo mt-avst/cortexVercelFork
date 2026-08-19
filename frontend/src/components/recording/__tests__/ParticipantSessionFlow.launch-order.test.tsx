@@ -151,7 +151,7 @@ async function walkToLaunch(token: string, withTarget = true) {
     <MemoryRouter>
       <ParticipantSessionFlow
         attemptNumber={1}
-        directRecordingUploadMode="disabled"
+        directRecordingUploadMode={null}
         payload={payload(token, withTarget)}
         token={token}
       />

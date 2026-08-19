@@ -266,7 +266,7 @@ describe("startCapture camera promise", () => {
     const { result } = renderHook(() =>
       useSessionRecorder("token_camera", {
         attemptNumber: 1,
-        directRecordingUploadMode: "disabled"
+        directRecordingUploadMode: null
       })
     );
 

@@ -139,7 +139,7 @@ async function walkToSetup() {
     <MemoryRouter>
       <ParticipantSessionFlow
         attemptNumber={1}
-        directRecordingUploadMode="disabled"
+        directRecordingUploadMode={null}
         payload={payload()}
         token="token_open_pane"
       />

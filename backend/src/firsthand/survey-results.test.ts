@@ -59,7 +59,8 @@ describe("single choice tallies", () => {
       response("q1", "s1", { selectedOption: "Jira" })
     ]).questions;
 
-    expect(result.options.map((o) => o.option)).toEqual([
+    expect(result.options).toBeDefined();
+    expect(result.options!.map((o) => o.option)).toEqual([
       "Jira",
       "Confluence",
       "Bitbucket"
@@ -83,7 +84,7 @@ describe("single choice tallies", () => {
     const [result] = aggregateSurveyResults(steps, []).questions;
 
     expect(result.answered).toBe(0);
-    expect(result.options.every((o) => o.percent === 0)).toBe(true);
+    expect(result.options!.every((o) => o.percent === 0)).toBe(true);
   });
 });
 
@@ -120,7 +121,7 @@ describe("multi choice tallies", () => {
       response("q1", "s1", { selectedOptions: ["a", "a"] })
     ]).questions;
 
-    expect(result.options[0]).toEqual({ option: "a", count: 1, percent: 100 });
+    expect(result.options![0]).toEqual({ option: "a", count: 1, percent: 100 });
   });
 });
 
@@ -200,8 +201,8 @@ describe("nps", () => {
     const result = scores([0, 10]);
 
     expect(result.distribution).toHaveLength(11);
-    expect(result.distribution[0]).toEqual({ value: 0, count: 1 });
-    expect(result.distribution[10]).toEqual({ value: 10, count: 1 });
+    expect(result.distribution![0]).toEqual({ value: 0, count: 1 });
+    expect(result.distribution![10]).toEqual({ value: 10, count: 1 });
   });
 });
 
