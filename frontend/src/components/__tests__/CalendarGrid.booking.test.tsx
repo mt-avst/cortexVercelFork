@@ -14,7 +14,21 @@ import CalendarGrid from '../CalendarGrid';
  * be theirs and will not respond to a click.
  */
 
+/**
+ * A weekday, not merely a future day.
+ *
+ * groupSessionsByDate builds its columns from Monday to Friday only, so a
+ * session on a Saturday or Sunday lands in no column and the grid renders its
+ * "No sessions available" empty state instead. Pinned to "three days from now",
+ * this fixture therefore produced an empty grid - and failed all three tests in
+ * this file - on every Wednesday and Thursday, and passed the rest of the week.
+ * Rolling forward past the weekend makes the fixture independent of the day the
+ * suite happens to run.
+ */
 const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+while (start.getDay() === 0 || start.getDay() === 6) {
+  start.setDate(start.getDate() + 1);
+}
 start.setHours(10, 0, 0, 0);
 const end = new Date(start.getTime() + 60 * 60 * 1000);
 
