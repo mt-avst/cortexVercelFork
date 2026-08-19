@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Request } from '@playwright/test';
 
 /**
  * M6 Poll/Survey Click Tracking E2E
@@ -6,6 +6,24 @@ import { test, expect } from '@playwright/test';
  * Optional: Verify analytics shows the click.
  */
 const UNIQUE_TITLE = `M6 E2E Poll ${Date.now()}`;
+
+/**
+ * Match ONLY the click fired by pressing the action button.
+ *
+ * OpportunityDetail tracks a 'view' click on mount, so a predicate that matches
+ * the URL alone is already satisfied by the time the button is pressed - these
+ * tests passed with the button click removed entirely. Discriminating on
+ * click_type is what makes them about click tracking rather than page load.
+ */
+const isActionClick = (req: Request): boolean => {
+  if (req.method() !== 'POST') return false;
+  if (!/\/api\/opportunities\/[^/]+\/click/.test(req.url())) return false;
+  try {
+    return req.postDataJSON()?.click_type === 'action';
+  } catch {
+    return false;
+  }
+};
 
 test.describe('M6 Poll Click Tracking', () => {
   test('publish poll, click Open Poll, verify click is tracked', async ({ page }) => {
@@ -70,6 +88,12 @@ test.describe('M6 Poll Click Tracking', () => {
 
     // Ensure we're on Basic Info tab and change status to published
     await page.waitForSelector('#status', { state: 'visible', timeout: 10000 });
+    // Wait for the study's data, not just the controls. Reached via a
+    // client-side route the form mounts EMPTY - #status is visible and enabled
+    // while #title is still '' - and loadOpportunity() then replaces the whole
+    // form state. A status selected in that window is silently reverted, the
+    // PATCH sends 'draft', and the study never publishes. This was a ~50% flake.
+    await expect(page.locator('#title')).toHaveValue(UNIQUE_TITLE, { timeout: 15000 });
     await page.selectOption('#status', 'published');
     await page.waitForTimeout(800);
     
@@ -100,19 +124,10 @@ test.describe('M6 Poll Click Tracking', () => {
     await page.waitForTimeout(3000);
 
     // --- 4. Open public opportunity detail and listen for click POST ---
-    const clickRequestPromise = page.waitForRequest(
-      (req) => {
-        const url = req.url();
-        return req.method() === 'POST' && /\/api\/opportunities\/[^/]+\/click/.test(url);
-      },
-      { timeout: 15000 }
-    );
+    const clickRequestPromise = page.waitForRequest(isActionClick, { timeout: 15000 });
 
     const clickResponsePromise = page.waitForResponse(
-      (res) => {
-        const url = res.url();
-        return res.request().method() === 'POST' && /\/api\/opportunities\/[^/]+\/click/.test(url) && res.status() === 200;
-      },
+      (res) => isActionClick(res.request()) && res.status() === 200,
       { timeout: 15000 }
     );
 
@@ -141,44 +156,49 @@ test.describe('M6 Poll Click Tracking', () => {
 
   test('clicking Open Poll sends POST to click endpoint (request assertion only)', async ({ page }) => {
     test.setTimeout(60000);
-    // Navigate to home and find any poll/survey card; if none, skip. Then open detail and click Open Poll, assert POST /click.
+    // The home page only lists studies to a signed-in user - anonymously it is a
+    // marketing landing page with no study links at all, so this test skipped on
+    // every run instead of testing anything. Sign in as a plain employee first.
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto('/api/auth/demo-login', { waitUntil: 'load', timeout: 15000 });
+    await page.waitForTimeout(2000);
+
+    // Fail loudly if the session was not established. Without this a failed
+    // login looks exactly like an empty database - the home page falls back to
+    // its signed-out marketing view, no study cards render, and the data guard
+    // below skips the test with a reason that is not the real one. The auth
+    // routes are rate limited (100 requests / 15 min from one IP in
+    // development), so repeated local runs do hit this.
+    const me = await page.request.get('/api/me');
+    expect(me.status(), 'demo login did not establish a session').toBe(200);
+
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
-    const pollCard = page.locator('a[href*="/opportunities/"]').filter({ has: page.locator('text=Poll') }).first();
-    const surveyCard = page.locator('a[href*="/opportunities/"]').filter({ has: page.locator('text=Survey') }).first();
-    const card = pollCard.or(surveyCard);
+    const pollCard = page.locator('a[href*="/opportunities/"]').filter({ has: page.locator('text=Poll') });
+    const surveyCard = page.locator('a[href*="/opportunities/"]').filter({ has: page.locator('text=Survey') });
+    // .first() has to come AFTER .or(): a.first().or(b.first()) still matches both
+    // of them, which is two elements and a strict-mode violation.
+    const card = pollCard.or(surveyCard).first();
+    // Genuinely-empty data is the only thing worth skipping for, and it says so
+    // when it happens. Everything below is logic, so it asserts instead.
     const count = await card.count();
-    if (count === 0) {
-      test.skip();
-      return;
-    }
+    test.skip(count === 0, 'no published poll or survey study on the home page');
 
     const href = await card.getAttribute('href');
     const idMatch = href?.match(/\/opportunities\/([^/?#]+)/);
     const opportunityId = idMatch?.[1];
-    if (!opportunityId) {
-      test.skip();
-      return;
-    }
+    expect(opportunityId, `could not parse an opportunity id from href ${href}`).toBeTruthy();
 
-    const clickResponsePromise = page.waitForResponse(
-      (res) => {
-        const url = res.url();
-        return res.request().method() === 'POST' && /\/api\/opportunities\/[^/]+\/click/.test(url);
-      },
-      { timeout: 12000 }
-    );
+    const clickResponsePromise = page.waitForResponse((res) => isActionClick(res.request()), { timeout: 20000 });
 
     await card.click();
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1500);
 
     const openButton = page.getByRole('button', { name: /Open Poll|Open Survey/i });
-    if ((await openButton.count()) === 0) {
-      test.skip();
-      return;
-    }
+    await expect(openButton).toBeVisible({ timeout: 8000 });
     await openButton.click();
 
     const response = await clickResponsePromise;
