@@ -277,18 +277,40 @@ type InPlaceStudyUpdate = 'updated' | 'forbidden' | 'missing';
  * were written against.
  */
 function stepSequenceIsUnchanged(stored: StudyStep[], incoming: StudyStep[]) {
+  // Normalised on BOTH sides, because the payload normalises and the stored
+  // row does not. The form trims every prompt and drops blank option rows, so
+  // comparing a trimmed incoming value against an untrimmed stored one made a
+  // study whose prompts happened to carry trailing whitespace read as
+  // "sequence changed" on a save that changed nothing - and once it had
+  // answers, every save was then refused, naming an edit the author had not
+  // made. The comparison has to ask the same question at both ends.
   const shape = (step: StudyStep) =>
     JSON.stringify([
       step.step_id,
       step.type,
-      step.prompt ?? null,
-      step.options ?? null,
+      step.prompt?.trim() ?? null,
+      (step.options ?? []).map((option) => option.trim()).filter(Boolean),
       step.config ?? null
     ]);
 
+  // The `end` marker is excluded from the comparison entirely.
+  //
+  // It is a completion marker, never authored, and `isAnswerable` excludes it -
+  // so no answer can ever be attached to it and no re-attribution involving it
+  // is possible. Comparing it can therefore only produce FALSE refusals, and it
+  // did: `toStudySteps` appends the canonical END_STEP_PROMPT, so any study
+  // whose stored marker says something else - one created through the studies
+  // API with its own wording - read as a changed sequence on every save. Once
+  // that study had answers, it could not be edited, retitled or unpublished
+  // from the opportunity form at all, and the refusal named questions the
+  // author had not touched.
+  const authored = (steps: StudyStep[]) => steps.filter((step) => step.type !== 'end');
+  const storedAuthored = authored(stored);
+  const incomingAuthored = authored(incoming);
+
   return (
-    stored.length === incoming.length &&
-    stored.every((step, index) => shape(step) === shape(incoming[index]))
+    storedAuthored.length === incomingAuthored.length &&
+    storedAuthored.every((step, index) => shape(step) === shape(incomingAuthored[index]))
   );
 }
 
@@ -321,6 +343,37 @@ async function updateLinkedStudyContent(
     throw new ValidationError(STUDY_KIND_MISMATCH[requiredKind]);
   }
 
+  // Keep the identity the stored steps already have.
+  //
+  // The incoming ids are derived from array position by toStudySteps and
+  // toSurveySteps, in an UNPADDED form (`_step_1`). A study built by hand in
+  // the Task Lists area numbers its own steps zero-padded (`_step_001`,
+  // StudyEditor.stepIdFor). Taking the payload's ids therefore rewrote the id
+  // of every step of every hand-built study, which did two bad things at once:
+  //
+  //  - `stepSequenceIsUnchanged` compares `step_id`, so a save that changed
+  //    NOTHING about the questions read as a changed sequence. On a study with
+  //    answers that meant the refusal below fired on, say, a title edit, and
+  //    named a change the author had not made. The opportunity could then not
+  //    be edited, unpublished or repaired from the form at all
+  //  - with no answers yet, the renumber went through silently. Any answer
+  //    collected afterwards against `_step_001` would then reference a row
+  //    that no longer exists - orphaning, where the guard exists to prevent
+  //    mis-attribution
+  //
+  // Positional and only when the counts match: a different length means the
+  // author added or removed a step, so position no longer identifies the same
+  // question and the guard below is the right thing to answer. F2 replaces
+  // positional identity outright; this keeps the route from destroying the
+  // identity that already exists in the meantime.
+  const incomingSteps =
+    content.steps.length === stored.steps.length
+      ? content.steps.map((step, index) => ({
+          ...step,
+          step_id: stored.steps[index].step_id
+        }))
+      : content.steps;
+
   // The refusal that stops this route corrupting research data.
   //
   // Because ids are positional, rewriting the steps of a study that has
@@ -343,7 +396,7 @@ async function updateLinkedStudyContent(
   // is the guard that holds until then, and it is deliberately fail-closed:
   // studyHasResponses answers true when it cannot check.
   if (
-    !stepSequenceIsUnchanged(stored.steps, content.steps) &&
+    !stepSequenceIsUnchanged(stored.steps, incomingSteps) &&
     (await studyHasResponses(studyId))
   ) {
     throw new ValidationError(
@@ -351,7 +404,11 @@ async function updateLinkedStudyContent(
     );
   }
 
-  const result = await updateStudy(studyId, content, requester);
+  const result = await updateStudy(
+    studyId,
+    { ...content, steps: incomingSteps },
+    requester
+  );
 
   if (!result.ok) {
     // A study deleted between the read above and the row lock inside

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
 import { FirstHandStudy, OpportunityFormData } from '../../api/types';
+import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
 import { type InlineStudyStep } from '../../shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
 
@@ -28,14 +29,28 @@ interface FirstHandStudyTabProps {
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
   handleStepsChange: (steps: InlineStudyStep[]) => void;
   /**
-   * True only when the opportunity already had a task list when it loaded.
-   * Authoring inline would then be a second source of truth against a list that
-   * is edited in the Task Lists area, so reuse is the only option. An edit of an
-   * opportunity with NO task list - a draft saved before its tasks were written -
-   * is not locked, or the errand this feature removes would come back for
-   * exactly that path.
+   * True when the opportunity already points at a task list. Hides the "reuse
+   * an existing one instead" tickbox: swapping which list an opportunity points
+   * at is not this form's job once it points at one.
+   *
+   * NOT the same question as whether the list may be authored here - see
+   * studyIsReadOnly. The two were one flag, and collapsing them is what made an
+   * edit discard the author's content: a linked list swapped this tab to the
+   * picker, so there was no surface for it to be loaded into.
    */
-  lockedToExistingStudy: boolean;
+  hasLinkedStudy: boolean;
+  /**
+   * True when the linked task list may not be authored HERE - it belongs to
+   * another researcher, or it holds a step type this tab cannot represent. Only
+   * then is the picker the right surface; a list this author may change is
+   * loaded into the editor below and saved back to the same study.
+   */
+  studyIsReadOnly: boolean;
+  /**
+   * Why, when it is. Null when a banner above the tabs already explains it, in
+   * which case this tab says nothing rather than asserting a second cause.
+   */
+  readOnlyReason: StudyReadOnlyReason;
 }
 
 /**
@@ -55,14 +70,16 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   validationErrors,
   handleInputChange,
   handleStepsChange,
-  lockedToExistingStudy
+  hasLinkedStudy,
+  studyIsReadOnly,
+  readOnlyReason
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
-  const reuseExisting = lockedToExistingStudy || Boolean(formData.reuse_existing_study);
+  const reuseExisting = studyIsReadOnly || Boolean(formData.reuse_existing_study);
 
   useEffect(() => {
     // Only the picker needs the list. Skip the request (and its cost) when
@@ -141,7 +158,24 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         </div>
 
-        {!lockedToExistingStudy && (
+        {readOnlyReason === 'not-yours' && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            This task list belongs to another researcher, so it is not editable
+            here - and the Task Lists area applies the same rule. Ask its owner
+            to change it, or pick a different one below.
+          </div>
+        )}
+
+        {readOnlyReason === 'not-representable' && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            This task list uses something this form cannot show - a step type it
+            does not offer, or a different starting URL per step. Editing it here
+            would drop what is not shown, so open it in the Task Lists area
+            instead.
+          </div>
+        )}
+
+        {!hasLinkedStudy && (
           <div className="form-check mb-4">
             <input
               className="form-check-input"

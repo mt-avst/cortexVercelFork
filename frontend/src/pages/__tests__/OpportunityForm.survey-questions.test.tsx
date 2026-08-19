@@ -36,6 +36,35 @@ vi.mock('../../api/client', () => ({
   getSessions: vi.fn(async () => [])
 }));
 
+/**
+ * The single-study getter edit mode uses to read back what the author wrote.
+ *
+ * Resolves a survey-kind study with one question, because every edit-mode
+ * fixture in this file links one. Without a stub the real module runs, the
+ * fetch fails, and the form refuses to save at all - which is the correct
+ * behaviour for an unreadable study and a very confusing test failure.
+ */
+vi.mock('../../api/firsthand-studies', () => ({
+  getFirstHandStudy: vi.fn(async () => ({
+    study: {
+      id: 'study_questions',
+      title: 'Developer experience pulse',
+      intro_text: 'Intro',
+      consent_text: 'Answers are stored for research analysis',
+      kind: 'survey',
+      status: 'launched',
+      estimated_duration_minutes: null,
+      owner_user_id: 'u1',
+      updated_at: '2026-08-19T00:00:00.000Z'
+    },
+    steps: [
+      { step_id: 'study_questions_step_1', order: 1, type: 'open_text', prompt: 'Which tool slows you down?' },
+      { step_id: 'study_questions_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ],
+    can_edit: true
+  }))
+}));
+
 const renderForm = () =>
   render(
     <MemoryRouter initialEntries={['/admin/opportunities/new']}>

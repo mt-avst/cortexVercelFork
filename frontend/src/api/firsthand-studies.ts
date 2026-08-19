@@ -22,6 +22,18 @@ import type { CreateStudyRequest, UpdateStudyRequest } from '../shared/firsthand
 export interface FirstHandStudyWithSteps {
   study: FirstHandStudy;
   steps: StudyStep[];
+  /**
+   * Whether the reader may edit this study, as decided by the API's own
+   * `canWriteStudy` - not re-derived here from `owner_user_id`, which would put
+   * a second copy of the rule in the client and get the unowned-legacy case
+   * wrong the first time that rule changes.
+   *
+   * Only GET sends it. Optional so the create and update responses, which do
+   * not, still satisfy this type; a caller that needs it must treat its absence
+   * as "not stated" rather than as false, or a successful save would flip its
+   * own surface to read-only.
+   */
+  can_edit?: boolean;
 }
 
 export const getFirstHandStudy = async (

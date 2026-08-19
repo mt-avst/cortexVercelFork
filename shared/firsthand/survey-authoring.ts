@@ -100,11 +100,26 @@ export const inlineSurveySchema = z
       .trim()
       .min(1)
       .max(INLINE_STUDY_LIMITS.maxConsentLength),
+    /**
+     * `null` and absent mean DIFFERENT things, which is why this is nullable
+     * rather than merely optional.
+     *
+     * Absent means "this request says nothing about the duration", and the
+     * in-place update path leaves the stored value alone - otherwise a save
+     * that only touched consent would erase an estimate set by hand in
+     * StudyEditor. Explicit `null` means "the author cleared the field", which
+     * has to be storable or a duration could be set on this form and never
+     * removed: the field's own help text offers exactly that ("leave it empty
+     * if you are not sure"), and the form showed a value it could not unset.
+     *
+     * Same per-field decision the `kind` and `expires_at` fields already make.
+     */
     estimated_duration_minutes: z
       .number()
       .int()
       .positive()
       .max(INLINE_STUDY_LIMITS.maxDurationMinutes)
+      .nullable()
       .optional(),
     steps: z
       .array(surveyQuestionSchema)

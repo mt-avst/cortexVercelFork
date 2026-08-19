@@ -14,6 +14,7 @@ import OpportunityForm, {
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
 } from '../OpportunityForm';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
+import { getFirstHandStudy } from '../../api/firsthand-studies';
 
 // OpportunityForm is an admin-gated, context-heavy page. Model a signed-in
 // researcher_admin so the auth gate lets the form render, and keep the theme
@@ -47,6 +48,60 @@ vi.mock('../../api/client', () => ({
     { id: 'study_demo', title: 'Demo Study', status: 'launched' },
   ]),
 }));
+
+// The single-study getter the form calls in edit mode to read back what the
+// author wrote. A separate module from the client, so it needs its own factory -
+// and every export this file's subject touches has to be in it, or the form
+// calls `undefined(...)` and the failure reads as a bug in the form.
+//
+// Rejecting by default is deliberate: a test that puts a linked study on an
+// opportunity without saying what that study CONTAINS is not describing a real
+// state, and the form's load-failure path (which refuses to save) is the honest
+// answer to it. Tests that mean a real study queue a resolved value.
+vi.mock('../../api/firsthand-studies', () => ({
+  getFirstHandStudy: vi.fn().mockRejectedValue(new Error('not stubbed')),
+}));
+
+/**
+ * A linked study as the API returns it: the record, its steps with the
+ * appended `end` marker, and whether this reader may edit it.
+ */
+const linkedStudy = (
+  overrides: {
+    kind?: 'recorded' | 'survey';
+    steps?: Array<Record<string, unknown>>;
+    consent_text?: string;
+    estimated_duration_minutes?: number | null;
+    updated_at?: string;
+    can_edit?: boolean;
+  } = {}
+) => {
+  const steps = overrides.steps ?? [
+    { step_id: 'study_demo_step_1', order: 1, type: 'open_text', prompt: 'What did you try first?' },
+  ];
+
+  return {
+    study: {
+      id: 'study_demo',
+      title: 'Demo Study',
+      intro_text: 'Intro',
+      consent_text: overrides.consent_text ?? 'Bespoke consent the author wrote',
+      kind: overrides.kind ?? 'recorded',
+      status: 'launched' as const,
+      estimated_duration_minutes:
+        overrides.estimated_duration_minutes === undefined
+          ? 12
+          : overrides.estimated_duration_minutes,
+      owner_user_id: 'admin-1',
+      updated_at: overrides.updated_at ?? '2026-08-19T00:00:00.000Z',
+    },
+    steps: [
+      ...steps,
+      { step_id: 'study_demo_step_end', order: steps.length + 1, type: 'end', prompt: 'Thanks' },
+    ],
+    can_edit: overrides.can_edit ?? true,
+  } as never;
+};
 
 // clearAllMocks resets call history but keeps mockResolvedValue implementations,
 // so getFirstHandStudies still resolves its launched study in every test.
@@ -481,12 +536,17 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
   });
 
-  it('adopts the created study after saving, so a second save is not rejected', async () => {
-    // Edit mode stays on the form after saving. Without adopting the server's
-    // answer the state still said "no study linked" while the database had one,
-    // so the next save re-sent the tasks and the backend refused it as
-    // authoring over an existing study - dead-ending the flow on click two.
-    vi.mocked(getOpportunity).mockResolvedValueOnce({
+  it('keeps the authored tasks editable after saving, and saves them again in place', async () => {
+    // Edit mode stays on the form after saving, so the state has to adopt the
+    // study id the server just minted or the next save is answered against a
+    // link the form does not know about.
+    //
+    // What it must NOT do any more is clear the tasks and swap to the picker.
+    // That was right while a linked study could not be authored here; A0 now
+    // applies the next save to the same study in place, so wiping the author's
+    // content one save after they wrote it would reproduce exactly the
+    // disappearance A1 exists to stop.
+    const draft = {
       id: 'opp-3',
       type: 'unmoderated',
       title: 'Draft saved early',
@@ -495,7 +555,21 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       default_duration_minutes: 30,
       firsthand_study_id: null,
       participant_type_required: 'any'
-    } as any);
+    };
+    // First read: no study linked yet. Every read AFTER the save sees the study
+    // the save minted, because the form now RE-READS instead of declaring that
+    // what it sent is what is stored. That re-read is the thing that makes the
+    // Save button's disappearance mean something.
+    // `as never` rather than `as any`: the suppression file pins the count of
+    // no-explicit-any per file, so one more here surfaces every previously
+    // suppressed error in this file at once and the lint failure reads as
+    // something else entirely.
+    vi.mocked(getOpportunity)
+      .mockResolvedValueOnce(draft as never)
+      .mockResolvedValue({ ...draft, firsthand_study_id: 'study_created_on_save' } as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      linkedStudy({ steps: [{ step_id: 's1', order: 1, type: 'instruction', prompt: 'Find the export button' }] })
+    );
     vi.mocked(updateOpportunity).mockResolvedValueOnce({
       id: 'opp-3',
       type: 'unmoderated',
@@ -527,17 +601,28 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       (vi.mocked(updateOpportunity).mock.calls[0][1] as any).inline_study
     ).toBeDefined();
 
-    // Having adopted it, the tab is locked to the picker - wait on the picker
-    // appearing rather than the tickbox vanishing, so the study-list fetch it
-    // triggers settles inside the assertion instead of after the test.
-    expect(await screen.findByText('-- Select a launched task list --')).toBeInTheDocument();
+    // The reuse tickbox goes: a study is linked now, so swapping which one this
+    // opportunity points at is no longer this form's job. Waited on rather than
+    // asserted straight away - updateOpportunity resolving is not the same
+    // moment as the state it settles being rendered.
+    await vi.waitFor(() =>
+      expect(
+        screen.queryByLabelText(/Reuse an existing task list/i)
+      ).not.toBeInTheDocument()
+    );
+
+    // The authored task is still on screen and still editable, and the picker
+    // has NOT taken over.
     expect(
-      screen.queryByLabelText(/Reuse an existing task list/i)
+      (screen.getByLabelText(/What the participant sees/i) as HTMLTextAreaElement).value
+    ).toBe('Find the export button');
+    expect(
+      screen.queryByText('-- Select a launched task list --')
     ).not.toBeInTheDocument();
 
-    // The point of the fix: a LATER save must not re-send the tasks, which the
-    // backend would now reject as authoring over an existing study. Asserting
-    // only that the tickbox vanished would pass even if the steps survived.
+    // The point of A1: a LATER save carries the tasks AGAIN, so the edit lands
+    // on the same study. Asserting only that the editor is still rendered would
+    // pass even if the payload had reverted to sending the id.
     //
     // A real edit is needed to trigger it - an unchanged form saves nothing.
     vi.mocked(updateOpportunity).mockResolvedValueOnce({
@@ -564,11 +649,22 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     });
 
     const secondPayload = vi.mocked(updateOpportunity).mock.calls[1][1] as any;
-    expect(secondPayload.inline_study).toBeUndefined();
-    expect(secondPayload.firsthand_study_id).toBe('study_created_on_save');
+    expect(secondPayload.inline_study.steps).toEqual([
+      { type: 'instruction', prompt: 'Find the export button' }
+    ]);
+    // Exactly one of the two, never both - the backend refuses a payload
+    // carrying an id alongside authored content rather than guessing.
+    expect(secondPayload.firsthand_study_id).toBeUndefined();
   });
 
-  it('locks an edit to the picker once a task list is actually linked', async () => {
+  it('loads a linked task list into the editor rather than swapping to the picker', async () => {
+    // This used to assert the opposite, and the opposite is the defect: a
+    // linked list swapped the tab body to the reuse picker, so the content the
+    // author had written had nowhere to render and looked like it was never
+    // there. The tickbox still goes - swapping WHICH list an opportunity points
+    // at is not this form's job once it points at one - but the list itself is
+    // now loaded and editable.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
     vi.mocked(getOpportunity).mockResolvedValueOnce({
       id: 'opp-2',
       type: 'unmoderated',
@@ -591,8 +687,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     expect(
-      await screen.findByText('-- Select a launched task list --')
-    ).toBeInTheDocument();
+      ((await screen.findByLabelText(/What the participant sees/i)) as HTMLTextAreaElement)
+        .value
+    ).toBe('What did you try first?');
+    expect(
+      screen.queryByText('-- Select a launched task list --')
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByLabelText(/Reuse an existing task list/i)
     ).not.toBeInTheDocument();
