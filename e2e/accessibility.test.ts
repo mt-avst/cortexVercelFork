@@ -8,15 +8,26 @@ import AxeBuilder from '@axe-core/playwright';
  * Runs on all major pages of the application
  */
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+/**
+ * Paths below are relative, so `use.baseURL` from whichever config is running
+ * decides the target.
+ *
+ * This file used to read its own module-level constant defaulting to
+ * localhost:3000, which no config could override. `npm run test:a11y:prod` sets
+ * PRODUCTION_URL and the prod config reads that into baseURL, but nothing here
+ * ever looked at it - so the "production" accessibility run silently tested
+ * localhost. On a machine with an unrelated app on port 3000 it reports
+ * confident failures for somebody else's application.
+ */
 
 test.describe('Accessibility Tests', () => {
-  test.beforeEach(async ({ page }) => {
+  test.beforeEach(async ({ page, baseURL }) => {
     // Set viewport size
     await page.setViewportSize({ width: 1280, height: 720 });
     
-    // Mock API responses for consistency (only if not using production)
-    if (BASE_URL.includes('localhost')) {
+    // Mock API responses for consistency (only against a local stack - against
+    // a deployment the real API is the thing under test).
+    if (baseURL?.includes('localhost')) {
       await page.route('**/api/me', async (route) => {
         await route.fulfill({
           status: 200,
@@ -63,7 +74,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Home page should be accessible', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     
     // Wait for page to load (use 'load' not 'networkidle' - production often has ongoing requests)
     await page.waitForLoadState('load');
@@ -77,7 +88,7 @@ test.describe('Accessibility Tests', () => {
 
   test('Home page (logged in) should be accessible', async ({ page }) => {
     // Mock logged-in state
-    await page.goto(BASE_URL);
+    await page.goto('/');
     
     // Set cookie to simulate logged-in user
     await page.context().addCookies([{
@@ -123,7 +134,7 @@ test.describe('Accessibility Tests', () => {
       });
     });
 
-    await page.goto(`${BASE_URL}/opportunities/opp-1`);
+    await page.goto('/opportunities/opp-1');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -162,7 +173,7 @@ test.describe('Accessibility Tests', () => {
       });
     });
 
-    await page.goto(`${BASE_URL}/admin`);
+    await page.goto('/admin');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -186,7 +197,7 @@ test.describe('Accessibility Tests', () => {
       });
     });
 
-    await page.goto(`${BASE_URL}/admin/opportunities/new`);
+    await page.goto('/admin/opportunities/new');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -197,7 +208,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Header navigation should be accessible', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -222,7 +233,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Skip link should be functional', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -260,7 +271,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Keyboard navigation should work', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -274,7 +285,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Color contrast should meet WCAG AA standards', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -287,7 +298,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Images should have alt text', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -304,7 +315,7 @@ test.describe('Accessibility Tests', () => {
   });
 
   test('Form inputs should have labels', async ({ page }) => {
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     
@@ -344,9 +355,9 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ upcoming: [], past: [] }),
       });
     });
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/my-bookings`);
+    await page.goto('/my-bookings');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();
@@ -366,9 +377,9 @@ test.describe('Accessibility Tests', () => {
         }),
       });
     });
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/feedback`);
+    await page.goto('/feedback');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();
@@ -395,9 +406,9 @@ test.describe('Accessibility Tests', () => {
         body: JSON.stringify({ on_book_email: true, on_cancel_email: true }),
       });
     });
-    await page.goto(BASE_URL);
+    await page.goto('/');
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/admin/settings`);
+    await page.goto('/admin/settings');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
     const results = await new AxeBuilder({ page }).analyze();

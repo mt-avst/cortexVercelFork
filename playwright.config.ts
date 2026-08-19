@@ -28,7 +28,12 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  /* `open: 'never'` matters: the HTML reporter defaults to open-on-failure,
+   * which starts a report server and BLOCKS waiting for a human. A failing run
+   * then never returns - it looks like a hung job rather than a failed one, and
+   * in CI it would sit there until the job timeout. Observed on a real run that
+   * finished in 32s and was still holding port 9323 fourteen minutes later. */
+  reporter: [['html', { open: 'never' }], ['list']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */

@@ -16,7 +16,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0, // Don't retry on production
   workers: 1, // Single worker for production
-  reporter: [['html'], ['list']],
+  /* `open: 'never'` matters: the HTML reporter defaults to open-on-failure,
+   * which starts a report server and BLOCKS waiting for a human. A failing run
+   * then never returns - it looks like a hung job rather than a failed one, and
+   * in CI it would sit there until the job timeout. Observed on a real run that
+   * finished in 32s and was still holding port 9323 fourteen minutes later. */
+  reporter: [['html', { open: 'never' }], ['list']],
   timeout: 30000, // 30 second timeout
   
   use: {

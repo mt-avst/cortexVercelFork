@@ -96,20 +96,36 @@ test.describe('Production Smoke Tests', () => {
 
   test('no console errors on home page', async ({ page }) => {
     const errors: string[] = [];
+    const failedRequests: string[] = [];
 
     page.on('console', (msg) => {
       if (msg.type() === 'error') errors.push(msg.text());
     });
     page.on('pageerror', (error) => errors.push(error.message));
+    page.on('response', (res) => {
+      if (res.status() >= 400) failedRequests.push(`${res.status()} ${res.url()}`);
+    });
 
     await page.goto(PRODUCTION_URL, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(WAIT_AFTER_LOAD_MS);
 
+    // A signed-out visitor legitimately gets 401 from /api/me - that is how the
+    // page decides to render its signed-out view - and the browser logs every
+    // 4xx as a console error. The console message carries no URL, so it cannot
+    // be excluded on its own; instead the generic 401 line is tolerated only
+    // when the responses actually seen show the 401s were the expected ones.
+    const unexpectedFailures = failedRequests.filter((r) => !/^401 .*\/api\/me\b/.test(r));
+    const only401sWereExpected = unexpectedFailures.length === 0;
     const criticalErrors = errors.filter(
       (err) =>
-        !err.includes('favicon') && !err.includes('analytics') && !err.includes('tracking')
+        !err.includes('favicon') &&
+        !err.includes('analytics') &&
+        !err.includes('tracking') &&
+        !(only401sWereExpected && /status of 401/.test(err))
     );
-    expect(criticalErrors.length).toBe(0);
+
+    expect(unexpectedFailures, `failing requests: ${unexpectedFailures.join(' | ')}`).toEqual([]);
+    expect(criticalErrors, `console errors: ${criticalErrors.join(' | ')}`).toEqual([]);
   });
 
   test('page performance - domcontentloaded within 5 seconds', async ({ page }) => {
@@ -122,14 +138,21 @@ test.describe('Production Smoke Tests', () => {
   test('API health returns JSON when deployed', async ({ request }) => {
     const res = await request.get(`${PRODUCTION_URL}/api/health`);
     const text = await res.text();
-    let body: { ok?: boolean };
+    let body: { status?: string; database?: string };
     try {
       body = JSON.parse(text);
     } catch {
       // API not deployed (HTML or error page); skip so suite passes in degraded state
       test.skip();
     }
-    expect(body).toHaveProperty('ok', true);
+    // The endpoint reports { status, database, ... } and has never returned an
+    // `ok` property, so the previous toHaveProperty('ok', true) could not pass
+    // against any version of this API. It went unnoticed because the suite
+    // collected zero tests. 200 + status 'ok' is the healthy contract; 503 +
+    // 'degraded' is the documented unhealthy one, which a smoke test should fail.
+    expect(res.status()).toBe(200);
+    expect(body!.status).toBe('ok');
+    expect(body!.database).toBe('up');
   });
 
   // v7.1.9+: Demo Access pills are hidden in production (shown only in dev or when VITE_SHOW_DEMO_LOGIN=true)
