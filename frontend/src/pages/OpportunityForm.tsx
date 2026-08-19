@@ -331,7 +331,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // block every save, a deleted one must not, or the opportunity pointing at it
   // can never be repaired or taken down. See the catch in loadOpportunity.
   const [studyMissing, setStudyMissing] = useState(false);
-  const [loadingOpportunity, setLoadingOpportunity] = useState(false);
+  // Starts true in edit mode, so the very FIRST paint is the spinner.
+  //
+  // This used to start false and only become true inside loadOpportunity's
+  // effect, which meant one painted frame of a fully interactive but EMPTY
+  // form. A value chosen in that frame was replaced wholesale when the load
+  // resolved and called setFormData - no error, no warning - and the next save
+  // reported success while storing the loaded value instead of the author's.
+  // An e2e run hit it about half the time: status set to published on arrival
+  // saved as draft, so the study silently never published.
+  const [loadingOpportunity, setLoadingOpportunity] = useState(isEdit);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
