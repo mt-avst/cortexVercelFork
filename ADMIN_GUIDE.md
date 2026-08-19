@@ -225,17 +225,15 @@ Editing a task list never changes a session already under way, so a participant 
 
 ### Editing a study that is already published
 
-> **Do not reorder, insert or delete tasks once anyone has taken part.**
-> A task's identity comes from its position in the list, not from the task itself, so changing the order re-attaches answers already collected to the wrong tasks - task 3's answers appear under task 1's prompt.
-> Nothing warns you and there is no way to tell afterwards that it happened.
-> If the questions genuinely need to change after data has been collected, make a new opportunity and leave the original alone.
-> This is a known defect (KNOWN_ISSUES.md, C1) and a fix is planned.
-
-> **Edit a task list in the Task Lists area, not on the opportunity form.**
-> Reopening an opportunity shows an empty task list and the default consent wording, as though nothing was ever written.
+> **Reopening an opportunity shows an empty task list and the default consent wording**, as though nothing was ever written.
 > Nothing has been lost - the form simply does not read your content back.
-> Retyping it there and saving is refused, because the opportunity form has no way to update a task list it already has.
-> Known defects C2 and C3.
+> Edit the tasks and the consent wording in the **Task Lists** area instead, where they are shown correctly.
+> This is a known defect (KNOWN_ISSUES.md, C2) and a fix is planned.
+
+> **Changing the questions of a study that has already collected answers is refused on the opportunity form.**
+> That is deliberate: a task's identity comes from its position in the list, so changing the order would re-attach answers already collected to the wrong tasks.
+> Editing the consent wording or the estimated duration still saves normally.
+> The same save is also refused if the task list belongs to another researcher, or if a second opportunity is using it - in both cases because the change would reach somebody else's work.
 
 - Editing the task list changes what **future** participants see. Sessions already started keep the tasks they began with
 - If someone else owns the task list you are reusing, the editor opens read only and says so. Ask the owner or a superadmin to make the change
@@ -247,8 +245,8 @@ Editing a task list never changes a session already under way, so a participant 
 - **Tasks written as click-by-click instructions** - you learn whether they can follow you, not whether the design works
 - **Publishing with no task list linked** - the Share panel warns you, and the participant's start button is disabled. Link one before sharing
 - **Assuming a colleague can edit your task list** - only its owner or a superadmin can
-- **Reordering tasks mid-study** - see the warning above. It silently corrupts the results
-- **Re-authoring tasks on the opportunity form because they look missing** - they are not missing, and the save is refused
+- **Re-authoring tasks on the opportunity form because they look missing** - they are not missing, and the form does not read them back yet. Edit them in the Task Lists area
+- **Expecting to change questions after people have answered** - the save is refused, on purpose. Make a new opportunity instead
 
 ---
 
