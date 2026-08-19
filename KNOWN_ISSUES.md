@@ -1,7 +1,7 @@
 # Known Issues and Limitations
 
-**Version**: 7.42.4  
-**Last Updated**: 2026-08-18  
+**Version**: 7.43.5  
+**Last Updated**: 2026-08-19  
 **Status**: Alpha Testing Phase
 
 ---
@@ -16,47 +16,51 @@ This document lists known issues, limitations, and workarounds for AdaptaLabs. T
 
 ### Critical Issues
 
-Three defects in the opportunity-authoring flow, all found by a code review on 2026-08-18 and none of them yet fixed.
-A rework is planned; until it lands, the workarounds below are the whole mitigation.
+One live defect in the opportunity-authoring flow, down from three.
+The other two are resolved as of release 7.43.5 (2026-08-19), and the reasoning is kept below rather than deleted, because both were written up more alarmingly than they deserved and the corrections are worth reading.
 
-None of these has harmed anything so far, because no real study has run — every study and response in the deployment today is test data.
-The first one becomes unfixable in retrospect the moment a real participant answers a real question.
+Nothing has been harmed by any of them: no real study has run, and every study and response in the deployment today is test data.
 
-#### C1. Reordering or editing questions mis-attributes answers already collected
+#### C1. Editing a study's questions cannot mis-attribute answers ~~RESOLVED~~ — and was never reachable
 
-**Impact**: High. Silent, and not detectable after the fact.
-**Description**: A question's identity is derived from its position in the list, not from the question.
-So if you reorder your questions after participants have answered them, the results view re-attaches the existing answers by position — reporting question 3's answers under question 1's prompt.
-Nothing warns you, and there is no way to tell afterwards that it happened.
-Deleting a question has the same effect on everything below it.
+**Status**: Resolved 2026-08-19, and the original entry overstated it.
+**What it claimed**: that reordering questions after participants had answered would silently re-attach their answers by position, reporting question 3's answers under question 1's prompt.
 
-**Workaround**: Do not reorder, insert, or delete questions on a study that has collected any answers.
-Get the order right before you publish.
-If you must change the questions after data has been collected, create a new opportunity instead and leave the original alone.
+The underlying fragility is real. A step's identity is derived from its position in the list (`${studyId}_step_${index + 1}`), and `participant_responses.step_id` has no foreign key, so nothing in the database would catch such a shift.
+
+**But no route ever reached it**, which the first write-up did not check:
+
+- The **Task Lists** editor has no reorder control at all. Removing a step renumbers `order` only and leaves every surviving step's id attached to its own question, deliberately
+- The **opportunity form** is the only thing that renumbers ids, and until 7.43.5 it *refused* to save authored content over a Task List that already existed — so the renumbering only ever ran when creating a study, before any answer could exist
+
+Since 7.43.5 the opportunity form can update a linked Task List in place, and that path **refuses** the save when the study has already collected answers and the questions would change. Consent and duration edits still save, because they move no question onto another's id.
+
+**What you still cannot do**: change the questions of a study that has collected answers, from the opportunity form. That is the refusal above, and it is deliberate.
 
 #### C2. Reopening an opportunity shows an empty authoring surface
 
-**Impact**: High.
+**Impact**: High. **This is the one still live.**
 **Description**: Editing an opportunity does not load the questions, tasks or consent wording you originally wrote.
 The form shows an empty question list and the default consent text.
 It reads as though nothing was ever authored.
 Your content is not lost — it is stored on the Task List, and only the authoring form fails to read it back.
 
 **Workaround**: Edit questions, tasks and consent wording in the **Task Lists** area (`/admin/studies`), not on the opportunity form.
-Do not re-author them on the opportunity form: see C3.
 
-#### C3. An opportunity form cannot save changes to a Task List it already has
+#### C3. An opportunity form cannot save changes to a Task List it already has ~~RESOLVED~~
 
-**Impact**: Medium, rising to High in combination with C2.
-**Description**: There is no in-place update path from the opportunity form to the Task List it is linked to.
-Saving an opportunity that already has a Task List, while carrying freshly authored questions or tasks, is refused outright with *"This opportunity already has a task list; edit its tasks in the Task Lists area"* (or the questions wording for a poll or survey).
-Authoring on the opportunity form only works while the opportunity has no Task List yet — the first save creates one and links it.
-Combined with C2, an author who reopens an opportunity, retypes what appears to be missing, and saves, is told their work cannot be saved there.
+**Status**: Resolved in release 7.43.5 (2026-08-19).
+**What it was**: there was no in-place update path from the opportunity form to the Task List it was linked to. Saving an opportunity that already had one, while carrying freshly authored questions or tasks, was refused outright with *"This opportunity already has a task list; edit its tasks in the Task Lists area"*. So authored content was writable exactly once, and every correction after that had to be made somewhere else.
 
-**Workaround**: As C2 — make changes in the Task Lists area.
+The form now updates the linked Task List in place. Three cases are still refused, each on purpose:
 
-An earlier draft of this entry said the save created a **duplicate** Task List and orphaned the original.
-That was true of an older build and is not true today: the duplicate-and-orphan path was closed when native polls and surveys shipped, and the refusal above replaced it.
+- the Task List belongs to **another researcher** — only its owner or a superadmin may edit it
+- the Task List is **also used by another opportunity** — editing it here would change what that opportunity serves its participants, so it must be edited in the Task Lists area where the sharing is visible
+- the study has **already collected answers** and the questions would change — see C1
+
+Note that C2 is still live, so the opportunity form still shows an empty list when you reopen it. Until that is fixed, the Task Lists area remains the place to edit content.
+
+An earlier draft of this entry said the save created a **duplicate** Task List and orphaned the original. That was true of an older build; the duplicate-and-orphan path was closed when native polls and surveys shipped, and the refusal replaced it.
 
 #### A note on reuse
 
