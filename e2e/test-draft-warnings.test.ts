@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test('draft warning appears in create opportunity form', async ({ page }) => {
   // Login as admin
-  await page.goto('http://localhost:3000/auth/admin-login');
+  await page.goto('/auth/admin-login');
   await page.waitForLoadState('networkidle');
   
   // Navigate to create opportunity form
-  await page.goto('http://localhost:3000/admin/opportunities/create');
+  await page.goto('/admin/opportunities/new');
   await page.waitForLoadState('networkidle');
   
   // Select poll type

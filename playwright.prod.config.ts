@@ -6,6 +6,12 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  /* Quarantined: e2e/critical-flows.test.ts is not a Playwright Test spec - it drives the
+   * raw `playwright` package with jest/vitest globals, and its import of '../../../shared/test-utils'
+   * resolves outside the repo. Playwright throws while transforming it, which aborts collection for
+   * EVERY spec in testDir, so the whole suite reported "0 tests in 0 files". Re-include it only once
+   * it has been rewritten against @playwright/test and the current UI. */
+  testIgnore: ['**/critical-flows.test.ts'],
   fullyParallel: false, // Run sequentially for production
   forbidOnly: !!process.env.CI,
   retries: 0, // Don't retry on production

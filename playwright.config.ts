@@ -3,8 +3,22 @@ import { defineConfig, devices } from '@playwright/test';
 /**
  * @see https://playwright.dev/docs/test-configuration
  */
+
+/* Where the frontend is served. Override with BASE_URL when port 3000 is taken,
+ * e.g. BASE_URL=http://localhost:3100 npm run test:e2e */
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+/* Where the backend API listens. */
+const API_BASE_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+const FRONTEND_PORT = new URL(BASE_URL).port || '3000';
+
 export default defineConfig({
   testDir: './e2e',
+  /* Quarantined: e2e/critical-flows.test.ts is not a Playwright Test spec - it drives the
+   * raw `playwright` package with jest/vitest globals, and its import of '../../../shared/test-utils'
+   * resolves outside the repo. Playwright throws while transforming it, which aborts collection for
+   * EVERY spec in testDir, so the whole suite reported "0 tests in 0 files". Re-include it only once
+   * it has been rewritten against @playwright/test and the current UI. */
+  testIgnore: ['**/critical-flows.test.ts'],
   /* Run tests in files in parallel */
   fullyParallel: true,
   /* Fail the build on CI if you accidentally left test.only in the source code. */
@@ -18,7 +32,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:3000',
+    baseURL: BASE_URL,
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -69,12 +83,12 @@ export default defineConfig({
     : [
         {
           command: 'cd backend && npm run dev',
-          url: 'http://localhost:3001',
+          url: API_BASE_URL,
           reuseExistingServer: !process.env.CI,
         },
         {
-          command: 'cd frontend && npm start',
-          url: 'http://localhost:3000',
+          command: `cd frontend && npm start -- --port ${FRONTEND_PORT} --strictPort`,
+          url: BASE_URL,
           reuseExistingServer: !process.env.CI,
         },
       ],

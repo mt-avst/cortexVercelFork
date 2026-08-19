@@ -5,7 +5,6 @@ import { test, expect } from '@playwright/test';
  * Flow: Login as admin → Create poll → Publish → Open public detail → Click "Open Poll" → Verify click tracked.
  * Optional: Verify analytics shows the click.
  */
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const UNIQUE_TITLE = `M6 E2E Poll ${Date.now()}`;
 
 test.describe('M6 Poll Click Tracking', () => {
@@ -13,9 +12,9 @@ test.describe('M6 Poll Click Tracking', () => {
     test.setTimeout(120000);
 
     // --- 1. Login as admin ---
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, { waitUntil: 'load', timeout: 15000 });
+    await page.goto('/api/auth/admin-login', { waitUntil: 'load', timeout: 15000 });
     // Wait for redirect to /admin and for admin UI (auth check may take a few seconds)
     await expect(page).toHaveURL(/\/admin/, { timeout: 25000 });
     await expect(page.getByText(/Research studies|Create|Opportunities/i).first()).toBeVisible({ timeout: 15000 });
@@ -24,7 +23,7 @@ test.describe('M6 Poll Click Tracking', () => {
     // Navigate to create page. Set loginRedirect so AuthContext treats the load as "returning from login"
     // and keeps the session (otherwise it clears cookies on full load).
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/admin/opportunities/new`, { waitUntil: 'domcontentloaded' });
+    await page.goto('/admin/opportunities/new', { waitUntil: 'domcontentloaded' });
     await page.waitForURL(/\/admin\/opportunities\/new/, { timeout: 15000 });
     // Form may show auth loading first; wait for type dropdown (Basic Info tab)
     await page.waitForSelector('#type', { state: 'visible', timeout: 20000 });
@@ -96,7 +95,7 @@ test.describe('M6 Poll Click Tracking', () => {
       { timeout: 15000 }
     );
 
-    await page.goto(`${BASE_URL}/opportunities/${opportunityId}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`/opportunities/${opportunityId}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2000);
 
     const openPollButton = page.getByRole('button', { name: /Open Poll|Open poll/i });
@@ -122,7 +121,7 @@ test.describe('M6 Poll Click Tracking', () => {
   test('clicking Open Poll sends POST to click endpoint (request assertion only)', async ({ page }) => {
     test.setTimeout(60000);
     // Navigate to home and find any poll/survey card; if none, skip. Then open detail and click Open Poll, assert POST /click.
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
 
     const pollCard = page.locator('a[href*="/opportunities/"]').filter({ has: page.locator('text=Poll') }).first();
