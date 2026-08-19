@@ -37,9 +37,6 @@
   "backend/src/index.ts": {
     "@typescript-eslint/no-require-imports": {
       "count": 1
-    },
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
     }
   },
   "backend/src/middleware/authenticate.ts": {

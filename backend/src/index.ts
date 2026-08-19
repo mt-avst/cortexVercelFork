@@ -14,9 +14,10 @@ import { sendDueReminders } from './services/reminders';
 import { runFirstHandMaintenance } from './firsthand/maintenance';
 import { isPostgresRuntimeConfigured } from './firsthand/runtime-database';
 import authRoutes from './routes/auth';
+import { createAuthLimiter } from './middleware/auth-rate-limit';
 import apiRoutes from './routes/api';
 import cronRoutes from './routes/cron';
-import { TIME_INTERVALS, RATE_LIMITS, SECURITY_CONFIG } from '../../shared/constants';
+import { SECURITY_CONFIG } from '../../shared/constants';
 
 const app: express.Application = express();
 
@@ -106,20 +107,7 @@ app.use(cors({
 app.use(logger.requestLogger());
 
 // Rate limiting for auth routes (excluding demo routes)
-const authLimiter = rateLimit({
-  windowMs: RATE_LIMITS.WINDOW_MS,
-  max: process.env.NODE_ENV === 'development' ? RATE_LIMITS.MAX_REQUESTS : RATE_LIMITS.MAX_AUTH_REQUESTS,
-  message: 'Too many authentication attempts, please try again later.',
-  skip: (req) => {
-    // Skip rate limiting for demo routes in development
-    const shouldSkip = process.env.NODE_ENV === 'development' && 
-           (req.path === '/auth/demo-login' || req.path === '/auth/admin-login');
-    if (shouldSkip) {
-      console.log('Skipping rate limit for demo route:', req.path);
-    }
-    return shouldSkip;
-  },
-});
+const authLimiter = createAuthLimiter();
 
 // Session configuration
 app.use(session({
