@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
 import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { RecorderState } from "../../../lib/recording/session-recorder";
 
 // The floating panel is ASKED FOR, never sprung. It used to open on the
 // consent click, which meant a chrome-less always-on-top window appeared
@@ -55,20 +56,27 @@ vi.mock("../../../lib/recording/task-window", () => ({
   })
 }));
 
+// The recorder is never started in this file, so the state is the idle one -
+// but it is the REAL shape, checked against RecorderState. It used to be an
+// inline literal carrying an `uploadStatus` outside the union and an
+// `uploadedAsset` field the type does not have.
+const idleRecorderState: RecorderState = {
+  recordingStatus: "not_started",
+  microphonePermission: "not_requested",
+  screenPermission: "not_requested",
+  recordingStartedAt: null,
+  captureStoppedExternally: false,
+  errorMessage: null,
+  uploadStatus: "not_started",
+  uploadProgress: null,
+  durationSeconds: null,
+  asset: null
+};
+
 vi.mock("../../../lib/recording/session-recorder", () => ({
   shouldGuardNavigation: () => false,
   useSessionRecorder: () => ({
-    state: {
-      recordingStatus: "not_started",
-      microphonePermission: "not_requested",
-      screenPermission: "not_requested",
-      recordingStartedAt: null,
-      captureStoppedExternally: false,
-      errorMessage: null,
-      uploadStatus: "idle",
-      uploadProgress: 0,
-      uploadedAsset: null
-    },
+    state: idleRecorderState,
     startCapture: vi.fn().mockResolvedValue(true),
     stopCaptureAndUpload: vi.fn().mockResolvedValue(null),
     retryUpload: vi.fn().mockResolvedValue(null)

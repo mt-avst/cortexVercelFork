@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
 import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { RecorderState } from "../../../lib/recording/session-recorder";
 
 // The launch handler's ordering rules. The panel is no longer opened from
 // here at all - it is the participant's to ask for on the setup step's own
@@ -62,6 +63,7 @@ vi.mock("../../../lib/recording/session-recorder", async () => {
       );
 
       return {
+        // Typed, so the shape is checked against the hook it stands in for.
         state: {
           recordingStatus: status,
           microphonePermission: "granted",
@@ -69,10 +71,11 @@ vi.mock("../../../lib/recording/session-recorder", async () => {
           recordingStartedAt: status === "active" ? 1_760_000_000_000 : null,
           captureStoppedExternally: false,
           errorMessage: null,
-          uploadStatus: "idle",
-          uploadProgress: 0,
-          uploadedAsset: null
-        },
+          uploadStatus: "not_started",
+          uploadProgress: null,
+          durationSeconds: null,
+          asset: null
+        } satisfies RecorderState,
         startCapture: async () => {
           const started = await startCapture();
 

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
 import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { RecorderState } from "../../../lib/recording/session-recorder";
 
 // finishSession only ever closes the pane (see StudyRunner.pip-task-pane.test
 // for that half). The task window - the target site the participant was
@@ -76,16 +77,24 @@ let failNext = false;
 vi.mock("../../../lib/recording/session-recorder", async () => {
   const React = await import("react");
 
-  const initial = {
-    recordingStatus: "not_started" as const,
-    microphonePermission: "not_requested" as const,
-    screenPermission: "not_requested" as const,
-    recordingStartedAt: null as number | null,
+  // Annotated as the real RecorderState, not inferred. Inference gave every
+  // literal its own narrow type, which made `recordingStatus === "active"`
+  // an impossible comparison the compiler could not warn about until !172
+  // turned it on over test files - and it let the shape drift from the real
+  // hook: `uploadStatus: "idle"` is not in the union, `uploadProgress` is an
+  // UploadProgressEvent rather than a number, and the asset field is `asset`,
+  // not `uploadedAsset`. The component reads all three.
+  const initial: RecorderState = {
+    recordingStatus: "not_started",
+    microphonePermission: "not_requested",
+    screenPermission: "not_requested",
+    recordingStartedAt: null,
     captureStoppedExternally: false,
-    errorMessage: null as string | null,
-    uploadStatus: "idle" as const,
-    uploadProgress: 0,
-    uploadedAsset: null
+    errorMessage: null,
+    uploadStatus: "not_started",
+    uploadProgress: null,
+    durationSeconds: null,
+    asset: null
   };
 
   return {
