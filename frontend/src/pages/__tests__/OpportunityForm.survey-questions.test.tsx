@@ -311,12 +311,13 @@ describe('authoring a native survey', () => {
   });
 
   /**
-   * Reached through EDIT mode on purpose. From the Questions tab the number
-   * input's own min/max blocks submission before any of this runs - but the
-   * Save Changes buttons on the first two tabs are type="button" and call
-   * handleSubmit directly, so they bypass constraint validation entirely while
-   * the Questions tab is unmounted. That is the path an author actually takes,
-   * and where the contract would otherwise refuse the save server-side.
+   * Reached through EDIT mode on purpose: the author fills the Questions tab,
+   * leaves it, and saves from somewhere else. The Questions tab is unmounted by
+   * then, so nothing on screen can refuse this - only the rule can, and without
+   * it the contract refuses the save server-side instead.
+   *
+   * The same refusal is reachable from the Questions tab itself; that case is
+   * covered separately, below.
    */
   it('refuses a rating scale the contract would reject, before sending it', async () => {
     vi.mocked(getOpportunity).mockResolvedValue({
@@ -403,5 +404,141 @@ describe('authoring a native survey', () => {
 
     expect(body.delivery_mode).toBe('external');
     expect(body.inline_survey).toBeUndefined();
+  });
+});
+
+/**
+ * The first step has nothing to go back to, so its row opens with a spacer
+ * rather than a Back control. Rendering one anyway gives the author a button
+ * that looks live and does nothing.
+ */
+describe('the step action row', () => {
+  it('offers no Back control on the first step', async () => {
+    renderForm();
+
+    await screen.findByRole('button', { name: /Continue to Details/i });
+
+    expect(screen.queryByRole('button', { name: /^Back$/i })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The Questions tab was the only step whose forward control was a real
+ * `type="submit"`. Every other step uses `type="button"` and calls
+ * `handleSubmit` directly, so the form has two different submit mechanics
+ * depending on which step the author happens to be on.
+ *
+ * Two things follow from that, and both are author-visible:
+ *
+ *  - a submit button makes Enter in any text field submit the form, so typing
+ *    a question and pressing Enter created or updated the opportunity
+ *  - a submit button runs the browser's own constraint validation first, so the
+ *    rating scale's `min`/`max` blocked the save with a native tooltip and the
+ *    form's own refusal never ran - on the very tab holding the offending field
+ */
+describe('the forward control on the Questions tab', () => {
+  const openQuestionsTab = async (user: ReturnType<typeof userEvent.setup>) => {
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByDisplayValue('Developer experience pulse');
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+  };
+
+  const editedSurvey = {
+    id: 'opp-1',
+    type: 'survey',
+    title: 'Developer experience pulse',
+    purpose_one_liner: 'Ten short questions about the tools you use every day',
+    description_optional: '',
+    product_optional: '',
+    default_duration_minutes: 30,
+    status: 'draft',
+    delivery_mode: 'native',
+    participant_type_required: 'any',
+    sessions: []
+  };
+
+  /**
+   * Asserted on the whole form rather than on one button, because the property
+   * that matters is that NOTHING in it can be submitted implicitly. A `button`
+   * with no `type` attribute defaults to submit, so it counts too.
+   */
+  it('leaves the form with no control that can submit it implicitly', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(editedSurvey as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+
+    await screen.findByRole('button', { name: /Update Opportunity/i });
+
+    const form = document.querySelector('form');
+    expect(form).not.toBeNull();
+    expect(
+      form!.querySelectorAll(
+        'button[type="submit"], input[type="submit"], button:not([type])'
+      )
+    ).toHaveLength(0);
+  });
+
+  /**
+   * The duration input carries `min={1}`, and until the forward control became
+   * a plain button the browser enforced it on this tab and only this tab. That
+   * enforcement is gone deliberately, so the rule has to exist in the form -
+   * otherwise a negative length reaches the API, which refuses it as
+   * `estimated_duration_minutes` without naming the field the author typed in.
+   */
+  it('refuses a negative length, naming the field rather than letting the API do it', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(editedSurvey as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Which tool slows you down?'
+    );
+    await user.clear(screen.getByLabelText(/How long it takes/i));
+    await user.type(screen.getByLabelText(/How long it takes/i), '-3');
+
+    await user.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+
+    expect(updateOpportunity).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/at least 1 minute, or leave it empty/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The same refusal the existing rating test reaches by leaving the tab. It
+   * has to be reachable from the tab the author is actually on, which is where
+   * the native tooltip used to fire instead.
+   */
+  it('refuses a rating scale from the Questions tab itself, naming the rule', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(editedSurvey as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Rate it'
+    );
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
+    await user.clear(screen.getByLabelText(/Points on the scale/i));
+
+    await user.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+
+    expect(updateOpportunity).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/rating scale needs between 2 and 10 points/i)
+    ).toBeInTheDocument();
   });
 });

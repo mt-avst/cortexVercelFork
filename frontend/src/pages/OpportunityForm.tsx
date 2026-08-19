@@ -19,7 +19,7 @@ import {
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, SurveyQuestionsTab } from '../components/OpportunityForm';
 import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
@@ -37,7 +37,7 @@ import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
-import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, Save, ArrowRight } from 'lucide-react';
+import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid } from 'lucide-react';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -112,10 +112,7 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   inline_study_steps: { tab: 3, label: 'Task List' },
   inline_study_consent_text: { tab: 3, label: 'Consent text' },
   inline_survey_questions: { tab: 3, label: 'Questions' },
-  // No entry for inline_survey_duration_minutes: nothing validates it. Its
-  // task-list counterpart has one because an emptied duration IS refused
-  // there; a survey's is optional with no rule, and the completeness test in
-  // both directions is what says so.
+  inline_survey_duration_minutes: { tab: 3, label: 'How long it takes' },
   inline_survey_consent_text: { tab: 3, label: 'Consent text' }
 };
 
@@ -181,14 +178,33 @@ export const describeValidationFailure = (
  *
  * Tab 3 is type-dependent and simply absent until a type is chosen, which is
  * why the Continue button has to handle there being no tab to continue to.
+ *
+ * `key` says which body a step renders. The step bodies used to re-derive that
+ * from `type` and `deliveryMode` themselves, in predicates that had to agree
+ * with this function and could silently stop agreeing with it.
  */
+export type StepKey =
+  | 'basics'
+  | 'content'
+  | 'questions'
+  | 'externalLink'
+  | 'taskList'
+  | 'sessions';
+
+export interface FormStep {
+  id: number;
+  key: StepKey;
+  title: string;
+  description: string;
+}
+
 export const getTabsForType = (
   type: string,
   deliveryMode: 'native' | 'external' = 'external'
-) => {
-  const tabs = [
-    { id: 1, title: 'Basic Information', description: 'Configure type and status' },
-    { id: 2, title: 'Content & Details', description: 'Define opportunity content' }
+): FormStep[] => {
+  const tabs: FormStep[] = [
+    { id: 1, key: 'basics', title: 'Basic Information', description: 'Configure type and status' },
+    { id: 2, key: 'content', title: 'Content & Details', description: 'Define opportunity content' }
   ];
 
   // A poll or survey has two shapes now. Native delivery collects the questions
@@ -197,22 +213,23 @@ export const getTabsForType = (
   if (type === 'poll' || type === 'survey') {
     tabs.push(
       deliveryMode === 'native'
-        ? { id: 3, title: 'Questions', description: 'What the participant is asked' }
-        : { id: 3, title: 'External Link', description: 'Configure external tool' }
+        ? { id: 3, key: 'questions', title: 'Questions', description: 'What the participant is asked' }
+        : { id: 3, key: 'externalLink', title: 'External Link', description: 'Configure external tool' }
     );
   }
 
   if (type === 'question') {
-    tabs.push({ id: 3, title: 'External Link', description: 'Configure external tool' });
+    tabs.push({ id: 3, key: 'externalLink', title: 'External Link', description: 'Configure external tool' });
   }
 
   if (type === 'unmoderated') {
-    tabs.push({ id: 3, title: 'Task List', description: 'What the participant does' });
+    tabs.push({ id: 3, key: 'taskList', title: 'Task List', description: 'What the participant does' });
   }
 
   if (type === 'test' || type === 'interview') {
     tabs.push({
       id: 3,
+      key: 'sessions',
       title: 'Session Management',
       description: 'Create time slots'
     });
@@ -340,6 +357,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   // Define tabs based on opportunity type
   const tabs = getTabsForType(formData.type, deliveryMode);
+  // Undefined when the author is on a step this type does not have - reachable,
+  // because the step headers are clickable and the type can change underneath.
+  const currentStep = tabs.find((tab) => tab.id === activeTab);
+
+  // Computed once for every save control on every step. A study that could not
+  // be read is the reason most easily dropped when this is written out by hand,
+  // and dropping it is what lets a save overwrite content the form never had.
+  const saveControlsDisabled = saving || !!successMessage || !!studyLoadError;
 
   const loadOpportunity = useCallback(async () => {
     if (!id) return;
@@ -805,9 +830,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
       }
 
-      // The number input's min/max never runs: the save controls are
-      // type="button" and call handleSubmit directly, and the Questions tab is
-      // unmounted while the author is on another tab. Without this the contract
+      // The number input's own min/max never runs: every save control in
+      // this form is type="button" and calls handleSubmit directly, so the
+      // browser never validates the form. Without this rule the contract
       // refuses the save instead, naming config on a step the form numbers
       // differently.
       if (question.type === 'rating') {
@@ -830,6 +855,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       !formData.inline_survey_consent_text.trim()
     ) {
       errors.inline_survey_consent_text = 'Consent text is required';
+    }
+
+    // The input carries min={1}, and the browser used to enforce it on this
+    // tab and only this tab, because its forward control was the form's one
+    // real submit button. Nothing submits this form implicitly now, so the
+    // rule lives here - otherwise a negative or fractional length reaches the
+    // API, which refuses it as `estimated_duration_minutes` and never names
+    // the field the author typed in. Integers, because the contract is
+    // `.int()` and the input's implicit step is 1.
+    if (authoringQuestions) {
+      const surveyDuration = formData.inline_survey_duration_minutes;
+      if (surveyDuration !== undefined) {
+        if (!Number.isInteger(surveyDuration) || surveyDuration < 1) {
+          errors.inline_survey_duration_minutes =
+            'Give a length of at least 1 minute, or leave it empty';
+        } else if (surveyDuration > INLINE_STUDY_LIMITS.maxDurationMinutes) {
+          errors.inline_survey_duration_minutes =
+            `Keep it under ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes`;
+        }
+      }
     }
 
     // Task content is checked whenever tasks exist, not only at publish: the
@@ -1519,10 +1564,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     validateField(field, value);
   };
 
-  const handleCancel = () => {
-    navigate('/admin', { state: { refresh: true } });
-  };
-
   // Show loading spinner while checking authentication
   if (loading) {
     return (
@@ -1702,7 +1743,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 {/* Tab Content */}
                 <div className="tab-content p-4">
                   {/* Basic Information Tab */}
-                  {activeTab === 1 && (
+                  {currentStep?.key === 'basics' && (
                     <>
                       <BasicInfoTab
                         formData={formData}
@@ -1756,83 +1797,55 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         </div>
                       )}
 
-                      {/* Navigation Buttons for Tab 1 */}
-                      <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between align-items-center gap-2">
-                          <div style={{ flex: 1 }}></div>
-                          {isEdit && hasChanges() && (
-                            <button
-                              type="button"
-                              className="btn btn-success px-5 py-2 fw-semibold"
-                              onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage || !!studyLoadError}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              {saving ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <Save size={16} className="me-2" />
-                                  Save Changes
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-primary px-5 py-2 fw-semibold"
-                            onClick={() => {
-                              // Validate basic info before continuing
-                              const errors: Record<string, string> = {};
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        nextLabel="Continue to Details"
+                        onNext={() => {
+                          // Validate basic info before continuing
+                          const errors: Record<string, string> = {};
 
-                              if (!formData.type) {
-                                errors.type = 'Please select a research study type';
-                              }
-                              if (!formData.title.trim()) {
-                                errors.title = 'Title is required';
-                              } else if (formData.title.trim().length < 4) {
-                                errors.title = 'Title must be at least 4 characters';
-                              }
-                              if (!formData.purpose_one_liner.trim()) {
-                                errors.purpose_one_liner = 'Purpose is required';
-                              } else if (formData.purpose_one_liner.trim().length < 10) {
-                                errors.purpose_one_liner = 'Purpose must be at least 10 characters';
-                              }
-                              // Only require meeting location for test/interview types
-                              if ((formData.type === 'test' || formData.type === 'interview') && !formData.meeting_location_optional?.trim()) {
-                                errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
-                              }
+                          if (!formData.type) {
+                            errors.type = 'Please select a research study type';
+                          }
+                          if (!formData.title.trim()) {
+                            errors.title = 'Title is required';
+                          } else if (formData.title.trim().length < 4) {
+                            errors.title = 'Title must be at least 4 characters';
+                          }
+                          if (!formData.purpose_one_liner.trim()) {
+                            errors.purpose_one_liner = 'Purpose is required';
+                          } else if (formData.purpose_one_liner.trim().length < 10) {
+                            errors.purpose_one_liner = 'Purpose must be at least 10 characters';
+                          }
+                          // Only require meeting location for test/interview types
+                          if ((formData.type === 'test' || formData.type === 'interview') && !formData.meeting_location_optional?.trim()) {
+                            errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
+                          }
 
-                              if (Object.keys(errors).length > 0) {
-                                setValidationErrors(errors);
-                                // Reported the same way as every other refusal
-                                // in this form, so the author learns one shape.
-                                showRefusal();
-                                // Scroll to top to see errors
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                return;
-                              }
+                          if (Object.keys(errors).length > 0) {
+                            setValidationErrors(errors);
+                            // Reported the same way as every other refusal
+                            // in this form, so the author learns one shape.
+                            showRefusal();
+                            // Scroll to top to see errors
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            return;
+                          }
 
-                              // Clears the refusal only - a server error
-                              // banner is not this button's to erase.
-                              setRefusalShown(false);
-                              setActiveTab(2);
-                            }}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            Continue to Details
-                            <ArrowRight size={16} className="ms-2" />
-                          </button>
-                        </div>
-                      </div>
+                          // Clears the refusal only - a server error
+                          // banner is not this button's to erase.
+                          setRefusalShown(false);
+                          setActiveTab(2);
+                        }}
+                      />
                     </>
                   )}
 
                   {/* Content & Details Tab */}
-                  {activeTab === 2 && (
+                  {currentStep?.key === 'content' && (
                     <>
                       <ContentDetailsTab
                         formData={formData}
@@ -1840,85 +1853,53 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
                       />
-                      {/* Navigation Buttons for Tab 2 */}
-                      <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between align-items-center gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                            onClick={() => setActiveTab(1)}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            <ArrowLeft size={16} className="me-2" />
-                            Back
-                          </button>
-                          {isEdit && hasChanges() && (
-                            <button
-                              type="button"
-                              className="btn btn-success px-5 py-2 fw-semibold"
-                              onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage || !!studyLoadError}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              {saving ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <Save size={16} className="me-2" />
-                                  Save Changes
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-primary px-5 py-2 fw-semibold"
-                            onClick={() => {
-                              // Determine next tab based on opportunity type
-                              const tabs = getTabsForType(formData.type, deliveryMode);
-                              const nextTab = tabs.find(tab => tab.id > 2)?.id;
-                              if (!nextTab) {
-                                // There is no third tab until a type is chosen,
-                                // and the tab headers are directly clickable -
-                                // so this tab is reachable with no type set.
-                                // Continuing to tab 2 from tab 2 is a no-op the
-                                // author reads as a broken button. Send them to
-                                // the field that is actually blocking them.
-                                setValidationErrors(prev => ({
-                                  ...prev,
-                                  type: 'Please select a research study type'
-                                }));
-                                showRefusal();
-                                setActiveTab(1);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                                return;
-                              }
-                              setRefusalShown(false);
-                              setActiveTab(nextTab);
-                            }}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            {formData.type === 'test' || formData.type === 'interview'
-                              ? 'Continue to Session Setup'
-                              : formData.type === 'unmoderated'
-                              ? 'Continue to Task List'
-                              : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
-                              ? 'Continue to Link Setup'
-                              : 'Continue'}
-                            <ArrowRight size={16} className="ms-2" />
-                          </button>
-                        </div>
-                      </div>
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        onPrevious={() => setActiveTab(1)}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        nextLabel={
+                          // Left exactly as it was. A native poll or survey
+                          // reads "Continue to Link Setup" here and then lands
+                          // on Questions; that mislabel is not this step's to
+                          // fix, because this step changes no labels.
+                          formData.type === 'test' || formData.type === 'interview'
+                            ? 'Continue to Session Setup'
+                            : formData.type === 'unmoderated'
+                            ? 'Continue to Task List'
+                            : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
+                            ? 'Continue to Link Setup'
+                            : 'Continue'
+                        }
+                        onNext={() => {
+                          // Determine next tab based on opportunity type
+                          const nextTab = tabs.find(tab => tab.id > 2)?.id;
+                          if (!nextTab) {
+                            // There is no third tab until a type is chosen,
+                            // and the tab headers are directly clickable -
+                            // so this tab is reachable with no type set.
+                            // Continuing to tab 2 from tab 2 is a no-op the
+                            // author reads as a broken button. Send them to
+                            // the field that is actually blocking them.
+                            setValidationErrors(prev => ({
+                              ...prev,
+                              type: 'Please select a research study type'
+                            }));
+                            showRefusal();
+                            setActiveTab(1);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                            return;
+                          }
+                          setRefusalShown(false);
+                          setActiveTab(nextTab);
+                        }}
+                      />
                     </>
                   )}
 
                   {/* Task List tab - only for unmoderated */}
-                  {activeTab === 3 &&
-                    (formData.type === 'poll' || formData.type === 'survey') &&
-                    deliveryMode === 'native' && (
+                  {currentStep?.key === 'questions' && (
                       <>
                         <SurveyQuestionsTab
                           formData={formData}
@@ -1930,46 +1911,28 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           readOnlyReason={studyReadOnlyReason}
                         />
 
-                        {/* Navigation buttons for the Questions tab. Same shape
-                            as every other tab's: this is the last tab for a
-                            native survey, so without them there is no way to
-                            save at all - which is how it shipped until a test
-                            went looking for the button. */}
-                        <div className="border-top mt-4 pt-4">
-                          <div className="d-flex justify-content-between align-items-center gap-2">
-                            <button
-                              type="button"
-                              className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                              onClick={() => setActiveTab(2)}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              <ArrowLeft size={16} className="me-2" />
-                              Back
-                            </button>
-                            <button
-                              type="submit"
-                              className="btn btn-primary px-5 py-2 fw-semibold"
-                              disabled={saving || !!successMessage || !!studyLoadError}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              {saving ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
-                                  {isEdit ? 'Updating...' : 'Creating...'}
-                                </>
-                              ) : (
-                                <>
-                                  <CheckCircle size={16} className="me-2" />
-                                  {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </div>
+                        {/* This is the last step for a native survey, so
+                            without these there is no way to save at all - which
+                            is how it shipped until a test went looking for the
+                            button. Two of its differences from every other
+                            step's row are preserved rather than fixed, because
+                            this step changes nothing visible: it offers no
+                            green Save Changes shortcut in edit mode, and its
+                            final control is blue where the others are green.
+                            The third - a real type="submit" - is fixed, and is
+                            the one intentional behaviour change here. */}
+                        <StepActions
+                          isEdit={isEdit}
+                          saving={saving}
+                          disabled={saveControlsDisabled}
+                          onPrevious={() => setActiveTab(2)}
+                          onSubmit={() => handleSubmit()}
+                          submitVariant="primary"
+                        />
                       </>
                     )}
 
-                  {activeTab === 3 && formData.type === 'unmoderated' && (
+                  {currentStep?.key === 'taskList' && (
                     <>
                       <FirstHandStudyTab
                         formData={formData}
@@ -1981,65 +1944,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         readOnlyReason={studyReadOnlyReason}
                       />
 
-                      {/* Navigation buttons for the Task List tab */}
-                      <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between align-items-center gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                            onClick={() => setActiveTab(2)}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            <ArrowLeft size={16} className="me-2" />
-                            Back
-                          </button>
-                          {isEdit && hasChanges() && (
-                            <button
-                              type="button"
-                              className="btn btn-success px-5 py-2 fw-semibold"
-                              onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage || !!studyLoadError}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              {saving ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <Save size={16} className="me-2" />
-                                  Save Changes
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-success px-5 py-2 fw-semibold"
-                            onClick={() => handleSubmit()}
-                            disabled={saving || !!successMessage || !!studyLoadError}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            {saving ? (
-                              <>
-                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
-                                {isEdit ? 'Updating...' : 'Creating...'}
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle size={16} className="me-2" />
-                                {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        onPrevious={() => setActiveTab(2)}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        onSubmit={() => handleSubmit()}
+                      />
                     </>
                   )}
 
                   {/* External Link Tab - for polls, surveys, and questions (not unmoderated) */}
-                  {activeTab === 3 && ['poll', 'survey', 'question'].includes(formData.type) && !(deliveryMode === 'native' && formData.type !== 'question') && (
+                  {currentStep?.key === 'externalLink' && (
                     <>
                       <ExternalLinkTab
                         formData={formData}
@@ -2047,65 +1964,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleInputChange={handleInputChange}
                       />
 
-                      {/* Navigation Buttons for External Link Tab */}
-                      <div className="border-top mt-4 pt-4">
-                        <div className="d-flex justify-content-between align-items-center gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                            onClick={() => setActiveTab(2)}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            <ArrowLeft size={16} className="me-2" />
-                            Back
-                          </button>
-                          {isEdit && hasChanges() && (
-                            <button
-                              type="button"
-                              className="btn btn-success px-5 py-2 fw-semibold"
-                              onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage || !!studyLoadError}
-                              style={{ fontSize: '0.95rem' }}
-                            >
-                              {saving ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Saving" aria-hidden="true"></span>
-                                  Saving...
-                                </>
-                              ) : (
-                                <>
-                                  <Save size={16} className="me-2" />
-                                  Save Changes
-                                </>
-                              )}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn btn-success px-5 py-2 fw-semibold"
-                            onClick={() => handleSubmit()}
-                            disabled={saving || !!successMessage || !!studyLoadError}
-                            style={{ fontSize: '0.95rem' }}
-                          >
-                            {saving ? (
-                              <>
-                                <span className="spinner-border spinner-border-sm me-2" role="status" aria-label="Creating" aria-hidden="true"></span>
-                                {isEdit ? 'Updating...' : 'Creating...'}
-                              </>
-                            ) : (
-                              <>
-                                <CheckCircle size={16} className="me-2" />
-                                {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        onPrevious={() => setActiveTab(2)}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        onSubmit={() => handleSubmit()}
+                      />
                     </>
                   )}
 
                   {/* Session Management - Only for Tests and Interviews */}
-                  {activeTab === 3 && (formData.type === 'test' || formData.type === 'interview') && (
+                  {currentStep?.key === 'sessions' && (
                     <>
                       <div className="form-section mb-5">
                         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
