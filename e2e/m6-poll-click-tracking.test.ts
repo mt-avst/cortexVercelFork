@@ -40,10 +40,16 @@ test.describe('M6 Poll Click Tracking', () => {
     await page.fill('#external_link_optional', 'https://example.com/m6-poll');
 
     await page.getByRole('button', { name: /Create Opportunity/i }).click();
-    await page.waitForTimeout(5000);
-    await expect(page.getByRole('button', { name: /Return to Dashboard/i })).toBeVisible({ timeout: 10000 });
-    await page.getByRole('button', { name: /Return to Dashboard/i }).click();
-    await page.waitForURL(/\/admin/, { timeout: 8000 });
+    // The success alert - and the Return to Dashboard button inside it - is only
+    // mounted until the form auto-navigates, 3s for a draft and 1.5s otherwise
+    // (OpportunityForm.tsx). Sleeping 5s here landed after it had gone. Assert on
+    // it instead of sleeping past it.
+    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: /Return to Dashboard/i })).toBeVisible();
+    // Let the form's own auto-navigation take us back rather than racing its
+    // timer to click the button. Anchor the match: the current URL
+    // (/admin/opportunities/new) already contains "/admin".
+    await page.waitForURL(/\/admin$/, { timeout: 15000 });
     await page.waitForTimeout(2000);
 
     // --- 3. Open Edit for our poll and publish ---
@@ -51,7 +57,10 @@ test.describe('M6 Poll Click Tracking', () => {
     // Open dropdown for the row containing our title (kebab ⋮)
     const row = page.locator('tr').filter({ has: page.getByText(UNIQUE_TITLE) });
     await row.locator('button[title="Actions"]').click();
-    await page.getByRole('button', { name: 'Edit' }).click();
+    // Scope to the row's own dropdown and match exactly: getByRole name matching
+    // is a case-insensitive substring by default, so a bare 'Edit' also matched
+    // the "...new script editor" recent-study links and tripped strict mode.
+    await row.getByRole('button', { name: 'Edit', exact: true }).click();
     await page.waitForURL(/\/admin\/opportunities\/[^/]+\/edit/, { timeout: 8000 });
 
     const editUrl = page.url();
@@ -75,7 +84,19 @@ test.describe('M6 Poll Click Tracking', () => {
     const updateBtn = page.getByRole('button', { name: 'Update Opportunity' });
     await updateBtn.waitFor({ state: 'visible', timeout: 10000 });
     await updateBtn.scrollIntoViewIfNeeded();
+
+    // Assert the save actually landed. Without this a failed publish is silent,
+    // and the first symptom is the click-tracking POST 404ing 40 lines later
+    // (the endpoint rejects anything not published) - which reads as a
+    // click-tracking bug rather than a save that never happened.
+    const updateResponsePromise = page.waitForResponse(
+      (res) => res.request().method() === 'PATCH' && /\/api\/opportunities\/[^/]+$/.test(res.url()),
+      { timeout: 15000 }
+    );
     await updateBtn.click();
+    const updateResponse = await updateResponsePromise;
+    expect(updateResponse.status()).toBe(200);
+    expect((await updateResponse.json()).status).toBe('published');
     await page.waitForTimeout(3000);
 
     // --- 4. Open public opportunity detail and listen for click POST ---

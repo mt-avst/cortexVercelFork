@@ -42,10 +42,15 @@ test.describe('Superadmin Create Study Flow', () => {
     // 6. Submit form - click Create Opportunity button (on External Link tab for poll)
     await page.getByRole('button', { name: /Create Opportunity/i }).click();
 
-    // 7. After submit, success message shows briefly then auto-navigates to /admin (1.5s delay)
-    await expect(page.getByText(/created successfully/i)).toBeVisible({ timeout: 10000 });
-    // Wait for auto-redirect to admin dashboard (happens after 1500ms)
-    await page.waitForURL(/\/admin/, { timeout: 8000 });
+    // 7. After submit the success alert shows, then the form auto-navigates to
+    // /admin on its own (3s for a draft, 1.5s otherwise - OpportunityForm.tsx).
+    // This study is created without setting status, so it saves as a DRAFT and
+    // the copy is the draft warning rather than "created successfully".
+    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 10000 });
+    // Anchor the match: the current URL (/admin/opportunities/new) already
+    // contains "/admin", so an unanchored regex resolves instantly and waits
+    // for nothing.
+    await page.waitForURL(/\/admin$/, { timeout: 10000 });
     await page.waitForTimeout(1000); // Allow list to refresh
 
     // 8. Verify our study appears in the list
