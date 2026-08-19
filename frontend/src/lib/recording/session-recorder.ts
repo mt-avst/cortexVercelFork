@@ -22,7 +22,7 @@ type ExtendedDisplayMediaOptions = DisplayMediaStreamOptions & {
   monitorTypeSurfaces?: "include" | "exclude";
 };
 
-type RecorderState = {
+export type RecorderState = {
   captureStoppedExternally: boolean;
   microphonePermission:
     | "not_requested"
