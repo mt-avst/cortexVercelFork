@@ -713,6 +713,50 @@ describe('when the linked study cannot be read', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(updateOpportunity).not.toHaveBeenCalled();
   });
+
+  /**
+   * The green "Save Changes" shortcut is not the only save control on the row.
+   * The final "Update Opportunity" control saves through the same handler and
+   * has to be disabled by the same unreadable study - and it is the one no test
+   * covered, so it could lose the binding with every suite still green.
+   */
+  /**
+   * `disabled` is one shared value handed to a component that spells
+   * `disabled={disabled}` twice already, so extending it to the navigation
+   * controls is a plausible one-line edit. It would strand the author on the
+   * step: a study that could not be read must stop the save, not the walking.
+   */
+  it('leaves the navigation controls usable while the study could not be read', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(new Error('network down'));
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+
+    await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
+
+    expect(
+      await screen.findByRole('button', { name: /Continue to Details/i })
+    ).toBeEnabled();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+
+    expect(await screen.findByRole('button', { name: /^Back$/i })).toBeEnabled();
+  });
+
+  it('disables the final save control too, not only the Save Changes shortcut', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(new Error('network down'));
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+
+    await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+
+    expect(
+      await screen.findByRole('button', { name: /Update Opportunity/i })
+    ).toBeDisabled();
+  });
 });
 
 describe('the Save button appearing for a change that only touches authored content', () => {
@@ -795,5 +839,29 @@ describe('the Save button appearing for a change that only touches authored cont
     fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+  });
+
+  /**
+   * The same control assertion, on a step that is not Basic Information. Every
+   * case above navigates back to Basic Information before looking, so the
+   * `isEdit && hasChanges()` gate was pinned on exactly one of the four steps
+   * that render it - and those four call sites are now textually identical,
+   * which is when a change gets applied to one and not the others.
+   */
+  it('stays away on the content steps too, not only on Basic Information', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    await screen.findAllByLabelText(/What the participant sees/i);
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
+      target: { value: 'Open the basket and describe it' }
+    });
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 });

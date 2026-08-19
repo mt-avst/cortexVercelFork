@@ -3,4 +3,4 @@ export { default as ContentDetailsTab } from './ContentDetailsTab';
 export { default as ExternalLinkTab } from './ExternalLinkTab';
 export { default as FirstHandStudyTab } from './FirstHandStudyTab';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
-export { default as FormActions } from './FormActions';
+export { default as StepActions } from './StepActions';

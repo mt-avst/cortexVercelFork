@@ -11,6 +11,7 @@ import {
   authorableSurveyStepTypes,
   type SurveyQuestion
 } from '../../shared/firsthand/survey-authoring';
+import { INLINE_STUDY_LIMITS } from '../../shared/firsthand/inline-study';
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -357,9 +358,10 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                   </label>
                   <input
                     type="number"
-                    className="form-control"
+                    className={`form-control ${validationErrors.inline_survey_duration_minutes ? 'is-invalid' : ''}`}
                     id="inline_survey_duration_minutes"
                     min={1}
+                    max={INLINE_STUDY_LIMITS.maxDurationMinutes}
                     value={formData.inline_survey_duration_minutes ?? ''}
                     onChange={(e) =>
                       handleInputChange(
@@ -368,6 +370,11 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                       )
                     }
                   />
+                  {validationErrors.inline_survey_duration_minutes && (
+                    <div className="invalid-feedback d-block">
+                      {validationErrors.inline_survey_duration_minutes}
+                    </div>
+                  )}
                   <div className="form-text">
                     Minutes. Shown to participants before they start. Leave it
                     empty if you are not sure - they will simply not be told a
