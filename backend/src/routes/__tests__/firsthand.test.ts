@@ -11,6 +11,13 @@ jest.mock('../../firsthand/studies-repository', () => ({
   getStudyById: jest.fn(),
   updateStudy: jest.fn(),
   deleteStudy: jest.fn(),
+  // NOT a jest.fn(). canWriteStudy is the authorisation rule itself, and the
+  // point of the GET route reporting it is that the client is told the same
+  // answer the write path would give - a stub here would let this file agree
+  // with itself while the two drifted apart.
+  canWriteStudy: jest.requireActual<typeof import('../../firsthand/studies-repository')>(
+    '../../firsthand/studies-repository'
+  ).canWriteStudy,
 }));
 jest.mock('../../firsthand/survey-results-repository', () => ({
   listResponsesForStudy: jest.fn(),
@@ -275,6 +282,38 @@ describe('FirstHand Express router', () => {
       const res = await request(app).get('/api/firsthand/studies/missing').expect(404);
       expect(res.body).toMatchObject({ error: 'not_found' });
     });
+
+    /**
+     * `can_edit` tells the reader whether a later save would be allowed, so the
+     * opportunity form can show an author their own study as an editable
+     * surface and a colleague's as a read-only one instead of guessing.
+     *
+     * It is a DISCLOSURE, not a gate - the binding check is the one updateStudy
+     * takes under its own FOR UPDATE lock - which is exactly why these assert
+     * the rule's four outcomes rather than that the field is merely present.
+     */
+    it.each([
+      ['the owner', 'admin-1', 'researcher_admin' as const, 'admin-1', true],
+      ['another researcher', 'someone-else', 'researcher_admin' as const, 'admin-1', false],
+      ['a superadmin over someone else', 'someone-else', 'superadmin' as const, 'root-1', true],
+      ['any admin over an unowned legacy study', null, 'researcher_admin' as const, 'admin-1', true],
+    ])(
+      'reports can_edit for %s',
+      async (_label, ownerUserId, role, userId, expected) => {
+        mockGetStudyById.mockResolvedValue({
+          ...storedStudy,
+          study: { ...storedStudy.study, owner_user_id: ownerUserId },
+        } as Awaited<ReturnType<typeof getStudyById>>);
+
+        const res = await request(
+          buildApp({ id: userId, name: 'A', email: 'a@test.com', role })
+        )
+          .get('/api/firsthand/studies/study_abc')
+          .expect(200);
+
+        expect(res.body.can_edit).toBe(expected);
+      }
+    );
   });
 
   describe('PUT /api/firsthand/studies/:studyId', () => {

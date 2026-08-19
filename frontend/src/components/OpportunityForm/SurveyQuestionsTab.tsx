@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
 import { FirstHandStudy, OpportunityFormData } from '../../api/types';
+import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
 import {
   NPS_SCALE_MAX,
   RATING_SCALE_BOUNDS
@@ -56,12 +57,28 @@ interface SurveyQuestionsTabProps {
   /** Questions are an array, which handleInputChange's scalar signature cannot carry. */
   handleQuestionsChange: (questions: SurveyQuestion[]) => void;
   /**
-   * True only when the opportunity already pointed at a set of questions when
-   * it loaded. Authoring inline would then be a second source of truth against
-   * something edited elsewhere. An edit of an opportunity with none - a draft
-   * saved before its questions were written - is deliberately not locked.
+   * True when the opportunity already points at a set of questions. Hides the
+   * "reuse an existing set instead" tickbox: swapping which set an opportunity
+   * points at is not this form's job once it points at one.
+   *
+   * NOT the same question as whether those questions may be authored here - see
+   * studyIsReadOnly. The two were one flag, and collapsing them is what made an
+   * edit discard the author's questions: a linked set swapped this tab to the
+   * picker, so there was no surface for them to be loaded into.
    */
-  lockedToExistingStudy: boolean;
+  hasLinkedStudy: boolean;
+  /**
+   * True when the linked questions may not be authored HERE - they belong to
+   * another researcher, or they use a step type this tab cannot represent. Only
+   * then is the picker the right surface; questions this author may change are
+   * loaded into the editor below and saved back to the same study.
+   */
+  studyIsReadOnly: boolean;
+  /**
+   * Why, when it is. Null when a banner above the tabs already explains it, in
+   * which case this tab says nothing rather than asserting a second cause.
+   */
+  readOnlyReason: StudyReadOnlyReason;
 }
 
 /**
@@ -78,7 +95,9 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   validationErrors,
   handleInputChange,
   handleQuestionsChange,
-  lockedToExistingStudy
+  hasLinkedStudy,
+  studyIsReadOnly,
+  readOnlyReason
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +105,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   const [retryCount, setRetryCount] = useState(0);
 
   const reuseExisting =
-    lockedToExistingStudy || Boolean(formData.reuse_existing_survey);
+    studyIsReadOnly || Boolean(formData.reuse_existing_survey);
 
   useEffect(() => {
     if (!reuseExisting) {
@@ -215,7 +234,23 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           </div>
         </div>
 
-        {!lockedToExistingStudy && (
+        {readOnlyReason === 'not-yours' && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            These questions belong to another researcher, so they are not
+            editable here - and the Task Lists area applies the same rule. Ask
+            their owner to change them, or pick a different set below.
+          </div>
+        )}
+
+        {readOnlyReason === 'not-representable' && (
+          <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
+            These questions use something this form cannot show, so editing them
+            here would drop what is not shown. Open them in the Task Lists area
+            instead.
+          </div>
+        )}
+
+        {!hasLinkedStudy && (
           <div className="form-check mb-4">
             <input
               className="form-check-input"

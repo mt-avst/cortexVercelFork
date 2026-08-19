@@ -4,6 +4,18 @@ import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
+import { getFirstHandStudy } from '../api/firsthand-studies';
+import { getPrimaryTargetUrl } from '../lib/recording/task-target';
+import {
+  authoredStepsOf,
+  studyRoundTripsCleanly,
+  toInlineStudyPayloadStep,
+  toInlineStudyStep,
+  toSurveyPayloadStep,
+  toSurveyQuestion,
+  type AuthoringKind,
+  type StudyReadOnlyReason
+} from '../lib/opportunity-authoring/hydrate-study';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -251,10 +263,57 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     reuse_existing_survey: false
   });
 
-  // Whether the opportunity already pointed at a study when it loaded. Only
-  // then is authoring inline off the table - an unmoderated draft saved before
-  // its tasks were written must still be authorable on the way back in.
-  const [lockedToExistingStudy, setLockedToExistingStudy] = useState(false);
+  // Whether the opportunity already pointed at a study when it loaded.
+  //
+  // This used to be one flag called lockedToExistingStudy that meant two
+  // different things at once - "a study is linked" AND "you may not author
+  // here" - and the second meaning is what discarded authored content on the
+  // way back in: the tab body swapped to the reuse picker, so hydrated steps
+  // had nowhere to render. The two are now separate, because a linked study the
+  // author OWNS is exactly the thing they should be editing in place.
+  //
+  // hasLinkedStudy hides the "reuse an existing one instead" tickbox: swapping
+  // which study an opportunity points at is not this form's job once it points
+  // at one.
+  const [hasLinkedStudy, setHasLinkedStudy] = useState(false);
+  // Whether the linked study may not be authored HERE. True when the API says
+  // this reader cannot write it, and also when it holds a step type this form
+  // cannot represent - see formCanAuthorEveryStep. Only this flag swaps the tab
+  // body to the picker.
+  const [studyIsReadOnly, setStudyIsReadOnly] = useState(false);
+  // WHY it is read-only, because the honest sentence differs and the wrong one
+  // sends the author somewhere that will refuse them too. `not-yours` cannot be
+  // fixed in the Task Lists area either - StudyEditor applies the same
+  // ownership rule - whereas `not-representable` genuinely can. Null when a
+  // banner above the tabs already explains it (the study could not be read, or
+  // no longer exists), so the tab does not assert a second, wrong cause.
+  const [studyReadOnlyReason, setStudyReadOnlyReason] =
+    useState<StudyReadOnlyReason>(null);
+  // KNOWN GAP, deliberately not closed here. These three are derived once, at
+  // load, and are not re-derived if the author then changes `type` or
+  // `delivery_mode` in the same session. The reachable case is an EXTERNAL poll
+  // carrying a stale firsthand_study_id - the column has no foreign key and
+  // nothing clears it - which is deliberately never read (see authoringKind),
+  // so flipping it to native leaves the form authoring against a study it never
+  // loaded. Every destructive outcome is still refused by the API: 403 for a
+  // colleague's study, 400 for a kind mismatch, 400 if a second opportunity
+  // links it, 400 if it has answers and the sequence changed. The cost is a raw
+  // refusal instead of the read-only surface, which is not worth a re-read that
+  // would discard the author's in-progress type change to fix.
+  // The linked study's updated_at as it was when this form loaded it. Captured
+  // here rather than fetched again later: F1 uses it as a concurrency
+  // precondition and D2 sends it with an autosave, and both would otherwise
+  // need a second round trip to learn a value this load already had.
+  const [linkedStudyUpdatedAt, setLinkedStudyUpdatedAt] = useState<string | null>(null);
+  // Set when the linked study could not be read. Saving is refused while it is
+  // set: the form would otherwise show an empty task list that a save would
+  // then write over the real one.
+  const [studyLoadError, setStudyLoadError] = useState('');
+  // The linked study is GONE - a 404, not a failure to reach it. Distinct from
+  // studyLoadError because the answers are opposite: an unreadable study must
+  // block every save, a deleted one must not, or the opportunity pointing at it
+  // can never be repaired or taken down. See the catch in loadOpportunity.
+  const [studyMissing, setStudyMissing] = useState(false);
   const [loadingOpportunity, setLoadingOpportunity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>('');
@@ -288,7 +347,151 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     try {
       setLoadingOpportunity(true);
       setError('');
+      setStudyLoadError('');
+      setStudyMissing(false);
       const opportunity = await getOpportunity(id);
+
+      // What the author actually wrote, read back off the linked study.
+      //
+      // Everything below used to be hardcoded defaults - an empty step list and
+      // the boilerplate consent - so reopening an opportunity showed a form
+      // that had forgotten its own content. It read as an empty form rather
+      // than as loss because the tab body swapped to the reuse picker, so there
+      // was no populated surface to notice was missing.
+      const authoredFields = {
+        inline_study_target_url: '',
+        inline_study_duration_minutes: undefined as number | undefined,
+        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_steps: [] as InlineStudyStep[],
+        inline_survey_duration_minutes: undefined as number | undefined,
+        inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
+        inline_survey_questions: [] as SurveyQuestion[],
+        // Both deliberately FALSE once content is hydrated: a ticked reuse box
+        // sends the study id instead of the authored content, which is the same
+        // save the old code made and the reason an edit could never change what
+        // was written.
+        reuse_existing_study: false,
+        reuse_existing_survey: false
+      };
+      let readOnly = false;
+      let readOnlyReason: StudyReadOnlyReason = null;
+      let studyUpdatedAt: string | null = null;
+
+      // The vocabulary this opportunity's form authors in, or null when it
+      // authors nothing. An external poll can carry a study id it no longer
+      // uses - the column has no foreign key and nothing clears it when the
+      // delivery mode changes - and reading a study the form will never render
+      // would make a failed fetch block a save that has nothing to do with it.
+      const authoringKind: AuthoringKind | null =
+        opportunity.type === 'unmoderated'
+          ? 'recorded'
+          : (opportunity.type === 'poll' || opportunity.type === 'survey') &&
+              (opportunity.delivery_mode ?? 'external') === 'native'
+            ? 'survey'
+            : null;
+
+      if (opportunity.firsthand_study_id && authoringKind) {
+        try {
+          const linked = await getFirstHandStudy(opportunity.firsthand_study_id);
+          const kind = linked.study.kind === 'survey' ? 'survey' : 'recorded';
+          const authored = authoredStepsOf(linked.steps);
+
+          studyUpdatedAt = linked.study.updated_at ?? null;
+          // Absent means "not stated", not false: create and update responses
+          // do not carry can_edit, and treating a missing value as a refusal
+          // would lock the author out of their own study.
+          if (linked.can_edit === false) {
+            readOnlyReason = 'not-yours';
+          } else if (
+            // A recorded task list linked to a native survey, or the reverse.
+            // The two vocabularies are different, so the wrong surface would
+            // show an EMPTY editor for a study that is not empty - and the API
+            // refuses the mismatch on save anyway.
+            kind !== authoringKind ||
+            // The general rule, replacing a step-type check that only caught
+            // one of the ways this form could fail to reproduce a study. See
+            // studyRoundTripsCleanly: anything it would drop, flatten or
+            // rewrite makes the study read-only rather than partially loaded.
+            !studyRoundTripsCleanly(linked.steps, kind, linked.study.id)
+          ) {
+            readOnlyReason = 'not-representable';
+          }
+          readOnly = readOnlyReason !== null;
+
+          if (kind === 'survey') {
+            authoredFields.inline_survey_questions = authored.map(toSurveyQuestion);
+            authoredFields.inline_survey_consent_text = linked.study.consent_text;
+            authoredFields.inline_survey_duration_minutes =
+              linked.study.estimated_duration_minutes ?? undefined;
+          } else {
+            authoredFields.inline_study_steps = authored.map(toInlineStudyStep);
+            authoredFields.inline_study_consent_text = linked.study.consent_text;
+            authoredFields.inline_study_duration_minutes =
+              linked.study.estimated_duration_minutes ?? undefined;
+            // The study-level starting URL. Read with the runtime's own
+            // resolver rather than a second "first step carrying a target"
+            // rule: toStudySteps writes target_url onto EVERY authored step,
+            // and a private rule here would be free to disagree with the one
+            // the participant's runner actually follows.
+            authoredFields.inline_study_target_url =
+              getPrimaryTargetUrl(linked.steps) ?? '';
+          }
+
+          // A study this form cannot author is still shown as linked, but
+          // through the picker - and the reuse flag has to say so, or the
+          // publish check would demand a study id the picker is not being
+          // asked for.
+          if (readOnly) {
+            authoredFields.reuse_existing_study = true;
+            authoredFields.reuse_existing_survey = true;
+          }
+        } catch (studyError) {
+          const status = (studyError as { response?: { status?: number } })?.response?.status;
+          // A 404 is not a transient failure, and treating it as one bricks
+          // the opportunity.
+          //
+          // `firsthand_study_id` has no foreign key and studies can be
+          // deleted, so a dangling link is a reachable state. Refusing every
+          // save for it left the opportunity uneditable through the only UI
+          // that can write one - it could not be retitled, repointed at
+          // another study, or even UNPUBLISHED, while it went on serving a
+          // study that no longer exists. Delete was the only way out.
+          //
+          // A0's route already repairs this: an in-place update whose study
+          // has vanished falls through to minting a replacement. Read-only
+          // plus a save that is allowed is what lets the author ask for that
+          // repair.
+          const missing = status === 404;
+          logger.error('Could not load the linked study for editing', {
+            opportunityId: opportunity.id,
+            studyId: opportunity.firsthand_study_id,
+            status,
+            missing,
+            error: studyError instanceof Error ? studyError.message : String(studyError)
+          });
+
+          if (missing) {
+            setStudyMissing(true);
+          } else {
+            // Everything else - a network failure, a 5xx, studies persistence
+            // unconfigured - may well be a study that still exists and still
+            // has content. The form is showing default consent and an empty
+            // list because the read failed, and A0 would write exactly that
+            // over the real thing, so no save is allowed until it succeeds.
+            setStudyLoadError(
+              'The linked task list or questions could not be loaded, so this opportunity cannot be saved right now. Reload the page to try again.'
+            );
+          }
+
+          // readOnlyReason stays null: a banner above the tabs already says
+          // what happened, and the tab asserting "it belongs to another
+          // researcher, or uses a step type this form cannot show" would be
+          // two wrong causes for one right outcome.
+          readOnly = true;
+          authoredFields.reuse_existing_study = true;
+          authoredFields.reuse_existing_survey = true;
+        }
+      }
 
       setFormData({
         type: opportunity.type,
@@ -306,23 +509,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
-        inline_study_target_url: '',
-        inline_study_duration_minutes: undefined,
-        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
-        inline_study_steps: [],
-        // Only pre-tick reuse when a study is actually linked; otherwise the
-        // author gets the same choice they had when creating.
-        reuse_existing_study: Boolean(opportunity.firsthand_study_id),
+        // Read from the linked study rather than defaulted. See authoredFields.
+        ...authoredFields,
         // Read from the row rather than defaulted, so editing a native survey
         // does not silently switch it back to an external handoff on save.
-        delivery_mode: opportunity.delivery_mode ?? 'external',
-        inline_survey_duration_minutes: undefined,
-        inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
-        inline_survey_questions: [],
-        reuse_existing_survey: Boolean(opportunity.firsthand_study_id)
+        delivery_mode: opportunity.delivery_mode ?? 'external'
       });
 
-      setLockedToExistingStudy(Boolean(opportunity.firsthand_study_id));
+      setHasLinkedStudy(Boolean(opportunity.firsthand_study_id));
+      setStudyIsReadOnly(readOnly);
+      setStudyReadOnlyReason(readOnlyReason);
+      setLinkedStudyUpdatedAt(studyUpdatedAt);
       setOpportunityId(opportunity.id);
 
       // Store original form data for change detection
@@ -342,18 +539,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         display_width: opportunity.display_width || 'single' as 'single' | 'double',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
-        inline_study_target_url: '',
-        inline_study_duration_minutes: undefined,
-        inline_study_consent_text: DEFAULT_CONSENT_TEXT,
-        inline_study_steps: [] as InlineStudyStep[],
-        reuse_existing_study: Boolean(opportunity.firsthand_study_id),
+        // Seeded from the SERVER's state, not from the defaults. Seeding the
+        // baseline from a fiction made hasChanges compare the author's content
+        // against an empty list, so simply opening an opportunity looked like
+        // an unsaved change - and a real edit back to the stored value looked
+        // like none. Deep-copied, so editing a step in formData cannot mutate
+        // the baseline it is compared against.
+        ...structuredClone(authoredFields),
         // Read from the row rather than defaulted, so editing a native survey
         // does not silently switch it back to an external handoff on save.
-        delivery_mode: opportunity.delivery_mode ?? 'external',
-        inline_survey_duration_minutes: undefined,
-        inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
-        inline_survey_questions: [] as SurveyQuestion[],
-        reuse_existing_survey: Boolean(opportunity.firsthand_study_id)
+        delivery_mode: opportunity.delivery_mode ?? 'external'
       };
       setOriginalFormData(originalData);
 
@@ -509,11 +704,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
-      if (formData.reuse_existing_study || lockedToExistingStudy) {
+      if (formData.reuse_existing_study || studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
           // The reuse tickbox is not rendered once a study is linked, so do not
-          // tell that author to untick it.
-          errors.firsthand_study_id = lockedToExistingStudy
+          // tell that author to untick it. Keyed on hasLinkedStudy rather than
+          // studyIsReadOnly because it is the tickbox's own visibility rule.
+          errors.firsthand_study_id = hasLinkedStudy
             ? 'Select a launched task list before publishing'
             : 'Select a launched task list, or untick the reuse box and write the tasks here';
         }
@@ -529,9 +725,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     ) {
       // A native poll or survey needs its questions, not a link. Mirrors the
       // backend guard, which refuses the same state.
-      if (formData.reuse_existing_survey || lockedToExistingStudy) {
+      if (formData.reuse_existing_survey || studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
-          errors.firsthand_study_id = lockedToExistingStudy
+          errors.firsthand_study_id = hasLinkedStudy
             ? 'Select a launched set of questions before publishing'
             : 'Select a launched set of questions, or untick the reuse box and write them here';
         }
@@ -550,6 +746,39 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     }
 
+    // Emptying an authored list is a deliberate instruction, and it used to be
+    // answered by doing nothing.
+    //
+    // `authoringInline` requires at least one step, so deleting them all made
+    // the payload fall back to sending the study id: the study kept every task,
+    // the save reported success, and reopening brought them all back. Removing
+    // one is never disabled, so this was one click away on a draft - the
+    // publish checks above only cover a published opportunity.
+    //
+    // Standalone rather than another arm of the chain above, which is keyed on
+    // status and type: these two are about a LINKED study being emptied, which
+    // is a different question and must not depend on which arm ran first.
+    if (hasLinkedStudy && !studyIsReadOnly) {
+      if (
+        formData.type === 'unmoderated' &&
+        !formData.reuse_existing_study &&
+        formData.inline_study_steps.length === 0
+      ) {
+        errors.inline_study_steps =
+          'A task list needs at least one task. Add one, or delete the opportunity if you no longer need it';
+      }
+
+      if (
+        (formData.type === 'poll' || formData.type === 'survey') &&
+        deliveryMode === 'native' &&
+        !formData.reuse_existing_survey &&
+        formData.inline_survey_questions.length === 0
+      ) {
+        errors.inline_survey_questions =
+          'A set of questions needs at least one question. Add one, or delete the opportunity if you no longer need it';
+      }
+    }
+
     // Gated exactly like the task-list loop below: only when these questions
     // are the thing being authored. Ungated, a question abandoned before the
     // author switched to an external tool refused every later save, naming a
@@ -558,7 +787,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       (formData.type === 'poll' || formData.type === 'survey') &&
       deliveryMode === 'native' &&
       !formData.reuse_existing_survey &&
-      !lockedToExistingStudy;
+      !studyIsReadOnly;
 
     (authoringQuestions ? formData.inline_survey_questions : []).forEach((question, index) => {
       if (!question.prompt.trim()) {
@@ -607,7 +836,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // backend contract rejects an empty prompt or a one-option choice on every
     // save, so a draft with a half-written task would fail server-side with a
     // far less useful message.
-    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !lockedToExistingStudy) {
+    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !studyIsReadOnly) {
       formData.inline_study_steps.forEach((step, index) => {
         if (!step.prompt.trim()) {
           errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
@@ -790,12 +1019,75 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
       formData.display_width !== originalFormData.display_width ||
+      // The seven fields this comparison omitted, plus the two reuse flags.
+      //
+      // Changing only one of them left hasChanges false, which hides the Save
+      // buttons on the first two tabs - so an author who rewrote their tasks,
+      // their consent wording, the starting URL, either duration or the study
+      // period had no way to save it from where they were standing. Only
+      // reachable at all now that A1 loads these back in: before it, they never
+      // held anything but their defaults in edit mode.
+      //
+      // inline_survey_questions and inline_survey_consent_text are deliberately
+      // absent from this block: they are already compared above, and adding
+      // them again would look like coverage while testing nothing.
+      formData.inline_study_target_url.trim() !==
+        originalFormData.inline_study_target_url.trim() ||
+      formData.inline_study_consent_text.trim() !==
+        originalFormData.inline_study_consent_text.trim() ||
+      formData.inline_study_duration_minutes !==
+        originalFormData.inline_study_duration_minutes ||
+      formData.inline_survey_duration_minutes !==
+        originalFormData.inline_survey_duration_minutes ||
+      // No length comparison to go with this one. There is no input where the
+      // lengths differ and the stringifications match, so a length clause is
+      // exactly the "looks like coverage while testing nothing" shape the note
+      // above warns about - it cannot be killed by a mutation on its own. The
+      // survey pair a few lines up has the same redundancy and predates A1;
+      // removing it is a tidy of its own rather than something to smuggle in
+      // here.
+      JSON.stringify(formData.inline_study_steps) !==
+        JSON.stringify(originalFormData.inline_study_steps) ||
+      (formData.start_date || '') !== (originalFormData.start_date || '') ||
+      (formData.end_date || '') !== (originalFormData.end_date || '') ||
+      formData.reuse_existing_study !== originalFormData.reuse_existing_study ||
+      formData.reuse_existing_survey !== originalFormData.reuse_existing_survey ||
       sessions.some(session => session.id.startsWith('temp-session-'))
     );
   };
 
+  /**
+   * What to send for a duration the author may have cleared.
+   *
+   * `undefined` omits the key, which the in-place update path reads as "this
+   * request says nothing about the duration" and leaves the stored value
+   * alone. That is right for a form that never showed the field - and wrong
+   * now that it does: an author who cleared a populated field got a successful
+   * save and the old number still stored, with no way to remove it at all.
+   *
+   * So an empty field is `null` when the study HAD one at load (a deliberate
+   * clear) and `undefined` when it did not (nothing to say).
+   */
+  const durationToSend = (
+    current: number | undefined,
+    original: number | undefined
+  ): number | null | undefined => {
+    if (current) return current;
+    return original === undefined ? undefined : null;
+  };
+
   const handleSubmit = async (e?: React.FormEvent, skipNavigation = false): Promise<string | undefined> => {
-    logger.debug('handleSubmit called', { isEdit, opportunityId, skipNavigation });
+    // linkedStudyUpdatedAt is recorded here rather than sent: A0's in-place
+    // update has no concurrency precondition yet (F1 adds one, and D2's
+    // autosave sends it), so the only thing this revision stamp can do today is
+    // name which revision of the study the form was editing when a lost-update
+    // is reported.
+    logger.debug('handleSubmit called', {
+      isEdit,
+      opportunityId,
+      skipNavigation,
+      linkedStudyUpdatedAt
+    });
 
     if (e) {
       e.preventDefault();
@@ -804,6 +1096,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Prevent double-clicks - return early if already saving
     if (saving) {
       logger.debug('Already saving, ignoring duplicate click');
+      return undefined;
+    }
+
+    // Refuse every save while the linked study could not be read.
+    //
+    // The form is showing default consent text and an empty task list because
+    // the fetch failed, not because that is what the study holds. A0 applies an
+    // edit to the linked study IN PLACE, so letting this through would write
+    // the placeholder over the real content - and it would look like a
+    // successful save.
+    if (studyLoadError) {
+      logger.error('Save refused: the linked study never loaded', { opportunityId });
+      setError(studyLoadError);
+      setSuccessMessage('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return undefined;
     }
 
@@ -864,11 +1171,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       if (formData.type === 'unmoderated') {
-        // Authoring is available whenever no task list is linked yet - on
-        // create, and on an edit of a draft saved before its tasks were written.
-        // Once one is linked it is edited in the Task Lists area instead.
+        // Authoring is available on create, on an edit of a draft saved before
+        // its tasks were written, AND on an edit of a task list this author may
+        // change - which A1 added and A0 made safe by updating the linked study
+        // in place instead of minting a second one. Only a list this form
+        // cannot author here (someone else's, or one holding a step type this
+        // form cannot represent) still sends its id and is edited in the Task
+        // Lists area.
         const authoringInline =
-          !lockedToExistingStudy &&
+          !studyIsReadOnly &&
           !formData.reuse_existing_study &&
           formData.inline_study_steps.length > 0;
 
@@ -894,16 +1205,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // send `default_duration_minutes`, which unmoderated never shows,
             // so every recorded study inherited that field's default and told
             // participants a length nobody had chosen.
-            estimated_duration_minutes: formData.inline_study_duration_minutes || undefined,
-            steps: formData.inline_study_steps.map((step) => ({
-              type: step.type,
-              prompt: step.prompt.trim(),
-              // Blank rows are UI scaffolding, not content: drop them so a
-              // trailing empty option cannot fail the contract's min(1).
-              ...(step.type === 'single_choice'
-                ? { options: (step.options ?? []).map((o) => o.trim()).filter(Boolean) }
-                : {})
-            }))
+            estimated_duration_minutes: durationToSend(
+              formData.inline_study_duration_minutes,
+              originalFormData?.inline_study_duration_minutes
+            ),
+            // Built by the same function studyRoundTripsCleanly checks with,
+            // so the fields this sends and the fields the form claims it can
+            // reproduce cannot drift apart again. They did, and it deleted
+            // helper_text and is_required from every task list built in the
+            // Task Lists area.
+            steps: formData.inline_study_steps.map(toInlineStudyPayloadStep)
           };
         }
       }
@@ -933,7 +1244,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // author ticks reuse, picks one, then unticks and writes questions
           // instead. The backend refuses both rather than guessing.
           const authoringInline =
-            !lockedToExistingStudy &&
+            !studyIsReadOnly &&
             !formData.reuse_existing_survey &&
             formData.inline_survey_questions.length > 0;
 
@@ -944,26 +1255,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           if (authoringInline) {
             data.inline_survey = {
               consent_text: formData.inline_survey_consent_text.trim(),
-              estimated_duration_minutes:
-                formData.inline_survey_duration_minutes || undefined,
-              steps: formData.inline_survey_questions.map((question) => ({
-                type: question.type,
-                prompt: question.prompt.trim(),
-                // Blank rows are UI scaffolding, not content: dropped so a
-                // trailing empty answer cannot fail the contract's min(1).
-                ...(question.type === 'single_choice' || question.type === 'multi_choice'
-                  ? {
-                      options: (question.options ?? [])
-                        .map((option) => option.trim())
-                        .filter(Boolean)
-                    }
-                  : {}),
-                ...(question.config ? { config: question.config } : {}),
-                ...(question.helper_text ? { helper_text: question.helper_text } : {}),
-                ...(question.is_required !== undefined
-                  ? { is_required: question.is_required }
-                  : {})
-              }))
+              estimated_duration_minutes: durationToSend(
+                formData.inline_survey_duration_minutes,
+                originalFormData?.inline_survey_duration_minutes
+              ),
+              // Same function studyRoundTripsCleanly checks with. This branch
+              // was already faithful; sharing the serialiser is what stops it
+              // drifting the way the task-list branch did.
+              steps: formData.inline_survey_questions.map(toSurveyPayloadStep)
             };
           }
         }
@@ -1050,28 +1349,24 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
       // Update original form data after successful save
       if (isEdit) {
-        // Adopt the server's answer before anything else. Edit mode stays on
-        // the form, so without this the state still says "no study linked"
-        // while the database now has one: the next save would send the tasks
-        // again and be rejected as authoring over an existing study, stranding
-        // the author on the very flow this supports.
-        const savedStudyId = savedOpportunity?.firsthand_study_id || '';
-        const nowLinked = Boolean(savedStudyId);
-
-        setFormData(prev => ({
-          ...prev,
-          firsthand_study_id: savedStudyId,
-          inline_study_steps: nowLinked ? [] : prev.inline_study_steps,
-          reuse_existing_study: nowLinked ? true : prev.reuse_existing_study
-        }));
-        setLockedToExistingStudy(nowLinked);
-
-        setOriginalFormData({
-          ...formData,
-          firsthand_study_id: savedStudyId,
-          inline_study_steps: nowLinked ? [] : formData.inline_study_steps,
-          reuse_existing_study: nowLinked ? true : formData.reuse_existing_study
-        });
+        // RE-READ, rather than declaring that what we sent is now what is
+        // stored.
+        //
+        // This used to do `setOriginalFormData({ ...formData })`, which is the
+        // same mistake on the way out that A1 just fixed on the way in: a
+        // baseline seeded from a fiction. It asserts the request body was
+        // stored verbatim, so `hasChanges()` goes false, the Save button
+        // disappears, and the author gets positive confirmation that content
+        // the server did not keep was written. Every remaining round-trip
+        // discrepancy would be invisible behind it - which is exactly how the
+        // helper_text loss stayed invisible.
+        //
+        // loadOpportunity already hydrates from the study, so re-running it
+        // makes the baseline true by construction, and refreshes
+        // linkedStudyUpdatedAt and studyIsReadOnly with it. It costs one round
+        // trip per save; correctness of the thing the Save button reports is
+        // worth more than that.
+        await loadOpportunity();
         // Show success message for edit mode
         const isDraft = formData.status === 'draft';
         setSuccessMessage(
@@ -1328,6 +1623,32 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 </div>
               )}
 
+              {/* Stays up for as long as the load failure lasts, rather than
+                  appearing only once a save is attempted: the tabs below are
+                  showing placeholder consent text and an empty task list, and
+                  the author has no other way to tell that apart from a study
+                  that genuinely holds nothing. The save controls are disabled
+                  to match - see the studyLoadError guard in handleSubmit, which
+                  is the one that actually refuses. */}
+              {studyLoadError && (
+                <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
+                  <AlertTriangle size={18} className="me-2" />
+                  {studyLoadError}
+                </div>
+              )}
+
+              {/* Saving is deliberately still allowed here - see the 404 branch
+                  in loadOpportunity. The author needs to be able to repoint or
+                  unpublish an opportunity whose study has been deleted. */}
+              {studyMissing && (
+                <div className="alert alert-warning mx-4 mt-4 mb-0" role="alert">
+                  <AlertTriangle size={18} className="me-2" />
+                  The task list or questions this opportunity points at no longer
+                  exist. Pick another below, or unpublish this opportunity until
+                  you have replaced them.
+                </div>
+              )}
+
               {successMessage && (
                 <div
                   className={`alert ${successMessage.includes('DRAFT') ? 'alert-warning' : 'alert-success'} d-flex justify-content-between align-items-center mx-4 mt-4 mb-0`}
@@ -1444,7 +1765,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage}
+                              disabled={saving || !!successMessage || !!studyLoadError}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1536,7 +1857,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage}
+                              disabled={saving || !!successMessage || !!studyLoadError}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1604,7 +1925,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           validationErrors={validationErrors}
                           handleInputChange={handleInputChange}
                           handleQuestionsChange={handleQuestionsChange}
-                          lockedToExistingStudy={lockedToExistingStudy}
+                          hasLinkedStudy={hasLinkedStudy}
+                          studyIsReadOnly={studyIsReadOnly}
+                          readOnlyReason={studyReadOnlyReason}
                         />
 
                         {/* Navigation buttons for the Questions tab. Same shape
@@ -1626,7 +1949,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             <button
                               type="submit"
                               className="btn btn-primary px-5 py-2 fw-semibold"
-                              disabled={saving || !!successMessage}
+                              disabled={saving || !!successMessage || !!studyLoadError}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1653,7 +1976,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleStepsChange={handleStepsChange}
-                        lockedToExistingStudy={lockedToExistingStudy}
+                        hasLinkedStudy={hasLinkedStudy}
+                        studyIsReadOnly={studyIsReadOnly}
+                        readOnlyReason={studyReadOnlyReason}
                       />
 
                       {/* Navigation buttons for the Task List tab */}
@@ -1673,7 +1998,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage}
+                              disabled={saving || !!successMessage || !!studyLoadError}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1693,7 +2018,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             type="button"
                             className="btn btn-success px-5 py-2 fw-semibold"
                             onClick={() => handleSubmit()}
-                            disabled={saving || !!successMessage}
+                            disabled={saving || !!successMessage || !!studyLoadError}
                             style={{ fontSize: '0.95rem' }}
                           >
                             {saving ? (
@@ -1739,7 +2064,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                               type="button"
                               className="btn btn-success px-5 py-2 fw-semibold"
                               onClick={() => handleSubmit()}
-                              disabled={saving || !!successMessage}
+                              disabled={saving || !!successMessage || !!studyLoadError}
                               style={{ fontSize: '0.95rem' }}
                             >
                               {saving ? (
@@ -1759,7 +2084,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             type="button"
                             className="btn btn-success px-5 py-2 fw-semibold"
                             onClick={() => handleSubmit()}
-                            disabled={saving || !!successMessage}
+                            disabled={saving || !!successMessage || !!studyLoadError}
                             style={{ fontSize: '0.95rem' }}
                           >
                             {saving ? (

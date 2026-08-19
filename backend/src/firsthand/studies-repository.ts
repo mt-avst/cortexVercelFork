@@ -569,8 +569,14 @@ function claimsOwnership(
  * the very people who authored them, with no API to hand them back. Fail-open
  * here matches today's behaviour exactly rather than adding new exposure, and
  * updateStudy closes each row the first time it is touched.
+ *
+ * Exported so a read route can DISCLOSE the same decision the write path will
+ * take, rather than a second copy of the rule drifting in the client. It is
+ * advisory wherever it is read outside a write transaction: the binding check
+ * is the one updateStudy and deleteStudy take inside their own `FOR UPDATE`
+ * lock, because the owner can change between a read and a write.
  */
-function canWriteStudy(ownerUserId: string | null, requester: StudyRequester) {
+export function canWriteStudy(ownerUserId: string | null, requester: StudyRequester) {
   return (
     requester.isSuperadmin || ownerUserId === null || ownerUserId === requester.userId
   );

@@ -4,6 +4,7 @@ import { requireAdmin } from '../middleware/authenticate';
 import { logger } from '../utils/logger';
 import { asyncHandler, ForbiddenError, NotFoundError } from '../utils/errorHandler';
 import {
+  canWriteStudy,
   createStudy,
   deleteStudy,
   getStudyById,
@@ -185,7 +186,18 @@ router.get('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, 
     return res.status(404).json({ error: 'not_found' });
   }
 
-  return res.json({ study: stored.study, steps: stored.steps });
+  // Whether THIS reader may edit the study, decided by the same predicate the
+  // write path uses rather than by a second copy of the rule in the client.
+  //
+  // Advisory, not a gate: it is read outside any transaction, so an owner
+  // change between this read and a later save would make it stale. Every write
+  // still re-checks under `FOR UPDATE` and answers 403. It exists so the
+  // opportunity form can show an author their own study as an editable surface
+  // and a colleague's as a read-only one, instead of guessing from an owner id
+  // and getting the unowned-legacy case wrong.
+  const can_edit = canWriteStudy(stored.study.owner_user_id, studyRequester(req));
+
+  return res.json({ study: stored.study, steps: stored.steps, can_edit });
 }));
 
 // PUT /api/firsthand/studies/:studyId - update a study

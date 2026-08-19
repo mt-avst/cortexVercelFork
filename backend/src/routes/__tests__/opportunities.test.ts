@@ -1678,6 +1678,200 @@ describe('Opportunities API', () => {
         mockStudyHasResponses.mockResolvedValue(false);
       });
 
+      /**
+       * A study built by hand in the Task Lists area, whose steps are numbered
+       * the way StudyEditor numbers them - zero-padded to three digits.
+       * `toStudySteps` numbers unpadded, so this is the shape that exposes
+       * whether the route keeps the identity it was given or invents new ones.
+       */
+      const storedWithPaddedIds = (
+        steps: { type: 'instruction' | 'open_text'; prompt: string }[]
+      ) => ({
+        study: {
+          id: 'study_already_linked',
+          title: 'Built in the Task Lists area',
+          intro_text: 'Intro',
+          consent_text: 'We record your screen.',
+          kind: 'recorded',
+          estimated_duration_minutes: undefined,
+          status: 'launched',
+          owner_user_id: 'test-user-id',
+          created_at: '2026-08-16T10:00:00.000Z',
+          updated_at: '2026-08-16T10:00:00.000Z',
+        },
+        steps: [
+          ...steps.map((step, index) => ({
+            step_id: `study_already_linked_step_${String(index + 1).padStart(3, '0')}`,
+            order: index + 1,
+            type: step.type,
+            prompt: step.prompt,
+          })),
+          {
+            step_id: 'study_already_linked_step_end',
+            order: steps.length + 1,
+            type: 'end' as const,
+            prompt: 'Thanks - that is the end of the study.',
+          },
+        ],
+      });
+
+      /** Exactly what `inlineStudy` serialises to, so only the ids differ. */
+      const sameSequenceAsInlineStudy = [
+        { type: 'open_text' as const, prompt: 'What did you expect?' },
+      ];
+
+      it('keeps the stored step ids instead of renumbering them', async () => {
+        // The ids in the payload are derived from array position and are
+        // UNPADDED. Taking them would rewrite every id of a hand-built study,
+        // detaching any answer already written against the old one. The answers
+        // guard cannot save us here - it would have passed, because the
+        // sequence is otherwise identical.
+        mockGetStudyById.mockResolvedValueOnce(
+          storedWithPaddedIds(sameSequenceAsInlineStudy) as never
+        );
+
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        const written = mockUpdateStudy.mock.calls[0][1] as {
+          steps: { step_id: string }[];
+        };
+        expect(written.steps.map((step) => step.step_id)).toEqual([
+          'study_already_linked_step_001',
+          'study_already_linked_step_end',
+        ]);
+      });
+
+      it('does not refuse an unrelated edit just because the ids are padded', async () => {
+        // The user-visible half of the same bug. stepSequenceIsUnchanged
+        // compares step_id, so an unpadded payload read as "the questions
+        // changed" on a save that changed none of them - and on a study with
+        // answers that refused the save, naming an edit the author had not
+        // made. The opportunity could then not be retitled or unpublished at
+        // all.
+        mockGetStudyById.mockResolvedValueOnce(
+          storedWithPaddedIds(sameSequenceAsInlineStudy) as never
+        );
+
+        await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
+          .expect(200);
+
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        // Stronger than stubbing an answer and asserting the save survived it:
+        // the sequence now reads as UNCHANGED, so the guard short-circuits and
+        // never asks about responses at all. A queued `once` here would also
+        // leak into the next test, which this file has been bitten by before.
+        expect(mockStudyHasResponses).not.toHaveBeenCalled();
+      });
+
+      it('ignores the completion marker when deciding whether the questions changed', async () => {
+        // toStudySteps appends the canonical END_STEP_PROMPT. A study created
+        // through the studies API with its own end wording therefore read as a
+        // changed sequence on EVERY save - and once it had answers, it could
+        // not be edited, retitled or unpublished from the opportunity form at
+        // all. No answer can attach to the marker (isAnswerable excludes it),
+        // so comparing it can only ever produce a false refusal.
+        mockGetStudyById.mockResolvedValueOnce({
+          study: {
+            id: 'study_already_linked',
+            title: 'Built elsewhere',
+            intro_text: 'Intro',
+            consent_text: 'We record your screen.',
+            kind: 'recorded',
+            estimated_duration_minutes: undefined,
+            status: 'launched',
+            owner_user_id: 'test-user-id',
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-16T10:00:00.000Z',
+          },
+          steps: [
+            {
+              step_id: 'study_already_linked_step_001',
+              order: 1,
+              type: 'open_text' as const,
+              prompt: 'What did you expect?',
+            },
+            {
+              step_id: 'study_already_linked_step_end',
+              order: 2,
+              type: 'end' as const,
+              // Deliberately NOT the canonical wording.
+              prompt: 'Thanks',
+            },
+          ],
+        } as never);
+
+        await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
+          .expect(200);
+
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        expect(mockStudyHasResponses).not.toHaveBeenCalled();
+      });
+
+      it('renumbers nothing when the author added or removed a step', async () => {
+        // Positional identity only holds while the count does. A different
+        // length means the author really did change the sequence, so the ids
+        // must NOT be carried across - and the answers guard is then the right
+        // thing to answer.
+        mockGetStudyById.mockResolvedValueOnce(
+          storedWithPaddedIds([
+            { type: 'open_text', prompt: 'One' },
+            { type: 'open_text', prompt: 'Two' },
+            { type: 'open_text', prompt: 'Three' },
+          ]) as never
+        );
+
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        const written = mockUpdateStudy.mock.calls[0][1] as {
+          steps: { step_id: string }[];
+        };
+        expect(written.steps[0].step_id).toBe('study_already_linked_step_1');
+      });
+
+      it('does not treat trimmed whitespace as a changed question', async () => {
+        // The payload trims every prompt; the stored row does not. Comparing
+        // one against the other made a study whose prompts carried trailing
+        // whitespace read as changed on a save that changed nothing, and once
+        // it had answers every save was refused.
+        mockGetStudyById.mockResolvedValueOnce(
+          storedWithPaddedIds([
+            { type: 'open_text', prompt: 'What did you expect?   ' },
+          ]) as never
+        );
+
+        await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
+          .expect(200);
+
+        expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        expect(mockStudyHasResponses).not.toHaveBeenCalled();
+      });
+
+      it('clears a duration the author emptied', async () => {
+        // null and absent mean different things, and the form now sends null
+        // when the author empties a field that had a value. Without this a
+        // duration could be set on the opportunity form and never unset - the
+        // field's own help text offers exactly that.
+        await patchLinked(
+          { inline_study: { ...inlineStudy, estimated_duration_minutes: null } },
+          true
+        ).expect(200);
+
+        expect(
+          (mockUpdateStudy.mock.calls[0][1] as { estimated_duration_minutes?: number | null })
+            .estimated_duration_minutes
+        ).toBeNull();
+      });
+
+      it('leaves a duration the request did not mention', async () => {
+        // The other half of the same decision: a save that says nothing about
+        // duration must not erase an estimate set by hand in StudyEditor.
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(
+          mockUpdateStudy.mock.calls[0][1] as Record<string, unknown>
+        ).not.toHaveProperty('estimated_duration_minutes');
+      });
+
       it('asks whether the study is shared, excluding this opportunity itself', async () => {
         // The mock cannot tell a correct query from a wrong one - it returns
         // whatever was queued - so the refusal test above passes just as
