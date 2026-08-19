@@ -15,20 +15,23 @@ import CalendarGrid from '../CalendarGrid';
  */
 
 /**
- * A weekday, not merely a future day.
+ * Any future day will do.
  *
- * groupSessionsByDate builds its columns from Monday to Friday only, so a
- * session on a Saturday or Sunday lands in no column and the grid renders its
- * "No sessions available" empty state instead. Pinned to "three days from now",
- * this fixture therefore produced an empty grid - and failed all three tests in
- * this file - on every Wednesday and Thursday, and passed the rest of the week.
- * Rolling forward past the weekend makes the fixture independent of the day the
- * suite happens to run.
+ * It did not always: groupSessionsByDate built its columns from Monday to
+ * Friday only, so a session on a Saturday or Sunday landed in no column and the
+ * grid rendered its "No sessions available" empty state instead. Pinned to
+ * "three days from now", this fixture therefore produced an empty grid - and
+ * failed all three tests in this file - on every Wednesday and Thursday, and
+ * passed the rest of the week. It was carrying a roll-forward past the weekend
+ * to work around that.
+ *
+ * The grid now gives a weekend day its own column when a session falls on one,
+ * so the workaround is gone and the day of the week no longer matters here.
+ * That behaviour is pinned to fixed dates in CalendarGrid.weekend.test.tsx -
+ * deliberately not left to depend on the day the suite happens to run, which is
+ * how the original defect stayed hidden.
  */
 const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
-while (start.getDay() === 0 || start.getDay() === 6) {
-  start.setDate(start.getDate() + 1);
-}
 start.setHours(10, 0, 0, 0);
 const end = new Date(start.getTime() + 60 * 60 * 1000);
 

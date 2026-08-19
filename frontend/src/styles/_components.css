@@ -7450,11 +7450,18 @@ body.theme-dark .calendar-living-interface .calendar-slot-past .timeslot-label {
     animation: slideUpFade 0.5s ease forwards;
   }
   
+  /* One rule per column the grid can draw - MAX_VISIBLE_DAYS in CalendarGrid.tsx
+     is 7, a full Monday-to-Sunday week. nth-child cannot compute a delay from
+     the index, so the list has to reach the last column: a column past the end
+     of it falls back to a 0s delay and enters alongside the first one, breaking
+     the stagger exactly where the eye is most likely to follow it. */
   .calendar-day-column:nth-child(1) { animation-delay: 0s; }
   .calendar-day-column:nth-child(2) { animation-delay: 0.1s; }
   .calendar-day-column:nth-child(3) { animation-delay: 0.2s; }
   .calendar-day-column:nth-child(4) { animation-delay: 0.3s; }
   .calendar-day-column:nth-child(5) { animation-delay: 0.4s; }
+  .calendar-day-column:nth-child(6) { animation-delay: 0.5s; }
+  .calendar-day-column:nth-child(7) { animation-delay: 0.6s; }
 }
 
 /* Respect reduced motion preferences */
