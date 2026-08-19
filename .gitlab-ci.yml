@@ -220,6 +220,13 @@ typecheck:
 
 test-scripts:
   extends: .test-base
+  before_script:
+    # check-release-will-deploy.test.js drives the real detector against real
+    # throwaway git repositories, and the node alpine image has no git. The
+    # check-release-will-deploy job installs it for the same reason. Without
+    # this the six detector tests fail with `spawnSync git ENOENT`, which reads
+    # as a broken test rather than a missing binary.
+    - apk add --no-cache git
   script:
     - npm ci
     # set-superadmin.test.js and role-scripts-tls.test.js spawn the real script

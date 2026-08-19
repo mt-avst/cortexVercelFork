@@ -36,6 +36,16 @@ set -eu
 # change confined to them genuinely does not need to deploy.
 DEPLOY_PATHS="${DEPLOY_PATHS:-backend frontend shared .kubera}"
 
+# Files that sit UNDER a deploy path but are not built into the image. Vite and
+# tsc both exclude them from their outputs, so a change confined to these ships
+# nothing and cannot be stranded.
+#
+# Manifests are deliberately NOT here. A package.json change can alter the
+# dependency tree and therefore the image, and this script cannot tell a new
+# script entry from a new dependency - so a merge touching one still needs a
+# releasing type. Keep this list to files that are provably not deployed.
+NON_DEPLOYED_PATTERN="${NON_DEPLOYED_PATTERN:-(^|/)__tests__/|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|(^|/)tsconfig\.test\.json$}"
+
 # Both variables come from the same dotenv artifact. LAST is written on every
 # run of `semantic-release-info` (its analyzeCommits hook always fires), NEXT
 # only when a release is due. So both being empty means the artifact never
@@ -76,11 +86,20 @@ fi
 echo "No release is due. Checking whether deployed code changed since ${base}..."
 
 # shellcheck disable=SC2086
-changed=$(git diff --name-only "$base" HEAD -- $DEPLOY_PATHS)
+all_changed=$(git diff --name-only "$base" HEAD -- $DEPLOY_PATHS)
+# grep -v exits 1 when it filters everything out, which `set -e` would treat as
+# a failure, so the empty case is handled rather than inherited.
+changed=$(printf '%s\n' "$all_changed" | grep -Ev "$NON_DEPLOYED_PATTERN" || true)
+changed=$(printf '%s\n' "$changed" | sed '/^$/d')
 
 if [ -z "$changed" ]; then
-  echo "OK: no release, but nothing under [${DEPLOY_PATHS}] changed either."
-  echo "    Docs-only or CI-only work does not need to deploy."
+  if [ -n "$all_changed" ]; then
+    echo "OK: no release, and everything that changed under [${DEPLOY_PATHS}] is"
+    echo "    test-only - not built into the image, so nothing is stranded."
+  else
+    echo "OK: no release, but nothing under [${DEPLOY_PATHS}] changed either."
+    echo "    Docs-only or CI-only work does not need to deploy."
+  fi
   exit 0
 fi
 
