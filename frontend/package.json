@@ -46,6 +46,7 @@
     "vite": "^7.2.6"
   },
   "scripts": {
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "dev": "vite",
     "start": "vite",
     "build": "tsc -b && vite build",

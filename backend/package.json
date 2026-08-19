@@ -4,6 +4,7 @@
   "description": "Adaptalabs recruitment app backend",
   "main": "dist/index.js",
   "scripts": {
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "dev": "nodemon --exec tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/backend/src/index.js",

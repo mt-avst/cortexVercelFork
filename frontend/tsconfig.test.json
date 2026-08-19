@@ -1,0 +1,51 @@
+{
+  // Type-checks the frontend INCLUDING its tests. tsconfig.json excludes them
+  // so the production build stays lean and a test type error cannot block a
+  // deploy - but that also meant nothing checked ~1,500 lines of test code.
+  //
+  // The `exclude` list below is a BACKLOG, not a policy. Every entry is a file
+  // that does not type-check yet. It may only ever shrink. Do not add to it -
+  // a new test that does not type-check is a new test that may not be testing
+  // what it claims.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
+  },
+  "include": ["src", "../shared"],
+  "exclude": [
+    "node_modules",
+    "dist",
+
+    // Jest-shaped Express mocks (createMockResponse/Next/Pool), checked by
+    // backend/tsconfig.test.json where the jest types exist. Excluding them is
+    // not enough on its own: TypeScript still checks a file that a CHECKED file
+    // imports, so the two frontend tests importing them are listed in the
+    // backlog below. The real fix is making shared/test-utils runner-agnostic -
+    // adding "jest" to the types here instead would collide with vitest's own
+    // describe/it/expect declarations.
+    "src/shared/test-utils.ts",
+    "../shared/test-utils/**/*",
+
+    // BACKLOG - 71 errors. See the MR for the classification.
+    "src/components/__tests__/AdminSessionManager.render.test.tsx",
+    "src/components/__tests__/OpportunityRow.test.tsx",
+    "src/components/__tests__/RecordedStudyExpectations.test.tsx",
+    "src/components/__tests__/ShareOpportunityLink.test.tsx",
+    "src/components/recording/__tests__/ParticipantSessionFlow.completion-cleanup.test.tsx",
+    "src/components/recording/__tests__/ParticipantSessionFlow.pip-standby.test.tsx",
+    "src/lib/recording/participant-return.test.ts",
+    "src/lib/recording/task-window.test.ts",
+    "src/lib/survey/answers.test.ts",
+    "src/pages/__tests__/OpportunityDetail.eligibility.test.tsx",
+    "src/pages/__tests__/OpportunityDetail.participant-type-name.test.tsx",
+    "src/pages/__tests__/OpportunityDetail.recorded-study-brief.test.tsx",
+    "src/pages/__tests__/OpportunityDetail.startable.test.tsx",
+    "src/utils/__tests__/datetime.test.ts",
+    "src/utils/__tests__/errorHandler.test.tsx",
+
+    // Blocked on the shared/test-utils jest coupling above, not on their own
+    // types.
+    "src/contexts/__tests__/AuthContext.test.tsx",
+    "src/shared/__tests__/shared-copies-are-current.test.ts"
+  ]
+}
