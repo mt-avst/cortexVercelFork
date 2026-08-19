@@ -13,7 +13,11 @@ import { expect, type Page } from "@playwright/test";
 // (for the real upload leg) the S3 grant tracked as OPS-3. They are NOT part of
 // the build-only CI. Provide the bound token via FIRSTHAND_E2E_SESSION_TOKEN.
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+/**
+ * Paths are relative so `use.baseURL` from the running config decides the
+ * target. A module-level BASE_URL here would silently win over the config -
+ * that is how `test:a11y:prod` ended up grading a different application.
+ */
 export const PARTICIPANT_E2E_ENABLED =
   process.env.FIRSTHAND_PARTICIPANT_E2E === "1";
 export const BOUND_SESSION_TOKEN =
@@ -167,8 +171,8 @@ export async function readMediaCaptureCounts(
  * be minted for that same participant id (see file header).
  */
 export async function loginAsParticipant(page: Page): Promise<void> {
-  await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-  await page.goto(`${BASE_URL}/api/auth/demo-login`, {
+  await page.goto('/', { waitUntil: "domcontentloaded" });
+  await page.goto('/api/auth/demo-login', {
     waitUntil: "load",
     timeout: 15000
   });

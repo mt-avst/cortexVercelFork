@@ -15,7 +15,11 @@ import { expect, test } from "@playwright/test";
 // (FIRSTHAND_E2E_OPPORTUNITY_ID) whose participant is the demo employee. Skipped
 // unless FIRSTHAND_PARTICIPANT_E2E=1.
 
-const BASE_URL = process.env.BASE_URL || "http://localhost:3000";
+/**
+ * Paths are relative so `use.baseURL` from the running config decides the
+ * target. A module-level BASE_URL here would silently win over the config -
+ * that is how `test:a11y:prod` ended up grading a different application.
+ */
 const OPPORTUNITY_ID = process.env.FIRSTHAND_E2E_OPPORTUNITY_ID || "";
 const PARTICIPANT_E2E_ENABLED = process.env.FIRSTHAND_PARTICIPANT_E2E === "1";
 
@@ -41,9 +45,9 @@ test.describe("golden: record and review end to end", () => {
     test.setTimeout(120000);
 
     // Log in as the seeded employee, then open the published opportunity.
-    await page.goto(BASE_URL, { waitUntil: "domcontentloaded" });
-    await page.goto(`${BASE_URL}/api/auth/demo-login`, { waitUntil: "load" });
-    await page.goto(`${BASE_URL}/opportunities/${OPPORTUNITY_ID}`, {
+    await page.goto('/', { waitUntil: "domcontentloaded" });
+    await page.goto('/api/auth/demo-login', { waitUntil: "load" });
+    await page.goto(`/opportunities/${OPPORTUNITY_ID}`, {
       waitUntil: "load"
     });
 
@@ -88,9 +92,9 @@ test.describe("golden: record and review end to end", () => {
 
     // A researcher reviews the recording: switch to admin and open the
     // opportunity's session review. The recording and transcript render.
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, { waitUntil: "load" });
+    await page.goto('/api/auth/admin-login', { waitUntil: "load" });
     await page.goto(
-      `${BASE_URL}/admin/opportunities/${OPPORTUNITY_ID}/analytics`,
+      `/admin/opportunities/${OPPORTUNITY_ID}/analytics`,
       { waitUntil: "load" }
     );
     await expect(page.getByText(/session/i).first()).toBeVisible();

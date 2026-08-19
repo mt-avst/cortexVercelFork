@@ -9,7 +9,11 @@ import { test, expect } from '@playwright/test';
  * superadmin-create-study.test.ts. Assumes dev servers are already running
  * (npm run dev:all) with a Postgres DB configured for FirstHand studies.
  */
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+/**
+ * Paths are relative so `use.baseURL` from the running config decides the
+ * target. A module-level BASE_URL here would silently win over the config -
+ * that is how `test:a11y:prod` ended up grading a different application.
+ */
 const UNIQUE_TITLE = `E2E Task List ${Date.now()}`;
 
 test.describe('Admin authoring - create task list', () => {
@@ -19,9 +23,9 @@ test.describe('Admin authoring - create task list', () => {
     test.setTimeout(90000);
 
     // Load app first so AuthContext exists, then log in as admin.
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, {
+    await page.goto('/api/auth/admin-login', {
       waitUntil: 'load',
       timeout: 15000,
     });
@@ -29,7 +33,7 @@ test.describe('Admin authoring - create task list', () => {
     await expect(page).toHaveURL(/\/admin/, { timeout: 6000 });
 
     // Open the authoring form.
-    await page.goto(`${BASE_URL}/admin/studies/new`, { waitUntil: 'load' });
+    await page.goto('/admin/studies/new', { waitUntil: 'load' });
     await page.waitForSelector('#study-title', {
       state: 'visible',
       timeout: 10000,

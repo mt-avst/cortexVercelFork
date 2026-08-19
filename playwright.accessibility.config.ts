@@ -8,7 +8,9 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   use: {
-    baseURL: 'http://localhost:3000',
+    /* Overridable, so a machine with something else on port 3000 can point this
+     * at the real stack. */
+    baseURL: process.env.BASE_URL || 'http://localhost:3000',
     trace: 'on-first-retry',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],

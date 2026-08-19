@@ -5,15 +5,22 @@ import { test, expect } from '@playwright/test';
  * Tests: Login as admin -> /admin -> Export CSV button visible; GET /api/admin/export/bookings returns 200 and CSV.
  * Run with dev servers: npm run dev:all then npx playwright test e2e/admin-bookings-export.test.ts
  */
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const API_BASE = process.env.API_BASE_URL || process.env.BASE_URL || 'http://localhost:3000';
+/**
+ * Paths are relative so `use.baseURL` from the running config decides the
+ * target. A module-level BASE_URL here would silently win over the config.
+ *
+ * API_BASE stays as an escape hatch for a deployment that serves its API from a
+ * different host; empty means "same origin as baseURL", which is the local
+ * stack and the app origin on Kubera.
+ */
+const API_BASE = process.env.API_BASE_URL ?? '';
 
 test.describe('Admin Bookings CSV Export', () => {
   test('admin export API returns CSV after login', async ({ page }) => {
     test.setTimeout(25000);
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, { waitUntil: 'load', timeout: 15000 });
+    await page.goto('/api/auth/admin-login', { waitUntil: 'load', timeout: 15000 });
     await page.waitForTimeout(2500);
     await expect(page).toHaveURL(/\/admin/, { timeout: 6000 });
 
@@ -32,9 +39,9 @@ test.describe('Admin Bookings CSV Export', () => {
 
   test('admin dashboard shows Export CSV when page loads', async ({ page }) => {
     test.setTimeout(25000);
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, { waitUntil: 'load', timeout: 15000 });
+    await page.goto('/api/auth/admin-login', { waitUntil: 'load', timeout: 15000 });
     await page.waitForTimeout(3000);
     await expect(page).toHaveURL(/\/admin/, { timeout: 6000 });
     const errorBoundary = page.getByText(/Something went wrong/i);
