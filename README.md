@@ -182,6 +182,49 @@ npm run test:e2e     # Full E2E suite (starts its own servers)
 
 The **admin create study** test verifies: login → create poll study → submit → study appears in list. Uses `admin-login` (seeded researcher_admin). Run `npm run seed` in backend to ensure admin/superadmin users exist.
 
+**Pointing the suite somewhere else.** Every spec takes its target from the
+running config's `baseURL`, so `BASE_URL` overrides it - no spec hardcodes a
+host. This matters more than it sounds: port 3000 is not always this app, and
+`playwright.config.ts` sets `reuseExistingServer`, so a plain run will happily
+attach to whatever is listening and report failures that look like product bugs.
+
+```bash
+BASE_URL=http://localhost:3100 PLAYWRIGHT_NO_WEBSERVER=1 npm run test:e2e
+```
+
+`e2e/critical-flows.test.ts` is quarantined by `testIgnore` in every config with
+a bare `testDir`. It is not a Playwright Test spec - it drives the raw
+`playwright` package with jest globals - and loading it aborts collection for
+the *whole* suite. Any new config needs the same `testIgnore` until it is
+rewritten or deleted.
+
+Three specs (`superadmin-create-study`, `m6-poll-click-tracking`,
+`test-draft-warnings`) **create studies in whatever they are pointed at**, and
+m6 publishes one. Nothing cleans them up, so do not aim them at a shared
+environment casually, and do not read local row counts as seed data.
+
+### What CI runs
+
+`lint`, `typecheck`, `test-backend`, `test-frontend` and `test-scripts` all run
+in `.pre`, so a red suite stops the pipeline before the image build spends
+anything. The e2e suite is **not** in CI - it needs a database and a running
+stack, and three of its specs write data.
+
+```bash
+npm run typecheck    # both apps, INCLUDING their test files
+```
+
+`tsconfig.json` in each app excludes tests so the production build stays lean;
+`tsconfig.test.json` is the one that checks them. `frontend/tsconfig.test.json`
+carries a **shrink-only** backlog of files that do not type-check yet - never
+add to it. A test that does not type-check is a test that may not be asserting
+what it claims: a fixture naming a field that does not exist compiles, runs, and
+passes while proving nothing.
+
+Running the backend suite locally needs `SESSION_SECRET` set to **at least 32
+characters**, or eight jest suites fail to load with an environment-validation
+error that reads like a code fault.
+
 ## API Endpoints
 
 ### Authentication
