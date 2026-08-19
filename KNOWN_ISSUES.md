@@ -16,10 +16,11 @@ This document lists known issues, limitations, and workarounds for AdaptaLabs. T
 
 ### Critical Issues
 
-One live defect in the opportunity-authoring flow, down from three.
-The other two are resolved as of release 7.43.5 (2026-08-19), and the reasoning is kept below rather than deleted, because both were written up more alarmingly than they deserved and the corrections are worth reading.
+**No live defects in the opportunity-authoring flow, down from three.**
+All three are resolved as of release 7.43.7 (2026-08-19).
+The reasoning is kept below rather than deleted, because two of the three were written up more alarmingly than they deserved and the corrections are worth reading.
 
-Nothing has been harmed by any of them: no real study has run, and every study and response in the deployment today is test data.
+Nothing was harmed by any of them: no real study has run, and every study and response in the deployment today is test data.
 
 #### C1. Editing a study's questions cannot mis-attribute answers ~~RESOLVED~~ — and was never reachable
 
@@ -37,15 +38,27 @@ Since 7.43.5 the opportunity form can update a linked Task List in place, and th
 
 **What you still cannot do**: change the questions of a study that has collected answers, from the opportunity form. That is the refusal above, and it is deliberate.
 
-#### C2. Reopening an opportunity shows an empty authoring surface
+**Corrected in 7.43.7**: that refusal used to fire on saves that changed no question at all. Task Lists built in the Task Lists area number their steps `_step_001` while the opportunity form numbers them `_step_1`, and the guard compared those ids — so a study with answers could not have its opportunity **retitled or even unpublished**, and the refusal named a change the author had not made. The route now keeps the stored ids, and the guard ignores whitespace and the trailing completion marker, which regenerates on every save.
 
-**Impact**: High. **This is the one still live.**
-**Description**: Editing an opportunity does not load the questions, tasks or consent wording you originally wrote.
-The form shows an empty question list and the default consent text.
-It reads as though nothing was ever authored.
-Your content is not lost — it is stored on the Task List, and only the authoring form fails to read it back.
+#### C2. Reopening an opportunity shows an empty authoring surface ~~RESOLVED~~
 
-**Workaround**: Edit questions, tasks and consent wording in the **Task Lists** area (`/admin/studies`), not on the opportunity form.
+**Status**: Resolved in release 7.43.7 (2026-08-19).
+**What it was**: editing an opportunity did not load the questions, tasks or consent wording you had written. The form showed an empty question list and the default consent text, so it read as though nothing had ever been authored. The content was never lost — it was on the Task List, and only the form failed to read it back.
+
+It looked like an empty form rather than like loss because a linked Task List also swapped the tab to the reuse picker, so there was no populated surface left to notice was missing.
+
+Reopening an opportunity now shows exactly what you wrote — tasks or questions, the consent wording, the estimated duration and the starting URL — and you can edit it in place.
+
+**Four cases are deliberately shown read-only instead**, because a save rewrites the linked Task List and anything the form could not display would be deleted:
+
+- the Task List **belongs to another researcher**
+- it uses **a step type this form cannot show** — a rating or a recommendation score on a recorded task list, for instance, which are only authorable on a survey
+- it gives **a different starting URL per step**, which this form can only express as one URL for the whole study
+- its **kind does not match** the opportunity — a recorded task list on a native survey, or the reverse
+
+In each case the form says which of these applies. The first cannot be fixed in the Task Lists area either, since the same ownership rule applies there; the others can.
+
+If the Task List **cannot be read at all**, every save is refused rather than the form showing a blank list a save would then write over the real one. If it **no longer exists**, saving stays available so the opportunity can be repointed or unpublished.
 
 #### C3. An opportunity form cannot save changes to a Task List it already has ~~RESOLVED~~
 
@@ -58,7 +71,7 @@ The form now updates the linked Task List in place. Three cases are still refuse
 - the Task List is **also used by another opportunity** — editing it here would change what that opportunity serves its participants, so it must be edited in the Task Lists area where the sharing is visible
 - the study has **already collected answers** and the questions would change — see C1
 
-Note that C2 is still live, so the opportunity form still shows an empty list when you reopen it. Until that is fixed, the Task Lists area remains the place to edit content.
+C2 is resolved too, so the opportunity form now shows your content when you reopen it and the Task Lists area is no longer the only place to edit it.
 
 An earlier draft of this entry said the save created a **duplicate** Task List and orphaned the original. That was true of an older build; the duplicate-and-orphan path was closed when native polls and surveys shipped, and the refusal replaced it.
 
@@ -94,7 +107,21 @@ The interface does not say any of this; the Admin Guide does.
 
 ---
 
-#### 3. Calendar Event Cancellation
+#### 3. Booking calendar: very long study periods are truncated
+
+**Status**: Bounded and announced as of 7.43.7 (2026-08-19)
+**Impact**: Low
+**Description**: The booking grid draws at most seven day columns. An opportunity whose sessions span longer than that cannot show every day at once.
+
+Days that do not fit are named in a notice below the grid, and **days that have sessions are always drawn in preference to empty ones** — so a bookable slot is never hidden behind an empty weekday. If there are more than seven days *with sessions*, the earliest seven are shown and the notice reports how many remain.
+
+**Until 7.43.7 this was worse in three separate ways**, each of which could hide a bookable session outright with no notice at all: the grid built columns Monday to Friday only, so a Saturday or Sunday session was never drawn and an all-weekend opportunity showed *"No sessions available"*; the render then capped at five columns, dropping a weekend day from a week that also had weekday sessions; and the seven-column window took the first seven days in date order, so a fortnightly Saturday opportunity spent its whole budget on empty weekdays and truncated the second bookable Saturday.
+
+**Workaround**: the **Table** view on the opportunity page lists every future session regardless of span.
+
+---
+
+#### 4. Calendar Event Cancellation
 **Status**: Known Limitation  
 **Impact**: Low  
 **Description**: When you cancel a booking, the event is removed from the **researcher's** calendar only (if calendar is configured). If you added the session to **your own** calendar (e.g. via the link in the confirmation email or an .ics attachment), you need to remove it yourself—the app does not delete events from participants' personal calendars.
@@ -109,7 +136,7 @@ The interface does not say any of this; the Admin Guide does.
 
 ### Low Priority Issues
 
-#### 4. Browser Compatibility
+#### 5. Browser Compatibility
 **Status**: Tested  
 **Impact**: Low  
 **Description**: Application is tested on:
@@ -123,7 +150,7 @@ The interface does not say any of this; the Admin Guide does.
 
 ---
 
-#### 5. Accessibility Compliance
+#### 6. Accessibility Compliance
 **Status**: WCAG 2.2 AA targeted; axe-core tests on key routes  
 **Impact**: Low (for alpha)  
 **Description**: M8 fixes applied: CTA/primary button contrast (orange-700/800), power button contrast, Settings tab active color, heading order (Available Sessions h2; calendar day titles as divs), page h1 (Feedback, form loading). Run: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts` (start frontend first). Use `load` not `networkidle` when testing production.

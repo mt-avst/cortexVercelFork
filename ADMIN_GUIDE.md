@@ -225,10 +225,12 @@ Editing a task list never changes a session already under way, so a participant 
 
 ### Editing a study that is already published
 
-> **Reopening an opportunity shows an empty task list and the default consent wording**, as though nothing was ever written.
-> Nothing has been lost - the form simply does not read your content back.
-> Edit the tasks and the consent wording in the **Task Lists** area instead, where they are shown correctly.
-> This is a known defect (KNOWN_ISSUES.md, C2) and a fix is planned.
+Reopening an opportunity shows exactly what you wrote - the tasks or questions, the consent wording, the estimated duration and the starting URL - and you can edit them there and save.
+
+> **Some task lists open read only on the opportunity form, and it will say which applies.**
+> Either it belongs to another researcher, or it uses something this form cannot show: a step type it does not offer, or a different starting URL for each step.
+> Editing it here would quietly drop whatever was not shown, so the form does not offer to.
+> The second case can be edited in the **Task Lists** area. The first cannot be edited by you anywhere - ask its owner or a superadmin.
 
 > **Changing the questions of a study that has already collected answers is refused on the opportunity form.**
 > That is deliberate: a task's identity comes from its position in the list, so changing the order would re-attach answers already collected to the wrong tasks.
@@ -245,7 +247,7 @@ Editing a task list never changes a session already under way, so a participant 
 - **Tasks written as click-by-click instructions** - you learn whether they can follow you, not whether the design works
 - **Publishing with no task list linked** - the Share panel warns you, and the participant's start button is disabled. Link one before sharing
 - **Assuming a colleague can edit your task list** - only its owner or a superadmin can
-- **Re-authoring tasks on the opportunity form because they look missing** - they are not missing, and the form does not read them back yet. Edit them in the Task Lists area
+- **Deleting every task and saving, expecting the list to empty** - a task list needs at least one task, and the save is refused rather than silently keeping what was there
 - **Expecting to change questions after people have answered** - the save is refused, on purpose. Make a new opportunity instead
 
 ---
