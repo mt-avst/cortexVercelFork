@@ -30,6 +30,59 @@ export const CALENDAR_LEGEND_ITEMS = [
   { className: 'legend-booked', label: 'Booked', labelClass: 'legend-label-booked' }
 ];
 
+/**
+ * Most columns the grid will draw at once - one full Monday-to-Sunday week.
+ *
+ * Weekend days are only given a column when they carry a session, so an
+ * ordinary working week still draws five. Seven is the ceiling rather than the
+ * norm, and it is a ceiling rather than "however many days the sessions span"
+ * because that span is unbounded.
+ */
+const MAX_VISIBLE_DAYS = 7;
+
+/**
+ * Narrowest a day column is allowed to get before the grid stops shrinking and
+ * starts overflowing.
+ *
+ * Measured, not guessed: the widest slot label is a session crossing noon, so
+ * both meridiems are shown ("11:30 AM - 12:30 PM"), which renders at 112.5px in
+ * the 11px/600 stack `.calendar-slot .timeslot-label` sets.
+ *
+ * The slot is inset 6px each side AND carries a 1px border on every variant
+ * (_components.css), and it is `box-sizing: border-box` - so the real inset is
+ * 14px, not 12. 126px left the content box at 112px, a hair UNDER the label it
+ * was measured against; 128px is the measurement it claims to be.
+ *
+ * `.calendar-slot` is `overflow: hidden`, so going under this does not show the
+ * text overflowing - it CLIPS it, which is worse, because a truncated time
+ * reads as a real time.
+ */
+const DAY_COLUMN_MIN_WIDTH_PX = 128;
+
+/** Gutter between day columns, and the tighter one used once the week is full. */
+const DAY_COLUMN_GAP_PX = 24;
+const DENSE_DAY_COLUMN_GAP_PX = 12;
+
+/**
+ * Gutter and floor for a grid of `dayCount` columns.
+ *
+ * Six or seven columns only happen now that a weekend day can earn one, and at
+ * 24px apiece the gutters alone would take 144px of a panel that has about
+ * 1100px to give - enough to push a seven-column week past the edge of the
+ * card. The columns are what carry information, so the gutters give way first.
+ *
+ * The floor counts the gutters as well as the columns. The old one did not,
+ * which left it claiming a minimum ~144px narrower than the content it was
+ * meant to be protecting.
+ */
+const dayGridMetrics = (dayCount: number): { gap: number; minWidth: number } => {
+  const gap = dayCount >= 6 ? DENSE_DAY_COLUMN_GAP_PX : DAY_COLUMN_GAP_PX;
+  return {
+    gap,
+    minWidth: dayCount * DAY_COLUMN_MIN_WIDTH_PX + Math.max(0, dayCount - 1) * gap,
+  };
+};
+
 // ============================================================
 // LEVEL 4: "LIVING INTERFACE" CALENDAR GRID
 // Features: Staggered entry, spring physics, cursor spotlight,
@@ -362,16 +415,23 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
 
     const allDays: Array<[string, Session[]]> = [];
     const currentDate = new Date(startDate);
-    
+
     while (currentDate <= endDate) {
       const dayOfWeek = currentDate.getDay();
-      
-      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        const dateKey = currentDate.toDateString();
-        const dateSessions = sessionsByDateMap.get(dateKey) || [];
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const dateKey = currentDate.toDateString();
+      const dateSessions = sessionsByDateMap.get(dateKey) || [];
+
+      // Weekdays are always given a column, so a run of days reads as a
+      // continuous week even where a day happens to be empty. A weekend day
+      // earns a column only by having a session in it - nothing stops an admin
+      // scheduling one, and dropping it here is silent data loss, but padding
+      // every ordinary Monday-to-Friday grid with two blank columns would cost
+      // a third of the width to show nothing.
+      if (!isWeekend || dateSessions.length > 0) {
         allDays.push([dateKey, dateSessions]);
       }
-      
+
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
@@ -379,6 +439,76 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
   }, [sessions]);
 
   const sessionsByDate = useMemo(() => groupSessionsByDate(), [groupSessionsByDate]);
+
+  /**
+   * The window of days the grid actually draws.
+   *
+   * A bound is needed - `sessionsByDate` spans first session to last, which for
+   * an opportunity running over a couple of months is dozens of columns - but
+   * it has to be wide enough for a full Monday-to-Sunday week now that weekend
+   * days can earn a column. At the old bound of five, a Saturday session in a
+   * week that also had weekday sessions was sliced off the end, which is the
+   * same defect as the Monday-to-Friday filter wearing a different hat.
+   */
+  const visibleDays = useMemo(() => {
+    if (sessionsByDate.length <= MAX_VISIBLE_DAYS) {
+      return sessionsByDate;
+    }
+
+    // Over budget, so something has to go - and it must not be a day someone
+    // can book.
+    //
+    // Taking the first seven CHRONOLOGICAL days reproduced the very defect this
+    // component was being fixed for. A fortnightly Saturday opportunity spans
+    // Sat 12 to Sat 26; the days between are weekdays, which always earn a
+    // column whether or not they hold anything, so the window filled with six
+    // empty weekdays and truncated the second bookable Saturday. Sessions
+    // invisible to the participant, with the budget spent on days that carry
+    // nothing.
+    //
+    // Days that HAVE sessions are therefore taken first. If even those overflow
+    // the budget the earliest win, which is the honest answer for an
+    // opportunity running over months, and the notice below reports the rest.
+    const kept = new Set(
+      sessionsByDate
+        .filter(([, daySessions]) => daySessions.length > 0)
+        .slice(0, MAX_VISIBLE_DAYS)
+        .map(([dateKey]) => dateKey)
+    );
+
+    // Anything left over is spent on the empty days between them, so a run of
+    // days still reads as a week rather than as a row of disconnected dates.
+    for (const [dateKey, daySessions] of sessionsByDate) {
+      if (kept.size >= MAX_VISIBLE_DAYS) break;
+      if (daySessions.length === 0) kept.add(dateKey);
+    }
+
+    // Filtered rather than assembled, so the result stays in date order
+    // whichever order the two passes above added things in.
+    return sessionsByDate.filter(([dateKey]) => kept.has(dateKey));
+  }, [sessionsByDate]);
+
+  /**
+   * What the window could not fit. Announced below the grid rather than simply
+   * dropped: a participant who is shown a calendar has no way of telling a week
+   * with nothing in it from a week that was truncated away.
+   */
+  const omittedDays = useMemo(() => {
+    const visible = new Set(visibleDays.map(([dateKey]) => dateKey));
+    // Derived from what is actually drawn rather than from a second slice of
+    // the same bound - two independent expressions of "which days did not fit"
+    // are free to disagree, and the notice is the only thing standing between a
+    // truncated session and silence.
+    return sessionsByDate.filter(([dateKey]) => !visible.has(dateKey));
+  }, [sessionsByDate, visibleDays]);
+  const omittedDaysWithSessions = useMemo(
+    () => omittedDays.filter(([, daySessions]) => daySessions.length > 0).length,
+    [omittedDays]
+  );
+
+  /** Shared by the sticky header row and the columns, so the two cannot drift. */
+  const dayGrid = useMemo(() => dayGridMetrics(visibleDays.length), [visibleDays.length]);
+
   const timeMarkers = useMemo(() => generateTimeMarkers(), []);
   /** Timeline column height — slots use top/height as % of .calendar-timeline-container (same reference as grid lines). */
   const TIMELINE_HEIGHT_PX = 900;
@@ -407,13 +537,18 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
     const today = new Date(currentTime);
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toDateString();
-    
-    return sessionsByDate.findIndex(([date]) => {
+
+    // Searched over the days that are DRAWN, not every day in range. The index
+    // is compared against a rendered column's index and it also gates the "Now"
+    // indicator, so a hit on a day outside the window used to mean either the
+    // wrong column carrying the Today badge or - worse - the red line drawn
+    // across a grid in which today is not a column at all.
+    return visibleDays.findIndex(([date]) => {
       const sessionDate = new Date(date);
       sessionDate.setHours(0, 0, 0, 0);
       return sessionDate.toDateString() === todayStr;
     });
-  }, [sessionsByDate, currentTime]);
+  }, [visibleDays, currentTime]);
 
   const handleSlotClick = (session: Session, slotElement: HTMLElement) => {
     const isBooked = bookedSlots.has(session.id);
@@ -629,10 +764,15 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           <div style={{
             flex: 1,
             display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
-            gap: '24px'
+            gridTemplateColumns: `repeat(${visibleDays.length}, 1fr)`,
+            // Same gutter and same floor as the day columns below. Without the
+            // floor the header grid keeps compressing after the columns have
+            // stopped, and the two slide out of alignment - a header sitting
+            // over the wrong day.
+            gap: `${dayGrid.gap}px`,
+            minWidth: `${dayGrid.minWidth}px`
           }}>
-            {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
+            {visibleDays.map(([date, dateSessions], columnIndex) => {
               const isToday = columnIndex === todayColumnIndex;
               return (
                 <motion.div
@@ -747,7 +887,7 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
             style={{ 
               position: 'relative',
               flex: 1,
-              minWidth: `${Math.min(sessionsByDate.length, 5) * 140}px`,
+              minWidth: `${dayGrid.minWidth}px`,
               overflow: 'hidden'
             }}
           >
@@ -856,13 +996,13 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
             {/* Day Columns Grid - Content scrolls under sticky header; raise above sticky when confirm popover is open */}
             <div style={{ 
               display: 'grid',
-              gridTemplateColumns: `repeat(${Math.min(sessionsByDate.length, 5)}, 1fr)`,
-              gap: '24px',
+              gridTemplateColumns: `repeat(${visibleDays.length}, 1fr)`,
+              gap: `${dayGrid.gap}px`,
               position: 'relative',
               zIndex: confirmingSlot ? 101 : 3,
               width: '100%',
             }}>
-              {sessionsByDate.slice(0, 5).map(([date, dateSessions], columnIndex) => {
+              {visibleDays.map(([date, dateSessions], columnIndex) => {
                 const isToday = columnIndex === todayColumnIndex;
                 const isPast = (() => {
                   const sessionDate = new Date(date);
@@ -1048,6 +1188,30 @@ const CalendarGrid: React.FC<CalendarGridProps> = memo(({ sessions, onBookSessio
           </div>
         </div>
       </div>
+
+      {/*
+        The days the window could not fit.
+
+        Truncating is acceptable; truncating silently is not. Without this a
+        participant is shown a calendar that looks complete and has no way of
+        knowing that the slot they were sent a link for is one of the days off
+        the end of it.
+      */}
+      {omittedDays.length > 0 && (
+        <div className="alert alert-info d-flex align-items-center mt-3" role="status">
+          <Info size={16} className="me-2" aria-hidden="true" />
+          <span>
+            {`Showing the first ${visibleDays.length} days. ${omittedDays.length} later `}
+            {omittedDays.length === 1 ? 'day is' : 'days are'}
+            {' not shown, '}
+            {omittedDaysWithSessions === 0
+              ? 'none of which have sessions.'
+              : omittedDaysWithSessions === 1
+                ? '1 of which has sessions.'
+                : `${omittedDaysWithSessions} of which have sessions.`}
+          </span>
+        </div>
+      )}
     </div>
   );
 });
