@@ -256,6 +256,27 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
   const submittedPayload = (): SubmittedPayload =>
     vi.mocked(createOpportunity).mock.calls[0][0] as unknown as SubmittedPayload;
 
+  /**
+   * Open every collapsed card. B2 collapses authored tasks by default, so their
+   * prompt fields do not exist until the card is opened.
+   */
+  const openAllCards = async (): Promise<void> => {
+    const summaries = await screen.findAllByRole('button', { expanded: false });
+    summaries.forEach((summary) => fireEvent.click(summary));
+  };
+
+  /**
+   * Take the duration over from the automatic estimate and set it by hand.
+   * The field is read-only while the estimate is in force, which is the whole
+   * point of the override being explicit.
+   */
+  const overrideDuration = (minutes: string) => {
+    fireEvent.click(screen.getByRole('button', { name: /Set it myself/i }));
+    fireEvent.change(screen.getByLabelText(/Estimated completion time/i), {
+      target: { value: minutes }
+    });
+  };
+
   const fillMinimalStudy = async () => {
     fireEvent.change(screen.getByLabelText(/^Title/i), {
       target: { value: 'Checkout flow walkthrough' }
@@ -275,9 +296,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('unmoderated');
     await fillMinimalStudy();
 
-    fireEvent.change(screen.getByLabelText(/how long it takes/i), {
-      target: { value: '18' }
-    });
+    overrideDuration('18');
     fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
 
     await vi.waitFor(() => {
@@ -292,7 +311,29 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     );
   });
 
-  it('sends no duration at all when the field is left empty', async () => {
+  it('sends no duration at all when the author takes it over and empties it', async () => {
+    // "Tell the participant no length" is still reachable, and it still has to
+    // be: B2 made the estimate the default, not the floor. Telling somebody a
+    // number nobody chose is the failure this field has already had once.
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    overrideDuration('');
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    expect(submittedPayload().inline_study?.estimated_duration_minutes).toBeUndefined();
+  });
+
+  it('sends the automatic estimate when the author leaves the field alone', async () => {
+    // The B2 behaviour change, pinned at the payload rather than at the input.
+    // A rendered "5" proves the author was shown a number; only the payload
+    // proves the participant is told one. Three minutes of setup plus two per
+    // task, for the one task fillMinimalStudy writes.
     renderForm();
     selectType('unmoderated');
     await fillMinimalStudy();
@@ -303,7 +344,29 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
     });
 
-    expect(submittedPayload().inline_study?.estimated_duration_minutes).toBeUndefined();
+    expect(submittedPayload().inline_study?.estimated_duration_minutes).toBe(5);
+  });
+
+  it('moves the estimate as tasks are added, rather than pinning the first one', async () => {
+    // A snapshot taken when the control first rendered would pass the test
+    // above and still send a stale number the moment a second task arrived.
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+    fireEvent.change(
+      screen.getAllByLabelText(/What the participant sees/i)[1],
+      { target: { value: 'Download last month report' } }
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    expect(submittedPayload().inline_study?.estimated_duration_minutes).toBe(7);
   });
 
   it('authors every task as a spoken-answer instruction - no response type to pick', async () => {
@@ -319,6 +382,31 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       screen.queryByRole('combobox', { name: /^Type$/i })
     ).toBeNull();
+  });
+
+  /**
+   * Task 12: the task list gets the same list, with its own noun. A gate
+   * finding names an instance; the twin is the class.
+   */
+  it('gives the task list the same reordering and duplication as the questions', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Open the basket' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
+
+    // Named "task", not "question" - the accessible names are what a screen
+    // reader user navigates this list by.
+    expect(screen.getByRole('button', { name: 'Move task 2 up' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Duplicate task 1' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', { name: 'Move task 1 to position' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /question/i })).toBeNull();
   });
 
   it('sends the starting url, and blocks one that could run against the session', async () => {
@@ -612,7 +700,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     );
 
     // The authored task is still on screen and still editable, and the picker
-    // has NOT taken over.
+    // has NOT taken over. Opened first: the form re-reads after a successful
+    // save, so the card comes back collapsed.
+    await openAllCards();
     expect(
       (screen.getByLabelText(/What the participant sees/i) as HTMLTextAreaElement).value
     ).toBe('Find the export button');
@@ -685,6 +775,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     );
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+    await openAllCards();
 
     expect(
       ((await screen.findByLabelText(/What the participant sees/i)) as HTMLTextAreaElement)

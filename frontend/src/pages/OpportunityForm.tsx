@@ -7,6 +7,16 @@ import { createOpportunity, updateOpportunity, getOpportunity, getSessions } fro
 import { getFirstHandStudy } from '../api/firsthand-studies';
 import { getPrimaryTargetUrl } from '../lib/recording/task-target';
 import {
+  withClientIds,
+  withoutClientIds,
+  type WithClientId
+} from '../lib/opportunity-authoring/client-ids';
+import { remapAuthoringErrors } from '../lib/opportunity-authoring/authoring-errors';
+import {
+  estimateRecordedMinutes,
+  estimateSurveyMinutes
+} from '../lib/opportunity-authoring/estimate-duration';
+import {
   authoredStepsOf,
   studyRoundTripsCleanly,
   toInlineStudyPayloadStep,
@@ -108,11 +118,11 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   // other half of the time.
   firsthand_study_id: { tab: 3, label: 'Existing study content' },
   inline_study_target_url: { tab: 3, label: 'Starting URL' },
-  inline_study_duration_minutes: { tab: 3, label: 'How long it takes' },
+  inline_study_duration_minutes: { tab: 3, label: 'Estimated completion time' },
   inline_study_steps: { tab: 3, label: 'Task List' },
   inline_study_consent_text: { tab: 3, label: 'Consent text' },
   inline_survey_questions: { tab: 3, label: 'Questions' },
-  inline_survey_duration_minutes: { tab: 3, label: 'How long it takes' },
+  inline_survey_duration_minutes: { tab: 3, label: 'Estimated completion time' },
   inline_survey_consent_text: { tab: 3, label: 'Consent text' }
 };
 
@@ -268,15 +278,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Undefined, never 30: an unset duration must stay unset all the way to
     // the database, where the column is nullable and null means "not stated".
     inline_study_duration_minutes: undefined as number | undefined,
+    // Whether the duration above is the one B2 derives from the task list.
+    // True on create so a new study gets an estimate rather than a blank; set
+    // false the moment an existing study is hydrated, because whatever is
+    // stored there is what its author decided and re-deriving over it would
+    // change a value nobody touched.
+    inline_study_duration_auto: true,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
-    inline_study_steps: [] as InlineStudyStep[],
+    inline_study_steps: [] as WithClientId<InlineStudyStep>[],
     reuse_existing_study: false,
     // Native poll and survey. Defaults to external so an author who never opens
     // the choice gets exactly today's behaviour.
     delivery_mode: 'external' as 'native' | 'external',
     inline_survey_duration_minutes: undefined as number | undefined,
+    inline_survey_duration_auto: true,
     inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT as string,
-    inline_survey_questions: [] as SurveyQuestion[],
+    inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
     reuse_existing_survey: false
   });
 
@@ -395,11 +412,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       const authoredFields = {
         inline_study_target_url: '',
         inline_study_duration_minutes: undefined as number | undefined,
+        inline_study_duration_auto: true,
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
-        inline_study_steps: [] as InlineStudyStep[],
+        inline_study_steps: [] as WithClientId<InlineStudyStep>[],
         inline_survey_duration_minutes: undefined as number | undefined,
+        inline_survey_duration_auto: true,
         inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
-        inline_survey_questions: [] as SurveyQuestion[],
+        inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
         // Both deliberately FALSE once content is hydrated: a ticked reuse box
         // sends the study id instead of the authored content, which is the same
         // save the old code made and the reason an edit could never change what
@@ -453,15 +472,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           readOnly = readOnlyReason !== null;
 
           if (kind === 'survey') {
-            authoredFields.inline_survey_questions = authored.map(toSurveyQuestion);
+            authoredFields.inline_survey_questions = withClientIds(
+              authored.map(toSurveyQuestion)
+            );
             authoredFields.inline_survey_consent_text = linked.study.consent_text;
             authoredFields.inline_survey_duration_minutes =
               linked.study.estimated_duration_minutes ?? undefined;
+            // Stored, therefore decided - including a stored NULL, which says
+            // "tell the participant no length". Re-deriving an estimate over
+            // either would rewrite a value the author did not touch, on a save
+            // about something else entirely.
+            authoredFields.inline_survey_duration_auto = false;
           } else {
-            authoredFields.inline_study_steps = authored.map(toInlineStudyStep);
+            authoredFields.inline_study_steps = withClientIds(
+              authored.map(toInlineStudyStep)
+            );
             authoredFields.inline_study_consent_text = linked.study.consent_text;
             authoredFields.inline_study_duration_minutes =
               linked.study.estimated_duration_minutes ?? undefined;
+            // Same rule as the survey twin above.
+            authoredFields.inline_study_duration_auto = false;
             // The study-level starting URL. Read with the runtime's own
             // resolver rather than a second "first step carrying a target"
             // rule: toStudySteps writes target_url onto EVERY authored step,
@@ -873,7 +903,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // API, which refuses it as `estimated_duration_minutes` and never names
     // the field the author typed in. Integers, because the contract is
     // `.int()` and the input's implicit step is 1.
-    if (authoringQuestions) {
+    //
+    // Gated on the override, because the override is the only thing this rule
+    // can be ABOUT. While the automatic estimate is in force the payload sends
+    // the estimate and ignores this field entirely, so validating it refuses a
+    // save over a value nothing will send - and the banner then sends the
+    // author to a read-only field displaying a perfectly valid number, with no
+    // way to correct it from what they can see. Validate what you send.
+    if (authoringQuestions && formData.inline_survey_duration_auto === false) {
       const surveyDuration = formData.inline_survey_duration_minutes;
       if (surveyDuration !== undefined) {
         if (!Number.isInteger(surveyDuration) || surveyDuration < 1) {
@@ -919,7 +956,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // submit that somehow skipped it must not be rejected for a missing
       // scheme we would have added. Normalising is idempotent, so running it
       // again here costs nothing.
-      const duration = formData.inline_study_duration_minutes;
+      // Gated exactly like the survey twin above: while the automatic estimate
+      // is in force this field is not what the payload carries.
+      const duration = formData.inline_study_duration_auto === false
+        ? formData.inline_study_duration_minutes
+        : undefined;
       if (duration !== undefined) {
         if (!Number.isFinite(duration) || duration < 1) {
           errors.inline_study_duration_minutes =
@@ -1065,8 +1106,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // last tab to save a change they had already made.
       (formData.delivery_mode || 'external') !== (originalFormData.delivery_mode || 'external') ||
       formData.inline_survey_questions.length !== originalFormData.inline_survey_questions.length ||
-      JSON.stringify(formData.inline_survey_questions) !==
-        JSON.stringify(originalFormData.inline_survey_questions) ||
+      // Compared WITHOUT the client-side ids. They match today only because the
+      // baseline is a structuredClone of the same hydrated array; anything that
+      // re-hydrated one side and not the other would pin the Save button on
+      // forever, with nothing for it to save.
+      JSON.stringify(withoutClientIds(formData.inline_survey_questions)) !==
+        JSON.stringify(withoutClientIds(originalFormData.inline_survey_questions)) ||
       formData.inline_survey_consent_text.trim() !==
         originalFormData.inline_survey_consent_text.trim() ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
@@ -1093,6 +1138,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         originalFormData.inline_study_duration_minutes ||
       formData.inline_survey_duration_minutes !==
         originalFormData.inline_survey_duration_minutes ||
+      // Switching between the automatic estimate and a hand-set number changes
+      // what a save sends, so it has to show the Save button. Without these two
+      // clauses, taking over the estimate on the last tab would be a change the
+      // form could not be persuaded to store.
+      formData.inline_survey_duration_auto !== originalFormData.inline_survey_duration_auto ||
+      formData.inline_study_duration_auto !== originalFormData.inline_study_duration_auto ||
       // No length comparison to go with this one. There is no input where the
       // lengths differ and the stringifications match, so a length clause is
       // exactly the "looks like coverage while testing nothing" shape the note
@@ -1100,8 +1151,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // survey pair a few lines up has the same redundancy and predates A1;
       // removing it is a tidy of its own rather than something to smuggle in
       // here.
-      JSON.stringify(formData.inline_study_steps) !==
-        JSON.stringify(originalFormData.inline_study_steps) ||
+      JSON.stringify(withoutClientIds(formData.inline_study_steps)) !==
+        JSON.stringify(withoutClientIds(originalFormData.inline_study_steps)) ||
       (formData.start_date || '') !== (originalFormData.start_date || '') ||
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
       formData.reuse_existing_study !== originalFormData.reuse_existing_study ||
@@ -1259,8 +1310,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // send `default_duration_minutes`, which unmoderated never shows,
             // so every recorded study inherited that field's default and told
             // participants a length nobody had chosen.
+            // The automatic estimate is what a save sends while it is in
+            // force. Derived HERE from the same list the tab shows it from, so
+            // a stale copy in state cannot be sent instead of the number the
+            // author was actually looking at.
             estimated_duration_minutes: durationToSend(
-              formData.inline_study_duration_minutes,
+              formData.inline_study_duration_auto
+                ? estimateRecordedMinutes(formData.inline_study_steps) ?? undefined
+                : formData.inline_study_duration_minutes,
               originalFormData?.inline_study_duration_minutes
             ),
             // Built by the same function studyRoundTripsCleanly checks with,
@@ -1309,8 +1366,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           if (authoringInline) {
             data.inline_survey = {
               consent_text: formData.inline_survey_consent_text.trim(),
+              // Same rule as the task-list branch above.
               estimated_duration_minutes: durationToSend(
-                formData.inline_survey_duration_minutes,
+                formData.inline_survey_duration_auto
+                  ? estimateSurveyMinutes(formData.inline_survey_questions) ?? undefined
+                  : formData.inline_survey_duration_minutes,
                 originalFormData?.inline_survey_duration_minutes
               ),
               // Same function studyRoundTripsCleanly checks with. This branch
@@ -1471,32 +1531,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * carry. Kept separate rather than widening that signature so the existing
    * type-change coercions there stay readable.
    */
-  const handleStepsChange = (steps: InlineStudyStep[]) => {
+  const handleStepsChange = (steps: WithClientId<InlineStudyStep>[]) => {
+    const previous = formData.inline_study_steps;
     setFormData(prev => ({ ...prev, inline_study_steps: steps }));
-    setValidationErrors(prev => {
-      // Drop every per-step error on any structural change: indices shift when
-      // a step is added, removed or moved, so a kept error would point at the
-      // wrong task.
-      const next = { ...prev };
-      Object.keys(next)
-        .filter(key => key.startsWith('inline_study_steps'))
-        .forEach(key => delete next[key]);
-      return next;
-    });
+    // Errors are keyed by POSITION, so they used to be deleted wholesale on any
+    // change - which meant moving a task the author had not yet fixed silently
+    // cleared the reason they were sent back to it. With a stable client id per
+    // task the mapping is derivable: an error follows its task, and is dropped
+    // only when that task was removed or edited. See remapAuthoringErrors.
+    setValidationErrors(prev =>
+      remapAuthoringErrors(prev, 'inline_study_steps', previous, steps)
+    );
   };
 
-  const handleQuestionsChange = (questions: SurveyQuestion[]) => {
+  const handleQuestionsChange = (questions: WithClientId<SurveyQuestion>[]) => {
+    const previous = formData.inline_survey_questions;
     setFormData(prev => ({ ...prev, inline_survey_questions: questions }));
-    setValidationErrors(prev => {
-      // Same reasoning as handleStepsChange: indices shift when a question is
-      // added, removed or moved, so a kept per-question error would point at
-      // the wrong question.
-      const next = { ...prev };
-      Object.keys(next)
-        .filter(key => key.startsWith('inline_survey_questions'))
-        .forEach(key => delete next[key]);
-      return next;
-    });
+    // Same reasoning as handleStepsChange.
+    setValidationErrors(prev =>
+      remapAuthoringErrors(prev, 'inline_survey_questions', previous, questions)
+    );
   };
 
   // One place that turns a refusal on, so every path reports it identically.
