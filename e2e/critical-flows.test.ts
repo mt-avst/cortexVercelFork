@@ -1,6 +1,10 @@
 import { chromium, Browser, Page } from 'playwright';
 import { generateMockUser, generateMockOpportunity, generateMockSession } from '../../../shared/test-utils';
 
+/* Raw `playwright` Browser, so playwright.config.ts's `use.baseURL` does not apply here.
+ * Set it on the context so the relative paths below resolve. */
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+
 describe('Adaptalabs E2E Tests', () => {
   let browser: Browser;
   let page: Page;
@@ -14,7 +18,7 @@ describe('Adaptalabs E2E Tests', () => {
   });
 
   beforeEach(async () => {
-    page = await browser.newPage();
+    page = await browser.newPage({ baseURL: BASE_URL });
     
     // Set viewport size
     await page.setViewportSize({ width: 1280, height: 720 });
@@ -65,7 +69,7 @@ describe('Adaptalabs E2E Tests', () => {
   describe('Authentication Flow', () => {
     it('should complete login flow', async () => {
       // Navigate to home page
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Should see login options
       await expect(page.locator('text=Sign In')).toBeVisible();
@@ -86,7 +90,7 @@ describe('Adaptalabs E2E Tests', () => {
     });
 
     it('should handle admin login', async () => {
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Click admin demo login
       await page.click('text=Admin Demo');
@@ -104,7 +108,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should handle logout', async () => {
       // First login
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=Demo Login');
       await page.fill('input[type="email"]', 'demo@example.com');
       await page.click('button[type="submit"]');
@@ -123,7 +127,7 @@ describe('Adaptalabs E2E Tests', () => {
   describe('Opportunity Management', () => {
     beforeEach(async () => {
       // Login as admin
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=Admin Demo');
       await page.fill('input[type="email"]', 'admin@example.com');
       await page.click('button[type="submit"]');
@@ -151,7 +155,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should edit existing opportunity', async () => {
       // Navigate to opportunities list
-      await page.goto('http://localhost:3000/admin');
+      await page.goto('/admin');
 
       // Click on first opportunity
       await page.click('text=UI Testing Session');
@@ -171,7 +175,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should delete opportunity', async () => {
       // Navigate to opportunities list
-      await page.goto('http://localhost:3000/admin');
+      await page.goto('/admin');
 
       // Click on first opportunity
       await page.click('text=UI Testing Session');
@@ -190,7 +194,7 @@ describe('Adaptalabs E2E Tests', () => {
   describe('Session Management', () => {
     beforeEach(async () => {
       // Login as admin
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=Admin Demo');
       await page.fill('input[type="email"]', 'admin@example.com');
       await page.click('button[type="submit"]');
@@ -198,7 +202,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should create new session', async () => {
       // Navigate to opportunity detail
-      await page.goto('http://localhost:3000/admin');
+      await page.goto('/admin');
       await page.click('text=UI Testing Session');
 
       // Click add session
@@ -222,7 +226,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should edit existing session', async () => {
       // Navigate to opportunity detail
-      await page.goto('http://localhost:3000/admin');
+      await page.goto('/admin');
       await page.click('text=UI Testing Session');
 
       // Click edit on first session
@@ -240,7 +244,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should delete session', async () => {
       // Navigate to opportunity detail
-      await page.goto('http://localhost:3000/admin');
+      await page.goto('/admin');
       await page.click('text=UI Testing Session');
 
       // Click delete on first session
@@ -257,7 +261,7 @@ describe('Adaptalabs E2E Tests', () => {
   describe('Booking Flow', () => {
     beforeEach(async () => {
       // Login as regular user
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=Demo Login');
       await page.fill('input[type="email"]', 'demo@example.com');
       await page.click('button[type="submit"]');
@@ -265,7 +269,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should book a session', async () => {
       // Navigate to opportunities
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Click on first opportunity
       await page.click('text=UI Testing Session');
@@ -289,7 +293,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should cancel a booking', async () => {
       // First book a session
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=UI Testing Session');
       await page.click('text=Book Session');
       await page.click('text=Confirm');
@@ -321,7 +325,7 @@ describe('Adaptalabs E2E Tests', () => {
       });
 
       // Try to book a session
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=UI Testing Session');
       await page.click('text=Book Session');
       await page.click('text=Confirm');
@@ -338,7 +342,7 @@ describe('Adaptalabs E2E Tests', () => {
         await route.abort('failed');
       });
 
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Should see error message
       await expect(page.locator('text=Network error')).toBeVisible();
@@ -354,7 +358,7 @@ describe('Adaptalabs E2E Tests', () => {
         });
       });
 
-      await page.goto('http://localhost:3000/opportunity/999');
+      await page.goto('/opportunity/999');
 
       // Should see 404 error
       await expect(page.locator('text=Opportunity not found')).toBeVisible();
@@ -362,7 +366,7 @@ describe('Adaptalabs E2E Tests', () => {
 
     it('should handle validation errors', async () => {
       // Login as admin
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
       await page.click('text=Admin Demo');
       await page.fill('input[type="email"]', 'admin@example.com');
       await page.click('button[type="submit"]');
@@ -382,7 +386,7 @@ describe('Adaptalabs E2E Tests', () => {
       // Set mobile viewport
       await page.setViewportSize({ width: 375, height: 667 });
 
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Should see mobile-friendly layout
       await expect(page.locator('text=Sign In')).toBeVisible();
@@ -395,7 +399,7 @@ describe('Adaptalabs E2E Tests', () => {
       // Set tablet viewport
       await page.setViewportSize({ width: 768, height: 1024 });
 
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Should see tablet-friendly layout
       await expect(page.locator('text=Sign In')).toBeVisible();
@@ -404,7 +408,7 @@ describe('Adaptalabs E2E Tests', () => {
 
   describe('Accessibility', () => {
     it('should have proper ARIA labels', async () => {
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Check for ARIA labels on interactive elements
       const signInButton = page.locator('text=Sign In');
@@ -412,7 +416,7 @@ describe('Adaptalabs E2E Tests', () => {
     });
 
     it('should support keyboard navigation', async () => {
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Tab through elements
       await page.keyboard.press('Tab');
@@ -424,7 +428,7 @@ describe('Adaptalabs E2E Tests', () => {
     });
 
     it('should have proper heading hierarchy', async () => {
-      await page.goto('http://localhost:3000');
+      await page.goto('/');
 
       // Check for proper heading structure
       const h1 = page.locator('h1');

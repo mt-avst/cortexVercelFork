@@ -6,17 +6,16 @@ import { test, expect } from '@playwright/test';
  * Uses admin-login (researcher_admin) - seeded in DB. For superadmin, run backend seed to add superadmin user.
  * Covers: study visibility after submit, refresh for admin, LEFT JOIN for owners not in users table
  */
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
 const UNIQUE_TITLE = `E2E Test Study ${Date.now()}`;
 
 test.describe('Superadmin Create Study Flow', () => {
   test('superadmin can create study and see it in research studies list', async ({ page }) => {
     test.setTimeout(90000);
     // Load app first to get AuthContext, set loginRedirect so AuthContext will fetch user on return
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     // 1. Login as admin (researcher_admin - seeded in DB; superadmin may not exist in local DB)
-    await page.goto(`${BASE_URL}/api/auth/admin-login`, { waitUntil: 'load', timeout: 15000 });
+    await page.goto('/api/auth/admin-login', { waitUntil: 'load', timeout: 15000 });
     await page.waitForTimeout(4000); // Auth context fetch + redirect
     await expect(page).toHaveURL(/\/admin/, { timeout: 6000 });
     // Wait for admin UI and click Create Research Study
