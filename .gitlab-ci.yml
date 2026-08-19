@@ -130,3 +130,88 @@ lint:
       when: never
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+
+# Tests. Until now this pipeline ran lint and nothing else, which is how the
+# whole e2e suite came to collect zero tests from the initial commit onwards
+# without anyone noticing. The unit and integration suites are the cheap part
+# of the gate - no database, no stack, no seed data, and they mutate nothing -
+# so they run in .pre alongside lint, and a red suite stops the pipeline before
+# it spends anything on building images.
+#
+# Not covered here, deliberately: the e2e suite, which needs postgres and a
+# seeded database, and three of whose specs create and publish studies.
+#
+# Image pinned to the same Node the apps build on, matching lint and
+# backend/Dockerfile. Root `npm ci` comes first in every job: the suites import
+# from shared/, whose dependencies (zod among them) resolve out of the root
+# tree, and without it 13 backend suites fail to load.
+.test-base:
+  stage: .pre
+  image: registry.hub.docker.com/library/node:20.20.2-alpine3.22
+  needs: []
+  interruptible: true
+  variables:
+    # The backend takes its connection string from the first of these four that
+    # is set - see backend/src/config/databaseUrl.ts, where reading DATABASE_URL
+    # alone is recorded as a proven landmine. Blank all four: with any of them
+    # present, race-condition.test.ts opens a real connection and fails against
+    # a schema that does not exist here. Empty string is falsy, so the resolver
+    # falls through to undefined exactly as it does on a developer's machine.
+    DATABASE_URL: ""
+    POSTGRES_URL: ""
+    POSTGRESQL_URL: ""
+    DB_URL: ""
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
+
+test-backend:
+  extends: .test-base
+  variables:
+    # shared/config/environment.ts validates the environment at import time and
+    # requires a session secret of at least 32 characters. Without one, 4 of the
+    # 32 jest suites fail to load before running a single test. This is a fixed
+    # test constant rather than a credential: no session it signs outlives the
+    # job, and the deployed value comes from the Kubera secret store.
+    SESSION_SECRET: "gitlab-ci-test-constant-not-a-real-secret" # gitleaks:allow
+    # Two vitest files - runtime-object-storage-s3.test.ts and
+    # s3-upload-integration.test.ts - start a real MinIO container and fail
+    # loudly rather than silently skipping when Docker is absent. These runners
+    # are tagged no-docker, which is why the image build uses kaniko, so there
+    # is no daemon to give them. This is the opt-out those files document.
+    #
+    # What that costs, stated plainly: the S3 object-storage and direct-upload
+    # integration paths are NOT covered by this job. They still run locally,
+    # where Docker is available, and they are the same category as the e2e
+    # suite - real infrastructure, not a unit test. 8 tests, reported as
+    # skipped rather than passed, so the log never claims more than it ran.
+    FIRSTHAND_SKIP_S3_TESTS: "1"
+  script:
+    - npm ci
+    - cd backend && npm ci
+    - npm test
+    - npm run test:vitest
+
+test-frontend:
+  extends: .test-base
+  script:
+    - npm ci
+    - cd frontend && npm ci
+    # `npm test` in frontend/ is bare `vitest`, which is watch mode. Vitest does
+    # switch to a single run when it detects CI, but a job that hangs forever if
+    # that detection ever changes is not worth the two saved characters.
+    - npx vitest run
+
+test-scripts:
+  extends: .test-base
+  script:
+    - npm ci
+    # set-superadmin.test.js and role-scripts-tls.test.js spawn the real script
+    # through backend/node_modules/.bin/tsx, so this job needs the backend tree
+    # even though the tests themselves live at the root. Without it two of the
+    # three files fail to load and the run reports 40 tests instead of 111 -
+    # which looks like a smaller suite, not a broken one.
+    - cd backend && npm ci
+    - cd "$CI_PROJECT_DIR" && npm run test:scripts
