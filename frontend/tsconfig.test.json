@@ -26,20 +26,15 @@
     "src/shared/test-utils.ts",
     "../shared/test-utils/**/*",
 
-    // BACKLOG - 71 errors. See the MR for the classification.
+    // BACKLOG - 58 errors. Shrinks only. See the MRs for the classification.
     "src/components/__tests__/AdminSessionManager.render.test.tsx",
     "src/components/__tests__/OpportunityRow.test.tsx",
-    "src/components/__tests__/RecordedStudyExpectations.test.tsx",
     "src/components/__tests__/ShareOpportunityLink.test.tsx",
     "src/components/recording/__tests__/ParticipantSessionFlow.completion-cleanup.test.tsx",
     "src/components/recording/__tests__/ParticipantSessionFlow.pip-standby.test.tsx",
     "src/lib/recording/participant-return.test.ts",
     "src/lib/recording/task-window.test.ts",
     "src/lib/survey/answers.test.ts",
-    "src/pages/__tests__/OpportunityDetail.eligibility.test.tsx",
-    "src/pages/__tests__/OpportunityDetail.participant-type-name.test.tsx",
-    "src/pages/__tests__/OpportunityDetail.recorded-study-brief.test.tsx",
-    "src/pages/__tests__/OpportunityDetail.startable.test.tsx",
     "src/utils/__tests__/datetime.test.ts",
     "src/utils/__tests__/errorHandler.test.tsx",
 
