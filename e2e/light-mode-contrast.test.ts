@@ -5,7 +5,11 @@ import { test, expect } from '@playwright/test';
  * Verifies that entered text and select values use dark color on white background.
  */
 
-const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+/**
+ * Paths are relative so `use.baseURL` from the running config decides the
+ * target. A module-level BASE_URL here would silently win over the config -
+ * that is how `test:a11y:prod` ended up grading a different application.
+ */
 
 // Dark text we expect in light mode: #374151 = rgb(55, 65, 81), #334155 = rgb(51, 65, 85)
 const EXPECTED_DARK_RGB = [
@@ -46,12 +50,12 @@ test.describe('Light-mode form contrast (Create New Opportunity)', () => {
     });
     // AuthContext only calls /api/me when sessionStorage has loginRedirect (return from login).
     // Set it so the app will fetch user and our mock will return researcher_admin.
-    await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
   });
 
   test('Create New Opportunity form: input text color is dark in light mode', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/opportunities/new`, { waitUntil: 'networkidle' });
+    await page.goto('/admin/opportunities/new', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
 
     // Ensure light theme (toggle if body has theme-dark)
@@ -80,7 +84,7 @@ test.describe('Light-mode form contrast (Create New Opportunity)', () => {
   });
 
   test('Create New Opportunity form: select displayed value color is dark in light mode', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/opportunities/new`, { waitUntil: 'networkidle' });
+    await page.goto('/admin/opportunities/new', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
 
     const body = page.locator('body');
@@ -99,7 +103,7 @@ test.describe('Light-mode form contrast (Create New Opportunity)', () => {
   });
 
   test('Create New Opportunity form: placeholder color is readable in light mode', async ({ page }) => {
-    await page.goto(`${BASE_URL}/admin/opportunities/new`, { waitUntil: 'networkidle' });
+    await page.goto('/admin/opportunities/new', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
 
     const body = page.locator('body');
