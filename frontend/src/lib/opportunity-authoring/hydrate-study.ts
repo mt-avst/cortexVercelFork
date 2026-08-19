@@ -105,6 +105,39 @@ export const toInlineStudyPayloadStep = (step: InlineStudyStep): InlineStudyStep
   ...(step.is_required !== undefined ? { is_required: step.is_required } : {})
 });
 
+/**
+ * The question types a `config` means anything on.
+ *
+ * `findStepShapeProblem` in the contract is the reason this list is exactly
+ * these two: `rating` REQUIRES `config.scale_max` and `multi_choice` may carry
+ * `min_selections`/`max_selections`, while `nps` is REFUSED outright if a scale
+ * arrives with it - NPS is fixed at 0 to 10 and an author-set scale would
+ * produce numbers nothing records the meaning of.
+ *
+ * That refusal is why this whitelist exists at all. Changing a question's type
+ * now PRESERVES its options and config in form state, so switching a rating to
+ * an NPS and back restores the scale the author chose. Sending the leftover
+ * would fail the whole save, naming a field the form is no longer showing.
+ * Preserve in state, strip here.
+ *
+ * Narrowing this narrows `studyRoundTripsCleanly` with it: a STORED question of
+ * another type carrying a config is now offered read-only rather than loaded
+ * into a form that would drop it. That is the safe direction, and StudyEditor -
+ * the only other authoring surface - writes `config` for `rating` alone, so
+ * nothing this product creates lands there.
+ *
+ * It is a small LOSS OF CAPABILITY rather than a prevention of loss, though,
+ * and worth stating plainly: `stepConfigSchema` permits `min_label`/`max_label`
+ * on any type and `findStepShapeProblem` accepts them, so a question written
+ * through the study API directly is storable, WAS editable here, and is now
+ * read-only. StudyEditor still edits it losslessly, which is exactly what the
+ * read-only banner tells the author to do.
+ */
+const CONFIGURABLE_QUESTION_TYPES: ReadonlySet<SurveyQuestion['type']> = new Set([
+  'rating',
+  'multi_choice'
+]);
+
 /** An authored question as the save payload carries it. */
 export const toSurveyPayloadStep = (question: SurveyQuestion): SurveyQuestion => ({
   type: question.type,
@@ -112,7 +145,9 @@ export const toSurveyPayloadStep = (question: SurveyQuestion): SurveyQuestion =>
   ...(question.type === 'single_choice' || question.type === 'multi_choice'
     ? { options: (question.options ?? []).map((option) => option.trim()).filter(Boolean) }
     : {}),
-  ...(question.config ? { config: question.config } : {}),
+  ...(question.config && CONFIGURABLE_QUESTION_TYPES.has(question.type)
+    ? { config: question.config }
+    : {}),
   ...(question.helper_text ? { helper_text: question.helper_text } : {}),
   ...(question.is_required !== undefined ? { is_required: question.is_required } : {})
 });

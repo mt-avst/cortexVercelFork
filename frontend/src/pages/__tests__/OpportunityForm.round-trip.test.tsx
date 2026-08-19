@@ -9,8 +9,10 @@ import {
   studyRoundTripsCleanly,
   toInlineStudyPayloadStep,
   toInlineStudyStep,
+  toSurveyPayloadStep,
   toSurveyQuestion
 } from '../../lib/opportunity-authoring/hydrate-study';
+import { withClientId } from '../../lib/opportunity-authoring/client-ids';
 import { toStudySteps } from '../../shared/firsthand/inline-study';
 import { getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
@@ -150,6 +152,19 @@ const renderEdit = (path: string) =>
     </MemoryRouter>
   );
 
+/**
+ * Open every collapsed card.
+ *
+ * B2 collapses authored questions and tasks by default, so their prompt fields
+ * do not exist until the card is opened. Doubles as the hydration wait these
+ * tests used to get from `findAllByLabelText`: the summaries are the first
+ * thing rendered from server state.
+ */
+const openAllCards = async (): Promise<void> => {
+  const summaries = await screen.findAllByRole('button', { expanded: false });
+  summaries.forEach((summary) => fireEvent.click(summary));
+};
+
 /** The body of the save this interaction produced. */
 const savedBody = () =>
   vi.mocked(updateOpportunity).mock.calls[0][1] as Record<string, never>;
@@ -262,6 +277,164 @@ describe('the pure hydration helpers', () => {
 });
 
 /**
+ * What the payload builders send, listed rather than spread.
+ *
+ * B2 hangs a client-side `_clientId` on every authored item so the list can key
+ * on identity instead of position. `surveyQuestionSchema` is `.strict()`, so a
+ * question carrying that id would be REFUSED - the whole save, not the field.
+ * Nothing deletes it: the builders name the fields they send, and these
+ * assertions are on the exact key set so both widening the mapper to a spread
+ * and quietly dropping a real field fail here.
+ */
+describe('the fields a payload carries', () => {
+  it('sends exactly the survey fields the contract accepts', () => {
+    const built = toSurveyPayloadStep(
+      withClientId({
+        type: 'single_choice',
+        prompt: '  Which delivery option would you pick?  ',
+        options: ['Standard', 'Next day'],
+        is_required: true,
+        helper_text: 'Pick the one you would actually use'
+      })
+    );
+
+    expect(Object.keys(built).sort()).toEqual([
+      'helper_text',
+      'is_required',
+      'options',
+      'prompt',
+      'type'
+    ]);
+    expect(built.prompt).toBe('Which delivery option would you pick?');
+  });
+
+  it('sends exactly the task fields the contract accepts', () => {
+    const built = toInlineStudyPayloadStep(
+      withClientId({
+        type: 'instruction',
+        prompt: 'Open the basket and read what is in it aloud',
+        is_required: false,
+        helper_text: 'Out loud, not in your head'
+      })
+    );
+
+    expect(Object.keys(built).sort()).toEqual([
+      'helper_text',
+      'is_required',
+      'prompt',
+      'type'
+    ]);
+  });
+
+  /**
+   * `findStepShapeProblem` refuses a scale on a recommendation score outright,
+   * which is why the config whitelist is per type rather than "send it if it is
+   * there". Preserving a rating's scale in state through a type change is only
+   * safe because of this line.
+   */
+  it('leaves a preserved scale behind when the question is a recommendation score', () => {
+    expect(
+      toSurveyPayloadStep({
+        type: 'nps',
+        prompt: 'Would you recommend us?',
+        config: { scale_max: 7 }
+      })
+    ).toEqual({ type: 'nps', prompt: 'Would you recommend us?' });
+  });
+
+  /**
+   * `multi_choice` is in the whitelist because `findStepShapeProblem` gives it
+   * `min_selections`/`max_selections`. Only the widening direction was pinned -
+   * adding `nps` failed three tests - while NARROWING it, which silently drops
+   * an author's selection bounds on save and flips such a stored study to
+   * read-only, failed nothing. The direction that destroys content is the one
+   * that needed the test.
+   */
+  it('sends the selection bounds a multiple choice can carry', () => {
+    expect(
+      toSurveyPayloadStep({
+        type: 'multi_choice',
+        prompt: 'Which of these do you use?',
+        options: ['Jira', 'Confluence', 'Bitbucket'],
+        config: { min_selections: 1, max_selections: 2 }
+      })
+    ).toEqual({
+      type: 'multi_choice',
+      prompt: 'Which of these do you use?',
+      options: ['Jira', 'Confluence', 'Bitbucket'],
+      config: { min_selections: 1, max_selections: 2 }
+    });
+  });
+
+  it('still authors a stored multiple choice that carries selection bounds', () => {
+    const stored: StudyStep[] = [
+      {
+        step_id: 'study_demo_step_1',
+        order: 1,
+        type: 'multi_choice',
+        prompt: 'Which of these do you use?',
+        options: ['Jira', 'Confluence', 'Bitbucket'],
+        config: { min_selections: 1, max_selections: 2 }
+      },
+      { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ];
+
+    expect(studyRoundTripsCleanly(stored, 'survey', 'study_demo')).toBe(true);
+  });
+
+  it('still sends the scale a rating actually needs', () => {
+    expect(
+      toSurveyPayloadStep({
+        type: 'rating',
+        prompt: 'How happy are you with it?',
+        config: { scale_max: 7 }
+      })
+    ).toEqual({
+      type: 'rating',
+      prompt: 'How happy are you with it?',
+      config: { scale_max: 7 }
+    });
+  });
+
+  /**
+   * Narrowing the whitelist narrows `studyRoundTripsCleanly` with it, and that
+   * is the safe direction: a stored question this form would now strip is
+   * offered READ-ONLY rather than loaded into a surface that would drop part of
+   * it on the next save. The stored shape here is one the contract refuses
+   * anyway, so it could never have been saved from this form.
+   */
+  it('refuses to author a stored question whose config it would drop', () => {
+    const stored: StudyStep[] = [
+      {
+        step_id: 'study_demo_step_1',
+        order: 1,
+        type: 'nps',
+        prompt: 'Would you recommend us?',
+        config: { scale_max: 7 }
+      },
+      { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ];
+
+    expect(studyRoundTripsCleanly(stored, 'survey', 'study_demo')).toBe(false);
+  });
+
+  it('still authors a stored rating, which is the config that means something', () => {
+    const stored: StudyStep[] = [
+      {
+        step_id: 'study_demo_step_1',
+        order: 1,
+        type: 'rating',
+        prompt: 'How happy are you with it?',
+        config: { scale_max: 7 }
+      },
+      { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ];
+
+    expect(studyRoundTripsCleanly(stored, 'survey', 'study_demo')).toBe(true);
+  });
+});
+
+/**
  * The property the whole class of loss reduces to.
  *
  * Hydrate, build the payload, expand it the way the backend will store it, and
@@ -363,6 +536,15 @@ describe('reopening an opportunity that has a task list', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
+    // Collapsed first, which is what B2 changed: the author sees the shape of
+    // the list before they see any one task's wording. Asserted here rather
+    // than only in the component suite, because it is what makes the expansion
+    // below necessary at all.
+    expect(
+      (await screen.findAllByRole('button', { expanded: false })).length
+    ).toBe(2);
+    await openAllCards();
+
     // Two authored steps, so two identically-labelled prompts - queried as a
     // list, because getByLabelText would fail on the ambiguity and hide which
     // step is actually being asserted.
@@ -443,6 +625,45 @@ describe('reopening an opportunity that has questions', () => {
       ]
     });
     expect(savedBody().firsthand_study_id).toBeUndefined();
+  });
+
+  /**
+   * The survey twin of the task-list identity test, and it was missing.
+   *
+   * Hydrating without client ids is invisible to a payload assertion - the
+   * builders do not read them - but it is exactly the defect this step exists
+   * to fix, on the path an author's EXISTING content is on. With no ids every
+   * card renders `key={undefined}`, so opening one opens all three and
+   * `remapAuthoringErrors` maps every question to the same index.
+   */
+  it('gives each reopened question an identity of its own', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        id: 'study_questions',
+        kind: 'survey',
+        consent_text: 'Answers are stored for research analysis',
+        estimated_duration_minutes: null,
+        steps: SURVEY_STEPS
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+    await screen.findByDisplayValue('Developer experience pulse');
+    fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
+
+    const collapsed = await screen.findAllByRole('button', { expanded: false });
+    expect(collapsed).toHaveLength(3);
+
+    // Open exactly one. Shared identity opens all of them, and the count is
+    // what says so - the wording alone would not.
+    fireEvent.click(collapsed[1]);
+
+    expect(screen.getAllByRole('button', { expanded: true })).toHaveLength(1);
+    expect(
+      (screen.getByLabelText(/What the participant is asked/i) as HTMLTextAreaElement)
+        .value
+    ).toBe('How happy are you with the build times?');
   });
 });
 
@@ -588,20 +809,26 @@ describe('emptying a list that is linked', () => {
 
     renderEdit('/admin/opportunities/opp-1/edit');
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
-    await screen.findAllByLabelText(/What the participant sees/i);
+    await screen.findAllByRole('button', { expanded: false });
 
     // Remove both tasks. The buttons are indexed, so the survivor becomes
     // "Remove task 1" in turn - waited on between clicks, because two
     // synchronous clicks both read the same pre-render state and only one
     // removal lands.
-    fireEvent.click(screen.getByRole('button', { name: /Remove task 1/i }));
-    await waitFor(() =>
-      expect(screen.getAllByLabelText(/What the participant sees/i)).toHaveLength(1)
-    );
-    fireEvent.click(screen.getByRole('button', { name: /Remove task 1/i }));
-    await waitFor(() =>
-      expect(screen.queryByLabelText(/What the participant sees/i)).not.toBeInTheDocument()
-    );
+    //
+    // Each removal is confirmed now: B2 asks before dropping a task that has
+    // wording in it, and both of these do.
+    const removeFirstTask = async (remaining: number) => {
+      fireEvent.click(screen.getByRole('button', { name: /Remove task 1/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Remove task$/i }));
+      await waitFor(() =>
+        expect(screen.queryAllByRole('button', { expanded: false })).toHaveLength(
+          remaining
+        )
+      );
+    };
+    await removeFirstTask(1);
+    await removeFirstTask(0);
 
     fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
 
@@ -625,7 +852,7 @@ describe('a duration the author cleared', () => {
     renderEdit('/admin/opportunities/opp-1/edit');
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
-    const duration = await screen.findByLabelText(/How long it takes/i);
+    const duration = await screen.findByLabelText(/Estimated completion time/i);
     expect((duration as HTMLInputElement).value).toBe('18');
     fireEvent.change(duration, { target: { value: '' } });
 
@@ -653,6 +880,100 @@ describe('a duration the author cleared', () => {
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     expect(sentBody().inline_study).not.toHaveProperty('estimated_duration_minutes');
+  });
+});
+
+describe('the automatic estimate against a study that already has a duration', () => {
+  /**
+   * A stored duration is a decision, so reopening must not quietly re-derive
+   * over it. The study here says 18 minutes and holds two tasks, which the
+   * estimate would put at 7 - so a form that turned the estimate back on at
+   * hydration would rewrite the number on a save about something else.
+   */
+  it('keeps the stored number through a save that changed something else', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout walkthrough, second pass' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    expect(sentBody().inline_study.estimated_duration_minutes).toBe(18);
+  });
+
+  /**
+   * And handing it back to the estimate has to be savable. Only the automatic
+   * flag changes here - the number in state stays 18 - so without its own
+   * clause in hasChanges the Save button never appears and the choice cannot
+   * be stored at all.
+   */
+  it('offers a save when the author hands the duration back to the estimate', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /Use the automatic estimate/i })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    // Three minutes of setup plus two per task, for the study's two tasks.
+    expect(sentBody().inline_study.estimated_duration_minutes).toBe(7);
+  });
+});
+
+describe('the automatic estimate on a survey that already has one', () => {
+  /**
+   * The survey twin of the task-list test above, and it was missing - so the
+   * survey half of the `hasChanges()` pair could be deleted and nothing failed.
+   * On a survey the author could hand the duration back to the estimate and
+   * never be offered a Save at all.
+   */
+  it('offers a save when the author hands the duration back to the estimate', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        id: 'study_questions',
+        kind: 'survey',
+        consent_text: 'Answers are stored for research analysis',
+        estimated_duration_minutes: 40,
+        steps: SURVEY_STEPS
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+    await screen.findByDisplayValue('Developer experience pulse');
+    fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
+
+    expect(
+      (await screen.findByLabelText(/Estimated completion time/i)) as HTMLInputElement
+    ).toHaveValue(40);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /Use the automatic estimate/i })
+    );
+
+    // Read on Basic Information, because the Questions step is the one step
+    // whose action row carries no Save Changes shortcut - it has `onSubmit`
+    // and no `onSave`. Navigating there is also what makes this a test of
+    // hasChanges() rather than of the submit button, which fires regardless.
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    // 30s of consent, 60 for the free text, 15 for the rating, 15 for the NPS.
+    // Through the serialiser, like the task-list twin: `savedBody()` is typed
+    // as a bag of `never`, so a field read off it does not type-check.
+    expect(sentBody().inline_survey.estimated_duration_minutes).toBe(2);
   });
 });
 
@@ -769,7 +1090,7 @@ describe('the Save button appearing for a change that only touches authored cont
     renderEdit('/admin/opportunities/opp-1/edit');
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    await screen.findAllByLabelText(/What the participant sees/i);
+    await openAllCards();
     change();
     fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     return screen.queryByRole('button', { name: /Save Changes/i });
@@ -795,7 +1116,7 @@ describe('the Save button appearing for a change that only touches authored cont
 
   it('appears when only the study duration changed', async () => {
     const save = await openAndEdit(() => {
-      fireEvent.change(screen.getByLabelText(/How long it takes/i), {
+      fireEvent.change(screen.getByLabelText(/Estimated completion time/i), {
         target: { value: '25' }
       });
     });
@@ -835,7 +1156,7 @@ describe('the Save button appearing for a change that only touches authored cont
     renderEdit('/admin/opportunities/opp-1/edit');
     await screen.findByDisplayValue('Checkout walkthrough');
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    await screen.findAllByLabelText(/What the participant sees/i);
+    await openAllCards();
     fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
@@ -856,7 +1177,7 @@ describe('the Save button appearing for a change that only touches authored cont
     await screen.findByDisplayValue('Checkout walkthrough');
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    await screen.findAllByLabelText(/What the participant sees/i);
+    await openAllCards();
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {

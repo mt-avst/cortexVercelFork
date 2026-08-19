@@ -2,9 +2,30 @@ import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
 import { FirstHandStudy, OpportunityFormData } from '../../api/types';
+import type { WithClientId } from '../../lib/opportunity-authoring/client-ids';
+import { estimateRecordedMinutes } from '../../lib/opportunity-authoring/estimate-duration';
 import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
-import { type InlineStudyStep } from '../../shared/firsthand/inline-study';
+import {
+  authorableStepTypes,
+  type InlineStudyStep
+} from '../../shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
+import DurationEstimate from './DurationEstimate';
+import QuestionList from './QuestionList';
+
+/**
+ * What a researcher calls each task type, for the collapsed summary row.
+ *
+ * A `Record` keyed on the recorded vocabulary, so widening that set is a
+ * compile error here until the new type has a name. The two typed shapes are
+ * named as legacy because authoring no longer offers them - participants in a
+ * recorded session answer out loud - but stored ones stay editable.
+ */
+const TASK_TYPE_LABELS: Record<(typeof authorableStepTypes)[number], string> = {
+  instruction: 'Task',
+  open_text: 'Typed answer (legacy)',
+  single_choice: 'Choice (legacy)'
+};
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -17,8 +38,14 @@ export type InlineStudyFormFields = {
   firsthand_study_id?: string;
   inline_study_target_url?: string;
   inline_study_duration_minutes?: number;
+  /**
+   * Whether the duration shown is derived from the task list. See the survey
+   * twin in SurveyQuestionsTab for why this is a flag rather than "empty means
+   * automatic".
+   */
+  inline_study_duration_auto?: boolean;
   inline_study_consent_text?: string;
-  inline_study_steps?: InlineStudyStep[];
+  inline_study_steps?: WithClientId<InlineStudyStep>[];
   reuse_existing_study?: boolean;
 };
 
@@ -27,7 +54,7 @@ interface FirstHandStudyTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
-  handleStepsChange: (steps: InlineStudyStep[]) => void;
+  handleStepsChange: (steps: WithClientId<InlineStudyStep>[]) => void;
   /**
    * True when the opportunity already points at a task list. Hides the "reuse
    * an existing one instead" tickbox: swapping which list an opportunity points
@@ -115,31 +142,8 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   // launch them would be wrong.
   const draftCount = studies.filter((s) => s.status === 'draft').length;
 
-  const updateStep = (index: number, patch: Partial<InlineStudyStep>) => {
-    handleStepsChange(
-      steps.map((step, i) => (i === index ? { ...step, ...patch } : step))
-    );
-  };
-
-  const addStep = () => {
-    // Always an instruction: sessions record screen and voice, so
-    // participants answer OUT LOUD. Typed-response step types invited them to
-    // stop talking and type - the opposite of think-aloud - so authoring no
-    // longer offers them. Legacy typed steps still run and stay editable.
-    handleStepsChange([...steps, { type: 'instruction', prompt: '' }]);
-  };
-
-  const removeStep = (index: number) => {
-    handleStepsChange(steps.filter((_, i) => i !== index));
-  };
-
-  const moveStep = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= steps.length) return;
-    const next = [...steps];
-    [next[index], next[target]] = [next[target], next[index]];
-    handleStepsChange(next);
-  };
+  const estimate = estimateRecordedMinutes(steps);
+  const automaticDuration = formData.inline_study_duration_auto !== false;
 
   return (
     <div className="tab-pane active">
@@ -323,45 +327,27 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 create path fell back to the opportunity's default_duration_minutes
                 - NOT NULL, DEFAULT 30 - so every recorded study told participants
                 "about 30 minutes" above a consent button, chosen by nobody. An
-                empty field now means nobody said, and every surface renders that
-                as nothing. A wrong number is worse than no number here. */}
+                empty field STILL means nobody said, and every surface renders
+                that as nothing. The automatic estimate is a better default than
+                a blank, but it is a default, not a floor. */}
             <div className="row">
-              <div className="col-12 col-md-4">
-                <div className="form-group mb-4">
-                  <label
-                    htmlFor="inline_study_duration_minutes"
-                    className="form-label mb-2"
-                    style={{ fontSize: '1rem', fontWeight: '600' }}
-                  >
-                    How long it takes (optional)
-                  </label>
-                  <input
-                    id="inline_study_duration_minutes"
-                    type="number"
-                    min={1}
-                    max={1440}
-                    className={`form-control ${validationErrors.inline_study_duration_minutes ? 'is-invalid' : ''}`}
-                    style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem' }}
-                    value={formData.inline_study_duration_minutes ?? ''}
-                    onChange={(e) =>
-                      handleInputChange(
-                        'inline_study_duration_minutes',
-                        e.target.value === '' ? undefined : Number(e.target.value)
-                      )
-                    }
-                    placeholder="e.g. 20"
-                  />
-                  {validationErrors.inline_study_duration_minutes && (
-                    <div className="invalid-feedback d-block">
-                      {validationErrors.inline_study_duration_minutes}
-                    </div>
-                  )}
-                  <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-                    Minutes. Shown to participants before they agree to be recorded.
-                    Leave it empty if you are not sure - they will simply not be told
-                    a length, which is better than being told the wrong one.
-                  </div>
-                </div>
+              <div className="col-12 col-md-6">
+                <DurationEstimate
+                  field="inline_study_duration_minutes"
+                  value={formData.inline_study_duration_minutes}
+                  automatic={automaticDuration}
+                  estimate={estimate}
+                  error={validationErrors.inline_study_duration_minutes}
+                  derivedFrom={`${steps.length} ${
+                    steps.length === 1 ? 'task' : 'tasks'
+                  }`}
+                  onValueChange={(value) =>
+                    handleInputChange('inline_study_duration_minutes', value)
+                  }
+                  onAutomaticChange={(automatic) =>
+                    handleInputChange('inline_study_duration_auto', automatic)
+                  }
+                />
               </div>
             </div>
 
@@ -371,136 +357,79 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               </div>
             )}
 
-            {steps.length === 0 && (
-              <p className="text-muted" style={{ fontSize: '0.95rem' }}>
-                No tasks yet. Add the first thing you want the participant to do.
-              </p>
-            )}
-
-            {steps.map((step, index) => (
-              <div className="card mb-3" key={index}>
-                <div className="card-body">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <strong style={{ fontSize: '0.95rem' }}>Task {index + 1}</strong>
-                    <div className="btn-group btn-group-sm">
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        onClick={() => moveStep(index, -1)}
-                        disabled={index === 0}
-                        aria-label={`Move task ${index + 1} up`}
-                      >
-                        Up
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary"
-                        onClick={() => moveStep(index, 1)}
-                        disabled={index === steps.length - 1}
-                        aria-label={`Move task ${index + 1} down`}
-                      >
-                        Down
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-outline-danger"
-                        onClick={() => removeStep(index)}
-                        aria-label={`Remove task ${index + 1}`}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* No response-type selector: sessions record screen and voice, so
-                      participants answer out loud. See addStep. Legacy typed
-                      steps keep their type, and the options editor below still
-                      renders for a legacy choice step so it stays editable. */}
-
-                  <div className="mb-3">
+            <QuestionList
+              items={steps}
+              onChange={handleStepsChange}
+              validationErrors={validationErrors}
+              errorPrefix="inline_study_steps"
+              idPrefix="task"
+              noun="task"
+              nounPlural="tasks"
+              typeLabels={TASK_TYPE_LABELS}
+              /* No type selector: a recorded participant answers out loud, so
+                 authoring offers instructions only. Adding one here would be a
+                 product change wearing a shared component's clothes. */
+              typeVocabulary={null}
+              makeItem={(): InlineStudyStep => ({ type: 'instruction', prompt: '' })}
+              promptLabel={() => 'What the participant sees *'}
+              promptPlaceholder="Find the export button and download last month's report"
+              addLabel="Add task"
+              emptyMessage="No tasks yet. Add the first thing you want the participant to do."
+              renderTypeFields={({ item, index, update }) =>
+                item.type === 'single_choice' ? (
+                  <div className="mb-2">
                     <label
                       className="form-label mb-1"
-                      htmlFor={`step_prompt_${index}`}
                       style={{ fontSize: '0.9rem', fontWeight: 600 }}
                     >
-                      What the participant sees *
+                      Options (at least two) *
                     </label>
-                    <textarea
-                      id={`step_prompt_${index}`}
-                      className={`form-control ${validationErrors[`inline_study_steps.${index}.prompt`] ? 'is-invalid' : ''}`}
-                      rows={2}
-                      value={step.prompt}
-                      onChange={(e) => updateStep(index, { prompt: e.target.value })}
-                      placeholder="Find the export button and download last month's report"
-                    />
-                    {validationErrors[`inline_study_steps.${index}.prompt`] && (
-                      <div className="invalid-feedback d-block">
-                        {validationErrors[`inline_study_steps.${index}.prompt`]}
-                      </div>
-                    )}
-                  </div>
-
-                  {step.type === 'single_choice' && (
-                    <div className="mb-2">
-                      <label
-                        className="form-label mb-1"
-                        style={{ fontSize: '0.9rem', fontWeight: 600 }}
+                    {(item.options ?? ['', '']).map((option, optionIndex) => (
+                      <input
+                        key={optionIndex}
+                        className="form-control mb-2"
+                        value={option}
+                        aria-label={`Task ${index + 1} option ${optionIndex + 1}`}
+                        onChange={(e) =>
+                          update({
+                            options: (item.options ?? ['', '']).map((each, i) =>
+                              i === optionIndex ? e.target.value : each
+                            )
+                          })
+                        }
+                      />
+                    ))}
+                    <div className="d-flex gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() =>
+                          update({ options: [...(item.options ?? ['', '']), ''] })
+                        }
                       >
-                        Options (at least two) *
-                      </label>
-                      {(step.options ?? ['', '']).map((option, optionIndex) => (
-                        <input
-                          key={optionIndex}
-                          className="form-control mb-2"
-                          value={option}
-                          aria-label={`Task ${index + 1} option ${optionIndex + 1}`}
-                          onChange={(e) => {
-                            const options = [...(step.options ?? ['', ''])];
-                            options[optionIndex] = e.target.value;
-                            updateStep(index, { options });
-                          }}
-                        />
-                      ))}
-                      <div className="d-flex gap-2">
+                        Add option
+                      </button>
+                      {(item.options ?? []).length > 2 && (
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-secondary"
                           onClick={() =>
-                            updateStep(index, {
-                              options: [...(step.options ?? ['', '']), '']
-                            })
+                            update({ options: (item.options ?? []).slice(0, -1) })
                           }
                         >
-                          Add option
+                          Remove last option
                         </button>
-                        {(step.options ?? []).length > 2 && (
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={() =>
-                              updateStep(index, {
-                                options: (step.options ?? []).slice(0, -1)
-                              })
-                            }
-                          >
-                            Remove last option
-                          </button>
-                        )}
-                      </div>
-                      {validationErrors[`inline_study_steps.${index}.options`] && (
-                        <div className="invalid-feedback d-block">
-                          {validationErrors[`inline_study_steps.${index}.options`]}
-                        </div>
                       )}
                     </div>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            <button type="button" className="btn btn-outline-primary mb-4" onClick={addStep}>
-              Add task
-            </button>
+                    {validationErrors[`inline_study_steps.${index}.options`] && (
+                      <div className="validation-error" role="alert">
+                        {validationErrors[`inline_study_steps.${index}.options`]}
+                      </div>
+                    )}
+                  </div>
+                ) : null
+              }
+            />
 
             <div className="row">
               <div className="col-12 col-md-8">

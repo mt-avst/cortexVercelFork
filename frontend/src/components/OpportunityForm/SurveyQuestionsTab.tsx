@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 
 import { getFirstHandStudies } from '../../api/client';
 import { FirstHandStudy, OpportunityFormData } from '../../api/types';
+import type { WithClientId } from '../../lib/opportunity-authoring/client-ids';
+import { estimateSurveyMinutes } from '../../lib/opportunity-authoring/estimate-duration';
 import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
 import {
   NPS_SCALE_MAX,
@@ -11,7 +13,8 @@ import {
   authorableSurveyStepTypes,
   type SurveyQuestion
 } from '../../shared/firsthand/survey-authoring';
-import { INLINE_STUDY_LIMITS } from '../../shared/firsthand/inline-study';
+import DurationEstimate from './DurationEstimate';
+import QuestionList from './QuestionList';
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -24,8 +27,16 @@ type FormFieldValue = string | number | boolean | undefined;
 export type InlineSurveyFormFields = {
   firsthand_study_id?: string;
   inline_survey_duration_minutes?: number;
+  /**
+   * Whether the duration shown is derived from the question list.
+   *
+   * A separate flag rather than "empty means automatic", because empty already
+   * means something: tell the participant no length at all. Collapsing the two
+   * would remove a capability the field's own help text offers.
+   */
+  inline_survey_duration_auto?: boolean;
   inline_survey_consent_text?: string;
-  inline_survey_questions?: SurveyQuestion[];
+  inline_survey_questions?: WithClientId<SurveyQuestion>[];
   reuse_existing_survey?: boolean;
 };
 
@@ -56,7 +67,7 @@ interface SurveyQuestionsTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   /** Questions are an array, which handleInputChange's scalar signature cannot carry. */
-  handleQuestionsChange: (questions: SurveyQuestion[]) => void;
+  handleQuestionsChange: (questions: WithClientId<SurveyQuestion>[]) => void;
   /**
    * True when the opportunity already points at a set of questions. Hides the
    * "reuse an existing set instead" tickbox: swapping which set an opportunity
@@ -148,75 +159,55 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
     (study) => study.status === 'draft' && study.kind === 'survey'
   ).length;
 
-  const updateQuestion = (index: number, patch: Partial<SurveyQuestion>) => {
-    handleQuestionsChange(
-      questions.map((question, i) =>
-        i === index ? { ...question, ...patch } : question
-      )
-    );
-  };
-
   /**
-   * Changing type has to drop the settings that no longer apply, not merely
-   * hide them. A rating's `scale_max` left on a question the author switched to
-   * NPS is rejected by the contract - NPS is fixed at 0 to 10 and takes no
-   * scale - so a hidden leftover would fail the save with an error about a
-   * field the form is no longer showing.
+   * Changing type keeps what the new type cannot show, rather than deleting it.
+   *
+   * It used to replace the question wholesale, so a multiple choice switched to
+   * free text and back came back with two empty answer rows and the author's
+   * four options gone - destroyed by a control that looks like a filter.
+   *
+   * The reason it deleted them is real, though, and has only moved: a rating's
+   * `scale_max` left on a question switched to NPS is REFUSED by the contract,
+   * and the save would fail naming a field the form is no longer showing. So
+   * the leftovers are preserved HERE and stripped in `toSurveyPayloadStep`,
+   * which is the same function `studyRoundTripsCleanly` checks the round trip
+   * with - the two cannot drift apart.
    */
   const changeQuestionType = (
-    index: number,
-    type: (typeof authorableSurveyStepTypes)[number]
-  ) => {
-    const current = questions[index];
-    const next: SurveyQuestion = { type, prompt: current.prompt };
+    question: WithClientId<SurveyQuestion>,
+    type: string
+  ): WithClientId<SurveyQuestion> => {
+    const next: WithClientId<SurveyQuestion> = {
+      ...question,
+      type: type as SurveyQuestion['type']
+    };
 
-    if (current.helper_text) next.helper_text = current.helper_text;
     // Not carried onto an instruction: it cannot be answered, so a required
     // flag on one is hidden state that crosses the API and is stored meaning
-    // nothing.
-    if (type !== 'instruction' && current.is_required !== undefined) {
-      next.is_required = current.is_required;
+    // nothing. Deleted rather than preserved because, unlike options and a
+    // scale, there is nothing for the author to get back - the checkbox is
+    // simply off when they switch away again.
+    if (type === 'instruction') {
+      delete next.is_required;
     }
-    if (CHOICE_TYPES.has(type)) next.options = current.options ?? ['', ''];
-    if (type === 'rating') next.config = { scale_max: DEFAULT_RATING_SCALE };
 
-    // Replaced wholesale rather than merged: updateQuestion spreads over the
-    // current question, which would keep exactly the stale settings this is
-    // here to drop.
-    handleQuestionsChange(
-      questions.map((question, i) => (i === index ? next : question))
-    );
+    // Seeded only when there is nothing to restore, so switching back to a
+    // choice type recovers the answers the author already wrote.
+    if (CHOICE_TYPES.has(type) && (next.options ?? []).length === 0) {
+      next.options = ['', ''];
+    }
+
+    // Same rule for the scale. `rating` is the one type the contract REQUIRES
+    // a config on, so a seed is not a convenience here.
+    if (type === 'rating' && next.config?.scale_max === undefined) {
+      next.config = { ...next.config, scale_max: DEFAULT_RATING_SCALE };
+    }
+
+    return next;
   };
 
-  const addQuestion = () =>
-    handleQuestionsChange([...questions, { type: 'open_text', prompt: '' }]);
-
-  const removeQuestion = (index: number) =>
-    handleQuestionsChange(questions.filter((_, i) => i !== index));
-
-  const moveQuestion = (index: number, direction: -1 | 1) => {
-    const target = index + direction;
-    if (target < 0 || target >= questions.length) return;
-    const next = [...questions];
-    [next[index], next[target]] = [next[target], next[index]];
-    handleQuestionsChange(next);
-  };
-
-  const updateOption = (index: number, optionIndex: number, value: string) => {
-    const options = [...(questions[index].options ?? [])];
-    options[optionIndex] = value;
-    updateQuestion(index, { options });
-  };
-
-  const addOption = (index: number) =>
-    updateQuestion(index, { options: [...(questions[index].options ?? []), ''] });
-
-  const removeOption = (index: number, optionIndex: number) =>
-    updateQuestion(index, {
-      options: (questions[index].options ?? []).filter(
-        (_, i) => i !== optionIndex
-      )
-    });
+  const estimate = estimateSurveyMinutes(questions);
+  const automaticDuration = formData.inline_survey_duration_auto !== false;
 
   return (
     <div className="tab-pane active">
@@ -347,281 +338,185 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
         ) : (
           <>
             <div className="row">
-              <div className="col-12 col-md-4">
-                <div className="form-group mb-4">
-                  <label
-                    htmlFor="inline_survey_duration_minutes"
-                    className="form-label mb-2"
-                    style={{ fontSize: '1rem', fontWeight: '600' }}
-                  >
-                    How long it takes (optional)
-                  </label>
-                  <input
-                    type="number"
-                    className={`form-control ${validationErrors.inline_survey_duration_minutes ? 'is-invalid' : ''}`}
-                    id="inline_survey_duration_minutes"
-                    min={1}
-                    max={INLINE_STUDY_LIMITS.maxDurationMinutes}
-                    value={formData.inline_survey_duration_minutes ?? ''}
-                    onChange={(e) =>
-                      handleInputChange(
-                        'inline_survey_duration_minutes',
-                        e.target.value === '' ? undefined : Number(e.target.value)
-                      )
-                    }
-                  />
-                  {validationErrors.inline_survey_duration_minutes && (
-                    <div className="invalid-feedback d-block">
-                      {validationErrors.inline_survey_duration_minutes}
-                    </div>
-                  )}
-                  <div className="form-text">
-                    Minutes. Shown to participants before they start. Leave it
-                    empty if you are not sure - they will simply not be told a
-                    length, which is better than being told the wrong one.
-                  </div>
-                </div>
+              <div className="col-12 col-md-6">
+                <DurationEstimate
+                  field="inline_survey_duration_minutes"
+                  value={formData.inline_survey_duration_minutes}
+                  automatic={automaticDuration}
+                  estimate={estimate}
+                  error={validationErrors.inline_survey_duration_minutes}
+                  derivedFrom={`${questions.length} ${
+                    questions.length === 1 ? 'question' : 'questions'
+                  }`}
+                  onValueChange={(value) =>
+                    handleInputChange('inline_survey_duration_minutes', value)
+                  }
+                  onAutomaticChange={(automatic) =>
+                    handleInputChange('inline_survey_duration_auto', automatic)
+                  }
+                />
               </div>
             </div>
 
-            {questions.length === 0 ? (
-              <p className="text-muted">
-                No questions yet. Add the first thing you want to ask.
-              </p>
-            ) : (
-              <ol className="list-unstyled">
-                {questions.map((question, index) => (
-                  <li key={index} className="card mb-3">
-                    <div className="card-body">
-                      <div className="d-flex justify-content-between align-items-center mb-3">
-                        <strong>Question {index + 1}</strong>
-                        <div className="btn-group btn-group-sm">
+            {validationErrors.inline_survey_questions && (
+              <div className="validation-error mb-2" role="alert">
+                {validationErrors.inline_survey_questions}
+              </div>
+            )}
+
+            <QuestionList
+              items={questions}
+              onChange={handleQuestionsChange}
+              validationErrors={validationErrors}
+              errorPrefix="inline_survey_questions"
+              idPrefix="question"
+              noun="question"
+              nounPlural="questions"
+              typeLabels={QUESTION_TYPE_LABELS}
+              typeVocabulary={authorableSurveyStepTypes}
+              onChangeType={changeQuestionType}
+              makeItem={(): SurveyQuestion => ({ type: 'open_text', prompt: '' })}
+              promptLabel={(question) =>
+                question.type === 'instruction'
+                  ? 'What the participant reads *'
+                  : 'What the participant is asked *'
+              }
+              addLabel="Add question"
+              emptyMessage="No questions yet. Add the first thing you want to ask."
+              renderTypeFields={({ item, index, update }) => (
+                <>
+                  {CHOICE_TYPES.has(item.type) && (
+                    <div className="form-group mb-3">
+                      <label className="form-label">Answers</label>
+                      {(item.options ?? []).map((option, optionIndex) => (
+                        <div className="input-group mb-2" key={optionIndex}>
+                          <input
+                            className="form-control"
+                            aria-label={`Answer ${optionIndex + 1} for question ${index + 1}`}
+                            value={option}
+                            onChange={(e) =>
+                              update({
+                                options: (item.options ?? []).map((each, i) =>
+                                  i === optionIndex ? e.target.value : each
+                                )
+                              })
+                            }
+                          />
                           <button
                             type="button"
                             className="btn btn-outline-secondary"
-                            onClick={() => moveQuestion(index, -1)}
-                            disabled={index === 0}
-                          >
-                            Up
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-secondary"
-                            onClick={() => moveQuestion(index, 1)}
-                            disabled={index === questions.length - 1}
-                          >
-                            Down
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-danger"
-                            onClick={() => removeQuestion(index)}
+                            onClick={() =>
+                              update({
+                                options: (item.options ?? []).filter(
+                                  (_, i) => i !== optionIndex
+                                )
+                              })
+                            }
+                            disabled={(item.options ?? []).length <= 2}
                           >
                             Remove
                           </button>
                         </div>
-                      </div>
-
-                      <div className="form-group mb-3">
-                        <label
-                          className="form-label"
-                          htmlFor={`question-type-${index}`}
-                        >
-                          Type
-                        </label>
-                        <select
-                          className="form-control form-select"
-                          id={`question-type-${index}`}
-                          value={question.type}
-                          onChange={(e) =>
-                            changeQuestionType(
-                              index,
-                              e.target
-                                .value as (typeof authorableSurveyStepTypes)[number]
-                            )
+                      ))}
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() =>
+                          update({ options: [...(item.options ?? []), ''] })
+                        }
+                      >
+                        Add answer
+                      </button>
+                      {validationErrors[
+                        `inline_survey_questions.${index}.options`
+                      ] && (
+                        <div className="validation-error" role="alert">
+                          {
+                            validationErrors[
+                              `inline_survey_questions.${index}.options`
+                            ]
                           }
-                        >
-                          {authorableSurveyStepTypes.map((type) => (
-                            <option key={type} value={type}>
-                              {QUESTION_TYPE_LABELS[type]}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div className="form-group mb-3">
-                        <label
-                          className="form-label"
-                          htmlFor={`question-prompt-${index}`}
-                        >
-                          {question.type === 'instruction'
-                            ? 'What the participant reads *'
-                            : 'What the participant is asked *'}
-                        </label>
-                        <textarea
-                          className={`form-control ${
-                            validationErrors[`inline_survey_questions.${index}.prompt`]
-                              ? 'is-invalid'
-                              : ''
-                          }`}
-                          id={`question-prompt-${index}`}
-                          rows={2}
-                          value={question.prompt}
-                          onChange={(e) =>
-                            updateQuestion(index, { prompt: e.target.value })
-                          }
-                        />
-                        {validationErrors[
-                          `inline_survey_questions.${index}.prompt`
-                        ] && (
-                          <div className="invalid-feedback d-block">
-                            {
-                              validationErrors[
-                                `inline_survey_questions.${index}.prompt`
-                              ]
-                            }
-                          </div>
-                        )}
-                      </div>
-
-                      {CHOICE_TYPES.has(question.type) && (
-                        <div className="form-group mb-3">
-                          <label className="form-label">Answers</label>
-                          {(question.options ?? []).map((option, optionIndex) => (
-                            <div className="input-group mb-2" key={optionIndex}>
-                              <input
-                                className="form-control"
-                                aria-label={`Answer ${optionIndex + 1} for question ${index + 1}`}
-                                value={option}
-                                onChange={(e) =>
-                                  updateOption(index, optionIndex, e.target.value)
-                                }
-                              />
-                              <button
-                                type="button"
-                                className="btn btn-outline-secondary"
-                                onClick={() => removeOption(index, optionIndex)}
-                                disabled={(question.options ?? []).length <= 2}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ))}
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={() => addOption(index)}
-                          >
-                            Add answer
-                          </button>
-                          {validationErrors[
-                            `inline_survey_questions.${index}.options`
-                          ] && (
-                            <div className="invalid-feedback d-block">
-                              {
-                                validationErrors[
-                                  `inline_survey_questions.${index}.options`
-                                ]
-                              }
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {question.type === 'rating' && (
-                        <div className="form-group mb-3">
-                          <label
-                            className="form-label"
-                            htmlFor={`question-scale-${index}`}
-                          >
-                            Points on the scale
-                          </label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            id={`question-scale-${index}`}
-                            min={RATING_SCALE_BOUNDS.min}
-                            max={RATING_SCALE_BOUNDS.max}
-                            style={{ maxWidth: '8rem' }}
-                            value={question.config?.scale_max ?? DEFAULT_RATING_SCALE}
-                            onChange={(e) =>
-                              updateQuestion(index, {
-                                config: {
-                                  ...question.config,
-                                  scale_max: Number(e.target.value)
-                                }
-                              })
-                            }
-                          />
-                          {validationErrors[
-                            `inline_survey_questions.${index}.config`
-                          ] && (
-                            <div className="invalid-feedback d-block">
-                              {
-                                validationErrors[
-                                  `inline_survey_questions.${index}.config`
-                                ]
-                              }
-                            </div>
-                          )}
-                          <div className="form-text">
-                            Between {RATING_SCALE_BOUNDS.min} and{' '}
-                            {RATING_SCALE_BOUNDS.max}. Not defaulted silently:
-                            two surveys with the same wording on different scales
-                            produce data nothing records the difference between.
-                          </div>
-                        </div>
-                      )}
-
-                      {question.type === 'nps' && (
-                        <div className="form-text mb-3">
-                          Always 0 to {NPS_SCALE_MAX}, so there is nothing to set.
-                          An author-set scale would produce something labelled a
-                          recommendation score whose numbers cannot be compared
-                          with anyone else&apos;s.
-                        </div>
-                      )}
-
-                      {question.type !== 'instruction' && (
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            id={`question-required-${index}`}
-                            checked={Boolean(question.is_required)}
-                            onChange={(e) =>
-                              updateQuestion(index, {
-                                is_required: e.target.checked
-                              })
-                            }
-                          />
-                          <label
-                            className="form-check-label"
-                            htmlFor={`question-required-${index}`}
-                          >
-                            Must be answered
-                          </label>
                         </div>
                       )}
                     </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+                  )}
 
-            <button
-              type="button"
-              className="btn btn-outline-primary"
-              onClick={addQuestion}
-            >
-              Add question
-            </button>
+                  {item.type === 'rating' && (
+                    <div className="form-group mb-3">
+                      <label
+                        className="form-label"
+                        htmlFor={`question-scale-${item._clientId}`}
+                      >
+                        Points on the scale
+                      </label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        id={`question-scale-${item._clientId}`}
+                        min={RATING_SCALE_BOUNDS.min}
+                        max={RATING_SCALE_BOUNDS.max}
+                        style={{ maxWidth: '8rem' }}
+                        value={item.config?.scale_max ?? DEFAULT_RATING_SCALE}
+                        onChange={(e) =>
+                          update({
+                            config: {
+                              ...item.config,
+                              scale_max: Number(e.target.value)
+                            }
+                          })
+                        }
+                      />
+                      {validationErrors[
+                        `inline_survey_questions.${index}.config`
+                      ] && (
+                        <div className="validation-error" role="alert">
+                          {
+                            validationErrors[
+                              `inline_survey_questions.${index}.config`
+                            ]
+                          }
+                        </div>
+                      )}
+                      <div className="form-text">
+                        Between {RATING_SCALE_BOUNDS.min} and{' '}
+                        {RATING_SCALE_BOUNDS.max}. Not defaulted silently: two
+                        surveys with the same wording on different scales produce
+                        data nothing records the difference between.
+                      </div>
+                    </div>
+                  )}
 
-            {validationErrors.inline_survey_questions && (
-              <div className="invalid-feedback d-block mt-2">
-                {validationErrors.inline_survey_questions}
-              </div>
-            )}
+                  {item.type === 'nps' && (
+                    <div className="form-text mb-3">
+                      Always 0 to {NPS_SCALE_MAX}, so there is nothing to set. An
+                      author-set scale would produce something labelled a
+                      recommendation score whose numbers cannot be compared with
+                      anyone else&apos;s.
+                    </div>
+                  )}
+
+                  {item.type !== 'instruction' && (
+                    <div className="form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id={`question-required-${item._clientId}`}
+                        checked={Boolean(item.is_required)}
+                        onChange={(e) =>
+                          update({ is_required: e.target.checked })
+                        }
+                      />
+                      <label
+                        className="form-check-label"
+                        htmlFor={`question-required-${item._clientId}`}
+                      >
+                        Required
+                      </label>
+                    </div>
+                  )}
+                </>
+              )}
+            />
 
             <div className="form-group mt-4">
               <label

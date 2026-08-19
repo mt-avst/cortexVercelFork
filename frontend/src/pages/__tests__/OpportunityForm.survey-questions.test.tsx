@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -188,11 +188,17 @@ describe('authoring a native survey', () => {
   });
 
   /**
-   * Changing a question's type has to DROP the settings that no longer apply,
-   * not merely stop rendering them. A rating's scale left on a question the
-   * author switched to a recommendation score is rejected by the contract -
-   * that type is fixed at 0 to 10 and takes no scale - so a hidden leftover
-   * fails the save with an error about a field the form is no longer showing.
+   * A rating's scale left on a question the author switched to a recommendation
+   * score is REJECTED by the contract - that type is fixed at 0 to 10 and takes
+   * no scale - so a leftover fails the save with an error about a field the
+   * form is no longer showing.
+   *
+   * B2 stopped answering that by deleting the author's settings on every type
+   * change, which threw away four hand-written answers if they touched the
+   * selector by mistake. The settings are kept in state now and stripped by
+   * `toSurveyPayloadStep` instead, so this test has to drive the REAL payload
+   * builder: a state-only assertion proves nothing, because state is exactly
+   * where the leftover now legitimately lives.
    */
   it('drops a rating scale when the question becomes a recommendation score', async () => {
     const user = userEvent.setup();
@@ -225,6 +231,273 @@ describe('authoring a native survey', () => {
       type: 'nps',
       prompt: 'How easy was that?'
     });
+  });
+
+  /**
+   * The other half of the same behaviour, and the half a state-only test would
+   * miss: what was preserved has to come BACK, and the save that carries it has
+   * to succeed. Asserted on the payload for both reasons.
+   */
+  it('gives the scale back when the question becomes a rating again', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'How easy was that?'
+    );
+
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
+    await user.clear(await screen.findByLabelText(/Points on the scale/i));
+    await user.type(screen.getByLabelText(/Points on the scale/i), '7');
+
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { steps: Record<string, unknown>[] };
+    };
+
+    // 7, not the default 5. A re-seeded scale would look like preservation and
+    // would silently change the data every study on it produces.
+    expect(body.inline_survey?.steps[0]).toEqual({
+      type: 'rating',
+      prompt: 'How easy was that?',
+      config: { scale_max: 7 }
+    });
+  });
+
+  /**
+   * The case the plan names: four answers, away to a type that cannot show
+   * them, and back. It used to come back as two empty rows.
+   */
+  it('gives written answers back after a trip through free text', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Which delivery option would you pick?'
+    );
+
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'single_choice');
+    await user.type(
+      await screen.findByLabelText('Answer 1 for question 1'),
+      'Standard'
+    );
+    await user.type(screen.getByLabelText('Answer 2 for question 1'), 'Next day');
+
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'open_text');
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'single_choice');
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { steps: Record<string, unknown>[] };
+    };
+
+    expect(body.inline_survey?.steps[0]).toEqual({
+      type: 'single_choice',
+      prompt: 'Which delivery option would you pick?',
+      options: ['Standard', 'Next day']
+    });
+  });
+
+  /**
+   * Errors are keyed by position, so the form used to delete every one of them
+   * on any change to the list. Moving a question the author had not yet fixed
+   * silently cleared the reason they were sent back to it, and the next save
+   * refused for exactly the same thing.
+   */
+  it('keeps a question error pointing at its question across a move', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Which tool slows you down?'
+    );
+    // Added second and left empty, so exactly one question is refused and the
+    // one that survives the move is identifiable.
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    expect(
+      await screen.findByText('Add what the participant is asked')
+    ).toBeInTheDocument();
+    expect(createOpportunity).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Move question 2 up' }));
+
+    // Still there, and now on the FIRST card - which is where the empty
+    // question went. Asserting only that it survived would pass against an
+    // error left behind on the question the author already filled in.
+    const cards = screen.getAllByRole('listitem');
+    expect(
+      within(cards[0]).getByText('Add what the participant is asked')
+    ).toBeInTheDocument();
+    expect(
+      within(cards[1]).queryByText('Add what the participant is asked')
+    ).toBeNull();
+  });
+
+  /**
+   * An empty list has no length, and the sentence that described one read
+   * "Automatically estimated from your 0 questions" - a broken sentence about
+   * a number that is not there.
+   */
+  it('says there is nothing to estimate before any question is written', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+
+    expect(screen.getByText(/nothing to estimate from yet/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Estimated completion time/i)).toHaveValue(null);
+
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+    expect(screen.queryByText(/nothing to estimate from yet/i)).toBeNull();
+    expect(screen.getByText(/Automatically estimated/i)).toBeInTheDocument();
+  });
+
+  /**
+   * The survey half of the automatic estimate, asserted at the PAYLOAD.
+   *
+   * The task-list half has its own test, and one covering both is exactly the
+   * shape that lets a copy-paste of the wrong field name past a review: the two
+   * branches are textually near-identical and neither is derived from the
+   * other. Thirty seconds of consent plus sixty for a free-text answer, rounded
+   * up to a whole minute.
+   */
+  it('sends the automatic estimate for a survey nobody set a length on', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Which tool slows you down?'
+    );
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { estimated_duration_minutes?: number | null };
+    };
+
+    expect(body.inline_survey?.estimated_duration_minutes).toBe(2);
+  });
+
+  /**
+   * An instruction cannot be answered, so a required flag on one is hidden
+   * state that crosses the API and is stored meaning nothing. The contract does
+   * NOT refuse it, so nothing downstream would ever complain - which is exactly
+   * why the rule needs a test rather than a comment.
+   */
+  it('drops the required flag when a question becomes section text', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Before we start, a note about how this works'
+    );
+    await user.click(screen.getByLabelText('Required'));
+    await user.selectOptions(screen.getByLabelText(/^Type$/i), 'instruction');
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { steps: Record<string, unknown>[] };
+    };
+
+    expect(body.inline_survey?.steps[0]).toEqual({
+      type: 'instruction',
+      prompt: 'Before we start, a note about how this works'
+    });
+  });
+
+  /**
+   * A number the payload does not send must not be able to refuse the save.
+   *
+   * The validator read this field unconditionally while the payload used it
+   * only under the override, so an out-of-range value left behind by a trip
+   * through "Set it myself" blocked every later save - and the banner sent the
+   * author to a READ-ONLY field displaying a perfectly valid estimate, with
+   * nothing on screen to correct. Found by the review gate, reproduced, fixed.
+   */
+  it('does not refuse the save over a length it is no longer sending', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'Which tool slows you down?'
+    );
+
+    await user.click(screen.getByRole('button', { name: /Set it myself/i }));
+    await user.clear(screen.getByLabelText(/Estimated completion time/i));
+    await user.type(screen.getByLabelText(/Estimated completion time/i), '5000');
+    await user.click(screen.getByRole('button', { name: /Use the automatic estimate/i }));
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { estimated_duration_minutes?: number | null };
+    };
+
+    expect(body.inline_survey?.estimated_duration_minutes).toBe(2);
+    expect(screen.queryByText(/Keep it under 1440 minutes/i)).toBeNull();
+  });
+
+  /**
+   * "Must be answered" described the participant's obligation from the
+   * participant's side, in a control the RESEARCHER uses. Every other product
+   * that has this checkbox calls it Required.
+   */
+  it('calls the answer requirement Required', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+    expect(screen.getByLabelText('Required')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Must be answered/i)).toBeNull();
   });
 
   /**
@@ -504,8 +777,12 @@ describe('the forward control on the Questions tab', () => {
       screen.getByLabelText(/What the participant is asked/i),
       'Which tool slows you down?'
     );
-    await user.clear(screen.getByLabelText(/How long it takes/i));
-    await user.type(screen.getByLabelText(/How long it takes/i), '-3');
+    // Taken over from the automatic estimate first: the field is read-only
+    // while the estimate is in force, so there is no way to type a negative
+    // length into it until the author has explicitly asked to set it.
+    await user.click(screen.getByRole('button', { name: /Set it myself/i }));
+    await user.clear(screen.getByLabelText(/Estimated completion time/i));
+    await user.type(screen.getByLabelText(/Estimated completion time/i), '-3');
 
     await user.click(screen.getByRole('button', { name: /Update Opportunity/i }));
 
