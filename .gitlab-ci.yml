@@ -41,26 +41,6 @@ include:
 variables:
   APP_1: backend
   APP_2: frontend
-  # TEMPORARY DIAGNOSTIC - REMOVE ONCE THE RELEASE IS FIXED.
-  #
-  # Every release has failed since 2026-08-18 21:38 UTC, when
-  # conventional-changelog-angular@9.4.0 was published. It requires
-  # conventional-changelog-writer@9+, while
-  # @semantic-release/release-notes-generator@14 pins writer 8.x, and pairing
-  # the two reproduces the exact "Missing helper" error locally against this
-  # repo's real commit range.
-  #
-  # What nobody here has been able to observe is how the RUNNER resolves those
-  # packages - a local simulation of the component's two global installs did
-  # not reproduce it. Acting on that gap without closing it is what made !149
-  # a bad fix. gitlab-ci-semrel prints `npm list --global` when TRACE is
-  # non-empty, which shows the actual installed tree and settles it.
-  #
-  # Set globally rather than on the two semrel jobs, because a job-level
-  # `variables:` override would replace the block those jobs already use for
-  # XDG_CACHE_HOME and npm_config_cache and so break their caching. The cost is
-  # a noisier pipeline everywhere for one run.
-  TRACE: "true"
 
 .docker-base:
   parallel:
