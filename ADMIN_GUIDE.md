@@ -17,11 +17,12 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 2. [Creating an Opportunity](#creating-an-opportunity)
 3. [Managing Sessions](#managing-sessions)
 4. [Unmoderated Studies](#unmoderated-studies)
-5. [Publishing Opportunities](#publishing-opportunities)
-6. [Dashboard and Analytics](#dashboard-and-analytics)
-7. [Settings](#settings)
-8. [Managing Bookings](#managing-bookings)
-9. [Tips and Best Practices](#tips-and-best-practices)
+5. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
+6. [Publishing Opportunities](#publishing-opportunities)
+7. [Dashboard and Analytics](#dashboard-and-analytics)
+8. [Settings](#settings)
+9. [Managing Bookings](#managing-bookings)
+10. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -72,12 +73,20 @@ Fill in the required fields:
 - **Product**: Related product or area (optional)
 - **Default Duration**: Default session length in minutes (default: 30)
 
-### Step 3: External Links (Polls & Surveys Only)
+### Step 3: Where a Poll or Survey is answered
 
-If creating a Poll or Survey:
-- **External Link**: Required
-- This is where users will be redirected when they click "Open Poll/Survey"
-- Example: Google Forms, SurveyMonkey, Typeform, etc.
+A Poll or a Survey can be answered in either of two places, and you choose on **Basic Information**:
+
+- **In an external tool** - you give Cortex the link. SurveyMonkey, Google Forms, Typeform and the rest. Cortex sends people there and counts the clicks, and the answers live in that tool. This is what every poll and survey used to be, and it is still the default
+- **In Cortex** - you write the questions here and the answers come back in Cortex. Nothing is recorded: no screen, no microphone, no camera
+
+Choosing **In an external tool** gives you an **External Link** step, where the link is required.
+That is where people go when they click "Open Poll/Survey".
+
+Choosing **In Cortex** replaces that step with a **Questions** step.
+See [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex).
+
+A **One question** opportunity has no native mode and always uses an external link.
 
 ### Step 4: Add Sessions
 
@@ -170,9 +179,13 @@ There is no Sessions tab, because there is nothing to book.
 Open the **Task List** tab. It is headed *"What the participant is asked to do while their screen is recorded"*.
 
 - **Starting URL**: the page the participant is asked to open and record. Optional, but leave it blank only for a survey-style study with nothing to test. Without it, participants share their screen with nothing pre-opened and never see the guided open-and-share step
-- **Add task**: adds a task. Each one is just **"What the participant sees"** - there is no response type to choose. Sessions record screen and voice, so participants answer **out loud** as they work; a typed answer box invited them to stop talking and type, which is the opposite of thinking aloud
+- **Estimated completion time**: worked out from your task list and shown to participants before they agree to be recorded. It moves as you write, so it stays right as the list grows. **Set it myself** takes it over if you know better - and once you have taken it over you can clear it entirely, which tells participants no length at all. That is still the better answer when you genuinely do not know: a wrong number is worse than no number
+- **Add task**: adds a task, already open with the cursor in it. Each one is just **"What the participant sees"** - there is no response type to choose. Sessions record screen and voice, so participants answer **out loud** as they work; a typed answer box invited them to stop talking and type, which is the opposite of thinking aloud
   - Task Lists written before this still hold typed steps. Those run and stay editable, but no participant is asked to type any more, and their answers are in the recording
-- **Up**, **Down** and **Remove** on each task card reorder or delete it. Order matters: participants work through the list top to bottom
+- **Each task is a collapsed row** showing its position, its type and the opening of its wording, so a long list stays readable and the consent field and save buttons stay within reach. **Edit** opens one to work on; **Collapse** shuts it again. A task that fails validation opens itself and is flagged **Needs attention**, so a refused save never hides the field it is complaining about
+- **Reordering**, on each row: **Move up** and **Move down** for a nudge, a **position dropdown** to send a task straight to a given place in a long list, and a **drag handle** to drag it. Order matters: participants work through the list top to bottom. Every move is announced for screen reader users
+- **Duplicate** copies a task and everything in it, and drops the copy directly below the original
+- **Remove** deletes a task. If there is anything written in it, you are asked to confirm first
 - **Consent text**: pre-filled with wording that covers screen and microphone recording, who sees it and the right to stop. Edit it if your study needs something different, but do not delete it
 
 Write tasks as goals, not instructions.
@@ -249,6 +262,71 @@ Reopening an opportunity shows exactly what you wrote - the tasks or questions, 
 - **Assuming a colleague can edit your task list** - only its owner or a superadmin can
 - **Deleting every task and saving, expecting the list to empty** - a task list needs at least one task, and the save is refused rather than silently keeping what was there
 - **Expecting to change questions after people have answered** - the save is refused, on purpose. Make a new opportunity instead
+
+---
+
+## Polls and Surveys Answered in Cortex
+
+A Poll or Survey set to **In Cortex** collects its answers here rather than sending people to another tool.
+Nothing is recorded - no screen, no microphone, no camera - so it is the right shape when you want typed answers rather than to watch someone work.
+
+Choose it on **Basic Information**, under where the poll or survey is answered.
+That replaces the External Link step with a **Questions** step.
+
+### Writing the questions
+
+The Questions step is headed *"What the participant is asked, answered here in Cortex"*.
+
+- **Estimated completion time**: worked out from your questions and shown to participants before they start. It moves as you write. **Set it myself** takes it over, and once taken over it can be cleared entirely to tell them no length at all
+- **Add question**: adds a question, already open with the cursor in it
+- **Type**, on each question:
+  - **Section text (no answer)** - a heading and some context before the next block of questions. It is shown and skipped, and does not count towards progress
+  - **Free text** - a typed answer
+  - **Choose one** / **Choose several** - answers you write, at least two
+  - **Rating scale** - you set the number of points, between 2 and 10. It is never chosen for you: two surveys with the same wording on different scales produce numbers nothing records the difference between
+  - **Recommendation score (0 to 10)** - always 0 to 10, so there is nothing to set. An author-set scale would produce something labelled a recommendation score whose numbers cannot be compared with anyone else's
+- **Required** marks a question that has to be answered. Section text cannot be required, because it cannot be answered
+- **Changing a question's type keeps what the new type cannot show.** Turn a multiple choice into free text and back, and your answers are still there. Turn a rating into a recommendation score and back, and your scale is still there. Nothing is thrown away by touching the type selector
+
+### Working with a long list
+
+The controls are the same ones the Task List uses, and they exist because a twenty-question survey used to push the consent field and the save buttons several screens down.
+
+- **Each question is a collapsed row** showing its position, its type, whether it is required, and the opening of its wording. **Edit** opens one; **Collapse** shuts it
+- A question that fails validation **opens itself** and is flagged **Needs attention**
+- **Move up**, **Move down**, a **position dropdown** for a long list, and a **drag handle**. Every move is announced for screen reader users
+- **Duplicate** copies a question and everything in it, including its answers and its scale, and drops the copy below the original
+- **Remove** asks first if there is anything written in the question
+- Up to 50 questions are allowed
+
+### Consent
+
+**Consent text** is pre-filled with wording that says answers are stored for research analysis and that **nothing is recorded**.
+It is deliberately different from the recorded-study wording: reusing that text would have participants agreeing to a capture that never happens.
+Edit it if your study needs something different, but do not delete it.
+
+### Reusing an existing set of questions
+
+Tick **"Reuse an existing set of questions instead of writing them here"** to point at a set you or a colleague has already written.
+Only launched, survey-shaped sets appear - a recorded task list offered here would be refused on save.
+If the dropdown is empty and you know one exists, it is probably still a draft, and the form says how many are waiting.
+
+### Reviewing results
+
+Open the opportunity and go to **Analytics**.
+Answers are grouped under each question's own wording:
+
+- **Choose one** and **Choose several** give a table of each answer with its count and share. Multiple choice says plainly that shares add up to past 100%, because they otherwise look like an error - and answers to options you have since removed are listed separately rather than vanishing
+- **Rating scale** and **Recommendation score** give the distribution across the scale
+- **Free text** lists the answers
+
+There is a CSV export.
+
+### Common mistakes
+
+- **Writing a rating question without deciding the scale** - the save is refused rather than picking one for you
+- **Expecting a recorded study's consent wording** - a survey records nothing, and its consent text says so
+- **Reordering questions after people have answered** - answers are attached to a question by its position, so this is refused on the opportunity form. Make a new opportunity instead
 
 ---
 
