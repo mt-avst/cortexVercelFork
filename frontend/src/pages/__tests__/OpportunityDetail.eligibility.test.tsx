@@ -64,6 +64,7 @@ beforeEach(() => {
     task_count: 1,
     records_screen_and_voice: true,
     requires_chromium: true,
+    estimated_duration_minutes: null,
   });
 });
 
