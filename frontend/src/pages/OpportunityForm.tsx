@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,14 @@ import {
   type WithClientId
 } from '../lib/opportunity-authoring/client-ids';
 import { remapAuthoringErrors } from '../lib/opportunity-authoring/authoring-errors';
+import { hasUnsavedChanges } from '../lib/opportunity-authoring/dirty-signature';
+import {
+  STEP_STATUS_LABEL,
+  deriveStepStatus,
+  describeStepPosition,
+  stepsHoldingErrors,
+  type StepStatus
+} from '../lib/opportunity-authoring/step-status';
 import {
   estimateRecordedMinutes,
   estimateSurveyMinutes
@@ -33,7 +41,8 @@ import type { StudySourceMode } from '../components/OpportunityForm/StudySourceC
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
@@ -56,7 +65,7 @@ import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
-import { ArrowLeft, TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid } from 'lucide-react';
+import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, LogOut } from 'lucide-react';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -142,6 +151,46 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   inline_survey_questions: { tab: 3, label: 'Questions' },
   inline_survey_duration_minutes: { tab: 3, label: 'Estimated completion time' },
   inline_survey_consent_text: { tab: 4, label: 'Consent text' }
+};
+
+/**
+ * The delivery-mode twin of `clearTypeConditionalErrors`.
+ *
+ * Switching a poll or survey between "in Cortex" and "in an external tool"
+ * replaces its third step just as completely as changing the type does, and
+ * discards the content of the surface being left - but nothing cleared the
+ * errors that content had produced. They stayed in the map, pointing at tab 3,
+ * which is now a different step.
+ *
+ * Before the stepper that was invisible unless a save was attempted. With a
+ * per-step badge it is a dead end: the External Link step reads "Needs
+ * attention" over a field that is optional on a draft and shows no error, and
+ * nothing the author can do on that step clears it.
+ *
+ * Deliberately in this file rather than in a module of its own. The
+ * `FIELD_LOCATIONS` completeness test greps this file for the assignments that
+ * produce these keys, and the deletions have to sit beside them to be read
+ * against them.
+ */
+export const clearDeliveryConditionalErrors = (
+  errors: Record<string, string>,
+  newDeliveryMode: 'native' | 'external'
+): Record<string, string> => {
+  const next = { ...errors };
+
+  if (newDeliveryMode === 'external') {
+    // The authored questions have just been dropped from state.
+    delete next.inline_survey_consent_text;
+    delete next.inline_survey_duration_minutes;
+    Object.keys(next)
+      .filter((key) => key.startsWith('inline_survey_questions'))
+      .forEach((key) => delete next[key]);
+  } else {
+    // And in the other direction the link is no longer on screen or sent.
+    delete next.external_link_optional;
+  }
+
+  return next;
 };
 
 /**
@@ -472,7 +521,34 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<number>(1);
+  /**
+   * Steps the author has been on and left, which is what separates "Completed"
+   * from "Not started". Validity alone cannot: most steps hold nothing invalid
+   * before they hold anything at all, so a blank four-step form would open
+   * reporting three steps done.
+   *
+   * Held by step KEY and not by step id, which is the correction to how this
+   * was first written. Id 3 is Task List, Questions, External Link or Session
+   * Management depending on the type - so an author who walked to the Task
+   * List and then changed the type to an external poll was shown "External
+   * Link: Completed" for a step that had not existed a moment earlier. Found
+   * in a browser, by doing it; no test had thought to change type mid-walk.
+   */
+  const [visitedStepKeys, setVisitedStepKeys] = useState<ReadonlySet<StepKey>>(
+    () => new Set<StepKey>()
+  );
   const [originalFormData, setOriginalFormData] = useState<typeof formData | null>(null);
+  /**
+   * The step the author is being asked to abandon, held while the confirmation
+   * is on screen. `null` means no confirmation is open - not "step 0", which is
+   * not a step this form has.
+   */
+  const [pendingExit, setPendingExit] = useState<string | null>(null);
+  /**
+   * What the live region says. Set on a step change and read once; the sentence
+   * is built from the same labels the strip renders, so the two cannot drift.
+   */
+  const [stepAnnouncement, setStepAnnouncement] = useState('');
 
   // Absent means external, matching the column default and every poll and
   // survey that existed before the choice did.
@@ -483,6 +559,34 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // Undefined when the author is on a step this type does not have - reachable,
   // because the step headers are clickable and the type can change underneath.
   const currentStep = tabs.find((tab) => tab.id === activeTab);
+
+  /**
+   * The step before the current one, by position in the list rather than by a
+   * number written at the call site.
+   *
+   * Every step body used to hard-code its own `setActiveTab(n)`, five times,
+   * and they all happened to agree with the list. They cannot any more: the
+   * control now has to NAME the step it goes back to, and a hard-coded number
+   * that drifts would send the author somewhere other than the place the button
+   * says. First step has none, which is what makes the control disappear.
+   */
+  const previousStep =
+    currentStep && tabs.findIndex((tab) => tab.id === currentStep.id) > 0
+      ? tabs[tabs.findIndex((tab) => tab.id === currentStep.id) - 1]
+      : undefined;
+
+  /**
+   * The backward control's two props, built as ONE value.
+   *
+   * `StepActions` types them as a present-or-absent pair, so a control cannot
+   * exist without naming where it goes. Passed as two separate expressions the
+   * compiler cannot see that they are correlated - each is independently
+   * `T | undefined` - and rejects them. Spreading one object is how the call
+   * site tells it what it already knows.
+   */
+  const backwardControl = previousStep
+    ? { onPrevious: () => setActiveTab(previousStep.id), previousLabel: previousStep.title }
+    : {};
 
   /**
    * Which consent vocabulary this opportunity authors in, or null when it
@@ -883,6 +987,62 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
   }, [formData.type, deliveryMode, activeTab]);
 
+  /**
+   * Record the step the author just left.
+   *
+   * Written as an effect on `activeTab` rather than inside a `goToStep` helper
+   * on purpose: there are eleven places that move the author between steps -
+   * five Continue handlers, five Back controls, the strip itself, plus two
+   * effects that reposition on load - and a helper only covers the ones that
+   * remember to call it. Watching the value covers all of them, including any
+   * added after this.
+   *
+   * Only the step being LEFT is recorded. The one being arrived at is not
+   * visited yet; it becomes visited when it is left in turn.
+   */
+  const stepBeforeThisRender = useRef<StepKey | null>(null);
+  useEffect(() => {
+    const left = stepBeforeThisRender.current;
+    const arrived = currentStep?.key ?? null;
+    if (arrived === null || left === arrived) {
+      return;
+    }
+    stepBeforeThisRender.current = arrived;
+    if (left === null) {
+      return;
+    }
+    setVisitedStepKeys((previous) => {
+      if (previous.has(left)) {
+        return previous;
+      }
+      const next = new Set(previous);
+      next.add(left);
+      return next;
+    });
+  }, [currentStep?.key]);
+
+  /**
+   * An opportunity being EDITED has been through every step already - its
+   * content is on the server. Reporting three of its four steps as "Not
+   * started" would be false, and worse than saying nothing, so the whole set is
+   * marked visited once the load has produced its baseline. From then on each
+   * step reports Completed or Needs attention on the same rules as a new one.
+   *
+   * Keyed on `originalFormData` rather than on `isEdit`, because `isEdit` is
+   * true from the first render, long before anything has been read back.
+   */
+  useEffect(() => {
+    if (!originalFormData) {
+      return;
+    }
+    setVisitedStepKeys(
+      (previous) => new Set([...previous, ...getTabsForType(
+        originalFormData.type,
+        originalFormData.delivery_mode ?? 'external'
+      ).map((tab) => tab.key)])
+    );
+  }, [originalFormData]);
+
   // Set active tab when editing existing opportunity
   // Only user tests and interviews should go to tab 3 (Session Management)
   // All other types should go to tab 1 (Basic Information)
@@ -906,7 +1066,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // errors back off `validationErrors` is not an option either: that is the
   // pre-update state from this closure, which is what the old log line
   // reported.
-  const collectValidationErrors = (): Record<string, string> => {
+  const computeValidationErrors = useCallback((): Record<string, string> => {
     const errors: Record<string, string> = {};
 
     // Validate research study type
@@ -1190,9 +1350,122 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     }
 
+    return errors;
+    // Memoised so that everything derived from it - `liveErrorSteps`, and
+    // `statusOfStep` through it - is stable across renders that did not change
+    // the form.
+    //
+    // It does NOT help on the typing path, and it would be easy to write a
+    // comment claiming it does: `handleInputChange` rebuilds `formData` on
+    // every keystroke, so this is recreated on every keystroke too. What stops
+    // the live region talking over an author who is typing is the
+    // `lastAnnouncedStep` guard, not this. The memo earns its place on the
+    // renders driven by other state - `validationErrors`, `activeTab`,
+    // `saving`, `sessions`, `refusalCount` - which is most of them.
+  }, [formData, deliveryMode, studyIsReadOnly, hasLinkedStudy, studyMissing]);
+
+  /**
+   * The same rules, run for the same reason they have always been run: a save
+   * was attempted, so the author is owed the list of what is wrong.
+   *
+   * Split from `computeValidationErrors` above so the stepper can ask the same
+   * question during render without writing state. Calling the old combined
+   * function from a render pass would have set state mid-render on every pass,
+   * which React answers with an infinite loop rather than a warning - and the
+   * alternative, a second set of "is this step done" rules, is exactly the
+   * drift this form has already been bitten by three times.
+   *
+   * There is a SECOND writer of this map: the Basics step's own Continue
+   * handler, which sets its own narrower object wholesale. That is why the
+   * stepper reads the live rules as well as this map, rather than treating the
+   * map as the complete picture.
+   */
+  const collectValidationErrors = (): Record<string, string> => {
+    const errors = computeValidationErrors();
     setValidationErrors(errors);
     return errors;
   };
+
+  /**
+   * Which steps hold a problem, asked twice of the same rules.
+   *
+   * `reportedErrorSteps` is what the author has already been told - the state
+   * map, written by a refused save, a blur, or the Basics step's own Continue
+   * handler. `liveErrorSteps` is what those same rules say about the form as it
+   * stands this render. The strip needs both: the first so a refusal keeps
+   * pointing at the step it named, the second so filling the field clears the
+   * flag immediately, with no save and without a second set of rules that could
+   * disagree with the one that actually refuses.
+   *
+   * `computeValidationErrors` is the pure half of the validator and writes no
+   * state, which is the only reason this is legal during render.
+   */
+  const reportedErrorSteps = useMemo(
+    () => stepsHoldingErrors(validationErrors, locateField),
+    [validationErrors]
+  );
+  const liveErrorSteps = useMemo(
+    () => stepsHoldingErrors(computeValidationErrors(), locateField),
+    [computeValidationErrors]
+  );
+
+  const statusOfStep = useCallback(
+    (step: FormStep): StepStatus =>
+      deriveStepStatus({
+        // Errors are located by tab NUMBER and history is held by step KEY.
+        // Both are passed rather than one derived from the other, because the
+        // two identifiers genuinely mean different things here and collapsing
+        // them is the bug this signature exists to prevent.
+        stepId: step.id,
+        activeStepId: activeTab,
+        visited: visitedStepKeys.has(step.key),
+        reportedErrorSteps,
+        liveErrorSteps
+      }),
+    [activeTab, visitedStepKeys, reportedErrorSteps, liveErrorSteps]
+  );
+
+  /**
+   * Say the step change out loud.
+   *
+   * Moving between steps replaces the whole panel and changes nothing a screen
+   * reader is told about: focus stays on the control that was clicked, which
+   * still reads as the control it was. The sentence names position, title and
+   * state - the same three things the strip shows - because "Step 4 of 4" on
+   * its own does not say what is now on screen.
+   *
+   * Deliberately not in a `useMemo`: the effect runs on step change only, and
+   * reading the status at that moment is the point. `stepAnnouncement` is state
+   * so that React renders the region with the sentence in it; assigning to the
+   * node directly would be a second source of truth for the same words.
+   */
+  // Seeded with the step the form opens on, so the region announces step
+  // CHANGES and not the fact that a page loaded. Left null, the first effect
+  // after mount fills an empty polite region, which a screen reader reads out
+  // over whatever it was already saying about the page.
+  const lastAnnouncedStep = useRef<number>(activeTab);
+  useEffect(() => {
+    // Guarded on the step rather than pared down to a dependency on `activeTab`
+    // alone: `tabs` and `statusOfStep` are rebuilt every render, so a narrower
+    // dependency list would be a lie the linter is right to reject. The body
+    // runs often and does something only when the step actually changed, which
+    // is what stops it talking over an author who is still typing.
+    if (lastAnnouncedStep.current === activeTab) {
+      return;
+    }
+
+    const index = tabs.findIndex((tab) => tab.id === activeTab);
+    const step = tabs[index];
+    if (!step) {
+      return;
+    }
+    lastAnnouncedStep.current = activeTab;
+    setStepAnnouncement(
+      `${describeStepPosition(index, tabs.length)}: ${step.title}. ${
+        STEP_STATUS_LABEL[statusOfStep(step)]
+      }.`
+    );
+  }, [activeTab, tabs, statusOfStep]);
 
   // Validate single field
   const validateField = (fieldName: string, value: string | number | boolean | undefined) => {
@@ -1358,6 +1631,79 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
       sessions.some(session => session.id.startsWith('temp-session-'))
     );
+  };
+
+  /**
+   * The state the form is in when it opens, captured once.
+   *
+   * `useRef`'s initial value is evaluated on the first render and kept, which
+   * is exactly the semantics wanted: an edit overwrites `formData` when its
+   * load returns, and the baseline for THAT case is `originalFormData`, not
+   * this. This one is the blank-form baseline a create starts from.
+   */
+  const openingFormData = useRef(formData);
+
+  /**
+   * Would leaving now lose something.
+   *
+   * An edit asks `hasChanges`, which is the same question the Save Changes
+   * button asks, so the two cannot disagree about whether there is anything to
+   * save. A create has no server-side baseline to compare against, so it
+   * compares against the form as it opened.
+   *
+   * A save that has just succeeded is not unsaved work, whatever the shape of
+   * the object: the success banner is on screen and the form is about to
+   * navigate on its own.
+   */
+  const hasUnsavedWork = (): boolean => {
+    // There is deliberately NO "a save just succeeded" shortcut here. Both
+    // baselines are refreshed by the save itself - an edit re-reads the
+    // opportunity and a create rebaselines what it sent - so a saved form is
+    // already clean by the ordinary comparison. A shortcut on top of that
+    // would not be redundant, it would be wrong: the form stays on screen for
+    // up to three seconds after a create, and anything typed in that window IS
+    // unsaved work.
+
+    // Temporary sessions are held outside `formData` entirely, so the object
+    // comparison below cannot see them. `hasChanges` counts them and this has
+    // to as well, or an author who laid out six time slots and never saved
+    // them is let out without a word.
+    if (sessions.some((session) => session.id.startsWith('temp-session-'))) {
+      return true;
+    }
+
+    // Both instruments, not one. `hasChanges` enumerates its comparisons
+    // because it decides whether to OFFER a save; that list has been wrong
+    // twice, and being wrong about a warning costs the author their work
+    // rather than a button. The signature comparison cannot drift, so it runs
+    // as well and either one is enough to ask the question.
+    if (isEdit && originalFormData) {
+      return hasChanges() || hasUnsavedChanges(formData, originalFormData);
+    }
+
+    // No baseline from the server. That is a create - and it is ALSO an edit
+    // whose load failed, which renders the form fully typeable behind an
+    // inline banner with `originalFormData` still null. `hasChanges` returns a
+    // flat false for that state, so this control used to walk an author
+    // straight out of a form they had just filled in.
+    return hasUnsavedChanges(formData, openingFormData.current);
+  };
+
+  /**
+   * Leave the form, asking first if there is anything to lose.
+   *
+   * The confirmation is the whole point of the rename. This control has always
+   * navigated away on one click, discarding everything typed since the last
+   * save, and it sat three inches above a button labelled the same way that
+   * only moved back one step. D2 replaces this with a real save; until then,
+   * asking is the least this can do.
+   */
+  const requestExit = (destination: string) => {
+    if (hasUnsavedWork()) {
+      setPendingExit(destination);
+      return;
+    }
+    navigate(destination);
   };
 
   /**
@@ -1682,6 +2028,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
 
+        // What is on screen has now been stored, so it is the new baseline for
+        // "would leaving lose anything". Without this, a test or interview -
+        // which returns below WITHOUT a success message, because
+        // AdminSessionManager owns the navigation from here - leaves an author
+        // whose opportunity is saved being told their unsaved changes will be
+        // discarded. A confirmation that cries wolf is the one people learn to
+        // click through, which costs more than never having asked.
+        openingFormData.current = formData;
+
         logger.debug('CREATE MODE - Opportunity created');
 
         // For types that use external links (no sessions), show success then auto-navigate
@@ -1959,6 +2314,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (field === 'type') {
       setValidationErrors(prev => clearTypeConditionalErrors(prev, String(value ?? '')));
     }
+    // The same problem, one field along: switching delivery mode replaces the
+    // third step and discards what the old one held.
+    if (field === 'delivery_mode') {
+      setValidationErrors(prev =>
+        clearDeliveryConditionalErrors(prev, value === 'native' ? 'native' : 'external')
+      );
+    }
   };
 
   const handleBlur = (field: string, value: string | number | boolean | undefined) => {
@@ -2008,13 +2370,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       <div className="container-fluid py-4 opportunity-form min-h-100vh">
         <div className="row justify-content-center">
           <div className="col-12 col-xl-10">
-            {/* Back button */}
+            {/*
+              The way OUT of the form, as against the way BACK one step.
+              They used to be two near-identical outline-secondary buttons
+              carrying the same left arrow and the same word, one at the top of
+              the page and one at the bottom of every step - so the destructive
+              one and the harmless one were told apart by position alone.
+              This one says Exit, carries a different icon, and asks before it
+              throws anything away. The bottom one names the step it returns to.
+            */}
             <button
               className="btn btn-outline-secondary mb-3"
-              onClick={() => allowUserSubmission ? navigate('/') : navigate('/admin')}
+              onClick={() => requestExit(allowUserSubmission ? '/' : '/admin')}
             >
-              <ArrowLeft size={16} className="me-1" />
-              {allowUserSubmission ? 'Back to Home' : 'Back to Admin Dashboard'}
+              <LogOut size={16} className="me-1" />
+              {allowUserSubmission ? 'Exit to home' : 'Exit to dashboard'}
             </button>
 
           <div className="card shadow-sm border-0">
@@ -2122,27 +2492,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               <form onSubmit={handleSubmit}>
                 {/* Tab Navigation */}
                 <div className="border-bottom">
-                  <nav className="nav nav-tabs border-0 nav-tabs-form">
-                    {tabs.map((tab) => (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        className={`nav-link border-0 py-3 px-4 opportunity-form-tab ${
-                          activeTab === tab.id ? 'active fw-bold' : 'fw-semibold'
-                        }`}
-                        onClick={() => setActiveTab(tab.id)}
-                      >
-                        <div className="text-center">
-                          <div className={`tab-title tab-title-dynamic ${activeTab === tab.id ? 'active' : ''}`}>
-                            {tab.title}
-                          </div>
-                          <small className={`tab-description tab-description-dynamic ${activeTab === tab.id ? 'active' : ''}`}>
-                            {tab.description}
-                          </small>
-                        </div>
-                      </button>
-                    ))}
-                  </nav>
+                  <StepNav
+                    steps={tabs}
+                    activeStepId={activeTab}
+                    statusOf={statusOfStep}
+                    /* Backward AND forward navigation both stay free. A step
+                       reporting Needs attention is information, not a lock:
+                       refusing to let an author look at step 4 because step 1
+                       is short of a purpose is how a form loses work. */
+                    onSelect={setActiveTab}
+                  />
+                </div>
+
+                {/*
+                  The panel below is replaced wholesale on a step change and
+                  nothing about that reaches a screen reader on its own - focus
+                  stays on the control that was pressed. One region, polite, for
+                  the whole strip.
+                */}
+                <div className="visually-hidden" aria-live="polite" role="status">
+                  {stepAnnouncement}
                 </div>
 
                 {/* Tab Content */}
@@ -2262,7 +2631,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
-                        onPrevious={() => setActiveTab(1)}
+                        {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         nextLabel={
                           // Left exactly as it was. A native poll or survey
@@ -2329,7 +2698,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           isEdit={isEdit}
                           saving={saving}
                           disabled={saveControlsDisabled}
-                          onPrevious={() => setActiveTab(2)}
+                          {...backwardControl}
                           onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                           nextLabel="Continue to Consent"
                           onNext={() => setActiveTab(4)}
@@ -2355,7 +2724,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
-                        onPrevious={() => setActiveTab(2)}
+                        {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         nextLabel="Continue to Consent"
                         onNext={() => setActiveTab(4)}
@@ -2432,7 +2801,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
-                        onPrevious={() => setActiveTab(3)}
+                        {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         onSubmit={() => handleSubmit()}
                       />
@@ -2452,7 +2821,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
-                        onPrevious={() => setActiveTab(2)}
+                        {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         onSubmit={() => handleSubmit()}
                       />
@@ -2486,7 +2855,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             disabled={saving || (isEdit && loadingOpportunity)}
                             isTemporary={!isEdit || !opportunityId}
                             onOpportunitySave={() => handleSubmit(undefined, true)}
-                            onBack={() => setActiveTab(2)}
+                            onBack={previousStep ? () => setActiveTab(previousStep.id) : undefined}
+                            onBackLabel={previousStep?.title}
                             onNavigate={(path) => {
                               const isDraft = formData.status === 'draft';
                               navigate(path, {
@@ -2512,6 +2882,30 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           </div>
         </div>
       </div>
+
+      {/*
+        Only ever mounted with something to lose - `requestExit` navigates
+        straight out when the form is untouched, so a clean exit is still one
+        click. Cancel is the default action, and the destination is held rather
+        than recomputed, so the confirmation cannot send the author somewhere
+        other than the button they pressed.
+      */}
+      <ConfirmationModal
+        show={pendingExit !== null}
+        title="Leave without saving?"
+        message="This opportunity has changes that have not been saved. Leaving now discards them."
+        confirmLabel="Discard and leave"
+        cancelLabel="Stay on this form"
+        variant="warning"
+        onConfirm={() => {
+          const destination = pendingExit;
+          setPendingExit(null);
+          if (destination) {
+            navigate(destination);
+          }
+        }}
+        onCancel={() => setPendingExit(null)}
+      />
     </div>
   );
 };

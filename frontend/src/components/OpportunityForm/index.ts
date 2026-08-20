@@ -5,3 +5,4 @@ export { default as ExternalLinkTab } from './ExternalLinkTab';
 export { default as FirstHandStudyTab } from './FirstHandStudyTab';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
 export { default as StepActions } from './StepActions';
+export { default as StepNav } from './StepNav';

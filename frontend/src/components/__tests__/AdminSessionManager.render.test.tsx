@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -58,6 +58,39 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
 beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
+});
+
+describe('AdminSessionManager - the backward control names its destination', () => {
+  it('names the step it returns to rather than saying a bare "Back"', async () => {
+    renderManager({ onBack: vi.fn(), onBackLabel: 'Content & Details' });
+    await settle();
+
+    // This is the sixth backward control in the opportunity form and the only
+    // one outside the shared StepActions row. While it said "Back" it was
+    // indistinguishable from the control at the top of the page that leaves
+    // the form entirely, which is the confusion the rename exists to remove.
+    expect(
+      screen.getByRole('button', { name: 'Previous: Content & Details' })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Back$/ })).not.toBeInTheDocument();
+  });
+
+  it('goes back when it is pressed', async () => {
+    const onBack = vi.fn();
+    renderManager({ onBack, onBackLabel: 'Content & Details' });
+    await settle();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous: Content & Details' }));
+
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders no backward control at all when there is nowhere to go', async () => {
+    renderManager();
+    await settle();
+
+    expect(screen.queryByRole('button', { name: /^Previous/ })).not.toBeInTheDocument();
+  });
 });
 
 describe('AdminSessionManager - effect stability', () => {

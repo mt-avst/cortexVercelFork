@@ -22,9 +22,20 @@ type ForwardControl =
       nextLabel?: never;
     };
 
-type StepActionsProps = ForwardControl & {
-  /** Omitted on the first step, which has nowhere to go back to. */
-  onPrevious?: () => void;
+/**
+ * The backward control, present or absent as a pair.
+ *
+ * Written as a union for the same reason the forward control is: a back
+ * control that does not name its destination is the thing this step exists to
+ * remove, and left as two independent optional props the type permits exactly
+ * that. The compiler holds it instead of a comment asking nicely.
+ */
+type BackwardControl =
+  | { onPrevious: () => void; previousLabel: string }
+  | { onPrevious?: never; previousLabel?: never };
+
+type StepActionsProps = ForwardControl &
+  BackwardControl & {
   /** The green shortcut. Given only for an edit that has changed something. */
   onSave?: () => void;
   isEdit: boolean;
@@ -51,6 +62,7 @@ type StepActionsProps = ForwardControl & {
  */
 const StepActions: React.FC<StepActionsProps> = ({
   onPrevious,
+  previousLabel,
   onNext,
   nextLabel,
   onSubmit,
@@ -70,7 +82,7 @@ const StepActions: React.FC<StepActionsProps> = ({
           style={{ fontSize: '0.95rem' }}
         >
           <ArrowLeft size={16} className="me-2" />
-          Back
+          Previous: {previousLabel}
         </button>
       ) : (
         <div style={{ flex: 1 }}></div>

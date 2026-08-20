@@ -1045,7 +1045,14 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // both assertions below are about what the TASK LIST step shows - on the
     // Consent step there is no source radio and no task card, so they would
     // both pass without proving anything at all.
-    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    //
+    // Scoped to the step strip. From the Consent step there are now two
+    // controls that say "Task List" - the step itself and the bottom control
+    // that names where it goes back to - and an unscoped match is ambiguous.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Task List/i })
+    );
 
     // The source choice goes: this opportunity has its own task list now, so
     // "where does the content come from" has been answered. Waited on rather

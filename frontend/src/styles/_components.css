@@ -12449,6 +12449,45 @@ body.theme-light .btn-ghost-danger {
   font-size: 0.9rem;
 }
 
+/* ------------------------------------------------------------
+   STEP STRIP (the tab nav, as a stepper)
+
+   The strip reports three things per step now - where it sits in the
+   sequence, what it is, and whether it is done - so each button stacks
+   position, title, description and state.
+
+   Stacked rather than laid out alongside, deliberately: `.nav-link` is
+   `display: flex; justify-content: center`, so anything added as a SIBLING of
+   `.text-center` lands next to the title instead of under it. These live
+   inside it, where normal block flow applies.
+
+   `.nav-tabs-form`'s `margin-bottom: -1px` and the 2px bottom border on the
+   active step are what draw the active underline over the wrapper's border.
+   Nothing here adds a connector line between steps for exactly that reason.
+   ------------------------------------------------------------ */
+
+.step-tab__position {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 0.15rem;
+}
+
+.step-tab__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.3rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  /* The words wrap on a narrow viewport rather than being clipped: a
+     truncated "Needs atten..." is the kind of thing that reads as a rendering
+     bug rather than as a state. */
+  white-space: normal;
+}
+
 /* ============================================================
    RECORDED STUDY EXPECTATIONS
    What the participant is agreeing to, stated above the CTA.

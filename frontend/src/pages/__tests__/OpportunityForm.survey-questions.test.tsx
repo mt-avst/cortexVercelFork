@@ -1383,12 +1383,15 @@ describe('starting a survey from an existing set of questions', () => {
 });
 
 describe('the step action row', () => {
-  it('offers no Back control on the first step', async () => {
+  it('offers no backward control on the first step', async () => {
     renderForm();
 
     await screen.findByRole('button', { name: /Continue to Details/i });
 
-    expect(screen.queryByRole('button', { name: /^Back$/i })).not.toBeInTheDocument();
+    // Matched on the prefix, not on the whole label: the control names the
+    // step it returns to now, so pinning the old bare "Back" here would be an
+    // assertion that can never fail again.
+    expect(screen.queryByRole('button', { name: /^Previous: /i })).not.toBeInTheDocument();
   });
 });
 
