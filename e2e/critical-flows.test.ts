@@ -1,6 +1,32 @@
 import { chromium, Browser, Page } from 'playwright';
 import { generateMockUser, generateMockOpportunity, generateMockSession } from '../../../shared/test-utils';
 
+/*
+ * ⚠️ QUARANTINED, and its opportunity-form tests are stale far beyond any one
+ * change. Left as-is deliberately rather than half-updated.
+ *
+ * This file is in `testIgnore` in playwright.config.ts, playwright.prod.config.ts
+ * and playwright.superadmin.config.ts, because it drives the raw `playwright`
+ * package with jest globals and threw during Playwright's COLLECTION pass -
+ * which aborted every spec in `testDir`, not just this one, and reported the
+ * whole suite as "0 tests in 0 files".
+ *
+ * C3 moved the opportunity form's commit point onto a new Review step, and the
+ * question of what to update here has one honest answer: nothing. The form
+ * tests below address fields by `select[name="type"]` and `input[name="title"]`,
+ * and this form has carried `id="type"` / `id="title"` with no `name` attribute
+ * for a long time; they submit via `text=Save Opportunity`, a label that exists
+ * nowhere in the codebase. The two `text=Create Opportunity` clicks are the
+ * DASHBOARD's entry-point button and are not affected by C3 at all - changing
+ * them would be actively wrong.
+ *
+ * So: rewriting two labels inside a file whose every other selector is also
+ * wrong, and which cannot be run to check, would look like maintenance without
+ * being any. For whoever revives it: the form's terminal control now reads
+ * "Create opportunity" or "Save changes", lives ONLY on the Review step, and
+ * every forward control reads "Continue: {next step}".
+ */
+
 /* Raw `playwright` Browser, so playwright.config.ts's `use.baseURL` does not apply here.
  * Set it on the context so the relative paths below resolve. */
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';

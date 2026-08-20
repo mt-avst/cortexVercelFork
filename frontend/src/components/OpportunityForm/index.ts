@@ -3,6 +3,7 @@ export { default as ConsentStep } from './ConsentStep';
 export { default as ContentDetailsTab } from './ContentDetailsTab';
 export { default as ExternalLinkTab } from './ExternalLinkTab';
 export { default as FirstHandStudyTab } from './FirstHandStudyTab';
+export { default as ReviewStep } from './ReviewStep';
 export { default as SurveyQuestionsTab } from './SurveyQuestionsTab';
 export { default as StepActions } from './StepActions';
 export { default as StepNav } from './StepNav';

@@ -208,7 +208,7 @@
   },
   "frontend/src/components/AdminSessionManager.tsx": {
     "@typescript-eslint/no-unused-vars": {
-      "count": 4
+      "count": 3
     }
   },
   "frontend/src/components/CalendarGrid.tsx": {

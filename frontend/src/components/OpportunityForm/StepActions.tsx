@@ -9,14 +9,27 @@ import { ArrowLeft, ArrowRight, CheckCircle, Save } from 'lucide-react';
  * row with a live-looking button wired to nothing.
  */
 type ForwardControl =
-  | { onNext: () => void; nextLabel: string; onSubmit?: never; submitVariant?: never }
+  | {
+      onNext: () => void;
+      nextLabel: string;
+      onSubmit?: never;
+      submitLabel?: never;
+      submitVariant?: never;
+    }
   | {
       onSubmit: () => void;
       /**
-       * The Questions step's final control is blue where every other step's is
-       * green. That is an inconsistency rather than a decision, but changing it
-       * here would be a visible change this step is not allowed to make.
+       * What the terminal control says.
+       *
+       * Required, and passed in rather than decided here from `isEdit`. This
+       * component used to hard-code "Create Opportunity" / "Update
+       * Opportunity", which made it the only place in the form that chose
+       * product copy - and after C3 there is exactly ONE step that submits, so
+       * a label baked in here is a label with no reader. Naming it at the call
+       * site is also what stops a second submitting step appearing later
+       * wearing the wrong words.
        */
+      submitLabel: string;
       submitVariant?: 'primary' | 'success';
       onNext?: never;
       nextLabel?: never;
@@ -56,9 +69,17 @@ type StepActionsProps = ForwardControl &
  * change to this chrome had to be made five times, and they had already drifted
  * apart in three ways.
  *
- * Every control here is `type="button"`. Nothing in the form submits it
- * implicitly, so Enter behaves the same way on every step, and the form's own
- * validation runs instead of the browser's.
+ * Every control here is `type="button"`, which means this form has no submit
+ * button at all - and that is the CONDITION for implicit submission, not a
+ * defence against it. This comment used to claim the opposite, and the claim
+ * was load-bearing: it is the reason nobody looked, while pressing Return in a
+ * step with a single text field created the opportunity from a step that was
+ * not Review. The form's own `onSubmit` is what refuses that, in
+ * `OpportunityForm.tsx`; these buttons only make it possible for it to.
+ *
+ * A nearly-right premise in a comment has now cost this plan several defects.
+ * This one is corrected rather than deleted so the next reader knows which way
+ * round the rule goes.
  */
 const StepActions: React.FC<StepActionsProps> = ({
   onPrevious,
@@ -66,6 +87,7 @@ const StepActions: React.FC<StepActionsProps> = ({
   onNext,
   nextLabel,
   onSubmit,
+  submitLabel,
   onSave,
   isEdit,
   saving,
@@ -136,7 +158,7 @@ const StepActions: React.FC<StepActionsProps> = ({
           ) : (
             <>
               <CheckCircle size={16} className="me-2" />
-              {isEdit ? 'Update Opportunity' : 'Create Opportunity'}
+              {submitLabel}
             </>
           )}
         </button>

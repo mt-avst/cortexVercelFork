@@ -12,6 +12,7 @@ import OpportunityForm, {
   FIELD_LOCATIONS,
   locateField,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
+  stepAfterShapeChange,
 } from '../OpportunityForm';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
@@ -125,24 +126,16 @@ beforeEach(() => {
 
 
 /**
- * Click the create/update control, walking the Consent step first if it is in
- * the way.
+ * Open the Consent step, the step before Review on the two authoring paths.
  *
- * C1 gave consent its own step at the END of the two authoring paths, which
- * moved the terminal control off Questions and Task List onto Consent. Tests
- * that author content and then save therefore have one more step to walk than
- * they used to. Doing it here rather than at thirty call sites keeps "where the
- * save control lives" in one place, which is the thing that has now moved
- * twice.
- *
- * The forward click is conditional, not optional: on a path with no Consent
- * step - an external link, a booked session - there is nothing to walk and the
- * control is already on screen. If neither is present the `getByRole` below
- * throws, so a test standing on the wrong step still fails rather than passing
- * quietly.
+ * C1 gave consent its own step; C3 then added Review after it, so this no
+ * longer lands on the terminal control - it lands one step short of it, which
+ * is what the tests that dig into the Consent surface itself actually want.
+ * A test that needs to submit calls `walkToReview` (or `submitFromLastStep`,
+ * which does that for it) instead.
  */
 const goToConsentStep = () => {
-  fireEvent.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
 /**
@@ -162,13 +155,37 @@ const customiseConsent = () => {
   }
 };
 
-const submitFromLastStep = (name: RegExp = /^(Create|Update) Opportunity/i) => {
-  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
-
-  if (forward) {
+/**
+ * Walk forward until there is nowhere left to go, which is Review.
+ *
+ * Clicks whatever "Continue: {step}" the current step offers, repeatedly. A
+ * loop rather than a fixed number of clicks because the shapes are three, four
+ * and five steps long, and a count cannot help stopping one step short when a
+ * shape changes - which is the whole failure mode this helper exists to keep
+ * out of thirty-odd call sites.
+ *
+ * The bound guards against a Continue control that renders but does not
+ * advance: without it that spins forever instead of failing.
+ */
+const walkToReview = () => {
+  for (let guard = 0; guard <= 6; guard += 1) {
+    const forward = screen.queryByRole('button', { name: /^Continue: /i });
+    if (!forward) {
+      return;
+    }
     fireEvent.click(forward);
   }
+  throw new Error('walkToReview never reached a step with no Continue control');
+};
 
+/**
+ * Click the create/save control, walking every remaining step to Review first.
+ *
+ * Review is where every save happens now (C3), so this always walks whatever
+ * distance is left via `walkToReview` before clicking the terminal control.
+ */
+const submitFromLastStep = (name: RegExp = /^(Create opportunity|Save changes)$/) => {
+  walkToReview();
   fireEvent.click(screen.getByRole('button', { name }));
 };
 
@@ -406,7 +423,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/Consent text/i), {
       target: { value: 'We record everything and share it with our client.' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalled());
     const inline = submittedPayload().inline_study;
@@ -1030,7 +1047,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Find the export button' }
     });
 
-    submitFromLastStep(/Update Opportunity/i);
+    submitFromLastStep(/^Save changes$/);
 
     await vi.waitFor(() => {
       expect(vi.mocked(updateOpportunity)).toHaveBeenCalled();
@@ -1041,10 +1058,10 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       updatedPayload().inline_study
     ).toBeDefined();
 
-    // Back to the Task List step first. The save is now made from Consent, and
-    // both assertions below are about what the TASK LIST step shows - on the
-    // Consent step there is no source radio and no task card, so they would
-    // both pass without proving anything at all.
+    // Back to the Task List step first. The save is now made from Review, and
+    // both assertions below are about what the TASK LIST step shows - on
+    // Consent or Review there is no source radio and no task card, so they
+    // would both pass without proving anything at all.
     //
     // Scoped to the step strip. From the Consent step there are now two
     // controls that say "Task List" - the step itself and the bottom control
@@ -1089,13 +1106,13 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Draft saved early, now renamed' }
     });
 
-    // Back to the Task List tab and on to Consent, which is where the save
-    // control lives since C1. It stays disabled while the post-save success
+    // Back to the Task List tab and on to Review, which is where the save
+    // control lives since C3. It stays disabled while the post-save success
     // banner is up, so wait it out rather than racing it - a click during that
     // window is silently dropped.
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    goToConsentStep();
-    const saveAgain = await screen.findByRole('button', { name: /Update Opportunity/i });
+    walkToReview();
+    const saveAgain = await screen.findByRole('button', { name: /^Save changes$/ });
     await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
     fireEvent.click(saveAgain);
 
@@ -1512,9 +1529,10 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 // Silent failures in the authoring form - two live defects (2026-08-14)
 //
 // Both had the same shape: the author acts, nothing visible happens, and the
-// only tell is a console line they will never see. The form spans three tabs,
-// so "the problem is on a tab you are not looking at" is the normal case, not
-// an edge case.
+// only tell is a console line they will never see. The form spans up to five
+// steps (three, four or five depending on the shape, since C3 added Review to
+// every one of them), so "the problem is on a step you are not looking at" is
+// the normal case, not an edge case.
 // ---------------------------------------------------------------------------
 
 describe('locateField', () => {
@@ -1632,7 +1650,13 @@ describe('OpportunityForm - a refused action always says so', () => {
     // no-op, with the label silently degraded to a bare "Continue".
     renderForm();
 
-    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    // Scoped to the step strip. C3's "Continue: {next step}" label means the
+    // forward control on step 1 is now ALSO named "Content & Details" -
+    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Content & Details/i })
+    );
     expect(screen.getByLabelText(/Description \(Optional\)/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
@@ -1689,13 +1713,19 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find out where people stall in the checkout flow' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    // Scoped to the step strip. C3's "Continue: {next step}" label means the
+    // forward control on step 1 is now ALSO named "Content & Details" -
+    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Content & Details/i })
+    );
     fireEvent.change(screen.getByLabelText(/Participant Type/i), {
       target: { value: 'specific' },
     });
 
     // Anchored on the tab's own description: from tab 2 the forward button is
-    // named "Continue to Task List", so /Task List/i alone matches both.
+    // named "Continue: Task List", so /Task List/i alone matches both.
     fireEvent.click(
       screen.getByRole('button', { name: /What the participant does/i })
     );
@@ -1723,7 +1753,13 @@ describe('OpportunityForm - a refused action always says so', () => {
     // went on naming it. Derived now, so it empties itself.
     const { container } = renderForm();
 
-    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    // Scoped to the step strip. C3's "Continue: {next step}" label means the
+    // forward control on step 1 is now ALSO named "Content & Details" -
+    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Content & Details/i })
+    );
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
     expect(
       screen.getByText('Please fix these fields: Research Study Type')
@@ -1740,8 +1776,12 @@ describe('OpportunityForm - a refused action always says so', () => {
   });
 
   it('stays put when the earliest problem is already on the open tab', async () => {
-    // Exercises setActiveTab(4) from tab 4 - the routing must not bounce the
-    // author to tab 1 just because that is where most fields live.
+    // Exercises setActiveTab(4) from tab 5 - the routing must not bounce the
+    // author to tab 1 just because that is where most fields live. The save
+    // control lives only on Review (C3) now, so the refusal is issued from
+    // tab 5 and has to route back to tab 4, not "stay" on it in the literal
+    // sense the earlier, four-step version of this test had - but the thing
+    // being exercised (not defaulting to tab 1) is the same thing either way.
     renderForm();
     selectType('unmoderated');
 
@@ -1761,7 +1801,7 @@ describe('OpportunityForm - a refused action always says so', () => {
     customiseConsent();
     fireEvent.change(screen.getByLabelText(/Consent text/i), { target: { value: '  ' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     expect(
       await screen.findByText('Please fix these fields: Consent text')
@@ -1809,7 +1849,13 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: '' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Content & Details/i }));
+    // Scoped to the step strip. C3's "Continue: {next step}" label means the
+    // forward control on step 1 is now ALSO named "Content & Details" -
+    // "Continue: Content & Details" - so an unscoped match is ambiguous.
+    fireEvent.click(
+      within(screen.getByRole('navigation', { name: 'Form steps' }))
+        .getByRole('button', { name: /Content & Details/i })
+    );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 
     expect(
@@ -1817,5 +1863,56 @@ describe('OpportunityForm - a refused action always says so', () => {
     ).toBeInTheDocument();
     expect(screen.getByText('Duration must be between 5 and 240 minutes')).toBeInTheDocument();
     expect(vi.mocked(updateOpportunity)).not.toHaveBeenCalled();
+  });
+});
+
+describe('stepAfterShapeChange', () => {
+  /*
+   * The landing choice for an author standing on a step the current shape does
+   * not have. Unreachable through the UI - both controls that reshape the step
+   * set live on step 1 - so an independent mutation pass replaced the whole
+   * thing with "the first step" and all 1178 tests passed. Tested here as a
+   * pure function instead, because unreachable is not the same as unspecified,
+   * and the next change to the step set inherits whatever this does.
+   */
+  const shape = (...ids: number[]) =>
+    ids.map((id) => ({
+      id,
+      key: 'basics' as const,
+      title: `Step ${id}`,
+      description: ''
+    }));
+
+  it('leaves the author where they are when the shape still has that step', () => {
+    expect(stepAfterShapeChange(shape(1, 2, 3, 4, 5), 4)).toBe(4);
+    // Including the sparse case, where the id is nowhere near its position.
+    expect(stepAfterShapeChange(shape(1, 2, 5), 5)).toBe(5);
+  });
+
+  it('falls back to the nearest EARLIER step, not the first one', () => {
+    /*
+     * The distinction the mutation erased. An author on Consent (4) whose shape
+     * becomes an external poll's [1, 2, 3, 5] belongs on 3 - they were working
+     * forwards, and step 1 discards their place for no reason.
+     */
+    expect(stepAfterShapeChange(shape(1, 2, 3, 5), 4)).toBe(3);
+    // And two steps back when the nearer one is gone too.
+    expect(stepAfterShapeChange(shape(1, 2, 5), 4)).toBe(2);
+  });
+
+  it('never returns a step the shape does not have', () => {
+    // The whole point: the caller renders by `tabs.find`, so a returned id that
+    // is not in the list is a blank page rather than a wrong step.
+    const shapes = [shape(1, 2, 5), shape(1, 2, 3, 5), shape(1, 2, 3, 4, 5)];
+    for (const candidate of shapes) {
+      for (const active of [1, 2, 3, 4, 5, 6, 99]) {
+        const landing = stepAfterShapeChange(candidate, active);
+        expect(candidate.map((step) => step.id)).toContain(landing);
+      }
+    }
+  });
+
+  it('lands on the first step when there is nothing earlier to fall back to', () => {
+    expect(stepAfterShapeChange(shape(2, 3, 5), 1)).toBe(2);
   });
 });

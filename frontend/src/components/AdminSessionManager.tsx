@@ -3,7 +3,6 @@ import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
 import { getMyCalendarEvents, getAvailability } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
-import { navigation } from '../utils/navigation';
 import { logger } from '../utils/logger';
 
 import { formatDateTime, formatClockTime, formatStudyDate } from '../utils/datetime';
@@ -31,33 +30,19 @@ import {
   LayoutGrid, 
   List, 
   RefreshCw, 
-  ArrowLeft 
+  ArrowLeft,
+  ArrowRight
 } from 'lucide-react';
 
-/**
- * What to do once the parent's save callback comes back.
- *
- * Extracted and pure because the wrong answer here is invisible. In create mode
- * the parent's `onNavigate` announces "Opportunity created successfully!", so
- * navigating after a save that returned no id tells the author their study was
- * created when nothing was saved and no sessions were created either. A refused
- * save (the parent's validation banner) and a failed one both land here.
+/*
+ * `resolveSaveOutcome` and `OpportunitySaveOutcome` were deleted here, not
+ * moved. They existed to decide what to do after this component called the
+ * parent back to save the opportunity - chiefly to NOT navigate when the save
+ * returned no id, because navigating announced a success that had not happened.
+ * With the commit point on the Review step there is no save to interpret: a
+ * refusal keeps the author on Review, in front of the reason, which is what
+ * that function was approximating.
  */
-export type OpportunitySaveOutcome = 'create-sessions' | 'already-saved' | 'not-saved';
-
-export const resolveSaveOutcome = (
-  savedOpportunityId: string | null | undefined,
-  propOpportunityId: string | null | undefined,
-  urlId: string | undefined,
-  opportunityIdBeforeSave: string | null | undefined
-): OpportunitySaveOutcome => {
-  const idToUse =
-    savedOpportunityId || propOpportunityId || (urlId && urlId !== 'new' ? urlId : null);
-  if (!idToUse) {
-    return 'not-saved';
-  }
-  return idToUse !== opportunityIdBeforeSave ? 'create-sessions' : 'already-saved';
-};
 
 interface AdminSessionManagerProps {
   opportunityId: string;
@@ -66,7 +51,6 @@ interface AdminSessionManagerProps {
   defaultDurationMinutes: number;
   disabled?: boolean;
   isTemporary?: boolean;
-  onOpportunitySave?: () => Promise<string | undefined>; // New prop for saving opportunity, returns opportunity ID
   onBack?: () => void; // Prop for back navigation
   /**
    * The name of the step `onBack` returns to.
@@ -77,8 +61,16 @@ interface AdminSessionManagerProps {
    * confusion still live as the one step where it had not been fixed.
    */
   onBackLabel?: string;
-  onNavigate?: (path: string) => void; // Prop for navigation (avoids full page reload)
-  isDraft?: boolean; // Whether the opportunity is in draft status
+  /**
+   * Move forward to the next step of the form, and the name of the step it
+   * goes to.
+   *
+   * This step had no forward control at all while it WAS the last step. Review
+   * follows it now, so it needs one - and it names its destination for the same
+   * reason `onBackLabel` does.
+   */
+  onContinue?: () => void;
+  onContinueLabel?: string;
 }
 
 interface CalendarViewProps {
@@ -1129,11 +1121,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   defaultDurationMinutes,
   disabled = false,
   isTemporary = false,
-  onOpportunitySave,
   onBack,
   onBackLabel,
-  onNavigate,
-  isDraft = false
+  onContinue,
+  onContinueLabel
 }) => {
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
@@ -1184,6 +1175,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * covers both, and there is no second spelling to forget.
    */
   const backLabel = onBackLabel ? `Previous: ${onBackLabel}` : 'Previous step';
+  const continueLabel = onContinueLabel ? `Continue: ${onContinueLabel}` : 'Continue';
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
   
   // Calendar view mode
@@ -1653,94 +1645,18 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         setSelectedSlots(new Set());
         persistSelectedSlots(new Set());
         
-        // If we have an opportunity save callback, save the opportunity
-        if (onOpportunitySave) {
-          logger.debug('🚀 Calling onOpportunitySave callback for temporary opportunity');
-          // Small delay to ensure state has propagated to parent component
-          await new Promise(resolve => setTimeout(resolve, 100));
-          try {
-            // Get the opportunity ID before saving (it should be set by parent)
-            const opportunityIdBeforeSave = opportunityId;
-            const savedOpportunityId = await onOpportunitySave();
-            logger.debug('✅ onOpportunitySave completed successfully for temporary opportunity:', {
-              returnedOpportunityId: savedOpportunityId,
-              previousOpportunityId: opportunityIdBeforeSave
-            });
-            
-            // Use the opportunity ID returned from the callback, or fall back to prop/URL
-            const opportunityIdToUse = savedOpportunityId || opportunityId || (urlId && urlId !== 'new' ? urlId : null);
-            const outcome = resolveSaveOutcome(savedOpportunityId, opportunityId, urlId, opportunityIdBeforeSave);
-
-            // The `&& opportunityIdToUse` is for the type narrowing only -
-            // 'create-sessions' already implies it.
-            if (outcome === 'create-sessions' && opportunityIdToUse) {
-              logger.debug('🔄 Creating sessions for saved opportunity:', {
-                oldId: opportunityIdBeforeSave,
-                newId: opportunityIdToUse,
-                sessionCount: sessionData.length
-              });
-              
-              try {
-                const { createSessions } = await import('../api/client');
-                const createdSessions = await createSessions(opportunityIdToUse, sessionData);
-                logger.debug('✅ CREATE MODE - Sessions created directly:', {
-                  createdCount: createdSessions.length,
-                  createdSessions: createdSessions.map(s => ({
-                    id: s.id,
-                    start_time: s.start_time,
-                    end_time: s.end_time,
-                    opportunity_id: s.opportunity_id
-                  }))
-                });
-                
-                // Update sessions state with real sessions
-                onSessionsChange(createdSessions);
-                
-                // After sessions are created, navigate to admin dashboard
-                logger.info('All sessions created, navigating to admin dashboard');
-                // Use callback navigation to avoid full page reload (which clears session)
-                if (onNavigate) {
-                  onNavigate('/admin');
-                } else {
-                  // Fallback to navigation utility if callback not provided
-                  navigation.toAdmin();
-                }
-              } catch (sessionError: unknown) {
-                const errorMessage = sessionError instanceof Error ? sessionError.message : String(sessionError);
-                logger.error('Error creating sessions after opportunity save', { errorMessage });
-                setError('Opportunity saved but failed to create sessions. Please add them manually.');
-                // Navigate anyway so user can manually add sessions
-                if (onNavigate) {
-                  onNavigate('/admin');
-                } else {
-                  navigation.toAdmin();
-                }
-              }
-            } else if (outcome === 'not-saved') {
-              // Do NOT navigate: the parent announces success on navigation, so
-              // leaving here would report a study that was never created. The
-              // parent has already named the fields at fault and opened the tab
-              // holding them - stay on the form so the author can see it.
-              logger.warn('Save returned no opportunity id - staying on the form so the refusal stays visible');
-              setError('The study was not saved, so no sessions were created. Check the fields flagged above.');
-            } else {
-              logger.warn('Opportunity ID unchanged, sessions may have been created by parent component. Navigating to admin.');
-              if (onNavigate) {
-                onNavigate('/admin');
-              } else {
-                navigation.toAdmin();
-              }
-            }
-          } catch (saveError: unknown) {
-            const errorMessage = saveError instanceof Error ? saveError.message : String(saveError);
-            logger.error('Error saving temporary opportunity', { errorMessage });
-            // Same reason as the 'not-saved' branch: navigating reports a
-            // success that did not happen. Nothing was saved, so stay put.
-            setError('The study was not saved, so no sessions were created. Please try again.');
-          }
-        } else {
-          logger.debug('⚠️ onOpportunitySave callback not provided for temporary opportunity');
-        }
+        /*
+         * The slots are confirmed and that is ALL that happens here.
+         *
+         * This block used to call the parent back to save the opportunity,
+         * create the real sessions against the id that came back, and then
+         * navigate to the dashboard - which made confirming a time slot the
+         * commit point for a test or an interview, and made those two the only
+         * types whose author never saw what they were about to create. C3 moved
+         * the commit to the Review step for all five types, so a temporary
+         * session stays temporary until the author gets there. The parent holds
+         * these in `sessions` and its save writes them.
+         */
         
         // Refresh calendar to show updated state immediately (before navigation)
         await loadCalendarData();
@@ -1766,20 +1682,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       
       onSessionsChange([...sessions, ...createdSessions]);
       
-      // If we have an opportunity save callback, save the opportunity
-      if (onOpportunitySave) {
-        logger.debug('🚀 Calling onOpportunitySave callback');
-        try {
-          await onOpportunitySave();
-          logger.debug('✅ onOpportunitySave completed successfully');
-        } catch (saveError) {
-          logger.error('Error saving opportunity', { error: saveError instanceof Error ? saveError : undefined, errorMessage: saveError instanceof Error ? saveError.message : String(saveError) });
-          // Don't fail the entire operation if opportunity save fails
-          // Sessions were already created successfully
-        }
-      } else {
-        logger.debug('⚠️ onOpportunitySave callback not provided');
-      }
+      /*
+       * Nothing is saved here any more. In edit mode these sessions are real
+       * the moment they are created, and the OPPORTUNITY is saved from the
+       * Review step - so adding a time slot no longer commits an unrelated
+       * half-finished edit to the title beside it.
+       */
       
       // Mark selected slots as confirmed
       setConfirmedSlots(prev => {
@@ -2243,14 +2151,20 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <strong>{selectedSlots.size}</strong> slot{selectedSlots.size !== 1 ? 's' : ''} selected
                 </div>
                 
-                {/* Create Opportunity Button */}
+                {/*
+                  Said "Create Opportunity" while this button WAS the commit
+                  point. It no longer creates the opportunity - Review does -
+                  so it now says what it actually does, in both modes: on a new
+                  opportunity the slots are held until Review saves, and on an
+                  existing one they are created immediately.
+                */}
                 <button
                   type="button"
                   className="btn btn-success btn-sm min-w-180"
                   onClick={handleCreateSessionsFromSelected}
                   disabled={disabled || loading}
                 >
-                  {loading ? 'Creating...' : 'Create Opportunity'}
+                  {loading ? 'Confirming...' : 'Confirm selected slots'}
                 </button>
                 
                 {/* Clear Selection and Back buttons on same row */}
@@ -2265,6 +2179,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                     >
                       <ArrowLeft size={16} className="me-2" />
                       {backLabel}
+                    </button>
+                  )}
+                  {onContinue && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={onContinue}
+                      disabled={disabled || loading}
+                    >
+                      {continueLabel}
+                      <ArrowRight size={16} className="ms-2" />
                     </button>
                   )}
                   {/* Clear Selection - centered */}
@@ -2283,18 +2208,39 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
             </div>
           )}
 
-          {/* Back button when no slots selected - left-aligned */}
-          {!selectedSlots.size && onBack && (
-            <div className="mt-4 text-start">
-              <button
-                type="button"
-                className="btn btn-outline-secondary px-5 py-2 fw-semibold"
-                onClick={onBack}
-                disabled={disabled || loading}
-              >
-                <ArrowLeft size={16} className="me-2" />
-                {backLabel}
-              </button>
+          {/*
+            The step's own action row when no slots are selected.
+            Both controls, not just Back: an author who booked their slots
+            earlier, or who means to come back to them, still has to be able to
+            reach Review - and while this step was terminal there was nothing
+            here but Back.
+          */}
+          {!selectedSlots.size && (onBack || onContinue) && (
+            <div className="mt-4 d-flex justify-content-between align-items-center gap-2">
+              {onBack ? (
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary px-5 py-2 fw-semibold"
+                  onClick={onBack}
+                  disabled={disabled || loading}
+                >
+                  <ArrowLeft size={16} className="me-2" />
+                  {backLabel}
+                </button>
+              ) : (
+                <div style={{ flex: 1 }}></div>
+              )}
+              {onContinue && (
+                <button
+                  type="button"
+                  className="btn btn-primary px-5 py-2 fw-semibold"
+                  onClick={onContinue}
+                  disabled={disabled || loading}
+                >
+                  {continueLabel}
+                  <ArrowRight size={16} className="ms-2" />
+                </button>
+              )}
             </div>
           )}
         </div>

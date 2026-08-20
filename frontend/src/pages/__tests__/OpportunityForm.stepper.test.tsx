@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
-import { createOpportunity, getOpportunity } from '../../api/client';
+import { getOpportunity, updateOpportunity } from '../../api/client';
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -19,27 +19,34 @@ vi.mock('../../contexts/ThemeContext', () => ({
 
 vi.mock('../../components/SlowNeuralBackground', () => ({ default: () => null }));
 /**
- * Reports the backward-navigation props it was handed, so the page's wiring can
- * be asserted here while the control's own rendering is asserted where the real
- * component is rendered, in `AdminSessionManager.render.test.tsx`. Stubbed to
- * null, this step's control was invisible to every test - which is how it stayed
- * a bare "Back" while the other five were renamed.
+ * Reports the backward- and forward-navigation props it was handed, so the
+ * page's wiring can be asserted here while the control's own rendering is
+ * asserted where the real component is rendered, in
+ * `AdminSessionManager.render.test.tsx`. Stubbed to null, this step's controls
+ * were invisible to every test - which is how the backward one stayed a bare
+ * "Back" while the other five were renamed, and it is also why C3 could add a
+ * forward one here (`onContinue`/`onContinueLabel`) with nothing to walk the
+ * sessions path forward until this stub grew a button for it. `onOpportunitySave`
+ * and `onNavigate` are gone from the real component - Review commits for every
+ * type now - so this stub no longer wires anything to them.
  */
 vi.mock('../../components/AdminSessionManager', () => ({
   default: ({
     onBack,
     onBackLabel,
-    onSessionsChange,
-    onOpportunitySave
+    onContinue,
+    onContinueLabel,
+    onSessionsChange
   }: {
     onBack?: () => void;
     onBackLabel?: string;
+    onContinue?: () => void;
+    onContinueLabel?: string;
     onSessionsChange?: (sessions: unknown[]) => void;
-    onOpportunitySave?: () => void;
   }) => (
     <>
-      <button type="button" onClick={onOpportunitySave}>
-        stub: save the opportunity
+      <button type="button" onClick={onContinue}>
+        {onContinueLabel ? `Continue: ${onContinueLabel}` : 'sessions: no forward control'}
       </button>
       <button type="button" onClick={onBack}>
         {onBackLabel ? `Previous: ${onBackLabel}` : 'sessions: no backward control'}
@@ -119,41 +126,117 @@ describe('the step strip reports progress, not just position', () => {
   it('numbers every step against the real total for the shape on screen', () => {
     renderForm();
 
-    // No type chosen is a REACHABLE state with only two steps, and the numbering
-    // has to be honest about it rather than promising a third.
+    // No type chosen is a REACHABLE state with only three steps - Basic
+    // Information, Content & Details and Review - and the numbering has to be
+    // honest about it rather than promising a fourth.
     expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 2'),
-      expect.stringContaining('Step 2 of 2'),
+      expect.stringContaining('Step 1 of 3'),
+      expect.stringContaining('Step 2 of 3'),
+      expect.stringContaining('Step 3 of 3'),
     ]);
 
     selectType('unmoderated');
+    expect(steps().map((step) => step.textContent)).toEqual([
+      expect.stringContaining('Step 1 of 5'),
+      expect.stringContaining('Step 2 of 5'),
+      expect.stringContaining('Step 3 of 5'),
+      expect.stringContaining('Step 4 of 5'),
+      expect.stringContaining('Step 5 of 5'),
+    ]);
+
+    // An external poll authors no study, so it has no Consent step and stops
+    // at four - and step 4 of 4 and step 4 of 5 are both real sentences this
+    // strip has to be able to say, for Review on two different shapes.
+    selectType('poll');
     expect(steps().map((step) => step.textContent)).toEqual([
       expect.stringContaining('Step 1 of 4'),
       expect.stringContaining('Step 2 of 4'),
       expect.stringContaining('Step 3 of 4'),
       expect.stringContaining('Step 4 of 4'),
     ]);
+  });
 
-    // An external poll authors no study, so it stops at three - and step 3 of 3
-    // and step 3 of 4 are both real sentences this strip has to be able to say.
+  it("reads step IDENTITY rather than position, so Review's id (5) still reports its true position on shapes shorter than five", () => {
+    // On the two shapes that author a study, id === index + 1 for every step
+    // including Review (id 5, index 4) - a component that read POSITION where
+    // it should read IDENTITY would behave identically on those and only show
+    // the mistake on a shorter shape.
+    //
+    // No type chosen is the SHORTEST shape that still reaches Review: [1, 2,
+    // 5], length 3 - Review sits at index 2 and reads "Step 3 of 3" despite
+    // carrying id 5.
+    renderForm();
+
+    const blankSteps = steps();
+    expect(blankSteps).toHaveLength(3);
+
+    fireEvent.click(blankSteps[1]); // Content & Details
+
+    /*
+     * Reached by clicking the TILE, not the forward control, and that is a
+     * statement about the form rather than a convenience.
+     *
+     * With no type chosen the forward control on step 2 reads a bare
+     * "Continue" and refuses the move, sending the author to the type field -
+     * so there is no "Continue: Review" here to press. Asserted, because the
+     * first version of this test pressed it and the label existed: the control
+     * named Review while going to step 1, which is precisely the lying label
+     * C3 removed from this row.
+     */
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: 'Continue: Review' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(blankSteps[2]); // Review, directly
+
+    const blankOnReview = steps();
+    expect(blankOnReview).toHaveLength(3);
+    expect(blankOnReview[2]).toHaveTextContent('Step 3 of 3');
+    expect(blankOnReview[2]).toHaveTextContent('Review');
+    expect(blankOnReview[2]).toHaveAttribute('aria-current', 'step');
+
+    // An external poll is one step longer - [1, 2, 3, 5], length 4 - so
+    // Review's id (5) is one past what THIS shape's length would suggest too,
+    // at a different position than the case above.
+    // Review's backward control names the step BEFORE it in this shape, which
+    // with no type chosen is Content & Details rather than the type-dependent
+    // step - asserted rather than assumed, because it is the label that would
+    // be wrong if the control read a fixed number instead of the list.
+    expect(
+      screen.getByRole('button', { name: 'Previous: Content & Details' })
+    ).toBeInTheDocument();
+    fireEvent.click(steps()[0]);
     selectType('poll');
-    expect(steps().map((step) => step.textContent)).toEqual([
-      expect.stringContaining('Step 1 of 3'),
-      expect.stringContaining('Step 2 of 3'),
-      expect.stringContaining('Step 3 of 3'),
-    ]);
+
+    const beforeReview = steps();
+    expect(beforeReview).toHaveLength(4);
+
+    fireEvent.click(beforeReview[2]); // External Link
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+
+    const onReview = steps();
+    expect(onReview).toHaveLength(4);
+    expect(onReview[3]).toHaveTextContent('Step 4 of 4');
+    expect(onReview[3]).toHaveTextContent('Review');
+    expect(onReview[3]).toHaveAttribute('aria-current', 'step');
   });
 
   it('opens a blank form with one current step and the rest not started', () => {
     renderForm();
     selectType('unmoderated');
 
-    const [one, two, three, four] = steps();
+    const [one, two, three, four, five] = steps();
     expect(one).toHaveTextContent('Current step');
     expect(two).toHaveTextContent('Not started');
     expect(three).toHaveTextContent('Not started');
     expect(four).toHaveTextContent('Not started');
-    // Not "Completed": nothing has been decided about steps 2 to 4, and the
+    // Review, unasserted here before: a blank form has decided nothing about
+    // it either, and it must read Not started rather than defaulting to some
+    // other word because it is also the step that commits.
+    expect(five).toHaveTextContent('Review');
+    expect(five).toHaveTextContent('Not started');
+    // Not "Completed": nothing has been decided about steps 2 to 5, and the
     // validator has nothing to object to on any of them yet.
     expect(screen.queryByText('Completed')).not.toBeInTheDocument();
   });
@@ -206,6 +289,7 @@ describe('the step strip reports progress, not just position', () => {
       'step',
       null,
       null,
+      null,
     ]);
   });
 
@@ -215,12 +299,12 @@ describe('the step strip reports progress, not just position', () => {
 
     const region = screen.getByRole('status');
     fireEvent.click(steps()[2]);
-    expect(region).toHaveTextContent('Step 3 of 4: Task List. Current step.');
+    expect(region).toHaveTextContent('Step 3 of 5: Task List. Current step.');
 
     fireEvent.click(steps()[0]);
     // Announces the step it ARRIVED at, not the one it left, and reports the
     // state that step is actually in.
-    expect(region).toHaveTextContent('Step 1 of 4: Basic Information. Needs attention.');
+    expect(region).toHaveTextContent('Step 1 of 5: Basic Information. Needs attention.');
   });
 
   it('treats an opportunity being edited as already walked, not as three untouched steps', async () => {
@@ -244,12 +328,20 @@ describe('the step strip reports progress, not just position', () => {
 
     await screen.findByDisplayValue('An existing study');
 
-    // Its content is on the server; calling steps 2 and 3 "Not started" would
-    // be false. Step 1 is the one being looked at, so it reads Current.
-    const [one, two, three] = steps();
+    // Its content is on the server; calling steps 2, 3 and Review "Not
+    // started" would be false. Step 1 is the one being looked at, so it reads
+    // Current.
+    const [one, two, three, four] = steps();
     expect(one).toHaveTextContent('Current step');
     expect(two).toHaveTextContent('Completed');
     expect(three).toHaveTextContent('Completed');
+    // Review too, previously left unasserted here: the edit-mode "mark
+    // everything visited" effect walks the WHOLE shape from `getTabsForType`,
+    // which now includes Review, and a version that stopped one step short of
+    // it would have passed this test while still leaving Review "Not started"
+    // under an author's own content.
+    expect(four).toHaveTextContent('Review');
+    expect(four).toHaveTextContent('Completed');
   });
 });
 
@@ -302,9 +394,12 @@ describe('the strip reports steps other than the first', () => {
       target: { value: 'published' }
     });
 
-    // Straight from step 1 to the last step, so steps 2 and 3 are UNVISITED -
-    // which is the only state the reported-errors map is load-bearing for.
+    // Straight from step 1 to Consent - no longer the last step, but still
+    // reached with steps 2 and 3 UNVISITED, which is the only state the
+    // reported-errors map is load-bearing for - and on to Review, the step
+    // that now carries the submit control.
     fireEvent.click(steps()[3]);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
 
     // Publishing an unmoderated study with no tasks fails on step 3.
@@ -337,10 +432,17 @@ describe('the strip reports steps other than the first', () => {
     await screen.findByDisplayValue('A native survey');
 
     const rendered = steps();
-    expect(rendered).toHaveLength(4);
-    expect(rendered[3]).toHaveTextContent('Step 4 of 4');
+    expect(rendered).toHaveLength(5);
+    expect(rendered[3]).toHaveTextContent('Step 4 of 5');
     expect(rendered[3]).toHaveTextContent('Completed');
     expect(rendered[2]).toHaveTextContent('Completed');
+    // Review, previously left out of this test entirely: the fifth slot is
+    // exactly the one an id-keyed (rather than key-keyed) history tracker
+    // could get right for four steps and wrong for the fifth, since Review's
+    // id (5) matches neither the native nor the external shape's step 4.
+    expect(rendered[4]).toHaveTextContent('Step 5 of 5');
+    expect(rendered[4]).toHaveTextContent('Review');
+    expect(rendered[4]).toHaveTextContent('Completed');
   });
 
   it('does not carry one step 3 history over to a different step 3', () => {
@@ -358,7 +460,7 @@ describe('the strip reports steps other than the first', () => {
     // is still 3, which is exactly why history cannot be held by id.
     selectType('poll');
 
-    expect(steps()).toHaveLength(3);
+    expect(steps()).toHaveLength(4);
     expect(steps()[2]).toHaveTextContent('External Link');
     expect(steps()[2]).toHaveTextContent('Not started');
 
@@ -376,7 +478,7 @@ describe('the strip reports steps other than the first', () => {
 
     const region = screen.getByRole('status');
     const announced = region.textContent;
-    expect(announced).toContain('Step 2 of 4');
+    expect(announced).toContain('Step 2 of 5');
 
     // Typing flips step 1 from Needs attention to Completed, which re-renders
     // the strip. The region must not re-announce: it reports step CHANGES.
@@ -417,7 +519,9 @@ describe('the strip reports steps other than the first', () => {
     // Through a REFUSED SAVE, so the error lands in the reported map and not
     // only in the live rules. The live rules re-evaluate against a form that
     // no longer holds any questions and clear themselves; the reported map
-    // does not, and that is the half that strands.
+    // does not, and that is the half that strands. The submit control lives
+    // on Review now, one step further on than Consent.
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
     fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
     expect(steps()[2]).toHaveTextContent('Needs attention');
 
@@ -521,6 +625,35 @@ describe('the two backward controls are named apart', () => {
     expect(steps()[2]).toHaveAttribute('aria-current', 'step');
   });
 
+  it("names the step Review's own control returns to, and proves it on two different paths", () => {
+    // An independent mutation pass on this plan's previous step found 18
+    // survivors that collapsed to one finding: everything had only ever been
+    // proven for the first tile. Review sits after every shape now, so its
+    // own backward control needs checking on two shapes with two different
+    // previous steps, not one - a version that only ever checked the
+    // authoring path could not tell Review's previous step apart from a
+    // hard-coded "Consent".
+    renderForm();
+    selectType('unmoderated');
+    fillBasics();
+
+    fireEvent.click(steps()[3]); // Consent
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: Consent' })
+    ).toBeInTheDocument();
+
+    // A poll authors no study, so it has no Consent step at all - Review's
+    // previous here is External Link.
+    fireEvent.click(steps()[0]);
+    selectType('poll');
+    fireEvent.click(steps()[2]); // External Link
+    fireEvent.click(screen.getByRole('button', { name: 'Continue: Review' }));
+    expect(
+      screen.getByRole('button', { name: 'Previous: External Link' })
+    ).toBeInTheDocument();
+  });
+
   it('calls the way out of the form Exit, not Back', () => {
     renderForm();
 
@@ -622,51 +755,108 @@ describe('exiting the form', () => {
   });
 
   it('says nothing about unsaved work once the save has succeeded', async () => {
-    vi.mocked(createOpportunity).mockResolvedValue({ id: 'opp-new' } as never);
-    renderForm();
-    selectType('question');
-    fillBasics();
-    fireEvent.click(steps()[2]);
-    fireEvent.change(screen.getByLabelText(/External Link/i), {
-      target: { value: 'https://survey.test/one' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    // A CREATE no longer leaves the form mounted to ask this of. Review
+    // commits for every type now and its `onSubmit` calls `handleSubmit()`
+    // with no `skipNavigation`, so a successful create navigates away the
+    // instant the request resolves - there is no window left in which Exit
+    // could be clicked against a freshly-created, still-mounted form, and no
+    // "created as DRAFT" banner ever renders here: that message travels to
+    // `/admin` in the navigation state now, for THAT page to show, not this
+    // one. An EDIT is the one path left where a successful save keeps the
+    // form on screen, and it is the one this assertion has always actually
+    // been about: does the save rebaseline what it sent, or does the form
+    // read dirty forever afterwards.
+    vi.mocked(getOpportunity).mockResolvedValue({
+      id: 'opp-5',
+      title: 'A study to be re-saved',
+      type: 'poll',
+      status: 'draft',
+      purpose_one_liner: 'Understand how people read the dashboard',
+      external_link_optional: 'https://survey.test/one',
+      participant_type_required: 'any',
+    } as never);
+    vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-5' } as never);
 
-    // The form stays on screen for a second or two after a create, showing its
-    // success banner, before navigating itself. Clicking Exit in that window
-    // must not claim the work is unsaved - it is saved, and a confirmation
-    // that cries wolf is the one people learn to click through.
-    // A create defaults to draft, so the banner is the draft warning - which
-    // is still a save that succeeded.
-    await screen.findByText(/created as DRAFT/i);
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-5/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+          <Route path="/admin" element={<div>Admin dashboard</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByDisplayValue('A study to be re-saved');
+
+    typeInto(/^Title/i, 'A study to be re-saved, revised');
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+    await vi.waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalled());
+    // Re-baselined against the server's answer, which is what makes the save
+    // itself the thing under test rather than "nothing was ever touched".
+    await screen.findByText(/saved as DRAFT|saved successfully/i);
+
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 
     expect(screen.queryByText(/have not been saved/i)).not.toBeInTheDocument();
+    // And it actually left - a confirmation that silently no-ops is just as
+    // wrong as one that cries wolf.
+    expect(screen.getByText('Admin dashboard')).toBeInTheDocument();
   });
 
   /**
-   * Create a test/interview and stop, which is a real resting state: this type
-   * returns from its create WITHOUT navigating, because the session manager
-   * owns both the save and the navigation away. So the form is on screen with
-   * everything in it already stored.
+   * Edit an interview and save a real change, which is what leaves a saved
+   * entity mounted now.
+   *
+   * This used to be a CREATE that stopped without navigating, because the
+   * session manager owned both the save and the navigation away for exactly
+   * test and interview. That branch is gone: Review commits for every type,
+   * its `onSubmit` calls `handleSubmit()` with no `skipNavigation`, and a
+   * successful CREATE now navigates away the instant the request resolves -
+   * for every type, not just the other four. There is no "created and
+   * stayed" state left to test from a create at all. An edit save is the one
+   * path still on screen afterwards, and it exercises the equivalent
+   * rebaseline: `loadOpportunity()` re-reads the server and refreshes
+   * `originalFormData`, the way `openingFormData.current = formData` used to
+   * for a create.
    */
-  const createAnInterview = async () => {
-    vi.mocked(createOpportunity).mockResolvedValue({ id: 'opp-new' } as never);
-    renderForm();
-    selectType('interview');
-    fillBasics();
-    typeInto(/Meeting Location/i, 'Zoom');
-    fireEvent.click(steps()[2]);
-    fireEvent.click(screen.getByRole('button', { name: /save the opportunity/i }));
-    await vi.waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalled());
+  const editAndSaveAnInterview = async () => {
+    vi.mocked(getOpportunity).mockResolvedValue({
+      id: 'opp-interview-1',
+      title: 'An interview about the export flow',
+      type: 'interview',
+      status: 'draft',
+      purpose_one_liner: 'Understand how people book time',
+      meeting_location_optional: 'Zoom',
+      default_duration_minutes: 30,
+      participant_type_required: 'any',
+    } as never);
+    vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-interview-1' } as never);
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-interview-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+          <Route path="/admin" element={<div>Admin dashboard</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+    await screen.findByDisplayValue('An interview about the export flow');
+
+    // Test and interview land on Session Management the moment the load
+    // resolves - back to Basic Information to make a real, savable change.
+    fireEvent.click(steps()[0]);
+    typeInto(/^Title/i, 'An interview about the export flow, revised');
+
+    fireEvent.click(screen.getByRole('button', { name: /Save Changes/i }));
+    await vi.waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalled());
+    await screen.findByText(/saved as DRAFT|saved successfully/i);
   };
 
   it('lets a saved interview be left without a word', async () => {
-    await createAnInterview();
+    await editAndSaveAnInterview();
 
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 
-    // The half that stops the confirmation crying wolf. Without the create
+    // The half that stops the confirmation crying wolf. Without the save
     // rebaselining what it sent, this form reads dirty forever - and a dialog
     // that always appears is the one people learn to click through.
     expect(screen.getByText('Admin dashboard')).toBeInTheDocument();
@@ -681,8 +871,9 @@ describe('exiting the form', () => {
     // without the sessions being consulted at all - a fixture that is dirty
     // either way proves nothing about the clause under test. The test above
     // pins that this same state is otherwise clean.
-    await createAnInterview();
+    await editAndSaveAnInterview();
 
+    fireEvent.click(steps()[2]); // Session Management
     fireEvent.click(screen.getByRole('button', { name: /lay out a time slot/i }));
     fireEvent.click(screen.getByRole('button', { name: /Exit to dashboard/i }));
 

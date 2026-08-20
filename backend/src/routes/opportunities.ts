@@ -37,6 +37,10 @@ import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/survey-authoring';
 import type { StudyKind } from '../../../shared/firsthand/study-input';
+import {
+  PUBLISH_PROBLEM_MESSAGES,
+  findPublishProblem
+} from '../../../shared/firsthand/publish-readiness';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
@@ -117,19 +121,18 @@ export function resetParticipantRouteLimits(userId: string): void {
   opportunityWriteLimiter.resetKey(userId);
 }
 
-// Shared by the create and update publish guards. Both endpoints accept an
-// inline study, and the guard only fires when no study is linked - which is
-// exactly when authoring one is available - so the same wording is correct at
-// both sites.
-const UNMODERATED_STUDY_REQUIRED =
-  'Add at least one prompt to the task list, or link an existing task list, before publishing';
-
 /**
- * The native counterpart. A poll or survey delivered inside Cortex has no
- * external link to require, so what it needs instead is the questions.
+ * Re-exported from `shared/firsthand/publish-readiness`, which is where both
+ * publish-refusal messages now live and what the Review step reads.
+ *
+ * This one is kept because `__tests__/opportunities.test.ts` imports it by
+ * name, and that import is the assertion that stops this wording drifting away
+ * from the client's preview of it. Its unmoderated twin was NOT kept: nothing
+ * imported it, and once the guards below stopped naming it directly a local
+ * alias for a value used nowhere is just a second name to keep in step.
  */
 export const NATIVE_SURVEY_STUDY_REQUIRED =
-  'Add questions, or link an existing set of questions, before publishing';
+  PUBLISH_PROBLEM_MESSAGES.native_survey_study_required;
 
 /**
  * Which study vocabulary an opportunity of this shape can run.
@@ -513,15 +516,13 @@ type UpdateOpportunityBody = UpdateOpportunityRequest & {
   delivery_mode?: DeliveryMode;
 };
 
-// Validation helper
-const validateUrl = (url: string): boolean => {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
+// `validateUrl` used to live here. Its body moved to
+// `shared/firsthand/publish-readiness` as `isPublishableExternalLink`, so the
+// Review step's publish preview answers "is this link publishable" with the
+// same function this route does. A local alias was left behind at first, on the
+// assumption that several call sites read better for the shorter name - lint
+// then showed there were none: the two publish guards were its only readers,
+// and both now ask the shared predicate directly.
 
 // GET /api/opportunities - List opportunities
 router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -865,22 +866,23 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // so an absent value means external here too.
   const deliveryMode = data.delivery_mode ?? 'external';
 
-  // Additional validation for published opportunities
-  if (data.status === 'published' && data.type === 'unmoderated') {
-    if (!linkedStudyId && !inlineStudy) {
-      throw new ValidationError(UNMODERATED_STUDY_REQUIRED);
-    }
-  } else if (data.status === 'published' && (data.type === 'poll' || data.type === 'survey')) {
-    // The external link is required only where the participant is actually
-    // being sent somewhere else. It used to be required unconditionally, which
-    // is what made these types external-only.
-    if (deliveryMode === 'native') {
-      if (!linkedStudyId && !inlineSurvey) {
-        throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
-      }
-    } else if (!data.external_link_optional || !validateUrl(data.external_link_optional)) {
-      throw new ValidationError('External link is required for published polls and surveys');
-    }
+  // Additional validation for published opportunities. The rule itself lives in
+  // `shared/firsthand/publish-readiness`, so the Review step can preview this
+  // refusal by asking the same function rather than restating it. `linkedStudyId`
+  // is already trimmed above, which is why the boolean is safe to pass straight in.
+  const createPublishProblem = findPublishProblem({
+    willBePublished: data.status === 'published',
+    type: data.type,
+    deliveryMode,
+    hasLinkedStudy: Boolean(linkedStudyId),
+    hasInlineStudy: Boolean(inlineStudy),
+    hasInlineSurvey: Boolean(inlineSurvey),
+    externalLink: data.external_link_optional
+    // No `removingLinkedStudy`: nothing is being removed from an opportunity
+    // that does not exist yet.
+  });
+  if (createPublishProblem) {
+    throw new ValidationError(PUBLISH_PROBLEM_MESSAGES[createPublishProblem.code]);
   }
 
   // Checked whatever the status, not only on publish: a draft carrying a
@@ -1268,36 +1270,34 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
   const publishGuardApplies = willBePublished && changesPublishShape;
 
-  if (publishGuardApplies && existingType === 'unmoderated') {
-    // Trimmed for the same reason as the create guard: an all-whitespace id
-    // would otherwise satisfy this and store NULL.
-    if (!newFirstHandStudyId?.trim() && !inlineStudyInput) {
+  // Same rule as create, asked of the RESULTING state rather than of the request
+  // - gating on the request's own status let `PATCH { type: 'poll' }` against a
+  // published opportunity produce a published poll with no link. Every value
+  // below is already merged over the stored row above.
+  //
+  // `publishGuardApplies` stays outside the predicate deliberately. It is not
+  // part of "is this publishable"; it is this endpoint's separate decision to
+  // leave an unrelated edit to a row ALREADY in the bad state alone.
+  if (publishGuardApplies) {
+    const updatePublishProblem = findPublishProblem({
+      willBePublished: true,
+      type: existingType,
+      deliveryMode: newDeliveryMode,
+      // Trimmed for the same reason as the create guard: an all-whitespace id
+      // would otherwise satisfy this and store NULL.
+      hasLinkedStudy: Boolean(newFirstHandStudyId?.trim()),
+      hasInlineStudy: Boolean(inlineStudyInput),
+      hasInlineSurvey: Boolean(inlineSurveyInput),
+      externalLink: newLink,
       // A caller REMOVING the study from a published opportunity is not trying
       // to publish, so telling them to add a prompt "before publishing"
       // describes an action they are not taking.
-      const removingStudy =
-        data.firsthand_study_id !== undefined && existingFirstHandStudyId?.trim();
-
-      throw new ValidationError(
-        removingStudy
-          ? 'A published unmoderated test cannot have its task list removed; unpublish it first'
-          : UNMODERATED_STUDY_REQUIRED
-      );
-    }
-  } else if (publishGuardApplies && (existingType === 'poll' || existingType === 'survey')) {
-    // Same reasoning as the unmoderated branch above: gating on the request's
-    // own status let `PATCH { type: 'poll' }` against a published opportunity
-    // produce a published poll with no link, which is what this rejects.
-    //
-    // Which of the two things is required now depends on where the participant
-    // is being sent. A native poll needs its questions; an external one needs
-    // the link it hands off to.
-    if (newDeliveryMode === 'native') {
-      if (!newFirstHandStudyId?.trim() && !inlineSurveyInput) {
-        throw new ValidationError(NATIVE_SURVEY_STUDY_REQUIRED);
-      }
-    } else if (!newLink || !validateUrl(newLink)) {
-      throw new ValidationError('External link is required for published polls and surveys');
+      removingLinkedStudy: Boolean(
+        data.firsthand_study_id !== undefined && existingFirstHandStudyId?.trim()
+      )
+    });
+    if (updatePublishProblem) {
+      throw new ValidationError(PUBLISH_PROBLEM_MESSAGES[updatePublishProblem.code]);
     }
   }
 
