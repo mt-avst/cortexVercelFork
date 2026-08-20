@@ -157,9 +157,11 @@ Days that do not fit are named in a notice below the grid, and **days that have 
 
 **Known Issues**:
 - Screen reader optimization is basic
+- **Four `color-contrast` failures remain on the opportunity form in light mode**, measured 2026-08-20: `.btn-outline-primary`, `.btn-primary`, and the active step's title and description. All predate the C2 stepper — a before-and-after axe run against a build of `main` was identical node for node. Dark mode is clean.
+- **`ConfirmationModal` renders its title as `<h5>`**, which skips heading levels under the page `<h1>` and reports as a moderate `heading-order` violation wherever it opens. It is shared by nine call sites, so the fix is not local to any one of them.
 
 **Workaround**: 
-- Use keyboard navigation (Tab, Enter, Escape)
+- Use keyboard navigation (Tab, Enter, Escape). The opportunity form's step strip gives one Tab stop per step and then the form body; each step is a button carrying `aria-current="step"` and its state in words
 - Report accessibility issues via feedback form
 
 ---
