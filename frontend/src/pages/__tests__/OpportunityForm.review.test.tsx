@@ -4,8 +4,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
-import { createOpportunity, createSessions, getOpportunity } from '../../api/client';
+import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
 import { PUBLISH_PROBLEM_MESSAGES } from '../../shared/firsthand/publish-readiness';
+import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '../../shared/firsthand/url-safety';
 
 /**
  * The Review step, and the commit point that moved onto it.
@@ -799,5 +800,158 @@ describe('a publish that WOULD be allowed says nothing', () => {
     walkForward();
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+});
+
+describe('the form refuses a link the server would refuse', () => {
+  it.each([
+    ['javascript:alert(1)'],
+    ['data:text/html,<script>alert(1)</script>'],
+    ['vbscript:msgbox(1)']
+  ])('names the problem inline rather than letting %s reach a 400', (link) => {
+    /*
+     * The client used a bare `new URL(...)`, which parses every one of these
+     * happily. Now that the server's schema refuses them, an author whose form
+     * did not would get an opaque "Validation failed" from an endpoint instead
+     * of a message beside the field - so both boundaries have to agree, and the
+     * message is imported rather than restated for exactly that reason.
+     */
+    renderCreate();
+    fillBasics('question', { status: 'published' });
+    walkForward();
+    fireEvent.click(strip()[2]);
+    fireEvent.change(screen.getByLabelText(/External Link/i), { target: { value: link } });
+    fireEvent.click(strip()[strip().length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+
+    expect(screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))).toBeInTheDocument();
+    expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it('lets a real web address through, so the refusal is about the scheme and not the field', async () => {
+    renderCreate();
+    fillBasics('question', { status: 'published' });
+    walkForward();
+    fireEvent.click(strip()[2]);
+    fireEvent.change(screen.getByLabelText(/External Link/i), {
+      target: { value: 'http://example.com/answer' }
+    });
+    fireEvent.click(strip()[strip().length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+
+    await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('an opportunity stored with a bad link can still be repaired', () => {
+  it('flags the stored link on a DRAFT, where no publish rule applies', async () => {
+    /*
+     * The case that kept this fix out of C3: hardening the schema refuses
+     * existing rows, and a row that can never be edited again is worse than the
+     * bug.
+     *
+     * The form resends this field on every save, so a draft holding a
+     * `javascript:` link stored before the schema was hardened gets a 400 from
+     * the endpoint. Well-formedness is therefore checked whatever the status -
+     * otherwise the author's only warning is "Validation failed", naming no
+     * field, on the row they are trying to fix.
+     */
+    vi.mocked(getOpportunity).mockResolvedValue(
+      OPPORTUNITY({
+        type: 'question',
+        status: 'draft',
+        external_link_optional: 'javascript:alert(1)'
+      }) as never
+    );
+    renderEdit();
+    await screen.findByDisplayValue('A poll the author already wrote');
+
+    walkForward();
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(
+      screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+    ).toBeInTheDocument();
+    expect(vi.mocked(updateOpportunity)).not.toHaveBeenCalled();
+  });
+
+  it('saves once the author replaces it, so the row is not locked out', async () => {
+    /*
+     * The half that matters most. A guard that refuses the bad value and also
+     * refuses the corrected one would brick every affected row, and the test
+     * above alone cannot tell those two apart.
+     */
+    vi.mocked(getOpportunity).mockResolvedValue(
+      OPPORTUNITY({
+        type: 'question',
+        status: 'draft',
+        external_link_optional: 'javascript:alert(1)'
+      }) as never
+    );
+    renderEdit();
+    await screen.findByDisplayValue('A poll the author already wrote');
+
+    walkForward();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit External Link' }));
+    fireEvent.change(screen.getByLabelText(/External Link/i), {
+      target: { value: 'https://example.com/repaired' }
+    });
+    fireEvent.click(strip()[strip().length - 1]);
+    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateOpportunity).mock.calls[0][1]).toEqual(
+      expect.objectContaining({ external_link_optional: 'https://example.com/repaired' })
+    );
+  });
+});
+
+describe('the field says so on blur, not only on save', () => {
+  /*
+   * This boundary was a MUTATION SURVIVOR: disabling the blur validator's
+   * scheme check left all 1210 tests green. There are three validators of this
+   * field - submit, blur, and the server's schema - and the blur one had its
+   * own bare `new URL(...)` and its own wording, so an author was told on blur
+   * that a `javascript:` link was fine and told on save that it was not, in
+   * different words. Testing only the submit path is how that survived.
+   */
+  const linkField = () => screen.getByLabelText(/External Link/i);
+
+  it.each([
+    ['javascript:alert(1)'],
+    ['data:text/html,<script>alert(1)</script>']
+  ])('reports %s as soon as the author leaves the field', (link) => {
+    renderCreate();
+    fillBasics('question');
+    walkForward();
+    fireEvent.click(strip()[2]);
+
+    fireEvent.change(linkField(), { target: { value: link } });
+    fireEvent.blur(linkField());
+
+    expect(
+      screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+    ).toBeInTheDocument();
+  });
+
+  it('clears the message when the author replaces it with a real address', () => {
+    // The satisfied twin: a validator that flagged everything would pass the
+    // assertions above and make the field impossible to fill in.
+    renderCreate();
+    fillBasics('question');
+    walkForward();
+    fireEvent.click(strip()[2]);
+
+    fireEvent.change(linkField(), { target: { value: 'javascript:alert(1)' } });
+    fireEvent.blur(linkField());
+    expect(
+      screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+    ).toBeInTheDocument();
+
+    fireEvent.change(linkField(), { target: { value: 'https://example.com/answer' } });
+    fireEvent.blur(linkField());
+    expect(
+      screen.queryByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+    ).not.toBeInTheDocument();
   });
 });

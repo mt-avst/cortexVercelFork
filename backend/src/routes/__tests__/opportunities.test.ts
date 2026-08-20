@@ -121,6 +121,10 @@ jest.mock('../../firsthand/studies-repository', () => ({
 }));
 
 import opportunitiesRouter, { NATIVE_SURVEY_STUDY_REQUIRED, STUDY_KIND_MISMATCH, resetParticipantRouteLimits } from '../opportunities';
+import {
+  EXTERNAL_LINK_PROTOCOL_MESSAGE,
+  MEETING_LOCATION_SCHEME_MESSAGE
+} from '../../../../shared/firsthand/url-safety';
 import { addMockOpportunity, deleteMockOpportunity } from '../../../../demo/mock-data';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
@@ -355,6 +359,104 @@ describe('Opportunities API', () => {
 
       expect(response.body.error).toBe('Validation failed');
       expect(response.body.details).toContain('purpose_one_liner: String must contain at least 10 character(s)');
+    });
+
+    /*
+     * `z.string().url()` is not a protocol check, and this field is rendered
+     * into an `href` on the participant page.
+     *
+     * Before this guard, `POST /api/opportunities` with
+     * `external_link_optional: 'javascript:alert(document.domain)'` on a
+     * published question returned **201** - verified by request, not inferred -
+     * and the page rendered it as `<a href="javascript:...">`. A
+     * `researcher_admin` could therefore store script in the app's own origin.
+     * ONE accident stopped it firing - Chrome refuses that navigation to
+     * `target="_blank"` - and that was it. I first wrote that helmet's default
+     * CSP was a second layer; it is not. helmet is on the BACKEND, and the
+     * participant page comes from `frontend/nginx.conf`, which sends no
+     * Content-Security-Policy at all. A markup attribute was the only thing
+     * there.
+     *
+     * Both endpoints, deliberately. One twin pinned and not the other is this
+     * repo's most-repeated failure, and here it would leave PATCH as the weaker
+     * boundary - which is the one an attacker with an existing draft would use.
+     */
+    it.each([
+      ['javascript:alert(document.domain)'],
+      ['data:text/html,<script>alert(1)</script>'],
+      ['vbscript:msgbox(1)'],
+      ['ftp://example.com/file']
+    ])('refuses %s on create', async (link) => {
+      const response = await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'draft',
+          external_link_optional: link
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.details).toEqual([
+        `external_link_optional: ${EXTERNAL_LINK_PROTOCOL_MESSAGE}`
+      ]);
+    });
+
+    it.each([
+      ['javascript:alert(document.domain)'],
+      ['data:text/html,<script>alert(1)</script>']
+    ])('refuses %s on update too', async (link) => {
+      // No stored-row mocks needed: the schema refuses before the handler runs,
+      // which is the point - it is a boundary, not a guard inside the flow.
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ external_link_optional: link })
+        .expect(400);
+
+      expect(response.body.error).toBe('Validation failed');
+      expect(response.body.details).toEqual([
+        `external_link_optional: ${EXTERNAL_LINK_PROTOCOL_MESSAGE}`
+      ]);
+    });
+
+    it.each([
+      ['https://example.com/survey'],
+      ['http://example.com/survey']
+    ])('still accepts %s', async (link) => {
+      /*
+       * The satisfied twin, and both schemes. Without it the four refusals
+       * above would pass against a schema that rejected every link, and a fix
+       * permitting only https would break every stored http link in the table.
+       */
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'q-1',
+            type: 'question',
+            title: 'Valid Question Title',
+            purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+            status: 'draft',
+            external_link_optional: link,
+            owner_user_id: 'test-user-id',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      }); // opportunity insert
+
+      await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'draft',
+          external_link_optional: link
+        })
+        .expect(201);
     });
 
     it('should require external link for published polls/surveys', async () => {
@@ -3384,6 +3486,82 @@ describe('Opportunities API', () => {
         .expect(403);
 
       expect(response.body.error).toBe('Only the owner can edit this opportunity');
+    });
+  });
+
+  describe('POST /api/opportunities/:id/sessions - the location field', () => {
+    /*
+     * The same defect class as the external-link guard, one field over, found by
+     * the security gate on that fix.
+     *
+     * `location_or_meet_link_optional` had NO validation, and `MyBookings`
+     * decided whether to render it as an `href` with a substring test -
+     * `str.includes('meet.google.com')` - so the `//` in
+     * `javascript:alert(document.cookie)//meet.google.com` turned the
+     * allowlisted host into a JavaScript comment and the value rendered as a
+     * link labelled "Join via Google Meet". Set once by a researcher; seen by
+     * every participant who booked that session.
+     *
+     * Its own describe rather than appended to a neighbour: my first attempt put
+     * these inside `database outage propagation`, whose `beforeEach` makes the
+     * database unavailable, so they failed for a reason that had nothing to do
+     * with the schema - and leaked mocks into four earlier tests.
+     */
+    it.each([
+      ['javascript:alert(document.cookie)//meet.google.com'],
+      ['javascript:alert(1)/*teams.microsoft.com*/'],
+      ['data:text/html,<script>alert(1)</script>#meet.google.com'],
+      ['vbscript:msgbox(1)']
+    ])('refuses an executable location: %s', async (location) => {
+      // The route looks the opportunity up BEFORE it validates, so without this
+      // the request 404s and the assertion below passes for the wrong reason -
+      // which is exactly what my first version of this test did.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/sessions')
+        .send([
+          {
+            start_time: '2030-08-01T10:00:00Z',
+            end_time: '2030-08-01T11:00:00Z',
+            capacity: 1,
+            location_or_meet_link_optional: location
+          }
+        ]);
+
+      expect(response.status).toBe(400);
+      expect(JSON.stringify(response.body)).toContain(MEETING_LOCATION_SCHEME_MESSAGE);
+    });
+
+    it.each([
+      ['a plain room, which is the common case', 'Room 3B'],
+      ['a note rather than a link', 'Zoom, see the calendar invite'],
+      ['a real joining link', 'https://meet.google.com/abc-defg-hij']
+    ])('does not let validation refuse %s', async (_why, location) => {
+      /*
+       * Without these three the four refusals above would pass against a schema
+       * that rejected every location, which would break every booking in a
+       * physical room. Asserted as "not 400" rather than as a success, because
+       * what is being pinned here is the validator's verdict, not the rest of
+       * the route. The existence lookup is mocked for the same reason as above:
+       * a 404 is also "not 400".
+       */
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+
+      const response = await request(app)
+        .post('/api/opportunities/1/sessions')
+        .send([
+          {
+            start_time: '2030-08-01T10:00:00Z',
+            end_time: '2030-08-01T11:00:00Z',
+            capacity: 1,
+            location_or_meet_link_optional: location
+          }
+        ]);
+
+      expect(response.status).not.toBe(400);
+      // And specifically not 404 either, so this really did reach validation.
+      expect(response.status).not.toBe(404);
     });
   });
 

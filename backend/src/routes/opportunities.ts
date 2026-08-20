@@ -41,6 +41,7 @@ import {
   PUBLISH_PROBLEM_MESSAGES,
   findPublishProblem
 } from '../../../shared/firsthand/publish-readiness';
+import { isPublishableExternalLink } from '../../../shared/firsthand/url-safety';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
@@ -2551,7 +2552,17 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     opp.product_optional,
     opp.default_duration_minutes,
     req.user!.id,
-    opp.external_link_optional,
+    /*
+     * Re-checked rather than copied through. This endpoint cannot introduce a
+     * NEW bad value - it only reads a stored one - but a row carrying a link
+     * from before the scheme guard existed would otherwise become two of them.
+     * Dropped to null instead of refusing the duplicate: the author asked for a
+     * copy of an opportunity, not for a lecture about a field they may never
+     * have set.
+     */
+    isPublishableExternalLink(opp.external_link_optional)
+      ? opp.external_link_optional
+      : null,
     opp.participant_type_required,
     opp.participant_type_specific_details
   ];
