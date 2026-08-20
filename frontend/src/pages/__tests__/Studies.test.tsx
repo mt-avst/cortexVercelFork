@@ -154,3 +154,46 @@ describe('Studies list ownership affordance', () => {
     expect(await screen.findByRole('link', { name: 'Edit' })).toBeInTheDocument();
   });
 });
+
+/**
+ * Which studies are NOT on approved consent wording, at a glance.
+ *
+ * The chip's own unit tests cover when it renders; this covers that the LIST
+ * renders it at all. An independent mutation pass deleted it from both call
+ * sites and neither deletion failed a single test - the component was proven
+ * and its use was not.
+ */
+describe('Studies - consent state', () => {
+  beforeEach(() => {
+    mockedUseAuth.mockReturnValue({
+      user: { id: 'user-1', role: 'researcher_admin' },
+      loading: false
+    });
+  });
+
+  it('flags the studies running on custom consent, and only those', async () => {
+    mockedList.mockResolvedValue([
+      study({ id: 'study_ok', title: 'On the template', consent_template_id: 'recorded-default' }),
+      study({ id: 'study_custom', title: 'Rewritten', consent_template_id: 'custom' })
+    ] as never);
+
+    render(
+      <MemoryRouter>
+        <Studies />
+      </MemoryRouter>
+    );
+
+    await screen.findByText('Rewritten');
+
+    // One chip, not two and not none - a list that flagged everything says as
+    // little as one that flagged nothing.
+    const chips = screen.getAllByTestId('consent-state-chip');
+    expect(chips).toHaveLength(1);
+
+    // And it is on the RIGHT row. With two rows carrying different states, a
+    // chip rendered against the wrong one is otherwise undetectable.
+    const row = screen.getByText('Rewritten').closest('li');
+    expect(row).not.toBeNull();
+    expect(row!.querySelector('[data-testid="consent-state-chip"]')).not.toBeNull();
+  });
+});

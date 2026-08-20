@@ -195,6 +195,28 @@ export const studySchema = z.object({
    * existed", not "recorded" - see isSurveySession.
    */
   kind: z.enum(["recorded", "survey"]).optional(),
+  /**
+   * Which approved consent wording this study runs on, snapshotted alongside
+   * the wording itself at the moment the session was minted.
+   *
+   * Snapshotting the CLASSIFICATION and not only the text is the point. The
+   * text alone answers "what did this participant agree to"; these two answer
+   * "and was it the wording anybody approved" - which cannot be recovered later
+   * by re-reading the study, because the study can be edited afterwards and
+   * because a template can be superseded. Both questions have to be answerable
+   * from the frozen payload or the governance is decorative.
+   *
+   * OPTIONAL and NULLABLE, for the two different reasons both of which apply.
+   * Optional because a payload is minted once and stored as JSONB, so every
+   * session that predates this field carries a study block without it - the
+   * same argument `kind` records above. Nullable because a study whose
+   * provenance was never established stores NULL rather than a guess, and the
+   * snapshot must be able to say so rather than quietly claiming a template.
+   * `consent_template_version` is null whenever the id is `custom`: custom
+   * wording is not a version of anything.
+   */
+  consent_template_id: z.string().min(1).nullable().optional(),
+  consent_template_version: z.number().int().positive().nullable().optional(),
   status: z.string().min(1).optional(),
   brand_name: z.string().min(1).optional(),
   estimated_duration_minutes: z.number().int().positive().optional(),

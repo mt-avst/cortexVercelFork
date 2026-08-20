@@ -1,10 +1,11 @@
 import React from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { getTabsForType } from '../OpportunityForm';
+import { SURVEY_CONSENT_TEMPLATE } from '../../shared/firsthand/consent-templates';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
@@ -79,6 +80,37 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+
+/**
+ * Click the create/update control, walking the Consent step first if it is in
+ * the way.
+ *
+ * C1 gave consent its own step at the END of the two authoring paths, which
+ * moved the terminal control off Questions and Task List onto Consent. Tests
+ * that author content and then save therefore have one more step to walk than
+ * they used to. Doing it here rather than at thirty call sites keeps "where the
+ * save control lives" in one place, which is the thing that has now moved
+ * twice.
+ *
+ * The forward click is conditional, not optional: on a path with no Consent
+ * step - an external link, a booked session - there is nothing to walk and the
+ * control is already on screen. If neither is present the `getByRole` below
+ * throws, so a test standing on the wrong step still fails rather than passing
+ * quietly.
+ */
+const submitFromLastStep = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp = /^(Create|Update) Opportunity/i
+) => {
+  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
+
+  if (forward) {
+    await user.click(forward);
+  }
+
+  await user.click(screen.getByRole('button', { name }));
+};
+
 describe('getTabsForType', () => {
   it('offers the external link tab when a survey hands off', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
@@ -92,7 +124,44 @@ describe('getTabsForType', () => {
     expect(getTabsForType('survey', 'native').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
-      'Questions'
+      'Questions',
+      'Consent'
+    ]);
+  });
+
+  /**
+   * The pair that proves C1's scope. A native survey authors a study and gets a
+   * Consent step; the same type delivered externally authors nothing and must
+   * not. `toEqual` on the whole array rather than `toContain`, because the
+   * failure that matters is an EXTRA step appearing, and `toContain` cannot see
+   * one.
+   */
+  it('gives an externally delivered survey no consent step, because it has no study', () => {
+    expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
+      'Basic Information',
+      'Content & Details',
+      'External Link'
+    ]);
+  });
+
+  it('gives a recorded study a consent step, and puts it last', () => {
+    expect(getTabsForType('unmoderated').map((tab) => tab.title)).toEqual([
+      'Basic Information',
+      'Content & Details',
+      'Task List',
+      'Consent'
+    ]);
+  });
+
+  it.each([
+    ['question', 'External Link'],
+    ['test', 'Session Management'],
+    ['interview', 'Session Management']
+  ])('gives %s no consent step, because it authors no study', (type, thirdStep) => {
+    expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
+      'Basic Information',
+      'Content & Details',
+      thirdStep
     ]);
   });
 
@@ -173,7 +242,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -186,6 +255,94 @@ describe('authoring a native survey', () => {
     expect(body.inline_survey?.steps).toEqual([
       { type: 'open_text', prompt: 'How easy was that?' }
     ]);
+  });
+
+  /**
+   * The survey twin of the payload-claim assertions on the recorded path, and
+   * it fails differently: `inlineSurveySchema` is `.strict()`, so a claim this
+   * form sends and that schema does not declare is a refused save rather than a
+   * dropped field. Both directions are worth pinning here.
+   */
+  it('sends the consent template the wording is actually on', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'How easy was that?'
+    );
+
+    await submitFromLastStep(user, /Create Opportunity/i);
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      inline_survey?: { consent_template_id?: string; consent_template_version?: number };
+    };
+    expect(body.inline_survey?.consent_template_id).toBe('survey-default');
+    expect(body.inline_survey?.consent_template_version).toBe(1);
+  });
+
+  it('sends no template claim once the author has customised the survey wording', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.type(
+      screen.getByLabelText(/What the participant is asked/i),
+      'How easy was that?'
+    );
+
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(
+      screen.getByRole('button', { name: /Customise consent wording/i })
+    );
+    await user.clear(screen.getByLabelText(/Consent text/i));
+    await user.type(screen.getByLabelText(/Consent text/i), 'Our own survey wording');
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const inline = (
+      vi.mocked(createOpportunity).mock.calls[0][0] as {
+        inline_survey?: Record<string, unknown>;
+      }
+    ).inline_survey as Record<string, unknown>;
+
+    expect(inline.consent_text).toBe('Our own survey wording');
+    expect('consent_template_id' in inline).toBe(false);
+    expect('consent_template_version' in inline).toBe(false);
+  });
+
+  /**
+   * The lock, on the survey path. Asserted separately from the recorded path's
+   * identical assertion: a lock applied on one twin and not the other is this
+   * project's most repeated defect, and the two consent surfaces were separate
+   * copies of the same markup until C1 replaced them with one component.
+   */
+  it('opens the consent step locked to the approved survey wording', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillBasics(user);
+    await user.click(screen.getByLabelText(/In Cortex/i));
+
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
+      'Standard survey consent (version 1)'
+    );
+    expect(screen.getByTestId('consent-locked-text')).toHaveTextContent(
+      /Nothing is recorded/i
+    );
+    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
   });
 
   /**
@@ -221,7 +378,7 @@ describe('authoring a native survey', () => {
 
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -259,7 +416,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -302,7 +459,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'open_text');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'single_choice');
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -338,7 +495,7 @@ describe('authoring a native survey', () => {
     // one that survives the move is identifiable.
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     expect(
       await screen.findByText('Add what the participant is asked')
     ).toBeInTheDocument();
@@ -401,7 +558,7 @@ describe('authoring a native survey', () => {
       'Which tool slows you down?'
     );
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -432,7 +589,7 @@ describe('authoring a native survey', () => {
     await user.click(screen.getByLabelText('Required'));
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'instruction');
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -472,7 +629,7 @@ describe('authoring a native survey', () => {
     await user.type(screen.getByLabelText(/Estimated completion time/i), '5000');
     await user.click(screen.getByRole('button', { name: /Use the automatic estimate/i }));
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -527,7 +684,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
   });
@@ -667,7 +824,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -742,6 +899,69 @@ describe('starting a survey from an existing set of questions', () => {
     can_edit: false
   };
 
+  /**
+   * The single most likely way C1 breaks.
+   *
+   * Both consent textareas used to live inside the third arm of
+   * `studyIsReadOnly ? readOnly : showChooser ? picker : editor`, so neither
+   * state could reach them. A Consent step lifted out of that arm inherits none
+   * of that gating - and would offer an author a consent editor for content
+   * they have not chosen yet, pre-filled with a template for a study that does
+   * not exist. Whichever study they then pick brings its own wording, silently
+   * overwriting whatever they just agreed to.
+   */
+  it('offers no consent editor while the author is still choosing a source', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    expect(await screen.findByTestId('consent-step')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('consent-locked-text')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Customise consent wording/i })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the copied study its own consent, once one has been chosen', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(SOURCE as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+    await screen.findByText(/Copied from/i);
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    // The source's wording is nobody's approved wording, and the copy inherits
+    // that rather than being re-badged as approved - the failure this whole
+    // classification exists to prevent, at the one place it would be invisible.
+    expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
+      /Custom wording/i
+    );
+    expect(screen.getByLabelText(/Consent text/i)).toHaveValue(
+      'The wording this researcher actually wrote'
+    );
+  });
+
   it('copies a colleague\'s questions into an EDITABLE form, not a read-only one', async () => {
     // The single most likely way this step breaks. `can_edit: false` is a fact
     // about the SOURCE, and edit-mode hydration turns exactly that into a
@@ -786,7 +1006,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.clear(prompts[1]);
     await user.type(prompts[1], 'Which docs did you actually open?');
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -1122,7 +1342,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
 
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
 
     const message = await screen.findByText(
       /Choose a set of questions to start from, or switch to writing them here/i
@@ -1143,7 +1363,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(screen.getByRole('button', { name: /Basic Information/i }));
     await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await submitFromLastStep(user, /Create Opportunity/i);
     expect(
       await screen.findByText(/Add at least one question before publishing/i)
     ).toBeInTheDocument();
@@ -1215,6 +1435,147 @@ describe('the forward control on the Questions tab', () => {
   };
 
   /**
+   * The SURVEY twin of the unclassified-hydration assertion made on the
+   * recorded path. An independent mutation pass found this fallback - and both
+   * version fallbacks - uncovered: a survey study with a NULL classification
+   * hydrated as `survey-default` version 1 and was shown to the author under a
+   * green approved badge.
+   */
+  it('reads an unclassified survey as custom, not as approved', async () => {
+    // The linked study is what carries the classification, so the fixture has
+    // to have one - without it the form keeps its create-mode defaults and the
+    // hydration this test is about never runs.
+    vi.mocked(getOpportunity).mockResolvedValue(
+      { ...editedSurvey, firsthand_study_id: 'study_questions' } as never
+    );
+    vi.mocked(getFirstHandStudy).mockResolvedValue({
+      study: {
+        id: 'study_questions',
+        title: 'Developer experience pulse',
+        intro_text: 'Intro',
+        consent_text: 'Answers are stored for research analysis',
+        kind: 'survey',
+        status: 'launched',
+        estimated_duration_minutes: null,
+        owner_user_id: 'u1',
+        consent_template_id: null,
+        consent_template_version: null,
+        updated_at: '2026-08-19T00:00:00.000Z'
+      },
+      steps: [
+        { step_id: 'study_questions_step_1', order: 1, type: 'open_text', prompt: 'Which tool slows you down?' },
+        { step_id: 'study_questions_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+      ],
+      can_edit: true
+    } as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
+      /Custom wording/i
+    );
+  });
+
+  /**
+   * The SURVEY twin of the classification-only save. A save that changes
+   * nothing but the classification has to be offerable on both authoring
+   * paths - `hasChanges` carries a separate clause pair for each, and a clause
+   * pinned on one twin and not the other is this project's most repeated defect.
+   */
+  it('offers a save when only the survey classification changed', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      { ...editedSurvey, firsthand_study_id: 'study_questions' } as never
+    );
+    vi.mocked(getFirstHandStudy).mockResolvedValue({
+      study: {
+        id: 'study_questions',
+        title: 'Developer experience pulse',
+        intro_text: 'Intro',
+        consent_text: SURVEY_CONSENT_TEMPLATE.text,
+        kind: 'survey',
+        status: 'launched',
+        estimated_duration_minutes: null,
+        owner_user_id: 'u1',
+        consent_template_id: 'custom',
+        consent_template_version: null,
+        updated_at: '2026-08-19T00:00:00.000Z'
+      },
+      steps: [
+        { step_id: 'study_questions_step_1', order: 1, type: 'open_text', prompt: 'Which tool slows you down?' },
+        { step_id: 'study_questions_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+      ],
+      can_edit: true
+    } as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeNull();
+
+    // Away and back: setting a field to the value it already holds fires no
+    // change event, so the round trip is what moves the classification while
+    // leaving the wording exactly as it was found.
+    const field = () => screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement;
+    fireEvent.change(field(), { target: { value: 'something else' } });
+    fireEvent.change(field(), { target: { value: SURVEY_CONSENT_TEMPLATE.text } });
+
+    expect(field().value).toBe(SURVEY_CONSENT_TEMPLATE.text);
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
+      'Standard survey consent (version 1)'
+    );
+    expect(
+      await screen.findByRole('button', { name: /Save Changes/i })
+    ).toBeInTheDocument();
+  });
+
+  /** The survey twin of the per-kind field-wiring assertion. */
+  it('gives the consent field the survey key, not the recorded one', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      { ...editedSurvey, firsthand_study_id: 'study_questions' } as never
+    );
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
+    if (unlock) await user.click(unlock);
+
+    expect(await screen.findByLabelText(/Consent text/i)).toHaveAttribute(
+      'id',
+      'inline_survey_consent_text'
+    );
+  });
+
+  /**
+   * And the step names the surface it sends the author back to, per kind. A
+   * swapped `contentStepTitle` sends a survey author to "Task List", which is
+   * not a step their opportunity has.
+   */
+  it('names Questions, not Task List, when sending a survey author back', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      { ...editedSurvey, firsthand_study_id: null } as never
+    );
+    vi.mocked(getFirstHandStudies).mockResolvedValue([] as never);
+
+    const user = userEvent.setup();
+    await openQuestionsTab(user);
+    await user.click(
+      await screen.findByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+
+    const back = await screen.findByRole('button', { name: /Go back to Questions/i });
+    await user.click(back);
+
+    // And the click lands on the content step, not somewhere else.
+    expect(await screen.findByRole('radio', { name: /Start from an existing set of questions/i })).toBeInTheDocument();
+  });
+
+  /**
    * Asserted on the whole form rather than on one button, because the property
    * that matters is that NOTHING in it can be submitted implicitly. A `button`
    * with no `type` attribute defaults to submit, so it counts too.
@@ -1225,15 +1586,27 @@ describe('the forward control on the Questions tab', () => {
     const user = userEvent.setup();
     await openQuestionsTab(user);
 
-    await screen.findByRole('button', { name: /Update Opportunity/i });
+    const expectNoImplicitSubmit = () => {
+      const form = document.querySelector('form');
+      expect(form).not.toBeNull();
+      expect(
+        form!.querySelectorAll(
+          'button[type="submit"], input[type="submit"], button:not([type])'
+        )
+      ).toHaveLength(0);
+    };
 
-    const form = document.querySelector('form');
-    expect(form).not.toBeNull();
-    expect(
-      form!.querySelectorAll(
-        'button[type="submit"], input[type="submit"], button:not([type])'
-      )
-    ).toHaveLength(0);
+    // Checked on BOTH steps, because C1 moved the terminal control onto a step
+    // that did not exist when this rule was written. Checking only where the
+    // control now lives would let the step it left behind reacquire one - and
+    // checking only the step it left behind would test nothing at all, which is
+    // precisely what this test did the moment Consent was added.
+    await screen.findByRole('button', { name: /Continue to Consent/i });
+    expectNoImplicitSubmit();
+
+    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await screen.findByRole('button', { name: /Update Opportunity/i });
+    expectNoImplicitSubmit();
   });
 
   /**
@@ -1261,7 +1634,7 @@ describe('the forward control on the Questions tab', () => {
     await user.clear(screen.getByLabelText(/Estimated completion time/i));
     await user.type(screen.getByLabelText(/Estimated completion time/i), '-3');
 
-    await user.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    await submitFromLastStep(user, /Update Opportunity/i);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
     expect(
@@ -1288,7 +1661,7 @@ describe('the forward control on the Questions tab', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
     await user.clear(screen.getByLabelText(/Points on the scale/i));
 
-    await user.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    await submitFromLastStep(user, /Update Opportunity/i);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
     expect(

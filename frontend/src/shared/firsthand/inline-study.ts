@@ -158,6 +158,23 @@ export const inlineStudySchema = z
       .optional(),
     consent_text: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxConsentLength),
     /**
+     * A CLAIM about which approved wording `consent_text` is, carried from the
+     * form so a study stays attributed to the template VERSION it was written
+     * against once a later version ships. Never an instruction: the repository
+     * checks the claim against the text and downgrades it to `custom` when the
+     * two disagree, so a caller can understate its approval and can never
+     * overstate it. See shared/firsthand/consent-templates.ts.
+     *
+     * This object is NOT `.strict()` - unlike its survey twin - so an
+     * undeclared key here is dropped in silence rather than refused. That is
+     * exactly why these two are declared on BOTH schemas in the same change:
+     * the same omission fails loudly on one path and invisibly on the other,
+     * and the invisible one is a study claiming approved wording it does not
+     * carry.
+     */
+    consent_template_id: z.string().min(1).max(100).optional(),
+    consent_template_version: z.number().int().positive().optional(),
+    /**
      * `null` and absent mean DIFFERENT things, which is why this is nullable
      * rather than merely optional.
      *

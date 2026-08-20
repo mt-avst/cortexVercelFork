@@ -204,6 +204,82 @@ describe('StudyEditorForm - edit', () => {
     expect(mockedUpdate.mock.calls[0][0]).toBe('study_abc');
     expect(mockedCreate).not.toHaveBeenCalled();
   });
+
+  /**
+   * This surface has to carry the consent classification it loaded, or it will
+   * silently reclassify studies the day a second template version ships.
+   *
+   * The server resolves the classification from the wording, and with no claim
+   * it can only compare against the CURRENT version. So after a v2, an author
+   * who opens a study running on verbatim v1 wording and changes only its
+   * TITLE would have the row rewritten to `custom` - approved wording,
+   * permanently badged as unapproved, from an edit that never touched consent.
+   * Harmless today, invisible until it is expensive, which is exactly why it is
+   * pinned now.
+   */
+  it('carries the consent classification it loaded back into the save', async () => {
+    renderForm({
+      initialStudy: {
+        id: 'study_abc',
+        title: 'Existing study',
+        intro_text: 'Existing intro',
+        consent_text: 'Existing consent',
+        status: 'launched',
+        consent_template_id: 'recorded-default',
+        consent_template_version: 1,
+      },
+      initialSteps: [
+        {
+          step_id: 'step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com',
+        },
+      ],
+    });
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Renamed, consent untouched' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+    const payload = mockedUpdate.mock.calls[0][1] as Record<string, unknown>;
+    expect(payload.consent_template_id).toBe('recorded-default');
+    expect(payload.consent_template_version).toBe(1);
+  });
+
+  it('claims nothing for a study already running on custom wording', async () => {
+    renderForm({
+      initialStudy: {
+        id: 'study_abc',
+        title: 'Existing study',
+        intro_text: 'Existing intro',
+        consent_text: 'Wording somebody wrote',
+        status: 'launched',
+        consent_template_id: 'custom',
+        consent_template_version: null,
+      },
+      initialSteps: [
+        {
+          step_id: 'step_001',
+          order: 1,
+          type: 'instruction',
+          prompt: 'Do the thing',
+          target_url: 'https://example.com',
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+    await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+    const payload = mockedUpdate.mock.calls[0][1] as Record<string, unknown>;
+    // `custom` is the server's answer, never a client assertion - and sending
+    // it would be a claim the schema now insists travels with the wording.
+    expect('consent_template_id' in payload).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

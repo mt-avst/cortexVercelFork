@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getFirstHandStudies } from '../api/client';
+import ConsentStateChip from '../components/ConsentStateChip';
 import { Alert, Card, CardBody } from '../components/ui';
 import { isStudyReadOnly } from '../utils/studyOwnership';
 import type { FirstHandStudy } from '../api/types';
@@ -121,7 +122,8 @@ const Studies: React.FC = () => {
                 <Card padding="md" hoverable={false}>
                   <CardBody>
                     <p className="text-uppercase fw-semibold text-muted mb-1">
-                      {study.status ?? 'draft'}
+                      {study.status ?? 'draft'}{' '}
+                      <ConsentStateChip templateId={study.consent_template_id} />
                     </p>
                     <strong className="d-block mb-1">{study.title}</strong>
                     <p className="mb-2">{study.intro_text}</p>

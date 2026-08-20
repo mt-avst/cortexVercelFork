@@ -334,6 +334,65 @@ describe('FirstHand Express router', () => {
       );
     });
 
+    /**
+     * The classification describes the wording, so it cannot arrive without it.
+     *
+     * The repository already ignores a lone claim, so nothing is stored either
+     * way - this is about what the caller is TOLD. Answering 200 to a request
+     * that set out to record which template a study runs on, having recorded
+     * nothing, is how a client comes to depend on behaviour that does not exist.
+     */
+    it('refuses a consent classification sent without the wording it describes', async () => {
+      // `as never` rather than `as any`: this file's `any` budget is pinned
+      // exactly in eslint-suppressions.json, which is shrink-only.
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            consent_template_id: 'recorded-default',
+            consent_template_version: 1
+          })
+        )
+        .expect(400);
+
+      expect(mockUpdateStudy).not.toHaveBeenCalled();
+    });
+
+    it('accepts the classification when the wording travels with it', async () => {
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            consent_text: 'Some consent wording',
+            consent_template_id: 'recorded-default',
+            consent_template_version: 1
+          })
+        )
+        .expect(200);
+
+      expect(mockUpdateStudy).toHaveBeenCalledWith(
+        'study_abc',
+        {
+          consent_text: 'Some consent wording',
+          consent_template_id: 'recorded-default',
+          consent_template_version: 1
+        },
+        { userId: 'admin-1', isSuperadmin: false }
+      );
+    });
+
     it('marks a superadmin requester so the repository can bypass ownership', async () => {
       const superadminApp = buildApp({
         id: 'super-1', name: 'Super', email: 'super@test.com', role: 'superadmin',

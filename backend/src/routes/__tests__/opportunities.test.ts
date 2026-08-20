@@ -788,6 +788,34 @@ describe('Opportunities API', () => {
           );
         });
 
+        /**
+         * The mint-on-miss path decides the classification of a BRAND-NEW
+         * study, and it is the path a dangling `firsthand_study_id` takes -
+         * so it is reached by exactly the opportunities nobody is watching.
+         */
+        it('carries the consent template claim onto the PATCH fallback mint', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_new_claim' },
+            steps: []
+          } as never);
+
+          await patch(
+            {
+              inline_survey: {
+                ...questions,
+                consent_template_id: 'survey-default',
+                consent_template_version: 1
+              }
+            },
+            null,
+            true
+          ).expect(200);
+
+          const created = mockCreateStudy.mock.calls[0][0];
+          expect(created.consent_template_id).toBe('survey-default');
+          expect(created.consent_template_version).toBe(1);
+        });
+
         it('sends null, not undefined, for copied_from_study_id on the PATCH fallback mint when none is given', async () => {
           mockCreateStudy.mockResolvedValueOnce({
             study: { id: 'study_new_blank' },
@@ -842,6 +870,45 @@ describe('Opportunities API', () => {
             steps: { step_id: string }[];
           };
           expect(written.steps[0].step_id.startsWith('study_existing_')).toBe(true);
+        });
+
+        /** The survey twin of the recorded in-place claim assertion. */
+        it('carries the consent template claim into the in-place update', async () => {
+          mockGetStudyById.mockResolvedValueOnce({
+            study: {
+              id: 'study_existing',
+              title: 'A survey',
+              intro_text: 'Intro',
+              consent_text: 'Consent',
+              kind: 'survey',
+              estimated_duration_minutes: undefined,
+              status: 'launched',
+              owner_user_id: 'test-user-id',
+              copied_from_study_id: null,
+              created_at: '2026-08-16T10:00:00.000Z',
+              updated_at: '2026-08-16T10:00:00.000Z',
+            },
+            steps: [],
+          } as never);
+
+          await patch(
+            {
+              inline_survey: {
+                ...questions,
+                consent_template_id: 'survey-default',
+                consent_template_version: 1
+              }
+            },
+            'study_existing',
+            true
+          ).expect(200);
+
+          const written = mockUpdateStudy.mock.calls[0][1] as {
+            consent_template_id?: string | null;
+            consent_template_version?: number | null;
+          };
+          expect(written.consent_template_id).toBe('survey-default');
+          expect(written.consent_template_version).toBe(1);
         });
 
         it('refuses to rewrite questions belonging to another researcher', async () => {
@@ -970,6 +1037,61 @@ describe('Opportunities API', () => {
         const created = mockCreateStudy.mock.calls[0][0];
         expect(created.copied_from_study_id).toBeNull();
         expect('copied_from_study_id' in created).toBe(true);
+      });
+
+      /**
+       * C1: the consent classification the form loaded travels with the wording
+       * so a study written against version 1 of a template stays attributed to
+       * version 1 once a version 2 ships. The route only carries it - the
+       * repository decides whether to believe it - but a route that drops it
+       * makes every save look like a fresh classification against the newest
+       * template, which is the silent mass-reclassification the version number
+       * exists to prevent.
+       *
+       * `inlineSurveySchema` is `.strict()`, so this also proves the field is
+       * declared there: an undeclared key is a 400, not a dropped field.
+       */
+      it('passes the consent template claim through to createStudy', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_c' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '19', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send(
+            body({
+              inline_survey: {
+                ...questions,
+                consent_template_id: 'survey-default',
+                consent_template_version: 1
+              }
+            })
+          )
+          .expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        // Both halves, asserted separately. An id without a version names
+        // wording nothing can look up, and a version without an id names
+        // nothing at all - so a route that forwards one and drops the other is
+        // as broken as one that forwards neither.
+        expect(created.consent_template_id).toBe('survey-default');
+        expect(created.consent_template_version).toBe(1);
+      });
+
+      it('sends null for the consent claim when the client makes none', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_d' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '20', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(body()).expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        expect(created.consent_template_id).toBeNull();
+        expect(created.consent_template_version).toBeNull();
       });
     });
 
@@ -1451,6 +1573,53 @@ describe('Opportunities API', () => {
         expect(created.copied_from_study_id).toBeNull();
         expect('copied_from_study_id' in created).toBe(true);
       });
+
+      /**
+       * The recorded twin of the consent-claim assertions in the survey block.
+       *
+       * This one has a failure mode the survey twin does not: `inlineStudySchema`
+       * is NOT `.strict()`, so an undeclared key here is stripped in silence
+       * rather than refused. The survey path would 400 loudly for the same
+       * mistake; this path would simply lose the claim and reclassify the study
+       * on every save, with a green build either side of it.
+       */
+      it('passes the consent template claim through to createStudy', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_c' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '21', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: {
+              ...inlineBody.inline_study,
+              consent_template_id: 'recorded-default',
+              consent_template_version: 1
+            }
+          })
+          .expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        expect(created.consent_template_id).toBe('recorded-default');
+        expect(created.consent_template_version).toBe(1);
+      });
+
+      it('sends null for the consent claim when the client makes none', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_d' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '22', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        expect(created.consent_template_id).toBeNull();
+        expect(created.consent_template_version).toBeNull();
+      });
     });
 
     it('should reject an unmoderated opportunity with an external participant type (M2)', async () => {
@@ -1666,6 +1835,42 @@ describe('Opportunities API', () => {
       );
     });
 
+    /** The recorded twin of the survey fallback-mint claim assertion. */
+    it('carries the consent template claim onto the PATCH fallback mint', async () => {
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_from_edit_claim' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            firsthand_study_id: 'study_from_edit_claim',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({
+          status: 'published',
+          inline_study: {
+            ...inlineStudy,
+            consent_template_id: 'recorded-default',
+            consent_template_version: 1
+          }
+        })
+        .expect(200);
+
+      const created = mockCreateStudy.mock.calls[0][0];
+      expect(created.consent_template_id).toBe('recorded-default');
+      expect(created.consent_template_version).toBe(1);
+    });
+
     it('sends null, not undefined, for copied_from_study_id on the PATCH fallback mint when none is given', async () => {
       mockCreateStudy.mockResolvedValueOnce({
         study: { id: 'study_from_edit_blank' },
@@ -1828,6 +2033,48 @@ describe('Opportunities API', () => {
         // Namespaced against the study that already exists, so the ids the
         // collected answers were written against keep resolving.
         expect(written.steps[0].step_id.startsWith('study_already_linked_')).toBe(true);
+      });
+
+      /**
+       * C1: the in-place path is the one an ordinary edit takes, so it is the
+       * one that decides whether a study's classification survives being saved.
+       * Dropping the claim here does not break a save - it silently
+       * reclassifies the study against the newest template on every edit, which
+       * is invisible until a version 2 exists and then wrong everywhere at once.
+       */
+      it('carries the consent template claim into the in-place update', async () => {
+        await patchLinked(
+          {
+            inline_study: {
+              ...inlineStudy,
+              consent_template_id: 'recorded-default',
+              consent_template_version: 1
+            }
+          },
+          true
+        ).expect(200);
+
+        const written = mockUpdateStudy.mock.calls[0][1] as {
+          consent_template_id?: string | null;
+          consent_template_version?: number | null;
+        };
+        expect(written.consent_template_id).toBe('recorded-default');
+        expect(written.consent_template_version).toBe(1);
+      });
+
+      it('sends an explicit null claim when the client makes none, rather than omitting it', async () => {
+        await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        const written = mockUpdateStudy.mock.calls[0][1] as Record<string, unknown>;
+        // Present-and-null, not absent. `updateStudy` pushes the classification
+        // whenever `consent_text` is present, so absent here would be the same
+        // request - but asserting the key exists pins that this path never
+        // adopts the leave-it-alone conditional spread the DURATION field uses,
+        // where absent means "do not touch". Consent and its classification are
+        // written as one thing.
+        expect('consent_template_id' in written).toBe(true);
+        expect(written.consent_template_id).toBeNull();
+        expect(written.consent_template_version).toBeNull();
       });
 
       it('does not repoint the opportunity when it updates in place', async () => {

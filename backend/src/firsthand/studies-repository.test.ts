@@ -2,6 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
+import { DEFAULT_CONSENT_TEXT as RECORDED_TEXT } from "../../../shared/firsthand/inline-study";
+import { DEFAULT_SURVEY_CONSENT_TEXT as SURVEY_TEXT } from "../../../shared/firsthand/survey-authoring";
+
 const connectMock = vi.fn();
 // `on` is part of the mock because the runtime pool registers an `error`
 // listener at construction - see ../utils/poolErrorLogging.ts. A pool without
@@ -1921,5 +1924,481 @@ describe("studies repository - copy provenance", () => {
     expect(result.ok && result.study.copied_from_study_id).toBe(
       "study_original_source"
     );
+  });
+});
+
+/**
+ * Consent governance at the write boundary.
+ *
+ * The repository is the chokepoint on purpose: every path that stores a study -
+ * the opportunity form, StudyEditor's `PUT`, a script - goes through
+ * `createStudy` or `updateStudy`, so classifying here means no caller can store
+ * wording and a classification that disagree with each other, and none of them
+ * has to remember to.
+ */
+describe("studies repository - consent template governance", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL =
+      "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const createMockClient = ({ missingRelations }: { missingRelations: string[] }) => ({
+    // Widened deliberately: this mock stands in for every query the repository
+    // makes, and each returns a different row shape. Left to inference it takes
+    // the shape of the FIRST branch - the `to_regclass` probe - and every later
+    // `mockImplementation` in this block becomes a type error about a row that
+    // has no `studies` column.
+    query: vi.fn(
+      async (
+        sql: string,
+        _params?: unknown[]
+      ): Promise<{ rowCount: number; rows: Record<string, unknown>[] }> => {
+        if (typeof sql === "string" && sql.includes("to_regclass")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                studies: missingRelations.includes("studies") ? null : "studies",
+                study_steps: missingRelations.includes("study_steps")
+                  ? null
+                  : "study_steps"
+              }
+            ]
+          };
+        }
+        return { rowCount: 0, rows: [] };
+      }
+    ),
+    release: vi.fn()
+  });
+
+  const columnIndex = (sql: string, column: string): number =>
+    sql
+      .split("(")[1]
+      .split(")")[0]
+      .split(",")
+      .map((name) => name.trim())
+      .indexOf(column);
+
+  const storedRow = (overrides: Record<string, unknown> = {}) => ({
+    id: "study_abc",
+    title: "Pulse",
+    intro_text: "Intro",
+    consent_text: RECORDED_TEXT,
+    brand_name: null,
+    estimated_duration_minutes: null,
+    locale: null,
+    status: "draft",
+    kind: "recorded",
+    owner_user_id: "user-author",
+    copied_from_study_id: null,
+    consent_template_id: "recorded-default",
+    consent_template_version: 1,
+    created_at: "2026-08-20T00:00:00.000Z",
+    updated_at: "2026-08-20T00:00:00.000Z",
+    ...overrides
+  });
+
+  const wireCreate = () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const studyInserts: { sql: string; params: unknown[] }[] = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+          return { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("INSERT INTO studies")) {
+          studyInserts.push({ sql, params: params ?? [] });
+          return { rowCount: 1, rows: [] };
+        }
+        if (sql.includes("INSERT INTO study_steps")) return { rowCount: 1, rows: [] };
+        if (sql.includes("FROM studies")) return { rowCount: 1, rows: [storedRow()] };
+        if (sql.includes("FROM study_steps")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc_step_1",
+                study_id: "study_abc",
+                step_order: 1,
+                type: "open_text",
+                prompt: "What did you expect?",
+                target_url: null,
+                helper_text: null,
+                is_required: true,
+                options: null,
+                config: null
+              }
+            ]
+          };
+        }
+        throw new Error(`Unexpected query in test: ${sql}`);
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { studyInserts };
+  };
+
+  const wireUpdate = (storedKind: string) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const updates: { sql: string; params: unknown[] }[] = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+        if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+          return { rowCount: 0, rows: [] };
+        }
+        if (sql.includes("FOR UPDATE")) {
+          return {
+            rowCount: 1,
+            rows: [{ owner_user_id: "user-author", kind: storedKind }]
+          };
+        }
+        if (sql.startsWith("UPDATE studies")) {
+          updates.push({ sql, params: params ?? [] });
+          return { rowCount: 1, rows: [] };
+        }
+        if (sql.includes("FROM studies")) {
+          return { rowCount: 1, rows: [storedRow({ kind: storedKind })] };
+        }
+        return { rowCount: 0, rows: [] };
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { updates };
+  };
+
+  const baseCreate = (consentText: string, extra: Record<string, unknown> = {}) => ({
+    id: "study_abc",
+    title: "Pulse",
+    intro_text: "Intro",
+    consent_text: consentText,
+    owner_user_id: "user-author",
+    ...extra,
+    steps: [
+      {
+        step_id: "study_abc_step_1",
+        order: 1,
+        type: "open_text" as const,
+        prompt: "What did you expect?"
+      }
+    ]
+  });
+
+  /**
+   * Read by COLUMN NAME, never by `.toContain`. The INSERT now carries two
+   * adjacent consent columns; `.toContain('recorded-default')` passes just as
+   * happily when the id lands on the version's placeholder, and `.toContain(1)`
+   * passes when the version lands anywhere at all.
+   */
+  const consentParams = (insert: { sql: string; params: unknown[] }) => ({
+    id: insert.params[columnIndex(insert.sql, "consent_template_id")],
+    version: insert.params[columnIndex(insert.sql, "consent_template_version")],
+    text: insert.params[columnIndex(insert.sql, "consent_text")]
+  });
+
+  it("stores the template a create's wording actually is", async () => {
+    const { studyInserts } = wireCreate();
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.createStudy(baseCreate(RECORDED_TEXT));
+
+    expect(consentParams(studyInserts[0])).toEqual({
+      id: "recorded-default",
+      version: 1,
+      text: RECORDED_TEXT
+    });
+  });
+
+  it("stores custom when a create claims a template its wording is not", async () => {
+    const { studyInserts } = wireCreate();
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.createStudy(
+      baseCreate(`${RECORDED_TEXT} And to our client.`, {
+        consent_template_id: "recorded-default",
+        consent_template_version: 1
+      })
+    );
+
+    expect(consentParams(studyInserts[0])).toEqual({
+      id: "custom",
+      version: null,
+      text: `${RECORDED_TEXT} And to our client.`
+    });
+  });
+
+  it("classifies a survey create against the survey template, not the recorded one", async () => {
+    const { studyInserts } = wireCreate();
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.createStudy(
+      baseCreate(SURVEY_TEXT, { kind: "survey" as const })
+    );
+
+    expect(consentParams(studyInserts[0])).toEqual({
+      id: "survey-default",
+      version: 1,
+      text: SURVEY_TEXT
+    });
+  });
+
+  it("writes the classification alongside the wording on an update", async () => {
+    const { updates } = wireUpdate("recorded");
+    const studiesRepository = await import("./studies-repository");
+
+    const result = await studiesRepository.updateStudy(
+      "study_abc",
+      { consent_text: RECORDED_TEXT },
+      { userId: "user-author", isSuperadmin: false }
+    );
+
+    expect(result.ok).toBe(true);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].sql).toContain("consent_template_id");
+    expect(updates[0].sql).toContain("consent_template_version");
+    // Positional against the dynamic builder: read each column's own
+    // placeholder number out of the SET clause rather than searching `params`.
+    const at = (column: string) => {
+      const match = new RegExp(`${column} = \\$(\\d+)`).exec(updates[0].sql);
+      expect(match).not.toBeNull();
+      return updates[0].params[Number(match![1]) - 1];
+    };
+    expect(at("consent_template_id")).toBe("recorded-default");
+    expect(at("consent_template_version")).toBe(1);
+  });
+
+  /**
+   * The invariant that makes the whole thing worth anything: the classification
+   * is a property of the wording, so it is not settable on its own. A request
+   * that could set it without sending the text could assert that a study runs
+   * on approved consent while the stored sentence says something else.
+   */
+  it("writes no classification at all when an update does not carry the wording", async () => {
+    const { updates } = wireUpdate("recorded");
+    const studiesRepository = await import("./studies-repository");
+
+    const forced = {
+      title: "Renamed",
+      consent_template_id: "recorded-default",
+      consent_template_version: 1
+    } as Parameters<typeof studiesRepository.updateStudy>[1];
+
+    const result = await studiesRepository.updateStudy("study_abc", forced, {
+      userId: "user-author",
+      isSuperadmin: false
+    });
+
+    expect(result.ok).toBe(true);
+    expect(updates).toHaveLength(1);
+    expect(updates[0].sql).toContain("title = $");
+    expect(updates[0].sql).not.toContain("consent_template_id");
+    expect(updates[0].sql).not.toContain("consent_template_version");
+  });
+
+  /**
+   * The kind comes from the row under the `FOR UPDATE` lock, never from the
+   * request. Sending the survey wording to a RECORDED study must not file it
+   * under the survey template, whose central claim - that nothing is recorded -
+   * would be false about that study.
+   */
+  it("measures an update against the STORED kind, not the wording's own family", async () => {
+    const { updates } = wireUpdate("recorded");
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.updateStudy(
+      "study_abc",
+      {
+        consent_text: SURVEY_TEXT,
+        consent_template_id: "survey-default",
+        consent_template_version: 1
+      } as Parameters<typeof studiesRepository.updateStudy>[1],
+      { userId: "user-author", isSuperadmin: false }
+    );
+
+    const at = (column: string) => {
+      const match = new RegExp(`${column} = \\$(\\d+)`).exec(updates[0].sql);
+      return match ? updates[0].params[Number(match[1]) - 1] : undefined;
+    };
+    expect(at("consent_template_id")).toBe("custom");
+    expect(at("consent_template_version")).toBeNull();
+  });
+
+  /**
+   * The SURVEY direction of the stored-kind rule.
+   *
+   * Its recorded twin above sends survey wording to a recorded study and
+   * expects `custom`. That test alone is satisfied by hardcoding the kind to
+   * `"recorded"` - an independent mutation pass proved exactly that, and the
+   * defect it would ship is every native survey in the product being flagged as
+   * running on unapproved consent, silently, on its next save.
+   */
+  it("measures a stored SURVEY against the survey template", async () => {
+    const { updates } = wireUpdate("survey");
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.updateStudy(
+      "study_abc",
+      { consent_text: SURVEY_TEXT },
+      { userId: "user-author", isSuperadmin: false }
+    );
+
+    const at = (column: string) => {
+      const match = new RegExp(`${column} = \\$(\\d+)`).exec(updates[0].sql);
+      return match ? updates[0].params[Number(match[1]) - 1] : undefined;
+    };
+    expect(at("consent_template_id")).toBe("survey-default");
+    expect(at("consent_template_version")).toBe(1);
+  });
+
+  it("returns the stored classification from a read, mapping an absent one to null", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    let studySelectSql: string | null = null;
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      if (sql.includes("FROM studies")) {
+        studySelectSql = sql;
+        return {
+          rowCount: 1,
+          rows: [
+            storedRow({ consent_template_id: null, consent_template_version: null })
+          ]
+        };
+      }
+      return { rowCount: 0, rows: [] };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    const result = await studiesRepository.getStudyById("study_abc");
+
+    expect(result?.study.consent_template_id).toBeNull();
+    expect(result?.study.consent_template_version).toBeNull();
+    // The SELECT text itself, because every mock in this file returns whatever
+    // row is queued regardless of what the SQL asked for - so dropping the
+    // columns from the column list survives an assertion on the mapped result.
+    expect(/\bconsent_template_id\b/.test(studySelectSql as unknown as string)).toBe(true);
+    expect(/\bconsent_template_version\b/.test(studySelectSql as unknown as string)).toBe(
+      true
+    );
+  });
+
+  /**
+   * A read fixture whose version is NOT null.
+   *
+   * The null-mapping test above cannot tell "reads the row" from "always
+   * returns null" - the fixture and the mutation produce the same value. This
+   * is the companion that can: a row carrying version 1 must come back as 1.
+   * Without it, `mapStudyRow` returning a constant null survives, and the null
+   * flows into the session snapshot, freezing an incomplete consent record for
+   * every participant.
+   */
+  it("returns the stored version itself, not a constant", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      if (sql.includes("FROM studies")) {
+        return {
+          rowCount: 1,
+          rows: [
+            storedRow({
+              consent_template_id: "recorded-default",
+              consent_template_version: 1
+            })
+          ]
+        };
+      }
+      return { rowCount: 0, rows: [] };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    const result = await studiesRepository.getStudyById("study_abc");
+
+    expect(result?.study.consent_template_id).toBe("recorded-default");
+    expect(result?.study.consent_template_version).toBe(1);
+  });
+
+  it("selects the classification when listing studies too, not only on a single read", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const selects: string[] = [];
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      selects.push(sql);
+      return {
+        rowCount: 2,
+        rows: [
+          {
+            ...storedRow({ id: "study_a" }),
+            authored_step_count: 3
+          },
+          {
+            ...storedRow({
+              id: "study_b",
+              consent_template_id: "custom",
+              consent_template_version: null
+            }),
+            authored_step_count: 9
+          }
+        ]
+      };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    const result = await studiesRepository.listStudies();
+
+    // Two rows carrying DIFFERENT classifications, read by id. A single-row
+    // fixture cannot tell "reads the row's own value" from "reads the first
+    // row's value", and the study list is exactly where that matters: it is
+    // what the copy picker shows.
+    expect(result.find((s) => s.id === "study_a")?.consent_template_id).toBe(
+      "recorded-default"
+    );
+    expect(result.find((s) => s.id === "study_a")?.consent_template_version).toBe(1);
+    expect(result.find((s) => s.id === "study_b")?.consent_template_id).toBe("custom");
+    expect(result.find((s) => s.id === "study_b")?.consent_template_version).toBeNull();
+    expect(selects.some((sql) => /\bconsent_template_id\b/.test(sql))).toBe(true);
   });
 });

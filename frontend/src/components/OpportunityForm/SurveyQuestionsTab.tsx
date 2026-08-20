@@ -522,36 +522,6 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                 </>
               )}
             />
-
-            <div className="form-group mt-4">
-              <label
-                htmlFor="inline_survey_consent_text"
-                className="form-label mb-2"
-                style={{ fontSize: '1rem', fontWeight: '600' }}
-              >
-                Consent text *
-              </label>
-              <textarea
-                className={`form-control ${
-                  validationErrors.inline_survey_consent_text ? 'is-invalid' : ''
-                }`}
-                id="inline_survey_consent_text"
-                rows={4}
-                value={formData.inline_survey_consent_text ?? ''}
-                onChange={(e) =>
-                  handleInputChange('inline_survey_consent_text', e.target.value)
-                }
-              />
-              <div className="form-text">
-                Shown before the first question. The participant must accept it
-                to continue.
-              </div>
-              {validationErrors.inline_survey_consent_text && (
-                <div className="invalid-feedback d-block">
-                  {validationErrors.inline_survey_consent_text}
-                </div>
-              )}
-            </div>
           </>
         )}
       </div>

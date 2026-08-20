@@ -15,6 +15,7 @@ import {
   type StepConfig,
   type StudyStep
 } from '../shared/firsthand/contract';
+import { CUSTOM_CONSENT_TEMPLATE_ID } from '../shared/firsthand/consent-templates';
 import { authorableSurveyStepTypes } from '../shared/firsthand/survey-authoring';
 
 /** What a researcher calls each survey question type, keyed on the vocabulary. */
@@ -448,6 +449,22 @@ export function StudyEditorForm({
       title: title.trim(),
       intro_text: introText.trim(),
       consent_text: consentText.trim(),
+      // Carried through so this surface cannot silently reclassify a study.
+      //
+      // The server resolves the classification from the wording, and with no
+      // claim it can only compare against the CURRENT version of the template.
+      // So the day a version 2 ships, an author who opens a study running on
+      // verbatim version 1 wording and changes only its title would have it
+      // rewritten to `custom` - wording that is approved, permanently badged as
+      // not. Sending what was loaded is the whole of the fix; the claim is
+      // still verified against the text on the way in, so this grants nothing.
+      ...(initialStudy?.consent_template_id &&
+      initialStudy.consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID
+        ? {
+            consent_template_id: initialStudy.consent_template_id,
+            consent_template_version: initialStudy.consent_template_version ?? null
+          }
+        : {}),
       brand_name: brandName.trim() || undefined,
       estimated_duration_minutes: durationMinutes
         ? Number(durationMinutes)

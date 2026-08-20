@@ -163,6 +163,72 @@ describe('createSession', () => {
     expect(seedRuntimeSessionMock.mock.calls[0][0].study.kind).toBe('recorded');
   });
 
+  /**
+   * The snapshot has to carry the classification, not only the wording.
+   *
+   * The text alone answers "what did this participant agree to". It cannot
+   * answer "and was that the wording anybody approved", because both halves of
+   * that question move afterwards: the study can be edited, and a template can
+   * be superseded. Freezing the pair at mint is what makes the record
+   * answerable later, which is the whole reason the columns exist.
+   */
+  it('snapshots the consent classification beside the wording', async () => {
+    getStudyByIdMock.mockResolvedValue({
+      ...validStudy,
+      study: {
+        ...validStudy.study,
+        consent_text: 'Bespoke wording for this study',
+        consent_template_id: 'custom',
+        consent_template_version: null
+      }
+    });
+
+    const result = await createSession({ studyId: 'study_abc', participant });
+    if (!result.ok) throw new Error('expected success');
+
+    const study = seedRuntimeSessionMock.mock.calls[0][0].study;
+    expect(study.consent_text).toBe('Bespoke wording for this study');
+    expect(study.consent_template_id).toBe('custom');
+    expect(study.consent_template_version).toBeNull();
+  });
+
+  it('snapshots an approved template with its version, not just its name', async () => {
+    getStudyByIdMock.mockResolvedValue({
+      ...validStudy,
+      study: {
+        ...validStudy.study,
+        consent_template_id: 'recorded-default',
+        consent_template_version: 1
+      }
+    });
+
+    const result = await createSession({ studyId: 'study_abc', participant });
+    if (!result.ok) throw new Error('expected success');
+
+    const study = seedRuntimeSessionMock.mock.calls[0][0].study;
+    // Both, and asserted as a pair: an id with no version names wording that
+    // cannot be looked up once a second version exists, which is the same as
+    // recording nothing.
+    expect(study.consent_template_id).toBe('recorded-default');
+    expect(study.consent_template_version).toBe(1);
+  });
+
+  /**
+   * A payload minted before these fields existed is already stored as JSONB and
+   * is re-parsed on every read, so the contract has to keep accepting one
+   * without them. `kind` records the same argument; this proves it holds for
+   * the pair added here rather than assuming it transfers.
+   */
+  it('still assembles a valid payload for a study with no classification at all', async () => {
+    getStudyByIdMock.mockResolvedValue(validStudy);
+
+    const result = await createSession({ studyId: 'study_abc', participant });
+
+    expect(result.ok).toBe(true);
+    const study = seedRuntimeSessionMock.mock.calls[0][0].study;
+    expect(study.consent_template_id).toBeUndefined();
+  });
+
   it('mints unique tokens across calls', async () => {
     const a = await createSession({ studyId: 'study_abc', participant });
     const b = await createSession({ studyId: 'study_abc', participant });

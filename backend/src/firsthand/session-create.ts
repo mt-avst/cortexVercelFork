@@ -99,6 +99,15 @@ export async function createSession(
       // written for the other runner. So the value cannot drift away from the
       // study underneath a live session.
       kind: study.study.kind,
+      // Snapshotted for the same reason `consent_text` beside it is, and it is
+      // half of the same fact. The text alone says what the participant agreed
+      // to; these say whether it was wording anybody approved. Neither is
+      // recoverable from the study afterwards - a study can be edited, and a
+      // template can be superseded - so both have to be frozen here or the
+      // record of what was consented to is incomplete in exactly the way that
+      // matters when somebody asks.
+      consent_template_id: study.study.consent_template_id,
+      consent_template_version: study.study.consent_template_version,
       brand_name: study.study.brand_name,
       estimated_duration_minutes: study.study.estimated_duration_minutes,
       locale: study.study.locale,

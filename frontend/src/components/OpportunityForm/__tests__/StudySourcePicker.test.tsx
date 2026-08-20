@@ -530,3 +530,38 @@ describe('a refused copy', () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The chip's whole point on this surface is that it appears BEFORE the copy is
+ * taken - a copy inherits the source's consent wording and its classification
+ * with it, so "this one runs on custom wording" is something the author needs
+ * while choosing, not something to discover on the Consent step afterwards.
+ *
+ * An independent mutation pass deleted the chip from this surface and nothing
+ * failed: the component was covered, its use was not.
+ */
+describe('StudySourcePicker - consent state', () => {
+  it('flags the row that runs on custom consent, and not its neighbour', () => {
+    renderPicker({
+      studies: [
+        { ...TWO_STUDIES[0], consent_template_id: 'recorded-default' },
+        { ...TWO_STUDIES[1], consent_template_id: 'custom' }
+      ]
+    });
+
+    expect(screen.getAllByTestId('consent-state-chip')).toHaveLength(1);
+
+    // Rows carry a testid; find them by that rather than by their title, which
+    // also appears inside each row's own buttons ("Start from this ...").
+    const rows = screen.getAllByTestId(/-source-row$/);
+    expect(rows).toHaveLength(2);
+
+    const flagged = rows.find((row) => row.textContent?.includes('Onboarding survey'));
+    const clean = rows.find((row) => row.textContent?.includes('Checkout flow'));
+
+    // The RIGHT row. Asserting only that one chip exists cannot tell a correct
+    // render from one that flagged the wrong study.
+    expect(flagged!.querySelector('[data-testid="consent-state-chip"]')).not.toBeNull();
+    expect(clean!.querySelector('[data-testid="consent-state-chip"]')).toBeNull();
+  });
+});

@@ -9,6 +9,7 @@ import {
   type Study,
   type StudyStep
 } from "../../../shared/firsthand/contract";
+import { resolveConsentTemplate } from "../../../shared/firsthand/consent-templates";
 import {
   findStepVocabularyProblem,
   STEP_VOCABULARY_MESSAGES,
@@ -120,6 +121,19 @@ export type CreateStudyInput = {
    * study, every pre-B3 fixture) have nothing to record here.
    */
   copied_from_study_id?: string | null;
+  /**
+   * What the caller CLAIMS this consent wording is, not what will be stored.
+   *
+   * `createStudy` runs the claim through `resolveConsentTemplate` against
+   * `consent_text` and stores the verified answer, so a caller sending edited
+   * wording under an approved template id gets `custom` written to the row.
+   * The claim earns its place only for the version: once a second version of a
+   * template ships, a study still carrying the first version's wording resolves
+   * to v1 rather than to `custom`, and nothing but the claim can say which
+   * version to compare against.
+   */
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
   steps: StudyStep[];
 };
 
@@ -134,6 +148,20 @@ export type UpdateStudyInput = {
   // Superadmin-only reassignment. Rejected as forbidden for anyone else, and
   // deliberately not nullable - see updateStudy.
   owner_user_id?: string;
+  /**
+   * The same claim `CreateStudyInput` documents, and with one extra rule:
+   * IGNORED ENTIRELY unless `consent_text` is present in the same request.
+   *
+   * The classification is a property of the wording, so a request that could
+   * set it without sending the wording could assert that a study runs on
+   * approved consent while the stored sentence says something else - the one
+   * lie this whole feature exists to make impossible. Keeping the two welded
+   * together also leaves `claimsOwnership` unchanged in meaning: a consent edit
+   * counted as one real edit before, and still does, because these columns are
+   * only ever pushed alongside `consent_text`.
+   */
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
   // No copied_from_study_id here, deliberately. Provenance is write-once at
   // create - see CreateStudyInput - so there is no in-place edit that should
   // ever change it, and the dynamic update builder below has nothing to push
@@ -153,6 +181,8 @@ type StudyRow = {
   kind: string;
   owner_user_id: string | null;
   copied_from_study_id: string | null;
+  consent_template_id: string | null;
+  consent_template_version: number | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -195,7 +225,8 @@ export async function listStudies(): Promise<StudyListItem[]> {
       `
         SELECT s.id, s.title, s.intro_text, s.consent_text, s.brand_name,
                s.estimated_duration_minutes, s.locale, s.status, s.kind,
-               s.owner_user_id, s.copied_from_study_id, s.created_at, s.updated_at,
+               s.owner_user_id, s.copied_from_study_id, s.consent_template_id,
+               s.consent_template_version, s.created_at, s.updated_at,
                (SELECT count(*) FILTER (WHERE ss.type <> 'end')
                 FROM study_steps ss
                 WHERE ss.study_id = s.id)::int AS authored_step_count
@@ -283,14 +314,24 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
     try {
       const studyId = input.id ?? `study_${crypto.randomUUID()}`;
       const status = input.status ?? "draft";
+      // Verified here rather than taken from the caller: `resolveConsentTemplate`
+      // returns the claim only when the wording actually IS that template's
+      // wording, and `custom` otherwise. A create therefore cannot mint a study
+      // that claims approved consent while carrying something else.
+      const consentTemplate = resolveConsentTemplate({
+        kind: (input.kind ?? "recorded") === "survey" ? "survey" : "recorded",
+        consentText: input.consent_text,
+        claimedTemplateId: input.consent_template_id,
+        claimedTemplateVersion: input.consent_template_version
+      });
 
       await client.query(
         `
           INSERT INTO studies (
             id, title, intro_text, consent_text, brand_name,
             estimated_duration_minutes, locale, status, kind, owner_user_id,
-            copied_from_study_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            copied_from_study_id, consent_template_id, consent_template_version
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         `,
         [
           studyId,
@@ -303,7 +344,9 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
           status,
           input.kind ?? "recorded",
           input.owner_user_id ?? null,
-          input.copied_from_study_id ?? null
+          input.copied_from_study_id ?? null,
+          consentTemplate.id,
+          consentTemplate.version
         ]
       );
 
@@ -392,7 +435,31 @@ export async function updateStudy(
 
       if (input.title !== undefined) push("title", input.title);
       if (input.intro_text !== undefined) push("intro_text", input.intro_text);
-      if (input.consent_text !== undefined) push("consent_text", input.consent_text);
+      if (input.consent_text !== undefined) {
+        push("consent_text", input.consent_text);
+
+        // Pushed together with the wording, always, and never without it.
+        //
+        // Together, because a row whose text and classification disagree is
+        // worse than one with no classification at all: it states in a column
+        // that somebody approved a sentence nobody read. Never without it,
+        // because a request able to set the classification alone could assert
+        // approval for wording it never sent.
+        //
+        // `ownerRow.kind` and not the caller's: a study's vocabulary is fixed
+        // at create, and letting a request choose which template family it is
+        // measured against would let a recorded study be recorded as running on
+        // the survey template, whose central claim - "Nothing is recorded" -
+        // would be false about it.
+        const consentTemplate = resolveConsentTemplate({
+          kind: ownerRow.kind === "survey" ? "survey" : "recorded",
+          consentText: input.consent_text,
+          claimedTemplateId: input.consent_template_id,
+          claimedTemplateVersion: input.consent_template_version
+        });
+        push("consent_template_id", consentTemplate.id);
+        push("consent_template_version", consentTemplate.version);
+      }
       if (input.brand_name !== undefined) push("brand_name", input.brand_name);
       if (input.estimated_duration_minutes !== undefined) {
         push("estimated_duration_minutes", input.estimated_duration_minutes);
@@ -626,7 +693,8 @@ async function loadStudyWithSteps(
     `
       SELECT id, title, intro_text, consent_text, brand_name,
              estimated_duration_minutes, locale, status, kind, owner_user_id,
-             copied_from_study_id, created_at, updated_at
+             copied_from_study_id, consent_template_id, consent_template_version,
+             created_at, updated_at
       FROM studies
       WHERE id = $1
     `,
@@ -703,6 +771,8 @@ function mapStudyRow(row: StudyRow): StudyRecord {
     kind: row.kind === "survey" ? "survey" : "recorded",
     owner_user_id: row.owner_user_id ?? null,
     copied_from_study_id: row.copied_from_study_id ?? null,
+    consent_template_id: row.consent_template_id ?? null,
+    consent_template_version: row.consent_template_version ?? null,
     created_at: toIsoString(row.created_at),
     updated_at: toIsoString(row.updated_at)
   };
