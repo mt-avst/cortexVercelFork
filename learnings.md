@@ -297,9 +297,18 @@ Shipped on `feat/participant-welcome-expectations`.
 
 ### Verifying a local change
 
-- **`vite preview` serves `dist/`, and neither vitest nor a commit rebuilds it.**
+- **Use the dev server for the inner loop; `vite preview` is for checking the built output.**
+  `npx vite --port <port> --strictPort` from `frontend/` gives hot reload and no build step at all.
+  It proxies `/api` and `/auth` to `localhost:3001`, so it is same-origin and CORS never enters it.
+  This did not work until 7.48.2: `src/shared/config/environment.ts` calls `frontendEnvSchema.parse(process.env)` and `api.ts` calls it at module scope, so the dev server threw `process is not defined` before the app rendered, which is why local work ran through `vite preview` and paid a full rebuild per change.
+- **When you do use `vite preview`, it serves `dist/`, and neither vitest nor a commit rebuilds it.**
   Two changes were reported as not working when the browser was simply showing the previous build.
   Always `npm run build` after committing, then confirm a new marker string in the served chunk.
+  This is still the right tool for verifying what actually ships - code splitting and minification only exist in the built output.
+- **If an edit to a config file appears to do nothing, look for a compiled twin before doubting the config.**
+  `frontend/tsconfig.node.json` is `composite` with no `outDir`, so `tsc -b` emitted `vite.config.js` beside its own source - and Vite resolves `vite.config.js` **before** `vite.config.ts`.
+  The dev server read a stale compiled copy for days, and the artefact is gitignored, so nothing surfaced it.
+  Fixed in 7.48.2 by emitting to `node_modules/.tmp/tsconfig-node`.
 - **Minifiers rewrite literals, so grep for marker copy rather than numbers.**
   `0.65` is served as `.65` and named constants disappear entirely.
 - **The recording styles are code-split into their own `RecordingSession-*.css` chunk.**
