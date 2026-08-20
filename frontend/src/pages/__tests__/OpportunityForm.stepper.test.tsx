@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -327,6 +327,23 @@ describe('the step strip reports progress, not just position', () => {
     );
 
     await screen.findByDisplayValue('An existing study');
+
+    /*
+     * WAIT FOR THE THING BEING ASSERTED, not for a neighbour of it.
+     *
+     * This test used to stop at `findByDisplayValue` and then read the strip
+     * immediately, and it reddened `main` once: the title appearing means
+     * `setFormData` has run, and the effect that marks an edited opportunity's
+     * steps VISITED is a separate pass. On a loaded CI runner the assertion
+     * landed between the two and read "Not started", which is exactly what this
+     * test exists to catch - so the failure was indistinguishable from the real
+     * defect.
+     *
+     * Waiting on the visited state makes the precondition the same fact the
+     * assertions below are about. It cannot mask the real defect: if the effect
+     * never ran, this times out and fails.
+     */
+    await waitFor(() => expect(steps()[1]).toHaveTextContent('Completed'));
 
     // Its content is on the server; calling steps 2, 3 and Review "Not
     // started" would be false. Step 1 is the one being looked at, so it reads
