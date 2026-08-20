@@ -48,6 +48,33 @@ The dashboard shows:
 
 ## Creating an Opportunity
 
+### Finding your way around the form
+
+The form is a series of steps, listed across the top. How many there are depends on the type you pick: an external poll has three, a recorded study has four, and before you have chosen a type at all there are two.
+Each step says where it sits in the sequence - *Step 3 of 4* - what it is for, and how it is doing.
+
+Every step reports one of four states, with an icon and words as well as a colour:
+
+- **Not started** - you have not opened this step yet
+- **Current step** - the one you are looking at
+- **Completed** - you have been here and there is nothing on it that would stop a save
+- **Needs attention** - something on this step is not right, and the form will refuse to save until it is
+
+**Needs attention does not lock anything.** You can go forward and back freely, in any order, and nothing you have typed is lost by moving between steps. The flag is there to tell you where the problem is, not to stop you working.
+
+The states update as you type. Leave the Title empty, walk two steps on, and step 1 says *Needs attention*; go back and fill it in, and it says *Completed* - without saving anything.
+
+A draft is allowed to be empty, so a Task List step with nothing written on it yet still shows as **Completed** - there is genuinely nothing there stopping you. Publishing is where the form starts insisting.
+
+An opportunity you are **editing** opens with its steps already marked, because its content is already saved.
+
+### The two ways back
+
+Two controls used to look almost identical and do very different things. They are now named apart:
+
+- **Exit to dashboard**, at the top of the page, leaves the form. If you have unsaved changes it asks first, and you can choose to stay
+- **Previous: {step name}**, at the bottom of every step after the first, goes back one step and names where it is going - *Previous: Task List*, *Previous: Content & Details*
+
 ### Step 1: Start Creating
 
 1. Go to Admin Dashboard
@@ -172,12 +199,12 @@ Use a **Test** or **Interview** instead when you need to be in the room.
 3. On **Basic Information**, set **Research Study Type** to **"🖥️ Recorded study - Self-guided, recorded in the browser"**
 4. Fill in Title and Purpose as usual on **Basic Information** and **Content & Details**
 
-Choosing Unmoderated replaces the External Link tab with a **Task List** tab.
-There is no Sessions tab, because there is nothing to book.
+Choosing Unmoderated replaces the External Link step with a **Task List** step.
+There is no Session Management step, because there is nothing to book.
 
 ### Step 2: Write the Task List
 
-Open the **Task List** tab. It is headed *"What the participant is asked to do while their screen is recorded"*.
+Open the **Task List** step. It is headed *"What the participant is asked to do while their screen is recorded"*.
 
 - **Starting URL**: the page the participant is asked to open and record. Optional, but leave it blank only for a survey-style study with nothing to test. Without it, participants share their screen with nothing pre-opened and never see the guided open-and-share step
 - **Estimated completion time**: worked out from your task list and shown to participants before they agree to be recorded. It moves as you write, so it stays right as the list grows. **Set it myself** takes it over if you know better - and once you have taken it over you can clear it entirely, which tells participants no length at all. That is still the better answer when you genuinely do not know: a wrong number is worse than no number
@@ -198,7 +225,7 @@ Up to 50 tasks are allowed, though most useful studies have far fewer.
 
 ### Step 3: Start from an existing task list, if you have one
 
-At the top of the Task List tab, **"How do you want to add tasks?"** offers two answers.
+At the top of the Task List step, **"How do you want to add tasks?"** offers two answers.
 **Create tasks for this opportunity** is the default and is what everything above describes.
 **Start from an existing task list** offers the launched task lists you or a colleague has already written.
 
