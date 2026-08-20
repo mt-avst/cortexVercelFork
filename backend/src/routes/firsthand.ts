@@ -148,6 +148,11 @@ function requireSuperadminForStudyResults(req: Request): void {
 // reuse one it did not author - that is a designed feature, and filtering the
 // list by owner would break it. Study copy is authoring metadata, not
 // participant data; the boundary this MR draws is over WRITES.
+//
+// B3's copy-on-select reads from exactly this list - it is what the picker
+// already showed - and copying grants no new read capability: the picker
+// could always see (and select) any launched study, it just used to link to
+// it rather than copy it.
 router.get('/studies', requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
   // listStudies() returns [] when persistence is unconfigured, matching the
   // FirstHand list endpoint's soft-empty behaviour.

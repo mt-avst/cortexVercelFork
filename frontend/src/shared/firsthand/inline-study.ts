@@ -178,7 +178,15 @@ export const inlineStudySchema = z
       .max(INLINE_STUDY_LIMITS.maxDurationMinutes)
       .nullable()
       .optional(),
-    steps: z.array(inlineStudyStepSchema).min(1).max(INLINE_STUDY_LIMITS.maxSteps)
+    steps: z.array(inlineStudyStepSchema).min(1).max(INLINE_STUDY_LIMITS.maxSteps),
+    /**
+     * The study this one was copied from, recorded by the picker at the moment
+     * of copy-on-select rather than a live link. Optional: absent for a study
+     * authored from blank. Never trusted as an authorisation key - it is
+     * carried straight through to CreateStudyInput.copied_from_study_id and
+     * stored as-is; see migration 0012.
+     */
+    copied_from_study_id: z.string().min(1).max(200).optional()
   })
   .superRefine((value, ctx) => {
     // Mirrors the rule enforced in studies-repository.validateSteps. Duplicated

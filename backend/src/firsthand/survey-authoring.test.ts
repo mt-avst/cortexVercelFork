@@ -215,6 +215,36 @@ describe("inlineSurveySchema", () => {
   });
 
   /**
+   * B3: the picker copies a study rather than linking to it, and records what
+   * it copied from. This object is `.strict()`, so a field missing from its
+   * declared shape is a 400 rather than a silent drop - which is exactly what
+   * makes this the twin that bites first if only inlineStudySchema were
+   * updated. This is the twin of the identical field on inlineStudySchema;
+   * both must accept it.
+   */
+  it("accepts copied_from_study_id", () => {
+    const result = inlineSurveySchema.safeParse({
+      ...workableSurvey,
+      copied_from_study_id: "study_source"
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  /**
+   * Proves `.strict()` survived adding copied_from_study_id: an unrelated
+   * unknown top-level key must still be refused, not silently dropped.
+   */
+  it("still rejects an unrelated unknown top-level key", () => {
+    const result = inlineSurveySchema.safeParse({
+      ...workableSurvey,
+      not_a_real_field: "x"
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  /**
    * The scale's end labels are participant-facing and were the one uncapped
    * author-supplied string reachable through the study API: 80KB of labels on
    * one step went straight in, bounded only by the JSON body limit.

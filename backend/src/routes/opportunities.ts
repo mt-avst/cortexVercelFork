@@ -22,6 +22,7 @@ import { listResponsesForOpportunity, studyHasResponses } from '../firsthand/sur
 import { aggregateSurveyResults } from '../firsthand/survey-results';
 import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
 import {
+  canWriteStudy,
   claimStudyIfUnowned,
   countStudyTasks,
   createStudy,
@@ -171,7 +172,23 @@ export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
 };
 
 /**
- * Refuses a linked study whose vocabulary does not match the opportunity.
+ * Wording for the link-time ownership refusal below, keyed by the kind that
+ * was required - matching STUDY_KIND_MISMATCH's convention. B3 replaced
+ * reuse-by-link with copy-on-select in the UI, but `firsthand_study_id` is
+ * still a writable field on both request schemas, so without this a
+ * hand-crafted PATCH could still create the shared-link state B3 exists to
+ * remove: link a colleague's study, no UI involved. Points at the remedy that
+ * is actually still available - a copy - rather than just saying no.
+ */
+export const STUDY_OWNERSHIP_REFUSAL: Record<StudyKind, string> = {
+  recorded: 'This task list belongs to another researcher; take a copy of it instead',
+  survey: 'These questions belong to another researcher; take a copy of them instead'
+};
+
+/**
+ * Refuses a linked study whose vocabulary does not match the opportunity, or
+ * whose owner refuses this caller a write - when `checkOwnership` says the
+ * caller is asking for a NEW link rather than resending one already stored.
  *
  * Silent only when persistence is unconfigured - a deployment without the
  * runtime database, which is not this check's business. A study id that
@@ -179,11 +196,20 @@ export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
  * skipping it made the whole rule optional. (This docblock said the opposite
  * until the missing-study case was tightened; corrected here rather than left
  * to mislead the next reader.)
+ *
+ * The ownership half is gated by the caller rather than unconditional, because
+ * this function also runs on a save that changes nothing about the link: the
+ * opportunity form legitimately resends the SAME `firsthand_study_id` on
+ * every save while its author edits a title, even when the linked study
+ * belongs to someone else. Refusing that would break the one save path B3's
+ * design depends on - see each call site for how "new" is decided there.
  */
 async function assertLinkedStudyKindMatches(
   studyId: string,
   type: string,
-  deliveryMode: string
+  deliveryMode: string,
+  requester: StudyRequester,
+  checkOwnership: boolean
 ): Promise<void> {
   const required = requiredStudyKindFor(type, deliveryMode);
 
@@ -205,6 +231,10 @@ async function assertLinkedStudyKindMatches(
 
   if (stored.study.kind !== required) {
     throw new ValidationError(STUDY_KIND_MISMATCH[required]);
+  }
+
+  if (checkOwnership && !canWriteStudy(stored.study.owner_user_id, requester)) {
+    throw new ForbiddenError(STUDY_OWNERSHIP_REFUSAL[required]);
   }
 }
 
@@ -228,9 +258,14 @@ async function assertLinkedStudyKindMatches(
  * OPPORTUNITY. That is the same attack migration 0007 and `claimStudyIfUnowned`
  * were added to close, reached through a different door.
  *
- * So the authorisation decision is taken by `updateStudy`, inside its own
- * transaction and behind its `FOR UPDATE` row lock, rather than by a check
- * here that the write could race. The three outcomes are all meaningful:
+ * The BINDING authorisation decision is taken by `updateStudy`, inside its own
+ * transaction and behind its `FOR UPDATE` row lock, because a check made here
+ * ahead of it could race. This function also takes the same decision early -
+ * ahead of `stepSequenceIsUnchanged` and `studyHasResponses` - purely to keep
+ * those two probes from running, and so from disclosing whether a study this
+ * caller cannot write has collected responses, before write access is even
+ * established. See that early check's own comment for the disclosure it
+ * closes. The three outcomes below are all meaningful:
  *
  * - `updated`  - the caller may write it and it now holds the authored content
  * - `forbidden`- the study belongs to someone else; the caller is refused and
@@ -341,6 +376,21 @@ async function updateLinkedStudyContent(
   // that race is a refusal, never a wrong write.
   if (stored.study.kind !== requiredKind) {
     throw new ValidationError(STUDY_KIND_MISMATCH[requiredKind]);
+  }
+
+  // Read here, ahead of the two probes below, rather than left solely to
+  // updateStudy's own FOR UPDATE check further down. That check is still the
+  // authoritative one - the owner can change between this read and the write
+  // - but reaching it used to require first computing stepSequenceIsUnchanged
+  // and, when that was false, awaiting studyHasResponses: a 400 naming
+  // "already collected answers" versus updateStudy's 403 disclosed whether a
+  // study this caller cannot write had collected any responses, to a caller
+  // who was never granted read access to that fact. Checked advisedly here so
+  // neither probe below runs at all for a study this caller cannot write; the
+  // narrow race where ownership changes in the gap fails closed rather than
+  // disclosing anything.
+  if (!canWriteStudy(stored.study.owner_user_id, requester)) {
+    return 'forbidden';
   }
 
   // Keep the identity the stored steps already have.
@@ -827,8 +877,18 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // Checked whatever the status, not only on publish: a draft carrying a
   // mismatched study is a draft that cannot be published, and saying so now is
   // better than saying it later.
+  //
+  // Ownership is checked unconditionally here (`true`), unlike the PATCH call
+  // site: create has no prior link to compare against, so any linkedStudyId
+  // on this request is by definition a new one.
   if (linkedStudyId) {
-    await assertLinkedStudyKindMatches(linkedStudyId, data.type, deliveryMode);
+    await assertLinkedStudyKindMatches(
+      linkedStudyId,
+      data.type,
+      deliveryMode,
+      { userId: req.user!.id, isSuperadmin: req.user!.role === 'superadmin' },
+      true
+    );
   }
 
   // Ensure session user exists in DB (demo/session-only users may not be persisted)
@@ -899,6 +959,10 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       // Same owner as the opportunity this study is being authored for, so the
       // two sides of the same authoring action agree on who may edit them.
       owner_user_id: req.user!.id,
+      // Provenance only, from the picker's copy-on-select. Explicit `?? null`
+      // rather than leaving it to createStudy's own default so the intent
+      // reads here: absence means this study was authored from blank.
+      copied_from_study_id: inlineStudy.copied_from_study_id ?? null,
       steps: toStudySteps(inlineStudy.steps, studyId, inlineStudy.target_url)
     });
     createdStudyId = stored.study.id;
@@ -924,6 +988,9 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       // the linkage check would then refuse the very opportunity that authored
       // it, which is a confusing way to find out.
       kind: 'survey',
+      // Provenance only, from the picker's copy-on-select. See the task-list
+      // branch above for why this is explicit rather than left to the default.
+      copied_from_study_id: inlineSurvey.copied_from_study_id ?? null,
       steps: toSurveySteps(inlineSurvey.steps, studyId)
     });
     createdStudyId = stored.study.id;
@@ -1237,11 +1304,50 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     data.delivery_mode !== undefined ||
     data.type !== undefined;
 
-  if (changesLinkage && newFirstHandStudyId?.trim()) {
+  // FIX 5: skipped entirely when this request is authoring inline content.
+  //
+  // The guards above ("Send either firsthand_study_id or inline_study, not
+  // both", and the inline_survey twin) already refuse `data.firsthand_study_id
+  // !== undefined` alongside `inlineStudyInput`/`inlineSurveyInput` - INCLUDING
+  // an explicit null, which is why they test `!== undefined` rather than
+  // truthiness. So by the time control reaches here with inline content
+  // present, `data.firsthand_study_id` is guaranteed undefined, and
+  // `newFirstHandStudyId` therefore falls back to whatever is ALREADY stored -
+  // which this request is not touching.
+  //
+  // `changesLinkage` does not know that: the form sends `type` on every save,
+  // so `changesLinkage` reads true on a request that authors content into an
+  // opportunity whose STORED link is dangling (the study behind it was
+  // deleted), and this pre-check then resolves that stale id, gets null, and
+  // refuses the save with "That task list could not be found" - before
+  // `updateLinkedStudyContent` below ever gets to answer 'missing' and mint a
+  // repair. That is the one designed repair path for a dangling link
+  // (A0/B3's "author a replacement on the form"), and until this guard it was
+  // unreachable.
+  //
+  // Nothing here is lost by skipping: `updateLinkedStudyContent` (recorded
+  // task list) and its survey counterpart re-check the vocabulary against the
+  // STORED kind themselves, and the early ownership check added just above
+  // them (the FIX 1 second finding) still runs there too. Both are the real
+  // authorisation and vocabulary boundary for content going into an existing
+  // link; this pre-check only exists to catch a NEW `firsthand_study_id` on
+  // the request body, which inline content can never carry.
+  const authoringInlineContent = Boolean(inlineStudyInput || inlineSurveyInput);
+
+  if (changesLinkage && newFirstHandStudyId?.trim() && !authoringInlineContent) {
     await assertLinkedStudyKindMatches(
       newFirstHandStudyId.trim(),
       existingType,
-      newDeliveryMode
+      newDeliveryMode,
+      { userId: req.user!.id, isSuperadmin },
+      // Ownership is checked only when THIS request is actually changing what
+      // the opportunity points at - not merely on the trigger above, which
+      // also fires for `delivery_mode`/`type` changes that leave the id
+      // untouched. Without this gate, the read-only save path - resending the
+      // SAME not-yours id on every save while editing an unrelated field -
+      // would be refused, which is the regression FIX 1 must not cause.
+      data.firsthand_study_id !== undefined &&
+        data.firsthand_study_id?.trim() !== existingFirstHandStudyId?.trim()
     );
   }
   
@@ -1297,8 +1403,17 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
    * editor where the sharing is visible.
    *
    * Only the fan-out is refused, never a study this opportunity alone uses.
-   * B3 replaces reuse-by-link with copy-on-select, at which point sharing
-   * stops being possible and this guard can go.
+   *
+   * B3 replaces the reuse picker with copy-on-select, so the picker itself can
+   * no longer CREATE a new sharing relationship - a copy is a new, unshared
+   * study from the moment it is minted. This guard is deliberately RETAINED
+   * anyway, as defence in depth: it costs one query, it is the last check
+   * standing between an in-place rewrite and another opportunity's content for
+   * any row a future code path or a hand-edited link manages to share again,
+   * and an unreachable guard is a much cheaper mistake than a missing one.
+   * Migration 0012 converts every row that already shared a study at deploy
+   * time, so in steady state this branch is not expected to fire - but it
+   * stays live rather than becoming wrong.
    */
   const studyIsSharedWithAnotherOpportunity = async (studyId: string) => {
     const others = await pool.query(
@@ -1399,6 +1514,9 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         // someone else's opportunity is the author of the study they just wrote,
         // and the opportunity owner never saw its consent copy.
         owner_user_id: req.user!.id,
+        // Provenance only, from the picker's copy-on-select. See the create
+        // route's inline_study branch for why this is explicit.
+        copied_from_study_id: inlineStudyInput.copied_from_study_id ?? null,
         steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
       });
       createdStudyId = stored.study.id;
@@ -1481,6 +1599,9 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         status: 'launched',
         owner_user_id: req.user!.id,
         kind: 'survey',
+        // Provenance only, from the picker's copy-on-select. See the create
+        // route's inline_survey branch for why this is explicit.
+        copied_from_study_id: inlineSurveyInput.copied_from_study_id ?? null,
         steps: toSurveySteps(inlineSurveyInput.steps, studyId)
       });
       createdStudyId = stored.study.id;

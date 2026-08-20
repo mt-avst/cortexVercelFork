@@ -194,4 +194,24 @@ describe("inlineStudySchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  /**
+   * B3: the picker copies a study rather than linking to it, and records what
+   * it copied from. This object is NOT `.strict()`, so an undeclared field
+   * would not fail parsing - it would be silently stripped, and `.success`
+   * alone cannot tell the two apart. Asserted on the parsed VALUE for that
+   * reason: this is the non-strict twin of the identical field on
+   * inlineSurveySchema, and provenance silently vanishing on this twin only
+   * is exactly the failure mode the brief calls out.
+   */
+  it("carries copied_from_study_id through to the parsed value", () => {
+    const result = inlineStudySchema.safeParse({
+      consent_text: "C",
+      steps: [{ type: "open_text", prompt: "A" }],
+      copied_from_study_id: "study_source"
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.copied_from_study_id).toBe("study_source");
+  });
 });

@@ -12,6 +12,10 @@ import {
 import { normaliseTargetUrl } from '../../utils/targetUrl';
 import DurationEstimate from './DurationEstimate';
 import QuestionList from './QuestionList';
+import ReadOnlyStudyContent from './ReadOnlyStudyContent';
+import StudyProvenanceNote from './StudyProvenanceNote';
+import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
+import StudySourcePicker from './StudySourcePicker';
 
 /**
  * What a researcher calls each task type, for the collapsed summary row.
@@ -46,7 +50,15 @@ export type InlineStudyFormFields = {
   inline_study_duration_auto?: boolean;
   inline_study_consent_text?: string;
   inline_study_steps?: WithClientId<InlineStudyStep>[];
-  reuse_existing_study?: boolean;
+  /**
+   * Where the content came from, replacing `reuse_existing_study`. Declared on
+   * both surfaces' field types and backed by ONE field on the form, because
+   * only one of the two tabs is ever rendered.
+   */
+  study_source?: StudySourceMode;
+  copied_from_study_id?: string;
+  copied_from_title?: string;
+  copied_from_at?: string;
 };
 
 interface FirstHandStudyTabProps {
@@ -56,9 +68,14 @@ interface FirstHandStudyTabProps {
   /** Steps are an array, which handleInputChange's scalar signature cannot carry. */
   handleStepsChange: (steps: WithClientId<InlineStudyStep>[]) => void;
   /**
-   * True when the opportunity already points at a task list. Hides the "reuse
-   * an existing one instead" tickbox: swapping which list an opportunity points
-   * at is not this form's job once it points at one.
+   * True when the opportunity already has a task list of its own. Hides the
+   * source choice: "where should this content come from" has been answered, and
+   * the answer is "it is already here".
+   *
+   * The caller passes FALSE when the linked study is MISSING, deliberately. A
+   * dangling link is not a task list, and the author needs the choice back in
+   * order to repair it - authoring content is what makes the save mint a
+   * replacement.
    *
    * NOT the same question as whether the list may be authored here - see
    * studyIsReadOnly. The two were one flag, and collapsing them is what made an
@@ -68,9 +85,9 @@ interface FirstHandStudyTabProps {
   hasLinkedStudy: boolean;
   /**
    * True when the linked task list may not be authored HERE - it belongs to
-   * another researcher, or it holds a step type this tab cannot represent. Only
-   * then is the picker the right surface; a list this author may change is
-   * loaded into the editor below and saved back to the same study.
+   * another researcher, or it holds a step type this tab cannot represent. It
+   * is shown read-only; a list this author may change is loaded into the editor
+   * below and saved back to the same study.
    */
   studyIsReadOnly: boolean;
   /**
@@ -78,6 +95,10 @@ interface FirstHandStudyTabProps {
    * which case this tab says nothing rather than asserting a second cause.
    */
   readOnlyReason: StudyReadOnlyReason;
+  /** Takes the copy. Resolves to a refusal message, or null when it worked. */
+  onCopyFromStudy: (studyId: string) => Promise<string | null>;
+  /** Decides whether a row reads as "Yours". */
+  currentUserId?: string;
 }
 
 /**
@@ -89,8 +110,8 @@ interface FirstHandStudyTabProps {
  * lists, which meant abandoning a part-filled form to go and create one
  * elsewhere.
  *
- * Reusing an existing task list is still possible behind the toggle, and is the
- * only option once the opportunity actually points at one.
+ * Starting from an existing task list is still offered - as a COPY, chosen
+ * explicitly, and only while this opportunity has no list of its own.
  */
 const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   formData,
@@ -99,19 +120,31 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   handleStepsChange,
   hasLinkedStudy,
   studyIsReadOnly,
-  readOnlyReason
+  readOnlyReason,
+  onCopyFromStudy,
+  currentUserId
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
-  const reuseExisting = studyIsReadOnly || Boolean(formData.reuse_existing_study);
+  const [chooserOpen, setChooserOpen] = useState(false);
+
+  const sourceMode: StudySourceMode = formData.study_source ?? 'blank';
+  const copiedFromId = formData.copied_from_study_id ?? '';
+
+  // The survey twin carries the reasoning for all three of these. They are
+  // written the same way on both surfaces deliberately: the defect this project
+  // keeps producing is a property pinned on one twin and not the other.
+  const offeringSourceChoice = !hasLinkedStudy && !studyIsReadOnly;
+  const choosingSource = offeringSourceChoice && sourceMode === 'copy';
+  const showChooser = choosingSource && (!copiedFromId || chooserOpen);
 
   useEffect(() => {
-    // Only the picker needs the list. Skip the request (and its cost) when
+    // Only the chooser needs the list. Skip the request (and its cost) when
     // authoring inline, which is the default path.
-    if (!reuseExisting) {
+    if (!choosingSource) {
       setLoading(false);
       return;
     }
@@ -132,15 +165,31 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [retryCount, reuseExisting]);
+  }, [retryCount, choosingSource]);
 
   const steps = formData.inline_study_steps ?? [];
-  const launchedStudies = studies.filter((s) => s.status === 'launched');
+  /**
+   * Only recorded-vocabulary task lists, and only launched ones.
+   *
+   * The `kind` half was missing, and the survey twin has had it since 7.37: a
+   * survey-shaped study was offered in this picker and then refused by the API
+   * on save, naming a rule the author had no way to see. Copying one would fail
+   * the same way, one step earlier, so the filter is the fix rather than the
+   * message.
+   *
+   * A study created before `kind` existed carries the column's DEFAULT
+   * 'recorded' rather than nothing, so this excludes no legacy row.
+   */
+  const launchedStudies = studies.filter(
+    (s) => s.status === 'launched' && s.kind !== 'survey'
+  );
   // A draft task list cannot be picked but can be launched, so saying how many
   // are waiting beats an empty dropdown that reads as "you have none".
   // Archived ones are excluded: they are deliberately retired, so offering to
   // launch them would be wrong.
-  const draftCount = studies.filter((s) => s.status === 'draft').length;
+  const draftCount = studies.filter(
+    (s) => s.status === 'draft' && s.kind !== 'survey'
+  ).length;
 
   const estimate = estimateRecordedMinutes(steps);
   const automaticDuration = formData.inline_study_duration_auto !== false;
@@ -166,7 +215,8 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
             This task list belongs to another researcher, so it is not editable
             here - and the Task Lists area applies the same rule. Ask its owner
-            to change it, or pick a different one below.
+            to change it, or create a new opportunity and start from a copy of
+            it.
           </div>
         )}
 
@@ -179,102 +229,68 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
           </div>
         )}
 
-        {!hasLinkedStudy && (
-          <div className="form-check mb-4">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="reuse_existing_study"
-              checked={Boolean(formData.reuse_existing_study)}
-              onChange={(e) =>
-                handleInputChange('reuse_existing_study', e.target.checked)
-              }
-            />
-            <label className="form-check-label" htmlFor="reuse_existing_study">
-              Reuse an existing task list instead of writing one here
-            </label>
+        {offeringSourceChoice && (
+          <StudySourceChoice
+            noun="task"
+            idPrefix="task"
+            value={sourceMode}
+            onChange={(mode) => {
+              setChooserOpen(false);
+              handleInputChange('study_source', mode);
+            }}
+            copyLabel="Start from an existing task list"
+          />
+        )}
+
+        {copiedFromId && !studyIsReadOnly && (
+          <StudyProvenanceNote
+            title={formData.copied_from_title || null}
+            copiedAt={formData.copied_from_at}
+            noun="task"
+            onChooseAnother={
+              choosingSource && !showChooser ? () => setChooserOpen(true) : undefined
+            }
+          />
+        )}
+
+        {/* Rendered ABOVE the three-way branch, not inside the editor arm.
+            The copy-mode message this can carry - "Choose a task list to start
+            from, or switch to writing the tasks here" - is set in exactly the
+            state where the CHOOSER is on screen, so rendering it only alongside
+            the editor made it unreachable: the author was routed to this step
+            by the error summary and landed on a list with no error text on it.
+            `role="alert"` matches the survey twin, which already had it. */}
+        {validationErrors.inline_study_steps && (
+          <div
+            className="alert alert-danger py-2"
+            style={{ fontSize: '0.875rem' }}
+            role="alert"
+          >
+            {validationErrors.inline_study_steps}
           </div>
         )}
 
-        {reuseExisting ? (
-          <div className="row">
-            <div className="col-12 col-md-8">
-              <div className="form-group mb-4">
-                <label
-                  htmlFor="firsthand_study_id"
-                  className="form-label mb-2"
-                  style={{ fontSize: '1rem', fontWeight: '600' }}
-                >
-                  Existing task list *
-                </label>
-
-                {loading && (
-                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                    Loading task lists...
-                  </div>
-                )}
-
-                {!loading && fetchError && (
-                  <div
-                    className="alert alert-warning py-2 d-flex align-items-center justify-content-between"
-                    style={{ fontSize: '0.875rem' }}
-                  >
-                    <span>{fetchError}</span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-warning ms-3"
-                      onClick={() => setRetryCount((n) => n + 1)}
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                {!loading && !fetchError && (
-                  <select
-                    id="firsthand_study_id"
-                    className={`form-select ${validationErrors.firsthand_study_id ? 'is-invalid' : ''}`}
-                    style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
-                    value={formData.firsthand_study_id || ''}
-                    onChange={(e) =>
-                      handleInputChange('firsthand_study_id', e.target.value || undefined)
-                    }
-                  >
-                    <option value="">-- Select a launched task list --</option>
-                    {launchedStudies.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.title}
-                        {s.estimated_duration_minutes
-                          ? ` (${s.estimated_duration_minutes} min)`
-                          : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {validationErrors.firsthand_study_id && (
-                  <div
-                    className="fw-semibold"
-                    style={{ fontSize: '0.875rem', display: 'block' }}
-                  >
-                    {validationErrors.firsthand_study_id}
-                  </div>
-                )}
-
-                {!loading && !fetchError && launchedStudies.length === 0 && (
-                  <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-                    {draftCount > 0
-                      ? `No launched task lists. You have ${draftCount} ${draftCount === 1 ? 'task list' : 'task lists'} still in draft - launch ${draftCount === 1 ? 'it' : 'one'} in the Task Lists area, or untick the box above and write the tasks here.`
-                      : 'There are no task lists to reuse. Untick the box above to write the tasks here.'}
-                  </div>
-                )}
-              </div>
-            </div>
+        {studyIsReadOnly ? (
+          <ReadOnlyStudyContent items={steps} noun="task" />
+        ) : showChooser ? (
+          <div className="mb-4">
+            <StudySourcePicker
+              studies={launchedStudies}
+              draftCount={draftCount}
+              loading={loading}
+              fetchError={fetchError}
+              onRetry={() => setRetryCount((count) => count + 1)}
+              onChoose={async (studyId) => {
+                const failure = await onCopyFromStudy(studyId);
+                if (!failure) setChooserOpen(false);
+                return failure;
+              }}
+              onCancel={copiedFromId && chooserOpen ? () => setChooserOpen(false) : undefined}
+              currentUserId={currentUserId}
+              noun="task"
+              setNoun="task list"
+              idPrefix="task"
+            />
           </div>
         ) : (
           <>
@@ -350,12 +366,6 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 />
               </div>
             </div>
-
-            {validationErrors.inline_study_steps && (
-              <div className="alert alert-danger py-2" style={{ fontSize: '0.875rem' }}>
-                {validationErrors.inline_study_steps}
-              </div>
-            )}
 
             <QuestionList
               items={steps}

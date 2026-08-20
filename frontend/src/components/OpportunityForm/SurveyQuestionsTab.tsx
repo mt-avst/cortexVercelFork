@@ -15,6 +15,10 @@ import {
 } from '../../shared/firsthand/survey-authoring';
 import DurationEstimate from './DurationEstimate';
 import QuestionList from './QuestionList';
+import ReadOnlyStudyContent from './ReadOnlyStudyContent';
+import StudyProvenanceNote from './StudyProvenanceNote';
+import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
+import StudySourcePicker from './StudySourcePicker';
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -37,7 +41,15 @@ export type InlineSurveyFormFields = {
   inline_survey_duration_auto?: boolean;
   inline_survey_consent_text?: string;
   inline_survey_questions?: WithClientId<SurveyQuestion>[];
-  reuse_existing_survey?: boolean;
+  /**
+   * Where the content came from, replacing `reuse_existing_survey`. Shared with
+   * the task-list twin: only one authoring surface renders at a time, so a
+   * per-surface flag could only ever disagree with its counterpart.
+   */
+  study_source?: StudySourceMode;
+  copied_from_study_id?: string;
+  copied_from_title?: string;
+  copied_from_at?: string;
 };
 
 /**
@@ -69,9 +81,14 @@ interface SurveyQuestionsTabProps {
   /** Questions are an array, which handleInputChange's scalar signature cannot carry. */
   handleQuestionsChange: (questions: WithClientId<SurveyQuestion>[]) => void;
   /**
-   * True when the opportunity already points at a set of questions. Hides the
-   * "reuse an existing set instead" tickbox: swapping which set an opportunity
-   * points at is not this form's job once it points at one.
+   * True when the opportunity already has questions of its own. Hides the
+   * source choice: "where should this content come from" has been answered, and
+   * the answer is "it is already here".
+   *
+   * The caller passes FALSE when the linked study is MISSING, deliberately. A
+   * dangling link is not a set of questions, and the author needs the choice
+   * back in order to repair it - authoring content is what makes the save mint
+   * a replacement.
    *
    * NOT the same question as whether those questions may be authored here - see
    * studyIsReadOnly. The two were one flag, and collapsing them is what made an
@@ -81,9 +98,9 @@ interface SurveyQuestionsTabProps {
   hasLinkedStudy: boolean;
   /**
    * True when the linked questions may not be authored HERE - they belong to
-   * another researcher, or they use a step type this tab cannot represent. Only
-   * then is the picker the right surface; questions this author may change are
-   * loaded into the editor below and saved back to the same study.
+   * another researcher, or they use a step type this tab cannot represent. They
+   * are shown read-only; questions this author may change are loaded into the
+   * editor below and saved back to the same study.
    */
   studyIsReadOnly: boolean;
   /**
@@ -91,6 +108,10 @@ interface SurveyQuestionsTabProps {
    * which case this tab says nothing rather than asserting a second cause.
    */
   readOnlyReason: StudyReadOnlyReason;
+  /** Takes the copy. Resolves to a refusal message, or null when it worked. */
+  onCopyFromStudy: (studyId: string) => Promise<string | null>;
+  /** Decides whether a row reads as "Yours". */
+  currentUserId?: string;
 }
 
 /**
@@ -109,18 +130,39 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   handleQuestionsChange,
   hasLinkedStudy,
   studyIsReadOnly,
-  readOnlyReason
+  readOnlyReason,
+  onCopyFromStudy,
+  currentUserId
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
 
-  const reuseExisting =
-    studyIsReadOnly || Boolean(formData.reuse_existing_survey);
+  const [chooserOpen, setChooserOpen] = useState(false);
+
+  const sourceMode: StudySourceMode = formData.study_source ?? 'blank';
+  const copiedFromId = formData.copied_from_study_id ?? '';
+
+  /**
+   * The source choice is offered only before a study exists, exactly as the
+   * checkbox it replaces was: once an opportunity has one, the question is no
+   * longer "where does this come from" but "what does it say".
+   */
+  const offeringSourceChoice = !hasLinkedStudy && !studyIsReadOnly;
+  const choosingSource = offeringSourceChoice && sourceMode === 'copy';
+
+  /**
+   * The chooser gives way to the editor as soon as a copy has been taken, so
+   * the author lands on their content rather than on the list they just used.
+   * `chooserOpen` is local UI state, not form data: reopening the list must not
+   * discard the provenance of the copy already taken, which is what clearing
+   * `copied_from_study_id` to reopen it would have done.
+   */
+  const showChooser = choosingSource && (!copiedFromId || chooserOpen);
 
   useEffect(() => {
-    if (!reuseExisting) {
+    if (!choosingSource) {
       setLoading(false);
       return;
     }
@@ -141,7 +183,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [retryCount, reuseExisting]);
+  }, [retryCount, choosingSource]);
 
   const questions = formData.inline_survey_questions ?? [];
 
@@ -230,7 +272,8 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           <div className="alert alert-info py-2 px-3 mb-4" style={{ fontSize: '0.875rem' }}>
             These questions belong to another researcher, so they are not
             editable here - and the Task Lists area applies the same rule. Ask
-            their owner to change them, or pick a different set below.
+            their owner to change them, or create a new opportunity and start
+            from a copy of them.
           </div>
         )}
 
@@ -242,98 +285,66 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
           </div>
         )}
 
-        {!hasLinkedStudy && (
-          <div className="form-check mb-4">
-            <input
-              className="form-check-input"
-              type="checkbox"
-              id="reuse_existing_survey"
-              checked={Boolean(formData.reuse_existing_survey)}
-              onChange={(e) =>
-                handleInputChange('reuse_existing_survey', e.target.checked)
-              }
-            />
-            <label className="form-check-label" htmlFor="reuse_existing_survey">
-              Reuse an existing set of questions instead of writing them here
-            </label>
+        {offeringSourceChoice && (
+          <StudySourceChoice
+            noun="question"
+            idPrefix="survey"
+            value={sourceMode}
+            onChange={(mode) => {
+              // Switching mode is never destructive: the questions already
+              // written stay written, and the provenance of a copy already
+              // taken stays recorded. Only which surface renders changes.
+              setChooserOpen(false);
+              handleInputChange('study_source', mode);
+            }}
+            copyLabel="Start from an existing set of questions"
+          />
+        )}
+
+        {copiedFromId && !studyIsReadOnly && (
+          <StudyProvenanceNote
+            title={formData.copied_from_title || null}
+            copiedAt={formData.copied_from_at}
+            noun="question"
+            onChooseAnother={
+              choosingSource && !showChooser ? () => setChooserOpen(true) : undefined
+            }
+          />
+        )}
+
+        {/* Rendered ABOVE the three-way branch, not inside the editor arm.
+            The copy-mode message this can carry - "Choose a question to start from,
+            or switch to writing them here" - is set in exactly the state where
+            the CHOOSER is on screen, so rendering it only alongside the editor
+            made it unreachable: the author was routed to this step by the error
+            summary and landed on a list with no error text on it. */}
+        {validationErrors.inline_survey_questions && (
+          <div className="validation-error mb-2" role="alert">
+            {validationErrors.inline_survey_questions}
           </div>
         )}
 
-        {reuseExisting ? (
-          <div className="row">
-            <div className="col-12 col-md-8">
-              <div className="form-group mb-4">
-                <label
-                  htmlFor="survey_firsthand_study_id"
-                  className="form-label mb-2"
-                  style={{ fontSize: '1rem', fontWeight: '600' }}
-                >
-                  Existing questions *
-                </label>
-
-                {loading && (
-                  <div className="text-muted" style={{ fontSize: '0.875rem' }}>
-                    <span
-                      className="spinner-border spinner-border-sm me-2"
-                      role="status"
-                      aria-hidden="true"
-                    />
-                    Loading questions...
-                  </div>
-                )}
-
-                {!loading && fetchError && (
-                  <div className="alert alert-warning py-2 px-3 mb-2">
-                    <span className="me-2">{fetchError}</span>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      onClick={() => setRetryCount((count) => count + 1)}
-                    >
-                      Try again
-                    </button>
-                  </div>
-                )}
-
-                {!loading && !fetchError && (
-                  <>
-                    <select
-                      className={`form-control form-select ${
-                        validationErrors.firsthand_study_id ? 'is-invalid' : ''
-                      }`}
-                      id="survey_firsthand_study_id"
-                      value={formData.firsthand_study_id || ''}
-                      onChange={(e) =>
-                        handleInputChange('firsthand_study_id', e.target.value)
-                      }
-                    >
-                      <option value="">Select questions...</option>
-                      {selectableStudies.map((study) => (
-                        <option key={study.id} value={study.id}>
-                          {study.title}
-                        </option>
-                      ))}
-                    </select>
-                    {/* A draft set cannot be selected but can be launched, so
-                        saying how many are waiting beats an empty dropdown that
-                        reads as "you have none". */}
-                    {selectableStudies.length === 0 && (
-                      <div className="form-text mt-2">
-                        {draftCount > 0
-                          ? `No launched questions yet. ${draftCount} in draft - launch one in the Task Lists area, or write questions here instead.`
-                          : 'No existing questions yet. Write them here instead.'}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {validationErrors.firsthand_study_id && (
-                  <div className="invalid-feedback d-block">
-                    {validationErrors.firsthand_study_id}
-                  </div>
-                )}
-              </div>
-            </div>
+        {studyIsReadOnly ? (
+          <ReadOnlyStudyContent items={questions} noun="question" />
+        ) : showChooser ? (
+          <div className="mb-4">
+            <StudySourcePicker
+              studies={selectableStudies}
+              draftCount={draftCount}
+              loading={loading}
+              fetchError={fetchError}
+              onRetry={() => setRetryCount((count) => count + 1)}
+              onChoose={async (studyId) => {
+                const failure = await onCopyFromStudy(studyId);
+                if (!failure) setChooserOpen(false);
+                return failure;
+              }}
+              onCancel={copiedFromId && chooserOpen ? () => setChooserOpen(false) : undefined}
+              currentUserId={currentUserId}
+              noun="question"
+              setNoun="set of questions"
+              idPrefix="survey"
+            />
           </div>
         ) : (
           <>
@@ -357,12 +368,6 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                 />
               </div>
             </div>
-
-            {validationErrors.inline_survey_questions && (
-              <div className="validation-error mb-2" role="alert">
-                {validationErrors.inline_survey_questions}
-              </div>
-            )}
 
             <QuestionList
               items={questions}

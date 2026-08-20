@@ -165,7 +165,7 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 ### For researcher admins
 
 - **Admin dashboard:** Counts (opportunities, bookings, participants, available slots); table of opportunities with stats (sessions, bookings, clicks for poll/survey).
-- **CRUD opportunities:** Create, edit, delete, duplicate; set type, title, purpose, description, duration, status; for poll/survey/question set an external link; for unmoderated author a Task List on the form (or reuse an existing one).
+- **CRUD opportunities:** Create, edit, delete, duplicate; set type, title, purpose, description, duration, status; for poll/survey/question set an external link; for unmoderated author a Task List on the form (or start from a copy of an existing one).
 - **Sessions:** Add, edit, delete sessions (start/end, capacity, location/meeting link); sessions with existing bookings require care when editing.
 - **Publish workflow:** Save as draft or publish; draft only visible to admins.
 - **Analytics (per opportunity):** For poll/survey/unmoderated (and relevant types): views/actions, time-series, conversion; period 7/14/30 days. Admin/owner only. Unmoderated additionally has per-session review — recording playback and transcript (answers are spoken, so no typed responses are stored).

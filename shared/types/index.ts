@@ -437,6 +437,22 @@ export interface FirstHandStudy {
   // stay editable by any admin until the first save claims them. See
   // canWriteStudy in backend/src/firsthand/studies-repository.ts.
   owner_user_id?: string | null;
+  /**
+   * The study whose content was copied to create this one. Authoring
+   * provenance only, never an authorisation key - see migration 0012. Present
+   * on every study read; null means authored from blank, or the study
+   * predates copy-on-select. Write-once at create: nothing can set or clear it
+   * on an existing study, which is why UpdateStudyInput does not carry it.
+   */
+  copied_from_study_id?: string | null;
+  /**
+   * How many authored steps the study has, excluding the machine-appended
+   * `end` marker. LIST-ONLY: returned by GET /api/firsthand/studies so the
+   * study picker can show a count without loading every study's steps, and
+   * deliberately absent from the single-study read, which already returns the
+   * steps themselves.
+   */
+  authored_step_count?: number;
   created_at?: string;
   updated_at?: string;
 }

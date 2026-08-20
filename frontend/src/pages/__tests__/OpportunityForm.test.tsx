@@ -44,8 +44,13 @@ vi.mock('../../api/client', () => ({
   updateOpportunity: vi.fn(),
   getOpportunity: vi.fn(),
   getSessions: vi.fn().mockResolvedValue([]),
+  // Carries BOTH kinds, deliberately: a fixture with no `kind` key at all makes
+  // `undefined !== 'survey'` pass whether or not the task-list filter is even
+  // there, so removing `&& s.kind !== 'survey'` from FirstHandStudyTab could not
+  // fail against a single kind-less study.
   getFirstHandStudies: vi.fn().mockResolvedValue([
-    { id: 'study_demo', title: 'Demo Study', status: 'launched' },
+    { id: 'study_demo', title: 'Demo Study', status: 'launched', kind: 'recorded' },
+    { id: 'study_demo_survey', title: 'Demo Survey', status: 'launched', kind: 'survey' },
   ]),
 }));
 
@@ -247,14 +252,28 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
   // recorded study told participants a length nobody had chosen, above a consent
   // button. These two pin the payload: it comes from the study's own field, and
   // an untouched field sends nothing at all.
-  // Typed rather than `as any`: this file's per-file suppression budget for
-  // no-explicit-any is full, and one more would fail the repo lint.
+  // Typed rather than `as any`: an untyped payload read can silently survive a
+  // renamed or dropped field. Covers every shape this file's tests read off a
+  // create/update body - not the full CreateOpportunityRequest, just the
+  // fields these tests assert on.
+  type InlineContentPayload = {
+    target_url?: string;
+    consent_text?: string;
+    estimated_duration_minutes?: number;
+    steps?: Array<Record<string, unknown>>;
+    copied_from_study_id?: string;
+  };
   type SubmittedPayload = {
     default_duration_minutes?: number;
-    inline_study?: { estimated_duration_minutes?: number };
+    firsthand_study_id?: string;
+    inline_study?: InlineContentPayload;
+    inline_survey?: InlineContentPayload;
   };
   const submittedPayload = (): SubmittedPayload =>
     vi.mocked(createOpportunity).mock.calls[0][0] as unknown as SubmittedPayload;
+  /** The same shape, off an `updateOpportunity` call rather than a create. */
+  const updatedPayload = (callIndex = 0): SubmittedPayload =>
+    vi.mocked(updateOpportunity).mock.calls[callIndex][1] as unknown as SubmittedPayload;
 
   /**
    * Open every collapsed card. B2 collapses authored tasks by default, so their
@@ -447,8 +466,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
     });
 
-    const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
-    expect(payload.inline_study.target_url).toBe('https://example.com/checkout');
+    const payload = submittedPayload();
+    expect(payload.inline_study?.target_url).toBe('https://example.com/checkout');
   });
 
   // The failure this closes: a Starting URL typed the way people say addresses
@@ -489,8 +508,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
     });
 
-    const normalisedPayload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
-    expect(normalisedPayload.inline_study.target_url).toBe(
+    const normalisedPayload = submittedPayload();
+    expect(normalisedPayload.inline_study?.target_url).toBe(
       'https://example.com/checkout'
     );
   });
@@ -538,10 +557,82 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
 
-  it('does not send a stale task list id alongside tasks authored after unticking reuse', async () => {
-    // The sequence that silently dropped authored tasks: tick reuse, pick a
-    // study, change your mind, untick, write tasks. The id survived in state
-    // and won on the backend, discarding everything typed.
+  it('refuses to copy a task list this form cannot round-trip, and hydrates nothing', async () => {
+    // The documented case: steps carrying DIFFERENT target_urls. toStudySteps
+    // would stamp one study-level URL onto every step on the next save, moving
+    // a step to a page it was never written against - while a screen recording
+    // is running.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(
+      linkedStudy({
+        steps: [
+          {
+            step_id: 'study_demo_step_1',
+            order: 1,
+            type: 'instruction',
+            prompt: 'Open the basket',
+            target_url: 'https://shop.test/basket'
+          },
+          {
+            step_id: 'study_demo_step_2',
+            order: 2,
+            type: 'instruction',
+            prompt: 'Now check out',
+            target_url: 'https://shop.test/checkout'
+          }
+        ]
+      })
+    );
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+
+    expect(
+      await screen.findByText(
+        /use something this form cannot show, so copying them here would drop part of them/i
+      )
+    ).toBeInTheDocument();
+    // Nothing was hydrated: no provenance note, and the chooser is still on
+    // screen rather than the editor.
+    expect(screen.queryByText(/Copied from/i)).toBeNull();
+    expect(screen.getByTestId('task-source-list')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/What the participant sees/i)).toBeNull();
+  });
+
+  it('sends a copied task list as content, never as the id it was copied from', async () => {
+    // The sequence the link path made dangerous, now that it takes a copy: pick
+    // an existing task list, then save. Sending `firsthand_study_id` here would
+    // relink the opportunity to somebody else's study - the exact behaviour B3
+    // removes - and the backend refuses it alongside `inline_study` anyway.
+    //
+    // THREE steps, and the whole array is asserted below. A single-item fixture
+    // cannot tell a copy of the right list from a copy of one item, nor catch a
+    // reordering.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(
+      linkedStudy({
+        steps: [
+          { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket' },
+          {
+            step_id: 'study_demo_step_2',
+            order: 2,
+            type: 'open_text',
+            prompt: 'What did you try first?'
+          },
+          {
+            step_id: 'study_demo_step_3',
+            order: 3,
+            type: 'single_choice',
+            prompt: 'Which delivery would you pick?',
+            options: ['Standard', 'Next day'],
+            is_required: true
+          }
+        ]
+      })
+    );
     renderForm();
     selectType('unmoderated');
 
@@ -554,31 +645,33 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
-    const reuse = await screen.findByLabelText(/Reuse an existing task list/i);
-    fireEvent.click(reuse);
-    // Anchored to the picker's own label. `/Task list/i` alone also matches the
-    // reuse checkbox ("Reuse an existing task list..."), and while the picker is
-    // still loading that checkbox is the ONLY match - so the query silently
-    // returned it, no study was ever selected, and the assertion below passed
-    // against a build with the guard removed.
-    // Queried by ROLE, not by label text: the checkbox label reads "Reuse an
-    // existing task list...", so any /task list/ label matcher - anchored or
-    // not - also matches the checkbox, and `findBy*` returns it. That is how
-    // this test was silently disarmed. Role separates them by element type.
-    // The option must be awaited too: selecting a value the select does not yet
-    // carry is a no-op, which left the picker empty and the assertion vacuous.
-    const picker = (await screen.findByRole('combobox', {
-      name: /Existing task list/i
-    })) as HTMLSelectElement;
-    await screen.findByRole('option', { name: /Demo Study/i });
-    fireEvent.change(picker, { target: { value: 'study_demo' } });
-    expect(picker.value).toBe('study_demo');
-    fireEvent.click(reuse);
+    // Queried by ROLE. "Start from an existing task list" is also the wording of
+    // prose on this tab, and a label matcher alone has silently returned the
+    // wrong element here before.
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
-    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
-      target: { value: 'Find the export button' }
-    });
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+
+    // Waited on BEFORE opening the cards. openAllCards clicks every collapsed
+    // button, and while the chooser is still on screen that includes its
+    // Preview toggles - so without this the helper expands a preview instead,
+    // and the failure reads as a missing editor rather than as a race.
+    await screen.findByText(/Copied from/i);
+
+    // The copied tasks are in the editor, editable. Asserting the payload alone
+    // would pass against a copy that never reached the surface the author is
+    // about to save from.
+    await openAllCards();
+    const prompts = screen.getAllByLabelText(
+      /What the participant sees/i
+    ) as HTMLTextAreaElement[];
+    expect(prompts.map((field) => field.value)).toEqual([
+      'Open the basket',
+      'What did you try first?',
+      'Which delivery would you pick?'
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
 
@@ -586,11 +679,106 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
     });
 
-    const payload = vi.mocked(createOpportunity).mock.calls[0][0] as any;
+    const payload = submittedPayload();
     expect(payload.firsthand_study_id).toBeUndefined();
-    expect(payload.inline_study.steps).toEqual([
-      { type: 'instruction', prompt: 'Find the export button' }
+    // The whole array, in order, carrying the fields a shallow or lossy copy
+    // would flatten: the options and the required flag.
+    expect(payload.inline_study?.steps).toEqual([
+      { type: 'instruction', prompt: 'Open the basket' },
+      { type: 'open_text', prompt: 'What did you try first?' },
+      {
+        type: 'single_choice',
+        prompt: 'Which delivery would you pick?',
+        options: ['Standard', 'Next day'],
+        is_required: true
+      }
     ]);
+    expect(payload.inline_study?.copied_from_study_id).toBe('study_demo');
+    // The source's stored duration is carried rather than re-derived: a copy of
+    // a decision is still a decision. linkedStudy() stores 12; the automatic
+    // estimate for three tasks is 9, so a re-derivation is visible here.
+    expect(payload.inline_study?.estimated_duration_minutes).toBe(12);
+  });
+
+  it('carries the source starting URL into the field and into the payload', async () => {
+    // getPrimaryTargetUrl reads it off the STORED steps; copiedRecordedFields
+    // has to write it into inline_study_target_url or a copied task list loses
+    // its starting page - shown as a blank field, and sent as no page at all.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(
+      linkedStudy({
+        steps: [
+          {
+            step_id: 'study_demo_step_1',
+            order: 1,
+            type: 'instruction',
+            prompt: 'Open the basket',
+            target_url: 'https://shop.test/basket'
+          }
+        ]
+      })
+    );
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+    await screen.findByText(/Copied from/i);
+
+    expect(
+      (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
+    ).toBe('https://shop.test/basket');
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => {
+      expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+    });
+
+    const payload = submittedPayload();
+    expect(payload.inline_study?.target_url).toBe('https://shop.test/basket');
+  });
+
+  it('keeps a copied task list when the author switches back to writing their own', async () => {
+    // Switching source must not be destructive. It used to be a checkbox whose
+    // untick cleared the picked study; the content a copy has already put in
+    // the editor is the author's, and throwing it away because they changed
+    // which radio is selected would be the one thing this form must never do.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+    await screen.findByText(/Copied from/i);
+
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Create tasks for this opportunity/i })
+    );
+
+    await openAllCards();
+    expect(
+      (screen.getByLabelText(/What the participant sees/i) as HTMLTextAreaElement).value
+    ).toBe('What did you try first?');
   });
 
   it('offers inline authoring when editing an unmoderated draft that has no task list yet', async () => {
@@ -603,7 +791,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       default_duration_minutes: 30,
       firsthand_study_id: null,
       participant_type_required: 'any'
-    } as any);
+    } as never);
 
     render(
       <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
@@ -615,13 +803,68 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
-    // Not locked to the picker: the reuse tickbox is offered and authoring is
-    // the default, exactly as on create.
+    // Not locked to a chooser: the source choice is offered and writing them
+    // here is the default, exactly as on create.
     expect(
-      await screen.findByLabelText(/Reuse an existing task list/i)
-    ).toBeInTheDocument();
+      await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /Start from an existing task list/i })
+    ).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: 'Add task' }));
     expect(screen.getByLabelText(/What the participant sees/i)).toBeInTheDocument();
+  });
+
+  it('offers Save Changes as soon as a copy is taken in edit mode, before anything else changes', async () => {
+    // `hasChanges()` compares `study_source` and `copied_from_study_id`
+    // against the baseline `loadOpportunity` seeded - both 'blank'/'' for a
+    // draft with no study yet. Dropping either clause from the comparison
+    // would leave the Save button hidden for exactly this action.
+    vi.mocked(getOpportunity).mockResolvedValueOnce({
+      id: 'opp-1',
+      type: 'unmoderated',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the tasks were written, which is allowed',
+      status: 'draft',
+      default_duration_minutes: 30,
+      firsthand_study_id: null,
+      participant_type_required: 'any'
+    } as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    // Phase 1: the `study_source` clause in isolation. Choosing the radio
+    // alone changes `study_source` from 'blank' to 'copy' while
+    // `copied_from_study_id` is still '' either side - nothing has been
+    // picked yet - so only the `study_source` clause can be what shows this.
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+
+    // Phase 2: the `copied_from_study_id` clause in isolation. Taking a copy
+    // sets both fields, but switching back to "Create tasks" returns
+    // `study_source` to 'blank' - equal to the baseline again - while
+    // `copied_from_study_id` stays set (switching source is never
+    // destructive). Only the `copied_from_study_id` clause can be what keeps
+    // Save Changes showing here.
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+    await screen.findByText(/Copied from/i);
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Create tasks for this opportunity/i })
+    );
+
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
   it('keeps the authored tasks editable after saving, and saves them again in place', async () => {
@@ -648,10 +891,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // the save minted, because the form now RE-READS instead of declaring that
     // what it sent is what is stored. That re-read is the thing that makes the
     // Save button's disappearance mean something.
-    // `as never` rather than `as any`: the suppression file pins the count of
-    // no-explicit-any per file, so one more here surfaces every previously
-    // suppressed error in this file at once and the lint failure reads as
-    // something else entirely.
+    // `as never` rather than `as any`: the mock's declared return type is not
+    // the whole Opportunity shape, and `never` sidesteps that without opening
+    // the no-explicit-any lint rule up for this file.
     vi.mocked(getOpportunity)
       .mockResolvedValueOnce(draft as never)
       .mockResolvedValue({ ...draft, firsthand_study_id: 'study_created_on_save' } as never);
@@ -662,7 +904,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       id: 'opp-3',
       type: 'unmoderated',
       firsthand_study_id: 'study_created_on_save'
-    } as any);
+    } as never);
 
     render(
       <MemoryRouter initialEntries={['/admin/opportunities/opp-3/edit']}>
@@ -686,16 +928,16 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     // First save authored the study.
     expect(
-      (vi.mocked(updateOpportunity).mock.calls[0][1] as any).inline_study
+      updatedPayload().inline_study
     ).toBeDefined();
 
-    // The reuse tickbox goes: a study is linked now, so swapping which one this
-    // opportunity points at is no longer this form's job. Waited on rather than
-    // asserted straight away - updateOpportunity resolving is not the same
+    // The source choice goes: this opportunity has its own task list now, so
+    // "where does the content come from" has been answered. Waited on rather
+    // than asserted straight away - updateOpportunity resolving is not the same
     // moment as the state it settles being rendered.
     await vi.waitFor(() =>
       expect(
-        screen.queryByLabelText(/Reuse an existing task list/i)
+        screen.queryByRole('radio', { name: /Start from an existing task list/i })
       ).not.toBeInTheDocument()
     );
 
@@ -706,9 +948,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       (screen.getByLabelText(/What the participant sees/i) as HTMLTextAreaElement).value
     ).toBe('Find the export button');
-    expect(
-      screen.queryByText('-- Select a launched task list --')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId('task-source-list')).not.toBeInTheDocument();
 
     // The point of A1: a LATER save carries the tasks AGAIN, so the edit lands
     // on the same study. Asserting only that the editor is still rendered would
@@ -719,7 +959,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       id: 'opp-3',
       type: 'unmoderated',
       firsthand_study_id: 'study_created_on_save'
-    } as any);
+    } as never);
 
     fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     fireEvent.change(await screen.findByLabelText(/^Title/i), {
@@ -738,8 +978,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(2);
     });
 
-    const secondPayload = vi.mocked(updateOpportunity).mock.calls[1][1] as any;
-    expect(secondPayload.inline_study.steps).toEqual([
+    const secondPayload = updatedPayload(1);
+    expect(secondPayload.inline_study?.steps).toEqual([
       { type: 'instruction', prompt: 'Find the export button' }
     ]);
     // Exactly one of the two, never both - the backend refuses a payload
@@ -764,7 +1004,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       default_duration_minutes: 30,
       firsthand_study_id: 'study_demo',
       participant_type_required: 'any'
-    } as any);
+    } as never);
 
     render(
       <MemoryRouter initialEntries={['/admin/opportunities/opp-2/edit']}>
@@ -781,26 +1021,365 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       ((await screen.findByLabelText(/What the participant sees/i)) as HTMLTextAreaElement)
         .value
     ).toBe('What did you try first?');
+    expect(screen.queryByTestId('task-source-list')).not.toBeInTheDocument();
     expect(
-      screen.queryByText('-- Select a launched task list --')
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByLabelText(/Reuse an existing task list/i)
+      screen.queryByRole('radio', { name: /Start from an existing task list/i })
     ).not.toBeInTheDocument();
   });
 
-  it('still offers the launched-task-list picker when reuse is ticked', async () => {
+  it('offers the launched task lists to start from when copy is chosen', async () => {
     renderForm();
     selectType('unmoderated');
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    fireEvent.click(await screen.findByLabelText(/Reuse an existing task list/i));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+
+    // Queried by role: the study's title now also appears, visually hidden,
+    // inside both row buttons' accessible names, so a bare text match is
+    // ambiguous.
+    expect(await screen.findByRole('button', { name: /^Start from this Demo Study$/ })).toBeInTheDocument();
+    expect(vi.mocked(getFirstHandStudies)).toHaveBeenCalled();
+  });
+
+  /**
+   * The `kind` half of the chooser's filter. A survey-shaped study offered
+   * here would be refused by the API on save, naming a rule the author never
+   * saw - the same failure the survey twin's own filter exists to prevent.
+   */
+  it('excludes survey-kind studies from the task-list chooser', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
 
     expect(
-      await screen.findByText('-- Select a launched task list --')
+      await screen.findByRole('button', { name: /^Start from this Demo Study$/ })
     ).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Demo Study' })).toBeInTheDocument();
-    expect(vi.mocked(getFirstHandStudies)).toHaveBeenCalled();
+    expect(
+      screen.queryByRole('button', { name: /^Start from this Demo Survey$/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('does not fetch the task lists until the author asks to start from one', async () => {
+    // The default path is authoring, and it should cost nothing. This was true
+    // of the checkbox and is easy to lose when the chooser stops being the
+    // read-only branch's fallback.
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    await screen.findByRole('radio', { name: /Create tasks for this opportunity/i });
+
+    expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Provenance is write-once at create, so a copy taken on one authoring
+   * surface must not survive a type switch onto the other - otherwise a save
+   * stamps a task list as a copy of a survey it never came from, permanently.
+   * Written for BOTH directions, plus a waypoint with no authoring surface at
+   * all, because the clearing logic runs once per type change and any one
+   * arm missing it reintroduces the defect on that arm alone.
+   */
+  describe('switching the opportunity type clears a copied source', () => {
+    it('clears the copy and its provenance when switching from a copied task list to a native survey', async () => {
+      vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+      renderForm();
+      selectType('unmoderated');
+
+      fireEvent.change(screen.getByLabelText(/^Title/i), {
+        target: { value: 'Checkout flow walkthrough' }
+      });
+      fireEvent.change(screen.getByLabelText(/purpose/i), {
+        target: { value: 'Find out where people stall in the checkout flow' }
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+      fireEvent.click(
+        await screen.findByRole('radio', { name: /Start from an existing task list/i })
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+      await screen.findByText(/Copied from/i);
+
+      // The switch itself.
+      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      selectType('survey');
+      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+
+      fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
+
+      // The blank arm is selected, not the copy arm, and there is no leftover
+      // provenance note naming a task list this survey never came from.
+      expect(
+        await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+      ).toBeChecked();
+      expect(screen.queryByText(/Copied from/i)).toBeNull();
+
+      fireEvent.click(screen.getByRole('button', { name: /^Add question$/i }));
+      fireEvent.change(screen.getByLabelText(/What the participant is asked/i), {
+        target: { value: 'How easy was checkout?' }
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+      await vi.waitFor(() => {
+        expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+      });
+
+      const payload = submittedPayload();
+      // Asserted on the PAYLOAD, not just the rendered radio: state can look
+      // right while the field it is derived from is still carrying the old id.
+      expect(payload.inline_survey?.copied_from_study_id).toBeUndefined();
+    });
+
+    it('clears the copy and its provenance when switching from a copied set of questions to unmoderated', async () => {
+      vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy({ kind: 'survey' }));
+      renderForm();
+      selectType('survey');
+      fireEvent.click(screen.getByLabelText(/In Cortex/i));
+
+      fireEvent.change(screen.getByLabelText(/^Title/i), {
+        target: { value: 'Developer experience pulse' }
+      });
+      fireEvent.change(screen.getByLabelText(/purpose/i), {
+        target: { value: 'Ten short questions about the tools you use every day' }
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Questions/i }));
+      fireEvent.click(
+        await screen.findByRole('radio', { name: /Start from an existing set of questions/i })
+      );
+      // "Demo Study" is recorded-kind and excluded from this chooser; "Demo
+      // Survey" is the survey-kind entry the default fixture carries.
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Survey$/ }));
+      await screen.findByText(/Copied from/i);
+
+      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      selectType('unmoderated');
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+
+      expect(
+        await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+      ).toBeChecked();
+      expect(screen.queryByText(/Copied from/i)).toBeNull();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+      fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+        target: { value: 'Find the export button' }
+      });
+      fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+      await vi.waitFor(() => {
+        expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
+      });
+
+      const payload = submittedPayload();
+      expect(payload.inline_study?.copied_from_study_id).toBeUndefined();
+    });
+
+    it('keeps the copy cleared when the type change passes through a waypoint with no authoring surface', async () => {
+      // `question`, `test` and `interview` have no authoring surface at all, so
+      // a copy taken before passing through one must not silently reappear on
+      // the other side. Each arm of `handleInputChange`'s type switch has to
+      // clear it independently, which is exactly what a "poll/survey arm only"
+      // fix would miss.
+      vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+      renderForm();
+      selectType('unmoderated');
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+      fireEvent.click(
+        await screen.findByRole('radio', { name: /Start from an existing task list/i })
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+      await screen.findByText(/Copied from/i);
+
+      fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+      selectType('question');
+      selectType('unmoderated');
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+
+      expect(
+        await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+      ).toBeChecked();
+      expect(screen.queryByText(/Copied from/i)).toBeNull();
+    });
+  });
+
+  describe('choosing a different task list after one is already copied in', () => {
+    it('reopens the chooser without losing the content already copied in', async () => {
+      vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+      renderForm();
+      selectType('unmoderated');
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+      fireEvent.click(
+        await screen.findByRole('radio', { name: /Start from an existing task list/i })
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+      await screen.findByText(/Copied from/i);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /Choose a different set of tasks/i })
+      );
+
+      // The chooser is back...
+      expect(await screen.findByTestId('task-source-list')).toBeInTheDocument();
+      // ...and the note (and the content it describes) is still intact, not
+      // discarded just because the author is looking at the list again.
+      expect(screen.getByText(/Copied from/i)).toBeInTheDocument();
+
+      // The way back out: closes the chooser again without a new pick.
+      fireEvent.click(
+        screen.getByRole('button', { name: /Keep the task list already copied in/i })
+      );
+      expect(screen.queryByTestId('task-source-list')).not.toBeInTheDocument();
+      expect(screen.getByText(/Copied from/i)).toBeInTheDocument();
+    });
+
+    it('leaves the chooser open when a reopened choice is refused', async () => {
+      // A refused copy must not silently close the very list the author is
+      // choosing from.
+      vi.mocked(getFirstHandStudy)
+        .mockResolvedValueOnce(linkedStudy())
+        .mockResolvedValueOnce(
+          linkedStudy({
+            steps: [
+              { step_id: 's1', order: 1, type: 'instruction', prompt: 'A', target_url: 'https://a.test' },
+              { step_id: 's2', order: 2, type: 'instruction', prompt: 'B', target_url: 'https://b.test' }
+            ]
+          })
+        );
+      vi.mocked(getFirstHandStudies).mockResolvedValue([
+        { id: 'study_demo', title: 'Demo Study', status: 'launched', kind: 'recorded' }
+      ] as never);
+      renderForm();
+      selectType('unmoderated');
+
+      fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+      fireEvent.click(
+        await screen.findByRole('radio', { name: /Start from an existing task list/i })
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+      await screen.findByText(/Copied from/i);
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /Choose a different set of tasks/i })
+      );
+      fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+
+      expect(
+        await screen.findByText(
+          /use something this form cannot show, so copying them here would drop part of them/i
+        )
+      ).toBeInTheDocument();
+      // Still open: the author is left where they were, not bounced back to
+      // the note as though the refused pick had worked.
+      expect(screen.getByTestId('task-source-list')).toBeInTheDocument();
+    });
+  });
+
+  it('refuses when the source cannot even be loaded, naming the reason', async () => {
+    vi.mocked(getFirstHandStudy).mockRejectedValueOnce(new Error('network down'));
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+
+    expect(
+      await screen.findByText(/those task list could not be loaded, so nothing was copied/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Copied from/i)).toBeNull();
+  });
+
+  it('does not offer a draft task list as a copy source', async () => {
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_demo', title: 'Demo Study', status: 'launched', kind: 'recorded' },
+      { id: 'study_draft', title: 'Unfinished draft list', status: 'draft', kind: 'recorded' }
+    ] as never);
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+
+    expect(
+      await screen.findByRole('button', { name: /^Start from this Demo Study$/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Start from this Unfinished draft list$/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the copy-mode publish message where the chooser actually is', async () => {
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+    fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    // Visible, not merely present in validationErrors: the chooser is the
+    // whole tab body in copy mode with nothing picked yet, so the message has
+    // to render ABOVE it or it is unreachable.
+    const message = await screen.findByText(
+      /Choose a task list to start from, or switch to writing the tasks here/i
+    );
+    expect(message).toBeVisible();
+    expect(screen.getByTestId('task-source-list')).toBeInTheDocument();
+  });
+
+  it('clears a stale task-list validation error once a copy is taken', async () => {
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(linkedStudy());
+    renderForm();
+    selectType('unmoderated');
+
+    fireEvent.change(screen.getByLabelText(/^Title/i), {
+      target: { value: 'Checkout flow walkthrough' }
+    });
+    fireEvent.change(screen.getByLabelText(/purpose/i), {
+      target: { value: 'Find out where people stall in the checkout flow' }
+    });
+    fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    expect(
+      await screen.findByText(/Add at least one task before publishing/i)
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole('radio', { name: /Start from an existing task list/i })
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+    await screen.findByText(/Copied from/i);
+
+    expect(
+      screen.queryByText(/Add at least one task before publishing/i)
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -1071,7 +1650,7 @@ describe('OpportunityForm - a refused action always says so', () => {
       default_duration_minutes: 30,
       meeting_location_optional: 'Zoom',
       participant_type_required: 'any',
-    } as any);
+    } as never);
 
     render(
       <MemoryRouter initialEntries={['/admin/opportunities/opp-9/edit']}>

@@ -53,6 +53,13 @@ export type StudyRecord = Study & {
   // Null for a study created before owners existed and not claimable from an
   // opportunity by migration 0007. See canWriteStudy for what that permits.
   owner_user_id: string | null;
+  /**
+   * The study this one was copied from. Authoring provenance only, never an
+   * authorisation key - see migration 0012. Written once at create; null means
+   * authored from blank, or the study predates copy-on-select. Not on
+   * UpdateStudyInput: see the comment there for why it is write-once.
+   */
+  copied_from_study_id: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -106,6 +113,13 @@ export type CreateStudyInput = {
   // The authoring user. Optional in the type only so a caller with no user
   // context (a script, a fixture) can still insert; every HTTP path passes one.
   owner_user_id?: string | null;
+  /**
+   * The study this one was copied from, taken from the picker at the moment of
+   * copy-on-select rather than a live link. See migration 0012. Optional and
+   * defaults to null via `?? null` in createStudy - most callers (a blank
+   * study, every pre-B3 fixture) have nothing to record here.
+   */
+  copied_from_study_id?: string | null;
   steps: StudyStep[];
 };
 
@@ -120,6 +134,10 @@ export type UpdateStudyInput = {
   // Superadmin-only reassignment. Rejected as forbidden for anyone else, and
   // deliberately not nullable - see updateStudy.
   owner_user_id?: string;
+  // No copied_from_study_id here, deliberately. Provenance is write-once at
+  // create - see CreateStudyInput - so there is no in-place edit that should
+  // ever change it, and the dynamic update builder below has nothing to push
+  // it through even if a caller forced one in.
   steps?: StudyStep[];
 };
 
@@ -134,6 +152,7 @@ type StudyRow = {
   status: string;
   kind: string;
   owner_user_id: string | null;
+  copied_from_study_id: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -157,23 +176,38 @@ export function isStudiesPersistenceConfigured() {
   return isPostgresRuntimeConfigured();
 }
 
-export async function listStudies(): Promise<StudyRecord[]> {
+/**
+ * A study as the picker list serves it: every StudyRecord field, plus how many
+ * authored steps it holds. See `authored_step_count` on the row type for why
+ * that count is list-only rather than part of StudyRecord itself.
+ */
+export type StudyListItem = StudyRecord & { authored_step_count: number };
+
+type StudyListRow = StudyRow & { authored_step_count: number };
+
+export async function listStudies(): Promise<StudyListItem[]> {
   if (!isPostgresRuntimeConfigured()) {
     return [];
   }
 
   return withRuntimeDatabaseClient(async (client) => {
-    const result = await client.query<StudyRow>(
+    const result = await client.query<StudyListRow>(
       `
-        SELECT id, title, intro_text, consent_text, brand_name,
-               estimated_duration_minutes, locale, status, kind, owner_user_id,
-               created_at, updated_at
-        FROM studies
-        ORDER BY updated_at DESC, title ASC
+        SELECT s.id, s.title, s.intro_text, s.consent_text, s.brand_name,
+               s.estimated_duration_minutes, s.locale, s.status, s.kind,
+               s.owner_user_id, s.copied_from_study_id, s.created_at, s.updated_at,
+               (SELECT count(*) FILTER (WHERE ss.type <> 'end')
+                FROM study_steps ss
+                WHERE ss.study_id = s.id)::int AS authored_step_count
+        FROM studies s
+        ORDER BY s.updated_at DESC, s.title ASC
       `
     );
 
-    return result.rows.map(mapStudyRow);
+    return result.rows.map((row) => ({
+      ...mapStudyRow(row),
+      authored_step_count: row.authored_step_count
+    }));
   });
 }
 
@@ -254,8 +288,9 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
         `
           INSERT INTO studies (
             id, title, intro_text, consent_text, brand_name,
-            estimated_duration_minutes, locale, status, kind, owner_user_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            estimated_duration_minutes, locale, status, kind, owner_user_id,
+            copied_from_study_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         `,
         [
           studyId,
@@ -267,7 +302,8 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
           input.locale ?? null,
           status,
           input.kind ?? "recorded",
-          input.owner_user_id ?? null
+          input.owner_user_id ?? null,
+          input.copied_from_study_id ?? null
         ]
       );
 
@@ -590,7 +626,7 @@ async function loadStudyWithSteps(
     `
       SELECT id, title, intro_text, consent_text, brand_name,
              estimated_duration_minutes, locale, status, kind, owner_user_id,
-             created_at, updated_at
+             copied_from_study_id, created_at, updated_at
       FROM studies
       WHERE id = $1
     `,
@@ -666,6 +702,7 @@ function mapStudyRow(row: StudyRow): StudyRecord {
     // vocabulary, not offered survey widgets in a runner that cannot draw them.
     kind: row.kind === "survey" ? "survey" : "recorded",
     owner_user_id: row.owner_user_id ?? null,
+    copied_from_study_id: row.copied_from_study_id ?? null,
     created_at: toIsoString(row.created_at),
     updated_at: toIsoString(row.updated_at)
   };
