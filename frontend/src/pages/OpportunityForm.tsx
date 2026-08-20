@@ -18,6 +18,8 @@ import {
 } from '../lib/opportunity-authoring/estimate-duration';
 import {
   authoredStepsOf,
+  copiedRecordedFields,
+  copiedSurveyFields,
   studyRoundTripsCleanly,
   toInlineStudyPayloadStep,
   toInlineStudyStep,
@@ -26,6 +28,7 @@ import {
   type AuthoringKind,
   type StudyReadOnlyReason
 } from '../lib/opportunity-authoring/hydrate-study';
+import type { StudySourceMode } from '../components/OpportunityForm/StudySourceChoice';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -113,9 +116,11 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   participant_type_required: { tab: 2, label: 'Participant Type' },
   participant_type_specific_details: { tab: 2, label: 'Specific Criteria' },
   external_link_optional: { tab: 3, label: 'External Link' },
-  // One key, two controls: the task list picker and the questions picker both
-  // set it. Named for neither, because naming one makes the banner lie on the
-  // other half of the time.
+  // Set on neither authoring surface any more - copy mode sends `inline_*` and
+  // never this id. It survives for the one state that still carries it: a
+  // linked study this author may not change here, which is saved by id. Named
+  // for neither tab, because naming one makes the banner lie on the other half
+  // of the time.
   firsthand_study_id: { tab: 3, label: 'Existing study content' },
   inline_study_target_url: { tab: 3, label: 'Starting URL' },
   inline_study_duration_minutes: { tab: 3, label: 'Estimated completion time' },
@@ -248,6 +253,24 @@ export const getTabsForType = (
   return tabs;
 };
 
+/**
+ * The title of the study a copy came from, or null when it cannot be named.
+ *
+ * Separate from the study read it accompanies, and allowed to fail quietly,
+ * because provenance is not load-bearing: `copied_from_study_id` deliberately
+ * has no foreign key, so the source can have been deleted, archived, or simply
+ * be unreadable. None of that should stop an opportunity opening - it only
+ * changes what the note on screen can say.
+ */
+const resolveSourceTitle = async (studyId: string): Promise<string> => {
+  try {
+    const source = await getFirstHandStudy(studyId);
+    return source.study.title;
+  } catch {
+    return '';
+  }
+};
+
 const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -286,7 +309,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     inline_study_duration_auto: true,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
     inline_study_steps: [] as WithClientId<InlineStudyStep>[],
-    reuse_existing_study: false,
     // Native poll and survey. Defaults to external so an author who never opens
     // the choice gets exactly today's behaviour.
     delivery_mode: 'external' as 'native' | 'external',
@@ -294,7 +316,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     inline_survey_duration_auto: true,
     inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT as string,
     inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
-    reuse_existing_survey: false
+    // Where this opportunity's content comes from, replacing the two
+    // `reuse_existing_*` booleans. One field rather than two because only one
+    // authoring surface is ever rendered - `getTabsForType` returns the task
+    // list OR the questions tab, never both - so two flags could only ever
+    // disagree, and they did: `loadOpportunity` had to set both together and
+    // every read had to pick the right one for its tab.
+    //
+    // 'blank' is the default because copy is now the ONLY alternative and it
+    // has to be asked for. Nothing here is ever sent to the API; it decides
+    // which surface renders.
+    study_source: 'blank' as StudySourceMode,
+    // Provenance. Only `copied_from_study_id` reaches the payload - the other
+    // two are what the note on screen says, and are display-only.
+    copied_from_study_id: '' as string,
+    copied_from_title: '' as string,
+    copied_from_at: '' as string
   });
 
   // Whether the opportunity already pointed at a study when it loaded.
@@ -306,14 +343,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // had nowhere to render. The two are now separate, because a linked study the
   // author OWNS is exactly the thing they should be editing in place.
   //
-  // hasLinkedStudy hides the "reuse an existing one instead" tickbox: swapping
-  // which study an opportunity points at is not this form's job once it points
-  // at one.
+  // hasLinkedStudy hides the source choice: once an opportunity has content of
+  // its own, "where should this come from" has been answered. It is passed to
+  // the tabs as `hasLinkedStudy && !studyMissing`, because a dangling link is
+  // not content and the author needs the choice back to repair it.
   const [hasLinkedStudy, setHasLinkedStudy] = useState(false);
   // Whether the linked study may not be authored HERE. True when the API says
   // this reader cannot write it, and also when it holds a step type this form
-  // cannot represent - see formCanAuthorEveryStep. Only this flag swaps the tab
-  // body to the picker.
+  // cannot represent - see formCanAuthorEveryStep. This flag swaps the tab body
+  // to a read-only rendering of the content. Deliberately FALSE for a study
+  // that is missing entirely: nothing is there to protect, and read-only would
+  // leave that opportunity with no repair path at all.
   const [studyIsReadOnly, setStudyIsReadOnly] = useState(false);
   // WHY it is read-only, because the honest sentence differs and the wrong one
   // sends the author somewhere that will refuse them too. `not-yours` cannot be
@@ -419,12 +459,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         inline_survey_duration_auto: true,
         inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
         inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
-        // Both deliberately FALSE once content is hydrated: a ticked reuse box
-        // sends the study id instead of the authored content, which is the same
-        // save the old code made and the reason an edit could never change what
-        // was written.
-        reuse_existing_study: false,
-        reuse_existing_survey: false
+        // Deliberately 'blank' once content is hydrated. The source choice is
+        // about where content came FROM at authoring time; an opportunity being
+        // reopened already has its content, and leaving this on 'copy' would
+        // show the author a chooser instead of what they wrote.
+        study_source: 'blank' as StudySourceMode,
+        copied_from_study_id: '',
+        copied_from_title: '',
+        copied_from_at: ''
       };
       let readOnly = false;
       let readOnlyReason: StudyReadOnlyReason = null;
@@ -501,13 +543,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               getPrimaryTargetUrl(linked.steps) ?? '';
           }
 
-          // A study this form cannot author is still shown as linked, but
-          // through the picker - and the reuse flag has to say so, or the
-          // publish check would demand a study id the picker is not being
-          // asked for.
-          if (readOnly) {
-            authoredFields.reuse_existing_study = true;
-            authoredFields.reuse_existing_survey = true;
+          // Where this study's content came from, if it came from anywhere.
+          // Written once at create and never updated, so it is a fact about
+          // this study rather than about the current session - which is why it
+          // is shown on reopen and not only at the moment the copy is taken.
+          if (linked.study.copied_from_study_id) {
+            authoredFields.copied_from_study_id = linked.study.copied_from_study_id;
+            authoredFields.copied_from_at = linked.study.created_at ?? '';
+            // Resolved separately, and allowed to fail: there is deliberately
+            // no foreign key, so a source can be deleted. The note degrades to
+            // "a set that no longer exists" rather than disappearing, because
+            // the copy happened whether or not its source still does.
+            authoredFields.copied_from_title = await resolveSourceTitle(
+              linked.study.copied_from_study_id
+            );
           }
         } catch (studyError) {
           const status = (studyError as { response?: { status?: number } })?.response?.status;
@@ -522,9 +571,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // study that no longer exists. Delete was the only way out.
           //
           // A0's route already repairs this: an in-place update whose study
-          // has vanished falls through to minting a replacement. Read-only
-          // plus a save that is allowed is what lets the author ask for that
-          // repair.
+          // has vanished falls through to minting a replacement. What asks for
+          // that repair is authored content, so a MISSING study must leave the
+          // authoring surface OPEN - see `readOnly` below.
           const missing = status === 404;
           logger.error('Could not load the linked study for editing', {
             opportunityId: opportunity.id,
@@ -551,9 +600,25 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // what happened, and the tab asserting "it belongs to another
           // researcher, or uses a step type this form cannot show" would be
           // two wrong causes for one right outcome.
-          readOnly = true;
-          authoredFields.reuse_existing_study = true;
-          authoredFields.reuse_existing_survey = true;
+          //
+          // A MISSING study is deliberately NOT read-only, and the distinction
+          // is the whole repair path. Read-only was right while the picker was
+          // the read-only branch's fallback: a dangling link could be repointed
+          // at another study. B3 deletes the picker, so read-only here would
+          // leave an author with a 404'd opportunity, no control of any kind on
+          // the tab, and a banner telling them to pick something that is not
+          // there - repairable only by deleting the opportunity.
+          //
+          // There is nothing to protect: the study is gone, so no content can
+          // be overwritten and no owner can be trodden on. Leaving the surface
+          // open lets the author write a task list or copy one, which sends
+          // `inline_*`, which is exactly what A0's fallback mint needs to
+          // replace the dead link.
+          //
+          // The OTHER branch keeps read-only, and must: `studyLoadError` means
+          // the study still exists and could not be read, so authoring over it
+          // would destroy content that is really there.
+          readOnly = !missing;
         }
       }
 
@@ -768,19 +833,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     if (formData.status === 'published' && formData.type === 'unmoderated') {
-      if (formData.reuse_existing_study || studyIsReadOnly) {
+      // VALIDATE WHAT YOU SEND. The only state that still sends
+      // `firsthand_study_id` is a linked study this form may not author, so
+      // that is the only state whose presence is checked here. Copy mode sends
+      // `inline_study` and never the id - checking the id there would refuse
+      // every save over a field the payload does not carry.
+      if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
-          // The reuse tickbox is not rendered once a study is linked, so do not
-          // tell that author to untick it. Keyed on hasLinkedStudy rather than
-          // studyIsReadOnly because it is the tickbox's own visibility rule.
-          errors.firsthand_study_id = hasLinkedStudy
-            ? 'Select a launched task list before publishing'
-            : 'Select a launched task list, or untick the reuse box and write the tasks here';
+          errors.firsthand_study_id = 'This opportunity has no task list to publish';
         }
       } else if (formData.inline_study_steps.length === 0) {
         // Named against the thing the author does, not the object model. The
         // backend rejects the same state with an equivalent message.
-        errors.inline_study_steps = 'Add at least one task before publishing';
+        errors.inline_study_steps =
+          formData.study_source === 'copy'
+            ? 'Choose a task list to start from, or switch to writing the tasks here'
+            : 'Add at least one task before publishing';
       }
     } else if (
       formData.status === 'published' &&
@@ -789,14 +857,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     ) {
       // A native poll or survey needs its questions, not a link. Mirrors the
       // backend guard, which refuses the same state.
-      if (formData.reuse_existing_survey || studyIsReadOnly) {
+      // The recorded twin's reasoning applies here unchanged.
+      if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
-          errors.firsthand_study_id = hasLinkedStudy
-            ? 'Select a launched set of questions before publishing'
-            : 'Select a launched set of questions, or untick the reuse box and write them here';
+          errors.firsthand_study_id = 'This opportunity has no questions to publish';
         }
       } else if (formData.inline_survey_questions.length === 0) {
-        errors.inline_survey_questions = 'Add at least one question before publishing';
+        errors.inline_survey_questions =
+          formData.study_source === 'copy'
+            ? 'Choose a set of questions to start from, or switch to writing them here'
+            : 'Add at least one question before publishing';
       }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
@@ -822,10 +892,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Standalone rather than another arm of the chain above, which is keyed on
     // status and type: these two are about a LINKED study being emptied, which
     // is a different question and must not depend on which arm ran first.
-    if (hasLinkedStudy && !studyIsReadOnly) {
+    // `!studyMissing` matters as much as the other two. This guard is about a
+    // linked list that EXISTS and has been emptied; a study that has been
+    // deleted has no content to empty, and refusing the save for it would take
+    // away the very repair path the 404 branch of loadOpportunity opens up -
+    // the author could not retitle, unpublish, or author a replacement.
+    if (hasLinkedStudy && !studyIsReadOnly && !studyMissing) {
       if (
         formData.type === 'unmoderated' &&
-        !formData.reuse_existing_study &&
         formData.inline_study_steps.length === 0
       ) {
         errors.inline_study_steps =
@@ -835,7 +909,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (
         (formData.type === 'poll' || formData.type === 'survey') &&
         deliveryMode === 'native' &&
-        !formData.reuse_existing_survey &&
         formData.inline_survey_questions.length === 0
       ) {
         errors.inline_survey_questions =
@@ -850,7 +923,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     const authoringQuestions =
       (formData.type === 'poll' || formData.type === 'survey') &&
       deliveryMode === 'native' &&
-      !formData.reuse_existing_survey &&
       !studyIsReadOnly;
 
     (authoringQuestions ? formData.inline_survey_questions : []).forEach((question, index) => {
@@ -927,7 +999,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // backend contract rejects an empty prompt or a one-option choice on every
     // save, so a draft with a half-written task would fail server-side with a
     // far less useful message.
-    if (formData.type === 'unmoderated' && !formData.reuse_existing_study && !studyIsReadOnly) {
+    if (formData.type === 'unmoderated' && !studyIsReadOnly) {
       formData.inline_study_steps.forEach((step, index) => {
         if (!step.prompt.trim()) {
           errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
@@ -1155,8 +1227,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         JSON.stringify(withoutClientIds(originalFormData.inline_study_steps)) ||
       (formData.start_date || '') !== (originalFormData.start_date || '') ||
       (formData.end_date || '') !== (originalFormData.end_date || '') ||
-      formData.reuse_existing_study !== originalFormData.reuse_existing_study ||
-      formData.reuse_existing_survey !== originalFormData.reuse_existing_survey ||
+      formData.study_source !== originalFormData.study_source ||
+      formData.copied_from_study_id !== originalFormData.copied_from_study_id ||
       sessions.some(session => session.id.startsWith('temp-session-'))
     );
   };
@@ -1285,13 +1357,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // Lists area.
         const authoringInline =
           !studyIsReadOnly &&
-          !formData.reuse_existing_study &&
           formData.inline_study_steps.length > 0;
 
-        // Exactly one of the two, never both. A study id can survive in state
-        // after the author ticks reuse, picks one, then unticks and writes
-        // tasks instead; sending it alongside the authored study would be
-        // ambiguous, and the backend rejects that rather than guessing.
+        // Exactly one of the two, never both. An opportunity that already has
+        // a study keeps `firsthand_study_id` in state, so authoring content
+        // into it must OMIT the id rather than send it or null it: the PATCH
+        // guards test `!== undefined`, and a null would be read as "clear the
+        // link" in the same breath as rewriting the study it pointed at.
         data.firsthand_study_id = authoringInline
           ? undefined
           : formData.firsthand_study_id?.trim() || undefined;
@@ -1325,7 +1397,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // reproduce cannot drift apart again. They did, and it deleted
             // helper_text and is_required from every task list built in the
             // Task Lists area.
-            steps: formData.inline_study_steps.map(toInlineStudyPayloadStep)
+            steps: formData.inline_study_steps.map(toInlineStudyPayloadStep),
+            // Provenance travels with the content that came from it. Omitted
+            // rather than sent empty: `inlineStudySchema` takes a non-empty
+            // string, and the column is NULL for anything authored from blank.
+            ...(formData.copied_from_study_id
+              ? { copied_from_study_id: formData.copied_from_study_id }
+              : {})
           };
         }
       }
@@ -1351,12 +1429,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
         if (deliveryMode === 'native') {
           // Same shape as the task-list branch above, and the same reason for
-          // exactly one of the two: a study id can survive in state after the
-          // author ticks reuse, picks one, then unticks and writes questions
-          // instead. The backend refuses both rather than guessing.
+          // exactly one of the two: the stored id stays in state, and copy mode
+          // authors content rather than pointing at somebody else's study.
           const authoringInline =
             !studyIsReadOnly &&
-            !formData.reuse_existing_survey &&
             formData.inline_survey_questions.length > 0;
 
           data.firsthand_study_id = authoringInline
@@ -1376,7 +1452,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               // Same function studyRoundTripsCleanly checks with. This branch
               // was already faithful; sharing the serialiser is what stops it
               // drifting the way the task-list branch did.
-              steps: formData.inline_survey_questions.map(toSurveyPayloadStep)
+              steps: formData.inline_survey_questions.map(toSurveyPayloadStep),
+              // The recorded twin carries this too. `inlineSurveySchema` is
+              // `.strict()`, so an unknown key here is a refused save rather
+              // than a dropped field - which is exactly why both twins were
+              // changed in the same breath.
+              ...(formData.copied_from_study_id
+                ? { copied_from_study_id: formData.copied_from_study_id }
+                : {})
             };
           }
         }
@@ -1544,6 +1627,85 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     );
   };
 
+  /**
+   * Takes a copy of an existing study into the form.
+   *
+   * The one rule this must not inherit from `loadOpportunity`'s hydration:
+   * `can_edit` is NOT consulted. It is a fact about the SOURCE, and applying it
+   * to a copy would hand the author a read-only form for content that is about
+   * to become theirs - which is the single most likely way this step breaks,
+   * and the reason the two hydrations are separate functions rather than one
+   * with a flag.
+   *
+   * What IS consulted is whether this form can reproduce the content. Copying
+   * something the form would flatten or drop would lose part of it silently on
+   * the first save, so that is refused with a reason rather than half-done.
+   * `studyRoundTripsCleanly` is checked against the SOURCE's id because that is
+   * the id its stored steps were namespaced with; the copy's own steps are
+   * re-derived from the new study's id when it is minted.
+   *
+   * Returns a message when it refused, null when it worked, so the picker can
+   * say so next to the row that was clicked.
+   */
+  const copyFromStudy = async (
+    studyId: string,
+    kind: AuthoringKind
+  ): Promise<string | null> => {
+    const noun = kind === 'survey' ? 'questions' : 'task list';
+    let loaded;
+    try {
+      loaded = await getFirstHandStudy(studyId);
+    } catch {
+      return `Those ${noun} could not be loaded, so nothing was copied. Try again.`;
+    }
+
+    const sourceKind: AuthoringKind = loaded.study.kind === 'survey' ? 'survey' : 'recorded';
+    if (sourceKind !== kind) {
+      return kind === 'survey'
+        ? 'That is a recorded task list, not a set of questions, so it cannot be copied here.'
+        : 'That is a set of survey questions, not a task list, so it cannot be copied here.';
+    }
+
+    if (!studyRoundTripsCleanly(loaded.steps, kind, loaded.study.id)) {
+      return `Those ${noun} use something this form cannot show, so copying them here would drop part of them.`;
+    }
+
+    const copied =
+      kind === 'survey'
+        ? copiedSurveyFields(loaded.study, loaded.steps)
+        : copiedRecordedFields(loaded.study, loaded.steps);
+
+    setFormData((prev) => ({
+      ...prev,
+      ...copied,
+      // Provenance is about the content, so it is set in the same update that
+      // sets the content. The id is what reaches the payload; the other two are
+      // what the note says.
+      copied_from_study_id: loaded.study.id,
+      copied_from_title: loaded.study.title,
+      copied_from_at: new Date().toISOString()
+    }));
+
+    // The whole array has been replaced, so the errors that pointed into the
+    // old one point at nothing. Cleared rather than remapped - remapping
+    // matches errors to items by content, and none of these items are the same
+    // items any more.
+    setValidationErrors((prev) => {
+      const next = { ...prev };
+      Object.keys(next)
+        .filter(
+          (key) =>
+            key === 'firsthand_study_id' ||
+            key.startsWith('inline_survey_questions') ||
+            key.startsWith('inline_study_steps')
+        )
+        .forEach((key) => delete next[key]);
+      return next;
+    });
+
+    return null;
+  };
+
   const handleQuestionsChange = (questions: WithClientId<SurveyQuestion>[]) => {
     const previous = formData.inline_survey_questions;
     setFormData(prev => ({ ...prev, inline_survey_questions: questions }));
@@ -1561,21 +1723,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
     setFormData(prev => {
-      // Unticking reuse drops the study that was picked while it was ticked.
-      // Without this the id lives on invisibly - the picker is no longer on
-      // screen - and would be submitted alongside the authored tasks.
-      if (field === 'reuse_existing_study' && value === false) {
-        return { ...prev, reuse_existing_study: false, firsthand_study_id: '' };
-      }
-
-      // The survey twin. Without it the id survived the untick and was
-      // submitted alongside authored questions - and worse, the behaviour
-      // flipped on whether the author had typed anything yet, because the
-      // payload only drops the id once at least one question exists. That is
-      // precedence resolution of exactly the kind the backend refuses.
-      if (field === 'reuse_existing_survey' && value === false) {
-        return { ...prev, reuse_existing_survey: false, firsthand_study_id: '' };
-      }
+      // The source choice and anything copied under it belong to the authoring
+      // surface that is going away, so they are cleared for EVERY type change
+      // rather than inside one arm of it.
+      //
+      // They used to be cleared in the poll/survey arm only. Copy a set of
+      // questions, then change the type to unmoderated, and the provenance
+      // survived onto a task list written from scratch - which the save then
+      // stored, permanently, because provenance is write-once at create. The
+      // task list was stamped forever as a copy of a survey it never came from.
+      // Reachable in the other direction too, and through `question` as a
+      // waypoint, because neither arm matched on the way past.
+      const clearedSource =
+        field === 'type'
+          ? {
+              study_source: 'blank' as StudySourceMode,
+              copied_from_study_id: '',
+              copied_from_title: '',
+              copied_from_at: ''
+            }
+          : {};
 
       // Unmoderated is FirstHand-only and runs with logged-in Cortex users, so
       // drop any external link and coerce an 'external' participant type when
@@ -1583,6 +1750,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (field === 'type' && value === 'unmoderated') {
         return {
           ...prev,
+          ...clearedSource,
           type: 'unmoderated' as const,
           external_link_optional: '',
           participant_type_required:
@@ -1597,13 +1765,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (field === 'type' && (value === 'poll' || value === 'survey')) {
         return {
           ...prev,
+          ...clearedSource,
           type: value,
           firsthand_study_id: '',
-          reuse_existing_study: false,
-          reuse_existing_survey: false,
         };
       }
-      return { ...prev, [field]: value };
+
+      // Every other type change - to `question`, `test` or `interview` - lands
+      // here, and must still drop the source choice. Those types have no
+      // authoring surface at all, so a copy taken before the switch would
+      // otherwise sit in state invisibly and be sent on the next save.
+      return { ...prev, ...clearedSource, [field]: value };
     });
 
     // Clear validation error for this field immediately when typing
@@ -1741,15 +1913,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 </div>
               )}
 
-              {/* Saving is deliberately still allowed here - see the 404 branch
-                  in loadOpportunity. The author needs to be able to repoint or
-                  unpublish an opportunity whose study has been deleted. */}
+              {/* Saving is deliberately still allowed here, and so is
+                  AUTHORING - see the 404 branch in loadOpportunity. This
+                  sentence has to name a control that is actually on screen:
+                  the previous one said "pick another below" while pointing at
+                  a picker B3 deleted. */}
               {studyMissing && (
                 <div className="alert alert-warning mx-4 mt-4 mb-0" role="alert">
                   <AlertTriangle size={18} className="me-2" />
                   The task list or questions this opportunity points at no longer
-                  exist. Pick another below, or unpublish this opportunity until
-                  you have replaced them.
+                  exist. Write replacements below, or start from an existing set
+                  - saving will attach whichever you choose. You can also
+                  unpublish this opportunity until you have replaced them.
                 </div>
               )}
 
@@ -1969,9 +2144,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           validationErrors={validationErrors}
                           handleInputChange={handleInputChange}
                           handleQuestionsChange={handleQuestionsChange}
-                          hasLinkedStudy={hasLinkedStudy}
+                          hasLinkedStudy={hasLinkedStudy && !studyMissing}
                           studyIsReadOnly={studyIsReadOnly}
                           readOnlyReason={studyReadOnlyReason}
+                          onCopyFromStudy={(studyId) => copyFromStudy(studyId, 'survey')}
+                          currentUserId={user?.id}
                         />
 
                         {/* This is the last step for a native survey, so
@@ -2002,9 +2179,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleStepsChange={handleStepsChange}
-                        hasLinkedStudy={hasLinkedStudy}
+                        hasLinkedStudy={hasLinkedStudy && !studyMissing}
                         studyIsReadOnly={studyIsReadOnly}
                         readOnlyReason={studyReadOnlyReason}
+                        onCopyFromStudy={(studyId) => copyFromStudy(studyId, 'recorded')}
+                        currentUserId={user?.id}
                       />
 
                       <StepActions

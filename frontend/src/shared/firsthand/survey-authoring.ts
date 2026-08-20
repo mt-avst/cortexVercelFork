@@ -134,7 +134,15 @@ export const inlineSurveySchema = z
     steps: z
       .array(surveyQuestionSchema)
       .min(1)
-      .max(INLINE_STUDY_LIMITS.maxSteps)
+      .max(INLINE_STUDY_LIMITS.maxSteps),
+    /**
+     * The study this one was copied from. Same field and the same reasoning as
+     * inlineStudySchema's - see there - carried here too because `.strict()`
+     * on this object rejects any key it does not declare: omitting it here
+     * would 400 every survey save that carries provenance, rather than merely
+     * dropping the field the way the non-strict twin would.
+     */
+    copied_from_study_id: z.string().min(1).max(200).optional()
   })
   .strict()
   .superRefine((value, ctx) => {

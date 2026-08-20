@@ -266,11 +266,6 @@
       "count": 1
     }
   },
-  "frontend/src/pages/__tests__/OpportunityForm.test.tsx": {
-    "@typescript-eslint/no-explicit-any": {
-      "count": 10
-    }
-  },
   "frontend/src/utils/__tests__/errorHandler.test.tsx": {
     "@typescript-eslint/no-explicit-any": {
       "count": 10

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -667,8 +667,83 @@ describe('reopening an opportunity that has questions', () => {
   });
 });
 
+/**
+ * Reopening a study whose content was taken as a copy. Provenance is written
+ * once at create and read back on every later load - all of the existing
+ * `Copied from` assertions elsewhere in this file are on the CREATE flow, so
+ * none of them exercise this path at all.
+ */
+describe('reopening a task list that was copied from another', () => {
+  const SOURCE = {
+    study: {
+      id: 'study_source',
+      title: 'Original checkout walkthrough',
+      intro_text: 'Intro',
+      consent_text: 'irrelevant here',
+      kind: 'recorded',
+      status: 'launched',
+      estimated_duration_minutes: 5,
+      owner_user_id: 'someone-else',
+      updated_at: '2026-08-01T00:00:00.000Z'
+    },
+    steps: [
+      { step_id: 'study_source_step_1', order: 1, type: 'instruction', prompt: 'Open the basket' },
+      { step_id: 'study_source_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ],
+    can_edit: true
+  };
+
+  it('names the source and the date the copy was taken', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy)
+      .mockResolvedValueOnce(
+        study({
+          copied_from_study_id: 'study_source',
+          created_at: '2026-08-10T00:00:00.000Z'
+        }) as never
+      )
+      .mockResolvedValueOnce(SOURCE as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+
+    expect(await screen.findByText(/Copied from/i)).toBeInTheDocument();
+    expect(screen.getByText('Original checkout walkthrough')).toBeInTheDocument();
+    expect(screen.getByText(/10 August 2026/i)).toBeInTheDocument();
+    // The id is what a later save carries; sent for real regardless of
+    // whether the note above could resolve a title for it.
+    expect(vi.mocked(getFirstHandStudy)).toHaveBeenCalledWith('study_source');
+  });
+
+  it('degrades to "a set that no longer exists" when the source cannot be read, rather than rethrowing', async () => {
+    // The reason it degrades rather than rethrowing: `copied_from_study_id`
+    // deliberately has no foreign key, so the source can be gone. None of that
+    // should stop the opportunity opening - only the note's wording changes.
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy)
+      .mockResolvedValueOnce(
+        study({
+          copied_from_study_id: 'study_source',
+          created_at: '2026-08-10T00:00:00.000Z'
+        }) as never
+      )
+      .mockRejectedValueOnce(new Error('the source study is gone'));
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+
+    expect(await screen.findByText(/Copied from/i)).toBeInTheDocument();
+    expect(screen.getByText(/a set that no longer exists/i)).toBeInTheDocument();
+    // The opportunity itself still opened and is still editable - a failed
+    // provenance lookup is not a failed study load.
+    expect(
+      (screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement).value
+    ).toBe(study().study.consent_text);
+  });
+});
+
 describe('a study this author may not change here', () => {
-  it('shows the picker, says why, and sends the id rather than the content', async () => {
+  it('shows the content read-only, says why, and sends the id rather than the content', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
     vi.mocked(getFirstHandStudy).mockResolvedValue(
       study({ owner_user_id: 'someone-else', can_edit: false }) as never
@@ -684,7 +759,24 @@ describe('a study this author may not change here', () => {
     // And it does NOT tell them to go and fix it in the Task Lists area, which
     // applies the same ownership rule and would refuse them there too.
     expect(screen.queryByText(/open it in the Task Lists area/i)).not.toBeInTheDocument();
+    // No editing surface, and no source choice either: with linking gone there
+    // is nothing to repoint at, so offering a chooser would offer an action
+    // that cannot be completed.
     expect(screen.queryByLabelText(/What the participant sees/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /Start from an existing task list/i })
+    ).not.toBeInTheDocument();
+    // What replaced the picker: the tasks themselves, as text - the WHOLE
+    // list, in order. RECORDED_STEPS carries two authored steps; reading only
+    // the first is exactly the shape that lets `items.slice(0, 1)` survive in
+    // the component.
+    const readOnlyItems = within(
+      screen.getByTestId('read-only-study-content')
+    ).getAllByRole('listitem');
+    expect(readOnlyItems.map((item) => item.textContent)).toEqual([
+      'Open the basket and read what is in it aloud',
+      'Which delivery option would you pick?'
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
     fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
@@ -740,6 +832,66 @@ describe('a study this author may not change here', () => {
 
     expect(savedBody().inline_study).toBeUndefined();
     expect(savedBody().firsthand_study_id).toBe('study_demo');
+  });
+});
+
+/**
+ * The survey twin of the read-only rendering above. `ReadOnlyStudyContent
+ * items={questions}` -> `items={[]}` survives on the survey tab even though
+ * the identical mutation is killed on the task tab, so this half of the
+ * property was entirely unasserted.
+ */
+describe('a set of questions this author may not change here', () => {
+  it('shows every question read-only, in order, and sends the id rather than the content', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        id: 'study_questions',
+        kind: 'survey',
+        owner_user_id: 'someone-else',
+        can_edit: false,
+        consent_text: 'Answers are stored for research analysis',
+        estimated_duration_minutes: null,
+        steps: SURVEY_STEPS
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
+
+    // "belong to", not "belongs to" - the survey twin's copy is plural
+    // ("These questions belong..."), unlike the task-list twin's singular.
+    expect(
+      await screen.findByText(/belong to another researcher/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/What the participant is asked/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('radio', { name: /Start from an existing set of questions/i })
+    ).not.toBeInTheDocument();
+
+    // The whole array, in order - SURVEY_STEPS carries three authored
+    // questions, so a single-item read here could not tell the right question
+    // from the wrong one, and `items={[]}` would satisfy an empty-list check.
+    const readOnlyItems = within(
+      screen.getByTestId('read-only-study-content')
+    ).getAllByRole('listitem');
+    expect(readOnlyItems.map((item) => item.textContent)).toEqual([
+      'Which tool slows you down?',
+      'How happy are you with the build times?',
+      'Would you recommend it?'
+    ]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Basic Info/i }));
+    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
+      target: { value: 'Developer experience pulse 2026' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
+
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    expect(savedBody().inline_survey).toBeUndefined();
+    expect(savedBody().firsthand_study_id).toBe('study_questions');
   });
 });
 
@@ -1004,6 +1156,130 @@ describe('when the linked study no longer exists', () => {
     fireEvent.click(save);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
     expect(savedBody().title).toBe('Checkout walkthrough v2');
+    // No content was authored, so the save still carries the DANGLING id -
+    // unpublishing (or simply retitling, as here) must stay possible without
+    // forcing the author to write a replacement first.
+    expect(savedBody().firsthand_study_id).toBe('study_demo');
+    expect(savedBody().inline_study).toBeUndefined();
+  });
+
+  it('offers the source choice for a missing task list, not the read-only surface', async () => {
+    const notFound = Object.assign(new Error('not found'), {
+      response: { status: 404 }
+    });
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(notFound);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByText(/no longer exist/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+
+    expect(
+      await screen.findByRole('radio', { name: /Create tasks for this opportunity/i })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /Start from an existing task list/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('read-only-study-content')).not.toBeInTheDocument();
+  });
+
+  it('lets the author write a replacement for a missing task list, sent as inline_study', async () => {
+    const notFound = Object.assign(new Error('not found'), {
+      response: { status: 404 }
+    });
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(notFound);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByText(/no longer exist/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add task' }));
+    fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
+      target: { value: 'Find the export button' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    // Content reaches the payload as inline_study, which is what makes the
+    // backend mint a replacement rather than 400ing on a dangling id.
+    expect(sentBody().inline_study.steps).toEqual([
+      { type: 'instruction', prompt: 'Find the export button' }
+    ]);
+    expect(savedBody().firsthand_study_id).toBeUndefined();
+  });
+});
+
+/**
+ * The survey twin of "when the linked study no longer exists". Same 404
+ * branch in `loadOpportunity`, same repair path, exercised through the
+ * Questions surface instead of the Task List one.
+ */
+describe('when the linked set of questions no longer exists', () => {
+  const notFound = Object.assign(new Error('not found'), {
+    response: { status: 404 }
+  });
+
+  it('still lets the opportunity be saved with no content, sending the dangling id', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(notFound);
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+    expect(await screen.findByText(/no longer exist/i)).toBeInTheDocument();
+
+    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
+      target: { value: 'Developer experience pulse 2026' }
+    });
+    const save = await screen.findByRole('button', { name: /Save Changes/i });
+    expect(save).not.toBeDisabled();
+
+    fireEvent.click(save);
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+    expect(savedBody().title).toBe('Developer experience pulse 2026');
+    expect(savedBody().firsthand_study_id).toBe('study_questions');
+    expect(savedBody().inline_survey).toBeUndefined();
+  });
+
+  it('offers the source choice for a missing set of questions, not the read-only surface', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(notFound);
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+    await screen.findByText(/no longer exist/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
+
+    expect(
+      await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+    ).toBeChecked();
+    expect(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('read-only-study-content')).not.toBeInTheDocument();
+  });
+
+  it('lets the author write a replacement set of questions, sent as inline_survey', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(surveyOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValue(notFound);
+
+    renderEdit('/admin/opportunities/opp-2/edit');
+    await screen.findByText(/no longer exist/i);
+
+    fireEvent.click(await screen.findByRole('button', { name: /Questions/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Add question$/i }));
+    fireEvent.change(screen.getByLabelText(/What the participant is asked/i), {
+      target: { value: 'How easy was that?' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+    expect(sentBody().inline_survey.steps).toEqual([
+      { type: 'open_text', prompt: 'How easy was that?' }
+    ]);
+    expect(savedBody().firsthand_study_id).toBeUndefined();
   });
 });
 

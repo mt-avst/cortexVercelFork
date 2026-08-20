@@ -5,7 +5,8 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { getTabsForType } from '../OpportunityForm';
-import { createOpportunity, getOpportunity, updateOpportunity } from '../../api/client';
+import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
+import { getFirstHandStudy } from '../../api/firsthand-studies';
 
 /**
  * Authoring a native poll or survey on the opportunity form.
@@ -685,6 +686,482 @@ describe('authoring a native survey', () => {
  * rather than a Back control. Rendering one anyway gives the author a button
  * that looks live and does nothing.
  */
+describe('starting a survey from an existing set of questions', () => {
+  /**
+   * The survey twin of the task-list copy tests, written in the same breath as
+   * them and deliberately not by reference.
+   *
+   * The last two steps of this plan each shipped a property that was pinned on
+   * one of these two surfaces and silently missing on the other - the identical
+   * mutation killed by three tests on the task list and surviving completely
+   * here. Everything the task-list tests assert about copying is asserted again
+   * below against this surface's own wording, ids and payload key.
+   */
+  const fillNativeSurvey = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.selectOptions(screen.getByLabelText(/Research Study Type/i), 'survey');
+    await user.type(screen.getByLabelText(/^Title/i), 'Developer experience pulse');
+    await user.type(
+      screen.getByLabelText(/^Purpose/i),
+      'Ten short questions about the tools you use every day'
+    );
+    await user.click(screen.getByLabelText(/In Cortex/i));
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+  };
+
+  const SOURCE = {
+    study: {
+      id: 'study_source',
+      title: 'Onboarding pulse',
+      intro_text: 'Intro',
+      consent_text: 'The wording this researcher actually wrote',
+      kind: 'survey' as const,
+      status: 'launched' as const,
+      estimated_duration_minutes: 14,
+      owner_user_id: 'someone-else',
+      updated_at: '2026-08-18T00:00:00.000Z'
+    },
+    steps: [
+      { step_id: 'study_source_step_1', order: 1, type: 'open_text', prompt: 'What did you set up first?' },
+      {
+        step_id: 'study_source_step_2',
+        order: 2,
+        type: 'multi_choice',
+        prompt: 'Which docs did you read?',
+        options: ['Getting started', 'API reference', 'Nothing'],
+        is_required: true
+      },
+      {
+        step_id: 'study_source_step_3',
+        order: 3,
+        type: 'rating',
+        prompt: 'How clear was it?',
+        config: { scale_max: 7 }
+      },
+      { step_id: 'study_source_step_end', order: 4, type: 'end', prompt: 'Thanks' }
+    ],
+    can_edit: false
+  };
+
+  it('copies a colleague\'s questions into an EDITABLE form, not a read-only one', async () => {
+    // The single most likely way this step breaks. `can_edit: false` is a fact
+    // about the SOURCE, and edit-mode hydration turns exactly that into a
+    // read-only surface. Applying it to a copy would hand the author a form
+    // they cannot type in, for content that is about to become theirs.
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(SOURCE as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+    await screen.findByText(/Copied from/i);
+
+    // Not the read-only surface: no "belongs to another researcher" banner, and
+    // no read-only rendering of the content.
+    expect(screen.queryByText(/belongs to another researcher/i)).toBeNull();
+    expect(screen.queryByTestId('read-only-study-content')).toBeNull();
+
+    // And it is genuinely editable - proved by typing into it, not by the
+    // absence of a `disabled` attribute.
+    const summaries = await screen.findAllByRole('button', { expanded: false });
+    for (const summary of summaries) {
+      await user.click(summary);
+    }
+    const prompts = screen.getAllByLabelText(
+      /What the participant is asked/i
+    ) as HTMLTextAreaElement[];
+    expect(prompts.map((field) => field.value)).toEqual([
+      'What did you set up first?',
+      'Which docs did you read?',
+      'How clear was it?'
+    ]);
+    await user.clear(prompts[1]);
+    await user.type(prompts[1], 'Which docs did you actually open?');
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+    const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+      firsthand_study_id?: string;
+      inline_survey?: {
+        steps: Record<string, unknown>[];
+        consent_text: string;
+        estimated_duration_minutes?: number | null;
+        copied_from_study_id?: string;
+      };
+    };
+
+    // Never the id: sending it would relink this opportunity to the colleague's
+    // study, which is the behaviour B3 removes.
+    expect(body.firsthand_study_id).toBeUndefined();
+    // The whole array, in order, with the edit applied to the RIGHT question -
+    // a single-item read here could not tell question 2 from question 1.
+    expect(body.inline_survey?.steps).toEqual([
+      { type: 'open_text', prompt: 'What did you set up first?' },
+      {
+        type: 'multi_choice',
+        prompt: 'Which docs did you actually open?',
+        options: ['Getting started', 'API reference', 'Nothing'],
+        is_required: true
+      },
+      { type: 'rating', prompt: 'How clear was it?', config: { scale_max: 7 } }
+    ]);
+    expect(body.inline_survey?.consent_text).toBe(
+      'The wording this researcher actually wrote'
+    );
+    // Carried, not re-derived. The automatic estimate for three questions is
+    // not 14, so a re-derivation would be visible.
+    expect(body.inline_survey?.estimated_duration_minutes).toBe(14);
+    expect(body.inline_survey?.copied_from_study_id).toBe('study_source');
+  });
+
+  it('refuses to copy a recorded task list through the questions surface', async () => {
+    // The kind filter keeps this out of the list; this is the second line of
+    // defence, and it must refuse rather than half-copy - a recorded study's
+    // steps would hydrate into a vocabulary that cannot hold them.
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_recorded', title: 'Checkout walkthrough', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue({
+      ...SOURCE,
+      study: { ...SOURCE.study, id: 'study_recorded', kind: 'recorded' }
+    } as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Checkout walkthrough$/ })
+    );
+
+    expect(
+      await screen.findByText(/recorded task list, not a set of questions/i)
+    ).toBeInTheDocument();
+    // Nothing was copied: no provenance, and no questions in the editor.
+    expect(screen.queryByText(/Copied from/i)).toBeNull();
+    expect(screen.queryByLabelText(/What the participant is asked/i)).toBeNull();
+  });
+
+  it('refuses to copy questions this form cannot round-trip, and hydrates nothing', async () => {
+    // The survey analogue of the recorded twin's divergent-URL case: an NPS
+    // question is fixed at 0-10 and never carries a config, so a STORED one
+    // that somehow does (written elsewhere) would silently lose it on the
+    // next save - `toSurveyPayloadStep` only keeps config for rating and
+    // multi_choice.
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue({
+      ...SOURCE,
+      steps: [
+        {
+          step_id: 'study_source_step_1',
+          order: 1,
+          type: 'nps',
+          prompt: 'Would you recommend us?',
+          config: { scale_max: 7 }
+        },
+        { step_id: 'study_source_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+      ]
+    } as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+
+    expect(
+      await screen.findByText(
+        /use something this form cannot show, so copying them here would drop part of them/i
+      )
+    ).toBeInTheDocument();
+    // Nothing was hydrated: no provenance note, and the chooser is still on
+    // screen rather than the editor.
+    expect(screen.queryByText(/Copied from/i)).toBeNull();
+    expect(screen.getByTestId('survey-source-list')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/What the participant is asked/i)).toBeNull();
+  });
+
+  it('offers only survey-shaped sets in the questions chooser', async () => {
+    // Named for what this test actually exercises. It used to claim the
+    // recorded twin's half of the rule too, in its own title, and asserted
+    // nothing about it - the task-list chooser has its own test, in
+    // OpportunityForm.test.tsx, against the task-list surface itself.
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_survey', title: 'A survey set', status: 'launched', kind: 'survey' },
+      { id: 'study_recorded', title: 'A recorded list', status: 'launched', kind: 'recorded' }
+    ] as never);
+
+    renderForm();
+    await fillNativeSurvey(user);
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+
+    // Queried by role: the title also appears, visually hidden, inside both
+    // row buttons' accessible names, so a bare text match is ambiguous.
+    expect(
+      await screen.findByRole('button', { name: /^Start from this A survey set$/ })
+    ).toBeInTheDocument();
+    expect(screen.queryByText('A recorded list')).toBeNull();
+  });
+
+  it('offers Save Changes as soon as a copy is taken in edit mode, before anything else changes', async () => {
+    // The survey twin of the task-list `hasChanges()` test: `study_source` and
+    // `copied_from_study_id` are compared against the baseline
+    // `loadOpportunity` seeded, both 'blank'/'' for a draft with no study yet.
+    // Read on Basic Information, because the Questions step is the one step
+    // whose action row carries no Save Changes shortcut.
+    vi.mocked(getOpportunity).mockResolvedValue({
+      id: 'opp-1',
+      type: 'survey',
+      title: 'Draft saved early',
+      purpose_one_liner: 'Saved before the questions were written, which is allowed',
+      description_optional: '',
+      product_optional: '',
+      default_duration_minutes: 30,
+      status: 'draft',
+      delivery_mode: 'native',
+      firsthand_study_id: null,
+      participant_type_required: 'any',
+      sessions: []
+    } as never);
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(SOURCE as never);
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/admin/opportunities/opp-1/edit']}>
+        <Routes>
+          <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    await screen.findByDisplayValue('Draft saved early');
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    expect(
+      await screen.findByRole('radio', { name: /Create questions for this opportunity/i })
+    ).toBeChecked();
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+    await screen.findByText(/Copied from/i);
+
+    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    expect(await screen.findByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+  });
+
+  it('does not fetch the sets until the author asks to start from one', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillNativeSurvey(user);
+
+    expect(
+      screen.getByRole('radio', { name: /Create questions for this opportunity/i })
+    ).toBeChecked();
+    expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
+  });
+
+  describe('choosing a different set of questions after one is already copied in', () => {
+    beforeEach(() => {
+      vi.mocked(getFirstHandStudies).mockResolvedValue([
+        { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+      ] as never);
+    });
+
+    it('reopens the chooser without losing the content already copied in', async () => {
+      const user = userEvent.setup();
+      vi.mocked(getFirstHandStudy).mockResolvedValue(SOURCE as never);
+      renderForm();
+      await fillNativeSurvey(user);
+
+      await user.click(
+        screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+      );
+      await user.click(
+        await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+      );
+      await screen.findByText(/Copied from/i);
+
+      await user.click(
+        screen.getByRole('button', { name: /Choose a different set of questions/i })
+      );
+
+      expect(await screen.findByTestId('survey-source-list')).toBeInTheDocument();
+      expect(screen.getByText(/Copied from/i)).toBeInTheDocument();
+
+      await user.click(
+        screen.getByRole('button', { name: /Keep the set of questions already copied in/i })
+      );
+      expect(screen.queryByTestId('survey-source-list')).not.toBeInTheDocument();
+      expect(screen.getByText(/Copied from/i)).toBeInTheDocument();
+    });
+
+    it('leaves the chooser open when a reopened choice is refused', async () => {
+      const user = userEvent.setup();
+      vi.mocked(getFirstHandStudy)
+        .mockResolvedValueOnce(SOURCE as never)
+        .mockResolvedValueOnce({
+          ...SOURCE,
+          steps: [
+            {
+              step_id: 'study_source_step_1',
+              order: 1,
+              type: 'nps',
+              prompt: 'Would you recommend us?',
+              config: { scale_max: 7 }
+            },
+            { step_id: 'study_source_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+          ]
+        } as never);
+      renderForm();
+      await fillNativeSurvey(user);
+
+      await user.click(
+        screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+      );
+      await user.click(
+        await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+      );
+      await screen.findByText(/Copied from/i);
+
+      await user.click(
+        screen.getByRole('button', { name: /Choose a different set of questions/i })
+      );
+      await user.click(
+        await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+      );
+
+      expect(
+        await screen.findByText(
+          /use something this form cannot show, so copying them here would drop part of them/i
+        )
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('survey-source-list')).toBeInTheDocument();
+    });
+  });
+
+  it('refuses when the source cannot even be loaded, naming the reason', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockRejectedValueOnce(new Error('network down'));
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+
+    expect(
+      await screen.findByText(/those questions could not be loaded, so nothing was copied/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Copied from/i)).toBeNull();
+  });
+
+  it('does not offer a draft set of questions as a copy source', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' },
+      { id: 'study_draft', title: 'Unfinished draft set', status: 'draft', kind: 'survey' }
+    ] as never);
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+
+    expect(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /^Start from this Unfinished draft set$/ })
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows the copy-mode publish message where the chooser actually is', async () => {
+    const user = userEvent.setup();
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+
+    const message = await screen.findByText(
+      /Choose a set of questions to start from, or switch to writing them here/i
+    );
+    expect(message).toBeVisible();
+    expect(screen.getByTestId('survey-source-list')).toBeInTheDocument();
+  });
+
+  it('clears a stale questions validation error once a copy is taken', async () => {
+    const user = userEvent.setup();
+    vi.mocked(getFirstHandStudies).mockResolvedValue([
+      { id: 'study_source', title: 'Onboarding pulse', status: 'launched', kind: 'survey' }
+    ] as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(SOURCE as never);
+    renderForm();
+    await fillNativeSurvey(user);
+
+    await user.click(screen.getByRole('button', { name: /Basic Information/i }));
+    await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
+    await user.click(screen.getByRole('button', { name: /Questions/i }));
+    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    expect(
+      await screen.findByText(/Add at least one question before publishing/i)
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('radio', { name: /Start from an existing set of questions/i })
+    );
+    await user.click(
+      await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
+    );
+    await screen.findByText(/Copied from/i);
+
+    expect(
+      screen.queryByText(/Add at least one question before publishing/i)
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe('the step action row', () => {
   it('offers no Back control on the first step', async () => {
     renderForm();

@@ -1516,3 +1516,410 @@ describe("studies repository - update respects the stored vocabulary", () => {
     ).rejects.toThrow(/no page to open/i);
   });
 });
+
+/**
+ * copied_from_study_id: authoring provenance recorded by the picker's
+ * copy-on-select (migration 0012). Written once at create, read on every
+ * study, never touched by an update - see UpdateStudyInput.
+ */
+describe("studies repository - copy provenance", () => {
+  beforeEach(() => {
+    process.env.DATABASE_URL =
+      "postgres://firsthand:firsthand@localhost:5432/firsthand";
+  });
+
+  afterEach(() => {
+    delete process.env.DATABASE_URL;
+    delete (globalThis as typeof globalThis & { __firsthandRuntimePool?: unknown })
+      .__firsthandRuntimePool;
+    delete (
+      globalThis as typeof globalThis & {
+        __firsthandRuntimeVerification?: unknown;
+      }
+    ).__firsthandRuntimeVerification;
+    vi.clearAllMocks();
+    vi.resetModules();
+  });
+
+  const wireCreate = (returnedCopiedFrom: string | null) => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const studyInserts: Array<{ sql: string; params: unknown[] }> = [];
+
+    operationClient.query.mockImplementation(
+      async (sql: string, params?: unknown[]) => {
+        if (sql === "SET search_path TO firsthand") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql === "BEGIN" || sql === "COMMIT") {
+          return { rowCount: null, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO studies")) {
+          studyInserts.push({ sql, params: params ?? [] });
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("INSERT INTO study_steps")) {
+          return { rowCount: 1, rows: [] };
+        }
+
+        if (sql.includes("FROM studies")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc",
+                title: "Pulse",
+                intro_text: "Intro",
+                consent_text: "Consent",
+                brand_name: null,
+                estimated_duration_minutes: null,
+                locale: null,
+                status: "draft",
+                kind: "recorded",
+                owner_user_id: null,
+                copied_from_study_id: returnedCopiedFrom,
+                created_at: "2026-08-20T00:00:00.000Z",
+                updated_at: "2026-08-20T00:00:00.000Z"
+              }
+            ]
+          };
+        }
+
+        if (sql.includes("FROM study_steps")) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: "study_abc_step_1",
+                study_id: "study_abc",
+                step_order: 1,
+                type: "open_text",
+                prompt: "What did you expect?",
+                target_url: null,
+                helper_text: null,
+                is_required: true,
+                options: null,
+                config: null
+              }
+            ]
+          };
+        }
+
+        throw new Error(`Unexpected query in test: ${sql}`);
+      }
+    );
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    return { studyInserts };
+  };
+
+  // owner_user_id is set to a value distinct from every copied_from_study_id
+  // used below, and deliberately non-null. createInput previously left it
+  // unset, so both columns held `null` in every case here regardless of which
+  // one createStudy actually wrote to which placeholder - a transposition of
+  // the two params in the INSERT (`owner_user_id` and `copied_from_study_id`
+  // swapped, studies-repository.ts:302-306) passed the whole suite. In
+  // production that would make the copy's owner the SOURCE study's id: the
+  // author who just took the copy could not edit what they created.
+  const createInput = (copiedFrom?: string | null) => ({
+    id: "study_abc",
+    title: "Pulse",
+    intro_text: "Intro",
+    consent_text: "Consent",
+    owner_user_id: "user-author",
+    ...(copiedFrom !== undefined ? { copied_from_study_id: copiedFrom } : {}),
+    steps: [
+      {
+        step_id: "study_abc_step_1",
+        order: 1,
+        type: "open_text" as const,
+        prompt: "What did you expect?"
+      }
+    ]
+  });
+
+  // Shared by both tests below, so neither one hand-rolls its own index math
+  // that could itself go stale. Finds the ordinal position of `column` in the
+  // INSERT's column list, which is the only way to read `params` that is not
+  // blind to two columns swapping places - `.toContain(value)` and `.toContain(
+  // otherColumnsValue)` both still pass after a transposition, since the same
+  // set of values is present either way.
+  const columnIndex = (sql: string, column: string): number =>
+    sql
+      .split("(")[1]
+      .split(")")[0]
+      .split(",")
+      .map((name) => name.trim())
+      .indexOf(column);
+
+  it("writes the given copied_from_study_id as an INSERT parameter", async () => {
+    const { studyInserts } = wireCreate("study_source");
+    const studiesRepository = await import("./studies-repository");
+
+    const result = await studiesRepository.createStudy(createInput("study_source"));
+
+    const copiedFromIndex = columnIndex(studyInserts[0].sql, "copied_from_study_id");
+    const ownerIndex = columnIndex(studyInserts[0].sql, "owner_user_id");
+
+    expect(copiedFromIndex).toBeGreaterThanOrEqual(0);
+    expect(ownerIndex).toBeGreaterThanOrEqual(0);
+    // Positional, not `.toContain`: both values are present in `params`
+    // whichever placeholder each landed on, so only reading by index can tell
+    // a correct INSERT apart from the two columns swapped.
+    expect(studyInserts[0].params[copiedFromIndex]).toBe("study_source");
+    expect(studyInserts[0].params[ownerIndex]).toBe("user-author");
+    expect(result.study.copied_from_study_id).toBe("study_source");
+  });
+
+  it("writes null when copied_from_study_id is not supplied", async () => {
+    const { studyInserts } = wireCreate(null);
+    const studiesRepository = await import("./studies-repository");
+
+    await studiesRepository.createStudy(createInput());
+
+    // The parameter list has to hold an actual null, not merely omit the
+    // value - node-postgres needs every placeholder filled, and a bare
+    // `.not.toContain("study_source")` would also pass if the column were
+    // dropped from the statement entirely.
+    const copiedFromIndex = columnIndex(studyInserts[0].sql, "copied_from_study_id");
+    const ownerIndex = columnIndex(studyInserts[0].sql, "owner_user_id");
+
+    expect(copiedFromIndex).toBeGreaterThanOrEqual(0);
+    expect(ownerIndex).toBeGreaterThanOrEqual(0);
+    expect(studyInserts[0].params[copiedFromIndex]).toBeNull();
+    // The companion assertion that makes the null above mean something: with
+    // owner_user_id now set to a non-null value in the fixture, a
+    // transposition of the two params would put "user-author" here instead of
+    // null, and put null on owner_user_id's placeholder below.
+    expect(studyInserts[0].params[ownerIndex]).toBe("user-author");
+  });
+
+  it("selects copied_from_study_id and returns authored_step_count when listing studies", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    const selects: string[] = [];
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") {
+        return { rowCount: null, rows: [] };
+      }
+
+      selects.push(sql);
+
+      return {
+        rowCount: 2,
+        rows: [
+          {
+            id: "study_a",
+            title: "First",
+            intro_text: "Intro",
+            consent_text: "Consent",
+            brand_name: null,
+            // Deliberately distinct from authored_step_count on both rows, so
+            // a mutation that reads the wrong numeric column is detectable.
+            estimated_duration_minutes: 15,
+            locale: null,
+            status: "launched",
+            kind: "recorded",
+            owner_user_id: "user-a",
+            copied_from_study_id: "study_source_a",
+            created_at: "2026-08-20T00:00:00.000Z",
+            updated_at: "2026-08-20T00:00:00.000Z",
+            authored_step_count: 3
+          },
+          {
+            id: "study_b",
+            title: "Second",
+            intro_text: "Intro",
+            consent_text: "Consent",
+            brand_name: null,
+            estimated_duration_minutes: 20,
+            locale: null,
+            status: "launched",
+            kind: "recorded",
+            owner_user_id: "user-b",
+            copied_from_study_id: null,
+            created_at: "2026-08-20T00:00:00.000Z",
+            updated_at: "2026-08-20T00:00:00.000Z",
+            authored_step_count: 9
+          }
+        ]
+      };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    const result = await studiesRepository.listStudies();
+
+    expect(result).toHaveLength(2);
+    // Read the RIGHT item's count, not just any item's: study_a and study_b
+    // carry different counts, so a wrong-item or wrong-field read is caught.
+    const studyA = result.find((s) => s.id === "study_a");
+    const studyB = result.find((s) => s.id === "study_b");
+    expect(studyA?.authored_step_count).toBe(3);
+    expect(studyB?.authored_step_count).toBe(9);
+    expect(studyA?.copied_from_study_id).toBe("study_source_a");
+    expect(studyB?.copied_from_study_id).toBeNull();
+
+    expect(selects.some((sql) => /\bcopied_from_study_id\b/.test(sql))).toBe(true);
+    expect(
+      selects.some((sql) => /authored_step_count/.test(sql))
+    ).toBe(true);
+  });
+
+  it("selects copied_from_study_id when loading a single study by id", async () => {
+    // getStudyById (loadStudyWithSteps) is what the single-study GET returns
+    // and what the opportunity form reads to show provenance on reopen. It
+    // builds its own column list independently of listStudies above, so that
+    // test proving listStudies selects the column says nothing about this
+    // one. Dropping copied_from_study_id from this SELECT
+    // (studies-repository.ts:629) survives the rest of the suite: every other
+    // test's mock returns whatever row is queued regardless of what the SQL
+    // text actually asks for, so only inspecting the SQL text itself - not
+    // just the mapped result - catches it.
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+    let studySelectSql: string | null = null;
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") {
+        return { rowCount: null, rows: [] };
+      }
+
+      if (sql.includes("FROM studies")) {
+        studySelectSql = sql;
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "study_abc",
+              title: "Pulse",
+              intro_text: "Intro",
+              consent_text: "Consent",
+              brand_name: null,
+              estimated_duration_minutes: null,
+              locale: null,
+              status: "launched",
+              kind: "recorded",
+              owner_user_id: "user-author",
+              copied_from_study_id: "study_source",
+              created_at: "2026-08-20T00:00:00.000Z",
+              updated_at: "2026-08-20T00:00:00.000Z"
+            }
+          ]
+        };
+      }
+
+      if (sql.includes("FROM study_steps")) {
+        return { rowCount: 0, rows: [] };
+      }
+
+      return { rowCount: 0, rows: [] };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+    const result = await studiesRepository.getStudyById("study_abc");
+
+    expect(result?.study.copied_from_study_id).toBe("study_source");
+    expect(studySelectSql).not.toBeNull();
+    expect(/\bcopied_from_study_id\b/.test(studySelectSql as unknown as string)).toBe(true);
+  });
+
+  it("never writes copied_from_study_id from updateStudy, even when it is force-cast into the input", async () => {
+    const verificationClient = createMockClient({ missingRelations: [] });
+    const operationClient = createMockClient({ missingRelations: [] });
+
+    operationClient.query.mockImplementation(async (sql: string) => {
+      if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+      if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
+        return { rowCount: null, rows: [] };
+      }
+
+      if (sql.includes("FOR UPDATE")) {
+        return {
+          rowCount: 1,
+          rows: [{ owner_user_id: "user-author", kind: "recorded" }]
+        };
+      }
+
+      if (sql.startsWith("UPDATE studies")) {
+        return { rowCount: 1, rows: [] };
+      }
+
+      if (sql.includes("FROM studies")) {
+        return {
+          rowCount: 1,
+          rows: [
+            {
+              id: "study_abc",
+              title: "Pulse",
+              intro_text: "Intro",
+              consent_text: "Consent",
+              brand_name: null,
+              estimated_duration_minutes: null,
+              locale: null,
+              status: "draft",
+              kind: "recorded",
+              owner_user_id: "user-author",
+              copied_from_study_id: "study_original_source",
+              created_at: "2026-08-20T00:00:00.000Z",
+              updated_at: "2026-08-20T00:00:00.000Z"
+            }
+          ]
+        };
+      }
+
+      return { rowCount: 0, rows: [] };
+    });
+
+    connectMock
+      .mockResolvedValueOnce(verificationClient)
+      .mockResolvedValueOnce(operationClient);
+
+    const studiesRepository = await import("./studies-repository");
+
+    // Force-cast: UpdateStudyInput does not declare the field, so a caller can
+    // only reach this by lying to the type system - exactly what a stray
+    // spread of a CreateStudyInput-shaped object into an update would do.
+    const forcedInput = {
+      title: "Renamed",
+      copied_from_study_id: "study_attacker_controlled"
+    } as unknown as Parameters<typeof studiesRepository.updateStudy>[1];
+
+    const result = await studiesRepository.updateStudy(
+      "study_abc",
+      forcedInput,
+      { userId: "user-author", isSuperadmin: false }
+    );
+
+    expect(result.ok).toBe(true);
+
+    const updateCalls = operationClient.query.mock.calls.filter((call) =>
+      String(call[0]).startsWith("UPDATE studies")
+    );
+    expect(updateCalls.length).toBeGreaterThan(0);
+    updateCalls.forEach((call) => {
+      expect(String(call[0])).not.toContain("copied_from_study_id");
+    });
+
+    // The read path still reports whatever was already stored (unchanged by
+    // this write), proving the field survives untouched rather than being
+    // nulled out as a side effect of the update.
+    expect(result.ok && result.study.copied_from_study_id).toBe(
+      "study_original_source"
+    );
+  });
+});

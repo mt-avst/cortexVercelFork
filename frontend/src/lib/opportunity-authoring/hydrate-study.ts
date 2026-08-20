@@ -1,3 +1,4 @@
+import { withClientIds } from './client-ids';
 import { getPrimaryTargetUrl } from '../recording/task-target';
 import type { StudyStep } from '../../shared/firsthand/contract';
 import {
@@ -221,3 +222,51 @@ export const studyRoundTripsCleanly = (
 
   return before.length === after.length && before.every((step, i) => step === after[i]);
 };
+
+/**
+ * The form fields a copy sets, and nothing else.
+ *
+ * Kept separate from the edit-mode hydration in `loadOpportunity` even though
+ * the two transform the same steps the same way, because they differ on the one
+ * thing that matters most and would otherwise be shared by accident: a copy is
+ * NEVER read-only. Edit-mode hydration asks `can_edit` and, when the answer is
+ * false, swaps the whole surface for a read-only one. Running that rule over a
+ * copy would produce the exact defect this step exists to remove - copying a
+ * colleague's questions and landing in a form that will not let you change
+ * them, because the ownership of the SOURCE was consulted about the copy.
+ *
+ * The source's ownership is irrelevant here and is not read. What the copy
+ * becomes is decided by who saves it: the inline path mints a new study owned
+ * by the current user.
+ *
+ * `withClientIds` is applied here rather than by the caller because a list
+ * without them keys on `undefined` and B2's whole card identity collapses -
+ * that mutation survived on the survey twin last time precisely because one of
+ * two call sites was easy to miss.
+ *
+ * `duration_auto` comes back FALSE, carrying the source's stored number. Same
+ * reasoning A1 recorded for edit-mode hydration: a stored duration was decided
+ * by a human, and a copy of a decision is still a decision. Re-deriving the
+ * estimate would silently overwrite it on first save.
+ */
+export const copiedSurveyFields = (
+  study: { consent_text: string; estimated_duration_minutes?: number | null },
+  steps: StudyStep[]
+) => ({
+  inline_survey_questions: withClientIds(authoredStepsOf(steps).map(toSurveyQuestion)),
+  inline_survey_consent_text: study.consent_text,
+  inline_survey_duration_minutes: study.estimated_duration_minutes ?? undefined,
+  inline_survey_duration_auto: false
+});
+
+/** The recorded twin of `copiedSurveyFields`. Same rules, different vocabulary. */
+export const copiedRecordedFields = (
+  study: { consent_text: string; estimated_duration_minutes?: number | null },
+  steps: StudyStep[]
+) => ({
+  inline_study_steps: withClientIds(authoredStepsOf(steps).map(toInlineStudyStep)),
+  inline_study_consent_text: study.consent_text,
+  inline_study_duration_minutes: study.estimated_duration_minutes ?? undefined,
+  inline_study_duration_auto: false,
+  inline_study_target_url: getPrimaryTargetUrl(steps) ?? ''
+});

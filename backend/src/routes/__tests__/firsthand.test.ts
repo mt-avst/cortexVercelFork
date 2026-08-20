@@ -114,6 +114,8 @@ const storedStudy = {
     // Every study that predates the survey vocabulary is a recorded task list,
     // which is what the column defaults to.
     kind: 'recorded' as const,
+    owner_user_id: null,
+    copied_from_study_id: null,
     created_at: '2026-06-08T00:00:00.000Z',
     updated_at: '2026-06-08T00:00:00.000Z',
   },

@@ -194,15 +194,26 @@ Write tasks as goals, not instructions.
 
 Up to 50 tasks are allowed, though most useful studies have far fewer.
 
-### Step 3: Reuse a Task List instead, if you have one
+### Step 3: Start from an existing task list, if you have one
 
-Tick **"Reuse an existing task list instead of writing one here"** to pick one you or a colleague has already written, from **Existing task list**.
+At the top of the Task List tab, **"How do you want to add tasks?"** offers two answers.
+**Create tasks for this opportunity** is the default and is what everything above describes.
+**Start from an existing task list** offers the launched task lists you or a colleague has already written.
 
-Only launched task lists appear.
-If the dropdown is empty and you know one exists, it is probably still a draft - the form will tell you how many drafts are waiting.
+Each one shows how many tasks it holds, when it was last updated, and whether it is yours.
+**Preview** opens the tasks themselves without leaving the form.
+**Start from this** takes a **copy** into this opportunity.
 
-Reuse is deliberate: several opportunities can run the same task list, and results stay separate per opportunity.
-You can reuse a colleague's task list, but only its owner or a superadmin can change it.
+The copy is the point.
+The tasks become yours to edit here, and the original is left exactly as it was - so starting from a colleague's task list no longer means editing theirs, and later changes to theirs do not change what your participants see.
+The form says where the copy came from, and so does the opportunity when you reopen it.
+
+Only launched task lists appear, and only recorded ones - a set of survey questions is a different thing and cannot be copied here.
+If the list is empty and you know one exists, it is probably still a draft, and the form says how many are waiting.
+
+Changing your mind is safe: switching back to **Create tasks for this opportunity** keeps everything the copy brought in.
+
+> **This replaced reuse-by-link.** Until 7.44 an opportunity could point at another opportunity's task list, and editing that list changed what every opportunity using it served, with nothing on screen saying so. Existing links were converted to copies when this shipped; nothing a participant sees changed.
 
 ### Step 4: Publish and share
 
@@ -305,11 +316,14 @@ The controls are the same ones the Task List uses, and they exist because a twen
 It is deliberately different from the recorded-study wording: reusing that text would have participants agreeing to a capture that never happens.
 Edit it if your study needs something different, but do not delete it.
 
-### Reusing an existing set of questions
+### Starting from an existing set of questions
 
-Tick **"Reuse an existing set of questions instead of writing them here"** to point at a set you or a colleague has already written.
-Only launched, survey-shaped sets appear - a recorded task list offered here would be refused on save.
-If the dropdown is empty and you know one exists, it is probably still a draft, and the form says how many are waiting.
+**"How do you want to add questions?"** works exactly as the task-list version above.
+**Create questions for this opportunity** is the default; **Start from an existing set of questions** offers the launched, survey-shaped sets you or a colleague has already written, with a question count, a last-updated date, whether it is yours, and a **Preview**.
+
+**Start from this** takes a **copy**, so the questions become yours to edit and the original is untouched.
+Only survey-shaped sets appear - a recorded task list is a different vocabulary and cannot be copied here.
+If the list is empty and you know one exists, it is probably still a draft, and the form says how many are waiting.
 
 ### Reviewing results
 

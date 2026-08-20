@@ -53,6 +53,12 @@ jest.mock('../../firsthand/survey-csv', () => {
 });
 
 jest.mock('../../firsthand/studies-repository', () => ({
+  // The real, pure ownership rule rather than a hand-duplicated copy that
+  // could drift from it - the same reason toResponsesCsv above is a spy-able
+  // real implementation instead of a stub.
+  canWriteStudy: jest.requireActual<typeof import('../../firsthand/studies-repository')>(
+    '../../firsthand/studies-repository'
+  ).canWriteStudy,
   createStudy: jest.fn(),
   countStudyTasks: jest.fn(),
   // Defaults to a study with no stated duration, which is the common case and
@@ -71,6 +77,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
         estimated_duration_minutes: undefined,
         status: 'launched' as const,
         owner_user_id: 'test-user-id',
+        copied_from_study_id: null,
         created_at: '2026-08-16T10:00:00.000Z',
         updated_at: '2026-08-16T10:00:00.000Z',
       },
@@ -99,6 +106,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
         estimated_duration_minutes: undefined,
         status: 'launched' as const,
         owner_user_id: 'test-user-id',
+        copied_from_study_id: null,
         created_at: '2026-08-16T10:00:00.000Z',
         updated_at: '2026-08-16T10:00:00.000Z',
       },
@@ -198,6 +206,7 @@ describe('Opportunities API', () => {
       resetParticipantRouteLimits(userId);
     }
   });
+
 
   describe('GET /api/opportunities', () => {
     it('should return opportunities list', async () => {
@@ -420,6 +429,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'survey' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -450,6 +460,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -487,6 +498,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'survey' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -755,6 +767,41 @@ describe('Opportunities API', () => {
         });
 
         /**
+         * The survey twin of the PATCH fallback-mint assertion made for
+         * inline_study: provenance must reach createStudy from this second
+         * minting site too, on both authoring paths.
+         */
+        it('passes copied_from_study_id through on the PATCH fallback mint', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_new_copy' },
+            steps: []
+          } as never);
+
+          await patch(
+            { inline_survey: { ...questions, copied_from_study_id: 'study_source' } },
+            null,
+            true
+          ).expect(200);
+
+          expect(mockCreateStudy).toHaveBeenCalledWith(
+            expect.objectContaining({ copied_from_study_id: 'study_source' })
+          );
+        });
+
+        it('sends null, not undefined, for copied_from_study_id on the PATCH fallback mint when none is given', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_new_blank' },
+            steps: []
+          } as never);
+
+          await patch({ inline_survey: questions }, null, true).expect(200);
+
+          const created = mockCreateStudy.mock.calls[0][0];
+          expect(created.copied_from_study_id).toBeNull();
+          expect('copied_from_study_id' in created).toBe(true);
+        });
+
+        /**
          * Authoring over questions that already exist was refused outright,
          * because `inline_survey` only ever created - so honouring it would
          * have minted a second study and repointed the row at it, leaving the
@@ -776,6 +823,7 @@ describe('Opportunities API', () => {
               estimated_duration_minutes: undefined,
               status: 'launched',
               owner_user_id: 'test-user-id',
+              copied_from_study_id: null,
               created_at: '2026-08-16T10:00:00.000Z',
               updated_at: '2026-08-16T10:00:00.000Z',
             },
@@ -807,19 +855,29 @@ describe('Opportunities API', () => {
               estimated_duration_minutes: undefined,
               status: 'launched',
               owner_user_id: 'someone-else',
+              copied_from_study_id: null,
               created_at: '2026-08-16T10:00:00.000Z',
               updated_at: '2026-08-16T10:00:00.000Z',
             },
             steps: [],
           } as never);
-          mockUpdateStudy.mockResolvedValueOnce({ ok: false, reason: 'forbidden' } as never);
-
+          // No longer queues a forbidden updateStudy result: the ownership
+          // check that used to live only inside updateStudy's own FOR UPDATE
+          // transaction now also runs earlier, in updateLinkedStudyContent
+          // itself (the second finding from the FIX 1 review - see its own
+          // comment for the disclosure that closes). That means updateStudy is
+          // never reached on this path any more, so a queued mockUpdateStudy
+          // return here would go uncollected and poison whichever later test
+          // next calls updateStudy - exactly the trap `patch`'s own docblock
+          // warns about for mockQuery. Asserted directly below instead of
+          // relied upon implicitly.
           const response = await patch(
             { inline_survey: questions },
             'study_existing'
           ).expect(403);
 
           expect(response.body.error).toMatch(/belong to another researcher/);
+          expect(mockUpdateStudy).not.toHaveBeenCalled();
           // The dangerous failure is not the refusal itself but a fallback:
           // minting a replacement here would repoint the opportunity away from
           // a colleague's study without saying so.
@@ -837,6 +895,31 @@ describe('Opportunities API', () => {
           );
           expect(mockCreateStudy).not.toHaveBeenCalled();
         });
+
+        /**
+         * FIX 5, survey twin. See the recorded-study version for the trace:
+         * `changesLinkage` reads true whenever `data.type` is present, which
+         * the form sends on every save, so a dangling-link repair used to be
+         * caught by the pre-check meant for a NEW `firsthand_study_id` before
+         * `updateLinkedStudyContent` below could answer 'missing' and mint the
+         * replacement.
+         */
+        it('repairs a dangling link even when the request resends its own type', async () => {
+          mockGetStudyById.mockResolvedValueOnce(null as never);
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_replacement' },
+            steps: []
+          } as never);
+
+          await patch(
+            { type: 'survey', inline_survey: questions },
+            'study_existing',
+            true
+          ).expect(200);
+
+          expect(mockUpdateStudy).not.toHaveBeenCalled();
+          expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+        });
       });
 
       it('refuses a rating question with no scale, at the API not just the form', async () => {
@@ -851,6 +934,42 @@ describe('Opportunities API', () => {
           .expect(400);
 
         expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      /**
+       * The twin of the inline_study assertion above: a property proved on
+       * only one of the two authoring paths is this project's most recurring
+       * defect.
+       */
+      it('passes copied_from_study_id through to createStudy', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_copy' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '17', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send(body({ inline_survey: { ...questions, copied_from_study_id: 'study_source' } }))
+          .expect(201);
+
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ copied_from_study_id: 'study_source' })
+        );
+      });
+
+      it('sends null, not undefined, for copied_from_study_id when none is given', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_blank' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '18', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(body()).expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        expect(created.copied_from_study_id).toBeNull();
+        expect('copied_from_study_id' in created).toBe(true);
       });
     });
 
@@ -1291,6 +1410,47 @@ describe('Opportunities API', () => {
         expect(JSON.stringify(response.body)).toContain('options');
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
+
+      /**
+       * B3: the picker copies a study rather than linking to it, and the copy
+       * carries where it came from. The identical assertion is made for
+       * inline_survey immediately below the survey describe block - a
+       * property proved on only one twin is this project's most recurring
+       * defect.
+       */
+      it('passes copied_from_study_id through to createStudy', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_copy' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '15', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app)
+          .post('/api/opportunities')
+          .send({
+            ...inlineBody,
+            inline_study: { ...inlineBody.inline_study, copied_from_study_id: 'study_source' }
+          })
+          .expect(201);
+
+        expect(mockCreateStudy).toHaveBeenCalledWith(
+          expect.objectContaining({ copied_from_study_id: 'study_source' })
+        );
+      });
+
+      it('sends null, not undefined, for copied_from_study_id when none is given', async () => {
+        mockCreateStudy.mockResolvedValueOnce({ study: { id: 'study_blank' }, steps: [] });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '16', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+
+        const created = mockCreateStudy.mock.calls[0][0];
+        expect(created.copied_from_study_id).toBeNull();
+        expect('copied_from_study_id' in created).toBe(true);
+      });
     });
 
     it('should reject an unmoderated opportunity with an external participant type (M2)', async () => {
@@ -1307,6 +1467,101 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe(
         'Unmoderated studies cannot use an external participant type; participants must be logged-in Cortex users'
       );
+    });
+
+    /**
+     * FIX 1 (security review, B3): `firsthand_study_id` is still a writable
+     * field on this schema, and until this fix the only server-side check on
+     * it was kind-and-existence - never ownership. Two authenticated calls
+     * (create a study as one user, then link it here as another) still
+     * reached the exact shared-link state B3's copy-on-select exists to
+     * remove, no UI involved.
+     */
+    describe('linking a study you do not own (FIX 1)', () => {
+      const linkedStudy = (ownerUserId: string | null) => ({
+        study: {
+          id: 'study_colleagues',
+          title: 'A task list',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'recorded' as const,
+          owner_user_id: ownerUserId,
+          copied_from_study_id: null,
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      const linkBody = {
+        type: 'unmoderated',
+        title: 'Valid Unmoderated Title',
+        purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+        firsthand_study_id: 'study_colleagues',
+        status: 'published'
+      };
+
+      it('refuses to link a study owned by another researcher', async () => {
+        mockGetStudyById.mockResolvedValueOnce(linkedStudy('someone-else'));
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(linkBody)
+          .expect(403);
+
+        expect(response.body.error).toMatch(/belongs to another researcher/);
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+      });
+
+      it('still links an unowned study', async () => {
+        // canWriteStudy(null, ...) is true, and claimStudyIfUnowned depends
+        // on this staying reachable - a legacy row with no owner must still
+        // be linkable, or it can never be claimed.
+        mockGetStudyById.mockResolvedValueOnce(linkedStudy(null));
+        mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '20', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(linkBody).expect(201);
+      });
+
+      it('still links a study you own', async () => {
+        mockGetStudyById.mockResolvedValueOnce(linkedStudy('test-user-id'));
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '21', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(app).post('/api/opportunities').send(linkBody).expect(201);
+      });
+
+      it('lets a superadmin link a study owned by someone else', async () => {
+        const superadminApp = express();
+        superadminApp.use(express.json());
+        superadminApp.use((req, _res, next) => {
+          (req as unknown as { session: { user: unknown } }).session = {
+            user: {
+              id: 'superadmin-id',
+              name: 'Super Admin',
+              email: 'super@example.com',
+              role: 'superadmin'
+            }
+          };
+          next();
+        });
+        superadminApp.use('/api/opportunities', opportunitiesRouter);
+        superadminApp.use(errorHandler);
+
+        mockGetStudyById.mockResolvedValueOnce(linkedStudy('someone-else'));
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '22', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        await request(superadminApp).post('/api/opportunities').send(linkBody).expect(201);
+      });
     });
   });
 
@@ -1373,6 +1628,70 @@ describe('Opportunities API', () => {
       expect(updateSql).toContain('firsthand_study_id');
       expect(updateSql).not.toContain('inline_study');
       expect(mockQuery.mock.calls[2][1]).toContain('study_from_edit');
+    });
+
+    /**
+     * The PATCH fallback-mint twin of the POST-create assertion: provenance
+     * must reach createStudy from this second minting site too, not only the
+     * one on the create route.
+     */
+    it('passes copied_from_study_id through on the PATCH fallback mint', async () => {
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_from_edit_copy' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            firsthand_study_id: 'study_from_edit_copy',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({
+          status: 'published',
+          inline_study: { ...inlineStudy, copied_from_study_id: 'study_source' }
+        })
+        .expect(200);
+
+      expect(mockCreateStudy).toHaveBeenCalledWith(
+        expect.objectContaining({ copied_from_study_id: 'study_source' })
+      );
+    });
+
+    it('sends null, not undefined, for copied_from_study_id on the PATCH fallback mint when none is given', async () => {
+      mockCreateStudy.mockResolvedValueOnce({
+        study: { id: 'study_from_edit_blank' },
+        steps: []
+      });
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: '1',
+            firsthand_study_id: 'study_from_edit_blank',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'published', inline_study: inlineStudy })
+        .expect(200);
+
+      const created = mockCreateStudy.mock.calls[0][0];
+      expect(created.copied_from_study_id).toBeNull();
+      expect('copied_from_study_id' in created).toBe(true);
     });
 
     it('does not inherit an empty stored title into the study it creates', async () => {
@@ -1657,6 +1976,7 @@ describe('Opportunities API', () => {
             estimated_duration_minutes: undefined,
             status: 'launched',
             owner_user_id: 'test-user-id',
+            copied_from_study_id: null,
             created_at: '2026-08-16T10:00:00.000Z',
             updated_at: '2026-08-16T10:00:00.000Z',
           },
@@ -1696,6 +2016,7 @@ describe('Opportunities API', () => {
           estimated_duration_minutes: undefined,
           status: 'launched',
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-16T10:00:00.000Z',
           updated_at: '2026-08-16T10:00:00.000Z',
         },
@@ -1780,6 +2101,7 @@ describe('Opportunities API', () => {
             estimated_duration_minutes: undefined,
             status: 'launched',
             owner_user_id: 'test-user-id',
+            copied_from_study_id: null,
             created_at: '2026-08-16T10:00:00.000Z',
             updated_at: '2026-08-16T10:00:00.000Z',
           },
@@ -1971,6 +2293,45 @@ describe('Opportunities API', () => {
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
 
+      /**
+       * Second finding from the same review: `stepSequenceIsUnchanged` and
+       * `studyHasResponses` used to run BEFORE the ownership check inside
+       * updateStudy's own transaction, so a 400 ("already collected answers")
+       * versus updateStudy's 403 disclosed whether a study this caller
+       * cannot write had already collected responses - to a caller never
+       * granted read access to that fact. FIX 1 only closes this for a
+       * NEWLY set link; this is the case it does not reach: an opportunity
+       * ALREADY linked (from before this fix, or to a study a colleague
+       * later claimed by editing it directly in StudyEditor) to a study this
+       * caller cannot write.
+       */
+      it('refuses ownership before probing whether the study has already collected answers', async () => {
+        mockGetStudyById.mockResolvedValueOnce({
+          study: {
+            id: 'study_already_linked',
+            title: 'A study',
+            intro_text: 'Intro',
+            consent_text: 'Consent',
+            kind: 'recorded',
+            estimated_duration_minutes: undefined,
+            status: 'launched',
+            owner_user_id: 'someone-else',
+            copied_from_study_id: null,
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-16T10:00:00.000Z',
+          },
+          // Fewer steps than inlineStudy carries, so stepSequenceIsUnchanged
+          // would read as CHANGED and (pre-fix) reach studyHasResponses.
+          steps: [],
+        } as never);
+
+        const response = await patchLinked({ inline_study: inlineStudy }).expect(403);
+
+        expect(response.body.error).toMatch(/belongs to another researcher/);
+        expect(mockStudyHasResponses).not.toHaveBeenCalled();
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+      });
+
       it('refuses a task list whose linked study holds the other vocabulary', async () => {
         mockGetStudyById.mockResolvedValueOnce({
           study: {
@@ -1982,6 +2343,7 @@ describe('Opportunities API', () => {
             estimated_duration_minutes: undefined,
             status: 'launched',
             owner_user_id: 'test-user-id',
+            copied_from_study_id: null,
             created_at: '2026-08-16T10:00:00.000Z',
             updated_at: '2026-08-16T10:00:00.000Z',
           },
@@ -2009,6 +2371,35 @@ describe('Opportunities API', () => {
         } as never);
 
         await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        expect(mockCreateStudy).toHaveBeenCalledTimes(1);
+        expect(opportunityWrite()[1]).toContain('study_replacement');
+      });
+
+      /**
+       * FIX 5. The test above never actually reached the bug: it sends only
+       * `inline_study`, and the real form ALSO resends `type` on every save.
+       * `changesLinkage` is true whenever `data.type !== undefined`, so a
+       * dangling-link repair with `type` in the body used to route through the
+       * pre-check meant for a NEW `firsthand_study_id` on the request -
+       * resolving the STORED (missing) id instead and refusing with "That
+       * task list could not be found" before `updateLinkedStudyContent` below
+       * ever got to answer 'missing' and mint the repair. Reproduced against
+       * the running local server, traced to
+       * `assertLinkedStudyKindMatches` (opportunities.ts:203).
+       */
+      it('repairs a dangling link even when the request resends its own type', async () => {
+        mockGetStudyById.mockResolvedValueOnce(null as never);
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_replacement' },
+          steps: []
+        } as never);
+
+        await patchLinked(
+          { type: 'unmoderated', inline_study: inlineStudy },
+          true
+        ).expect(200);
 
         expect(mockUpdateStudy).not.toHaveBeenCalled();
         expect(mockCreateStudy).toHaveBeenCalledTimes(1);
@@ -2210,6 +2601,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'survey' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -2325,6 +2717,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -2422,6 +2815,124 @@ describe('Opportunities API', () => {
       expect(response.body.error).toBe(
         'Add at least one prompt to the task list, or link an existing task list, before publishing'
       );
+    });
+
+    /**
+     * FIX 1 (security review, B3): a PATCH could still repoint
+     * `firsthand_study_id` at a colleague's study - the exact shared-link
+     * state B3's copy-on-select exists to remove - because the only
+     * server-side check was kind-and-existence, never ownership.
+     */
+    describe('changing the linked study id respects ownership (FIX 1)', () => {
+      const colleaguesStudy = (ownerUserId: string | null) => ({
+        study: {
+          id: 'study_colleagues',
+          title: 'A task list',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'recorded' as const,
+          owner_user_id: ownerUserId,
+          copied_from_study_id: null,
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: []
+      });
+
+      it('refuses to change the link to a study owned by another researcher', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_mine')] });
+        mockGetStudyById.mockResolvedValueOnce(colleaguesStudy('someone-else'));
+
+        const response = await request(app)
+          .patch('/api/opportunities/1')
+          .send({ firsthand_study_id: 'study_colleagues' })
+          .expect(403);
+
+        expect(response.body.error).toMatch(/belongs to another researcher/);
+      });
+
+      /**
+       * The regression FIX 1 must not cause. The opportunity form legitimately
+       * resends the SAME `firsthand_study_id` on every save while its author
+       * edits an unrelated field, even when the linked study belongs to
+       * someone else - reusing a colleague's study (pre-B3) or an unowned one
+       * a colleague later claimed are both still-valid states to be linked to.
+       * Written first, per the brief, as the regression this fix must not
+       * cause.
+       */
+      it('still saves an unrelated edit while re-sending the same not-yours study id', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_colleagues')] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+          rowCount: 1
+        });
+        mockGetStudyById.mockResolvedValueOnce(colleaguesStudy('someone-else'));
+
+        await request(app)
+          .patch('/api/opportunities/1')
+          .send({ title: 'A retitled opportunity', firsthand_study_id: 'study_colleagues' })
+          .expect(200);
+      });
+
+      it('still clears the link to a study you do not own', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_colleagues')] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+          rowCount: 1
+        });
+
+        await request(app)
+          .patch('/api/opportunities/1')
+          .send({ firsthand_study_id: null })
+          .expect(200);
+
+        // Clearing never has a positive id to check the kind or ownership of.
+        expect(mockGetStudyById).not.toHaveBeenCalled();
+      });
+    });
+
+    /**
+     * FIX 5: the missing-study pre-check must stay exactly as strict for the
+     * case it was written for - LINKING to an id that does not exist - even
+     * though authoring inline content now skips it. See the two
+     * "repairs a dangling link" tests above for the case that changed.
+     */
+    describe('the missing-study refusal stays exact for an actual link (FIX 5)', () => {
+      it('still refuses to link an id that does not exist', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_mine')] });
+        mockGetStudyById.mockResolvedValueOnce(null as never);
+
+        const response = await request(app)
+          .patch('/api/opportunities/1')
+          .send({ firsthand_study_id: 'study_does_not_exist' })
+          .expect(400);
+
+        expect(response.body.error).toBe('That task list could not be found');
+      });
+
+      it('still allows retitling an opportunity whose linked study has gone missing', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+        mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_missing')] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+          rowCount: 1
+        });
+
+        await request(app)
+          .patch('/api/opportunities/1')
+          .send({ title: 'A retitled opportunity' })
+          .expect(200);
+
+        // No content and no id change: changesLinkage never triggers on a bare
+        // title edit, so the pre-check was never reached even before FIX 5 -
+        // the point is that it stays that way.
+        expect(mockGetStudyById).not.toHaveBeenCalled();
+      });
     });
   });
 
@@ -2747,6 +3258,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'survey' as const,
           owner_user_id: 'someone-else',
+          copied_from_study_id: null,
           created_at: '2026-08-17T10:00:00.000Z',
           updated_at: '2026-08-17T10:00:00.000Z',
         },
@@ -2970,6 +3482,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-16T10:00:00.000Z',
           updated_at: '2026-08-16T10:00:00.000Z',
         },
@@ -2998,6 +3511,7 @@ describe('Opportunities API', () => {
           status: 'launched' as const,
           kind: 'recorded' as const,
           owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
           created_at: '2026-08-16T10:00:00.000Z',
           updated_at: '2026-08-16T10:00:00.000Z',
         },
@@ -3105,6 +3619,7 @@ describe('Opportunities API', () => {
         status: 'launched' as const,
         kind: 'survey' as const,
         owner_user_id: 'test-user-id',
+        copied_from_study_id: null,
         created_at: '2026-08-17T10:00:00.000Z',
         updated_at: '2026-08-17T10:00:00.000Z',
       },
@@ -3384,6 +3899,7 @@ describe('Opportunities API', () => {
         estimated_duration_minutes: undefined,
         status: 'launched' as const,
         owner_user_id: 'someone-else',
+        copied_from_study_id: null,
         created_at: '2026-08-16T10:00:00.000Z',
         updated_at: '2026-08-16T10:00:00.000Z',
       },
