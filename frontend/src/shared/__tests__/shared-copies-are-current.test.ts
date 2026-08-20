@@ -25,11 +25,21 @@ const rootDir = path.resolve(frontendDir, '..');
 
 // Mirrors the mapping in copy-shared-types.js. A source added there and not
 // here simply is not covered - the two lists have to be kept together.
+//
+// `copy-shared-types.js` copies `shared/firsthand/` as a whole DIRECTORY, so a
+// new file there is copied without anybody adding it anywhere - and is then
+// uncovered here, silently, which is the worst of both. It happened on the very
+// next new file: `consent-templates.ts` shipped with its frontend copy
+// unchecked, and an independent mutation pass proved the consequence by
+// deleting the cross-kind consent refusal from the COPY alone and watching all
+// 992 frontend tests pass. The directory check below closes it by construction
+// rather than by anybody remembering.
 const copies: Array<{ source: string; copy: string }> = [
   { source: 'shared/types/index.ts', copy: 'src/shared/types.ts' },
   { source: 'shared/constants/index.ts', copy: 'src/shared/constants.ts' },
   { source: 'shared/config/environment.ts', copy: 'src/shared/config/environment.ts' },
   { source: 'shared/test-utils/index.ts', copy: 'src/shared/test-utils.ts' },
+  { source: 'shared/firsthand/consent-templates.ts', copy: 'src/shared/firsthand/consent-templates.ts' },
   { source: 'shared/firsthand/contract.ts', copy: 'src/shared/firsthand/contract.ts' },
   { source: 'shared/firsthand/inline-study.ts', copy: 'src/shared/firsthand/inline-study.ts' },
   { source: 'shared/firsthand/study-input.ts', copy: 'src/shared/firsthand/study-input.ts' },
@@ -37,6 +47,12 @@ const copies: Array<{ source: string; copy: string }> = [
   { source: 'shared/firsthand/survey-authoring.ts', copy: 'src/shared/firsthand/survey-authoring.ts' },
   { source: 'shared/firsthand/url-safety.ts', copy: 'src/shared/firsthand/url-safety.ts' },
 ];
+
+/** Every `.ts` the firsthand directory copy actually produces. */
+const firsthandSources = fs
+  .readdirSync(path.join(rootDir, 'shared', 'firsthand'))
+  .filter((entry) => entry.endsWith('.ts'))
+  .sort();
 
 /** Drop the generated banner, which is the one part the copy legitimately adds. */
 const withoutHeader = (contents: string): string => {
@@ -56,6 +72,22 @@ describe('frontend/src/shared is a current copy of shared/', () => {
       `${copy} is stale. Run \`node copy-shared-types.js\` from frontend/ and commit the result - ` +
         `the frontend imports this copy, so until you do, your change to ${source} is not in the app.`
     ).toBe(sourceText);
+  });
+
+  /**
+   * The list is enumerated by hand and the script copies a whole directory, so
+   * the two can silently disagree - and did, the first time a file was added to
+   * `shared/firsthand/`. Compared against the directory itself, so the omission
+   * is impossible rather than merely discouraged.
+   */
+  it('names every file the firsthand directory copy actually produces', () => {
+    const listed = copies
+      .map(({ source }) => source)
+      .filter((source) => source.startsWith('shared/firsthand/'))
+      .map((source) => source.replace('shared/firsthand/', ''))
+      .sort();
+
+    expect(listed).toEqual(firsthandSources);
   });
 
   it('every generated copy carries the banner, so nobody edits one by hand', () => {

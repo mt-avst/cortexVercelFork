@@ -446,6 +446,22 @@ export interface FirstHandStudy {
    */
   copied_from_study_id?: string | null;
   /**
+   * Which approved consent wording this study runs on: a template id
+   * (`recorded-default`, `survey-default`) or the sentinel `custom`, with the
+   * version of that template alongside. Null on both means the provenance was
+   * never established, and the application reads that as unapproved rather
+   * than as approved-by-default - see shared/firsthand/consent-templates.ts
+   * and migration 0013.
+   *
+   * Maintained by the repository from `consent_text` itself. A client may send
+   * them as a CLAIM, which is checked against the wording before it is
+   * believed; they are not independently writable, because a classification
+   * that could be set without the text it describes is a classification that
+   * can lie.
+   */
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
+  /**
    * How many authored steps the study has, excluding the machine-appended
    * `end` marker. LIST-ONLY: returned by GET /api/firsthand/studies so the
    * study picker can show a count without loading every study's steps, and

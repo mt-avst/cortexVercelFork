@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
+import { RECORDED_CONSENT_TEMPLATE } from '../../shared/firsthand/consent-templates';
 import {
   authoredStepsOf,
   studyRoundTripsCleanly,
@@ -184,6 +185,57 @@ beforeEach(() => {
   vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
   vi.mocked(updateOpportunity).mockResolvedValue({ id: 'opp-1' } as never);
 });
+
+
+/**
+ * Click the create/update control, walking the Consent step first if it is in
+ * the way.
+ *
+ * C1 gave consent its own step at the END of the two authoring paths, which
+ * moved the terminal control off Questions and Task List onto Consent. Tests
+ * that author content and then save therefore have one more step to walk than
+ * they used to. Doing it here rather than at thirty call sites keeps "where the
+ * save control lives" in one place, which is the thing that has now moved
+ * twice.
+ *
+ * The forward click is conditional, not optional: on a path with no Consent
+ * step - an external link, a booked session - there is nothing to walk and the
+ * control is already on screen. If neither is present the `getByRole` below
+ * throws, so a test standing on the wrong step still fails rather than passing
+ * quietly.
+ */
+const goToConsentStep = () => {
+  fireEvent.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+};
+
+/**
+ * The consent editor, opened the way an author opens it.
+ *
+ * A study whose stored wording is not the approved wording arrives classified
+ * `custom`, so the editor is already unlocked; one on the template arrives
+ * locked and has to be unlocked deliberately. Handling both here means a test
+ * asserting on the WORDING does not also have to know which of the two it is
+ * looking at - while still going through the lock rather than around it.
+ */
+const consentField = (): HTMLTextAreaElement => {
+  const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
+
+  if (unlock) {
+    fireEvent.click(unlock);
+  }
+
+  return screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement;
+};
+
+const submitFromLastStep = (name: RegExp = /^(Create|Update) Opportunity/i) => {
+  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
+
+  if (forward) {
+    fireEvent.click(forward);
+  }
+
+  fireEvent.click(screen.getByRole('button', { name }));
+};
 
 describe('the pure hydration helpers', () => {
   it('drops the appended completion marker and nothing else', () => {
@@ -555,9 +607,17 @@ describe('reopening an opportunity that has a task list', () => {
       'Open the basket and read what is in it aloud',
       'Which delivery option would you pick?'
     ]);
-    expect(
-      (screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement).value
-    ).toBe('The bespoke wording this researcher actually wrote');
+    goToConsentStep();
+    // The stored wording is nobody's approved wording, so the step must say so
+    // as well as showing it: asserting only the text would keep passing if the
+    // classification were dropped.
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
+      /Custom wording/i
+    );
+    expect(consentField().value).toBe(
+      'The bespoke wording this researcher actually wrote'
+    );
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
     expect(
       (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
     ).toBe('https://shop.test/basket');
@@ -736,9 +796,8 @@ describe('reopening a task list that was copied from another', () => {
     expect(screen.getByText(/a set that no longer exists/i)).toBeInTheDocument();
     // The opportunity itself still opened and is still editable - a failed
     // provenance lookup is not a failed study load.
-    expect(
-      (screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement).value
-    ).toBe(study().study.consent_text);
+    goToConsentStep();
+    expect(consentField().value).toBe(study().study.consent_text);
   });
 });
 
@@ -982,7 +1041,7 @@ describe('emptying a list that is linked', () => {
     await removeFirstTask(1);
     await removeFirstTask(0);
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    submitFromLastStep(/Update Opportunity/i);
 
     expect(
       await screen.findByText(/A task list needs at least one task/i)
@@ -1008,7 +1067,7 @@ describe('a duration the author cleared', () => {
     expect((duration as HTMLInputElement).value).toBe('18');
     fireEvent.change(duration, { target: { value: '' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    submitFromLastStep(/Update Opportunity/i);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     // Asserted after serialisation: null survives JSON, undefined would not,
@@ -1200,7 +1259,7 @@ describe('when the linked study no longer exists', () => {
       target: { value: 'Find the export button' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    submitFromLastStep(/Update Opportunity/i);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     // Content reaches the payload as inline_study, which is what makes the
@@ -1273,7 +1332,7 @@ describe('when the linked set of questions no longer exists', () => {
       target: { value: 'How easy was that?' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    submitFromLastStep(/Update Opportunity/i);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     expect(sentBody().inline_survey.steps).toEqual([
@@ -1338,6 +1397,15 @@ describe('when the linked study cannot be read', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     expect(await screen.findByRole('button', { name: /^Back$/i })).toBeEnabled();
+
+    // And onward to the step C1 added, which is now the one holding the save
+    // control - so it is the step an over-broad `disabled` would strand the
+    // author on, with no way back.
+    expect(
+      screen.getByRole('button', { name: /Continue to Consent/i })
+    ).toBeEnabled();
+    goToConsentStep();
+    expect(await screen.findByRole('button', { name: /^Back$/i })).toBeEnabled();
   });
 
   it('disables the final save control too, not only the Save Changes shortcut', async () => {
@@ -1349,6 +1417,7 @@ describe('when the linked study cannot be read', () => {
     await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
+    goToConsentStep();
 
     expect(
       await screen.findByRole('button', { name: /Update Opportunity/i })
@@ -1374,11 +1443,97 @@ describe('the Save button appearing for a change that only touches authored cont
 
   it('appears when only the consent wording changed', async () => {
     const save = await openAndEdit(() => {
-      fireEvent.change(screen.getByLabelText(/Consent text/i), {
+      goToConsentStep();
+      fireEvent.change(consentField(), {
         target: { value: 'Rewritten consent' }
       });
     });
     expect(save).toBeInTheDocument();
+  });
+
+  /**
+   * A save that changes ONLY the classification has to be offerable.
+   *
+   * A study stored `custom` whose wording is verbatim the approved template is
+   * a real state - migration 0013 could not classify a row it had no template
+   * for, and a copy inherits `custom` from an unclassified source. Correcting
+   * it changes no text at all, so without the classification clauses in
+   * `hasChanges` the Save button never appears and the row stays wrong forever.
+   * An independent mutation pass found all four clauses uncovered.
+   */
+  it('appears when only the consent classification changed, and the wording did not', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        consent_text: RECORDED_CONSENT_TEMPLATE.text,
+        consent_template_id: 'custom',
+        consent_template_version: null
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    goToConsentStep();
+
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    // Away and back. Setting a textarea to the value it already holds fires no
+    // change event at all, so the round trip is what actually exercises the
+    // classification moving from `custom` to the template the wording verbatim
+    // is - while leaving the TEXT exactly as it was found.
+    const field = () => screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement;
+    fireEvent.change(field(), { target: { value: 'something else entirely' } });
+    fireEvent.change(field(), { target: { value: RECORDED_CONSENT_TEMPLATE.text } });
+
+    expect(field().value).toBe(RECORDED_CONSENT_TEMPLATE.text);
+
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
+      'Standard recorded-session consent (version 1)'
+    );
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+  });
+
+  /**
+   * And the same for the VERSION alone, which the id clause cannot detect.
+   *
+   * A row naming a version nothing published - reachable on a rollback after a
+   * v2, and on any row written by something that got it wrong - keeps its id
+   * and gains the right version. Only the version clause sees that.
+   */
+  it('appears when only the consent template VERSION changed', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        consent_text: RECORDED_CONSENT_TEMPLATE.text,
+        consent_template_id: RECORDED_CONSENT_TEMPLATE.id,
+        consent_template_version: 99
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    goToConsentStep();
+
+    // Named, but with no version claimed - the row says 99 and nothing
+    // published a 99.
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
+      '(version not recorded)'
+    );
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Customise consent wording/i }));
+    const versionField = () =>
+      screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement;
+    fireEvent.change(versionField(), { target: { value: 'something else entirely' } });
+    fireEvent.change(versionField(), {
+      target: { value: RECORDED_CONSENT_TEMPLATE.text }
+    });
+
+    expect(versionField().value).toBe(RECORDED_CONSENT_TEMPLATE.text);
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent('(version 1)');
+    expect(screen.getByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
   });
 
   it('appears when only the starting URL changed', async () => {
@@ -1439,11 +1594,16 @@ describe('the Save button appearing for a change that only touches authored cont
   });
 
   /**
-   * The same control assertion, on a step that is not Basic Information. Every
-   * case above navigates back to Basic Information before looking, so the
-   * `isEdit && hasChanges()` gate was pinned on exactly one of the four steps
-   * that render it - and those four call sites are now textually identical,
-   * which is when a change gets applied to one and not the others.
+   * The same control assertion, on the steps that are not Basic Information.
+   * Every case above navigates back to Basic Information before looking, so the
+   * `isEdit && hasChanges()` gate was pinned on exactly one of the steps that
+   * render it - and those call sites are textually identical, which is when a
+   * change gets applied to one and not the others.
+   *
+   * C1 made it FIVE call sites: the Consent step renders one, and the Questions
+   * step gained one that it deliberately lacked before, since the terminal
+   * control moved off it. So the walk continues onto Consent rather than
+   * stopping at Task List.
    */
   it('stays away on the content steps too, not only on Basic Information', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
@@ -1456,9 +1616,139 @@ describe('the Save button appearing for a change that only touches authored cont
     await openAllCards();
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
 
+    goToConsentStep();
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    await openAllCards();
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
       target: { value: 'Open the basket and describe it' }
     });
     expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+
+    // And it appears on the new step too, not only on the one the edit was made
+    // on - the fifth call site is the one nothing was watching.
+    goToConsentStep();
+    expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeInTheDocument();
+  });
+
+  /**
+   * A study whose provenance was never established must NOT be badged approved.
+   *
+   * Migration 0013 classified everything it could and left the rest NULL. The
+   * form's hydration decides what NULL means, and defaulting it to the current
+   * template would put a green "Standard recorded-session consent (version 1)"
+   * badge over wording nobody has ever checked - and then send that claim on
+   * save. An independent mutation pass found the SURVEY twin of this fallback
+   * uncovered, and both version fallbacks with it.
+   */
+  it('reads an unclassified study as custom, not as approved', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({ consent_template_id: null, consent_template_version: null }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    goToConsentStep();
+
+    expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
+      /Custom wording/i
+    );
+    expect(screen.getByTestId('consent-template-state')).not.toHaveTextContent(
+      /version 1/i
+    );
+  });
+
+  it('carries a stored classification through to the payload, version included', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(
+      study({
+        consent_text: RECORDED_CONSENT_TEMPLATE.text,
+        consent_template_id: RECORDED_CONSENT_TEMPLATE.id,
+        consent_template_version: 1
+      }) as never
+    );
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    await openAllCards();
+    fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
+      target: { value: 'Open the basket and describe it' }
+    });
+    goToConsentStep();
+    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+
+    await vi.waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalled());
+    const inline = (
+      vi.mocked(updateOpportunity).mock.calls[0][1] as {
+        inline_study?: Record<string, unknown>;
+      }
+    ).inline_study as Record<string, unknown>;
+
+    expect(inline.consent_template_id).toBe(RECORDED_CONSENT_TEMPLATE.id);
+    // The VERSION, separately. A hydration that dropped it to null would still
+    // pass an id-only assertion, and the claim would then be ignored by the
+    // server - which is how a v1 study quietly becomes `custom` after a v2.
+    expect(inline.consent_template_version).toBe(1);
+  });
+
+  /**
+   * The consent field belongs to the kind the form is authoring.
+   *
+   * The step is handed its `fieldId`, `validationError` and `contentStepTitle`
+   * through per-kind ternaries in the parent, and all three could be swapped
+   * without a single test noticing. A swapped `fieldId` breaks the label
+   * association and points `FIELD_LOCATIONS`-driven error routing at a control
+   * that is not there.
+   */
+  it('gives the consent field the recorded key, not the survey one', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    goToConsentStep();
+
+    expect(await screen.findByLabelText(/Consent text/i)).toHaveAttribute(
+      'id',
+      'inline_study_consent_text'
+    );
+  });
+
+  /**
+   * The chooser gate, shared between the content step and the Consent step.
+   *
+   * `isAwaitingCopiedContent` was factored out of the tabs' own `showChooser`
+   * so the two surfaces cannot disagree about whether content has been chosen.
+   * The tabs still compute their own `showChooser` on top of it - deliberately,
+   * because a re-opened picker after a copy HAS been taken must not blank the
+   * Consent step - so this pins the shared half from the outside: both surfaces
+   * must be in the awaiting state at the same moment.
+   */
+  it('shows the picker and the awaiting-consent note at the same time', async () => {
+    vi.mocked(getOpportunity).mockResolvedValue(
+      { ...recordedOpportunity, firsthand_study_id: null } as never
+    );
+    renderEdit('/admin/opportunities/opp-1/edit');
+    await screen.findByDisplayValue('Checkout walkthrough');
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(
+      await screen.findByRole('radio', { name: /Start from an existing task list/i })
+    );
+
+    // The content step is showing the picker...
+    expect(await screen.findByTestId('task-source-list')).toBeInTheDocument();
+
+    // ...so the Consent step must be showing the awaiting note, not an editor.
+    goToConsentStep();
+    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /Go back to Task List/i })
+    ).toBeInTheDocument();
   });
 });

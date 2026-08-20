@@ -1,6 +1,8 @@
-import { withClientIds } from './client-ids';
+import { withClientIds, type WithClientId } from './client-ids';
 import { getPrimaryTargetUrl } from '../recording/task-target';
 import type { StudyStep } from '../../shared/firsthand/contract';
+import { CUSTOM_CONSENT_TEMPLATE_ID } from '../../shared/firsthand/consent-templates';
+import type { FirstHandStudy } from '../../shared/types';
 import {
   authorableStepTypes,
   toStudySteps,
@@ -249,24 +251,105 @@ export const studyRoundTripsCleanly = (
  * by a human, and a copy of a decision is still a decision. Re-deriving the
  * estimate would silently overwrite it on first save.
  */
+export type CopiedSurveyFields = {
+  inline_survey_questions: WithClientId<SurveyQuestion>[];
+  inline_survey_consent_text: string;
+  inline_survey_consent_template_id: string;
+  inline_survey_consent_template_version: number | null;
+  inline_survey_duration_minutes: number | undefined;
+  inline_survey_duration_auto: boolean;
+};
+
+export type CopiedRecordedFields = {
+  inline_study_steps: WithClientId<InlineStudyStep>[];
+  inline_study_consent_text: string;
+  inline_study_consent_template_id: string;
+  inline_study_consent_template_version: number | null;
+  inline_study_duration_minutes: number | undefined;
+  inline_study_duration_auto: boolean;
+  inline_study_target_url: string;
+};
+
+/**
+ * The study fields a copy reads.
+ *
+ * A NAMED Pick over `FirstHandStudy`, and the two functions below carry EXPLICIT
+ * return types, and both of those are load-bearing rather than tidiness.
+ *
+ * These functions used to take an inline structural literal and infer their
+ * return type. Adding a field to the study was therefore not a compile error
+ * anywhere: the call site passes a variable, not a fresh object, so a wider
+ * type is assignable to a narrower one in silence; the bodies enumerate their
+ * outputs rather than spreading; and an inferred return type spread into
+ * `{ ...prev, ...copied }` type-checks whatever it contains. A copy would have
+ * carried CUSTOM consent wording while claiming the DEFAULT template - the
+ * exact lie this step exists to prevent - with a green build either side of it.
+ *
+ * With the return type written down, omitting a field is a compile error in the
+ * function that omits it. With the parameter named, widening what a copy reads
+ * is a deliberate edit here rather than an accident somewhere else.
+ */
+export type CopyableStudy = Pick<
+  FirstHandStudy,
+  | 'consent_text'
+  | 'estimated_duration_minutes'
+  | 'consent_template_id'
+  | 'consent_template_version'
+>;
+
 export const copiedSurveyFields = (
-  study: { consent_text: string; estimated_duration_minutes?: number | null },
+  study: CopyableStudy,
   steps: StudyStep[]
-) => ({
+): CopiedSurveyFields => ({
   inline_survey_questions: withClientIds(authoredStepsOf(steps).map(toSurveyQuestion)),
   inline_survey_consent_text: study.consent_text,
+  // A copy inherits the SOURCE's classification, not a fresh one. The wording
+  // came from that study, so claiming the current template for it would be
+  // asserting an approval nobody granted to this text - and if the source ran
+  // on custom wording, the copy runs on custom wording. Null means the source's
+  // provenance was never established, which is not the same as approved, so it
+  // reads as custom here too.
+  inline_survey_consent_template_id:
+    study.consent_template_id ?? CUSTOM_CONSENT_TEMPLATE_ID,
+  inline_survey_consent_template_version: study.consent_template_version ?? null,
   inline_survey_duration_minutes: study.estimated_duration_minutes ?? undefined,
   inline_survey_duration_auto: false
 });
 
 /** The recorded twin of `copiedSurveyFields`. Same rules, different vocabulary. */
 export const copiedRecordedFields = (
-  study: { consent_text: string; estimated_duration_minutes?: number | null },
+  study: CopyableStudy,
   steps: StudyStep[]
-) => ({
+): CopiedRecordedFields => ({
   inline_study_steps: withClientIds(authoredStepsOf(steps).map(toInlineStudyStep)),
   inline_study_consent_text: study.consent_text,
+  inline_study_consent_template_id:
+    study.consent_template_id ?? CUSTOM_CONSENT_TEMPLATE_ID,
+  inline_study_consent_template_version: study.consent_template_version ?? null,
   inline_study_duration_minutes: study.estimated_duration_minutes ?? undefined,
   inline_study_duration_auto: false,
   inline_study_target_url: getPrimaryTargetUrl(steps) ?? ''
 });
+
+/**
+ * Whether the author has asked to start from an existing study and has not
+ * chosen one yet.
+ *
+ * Exported and shared because TWO surfaces now depend on it and they must not
+ * drift: the content step renders the picker in this state, and the Consent
+ * step must refuse to render a consent editor in it - the wording that will
+ * arrive belongs to whichever study is picked, so offering to author it first
+ * asks the author to consent on behalf of content that does not exist yet.
+ * Computed from form data alone, deliberately, so a step that cannot see the
+ * content step's local UI state can still answer the question.
+ */
+export const isAwaitingCopiedContent = (state: {
+  hasLinkedStudy: boolean;
+  studyIsReadOnly: boolean;
+  sourceMode: string;
+  copiedFromStudyId: string;
+}): boolean =>
+  !state.hasLinkedStudy &&
+  !state.studyIsReadOnly &&
+  state.sourceMode === 'copy' &&
+  !state.copiedFromStudyId;

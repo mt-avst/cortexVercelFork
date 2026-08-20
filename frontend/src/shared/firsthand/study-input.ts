@@ -146,6 +146,21 @@ export const updateStudyRequestSchema = z.strictObject({
   title: z.string().min(1).optional(),
   intro_text: z.string().min(1).optional(),
   consent_text: z.string().min(1).optional(),
+  /**
+   * A CLAIM about which approved wording `consent_text` is, never an
+   * instruction. The repository checks it against the text before believing it
+   * and downgrades it to `custom` when it does not match, so a caller can
+   * understate its approval and can never overstate it.
+   *
+   * Declared here because this object is strict: omitting them would 400 every
+   * save from a client that carries the classification it was handed on load -
+   * the same trap `copied_from_study_id` records on the survey schema - rather
+   * than merely dropping the field. They are also ignored entirely unless
+   * `consent_text` is present, because the classification is a property of the
+   * wording and must not be settable on its own.
+   */
+  consent_template_id: z.string().min(1).max(100).nullable().optional(),
+  consent_template_version: z.number().int().positive().nullable().optional(),
   brand_name: z.string().min(1).nullable().optional(),
   estimated_duration_minutes: z.number().int().positive().nullable().optional(),
   locale: z.string().min(1).nullable().optional(),
@@ -156,7 +171,29 @@ export const updateStudyRequestSchema = z.strictObject({
   // studies-repository.ts for why this is the only way to correct an owner.
   owner_user_id: z.string().min(1).optional(),
   steps: z.array(stepSchema).min(1).optional()
-});
+})
+  .superRefine((value, ctx) => {
+    // The classification describes the wording, so it cannot arrive without it.
+    //
+    // The repository already ignores a lone claim, so this changes no stored
+    // state - it changes what the caller is TOLD. Answering 200 to a request
+    // that set out to record which template a study runs on, having recorded
+    // nothing, is how a client comes to depend on behaviour that does not
+    // exist; and the one thing a governance field must never do is look like it
+    // was accepted when it was discarded.
+    if (
+      (value.consent_template_id !== undefined ||
+        value.consent_template_version !== undefined) &&
+      value.consent_text === undefined
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "consent_template_id and consent_template_version can only be sent alongside consent_text",
+        path: ["consent_template_id"]
+      });
+    }
+  });
 
 export type CreateStudyRequest = z.infer<typeof createStudyRequestSchema>;
 export type UpdateStudyRequest = z.infer<typeof updateStudyRequestSchema>;

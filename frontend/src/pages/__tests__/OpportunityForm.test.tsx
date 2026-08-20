@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -122,6 +122,55 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 // Pure logic - the two behaviours this change actually introduces (A1 follow-up)
 // ---------------------------------------------------------------------------
+
+
+/**
+ * Click the create/update control, walking the Consent step first if it is in
+ * the way.
+ *
+ * C1 gave consent its own step at the END of the two authoring paths, which
+ * moved the terminal control off Questions and Task List onto Consent. Tests
+ * that author content and then save therefore have one more step to walk than
+ * they used to. Doing it here rather than at thirty call sites keeps "where the
+ * save control lives" in one place, which is the thing that has now moved
+ * twice.
+ *
+ * The forward click is conditional, not optional: on a path with no Consent
+ * step - an external link, a booked session - there is nothing to walk and the
+ * control is already on screen. If neither is present the `getByRole` below
+ * throws, so a test standing on the wrong step still fails rather than passing
+ * quietly.
+ */
+const goToConsentStep = () => {
+  fireEvent.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+};
+
+/**
+ * Open the consent editor.
+ *
+ * Consent is LOCKED to the approved wording by default since C1, so a test that
+ * wants to change it has to unlock it the way an author does. Doing it through
+ * the button rather than by reaching past it is the point: the lock is the
+ * feature, and a test that bypassed it would keep passing if the lock were
+ * removed.
+ */
+const customiseConsent = () => {
+  const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
+
+  if (unlock) {
+    fireEvent.click(unlock);
+  }
+};
+
+const submitFromLastStep = (name: RegExp = /^(Create|Update) Opportunity/i) => {
+  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
+
+  if (forward) {
+    fireEvent.click(forward);
+  }
+
+  fireEvent.click(screen.getByRole('button', { name }));
+};
 
 describe('clearTypeConditionalErrors', () => {
   it('drops external-link and participant-type errors, keeps the study error, when switching to unmoderated', () => {
@@ -243,7 +292,18 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       screen.getByLabelText(/What the participant sees/i)
     ).toBeInTheDocument();
-    expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
+
+    // Consent is a step of its own now, and it opens LOCKED: the approved
+    // wording is shown as text with its template named, not as a textarea. So
+    // this asserts the wording is present and that there is nothing to type
+    // into - the second half is what would fail if the lock were dropped and
+    // the old free textarea came back.
+    goToConsentStep();
+    expect(screen.getByText(/Standard recorded-session consent/i)).toBeInTheDocument();
+    expect(screen.getByTestId('consent-locked-text')).toHaveTextContent(
+      /This session records your screen and microphone/i
+    );
+    expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
     expect(vi.mocked(getFirstHandStudies)).not.toHaveBeenCalled();
   });
 
@@ -262,6 +322,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     estimated_duration_minutes?: number;
     steps?: Array<Record<string, unknown>>;
     copied_from_study_id?: string;
+    consent_template_id?: string;
+    consent_template_version?: number;
   };
   type SubmittedPayload = {
     default_duration_minutes?: number;
@@ -310,13 +372,61 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     });
   };
 
+  /**
+   * The consent classification has to REACH the payload, not merely exist in
+   * form state.
+   *
+   * `inlineStudySchema` is the one inline schema that is not `.strict()`, so a
+   * claim the form never sends and a claim the schema silently strips look
+   * identical from here - and both leave the server reclassifying the study
+   * against the newest template on every save. Reading it off the request body
+   * is the only assertion that can tell the difference.
+   */
+  it('sends the consent template the wording is actually on', async () => {
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    submitFromLastStep(/^Create/i);
+
+    await vi.waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalled());
+    expect(submittedPayload().inline_study?.consent_template_id).toBe(
+      'recorded-default'
+    );
+    expect(submittedPayload().inline_study?.consent_template_version).toBe(1);
+  });
+
+  it('sends no template claim at all once the author has customised the wording', async () => {
+    renderForm();
+    selectType('unmoderated');
+    await fillMinimalStudy();
+
+    goToConsentStep();
+    customiseConsent();
+    fireEvent.change(screen.getByLabelText(/Consent text/i), {
+      target: { value: 'We record everything and share it with our client.' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+
+    await vi.waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalled());
+    const inline = submittedPayload().inline_study;
+    expect(inline?.consent_text).toBe(
+      'We record everything and share it with our client.'
+    );
+    // Absent, not `custom`. `custom` is the SERVER's answer, arrived at by
+    // reading the wording; a client asserting it would be a client that could
+    // also assert the opposite.
+    expect('consent_template_id' in (inline as object)).toBe(false);
+    expect('consent_template_version' in (inline as object)).toBe(false);
+  });
+
   it('sends the duration the researcher typed, not the opportunity default', async () => {
     renderForm();
     selectType('unmoderated');
     await fillMinimalStudy();
 
     overrideDuration('18');
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -339,7 +449,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     await fillMinimalStudy();
 
     overrideDuration('');
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -357,7 +467,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     selectType('unmoderated');
     await fillMinimalStudy();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -379,7 +489,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       { target: { value: 'Download last month report' } }
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -449,7 +559,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/Starting URL/i), {
       target: { value: 'javascript:alert(1)' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     expect(
       await screen.findByText(/http\(s\) address, or a path beginning with a single/i)
@@ -460,7 +570,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/Starting URL/i), {
       target: { value: 'https://example.com/checkout' }
     });
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -502,7 +612,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       ).toBe('https://example.com/checkout');
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -547,7 +657,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'https://example.com/checkout' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     // The payload is only built when a task exists, so without this the URL
     // would vanish and the save would look like it worked.
@@ -673,7 +783,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       'Which delivery would you pick?'
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -738,7 +848,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
     ).toBe('https://shop.test/basket');
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -920,7 +1030,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Find the export button' }
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    submitFromLastStep(/Update Opportunity/i);
 
     await vi.waitFor(() => {
       expect(vi.mocked(updateOpportunity)).toHaveBeenCalled();
@@ -930,6 +1040,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       updatedPayload().inline_study
     ).toBeDefined();
+
+    // Back to the Task List step first. The save is now made from Consent, and
+    // both assertions below are about what the TASK LIST step shows - on the
+    // Consent step there is no source radio and no task card, so they would
+    // both pass without proving anything at all.
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
 
     // The source choice goes: this opportunity has its own task list now, so
     // "where does the content come from" has been answered. Waited on rather
@@ -966,10 +1082,12 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       target: { value: 'Draft saved early, now renamed' }
     });
 
-    // Back to the Task List tab, where the save control lives. It stays disabled
-    // while the post-save success banner is up, so wait it out rather than
-    // racing it - a click during that window is silently dropped.
+    // Back to the Task List tab and on to Consent, which is where the save
+    // control lives since C1. It stays disabled while the post-save success
+    // banner is up, so wait it out rather than racing it - a click during that
+    // window is silently dropped.
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    goToConsentStep();
     const saveAgain = await screen.findByRole('button', { name: /Update Opportunity/i });
     await vi.waitFor(() => expect(saveAgain).not.toBeDisabled(), { timeout: 5000 });
     fireEvent.click(saveAgain);
@@ -1124,7 +1242,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.change(screen.getByLabelText(/What the participant is asked/i), {
         target: { value: 'How easy was checkout?' }
       });
-      fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+      submitFromLastStep(/^Create/i);
 
       await vi.waitFor(() => {
         expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -1172,7 +1290,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
         target: { value: 'Find the export button' }
       });
-      fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+      submitFromLastStep(/^Create/i);
 
       await vi.waitFor(() => {
         expect(vi.mocked(createOpportunity)).toHaveBeenCalled();
@@ -1340,7 +1458,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       await screen.findByRole('radio', { name: /Start from an existing task list/i })
     );
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     // Visible, not merely present in validationErrors: the chooser is the
     // whole tab body in copy mode with nothing picked yet, so the message has
@@ -1366,7 +1484,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.change(screen.getByLabelText(/Status/i), { target: { value: 'published' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
     expect(
       await screen.findByText(/Add at least one task before publishing/i)
     ).toBeInTheDocument();
@@ -1397,7 +1515,16 @@ describe('locateField', () => {
     expect(locateField('title').tab).toBe(1);
     expect(locateField('participant_type_specific_details').tab).toBe(2);
     expect(locateField('external_link_optional').tab).toBe(3);
-    expect(locateField('inline_study_consent_text').tab).toBe(3);
+    // Step 4, since C1: consent is its own step at the end of the two authoring
+    // paths. Asserted for BOTH keys, not one - the recorded and survey consent
+    // fields are a twin pair and pinning one has twice let the other drift.
+    expect(locateField('inline_study_consent_text').tab).toBe(4);
+    expect(locateField('inline_survey_consent_text').tab).toBe(4);
+    // Still step 3, and asserted here because "the consent field moved" and
+    // "everything on that step moved" are different changes: the content the
+    // consent is about stayed where it was.
+    expect(locateField('inline_study_steps').tab).toBe(3);
+    expect(locateField('inline_survey_questions').tab).toBe(3);
   });
 
   it('names a task by its position, not by its state key', () => {
@@ -1531,7 +1658,7 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find the export button' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     expect(
       await screen.findByText('Please fix these fields: Title')
@@ -1570,7 +1697,7 @@ describe('OpportunityForm - a refused action always says so', () => {
       target: { value: 'Find the export button' },
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
+    submitFromLastStep(/^Create/i);
 
     expect(
       await screen.findByText('Please fix these fields: Specific Criteria')
@@ -1606,7 +1733,7 @@ describe('OpportunityForm - a refused action always says so', () => {
   });
 
   it('stays put when the earliest problem is already on the open tab', async () => {
-    // Exercises setActiveTab(3) from tab 3 - the routing must not bounce the
+    // Exercises setActiveTab(4) from tab 4 - the routing must not bounce the
     // author to tab 1 just because that is where most fields live.
     renderForm();
     selectType('unmoderated');
@@ -1623,6 +1750,8 @@ describe('OpportunityForm - a refused action always says so', () => {
     fireEvent.change(screen.getByLabelText(/What the participant sees/i), {
       target: { value: 'Find the export button' },
     });
+    goToConsentStep();
+    customiseConsent();
     fireEvent.change(screen.getByLabelText(/Consent text/i), { target: { value: '  ' } });
 
     fireEvent.click(screen.getByRole('button', { name: /^Create/i }));
@@ -1630,8 +1759,16 @@ describe('OpportunityForm - a refused action always says so', () => {
     expect(
       await screen.findByText('Please fix these fields: Consent text')
     ).toBeInTheDocument();
-    // Still on the Task List tab, with the field that failed on screen.
+    // Still on the Consent step, with the field that failed on screen.
     expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
+    // And the STEP repeats the refusal beside the control, not only the banner
+    // at the top. The step is handed its error through a per-kind ternary, so
+    // this is also what stops the recorded and survey keys being swapped: with
+    // the wrong one wired in there is simply no message here at all.
+    expect(
+      within(screen.getByTestId('consent-step')).getByRole('alert')
+    ).toHaveTextContent('Consent text is required');
+    expect(screen.getByLabelText(/Consent text/i)).toHaveClass('is-invalid');
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
 

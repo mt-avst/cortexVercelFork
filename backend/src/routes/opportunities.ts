@@ -354,6 +354,15 @@ async function updateLinkedStudyContent(
   requiredKind: StudyKind,
   content: {
     consent_text: string;
+    /**
+     * The classification the form believed the wording carried when it loaded
+     * it. Passed straight through to `updateStudy`, which verifies it against
+     * the text rather than trusting it. Carried at all so that a study written
+     * against version 1 of a template stays attributed to version 1 after a
+     * version 2 ships, instead of silently reclassifying as custom.
+     */
+    consent_template_id?: string | null;
+    consent_template_version?: number | null;
     estimated_duration_minutes?: number | null;
     steps: StudyStep[];
   },
@@ -945,6 +954,8 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       title: data.title.trim(),
       intro_text: data.purpose_one_liner.trim(),
       consent_text: inlineStudy.consent_text.trim(),
+      consent_template_id: inlineStudy.consent_template_id ?? null,
+      consent_template_version: inlineStudy.consent_template_version ?? null,
       // NOT `?? data.default_duration_minutes`. That column is NOT NULL with a
       // DEFAULT of 30, so falling back to it gave every recorded study a
       // duration nobody chose - and put it above a consent button. Null means
@@ -978,6 +989,8 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       title: data.title.trim(),
       intro_text: data.purpose_one_liner.trim(),
       consent_text: inlineSurvey.consent_text.trim(),
+      consent_template_id: inlineSurvey.consent_template_id ?? null,
+      consent_template_version: inlineSurvey.consent_template_version ?? null,
       estimated_duration_minutes: resolveStudyDuration(
         inlineSurvey.estimated_duration_minutes
       ),
@@ -1441,6 +1454,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         'recorded',
         {
           consent_text: inlineStudyInput.consent_text.trim(),
+          consent_template_id: inlineStudyInput.consent_template_id ?? null,
+          consent_template_version: inlineStudyInput.consent_template_version ?? null,
           // Omitted rather than resolved when the request did not carry one.
           // resolveStudyDuration(undefined) is null, and updateStudy skips a
           // key that is absent - so without this, a save that says nothing
@@ -1508,6 +1523,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
           data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded study'
         ).trim(),
         consent_text: inlineStudyInput.consent_text.trim(),
+        consent_template_id: inlineStudyInput.consent_template_id ?? null,
+        consent_template_version: inlineStudyInput.consent_template_version ?? null,
         estimated_duration_minutes: resolveStudyDuration(inlineStudyInput.estimated_duration_minutes),
         status: 'launched',
         // The editing user, not the opportunity's owner: a superadmin editing
@@ -1541,6 +1558,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         'survey',
         {
           consent_text: inlineSurveyInput.consent_text.trim(),
+          consent_template_id: inlineSurveyInput.consent_template_id ?? null,
+          consent_template_version: inlineSurveyInput.consent_template_version ?? null,
           // Omitted rather than resolved when the request did not carry one.
           // resolveStudyDuration(undefined) is null, and updateStudy skips a
           // key that is absent - so without this, a save that says nothing
@@ -1593,6 +1612,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
           data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Survey'
         ).trim(),
         consent_text: inlineSurveyInput.consent_text.trim(),
+        consent_template_id: inlineSurveyInput.consent_template_id ?? null,
+        consent_template_version: inlineSurveyInput.consent_template_version ?? null,
         estimated_duration_minutes: resolveStudyDuration(
           inlineSurveyInput.estimated_duration_minutes
         ),

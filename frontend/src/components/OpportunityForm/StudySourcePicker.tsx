@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import type { FirstHandStudy } from '../../api/types';
 import type { StudyStep } from '../../shared/firsthand/contract';
+import ConsentStateChip from '../ConsentStateChip';
 
 interface StudySourcePickerProps {
   /** Already filtered to what this surface can actually author. */
@@ -198,7 +199,16 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
             >
               <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
                 <div>
-                  <div style={{ fontWeight: 600 }}>{study.title}</div>
+                  <div style={{ fontWeight: 600 }}>
+                    {study.title}{' '}
+                    {/* Shown BEFORE the copy is taken, not after. A copy
+                        inherits the source's consent wording and its
+                        classification with it, so "this one runs on custom
+                        wording" is something the author needs while choosing,
+                        not something to discover on the Consent step once the
+                        decision has been made. */}
+                    <ConsentStateChip templateId={study.consent_template_id} />
+                  </div>
                   <div className="text-muted" style={{ fontSize: '0.85rem' }}>
                     {/* `authored_step_count` is derived by the list endpoint and
                         excludes the completion marker, so this is the number of

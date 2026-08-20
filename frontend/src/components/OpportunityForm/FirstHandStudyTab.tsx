@@ -441,36 +441,6 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               }
             />
 
-            <div className="row">
-              <div className="col-12 col-md-8">
-                <div className="form-group">
-                  <label
-                    htmlFor="inline_study_consent_text"
-                    className="form-label mb-2"
-                    style={{ fontSize: '1rem', fontWeight: '600' }}
-                  >
-                    Consent text *
-                  </label>
-                  <textarea
-                    id="inline_study_consent_text"
-                    className={`form-control ${validationErrors.inline_study_consent_text ? 'is-invalid' : ''}`}
-                    rows={4}
-                    value={formData.inline_study_consent_text ?? ''}
-                    onChange={(e) =>
-                      handleInputChange('inline_study_consent_text', e.target.value)
-                    }
-                  />
-                  {validationErrors.inline_study_consent_text && (
-                    <div className="invalid-feedback d-block">
-                      {validationErrors.inline_study_consent_text}
-                    </div>
-                  )}
-                  <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-                    Shown before recording starts. The participant must accept it to continue.
-                  </div>
-                </div>
-              </div>
-            </div>
           </>
         )}
       </div>

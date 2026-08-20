@@ -101,6 +101,16 @@ export const inlineSurveySchema = z
       .min(1)
       .max(INLINE_STUDY_LIMITS.maxConsentLength),
     /**
+     * A CLAIM about which approved wording `consent_text` is. Same field and
+     * the same reasoning as `inlineStudySchema`'s - see there - and carried
+     * here for the same reason `copied_from_study_id` is: `.strict()` on this
+     * object rejects any key it does not declare, so omitting it would 400
+     * every survey save that carries a classification rather than merely
+     * dropping it the way the non-strict twin would.
+     */
+    consent_template_id: z.string().min(1).max(100).optional(),
+    consent_template_version: z.number().int().positive().optional(),
+    /**
      * `null` and absent mean DIFFERENT things, which is why this is nullable
      * rather than merely optional.
      *

@@ -20,6 +20,7 @@ import {
   authoredStepsOf,
   copiedRecordedFields,
   copiedSurveyFields,
+  isAwaitingCopiedContent,
   studyRoundTripsCleanly,
   toInlineStudyPayloadStep,
   toInlineStudyStep,
@@ -32,8 +33,13 @@ import type { StudySourceMode } from '../components/OpportunityForm/StudySourceC
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, SurveyQuestionsTab } from '../components/OpportunityForm';
 import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
+import {
+  CUSTOM_CONSENT_TEMPLATE_ID,
+  RECORDED_CONSENT_TEMPLATE,
+  SURVEY_CONSENT_TEMPLATE
+} from '../shared/firsthand/consent-templates';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
   type InlineSurvey as InlineSurveyPayload,
@@ -101,9 +107,10 @@ export const clearTypeConditionalErrors = (
 
 /**
  * Which tab renders each validation error, and what the author sees that field
- * called. The form spans three tabs and the save controls only exist on the
- * last one, so a refused save is almost always about a field that is not on
- * screen: naming it and opening its tab is the whole point. Labels are the
+ * called. The form spans three or four steps depending on the type, and the
+ * save controls only exist on the last one, so a refused save is almost always
+ * about a field that is not on screen: naming it and opening its step is the
+ * whole point. Labels are the
  * on-screen label text minus the required marker - not the state key, which
  * appears nowhere in the UI.
  */
@@ -125,10 +132,16 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
   inline_study_target_url: { tab: 3, label: 'Starting URL' },
   inline_study_duration_minutes: { tab: 3, label: 'Estimated completion time' },
   inline_study_steps: { tab: 3, label: 'Task List' },
-  inline_study_consent_text: { tab: 3, label: 'Consent text' },
+  // Step 4 on the two authoring paths, and there is no other kind of
+  // opportunity that can produce this error: only an unmoderated study carries
+  // a task list, and only an unmoderated study has a Consent step. Same for its
+  // survey twin below. A type with no study never sets either key -
+  // clearTypeConditionalErrors deletes them on a type change - so a fixed 4 is
+  // unambiguous here in a way it would not be for a field two shapes share.
+  inline_study_consent_text: { tab: 4, label: 'Consent text' },
   inline_survey_questions: { tab: 3, label: 'Questions' },
   inline_survey_duration_minutes: { tab: 3, label: 'Estimated completion time' },
-  inline_survey_consent_text: { tab: 3, label: 'Consent text' }
+  inline_survey_consent_text: { tab: 4, label: 'Consent text' }
 };
 
 /**
@@ -204,6 +217,7 @@ export type StepKey =
   | 'questions'
   | 'externalLink'
   | 'taskList'
+  | 'consent'
   | 'sessions';
 
 export interface FormStep {
@@ -247,6 +261,33 @@ export const getTabsForType = (
       key: 'sessions',
       title: 'Session Management',
       description: 'Create time slots'
+    });
+  }
+
+  // Consent is a step of its own on exactly the paths that author a study, and
+  // on no others.
+  //
+  // Derived from the step that precedes it rather than re-tested against `type`
+  // and `deliveryMode`, deliberately. The four blocks above already encode which
+  // shapes author content; a fifth predicate saying the same thing in different
+  // words is a predicate that can stop agreeing with them, which is the exact
+  // drift B1 removed from the step bodies. If a future type authors a study, it
+  // pushes `questions` or `taskList` and gets a Consent step for free.
+  //
+  // An external link, a booked session and a hand-off have no study, so there is
+  // no consent for this product to govern: what the participant agrees to lives
+  // in the tool on the other side of the link. Adding an empty Consent step
+  // there would imply Cortex has a say in something it does not.
+  const authoringStep = tabs.find(
+    (tab) => tab.key === 'questions' || tab.key === 'taskList'
+  );
+
+  if (authoringStep) {
+    tabs.push({
+      id: 4,
+      key: 'consent',
+      title: 'Consent',
+      description: 'What the participant agrees to'
     });
   }
 
@@ -308,6 +349,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // change a value nobody touched.
     inline_study_duration_auto: true,
     inline_study_consent_text: DEFAULT_CONSENT_TEXT as string,
+    // The classification the wording arrived with. A NEW study starts on the
+    // current version of its kind's template, because that is literally the
+    // text above it. Held in state rather than derived on every render so that
+    // a study written against version 1 keeps saying version 1 once a version 2
+    // ships - the wording is unchanged, so re-deriving it would reclassify a
+    // study nobody touched. The server verifies the claim against the text
+    // regardless; this only decides WHICH version it is checked against.
+    inline_study_consent_template_id: RECORDED_CONSENT_TEMPLATE.id as string,
+    inline_study_consent_template_version:
+      RECORDED_CONSENT_TEMPLATE.version as number | null,
     inline_study_steps: [] as WithClientId<InlineStudyStep>[],
     // Native poll and survey. Defaults to external so an author who never opens
     // the choice gets exactly today's behaviour.
@@ -315,6 +366,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     inline_survey_duration_minutes: undefined as number | undefined,
     inline_survey_duration_auto: true,
     inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT as string,
+    // The survey twin. Two field pairs rather than one for the same reason
+    // there are two consent texts: a type change swaps which pair is live, and
+    // a single shared pair would carry the recorded template's id onto a survey.
+    inline_survey_consent_template_id: SURVEY_CONSENT_TEMPLATE.id as string,
+    inline_survey_consent_template_version:
+      SURVEY_CONSENT_TEMPLATE.version as number | null,
     inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
     // Where this opportunity's content comes from, replacing the two
     // `reuse_existing_*` booleans. One field rather than two because only one
@@ -427,6 +484,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // because the step headers are clickable and the type can change underneath.
   const currentStep = tabs.find((tab) => tab.id === activeTab);
 
+  /**
+   * Which consent vocabulary this opportunity authors in, or null when it
+   * authors no study at all.
+   *
+   * Derived from the step set rather than from `type` and `deliveryMode`, so it
+   * cannot disagree with `getTabsForType` about which shapes have a study - the
+   * same reason the Consent step itself is derived there rather than re-tested.
+   */
+  const authoringKind: AuthoringKind | null = tabs.some((tab) => tab.key === 'questions')
+    ? 'survey'
+    : tabs.some((tab) => tab.key === 'taskList')
+    ? 'recorded'
+    : null;
+
+  /**
+   * Shared with the content step's own chooser gate, so the two cannot disagree
+   * about whether content has been chosen yet. See `isAwaitingCopiedContent`.
+   */
+  const awaitingCopiedContent = isAwaitingCopiedContent({
+    hasLinkedStudy: hasLinkedStudy && !studyMissing,
+    studyIsReadOnly,
+    sourceMode: formData.study_source,
+    copiedFromStudyId: formData.copied_from_study_id
+  });
+
   // Computed once for every save control on every step. A study that could not
   // be read is the reason most easily dropped when this is written out by hand,
   // and dropping it is what lets a save overwrite content the form never had.
@@ -454,10 +536,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         inline_study_duration_minutes: undefined as number | undefined,
         inline_study_duration_auto: true,
         inline_study_consent_text: DEFAULT_CONSENT_TEXT,
+        inline_study_consent_template_id: RECORDED_CONSENT_TEMPLATE.id as string,
+        inline_study_consent_template_version:
+          RECORDED_CONSENT_TEMPLATE.version as number | null,
         inline_study_steps: [] as WithClientId<InlineStudyStep>[],
         inline_survey_duration_minutes: undefined as number | undefined,
         inline_survey_duration_auto: true,
         inline_survey_consent_text: DEFAULT_SURVEY_CONSENT_TEXT,
+        inline_survey_consent_template_id: SURVEY_CONSENT_TEMPLATE.id as string,
+        inline_survey_consent_template_version:
+          SURVEY_CONSENT_TEMPLATE.version as number | null,
         inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
         // Deliberately 'blank' once content is hydrated. The source choice is
         // about where content came FROM at authoring time; an opportunity being
@@ -518,6 +606,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               authored.map(toSurveyQuestion)
             );
             authoredFields.inline_survey_consent_text = linked.study.consent_text;
+            authoredFields.inline_survey_consent_template_id =
+              linked.study.consent_template_id ?? CUSTOM_CONSENT_TEMPLATE_ID;
+            authoredFields.inline_survey_consent_template_version =
+              linked.study.consent_template_version ?? null;
             authoredFields.inline_survey_duration_minutes =
               linked.study.estimated_duration_minutes ?? undefined;
             // Stored, therefore decided - including a stored NULL, which says
@@ -530,6 +622,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
               authored.map(toInlineStudyStep)
             );
             authoredFields.inline_study_consent_text = linked.study.consent_text;
+            // A stored NULL is a row whose provenance was never established -
+            // migration 0013 classified everything it could and left the rest
+            // NULL rather than guessing. Reading that as `custom` is the safe
+            // direction: it shows the author "this wording is not the approved
+            // wording" for something nobody checked, where the other default
+            // would put an approval badge on it.
+            authoredFields.inline_study_consent_template_id =
+              linked.study.consent_template_id ?? CUSTOM_CONSENT_TEMPLATE_ID;
+            authoredFields.inline_study_consent_template_version =
+              linked.study.consent_template_version ?? null;
             authoredFields.inline_study_duration_minutes =
               linked.study.estimated_duration_minutes ?? undefined;
             // Same rule as the survey twin above.
@@ -761,10 +863,23 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
   // Ensure activeTab is valid when the type - or the delivery mode, which also
   // decides the tab set - changes.
+  //
+  // Lands on the LAST step the new shape has, rather than on the first.
+  //
+  // DEFENCE ONLY, and worth saying so plainly rather than implying coverage
+  // that cannot exist: both things that change the step set - the type selector
+  // and the delivery-mode choice - live on step 1, so `activeTab` is 1 whenever
+  // either of them fires and the condition below is unreachable through the UI.
+  // No test can drive it, and an independent mutation pass duly found the
+  // change from `1` to `maxTabId` survives. It stays because the step set is
+  // being reshaped step by step through this plan, and the day something moves
+  // one of those controls, sending an author who has filled in three steps back
+  // to the top is a worse answer than leaving them on the last step that still
+  // exists. Neither loses input; one loses their place.
   useEffect(() => {
     const maxTabId = Math.max(...getTabsForType(formData.type, deliveryMode).map(tab => tab.id));
     if (activeTab > maxTabId) {
-      setActiveTab(1);
+      setActiveTab(maxTabId);
     }
   }, [formData.type, deliveryMode, activeTab]);
 
@@ -1186,6 +1301,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         JSON.stringify(withoutClientIds(originalFormData.inline_survey_questions)) ||
       formData.inline_survey_consent_text.trim() !==
         originalFormData.inline_survey_consent_text.trim() ||
+      // The classification is saved state too, so a save that only reclassifies
+      // - unlocking custom wording, then restoring the template verbatim - has
+      // to be offerable. Without this the Save button stays hidden and the row
+      // keeps saying `custom` for wording that is now the approved wording.
+      formData.inline_survey_consent_template_id !==
+        originalFormData.inline_survey_consent_template_id ||
+      formData.inline_survey_consent_template_version !==
+        originalFormData.inline_survey_consent_template_version ||
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
@@ -1206,6 +1329,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         originalFormData.inline_study_target_url.trim() ||
       formData.inline_study_consent_text.trim() !==
         originalFormData.inline_study_consent_text.trim() ||
+      formData.inline_study_consent_template_id !==
+        originalFormData.inline_study_consent_template_id ||
+      formData.inline_study_consent_template_version !==
+        originalFormData.inline_study_consent_template_version ||
       formData.inline_study_duration_minutes !==
         originalFormData.inline_study_duration_minutes ||
       formData.inline_survey_duration_minutes !==
@@ -1300,7 +1427,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       logger.error('Validation errors', { errors });
       showRefusal();
       setSuccessMessage('');
-      if (tab) {
+      // Only to a step this shape actually HAS. FIELD_LOCATIONS is a static map
+      // over every field in the form, so it names step 4 for consent - and the
+      // shapes with no study have no step 4. Setting one anyway renders no step
+      // body at all, because the render guards key off `currentStep`, which
+      // `tabs.find` returns undefined for: the author would be told to fix a
+      // field and shown a blank page.
+      //
+      // Also defence only, for the same reason the clamp above is:
+      // `clearTypeConditionalErrors` deletes both consent keys on every type
+      // change, so no consent error survives into a shape that lacks step 4.
+      // The guard costs a predicate and removes a whole class of blank-page
+      // failure from every future change to the step set.
+      if (tab && tabs.some((candidate) => candidate.id === tab)) {
         setActiveTab(tab);
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1378,6 +1517,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // the contract rejects an empty string.
             ...(targetUrl ? { target_url: targetUrl } : {}),
             consent_text: formData.inline_study_consent_text.trim(),
+            // Sent as a claim, not as an instruction. The server checks it
+            // against the wording beside it and writes `custom` when the two
+            // disagree, so nothing this form sends can make a study claim
+            // approval it does not have. `custom` is omitted rather than sent:
+            // it is the server's answer, never the client's assertion.
+            ...(formData.inline_study_consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID &&
+            formData.inline_study_consent_template_version !== null
+              ? {
+                  consent_template_id: formData.inline_study_consent_template_id,
+                  consent_template_version:
+                    formData.inline_study_consent_template_version
+                }
+              : {}),
             // The study's OWN duration, not the opportunity's. This used to
             // send `default_duration_minutes`, which unmoderated never shows,
             // so every recorded study inherited that field's default and told
@@ -1442,6 +1594,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           if (authoringInline) {
             data.inline_survey = {
               consent_text: formData.inline_survey_consent_text.trim(),
+              ...(formData.inline_survey_consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID &&
+              formData.inline_survey_consent_template_version !== null
+                ? {
+                    consent_template_id: formData.inline_survey_consent_template_id,
+                    consent_template_version:
+                      formData.inline_survey_consent_template_version
+                  }
+                : {}),
               // Same rule as the task-list branch above.
               estimated_duration_minutes: durationToSend(
                 formData.inline_survey_duration_auto
@@ -1721,7 +1881,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     setRefusalCount(count => count + 1);
   };
 
-  const handleInputChange = (field: string, value: string | number | boolean | undefined) => {
+  const handleInputChange = (
+    field: string,
+    // `null` is here for `consent_template_version`, which is null exactly when
+    // the wording is custom. `undefined` already meant "no value" for the
+    // optional fields, and reusing it for this one would make "custom wording"
+    // indistinguishable from "field not set" in the dirty check.
+    value: string | number | boolean | null | undefined
+  ) => {
     setFormData(prev => {
       // The source choice and anything copied under it belong to the authoring
       // surface that is going away, so they are cleared for EVERY type change
@@ -2151,23 +2318,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           currentUserId={user?.id}
                         />
 
-                        {/* This is the last step for a native survey, so
-                            without these there is no way to save at all - which
-                            is how it shipped until a test went looking for the
-                            button. Two of its differences from every other
-                            step's row are preserved rather than fixed, because
-                            this step changes nothing visible: it offers no
-                            green Save Changes shortcut in edit mode, and its
-                            final control is blue where the others are green.
-                            The third - a real type="submit" - is fixed, and is
-                            the one intentional behaviour change here. */}
+                        {/* No longer the last step: Consent follows it, and
+                            the create/update control moved there with the end
+                            of the wizard. The green Save Changes shortcut this
+                            row deliberately lacked in edit mode is added here,
+                            because with the terminal control gone this step
+                            would otherwise be the only one in the form an
+                            edit could not be saved from. */}
                         <StepActions
                           isEdit={isEdit}
                           saving={saving}
                           disabled={saveControlsDisabled}
                           onPrevious={() => setActiveTab(2)}
-                          onSubmit={() => handleSubmit()}
-                          submitVariant="primary"
+                          onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                          nextLabel="Continue to Consent"
+                          onNext={() => setActiveTab(4)}
                         />
                       </>
                     )}
@@ -2191,6 +2356,83 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         saving={saving}
                         disabled={saveControlsDisabled}
                         onPrevious={() => setActiveTab(2)}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        nextLabel="Continue to Consent"
+                        onNext={() => setActiveTab(4)}
+                      />
+                    </>
+                  )}
+
+                  {/* Consent - the last step on the two paths that author a
+                      study, and absent from the three that do not. */}
+                  {currentStep?.key === 'consent' && authoringKind && (
+                    <>
+                      <ConsentStep
+                        // Remounted when the linked study is re-read, which is
+                        // what an edit-mode save does. ConsentStep captures the
+                        // template it started this session on - deliberately,
+                        // so the diff and Restore keep pointing at it while the
+                        // author types - and that capture has to be refreshed
+                        // when the SERVER's answer replaces the form's claim.
+                        key={linkedStudyUpdatedAt ?? 'unsaved'}
+                        kind={authoringKind}
+                        consentText={
+                          authoringKind === 'survey'
+                            ? formData.inline_survey_consent_text
+                            : formData.inline_study_consent_text
+                        }
+                        templateId={
+                          authoringKind === 'survey'
+                            ? formData.inline_survey_consent_template_id
+                            : formData.inline_study_consent_template_id
+                        }
+                        templateVersion={
+                          authoringKind === 'survey'
+                            ? formData.inline_survey_consent_template_version
+                            : formData.inline_study_consent_template_version
+                        }
+                        fieldId={
+                          authoringKind === 'survey'
+                            ? 'inline_survey_consent_text'
+                            : 'inline_study_consent_text'
+                        }
+                        validationError={
+                          authoringKind === 'survey'
+                            ? validationErrors.inline_survey_consent_text
+                            : validationErrors.inline_study_consent_text
+                        }
+                        studyIsReadOnly={studyIsReadOnly}
+                        readOnlyReason={studyReadOnlyReason}
+                        // A study that could not be READ has no wording for
+                        // this step to describe - the form is holding its
+                        // defaults - so it must say nothing rather than badge
+                        // the boilerplate as this study's approved consent.
+                        contentUnavailable={Boolean(studyLoadError)}
+                        awaitingContent={awaitingCopiedContent}
+                        contentStepTitle={
+                          authoringKind === 'survey' ? 'Questions' : 'Task List'
+                        }
+                        onGoToContent={() => setActiveTab(3)}
+                        onChange={(selection) => {
+                          const prefix =
+                            authoringKind === 'survey' ? 'inline_survey' : 'inline_study';
+                          handleInputChange(`${prefix}_consent_text`, selection.text);
+                          handleInputChange(
+                            `${prefix}_consent_template_id`,
+                            selection.templateId
+                          );
+                          handleInputChange(
+                            `${prefix}_consent_template_version`,
+                            selection.templateVersion
+                          );
+                        }}
+                      />
+
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        onPrevious={() => setActiveTab(3)}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         onSubmit={() => handleSubmit()}
                       />
