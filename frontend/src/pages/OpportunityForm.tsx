@@ -33,6 +33,10 @@ import {
   findPublishProblem
 } from '../shared/firsthand/publish-readiness';
 import {
+  EXTERNAL_LINK_PROTOCOL_MESSAGE,
+  isPublishableExternalLink
+} from '../shared/firsthand/url-safety';
+import {
   authoredStepsOf,
   copiedRecordedFields,
   copiedSurveyFields,
@@ -1301,13 +1305,45 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
         errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
-      } else {
-        try {
-          new URL(formData.external_link_optional);
-        } catch {
-          errors.external_link_optional = 'External link must be a valid URL';
-        }
       }
+    }
+
+    /*
+     * Whether the link is WELL FORMED is not publish-gated, and the asymmetry
+     * with the required check above is deliberate.
+     *
+     * The server's schema refuses a bad scheme on every write, draft included -
+     * it is a schema, it does not know the status. So gating the client's copy
+     * on `status === 'published'` left the repair path broken in exactly the
+     * case that matters: a DRAFT holding a `javascript:` link stored before the
+     * schema was hardened. The form resends that value on every save
+     * (`external_link_optional: formData.external_link_optional.trim() ||
+     * undefined`), so the author would have got an opaque "Validation failed"
+     * from the endpoint, naming no field, on a row they were trying to fix.
+     *
+     * Presence is a publishing rule. Well-formedness is a property of the
+     * value.
+     */
+    if (
+      /*
+       * Only where the author can actually SEE the field. Flagging a value on a
+       * shape whose step list has no External Link step blocks every save and
+       * sends the author to a step that does not contain it.
+       *
+       * `getTabsForType(...)` rather than the `tabs` const from the render:
+       * this is a `useCallback`, and `tabs` is rebuilt every render, so closing
+       * over it would either defeat the memo or leave a dependency the lint rule
+       * is right to want. The function is pure and at module scope, so calling
+       * it here depends only on the two values that decide the shape - both
+       * already dependencies.
+       */
+      getTabsForType(formData.type, deliveryMode).some(
+        (step) => step.key === 'externalLink'
+      ) &&
+      formData.external_link_optional.trim() &&
+      !isPublishableExternalLink(formData.external_link_optional)
+    ) {
+      errors.external_link_optional = EXTERNAL_LINK_PROTOCOL_MESSAGE;
     }
 
     // Emptying an authored list is a deliberate instruction, and it used to be
@@ -1841,17 +1877,25 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
         break;
       case 'external_link_optional': {
-        if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
-          if (!stringValue.trim()) {
-            fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
-          } else {
-            try {
-              new URL(stringValue);
-              delete fieldErrors.external_link_optional;
-            } catch {
-              fieldErrors.external_link_optional = 'External link must be a valid URL';
-            }
-          }
+        /*
+         * The THIRD validator of this field, and it had its own bare
+         * `new URL(...)` and its own wording ("External link must be a valid
+         * URL") - so on blur the author was told a `javascript:` link was fine,
+         * and on submit told it was not, in different words. One predicate and
+         * one message now, imported like the other two.
+         *
+         * Same split as the submit path: presence is publish-gated, the scheme
+         * is not.
+         */
+        const link = stringValue.trim();
+        const requiresLink =
+          formData.status === 'published' &&
+          ['poll', 'survey', 'question'].includes(formData.type);
+
+        if (requiresLink && !link) {
+          fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+        } else if (link && !isPublishableExternalLink(stringValue)) {
+          fieldErrors.external_link_optional = EXTERNAL_LINK_PROTOCOL_MESSAGE;
         } else {
           delete fieldErrors.external_link_optional;
         }
@@ -2221,7 +2265,24 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         description_optional: formData.description_optional.trim() || undefined,
         product_optional: formData.product_optional.trim() || undefined,
         meeting_location_optional: formData.meeting_location_optional.trim(),
-        external_link_optional: formData.external_link_optional.trim() || undefined,
+        /*
+         * Sent only on the shapes that HAVE an External Link step.
+         *
+         * It used to be sent unconditionally, which is what made a legacy bad
+         * value unrepairable. An unmoderated, test, interview or native-survey
+         * row holding a `javascript:` link from before the schema was hardened
+         * resends it on every save, is refused 400 by the schema, and has no
+         * External Link input anywhere in its step list to fix it in - the
+         * refusal banner even routes to tab 3, which on those shapes is Task
+         * List or Session Management. Found by the security gate; my own repair
+         * test only covered `question`, the one shape that has the step.
+         *
+         * Derived from the step list, not from a type test, for the same reason
+         * everything else on this form is.
+         */
+        ...(tabs.some((step) => step.key === 'externalLink')
+          ? { external_link_optional: formData.external_link_optional.trim() || undefined }
+          : {}),
         participant_type_required: formData.participant_type_required,
         participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
         status: allowUserSubmission ? 'draft' : formData.status
@@ -3230,6 +3291,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         formData={formData}
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
+                        handleBlur={handleBlur}
                       />
 
                       {continueControl && (

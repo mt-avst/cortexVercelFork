@@ -3,6 +3,12 @@ import { CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { SESSION_CAPACITY } from '../../../shared/constants';
 import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
 import { inlineSurveySchema } from '../../../shared/firsthand/survey-authoring';
+import {
+  EXTERNAL_LINK_PROTOCOL_MESSAGE,
+  MEETING_LOCATION_SCHEME_MESSAGE,
+  isPublishableExternalLink,
+  isSafeMeetingLocation
+} from '../../../shared/firsthand/url-safety';
 import type { Opportunity } from '../../../shared/types';
 
 // Base schemas
@@ -70,6 +76,60 @@ export const DELIVERY_MODE_MATCHES_SHARED_CONTRACT: MutuallyAssignable<
 // opportunity those two fields become the study's title and intro_text, which
 // the session contract requires at min(1) - so an all-whitespace title produced
 // a study that assembled no session and 500'd every participant who started it.
+/**
+ * A link this product will hand a participant, checked for its SCHEME as well
+ * as its shape.
+ *
+ * `z.string().url()` is not a protocol check. On zod 3 it accepts
+ * `javascript:alert(1)`, `data:text/html,...` and `vbscript:` - all of which
+ * parse as URLs - and this field is rendered straight into an `href` on the
+ * participant-facing opportunity page. A `researcher_admin` could therefore
+ * store script in the Cortex origin and have it run when a participant clicked
+ * the call to action. Confirmed by request: `POST /api/opportunities` with
+ * `{ type: 'question', status: 'published', external_link_optional:
+ * 'javascript:alert(document.domain)' }` returned **201**, and the value came
+ * back rendered as `<a href="javascript:...">Answer Question</a>`.
+ *
+ * ONE accident stopped it executing, not two, and the correction matters: I
+ * first wrote that helmet's default CSP was the second. It is not. helmet is
+ * mounted on the BACKEND (`backend/src/index.ts`), and the participant page is
+ * served by `frontend/nginx.conf`, which sets four security headers and NO
+ * Content-Security-Policy - in every environment. So the only thing standing
+ * there was Chrome refusing a `javascript:` navigation to `target="_blank"`.
+ * Removing that one attribute in the page made the alert fire immediately, with
+ * `document.domain` reading the app's own origin.
+ *
+ * A markup attribute is not a security control, and there was nothing behind
+ * it. That is the whole reason this guard is at the boundary rather than left
+ * to the browser.
+ *
+ * Defined once and shared by the create and update schemas so the two cannot
+ * drift, which is how one of them would end up the weaker boundary.
+ */
+/**
+ * A session's location, which is EITHER a joining link or a plain place.
+ *
+ * Not required to be a URL - "Room 3B" and "Zoom, see calendar invite" are
+ * ordinary values here, and requiring a URL would refuse every room-number
+ * booking. The rule is only that it must not be an EXECUTABLE one.
+ *
+ * This field had no validation at all, and `MyBookings` decided whether to
+ * render it as an `href` with a SUBSTRING test - `str.includes("meet.google.com")`
+ * - so `javascript:alert(document.cookie)//meet.google.com` was stored happily
+ * and rendered as a link labelled "Join via Google Meet", the `//` turning the
+ * allowlisted host into a JavaScript comment. Set once by a researcher on a
+ * session, seen by every participant who booked it. Found by the security gate
+ * on the external-link fix: the same defect class, one field over.
+ */
+const meetingLocationSchema = z
+  .string()
+  .refine(isSafeMeetingLocation, { message: MEETING_LOCATION_SCHEME_MESSAGE });
+
+const externalLinkSchema = z
+  .string()
+  .url()
+  .refine(isPublishableExternalLink, { message: EXTERNAL_LINK_PROTOCOL_MESSAGE });
+
 export const CreateOpportunitySchema = z.object({
   type: OpportunityTypeSchema,
   title: z.string().trim().min(4).max(140),
@@ -78,7 +138,7 @@ export const CreateOpportunitySchema = z.object({
   product_optional: z.string().optional(),
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
-  external_link_optional: z.string().url().optional(),
+  external_link_optional: externalLinkSchema.optional(),
   delivery_mode: DeliveryModeSchema.optional(),
   firsthand_study_id: z.string().min(1).optional(),
   // Unmoderated only: the study's content authored on the opportunity form
@@ -106,7 +166,7 @@ export const UpdateOpportunitySchema = z.object({
   product_optional: z.string().optional(),
   meeting_location_optional: z.string().optional(),
   default_duration_minutes: z.number().int().min(5).max(240).optional(),
-  external_link_optional: z.string().url().optional(),
+  external_link_optional: externalLinkSchema.optional(),
   delivery_mode: DeliveryModeSchema.optional(),
   firsthand_study_id: z.string().min(1).optional().nullable(),
   // Unmoderated only, and only when the opportunity has no study yet. Saving a
@@ -136,7 +196,11 @@ export const OpportunitySchema = z.object({
   default_duration_minutes: z.number().int().min(5).max(240),
   status: OpportunityStatusSchema,
   owner_user_id: UUIDSchema,
-  external_link_optional: z.string().optional(),
+  // Pointed at the guarded field even though nothing reads this schema today.
+  // It is NAMED as if it were the canonical opportunity shape, so the next route
+  // that reaches for it would otherwise get no scheme check and no `.url()`
+  // either.
+  external_link_optional: externalLinkSchema.optional(),
   delivery_mode: DeliveryModeSchema.optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
@@ -151,7 +215,7 @@ export const CreateSessionSchema = z.object({
   start_time: z.string().datetime(),
   end_time: z.string().datetime(),
   capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX),
-  location_or_meet_link_optional: z.string().optional(),
+  location_or_meet_link_optional: meetingLocationSchema.optional(),
 }).refine(
   (data) => new Date(data.end_time) > new Date(data.start_time),
   {
@@ -170,7 +234,7 @@ export const UpdateSessionSchema = z.object({
   start_time: z.string().datetime().optional(),
   end_time: z.string().datetime().optional(),
   capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX).optional(),
-  location_or_meet_link_optional: z.string().optional(),
+  location_or_meet_link_optional: meetingLocationSchema.optional(),
 }).refine(
   (data) => {
     if (data.start_time && data.end_time) {
@@ -191,7 +255,7 @@ export const SessionSchema = z.object({
   end_time: z.string().datetime(),
   capacity: z.number().int().min(SESSION_CAPACITY.MIN).max(SESSION_CAPACITY.MAX),
   booked_count: z.number().int().min(0),
-  location_or_meet_link_optional: z.string().optional(),
+  location_or_meet_link_optional: meetingLocationSchema.optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
   remaining: z.number().int().optional(),
@@ -234,7 +298,29 @@ export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRe
       errors.push(`Capacity must be an integer between ${SESSION_CAPACITY.MIN} and ${SESSION_CAPACITY.MAX}`);
     }
   }
-  
+
+  /*
+   * The location's SCHEME, checked HERE rather than only on the zod schemas
+   * above - because this hand-rolled validator is the one that actually runs.
+   *
+   * `POST /api/opportunities/:id/sessions` calls `validateSessionData`;
+   * `CreateSessionsSchema` is imported by that route and never used, which is
+   * one of the pre-existing unused-vars this file's suppression entry counts. I
+   * hardened the zod schemas first and the four exploit tests still returned
+   * 404-then-201: the fix was applied to code nothing reads. The schemas are
+   * hardened too, so that adopting them is safe, but this is the boundary.
+   *
+   * Not required to be a URL - the field holds "Room 3B" as often as a joining
+   * link - only required not to be executable. See `isSafeMeetingLocation`.
+   */
+  if (
+    'location_or_meet_link_optional' in data &&
+    data.location_or_meet_link_optional !== undefined &&
+    !isSafeMeetingLocation(data.location_or_meet_link_optional)
+  ) {
+    errors.push(MEETING_LOCATION_SCHEME_MESSAGE);
+  }
+
   return errors;
 };
 

@@ -19,6 +19,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
+import { isPublishableExternalLink } from '../shared/firsthand/url-safety';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();
@@ -126,23 +127,42 @@ const MyBookings: React.FC = () => {
   // and an en-US "Jul 25, 12:13 PM" for the cancellation - the last two on the
   // same card.
 
-  // URL detection helper
-  const isUrl = (str: string): boolean => {
-    if (!str) return false;
-    return (
-      str.startsWith('http://') ||
-      str.startsWith('https://') ||
-      str.includes('meet.google.com') ||
-      str.includes('zoom.us') ||
-      str.includes('teams.microsoft.com')
-    );
-  };
+  /**
+   * Whether this location is something to LINK to, decided by parsing it.
+   *
+   * This was a substring test - `str.includes('meet.google.com')` and friends -
+   * and the value it tested has never been validated on the way in. So
+   * `javascript:alert(document.cookie)//meet.google.com` satisfied it and was
+   * rendered as an `href` labelled "Join via Google Meet", the `//` turning the
+   * allowlisted host into a JavaScript comment. A researcher sets it once on a
+   * session; every participant who books sees the button.
+   *
+   * The same predicate the schema now refuses on, so a value that reached
+   * storage before that guard existed still cannot become a link here. Anything
+   * that is not an http(s) URL - including a plain "Room 3B" - falls through to
+   * being rendered as text, which is what it always did.
+   */
+  const isUrl = (str: string): boolean => isPublishableExternalLink(str);
 
-  // Get meeting platform name from URL
+  /**
+   * Which platform a joining link belongs to, read from the HOSTNAME.
+   *
+   * `url.includes('meet.google.com')` matched anywhere in the string, so
+   * `https://evil.example.com/?next=meet.google.com` was labelled "Join via
+   * Google Meet" - a phishing label this app would have printed itself. The
+   * host is the only part of a URL that says where it goes.
+   */
   const getMeetingPlatform = (url: string): string => {
-    if (url.includes('meet.google.com')) return 'Join via Google Meet';
-    if (url.includes('zoom.us')) return 'Join via Zoom';
-    if (url.includes('teams.microsoft.com')) return 'Join via Teams';
+    let host = '';
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      return 'Join Meeting';
+    }
+    const isHost = (domain: string) => host === domain || host.endsWith(`.${domain}`);
+    if (isHost('meet.google.com')) return 'Join via Google Meet';
+    if (isHost('zoom.us')) return 'Join via Zoom';
+    if (isHost('teams.microsoft.com')) return 'Join via Teams';
     return 'Join Meeting';
   };
 

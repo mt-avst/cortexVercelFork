@@ -62,19 +62,20 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
  * private hosts for a page Cortex will OPEN inside a recorded study; an
  * external hand-off is a link the author is publishing on purpose.
  */
-export const isPublishableExternalLink = (
-  url: string | null | undefined
-): boolean => {
-  if (!url) {
-    return false;
-  }
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
-};
+/*
+ * `isPublishableExternalLink` and `EXTERNAL_LINK_PROTOCOL_MESSAGE` used to live
+ * here and now live in `url-safety.ts`, beside `isSafeTargetUrl`.
+ *
+ * A security gate asked for the move and its reasoning is worth keeping: this
+ * module holds PRODUCT rules about when an opportunity may be published, and
+ * `findPublishProblem` below calls that predicate. With both in one file, a
+ * decision to relax what counts as an acceptable hand-off would read as a
+ * publish-rule change while silently widening two request schemas and a
+ * participant-facing render gate.
+ */
+import {
+  isPublishableExternalLink
+} from "./url-safety";
 
 /**
  * The RESULTING state of the opportunity, not the request that produced it.

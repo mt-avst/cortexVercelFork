@@ -8,12 +8,26 @@ interface ExternalLinkTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
+  /**
+   * Validate this field as the author leaves it.
+   *
+   * The page has had a `validateField` case for `external_link_optional` for a
+   * long time and it never ran, because this tab was never given the handler -
+   * so the rule was dead code that read as coverage. A mutation disabling its
+   * scheme check left all 1210 tests green, which is how that was found.
+   *
+   * Wired rather than deleted because a scheme rule the author only hears about
+   * at save time is the weaker half of this fix: the point is to say where the
+   * problem is at the moment they make it.
+   */
+  handleBlur: (field: string, value: FormFieldValue) => void;
 }
 
 const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
   formData,
   validationErrors,
-  handleInputChange
+  handleInputChange,
+  handleBlur
 }) => {
   return (
     <div className="tab-pane active">
@@ -45,6 +59,7 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                 value={formData.external_link_optional}
                 onChange={(e) => handleInputChange('external_link_optional', e.target.value)}
+                onBlur={(e) => handleBlur('external_link_optional', e.target.value)}
                 placeholder="https://forms.google.com/your-form or https://maze.co/your-test"
               />
               {validationErrors.external_link_optional && (

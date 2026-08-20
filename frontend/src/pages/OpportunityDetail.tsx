@@ -14,6 +14,7 @@ import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
+import { isPublishableExternalLink } from '../shared/firsthand/url-safety';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators
@@ -140,10 +141,27 @@ const OpportunityDetail: React.FC = () => {
     (opportunity?.type === 'poll' || opportunity?.type === 'survey') &&
     opportunity?.delivery_mode === 'native';
 
+  /**
+   * Whether the stored link is one this page will hand a participant.
+   *
+   * The second half of the fix, and the half a schema change cannot do: the
+   * schema stops a NEW bad value being accepted, and says nothing about rows
+   * already in the table. A `javascript:` URL was accepted for a long time -
+   * `z.string().url()` is not a protocol check - and this page rendered
+   * whatever it found straight into an `href`. Refusing to render it is what
+   * makes those rows inert rather than merely unlikely to fire.
+   *
+   * Not asserted as "the store is clean". It is not, it cannot be checked
+   * from here, and the render is the last place that can decline.
+   */
+  const externalLinkIsUsable = isPublishableExternalLink(
+    opportunity?.external_link_optional
+  );
+
   const hasStartablePath = Boolean(
     opportunity?.type === 'unmoderated' || isNativeSurvey
       ? opportunity?.firsthand_study_id
-      : opportunity?.external_link_optional
+      : externalLinkIsUsable
   );
   const [recordedStudyBrief, setRecordedStudyBrief] = useState<RecordedStudyBrief | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('calendar');
@@ -747,7 +765,7 @@ const OpportunityDetail: React.FC = () => {
                     // four open sessions.
                     opportunity.type === 'test' || opportunity.type === 'interview'
                       ? opportunity.sessions && opportunity.sessions.length > 0
-                      : opportunity.firsthand_study_id || opportunity.external_link_optional
+                      : opportunity.firsthand_study_id || externalLinkIsUsable
                   )}
                   status={opportunity.status}
                 />
@@ -1163,7 +1181,11 @@ const OpportunityDetail: React.FC = () => {
                               } finally {
                                 setFirstHandLoading(false);
                               }
-                            } else if (opportunity.external_link_optional) {
+                            } else if (externalLinkIsUsable) {
+                              // Guarded on the SCHEME, not on the string being
+                              // non-empty. `window.open` is a navigation like
+                              // any other, and a stored `javascript:` URL is
+                              // exactly what must not reach it.
                               await trackOpportunityClick(opportunity.id, 'action');
                               window.open(opportunity.external_link_optional, '_blank', 'noopener,noreferrer');
                             }
@@ -1202,7 +1224,7 @@ const OpportunityDetail: React.FC = () => {
                             ? 'Start recorded study'
                             : 'Open Study'}
                         </button>
-                      ) : (
+                      ) : externalLinkIsUsable ? (
                         <a
                           href={opportunity.external_link_optional}
                           target="_blank"
@@ -1215,6 +1237,22 @@ const OpportunityDetail: React.FC = () => {
                         >
                           {opportunity.type === 'question' ? 'Answer Question' : 'Participate'}
                         </a>
+                      ) : (
+                        /*
+                          No anchor at all when the stored link is not a web
+                          address. A disabled BUTTON rather than an anchor with
+                          a neutered href, because an `href` is the thing that
+                          has to not exist - and a participant is told the truth
+                          rather than left pressing something inert.
+                        */
+                        <button
+                          type="button"
+                          className="btn btn-secondary w-100 mission-cta-btn"
+                          disabled
+                          aria-label="This opportunity has no working link yet"
+                        >
+                          Link unavailable
+                        </button>
                       )}
                     </div>
                   </div>
