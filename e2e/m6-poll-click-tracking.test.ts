@@ -57,17 +57,32 @@ test.describe('M6 Poll Click Tracking', () => {
     await page.waitForTimeout(300);
     await page.fill('#external_link_optional', 'https://example.com/m6-poll');
 
-    await page.getByRole('button', { name: /Create Opportunity/i }).click();
-    // The success alert - and the Return to Dashboard button inside it - is only
-    // mounted until the form auto-navigates, 3s for a draft and 1.5s otherwise
-    // (OpportunityForm.tsx). Sleeping 5s here landed after it had gone. Assert on
-    // it instead of sleeping past it.
-    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole('button', { name: /Return to Dashboard/i })).toBeVisible();
-    // Let the form's own auto-navigation take us back rather than racing its
-    // timer to click the button. Anchor the match: the current URL
-    // (/admin/opportunities/new) already contains "/admin".
+    // Review is the only step that commits since C3. Scoped to the form's own
+    // strip because `.nav-link` is a global class the header navigation shares.
+    await page
+      .locator('nav[aria-label="Form steps"] .nav-link')
+      .filter({ hasText: 'Review' })
+      .click();
+    await page.waitForTimeout(300);
+
+    await page.getByRole('button', { name: /^Create opportunity$/ }).click();
+    /*
+     * There is no window to race any more, which is why the assertions here
+     * changed shape rather than just their strings.
+     *
+     * The success alert used to be mounted on the FORM until a timer navigated
+     * away - 3s for a draft, 1.5s otherwise - and this spec asserted on it,
+     * plus the Return to Dashboard button inside it, before letting that timer
+     * fire. C3 removed the timer: the form navigates the moment the request
+     * resolves, and the message travels in the navigation state to the
+     * dashboard, which renders it. So there is no Return to Dashboard button to
+     * assert on - the author is already there.
+     *
+     * Anchor the match: the current URL (/admin/opportunities/new) already
+     * contains "/admin".
+     */
     await page.waitForURL(/\/admin$/, { timeout: 15000 });
+    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 15000 });
     await page.waitForTimeout(2000);
 
     // --- 3. Open Edit for our poll and publish ---
@@ -100,12 +115,25 @@ test.describe('M6 Poll Click Tracking', () => {
     // Visit External Link tab to ensure validation runs (poll requires external link when published)
     await page.locator('.nav-link').filter({ hasText: 'External Link' }).click();
     await page.waitForTimeout(500);
+
+    // Then on to Review, which is where an edit is saved from since C3.
+    await page
+      .locator('nav[aria-label="Form steps"] .nav-link')
+      .filter({ hasText: 'Review' })
+      .click();
+    await page.waitForTimeout(300);
     
-    // Scroll to bottom where submit button is and click Update
+    // Scroll to bottom where submit button is and click the terminal control
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(300);
     
-    const updateBtn = page.getByRole('button', { name: 'Update Opportunity' });
+    /*
+     * Exact and case-sensitive. `getByRole` matches names as substrings by
+     * default, and every step but Review carries a green "Save Changes"
+     * shortcut - so an unanchored /save changes/i would be ambiguous the moment
+     * this spec is pointed at any other step.
+     */
+    const updateBtn = page.getByRole('button', { name: 'Save changes', exact: true });
     await updateBtn.waitFor({ state: 'visible', timeout: 10000 });
     await updateBtn.scrollIntoViewIfNeeded();
 

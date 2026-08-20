@@ -1112,6 +1112,44 @@ describe('Opportunities API', () => {
       );
     });
 
+    it('lets the SAME body through as a draft, because the rule is about publishing', async () => {
+      /*
+       * The other half of the test above, and its absence was a real hole: an
+       * independent mutation pass deleted `if (!willBePublished) return null`
+       * from the shared predicate and all 234 route tests stayed green. No
+       * backend test created a DRAFT that would have violated a publish rule,
+       * so nothing could tell "refuses a bad publish" from "refuses a bad
+       * opportunity". A draft is allowed to be empty - that is what drafts are
+       * for, and the form says so on the Review screen.
+       */
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'draft-1',
+            type: 'unmoderated',
+            title: 'Valid Unmoderated Title',
+            purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+            status: 'draft',
+            owner_user_id: 'test-user-id',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      }); // opportunity insert
+
+      await request(app)
+        .post('/api/opportunities')
+        .send({
+          type: 'unmoderated',
+          title: 'Valid Unmoderated Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'draft'
+          // Neither firsthand_study_id nor inline_study - exactly as above.
+        })
+        .expect(201);
+    });
+
     it('should create a published unmoderated opportunity when a FirstHand study is linked (A1)', async () => {
       const created = {
         id: '3',
@@ -2766,6 +2804,90 @@ describe('Opportunities API', () => {
         .patch('/api/opportunities/1')
         .send({ participant_type_required: 'any' })
         .expect(200);
+    });
+
+    /*
+     * The update guard reads the RESULTING state - the request merged over the
+     * stored row - and until these three tests nothing proved it.
+     *
+     * Every other PATCH publish test resends the field the guard reads, so
+     * "merged over the stored row" and "read straight off the request" were
+     * indistinguishable. An independent mutation pass made the guard read the
+     * request's own `external_link_optional` and its own `delivery_mode`, and
+     * all 234 route tests stayed green - while both mutants falsely REFUSE a
+     * bare publish of a row that is already complete.
+     */
+    it('publishes an external poll on its STORED link, without being resent one', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            ...existingUnmoderated(null, 'draft'),
+            type: 'poll',
+            delivery_mode: 'external',
+            external_link_optional: 'https://example.com/already-stored'
+          }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      // Only the status. The link is never mentioned.
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'published' })
+        .expect(200);
+    });
+
+    it('publishes a native survey on its STORED delivery mode and study', async () => {
+      // The twin: a guard reading the request's own delivery_mode sees
+      // undefined, falls through to the external branch, and demands a link
+      // that a native survey is never going to have.
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            ...existingUnmoderated('study_stored', 'draft'),
+            type: 'survey',
+            delivery_mode: 'native',
+            external_link_optional: null
+          }
+        ]
+      });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '1', created_at: new Date(), updated_at: new Date() }],
+        rowCount: 1
+      });
+
+      await request(app)
+        .patch('/api/opportunities/1')
+        .send({ status: 'published' })
+        .expect(200);
+    });
+
+    it('treats an all-whitespace study id as no study at all', async () => {
+      /*
+       * The create guard has this test and the update guard did not, though
+       * both carry the same comment about it. An untrimmed id satisfies the
+       * check and then stores NULL, which is a published unmoderated test with
+       * no task list - exactly the state the guard exists to refuse.
+       */
+      mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [existingUnmoderated('study_live', 'published')]
+      });
+
+      const response = await request(app)
+        .patch('/api/opportunities/1')
+        .send({ firsthand_study_id: '   ' })
+        .expect(400);
+
+      // The REMOVAL wording, because that is what taking the study away is.
+      expect(response.body.error).toBe(
+        'A published unmoderated test cannot have its task list removed; unpublish it first'
+      );
     });
 
     it('will not turn a published opportunity into a poll with no link', async () => {

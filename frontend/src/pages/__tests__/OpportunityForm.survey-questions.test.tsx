@@ -82,32 +82,39 @@ beforeEach(() => {
 
 
 /**
- * Click the create/update control, walking the Consent step first if it is in
- * the way.
+ * Walk forward until there is nowhere left to go, which is Review.
  *
- * C1 gave consent its own step at the END of the two authoring paths, which
- * moved the terminal control off Questions and Task List onto Consent. Tests
- * that author content and then save therefore have one more step to walk than
- * they used to. Doing it here rather than at thirty call sites keeps "where the
- * save control lives" in one place, which is the thing that has now moved
- * twice.
+ * Clicks whatever "Continue: {step}" the current step offers, repeatedly. A
+ * loop rather than a fixed number of clicks because the shapes are three, four
+ * and five steps long, and a count cannot help stopping one step short when a
+ * shape changes - which is the whole failure mode this helper exists to keep
+ * out of thirty-odd call sites.
  *
- * The forward click is conditional, not optional: on a path with no Consent
- * step - an external link, a booked session - there is nothing to walk and the
- * control is already on screen. If neither is present the `getByRole` below
- * throws, so a test standing on the wrong step still fails rather than passing
- * quietly.
+ * The bound guards against a Continue control that renders but does not
+ * advance: without it that spins forever instead of failing.
+ */
+const walkToReview = async (user: ReturnType<typeof userEvent.setup>) => {
+  for (let guard = 0; guard <= 6; guard += 1) {
+    const forward = screen.queryByRole('button', { name: /^Continue: /i });
+    if (!forward) {
+      return;
+    }
+    await user.click(forward);
+  }
+  throw new Error('walkToReview never reached a step with no Continue control');
+};
+
+/**
+ * Click the create/save control, walking every remaining step to Review first.
+ *
+ * Review is where every save happens now (C3), so this always walks whatever
+ * distance is left via `walkToReview` before clicking the terminal control.
  */
 const submitFromLastStep = async (
   user: ReturnType<typeof userEvent.setup>,
-  name: RegExp = /^(Create|Update) Opportunity/i
+  name: RegExp = /^(Create opportunity|Save changes)$/
 ) => {
-  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
-
-  if (forward) {
-    await user.click(forward);
-  }
-
+  await walkToReview(user);
   await user.click(screen.getByRole('button', { name }));
 };
 
@@ -116,7 +123,8 @@ describe('getTabsForType', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
-      'External Link'
+      'External Link',
+      'Review'
     ]);
   });
 
@@ -125,7 +133,8 @@ describe('getTabsForType', () => {
       'Basic Information',
       'Content & Details',
       'Questions',
-      'Consent'
+      'Consent',
+      'Review'
     ]);
   });
 
@@ -140,16 +149,18 @@ describe('getTabsForType', () => {
     expect(getTabsForType('survey', 'external').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
-      'External Link'
+      'External Link',
+      'Review'
     ]);
   });
 
-  it('gives a recorded study a consent step, and puts it last', () => {
+  it('gives a recorded study a consent step, last before Review', () => {
     expect(getTabsForType('unmoderated').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
       'Task List',
-      'Consent'
+      'Consent',
+      'Review'
     ]);
   });
 
@@ -161,7 +172,8 @@ describe('getTabsForType', () => {
     expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
-      thirdStep
+      thirdStep,
+      'Review'
     ]);
   });
 
@@ -242,7 +254,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -276,7 +288,7 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -299,13 +311,14 @@ describe('authoring a native survey', () => {
       'How easy was that?'
     );
 
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
     await user.click(
       screen.getByRole('button', { name: /Customise consent wording/i })
     );
     await user.clear(screen.getByLabelText(/Consent text/i));
     await user.type(screen.getByLabelText(/Consent text/i), 'Our own survey wording');
-    await user.click(screen.getByRole('button', { name: /Create Opportunity/i }));
+    await walkToReview(user);
+    await user.click(screen.getByRole('button', { name: /^Create opportunity$/ }));
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -334,7 +347,7 @@ describe('authoring a native survey', () => {
 
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
       'Standard survey consent (version 1)'
@@ -378,7 +391,7 @@ describe('authoring a native survey', () => {
 
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -416,7 +429,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'nps');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -459,7 +472,7 @@ describe('authoring a native survey', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'open_text');
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'single_choice');
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -495,7 +508,7 @@ describe('authoring a native survey', () => {
     // one that survives the move is identifiable.
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     expect(
       await screen.findByText('Add what the participant is asked')
     ).toBeInTheDocument();
@@ -558,7 +571,7 @@ describe('authoring a native survey', () => {
       'Which tool slows you down?'
     );
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -589,7 +602,7 @@ describe('authoring a native survey', () => {
     await user.click(screen.getByLabelText('Required'));
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'instruction');
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -629,7 +642,7 @@ describe('authoring a native survey', () => {
     await user.type(screen.getByLabelText(/Estimated completion time/i), '5000');
     await user.click(screen.getByRole('button', { name: /Use the automatic estimate/i }));
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -684,7 +697,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
   });
@@ -824,7 +837,7 @@ describe('authoring a native survey', () => {
       'https://example.com/form'
     );
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
 
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
@@ -922,7 +935,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(
       screen.getByRole('radio', { name: /Start from an existing set of questions/i })
     );
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-step')).toBeInTheDocument();
     expect(screen.queryByLabelText(/Consent text/i)).not.toBeInTheDocument();
@@ -949,7 +962,7 @@ describe('starting a survey from an existing set of questions', () => {
       await screen.findByRole('button', { name: /^Start from this Onboarding pulse$/ })
     );
     await screen.findByText(/Copied from/i);
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     // The source's wording is nobody's approved wording, and the copy inherits
     // that rather than being re-badged as approved - the failure this whole
@@ -1006,7 +1019,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.clear(prompts[1]);
     await user.type(prompts[1], 'Which docs did you actually open?');
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
 
     const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
@@ -1342,7 +1355,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
 
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
 
     const message = await screen.findByText(
       /Choose a set of questions to start from, or switch to writing them here/i
@@ -1363,7 +1376,7 @@ describe('starting a survey from an existing set of questions', () => {
     await user.click(screen.getByRole('button', { name: /Basic Information/i }));
     await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
-    await submitFromLastStep(user, /Create Opportunity/i);
+    await submitFromLastStep(user, /^Create opportunity$/);
     expect(
       await screen.findByText(/Add at least one question before publishing/i)
     ).toBeInTheDocument();
@@ -1386,7 +1399,10 @@ describe('the step action row', () => {
   it('offers no backward control on the first step', async () => {
     renderForm();
 
-    await screen.findByRole('button', { name: /Continue to Details/i });
+    // Anchors this test to step 1: without confirming we are standing on the
+    // step whose forward control reads "Continue: Content & Details", the
+    // negative assertion below would pass on any step at all.
+    await screen.findByRole('button', { name: /Continue: Content & Details/i });
 
     // Matched on the prefix, not on the whole label: the control names the
     // step it returns to now, so pinning the old bare "Back" here would be an
@@ -1474,7 +1490,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(await screen.findByTestId('consent-template-state')).toHaveTextContent(
       /Custom wording/i
@@ -1514,7 +1530,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     expect(screen.queryByRole('button', { name: /Save Changes/i })).toBeNull();
 
@@ -1542,7 +1558,7 @@ describe('the forward control on the Questions tab', () => {
 
     const user = userEvent.setup();
     await openQuestionsTab(user);
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const unlock = screen.queryByRole('button', { name: /Customise consent wording/i });
     if (unlock) await user.click(unlock);
@@ -1569,7 +1585,7 @@ describe('the forward control on the Questions tab', () => {
     await user.click(
       await screen.findByRole('radio', { name: /Start from an existing set of questions/i })
     );
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 
     const back = await screen.findByRole('button', { name: /Go back to Questions/i });
     await user.click(back);
@@ -1599,16 +1615,22 @@ describe('the forward control on the Questions tab', () => {
       ).toHaveLength(0);
     };
 
-    // Checked on BOTH steps, because C1 moved the terminal control onto a step
-    // that did not exist when this rule was written. Checking only where the
-    // control now lives would let the step it left behind reacquire one - and
-    // checking only the step it left behind would test nothing at all, which is
-    // precisely what this test did the moment Consent was added.
-    await screen.findByRole('button', { name: /Continue to Consent/i });
+    // Checked on all THREE steps that lead to the terminal control, because
+    // C1 moved the terminal control onto Consent, a step that did not exist
+    // when this rule was written, and C3 moved it again onto Review. Checking
+    // only where the control now lives would let a step it left behind
+    // reacquire one - and checking only a step it left behind would test
+    // nothing at all, which is precisely what this test did the moment
+    // Consent was added.
+    await screen.findByRole('button', { name: /^Continue: Consent$/i });
     expectNoImplicitSubmit();
 
-    await user.click(screen.getByRole('button', { name: /Continue to Consent/i }));
-    await screen.findByRole('button', { name: /Update Opportunity/i });
+    await user.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
+    await screen.findByRole('button', { name: /^Continue: Review$/i });
+    expectNoImplicitSubmit();
+
+    await user.click(screen.getByRole('button', { name: /^Continue: Review$/i }));
+    await screen.findByRole('button', { name: /^Save changes$/ });
     expectNoImplicitSubmit();
   });
 
@@ -1637,7 +1659,7 @@ describe('the forward control on the Questions tab', () => {
     await user.clear(screen.getByLabelText(/Estimated completion time/i));
     await user.type(screen.getByLabelText(/Estimated completion time/i), '-3');
 
-    await submitFromLastStep(user, /Update Opportunity/i);
+    await submitFromLastStep(user, /^Save changes$/);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
     expect(
@@ -1664,7 +1686,7 @@ describe('the forward control on the Questions tab', () => {
     await user.selectOptions(screen.getByLabelText(/^Type$/i), 'rating');
     await user.clear(screen.getByLabelText(/Points on the scale/i));
 
-    await submitFromLastStep(user, /Update Opportunity/i);
+    await submitFromLastStep(user, /^Save changes$/);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
     expect(

@@ -188,24 +188,16 @@ beforeEach(() => {
 
 
 /**
- * Click the create/update control, walking the Consent step first if it is in
- * the way.
+ * Open the Consent step, the step before Review on the two authoring paths.
  *
- * C1 gave consent its own step at the END of the two authoring paths, which
- * moved the terminal control off Questions and Task List onto Consent. Tests
- * that author content and then save therefore have one more step to walk than
- * they used to. Doing it here rather than at thirty call sites keeps "where the
- * save control lives" in one place, which is the thing that has now moved
- * twice.
- *
- * The forward click is conditional, not optional: on a path with no Consent
- * step - an external link, a booked session - there is nothing to walk and the
- * control is already on screen. If neither is present the `getByRole` below
- * throws, so a test standing on the wrong step still fails rather than passing
- * quietly.
+ * C1 gave consent its own step; C3 then added Review after it, so this no
+ * longer lands on the terminal control - it lands one step short of it, which
+ * is what the tests that dig into the Consent surface itself actually want.
+ * A test that needs to submit calls `walkToReview` (or `submitFromLastStep`,
+ * which does that for it) instead.
  */
 const goToConsentStep = () => {
-  fireEvent.click(screen.getByRole('button', { name: /Continue to Consent/i }));
+  fireEvent.click(screen.getByRole('button', { name: /^Continue: Consent$/i }));
 };
 
 /**
@@ -227,13 +219,37 @@ const consentField = (): HTMLTextAreaElement => {
   return screen.getByLabelText(/Consent text/i) as HTMLTextAreaElement;
 };
 
-const submitFromLastStep = (name: RegExp = /^(Create|Update) Opportunity/i) => {
-  const forward = screen.queryByRole('button', { name: /Continue to Consent/i });
-
-  if (forward) {
+/**
+ * Walk forward until there is nowhere left to go, which is Review.
+ *
+ * Clicks whatever "Continue: {step}" the current step offers, repeatedly. A
+ * loop rather than a fixed number of clicks because the shapes are three, four
+ * and five steps long, and a count cannot help stopping one step short when a
+ * shape changes - which is the whole failure mode this helper exists to keep
+ * out of thirty-odd call sites.
+ *
+ * The bound guards against a Continue control that renders but does not
+ * advance: without it that spins forever instead of failing.
+ */
+const walkToReview = () => {
+  for (let guard = 0; guard <= 6; guard += 1) {
+    const forward = screen.queryByRole('button', { name: /^Continue: /i });
+    if (!forward) {
+      return;
+    }
     fireEvent.click(forward);
   }
+  throw new Error('walkToReview never reached a step with no Continue control');
+};
 
+/**
+ * Click the create/save control, walking every remaining step to Review first.
+ *
+ * Review is where every save happens now (C3), so this always walks whatever
+ * distance is left via `walkToReview` before clicking the terminal control.
+ */
+const submitFromLastStep = (name: RegExp = /^(Create opportunity|Save changes)$/) => {
+  walkToReview();
   fireEvent.click(screen.getByRole('button', { name }));
 };
 
@@ -1041,7 +1057,7 @@ describe('emptying a list that is linked', () => {
     await removeFirstTask(1);
     await removeFirstTask(0);
 
-    submitFromLastStep(/Update Opportunity/i);
+    submitFromLastStep(/^Save changes$/);
 
     expect(
       await screen.findByText(/A task list needs at least one task/i)
@@ -1067,7 +1083,7 @@ describe('a duration the author cleared', () => {
     expect((duration as HTMLInputElement).value).toBe('18');
     fireEvent.change(duration, { target: { value: '' } });
 
-    submitFromLastStep(/Update Opportunity/i);
+    submitFromLastStep(/^Save changes$/);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     // Asserted after serialisation: null survives JSON, undefined would not,
@@ -1259,7 +1275,7 @@ describe('when the linked study no longer exists', () => {
       target: { value: 'Find the export button' }
     });
 
-    submitFromLastStep(/Update Opportunity/i);
+    submitFromLastStep(/^Save changes$/);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     // Content reaches the payload as inline_study, which is what makes the
@@ -1332,7 +1348,7 @@ describe('when the linked set of questions no longer exists', () => {
       target: { value: 'How easy was that?' }
     });
 
-    submitFromLastStep(/Update Opportunity/i);
+    submitFromLastStep(/^Save changes$/);
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     expect(sentBody().inline_survey.steps).toEqual([
@@ -1372,9 +1388,9 @@ describe('when the linked study cannot be read', () => {
 
   /**
    * The green "Save Changes" shortcut is not the only save control on the row.
-   * The final "Update Opportunity" control saves through the same handler and
-   * has to be disabled by the same unreadable study - and it is the one no test
-   * covered, so it could lose the binding with every suite still green.
+   * The final "Save changes" control on Review saves through the same handler
+   * and has to be disabled by the same unreadable study - and it is the one no
+   * test covered, so it could lose the binding with every suite still green.
    */
   /**
    * `disabled` is one shared value handed to a component that spells
@@ -1391,21 +1407,27 @@ describe('when the linked study cannot be read', () => {
     await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
 
     expect(
-      await screen.findByRole('button', { name: /Continue to Details/i })
+      await screen.findByRole('button', { name: /Continue: Content & Details/i })
     ).toBeEnabled();
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
     expect(await screen.findByRole('button', { name: /^Previous: Content & Details$/i })).toBeEnabled();
 
-    // And onward to the step C1 added, which is now the one holding the save
-    // control - so it is the step an over-broad `disabled` would strand the
-    // author on, with no way back.
+    // And onward to Consent, then Review - the step C3 added, which is now
+    // the one holding the save control - so it is the step an over-broad
+    // `disabled` would strand the author on, with no way back.
     expect(
-      screen.getByRole('button', { name: /Continue to Consent/i })
+      screen.getByRole('button', { name: /^Continue: Consent$/i })
     ).toBeEnabled();
     goToConsentStep();
     expect(await screen.findByRole('button', { name: /^Previous: Task List$/i })).toBeEnabled();
+
+    expect(
+      screen.getByRole('button', { name: /^Continue: Review$/i })
+    ).toBeEnabled();
+    walkToReview();
+    expect(await screen.findByRole('button', { name: /^Previous: Consent$/i })).toBeEnabled();
   });
 
   it('disables the final save control too, not only the Save Changes shortcut', async () => {
@@ -1416,11 +1438,21 @@ describe('when the linked study cannot be read', () => {
 
     await screen.findByText(/could not be loaded, so this opportunity cannot be saved/i);
 
+    // A real edit, so the Save Changes shortcut renders at all - the point
+    // below is that it renders DISABLED, on the step before Review too.
+    fireEvent.change(await screen.findByDisplayValue('Checkout walkthrough'), {
+      target: { value: 'Checkout walkthrough v2' }
+    });
+
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
     goToConsentStep();
 
+    expect(await screen.findByRole('button', { name: /Save Changes/i })).toBeDisabled();
+
+    // And the terminal control, on Review - not only the shortcut.
+    walkToReview();
     expect(
-      await screen.findByRole('button', { name: /Update Opportunity/i })
+      await screen.findByRole('button', { name: /^Save changes$/ })
     ).toBeDisabled();
   });
 });
@@ -1678,8 +1710,8 @@ describe('the Save button appearing for a change that only touches authored cont
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
       target: { value: 'Open the basket and describe it' }
     });
-    goToConsentStep();
-    fireEvent.click(screen.getByRole('button', { name: /Update Opportunity/i }));
+    walkToReview();
+    fireEvent.click(screen.getByRole('button', { name: /^Save changes$/ }));
 
     await vi.waitFor(() => expect(vi.mocked(updateOpportunity)).toHaveBeenCalled());
     const inline = (

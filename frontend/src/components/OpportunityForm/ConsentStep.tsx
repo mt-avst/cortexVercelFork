@@ -148,7 +148,25 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
 
   const heading = (
     <div className="mb-4">
+      {/*
+        The landing point for Review's "Edit Consent" link, and it has to be the
+        HEADING rather than the consent textarea.
+        The textarea carries `fieldId`, which is the obvious target and is
+        wrong: consent is LOCKED to the approved wording by default since C1, and
+        while it is locked that textarea is not rendered at all. Sending focus to
+        an id that does not exist is silent - the step opens and focus stays on
+        the button the author just left, two steps away, which is precisely the
+        failure the Edit links exist to fix. Found by driving the form; no test
+        had looked at where focus actually landed.
+
+        Derived from `fieldId` rather than a constant so the two consent
+        vocabularies stay distinguishable here as they are everywhere else: a
+        recorded study and a survey never render at the same time, but a single
+        shared id would make that a coincidence rather than a rule.
+      */}
       <h2
+        id={`${fieldId}-heading`}
+        tabIndex={-1}
         className="h4 mb-1 section-title"
         style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: 600 }}
       >

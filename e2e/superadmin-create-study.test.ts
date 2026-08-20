@@ -39,18 +39,31 @@ test.describe('Superadmin Create Study Flow', () => {
     await page.waitForTimeout(300);
     await page.fill('#external_link_optional', 'https://example.com/poll');
 
-    // 6. Submit form - click Create Opportunity button (on External Link tab for poll)
-    await page.getByRole('button', { name: /Create Opportunity/i }).click();
+    // 6. Walk to Review. The External Link step no longer commits anything -
+    // since C3 the only step that does is Review, which is last on every shape.
+    // Scoped to the form's own strip: `.nav-link` is a global class the header
+    // navigation shares.
+    await page
+      .locator('nav[aria-label="Form steps"] .nav-link')
+      .filter({ hasText: 'Review' })
+      .click();
+    await page.waitForTimeout(300);
 
-    // 7. After submit the success alert shows, then the form auto-navigates to
-    // /admin on its own (3s for a draft, 1.5s otherwise - OpportunityForm.tsx).
-    // This study is created without setting status, so it saves as a DRAFT and
-    // the copy is the draft warning rather than "created successfully".
-    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 10000 });
+    // 7. Submit from Review.
+    await page.getByRole('button', { name: /^Create opportunity$/ }).click();
+
+    // 8. The form navigates the MOMENT the request resolves - C3 removed the
+    // timed navigation that used to hold the success alert on screen for 1.5s
+    // or 3s first. So the message is asserted where it now lives: carried in
+    // the navigation state and rendered by the dashboard. This study is created
+    // without setting status, so it saves as a DRAFT and the copy is the draft
+    // warning rather than "created successfully".
+    //
     // Anchor the match: the current URL (/admin/opportunities/new) already
     // contains "/admin", so an unanchored regex resolves instantly and waits
     // for nothing.
     await page.waitForURL(/\/admin$/, { timeout: 10000 });
+    await expect(page.getByText(/created successfully|created as DRAFT/i)).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(1000); // Allow list to refresh
 
     // 8. Verify our study appears in the list

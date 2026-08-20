@@ -25,6 +25,14 @@ import {
   estimateSurveyMinutes
 } from '../lib/opportunity-authoring/estimate-duration';
 import {
+  buildReviewSummary,
+  stepForPublishProblem
+} from '../lib/opportunity-authoring/review-summary';
+import {
+  PUBLISH_PROBLEM_MESSAGES,
+  findPublishProblem
+} from '../shared/firsthand/publish-readiness';
+import {
   authoredStepsOf,
   copiedRecordedFields,
   copiedSurveyFields,
@@ -41,13 +49,14 @@ import type { StudySourceMode } from '../components/OpportunityForm/StudySourceC
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   RECORDED_CONSENT_TEMPLATE,
-  SURVEY_CONSENT_TEMPLATE
+  SURVEY_CONSENT_TEMPLATE,
+  resolveConsentTemplate
 } from '../shared/firsthand/consent-templates';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
@@ -267,7 +276,8 @@ export type StepKey =
   | 'externalLink'
   | 'taskList'
   | 'consent'
-  | 'sessions';
+  | 'sessions'
+  | 'review';
 
 export interface FormStep {
   id: number;
@@ -275,6 +285,47 @@ export interface FormStep {
   title: string;
   description: string;
 }
+
+/**
+ * Review's step id, fixed rather than derived from the length of the list.
+ *
+ * Exported so a test can name "the step that commits" without recomputing the
+ * whole shape to find it. The first version of this docstring also claimed the
+ * refusal-routing guard needed it; it does not, and nothing imported this at
+ * all until the tests did - a justification for an export that no reader had
+ * is the kind of nearly-right premise this plan keeps paying for.
+ */
+export const REVIEW_STEP_ID = 5;
+
+/**
+ * Where to send an author standing on a step the current shape does not have.
+ *
+ * Pure and exported so it can be TESTED, which the guard that calls it cannot
+ * be: both controls that reshape the step set live on step 1, so there is no
+ * way through the UI to be on a step the new shape lacks. An independent
+ * mutation pass proved the point - replacing the whole choice with "the first
+ * step" passed all 1178 tests, because nothing can reach it.
+ *
+ * That is a reason to make the logic reachable, not a reason to leave it
+ * unpinned. The two `DEFENCE ONLY` guards in `handleSubmit` are unreachable in
+ * the same way and are recorded as untested; this one need not join them.
+ *
+ * Returns the nearest EARLIER step rather than the first one: the author was
+ * working forwards, and sending them back to Basic Information from step 4
+ * discards their place for no reason. Falls back to the first step only when
+ * there is nothing earlier, which for a list that always contains step 1 means
+ * only when `activeStepId` is 1 or lower.
+ */
+export const stepAfterShapeChange = (
+  shape: readonly FormStep[],
+  activeStepId: number
+): number => {
+  if (shape.some((step) => step.id === activeStepId)) {
+    return activeStepId;
+  }
+  const earlier = [...shape].reverse().find((step) => step.id < activeStepId);
+  return (earlier ?? shape[0]).id;
+};
 
 export const getTabsForType = (
   type: string,
@@ -339,6 +390,29 @@ export const getTabsForType = (
       description: 'What the participant agrees to'
     });
   }
+
+  /*
+   * Review is last on every shape, and the shapes are not the same length -
+   * two steps before a type is chosen, three for a hand-off or a booked
+   * session, five for the two paths that author a study.
+   *
+   * Its id is a FIXED 5 rather than "one past the end", deliberately, and the
+   * gaps that leaves are the point. One past the end would give Review id 3 on
+   * a form with no type chosen - and id 3 is already Task List, Questions,
+   * External Link or Session Management depending on the type. Making it also
+   * mean Review is the same collision that had the strip reporting "External
+   * Link: Completed" for a step nobody had opened.
+   *
+   * A fixed 5 also leaves `FIELD_LOCATIONS`' hardcoded `tab: 4` for consent
+   * exactly where it was, which is the other thing a renumber would have
+   * broken.
+   */
+  tabs.push({
+    id: REVIEW_STEP_ID,
+    key: 'review',
+    title: 'Review',
+    description: 'Check and confirm'
+  });
 
   return tabs;
 };
@@ -589,6 +663,47 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     : {};
 
   /**
+   * The step after the current one, by position rather than by a number
+   * written at the call site - the same reason `previousStep` is derived.
+   *
+   * Undefined on Review and nowhere else, which is what makes Review the step
+   * that commits: `StepActions` types "continues" and "submits" as mutually
+   * exclusive, so "is there a step after this one" IS the decision about which
+   * control this step gets. Four steps used to hard-code `setActiveTab(4)` or
+   * `setActiveTab(2)`; with a fifth step on every shape, a hard-coded number
+   * and the label above it can disagree, and the label is what the author
+   * believes.
+   */
+  const nextStep =
+    currentStep && tabs.findIndex((tab) => tab.id === currentStep.id) >= 0
+      ? tabs[tabs.findIndex((tab) => tab.id === currentStep.id) + 1]
+      : undefined;
+
+  /**
+   * The forward control's two props, built as ONE value for the same reason
+   * `backwardControl` is: the compiler cannot see that a label and a handler
+   * are correlated when they arrive as two separate expressions.
+   *
+   * "Continue: {step}" rather than a bare "Continue", mirroring C2's
+   * "Previous: {step name}". The plan asked for "Continue"; naming the
+   * destination is the same promise kept in both directions, and it makes the
+   * label DERIVED - which deletes the mislabel that shipped in B1, where a
+   * native poll read "Continue to Link Setup" and then landed on Questions.
+   * A hardcoded label can be wrong about where it goes. This one cannot.
+   */
+  const continueControl = nextStep
+    ? {
+        nextLabel: `Continue: ${nextStep.title}`,
+        onNext: () => {
+          // Clears the refusal only - a server error banner is not this
+          // button's to erase.
+          setRefusalShown(false);
+          setActiveTab(nextStep.id);
+        }
+      }
+    : undefined;
+
+  /**
    * Which consent vocabulary this opportunity authors in, or null when it
    * authors no study at all.
    *
@@ -617,6 +732,22 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // be read is the reason most easily dropped when this is written out by hand,
   // and dropping it is what lets a save overwrite content the form never had.
   const saveControlsDisabled = saving || !!successMessage || !!studyLoadError;
+
+  /**
+   * Whether this save will carry authored content INLINE rather than point at a
+   * study by id. Exactly one of the two, never both.
+   *
+   * Hoisted out of `handleSubmit`, where each was a local named
+   * `authoringInline` inside its own type branch, because Review's publish
+   * preview has to answer "will the request the server sees carry a study" and
+   * the only honest answer is the one the payload builder is about to use. Two
+   * copies of that condition is Review promising a save the server refuses -
+   * or, worse, staying silent about one it will.
+   */
+  const authoringInlineStudy =
+    !studyIsReadOnly && formData.inline_study_steps.length > 0;
+  const authoringInlineSurvey =
+    !studyIsReadOnly && formData.inline_survey_questions.length > 0;
 
   const loadOpportunity = useCallback(async () => {
     if (!id) return;
@@ -981,10 +1112,34 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // to the top is a worse answer than leaving them on the last step that still
   // exists. Neither loses input; one loses their place.
   useEffect(() => {
-    const maxTabId = Math.max(...getTabsForType(formData.type, deliveryMode).map(tab => tab.id));
-    if (activeTab > maxTabId) {
-      setActiveTab(maxTabId);
+    const shape = getTabsForType(formData.type, deliveryMode);
+    const landing = stepAfterShapeChange(shape, activeTab);
+    if (landing === activeTab) {
+      return;
     }
+    /*
+     * A MEMBERSHIP check, not `activeTab > maxTabId`.
+     *
+     * DEFENCE ONLY, like the two guards in `handleSubmit`, and it is worth
+     * saying which failure it defends against because it is not the obvious
+     * one. Both controls that reshape the step set - the type and the delivery
+     * mode - live on step 1, so an author cannot reshape it while standing on a
+     * step the new shape lacks. Nothing here is reachable today.
+     *
+     * What changed is that the OLD guard would have become permanently dead.
+     * It asked whether `activeTab` was too LARGE, which was a true proxy for
+     * "not in the list" only while the ids were contiguous and the last one
+     * moved with the shape. Review is a fixed 5, so the largest id is now a
+     * constant and `activeTab > 5` can never hold - and the failure it was
+     * catching, a step body whose render guard is false and therefore shows
+     * nothing at all, would have gone from guarded to silent. Restating it as
+     * the question it always meant costs a predicate and keeps that class of
+     * blank page out of every future change to the step set.
+     *
+     * The choice of WHERE to land lives in `stepAfterShapeChange`, above, so
+     * that it can be tested even though this guard cannot be reached.
+     */
+    setActiveTab(landing);
   }, [formData.type, deliveryMode, activeTab]);
 
   /**
@@ -1426,6 +1581,179 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   );
 
   /**
+   * The control an Edit link asked for, held until the step it lives on has
+   * rendered.
+   *
+   * A state hop rather than a direct `document.getElementById(...).focus()` in
+   * the click handler: the step body is replaced wholesale by the render that
+   * `setActiveTab` schedules, so at the moment of the click the control does
+   * not exist yet. Cleared whether or not it was found, so a control that is
+   * conditionally rendered cannot leave a request queued that fires on some
+   * later, unrelated step change.
+   */
+  const [pendingFocusFieldId, setPendingFocusFieldId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!pendingFocusFieldId) {
+      return;
+    }
+    const target = document.getElementById(pendingFocusFieldId);
+    setPendingFocusFieldId(null);
+    if (!target) {
+      return;
+    }
+    target.focus();
+    // jsdom implements neither of these; the guard is what keeps the unit
+    // tests from failing on the browser's behalf.
+    if (typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [pendingFocusFieldId, activeTab]);
+
+  /**
+   * Open a step and put the author on the thing they came back to change.
+   *
+   * Review's Edit links are the only caller. A step change alone leaves focus
+   * on the button that was pressed, two steps away from the field the author
+   * just told us they wanted - which is the same "you fix it, we will not say
+   * where" failure the refusal banner exists to stop.
+   */
+  const goToStepAndFocus = (stepId: number, focusFieldId?: string) => {
+    setRefusalShown(false);
+    setActiveTab(stepId);
+    setPendingFocusFieldId(focusFieldId ?? null);
+  };
+
+  /**
+   * The check-answers screen, derived on EVERY render rather than snapshotted
+   * when the author arrives on it.
+   *
+   * Snapshotting is the obvious implementation and it is wrong: the whole
+   * point of Review is that going back, changing something and returning shows
+   * the change. A value captured on arrival shows the author their old answer
+   * and then commits the new one, which is worse than having no review screen
+   * at all. Every input below is read straight from `formData`, and the section
+   * list comes from `tabs`, so this cannot describe a shape the form is not
+   * rendering.
+   */
+  const reviewSections = buildReviewSummary({
+    steps: tabs,
+    type: formData.type,
+    title: formData.title,
+    purpose: formData.purpose_one_liner,
+    status: formData.status,
+    description: formData.description_optional,
+    product: formData.product_optional,
+    meetingLocation: formData.meeting_location_optional ?? '',
+    defaultDurationMinutes: formData.default_duration_minutes,
+    participantType: formData.participant_type_required,
+    participantTypeDetails: formData.participant_type_specific_details,
+    startDate: formData.start_date,
+    endDate: formData.end_date,
+    externalLink: formData.external_link_optional,
+    deliveryMode,
+    questionCount: formData.inline_survey_questions.length,
+    taskCount: formData.inline_study_steps.length,
+    // What the PARTICIPANT will be told, which is the author's own number when
+    // they have set one and the estimate only while it is still automatic.
+    estimatedMinutes:
+      authoringKind === 'survey'
+        ? formData.inline_survey_duration_minutes ??
+          estimateSurveyMinutes(formData.inline_survey_questions)
+        : authoringKind === 'recorded'
+        ? formData.inline_study_duration_minutes ??
+          estimateRecordedMinutes(formData.inline_study_steps)
+        : null,
+    // NORMALISED, like every other consumer of this field. Validation
+    // (`normaliseTargetUrl` at the collector) and the payload builder both do
+    // it, so passing the raw value made Review the only reader that did not -
+    // and `app.example.com/checkout`, which stores fine as
+    // `https://app.example.com/checkout`, was flagged on the summary as "not a
+    // web address a participant can open" and then saved without complaint. A
+    // false alarm on the screen whose job is to be the last chance to notice
+    // costs more than no screen at all.
+    targetUrl: normaliseTargetUrl(formData.inline_study_target_url),
+    consentText:
+      authoringKind === 'survey'
+        ? formData.inline_survey_consent_text
+        : formData.inline_study_consent_text,
+    // Resolved, not claimed. The form holds what the wording ARRIVED as; this
+    // asks the same function the server asks whether the wording still IS that,
+    // so an author who edited an approved template sees "Custom" here rather
+    // than the approval they no longer have.
+    consentTemplate: authoringKind
+      ? resolveConsentTemplate({
+          kind: authoringKind,
+          consentText:
+            authoringKind === 'survey'
+              ? formData.inline_survey_consent_text
+              : formData.inline_study_consent_text,
+          claimedTemplateId:
+            authoringKind === 'survey'
+              ? formData.inline_survey_consent_template_id
+              : formData.inline_study_consent_template_id,
+          claimedTemplateVersion:
+            authoringKind === 'survey'
+              ? formData.inline_survey_consent_template_version
+              : formData.inline_study_consent_template_version
+        })
+      : null,
+    copiedFromStudyId: formData.copied_from_study_id,
+    copiedFromStudyTitle: formData.copied_from_title,
+    linkedStudyId: formData.firsthand_study_id?.trim() ?? '',
+    sessionCount: sessions.length
+  });
+
+  /**
+   * The refusal the SERVER would give this opportunity if it were saved now,
+   * asked of the server's own predicate rather than restated here.
+   *
+   * `authoringKind` decides which twin's inline flag applies, and it is derived
+   * from the step list - so this cannot disagree with the shape on screen about
+   * which content the opportunity is supposed to have.
+   */
+  const authoringInline =
+    authoringKind === 'survey'
+      ? authoringInlineSurvey
+      : authoringKind === 'recorded'
+      ? authoringInlineStudy
+      : false;
+
+  const publishProblem = findPublishProblem({
+    willBePublished: formData.status === 'published',
+    type: formData.type,
+    deliveryMode,
+    // Matches what the payload builder sends: authoring inline OMITS the id.
+    hasLinkedStudy:
+      !authoringInline && Boolean(formData.firsthand_study_id?.trim()),
+    hasInlineStudy: authoringKind === 'recorded' && authoringInlineStudy,
+    hasInlineSurvey: authoringKind === 'survey' && authoringInlineSurvey,
+    externalLink: formData.external_link_optional
+    /*
+     * `removingLinkedStudy` is deliberately not passed, and it is not an
+     * oversight. The server words its refusal differently for a caller TAKING
+     * a task list away from a published opportunity, and it detects that by
+     * `firsthand_study_id !== undefined` on the request. This form never sends
+     * that key explicitly empty - it is `trimmed || undefined` - so the removal
+     * wording is unreachable from here, and claiming it would preview a message
+     * the server will not send.
+     */
+  });
+
+  const publishRefusalStep = publishProblem
+    ? stepForPublishProblem(publishProblem.code, tabs)
+    : null;
+
+  const publishRefusal =
+    publishProblem && publishRefusalStep
+      ? {
+          message: PUBLISH_PROBLEM_MESSAGES[publishProblem.code],
+          stepId: publishRefusalStep.id,
+          stepTitle: publishRefusalStep.title
+        }
+      : null;
+
+  /**
    * Say the step change out loud.
    *
    * Moving between steps replaces the whole panel and changes nothing a screen
@@ -1726,6 +2054,84 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     return original === undefined ? undefined : null;
   };
 
+  /**
+   * Write the time slots the author confirmed on the Session Management step.
+   *
+   * Extracted from the edit branch, which was the only branch that had it,
+   * because C3 moved the commit point: a test or an interview used to be
+   * created by `AdminSessionManager` itself, which then created its own
+   * sessions against the id it got back. Review commits now, so this form owns
+   * writing them on BOTH paths - and a create that dropped them silently would
+   * be the worst possible version of this change.
+   *
+   * Gated on BOTH the type and the `temp-session-` prefix, and the type half is
+   * back after the security gate refuted the reason it was dropped.
+   *
+   * The prefix is what distinguishes a slot held in memory from one that is
+   * already a row, and the first version of this relied on it alone - the
+   * comment here claimed the type test "could only ever have agreed with it or
+   * been wrong", because only the Session Management step mints these. That is
+   * true of how they are CREATED and false of what happens next: the type lives
+   * on step 1, so an author can confirm slots on a test, walk back, change the
+   * type to a poll, and reach Review with temporary sessions still in state.
+   * Without the type gate those slots are written to the poll - rows the author
+   * never asked for, on an opportunity that has no session surface to show them.
+   *
+   * A premise that is nearly right has cost this plan more than one defect, and
+   * this was one of them.
+   */
+  const persistTemporarySessions = async (savedOpportunityId: string): Promise<boolean> => {
+    if (formData.type !== 'test' && formData.type !== 'interview') {
+      return true;
+    }
+    const tempSessions = sessions.filter((session) => session.id.startsWith('temp-session-'));
+    if (tempSessions.length === 0) {
+      return true;
+    }
+
+    try {
+      const sessionData = tempSessions.map(session => ({
+        start_time: session.start_time,
+        end_time: session.end_time,
+        capacity: session.capacity,
+        location_or_meet_link_optional: session.location_or_meet_link_optional || ''
+      }));
+
+      logger.debug('Creating confirmed time slots', { count: sessionData.length });
+      const { createSessions } = await import('../api/client');
+      await createSessions(savedOpportunityId, sessionData);
+
+      // Re-read rather than assume: the temporary ids are local fictions and
+      // the real rows are what every later action addresses.
+      const refreshed = await getOpportunity(savedOpportunityId);
+      setSessions(refreshed.sessions || []);
+      return true;
+    } catch (sessionError: unknown) {
+      logger.error('Error saving sessions', {
+        error: sessionError instanceof Error ? sessionError : undefined,
+        errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError)
+      });
+      setError('The opportunity was saved but its time slots were not. Add them from the dashboard.');
+      /*
+       * Reported to the CALLER, not only to `setError`.
+       *
+       * The banner this sets is painted on a page the navigation below is
+       * about to unmount, so it was never seen: the author landed on the
+       * dashboard reading "Opportunity created successfully!" with an
+       * opportunity that had no bookable slots and no sign anything had gone
+       * wrong. The deleted `AdminSessionManager` block had the same shape, so
+       * this is not a regression - but C3 collapsed three create paths into one
+       * and this function's own comment says a create that dropped them
+       * silently would be the worst possible version of the change, so the code
+       * and its justification had stopped agreeing.
+       *
+       * The EDIT path needs no flag: it returns before the navigation, so its
+       * banner is already on a page the author is still looking at.
+       */
+      return false;
+    }
+  };
+
   const handleSubmit = async (e?: React.FormEvent, skipNavigation = false): Promise<string | undefined> => {
     // linkedStudyUpdatedAt is recorded here rather than sent: A0's in-place
     // update has no concurrency precondition yet (F1 adds one, and D2's
@@ -1840,9 +2246,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // cannot author here (someone else's, or one holding a step type this
         // form cannot represent) still sends its id and is edited in the Task
         // Lists area.
-        const authoringInline =
-          !studyIsReadOnly &&
-          formData.inline_study_steps.length > 0;
+        const authoringInline = authoringInlineStudy;
 
         // Exactly one of the two, never both. An opportunity that already has
         // a study keeps `firsthand_study_id` in state, so authoring content
@@ -1929,9 +2333,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           // Same shape as the task-list branch above, and the same reason for
           // exactly one of the two: the stored id stays in state, and copy mode
           // authors content rather than pointing at somebody else's study.
-          const authoringInline =
-            !studyIsReadOnly &&
-            formData.inline_survey_questions.length > 0;
+          const authoringInline = authoringInlineSurvey;
 
           data.firsthand_study_id = authoringInline
             ? undefined
@@ -1983,80 +2385,36 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
 
       let savedOpportunity: Opportunity;
+      // False only when the opportunity saved and its time slots did not.
+      let sessionsPersisted = true;
       if (isEdit && id) {
         savedOpportunity = await updateOpportunity(id, data as UpdateOpportunityRequest);
 
-        // Save any temporary sessions that were created during editing (only for test and interview types)
-        if (formData.type === 'test' || formData.type === 'interview') {
-          const tempSessions = sessions.filter(session => session.id.startsWith('temp-session-'));
-          logger.debug('EDIT MODE - Checking for temporary sessions', {
-            totalSessions: sessions.length,
-            tempSessions: tempSessions.length,
-            tempSessionIds: tempSessions.map(s => s.id),
-            opportunityId: savedOpportunity.id
-          });
-
-          if (tempSessions.length > 0) {
-            try {
-              const sessionData = tempSessions.map(session => ({
-                start_time: session.start_time,
-                end_time: session.end_time,
-                capacity: session.capacity,
-                location_or_meet_link_optional: session.location_or_meet_link_optional || ''
-              }));
-
-              logger.debug('EDIT MODE - Creating sessions', { count: sessionData.length });
-              const { createSessions } = await import('../api/client');
-              await createSessions(savedOpportunity.id, sessionData);
-
-              // Reload sessions to get the real IDs
-              const updatedOpportunity = await getOpportunity(savedOpportunity.id);
-              logger.debug('EDIT MODE - Updated opportunity sessions', { count: updatedOpportunity.sessions?.length || 0 });
-              setSessions(updatedOpportunity.sessions || []);
-            } catch (sessionError: unknown) {
-              logger.error('Error saving sessions', {
-                error: sessionError instanceof Error ? sessionError : undefined,
-                errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError)
-              });
-              setError('Opportunity updated but failed to save sessions. Please add them manually.');
-            }
-          } else {
-            logger.debug('EDIT MODE - No temporary sessions to save');
-          }
-        }
+        await persistTemporarySessions(savedOpportunity.id);
       } else {
         savedOpportunity = await createOpportunity(data as CreateOpportunityRequest);
         setOpportunityId(savedOpportunity.id);
 
-        // What is on screen has now been stored, so it is the new baseline for
-        // "would leaving lose anything". Without this, a test or interview -
-        // which returns below WITHOUT a success message, because
-        // AdminSessionManager owns the navigation from here - leaves an author
-        // whose opportunity is saved being told their unsaved changes will be
-        // discarded. A confirmation that cries wolf is the one people learn to
-        // click through, which costs more than never having asked.
+        // What is on screen has now been stored, so it is the new baseline
+        // for "would leaving lose anything".
         openingFormData.current = formData;
 
         logger.debug('CREATE MODE - Opportunity created');
 
-        // For types that use external links (no sessions), show success then auto-navigate
-        if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-          const isDraft = formData.status === 'draft';
-          setSuccessMessage(
-            isDraft
-              ? '⚠️ Study created as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
-              : 'Opportunity created successfully!'
-          );
-          // Auto-navigate to admin dashboard after a brief delay so the user sees the success message
-          setTimeout(() => {
-            navigate('/admin', { state: { refresh: true, timestamp: Date.now() } });
-          }, isDraft ? 3000 : 1500); // Longer delay for draft warning
-          return savedOpportunity.id;
-        }
-
-        // For test/interview types, AdminSessionManager will handle session creation
-        // Return the opportunity ID so AdminSessionManager can create sessions
-        return savedOpportunity.id;
+        /*
+         * One create path for all five types now, where there used to be
+         * three.
+         *
+         * Poll, survey, question and unmoderated set a banner and navigated on
+         * a timer; test and interview returned early here and let
+         * `AdminSessionManager` create the sessions and navigate itself, which
+         * is what made confirming a time slot the commit point for those two
+         * types. Review commits for every type now, so this branch writes the
+         * confirmed time slots - a no-op when there are none, which is every
+         * type but those two - and then falls through to the single navigation
+         * below.
+         */
+        sessionsPersisted = await persistTemporarySessions(savedOpportunity.id);
       }
 
       // Update original form data after successful save
@@ -2095,22 +2453,44 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         return savedOpportunity.id;
       }
 
-      // Navigate after successful save
-      if (!skipNavigation) {
+      /*
+       * Navigate the moment the request resolves. No timer.
+       *
+       * There were two timed navigations before this - `setTimeout(navigate,
+       * isDraft ? 3000 : 1500)` on the create path, and an
+       * `await new Promise(setTimeout)` here - and both raced the author. The
+       * page they were being given three seconds to read was one that was
+       * about to be replaced underneath them, every control on it belonged to a
+       * form that was unmounting, and pressing Return to Dashboard inside that
+       * window queued a second navigation behind the first. Review is where the
+       * author confirms now; there is nothing left for a delay to buy.
+       *
+       * A THIRD `setTimeout` survives deliberately, above: the one that clears
+       * the edit-mode success banner. That is a banner timeout on a page the
+       * author STAYS on, not a navigation, and removing it would leave a
+       * "Changes saved" notice up for the rest of the session.
+       *
+       * The draft warning is the thing that had to survive the change, so it
+       * travels in the navigation state rather than being shown here and
+       * abandoned. `Admin` renders `state.message` and styles anything
+       * containing DRAFT as a warning, so the author reads the same words in
+       * the same colour, on the page they have actually arrived at.
+       */
+      if (!skipNavigation && sessionsPersisted) {
         if (allowUserSubmission) {
           // For user submissions, navigate to home with success message
           navigate('/', { state: { message: 'Research request submitted successfully! It will be reviewed by an admin.' } });
         } else {
-          // For admin, show success message briefly then navigate to admin dashboard
           const isDraft = formData.status === 'draft';
-          setSuccessMessage(
-            isDraft
-              ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
-              : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
-          );
-          // Brief delay to show success feedback before navigation (longer for draft warnings)
-          await new Promise(resolve => setTimeout(resolve, isDraft ? 3000 : 1500));
-          navigate('/admin', { state: { refresh: true, timestamp: Date.now(), message: isEdit ? 'Opportunity updated!' : 'Opportunity created!' } });
+          navigate('/admin', {
+            state: {
+              refresh: true,
+              timestamp: Date.now(),
+              message: isDraft
+                ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
+                : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
+            }
+          });
         }
       }
 
@@ -2489,7 +2869,30 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 </div>
               )}
 
-              <form onSubmit={handleSubmit}>
+              {/*
+                The form's submit event is NEUTERED, not wired to the commit,
+                and this is the fix for the one defect that broke C3's whole
+                exit criterion.
+                `handleSubmit` used to be here. Every control in this form is
+                `type="button"`, so the form has no submit button - and that is
+                precisely the CONDITION under which the HTML implicit-submission
+                algorithm submits the form from the form element itself, not a
+                protection against it. It does so whenever the form holds no
+                more than ONE field that blocks implicit submission, and two
+                steps qualify: the External Link step renders a single
+                `input[type=url]`, and Content & Details renders a single
+                `input[type=text]` in its default case.
+                So pressing Return in either field called `handleSubmit`,
+                created the opportunity and navigated to the dashboard - from a
+                step that is not Review, without the author ever seeing a
+                summary. Confirmed in a browser: one keystroke, one POST, one
+                redirect. Harmless before C3, because the External Link step WAS
+                the commit point, which is why it survived this long.
+                Review's own commit does not travel through this event - it is
+                an `onClick` on a `type="button"` - so refusing the event costs
+                nothing and closes both steps at once.
+              */}
+              <form onSubmit={(event) => event.preventDefault()}>
                 {/* Tab Navigation */}
                 <div className="border-bottom">
                   <StepNav
@@ -2571,12 +2974,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         </div>
                       )}
 
+                      {continueControl && (
                       <StepActions
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        nextLabel="Continue to Details"
+                        {...continueControl}
                         onNext={() => {
                           // Validate basic info before continuing
                           const errors: Record<string, string> = {};
@@ -2609,12 +3013,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             return;
                           }
 
-                          // Clears the refusal only - a server error
-                          // banner is not this button's to erase.
-                          setRefusalShown(false);
-                          setActiveTab(2);
+                          continueControl.onNext();
                         }}
                       />
+                      )}
                     </>
                   )}
 
@@ -2627,35 +3029,46 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
                       />
+                      {continueControl && (
                       <StepActions
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        nextLabel={
-                          // Left exactly as it was. A native poll or survey
-                          // reads "Continue to Link Setup" here and then lands
-                          // on Questions; that mislabel is not this step's to
-                          // fix, because this step changes no labels.
-                          formData.type === 'test' || formData.type === 'interview'
-                            ? 'Continue to Session Setup'
-                            : formData.type === 'unmoderated'
-                            ? 'Continue to Task List'
-                            : formData.type === 'poll' || formData.type === 'survey' || formData.type === 'question'
-                            ? 'Continue to Link Setup'
-                            : 'Continue'
-                        }
+                        {...continueControl}
+                        /*
+                          The one place a forward control does NOT name its
+                          destination, and the exception is the point.
+                          With no type chosen the step list is [1, 2, 5], so the
+                          next step BY POSITION is Review - but the handler
+                          below refuses that move and sends the author to the
+                          type field instead. A label reading "Continue: Review"
+                          would therefore promise a step it does not go to,
+                          which is the exact defect C3 deleted from this row
+                          ("Continue to Link Setup", landing on Questions). The
+                          honest label is the one that names nothing, because
+                          until a type is chosen there is nothing to name.
+                        */
+                        nextLabel={formData.type ? continueControl.nextLabel : 'Continue'}
                         onNext={() => {
-                          // Determine next tab based on opportunity type
-                          const nextTab = tabs.find(tab => tab.id > 2)?.id;
-                          if (!nextTab) {
-                            // There is no third tab until a type is chosen,
-                            // and the tab headers are directly clickable -
-                            // so this tab is reachable with no type set.
-                            // Continuing to tab 2 from tab 2 is a no-op the
-                            // author reads as a broken button. Send them to
-                            // the field that is actually blocking them.
+                          /*
+                           * Asks the question it actually means.
+                           *
+                           * This used to read "is there a step after 2", which
+                           * was a true proxy for "has a type been chosen" only
+                           * while the shapes ended at the type-dependent step.
+                           * Review now sits after step 2 on every shape,
+                           * including the one with no type, so the proxy
+                           * silently became "yes, always" - and the author who
+                           * never picked a type would have been walked past the
+                           * only choice that decides what this form is for.
+                           *
+                           * The step headers are directly clickable, so this
+                           * step is reachable with no type set. Send them to the
+                           * field that is blocking them rather than forward.
+                           */
+                          if (!formData.type) {
                             setValidationErrors(prev => ({
                               ...prev,
                               type: 'Please select a research study type'
@@ -2665,10 +3078,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                             return;
                           }
-                          setRefusalShown(false);
-                          setActiveTab(nextTab);
+                          continueControl.onNext();
                         }}
                       />
+                      )}
                     </>
                   )}
 
@@ -2687,22 +3100,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           currentUserId={user?.id}
                         />
 
-                        {/* No longer the last step: Consent follows it, and
-                            the create/update control moved there with the end
-                            of the wizard. The green Save Changes shortcut this
-                            row deliberately lacked in edit mode is added here,
-                            because with the terminal control gone this step
-                            would otherwise be the only one in the form an
-                            edit could not be saved from. */}
+                        {/* Not the last step, and after C3 no step but Review
+                            is. The green Save Changes shortcut this row
+                            deliberately lacked in edit mode stays, because it
+                            is the only way to save an edit without walking to
+                            the end of the wizard. */}
+                        {continueControl && (
                         <StepActions
                           isEdit={isEdit}
                           saving={saving}
                           disabled={saveControlsDisabled}
                           {...backwardControl}
                           onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                          nextLabel="Continue to Consent"
-                          onNext={() => setActiveTab(4)}
+                          {...continueControl}
                         />
+                        )}
                       </>
                     )}
 
@@ -2720,20 +3132,21 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         currentUserId={user?.id}
                       />
 
+                      {continueControl && (
                       <StepActions
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        nextLabel="Continue to Consent"
-                        onNext={() => setActiveTab(4)}
+                        {...continueControl}
                       />
+                      )}
                     </>
                   )}
 
-                  {/* Consent - the last step on the two paths that author a
-                      study, and absent from the three that do not. */}
+                  {/* Consent - on the two paths that author a study, and absent
+                      from the three that do not. Review follows it. */}
                   {currentStep?.key === 'consent' && authoringKind && (
                     <>
                       <ConsentStep
@@ -2797,14 +3210,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         }}
                       />
 
+                      {continueControl && (
                       <StepActions
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        onSubmit={() => handleSubmit()}
+                        {...continueControl}
                       />
+                      )}
                     </>
                   )}
 
@@ -2817,14 +3232,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleInputChange={handleInputChange}
                       />
 
+                      {continueControl && (
                       <StepActions
                         isEdit={isEdit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
-                        onSubmit={() => handleSubmit()}
+                        {...continueControl}
                       />
+                      )}
                     </>
                   )}
 
@@ -2854,25 +3271,77 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                             defaultDurationMinutes={formData.default_duration_minutes}
                             disabled={saving || (isEdit && loadingOpportunity)}
                             isTemporary={!isEdit || !opportunityId}
-                            onOpportunitySave={() => handleSubmit(undefined, true)}
+                            /*
+                             * No `onOpportunitySave` and no `onNavigate` any
+                             * more, and that is the restructure C3 owes this
+                             * path rather than an omission.
+                             *
+                             * This component used to BE the commit point for a
+                             * test or an interview: confirming time slots saved
+                             * the opportunity and navigated away, so those two
+                             * types were the only ones whose author never saw a
+                             * summary of what they were about to create. Slot
+                             * confirmation is now just slot confirmation; the
+                             * Review step commits, for all five types.
+                             */
                             onBack={previousStep ? () => setActiveTab(previousStep.id) : undefined}
                             onBackLabel={previousStep?.title}
-                            onNavigate={(path) => {
-                              const isDraft = formData.status === 'draft';
-                              navigate(path, {
-                                state: {
-                                  refresh: true,
-                                  timestamp: Date.now(),
-                                  message: isDraft
-                                    ? '⚠️ Study created as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
-                                    : 'Opportunity created successfully!'
-                                }
-                              });
-                            }}
-                            isDraft={formData.status === 'draft'}
+                            onContinue={continueControl?.onNext}
+                            onContinueLabel={nextStep?.title}
                           />
                         )}
                       </div>
+                    </>
+                  )}
+
+                  {/*
+                    Review - the last step on every shape, and the only step
+                    that commits.
+                  */}
+                  {currentStep?.key === 'review' && (
+                    <>
+                      <ReviewStep
+                        sections={reviewSections}
+                        publishRefusal={publishRefusal}
+                        onEdit={goToStepAndFocus}
+                        isEdit={isEdit}
+                      />
+
+                      {/*
+                        E1's "Preview participant experience" entry point belongs
+                        here, and it is deliberately absent rather than stubbed.
+
+                        E1 has not landed - it is a parallel branch of this plan
+                        that rebuilds the participant read-through, and its own
+                        brief says its entry point is added by C3 rather than by
+                        E1. So this is the seam. A disabled button or one wired
+                        to nothing would read to an author as a broken feature,
+                        which is worse than a feature that is not there yet: the
+                        whole point of this screen is that every control on it
+                        does what it says.
+
+                        When E1 lands it goes between the summary and the action
+                        row, so an author checks their answers, looks at what the
+                        participant will see, and then commits - in that order.
+                      */}
+
+                      <StepActions
+                        isEdit={isEdit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        {...backwardControl}
+                        /*
+                          No `onSave` here, deliberately, where every other step
+                          has one. On Review the green Save Changes shortcut and
+                          the terminal control would be two buttons doing
+                          exactly the same thing, sitting next to each other,
+                          with two different names - and `getByRole` matching
+                          names as substrings, that ambiguity reaches the tests
+                          as well as the author.
+                        */
+                        onSubmit={() => handleSubmit()}
+                        submitLabel={isEdit ? 'Save changes' : 'Create opportunity'}
+                      />
                     </>
                   )}
                 </div>

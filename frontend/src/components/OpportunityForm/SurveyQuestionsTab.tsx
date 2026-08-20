@@ -256,7 +256,19 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
       <div className="form-section mb-5">
         <div className="d-flex align-items-center mb-4 pb-3" style={{ borderBottom: 'none' }}>
           <div>
+            {/*
+              The landing point for Review's Edit link on this step.
+              `tabIndex={-1}` makes the heading focusable programmatically
+              without adding a Tab stop, which is the standard skip-target
+              shape. A heading rather than a control because there is no single
+              control here to name: the author came back to change one of the questions, and
+              which one is theirs to choose. Its id is the validation key for
+              the same content, so the two ways of addressing this step cannot
+              drift apart.
+            */}
             <h2
+              id="inline_survey_questions"
+              tabIndex={-1}
               className="h4 mb-1 section-title"
               style={{ fontSize: '1.5rem', lineHeight: '1.3', fontWeight: '600' }}
             >
