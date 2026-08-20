@@ -617,7 +617,7 @@ describe('reopening an opportunity that has a task list', () => {
     expect(consentField().value).toBe(
       'The bespoke wording this researcher actually wrote'
     );
-    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     expect(
       (screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value
     ).toBe('https://shop.test/basket');
@@ -1396,7 +1396,7 @@ describe('when the linked study cannot be read', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Task List/i }));
 
-    expect(await screen.findByRole('button', { name: /^Back$/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Previous: Content & Details$/i })).toBeEnabled();
 
     // And onward to the step C1 added, which is now the one holding the save
     // control - so it is the step an over-broad `disabled` would strand the
@@ -1405,7 +1405,7 @@ describe('when the linked study cannot be read', () => {
       screen.getByRole('button', { name: /Continue to Consent/i })
     ).toBeEnabled();
     goToConsentStep();
-    expect(await screen.findByRole('button', { name: /^Back$/i })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: /^Previous: Task List$/i })).toBeEnabled();
   });
 
   it('disables the final save control too, not only the Save Changes shortcut', async () => {
@@ -1619,7 +1619,7 @@ describe('the Save button appearing for a change that only touches authored cont
     goToConsentStep();
     expect(screen.queryByRole('button', { name: /Save Changes/i })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /^Back$/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^Previous: Task List$/i }));
     await openAllCards();
     fireEvent.change(screen.getAllByLabelText(/What the participant sees/i)[0], {
       target: { value: 'Open the basket and describe it' }

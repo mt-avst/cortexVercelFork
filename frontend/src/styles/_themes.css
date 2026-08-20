@@ -2780,6 +2780,36 @@ body.theme-dark .opportunity-form .opportunity-form-tab:hover:not(.active) {
   border-bottom: 2px solid rgba(255,255,255,0.2);
 }
 
+/* The step strip's two extra lines. Position is supporting text and is muted
+   to match the description; state is the point of the strip and is not.
+   Every state pairs its colour with its own icon and its own words in the
+   markup, so none of this is load-bearing on its own - which is just as well,
+   because the active step is orange and so is a reported failure. */
+body.theme-dark .opportunity-form .opportunity-form-tab .step-tab__position {
+  color: rgba(224, 224, 224, 0.65);
+}
+
+body.theme-dark .opportunity-form .step-tab__status--completed {
+  color: #4ADE80;
+}
+
+body.theme-dark .opportunity-form .step-tab__status--notStarted {
+  color: rgba(224, 224, 224, 0.7);
+}
+
+body.theme-dark .opportunity-form .step-tab__status--current {
+  color: var(--color-brand-orange);
+}
+
+/* `validation-error` resolves to the brand orange in this theme, which is also
+   the active step's colour - so the two states an author most needs to tell
+   apart were the two that looked alike. Overridden here for the step chip only,
+   at one class more specific than the token's own rule, so the token keeps its
+   single definition everywhere else. Red-400 clears 4.5:1 on this ground. */
+body.theme-dark .opportunity-form .step-tab .step-tab__status--needsAttention {
+  color: #F87171;
+}
+
 body.theme-dark .opportunity-form .border-top,
 body.theme-dark .opportunity-form .border-bottom {
   border-color: rgba(255, 255, 255, 0.1);
@@ -2976,6 +3006,24 @@ body.theme-light .opportunity-form .opportunity-form-tab .tab-description {
 
 body.theme-light .opportunity-form .opportunity-form-tab.active .tab-description {
   color: rgba(255, 122, 51, 0.8);
+}
+
+/* Light-theme twin of the block above. The greens and greys here are picked
+   to clear 4.5:1 against the card, not to match the dark values by name. */
+body.theme-light .opportunity-form .opportunity-form-tab .step-tab__position {
+  color: #6B7280;
+}
+
+body.theme-light .opportunity-form .step-tab__status--completed {
+  color: #15803D;
+}
+
+body.theme-light .opportunity-form .step-tab__status--notStarted {
+  color: #6B7280;
+}
+
+body.theme-light .opportunity-form .step-tab__status--current {
+  color: #9A3412;
 }
 
 body.theme-light .opportunity-form .border-top,

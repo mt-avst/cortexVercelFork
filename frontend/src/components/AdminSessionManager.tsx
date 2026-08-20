@@ -68,6 +68,15 @@ interface AdminSessionManagerProps {
   isTemporary?: boolean;
   onOpportunitySave?: () => Promise<string | undefined>; // New prop for saving opportunity, returns opportunity ID
   onBack?: () => void; // Prop for back navigation
+  /**
+   * The name of the step `onBack` returns to.
+   *
+   * This is the sixth backward control in the opportunity form and the only
+   * one that is not a `StepActions` row. It said a bare "Back" while the other
+   * five named their destination, which left the step that has the top/bottom
+   * confusion still live as the one step where it had not been fixed.
+   */
+  onBackLabel?: string;
   onNavigate?: (path: string) => void; // Prop for navigation (avoids full page reload)
   isDraft?: boolean; // Whether the opportunity is in draft status
 }
@@ -1122,6 +1131,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   isTemporary = false,
   onOpportunitySave,
   onBack,
+  onBackLabel,
   onNavigate,
   isDraft = false
 }) => {
@@ -1164,6 +1174,16 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   }, [getStorageKey]);
 
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(getStoredSelectedSlots);
+
+  /**
+   * The backward control's label, in one place.
+   *
+   * This component renders that control twice - once in the selection bar and
+   * once below it - and the two copies had drifted to saying the same wrong
+   * thing in two places. One expression means a test that reaches either copy
+   * covers both, and there is no second spelling to forget.
+   */
+  const backLabel = onBackLabel ? `Previous: ${onBackLabel}` : 'Previous step';
   const [confirmedSlots, setConfirmedSlots] = useState<Set<string>>(getStoredConfirmedSlots);
   
   // Calendar view mode
@@ -2244,7 +2264,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                       disabled={disabled || loading}
                     >
                       <ArrowLeft size={16} className="me-2" />
-                      Back
+                      {backLabel}
                     </button>
                   )}
                   {/* Clear Selection - centered */}
@@ -2273,7 +2293,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 disabled={disabled || loading}
               >
                 <ArrowLeft size={16} className="me-2" />
-                Back
+                {backLabel}
               </button>
             </div>
           )}
