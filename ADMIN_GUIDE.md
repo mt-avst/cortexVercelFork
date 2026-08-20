@@ -18,11 +18,12 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 3. [Managing Sessions](#managing-sessions)
 4. [Unmoderated Studies](#unmoderated-studies)
 5. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
-6. [Publishing Opportunities](#publishing-opportunities)
-7. [Dashboard and Analytics](#dashboard-and-analytics)
-8. [Settings](#settings)
-9. [Managing Bookings](#managing-bookings)
-10. [Tips and Best Practices](#tips-and-best-practices)
+6. [Consent](#consent)
+7. [Publishing Opportunities](#publishing-opportunities)
+8. [Dashboard and Analytics](#dashboard-and-analytics)
+9. [Settings](#settings)
+10. [Managing Bookings](#managing-bookings)
+11. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -182,11 +183,12 @@ Open the **Task List** tab. It is headed *"What the participant is asked to do w
 - **Estimated completion time**: worked out from your task list and shown to participants before they agree to be recorded. It moves as you write, so it stays right as the list grows. **Set it myself** takes it over if you know better - and once you have taken it over you can clear it entirely, which tells participants no length at all. That is still the better answer when you genuinely do not know: a wrong number is worse than no number
 - **Add task**: adds a task, already open with the cursor in it. Each one is just **"What the participant sees"** - there is no response type to choose. Sessions record screen and voice, so participants answer **out loud** as they work; a typed answer box invited them to stop talking and type, which is the opposite of thinking aloud
   - Task Lists written before this still hold typed steps. Those run and stay editable, but no participant is asked to type any more, and their answers are in the recording
-- **Each task is a collapsed row** showing its position, its type and the opening of its wording, so a long list stays readable and the consent field and save buttons stay within reach. **Edit** opens one to work on; **Collapse** shuts it again. A task that fails validation opens itself and is flagged **Needs attention**, so a refused save never hides the field it is complaining about
+- **Each task is a collapsed row** showing its position, its type and the opening of its wording, so a long list stays readable and the controls below it stay within reach. **Edit** opens one to work on; **Collapse** shuts it again. A task that fails validation opens itself and is flagged **Needs attention**, so a refused save never hides the field it is complaining about
 - **Reordering**, on each row: **Move up** and **Move down** for a nudge, a **position dropdown** to send a task straight to a given place in a long list, and a **drag handle** to drag it. Order matters: participants work through the list top to bottom. Every move is announced for screen reader users
 - **Duplicate** copies a task and everything in it, and drops the copy directly below the original
 - **Remove** deletes a task. If there is anything written in it, you are asked to confirm first
-- **Consent text**: pre-filled with wording that covers screen and microphone recording, who sees it and the right to stop. Edit it if your study needs something different, but do not delete it
+
+Consent is no longer written here. **Continue to Consent** takes you to a step of its own - see [Consent](#consent) below.
 
 Write tasks as goals, not instructions.
 *"Find last month's report and download it"* tells you whether the journey works.
@@ -215,7 +217,13 @@ Changing your mind is safe: switching back to **Create tasks for this opportunit
 
 > **This replaced reuse-by-link.** Until 7.44 an opportunity could point at another opportunity's task list, and editing that list changed what every opportunity using it served, with nothing on screen saying so. Existing links were converted to copies when this shipped; nothing a participant sees changed.
 
-### Step 4: Publish and share
+### Step 4: Consent
+
+**Continue to Consent** takes you to the last step, where the **Create opportunity** button lives.
+
+It opens locked, showing the approved recorded-session wording and its version. Most studies need nothing here and can go straight on. If yours needs different wording, **Customise consent wording** unlocks it - and records that you did. See [Consent](#consent).
+
+### Step 5: Publish and share
 
 Publish as you would any opportunity.
 Once published, open it and you will see a **Share this study** panel with the participant link.
@@ -255,6 +263,7 @@ Reopening an opportunity shows exactly what you wrote - the tasks or questions, 
 > Either it belongs to another researcher, or it uses something this form cannot show: a step type it does not offer, or a different starting URL for each step.
 > Editing it here would quietly drop whatever was not shown, so the form does not offer to.
 > The second case can be edited in the **Task Lists** area. The first cannot be edited by you anywhere - ask its owner or a superadmin.
+> The **Consent** step shows that study's wording read only too, with its approved-or-custom status, so you can see what it says without being able to change it. If the task list could not be **loaded** at all, the step says so and shows nothing rather than showing you the default wording as though it were the study's.
 
 > **Changing the questions of a study that has already collected answers is refused on the opportunity form.**
 > That is deliberate: a task's identity comes from its position in the list, so changing the order would re-attach answers already collected to the wrong tasks.
@@ -301,7 +310,7 @@ The Questions step is headed *"What the participant is asked, answered here in C
 
 ### Working with a long list
 
-The controls are the same ones the Task List uses, and they exist because a twenty-question survey used to push the consent field and the save buttons several screens down.
+The controls are the same ones the Task List uses, and they exist because a twenty-question survey used to push everything below it several screens down.
 
 - **Each question is a collapsed row** showing its position, its type, whether it is required, and the opening of its wording. **Edit** opens one; **Collapse** shuts it
 - A question that fails validation **opens itself** and is flagged **Needs attention**
@@ -312,9 +321,7 @@ The controls are the same ones the Task List uses, and they exist because a twen
 
 ### Consent
 
-**Consent text** is pre-filled with wording that says answers are stored for research analysis and that **nothing is recorded**.
-It is deliberately different from the recorded-study wording: reusing that text would have participants agreeing to a capture that never happens.
-Edit it if your study needs something different, but do not delete it.
+Consent is its own step now, shared with recorded studies, and it follows the questions. See [Consent](#consent).
 
 ### Starting from an existing set of questions
 
@@ -341,6 +348,43 @@ There is a CSV export.
 - **Writing a rating question without deciding the scale** - the save is refused rather than picking one for you
 - **Expecting a recorded study's consent wording** - a survey records nothing, and its consent text says so
 - **Reordering questions after people have answered** - answers are attached to a question by its position, so this is refused on the opportunity form. Make a new opportunity instead
+
+---
+
+## Consent
+
+Consent is its own step, and it is the last one. It follows **Questions** on a poll or survey answered in Cortex, and **Task List** on a recorded study. The **Create opportunity** button lives there, so you pass through it on the way to saving.
+
+**It opens locked, showing the approved wording**, the template it comes from and its version - for example *Standard survey consent (version 1)*, with a line saying what it covers. There is nothing to type into, because for most studies there is nothing to decide: the approved wording is the wording.
+
+There are two templates, and they are deliberately different:
+
+- **Standard recorded-session consent** covers screen and microphone recording, who sees the recording, and how a participant ends it
+- **Standard survey consent** says what is stored, who sees it, and that **no screen, microphone or camera is recorded**
+
+A survey never gets the recorded wording and a recorded study never gets the survey wording. Reusing the recorded text on a survey would have participants agreeing to a capture that never happens.
+
+### If your study needs different wording
+
+**Customise consent wording** unlocks the field. Nothing is stopping you, and nothing tries to.
+
+What changes is that the deviation is **recorded**:
+
+- The step marks the study **Custom wording** and says plainly that it does not run on approved consent wording
+- A **diff** shows exactly what your version adds and removes against the template you started from, with a one-line summary in words as well as the marked-up text
+- A **Custom consent** flag appears against that study in the Task Lists list, and against it in the copy picker - so anyone starting from your study sees it *before* they take the copy
+
+**Opening the field is not the same as changing it.** Unlock it, read it, change nothing, and the study still runs on the approved template. Change it and change it back exactly, and it goes back to the template - there is no flag left stuck on. **Restore the approved wording** puts the template text back and re-locks the field in one step.
+
+Whitespace alone is not a change: a stray blank line at the end does not mark a study as custom.
+
+### What a copy inherits
+
+Starting from an existing task list or set of questions brings its consent wording across **and its status with it**. A copy of an approved study is approved; a copy of somebody's custom wording is custom. That is why the copy picker shows the flag on the row.
+
+### What the participant sees
+
+Whatever wording is stored on the study at the moment their session starts - approved or custom. That wording is **frozen into their session**, along with which template it was, so editing the study afterwards never changes what somebody has already agreed to.
 
 ---
 
