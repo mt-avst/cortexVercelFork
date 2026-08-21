@@ -62,6 +62,21 @@ interface HarnessProps {
    * copy replaced by a spread.
    */
   onItems?: (items: WithClientId<Question>[]) => void;
+  /**
+   * Answers already collected, by POSITION, turned into the by-`_clientId` map
+   * the component takes.
+   *
+   * By position because the ids are minted at render and a test cannot know
+   * them in advance - which is itself the point of them: the card's
+   * `_clientId` IS the stored question's identity, so a map built here the
+   * same way the API builds it is the honest harness.
+   *
+   * `undefined` means this list does not offer counts at all, the way the
+   * recorded task list does not. `null` means they could not be read. An empty
+   * array means they were read and nothing has been answered - three states,
+   * and the component says something different about each.
+   */
+  answersPerQuestion?: Array<number | undefined> | null;
 }
 
 /**
@@ -74,13 +89,36 @@ interface HarnessProps {
 const Harness: React.FC<HarnessProps> = ({
   initial = THREE,
   validationErrors = {},
-  onItems
+  onItems,
+  answersPerQuestion
 }) => {
   const [items, setItems] = useState<WithClientId<Question>[]>(() =>
     withClientIds(initial)
   );
 
   onItems?.(items);
+
+  /**
+   * Built ONCE, from the ids the first render minted, and never rebuilt.
+   *
+   * A map recomputed by position on every render is a positional map, and the
+   * component's whole job is not to be one - so the harness would have moved
+   * the counts in lockstep with the cards and no reorder test could ever fail.
+   * The real map has this property for free: it is read from the server once,
+   * against the stored questions, and the cards move without it.
+   */
+  const [answerCounts] = useState<Record<string, number> | null | undefined>(() =>
+    answersPerQuestion === undefined
+      ? undefined
+      : answersPerQuestion === null
+        ? null
+        : Object.fromEntries(
+            items.flatMap((item, index) => {
+              const count = answersPerQuestion[index];
+              return count === undefined ? [] : [[item._clientId, count] as const];
+            })
+          )
+  );
 
   return (
     <>
@@ -105,6 +143,7 @@ const Harness: React.FC<HarnessProps> = ({
         promptLabel={() => 'What the participant is asked *'}
         addLabel="Add question"
         emptyMessage="No questions yet."
+        answerCounts={answerCounts}
         renderTypeFields={({ item, index, update }) =>
           item.type === 'single_choice' ? (
             <div>
@@ -131,6 +170,12 @@ const Harness: React.FC<HarnessProps> = ({
           ground under it. */}
       <button type="button" onClick={() => setItems([...items].reverse())}>
         reverse from outside
+      </button>
+      {/* The other way a re-read changes the list: it gets SHORTER. A dialog
+          open on the last card then has neither its item nor its captured
+          index still in range. */}
+      <button type="button" onClick={() => setItems(items.slice(0, 1))}>
+        shorten from outside
       </button>
       <pre data-testid="state">
         {JSON.stringify(items.map(({ _clientId: _ignored, ...rest }) => rest))}
@@ -551,6 +596,139 @@ describe('removing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove question 1' }));
 
     expect(state()).toHaveLength(0);
+  });
+
+  /**
+   * What an author is told about the people who already answered.
+   *
+   * Before F2 none of this could happen: the API refused any save that changed
+   * the questions of a study with answers, so removing one was not a thing an
+   * author could do. F2 allows it and keeps the answers - 0015 detaches them
+   * rather than destroying them, and they surface under "Removed questions" -
+   * which leaves exactly one gap: the author, who sees a Remove control that
+   * behaves identically whether the question has none or three hundred.
+   */
+  describe('a question people have already answered', () => {
+    it('names the number of answers in the confirmation', () => {
+      render(<Harness answersPerQuestion={[undefined, 47, undefined]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).toHaveTextContent('Question 2 has collected 47 answers');
+      expect(dialog).toHaveTextContent('Removed questions');
+    });
+
+    it('reads the count of the question it asked about, not the position', () => {
+      // Same trap the removal itself has: the list can move under an open
+      // dialog, because the form re-reads itself after every save. A count
+      // resolved by the captured index would name another question's answers
+      // while the dialog went on removing the right one - a sentence that is
+      // wrong in a way nothing else on screen contradicts.
+      render(<Harness answersPerQuestion={[300, undefined, undefined]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'reverse from outside' }));
+
+      expect(screen.getByRole('dialog')).toHaveTextContent(
+        'has collected 300 answers'
+      );
+    });
+
+    it('says nothing about answers when nobody has answered it', () => {
+      render(<Harness answersPerQuestion={[]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+
+      // The noise that would teach authors to dismiss this dialog unread, and
+      // make the one that matters useless.
+      expect(screen.getByRole('dialog')).not.toHaveTextContent('collected');
+    });
+
+    it('confirms even when the wording was cleared first', () => {
+      // The empty-card exemption predates F2, when an answered question could
+      // not be removed at all. An author who empties a card before pressing
+      // Remove would otherwise skip the dialog entirely and detach three
+      // hundred answers with one click and no sentence anywhere.
+      render(
+        <Harness
+          initial={[{ type: 'open_text', prompt: '   ' }]}
+          answersPerQuestion={[300]}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 1' }));
+
+      expect(state()).toHaveLength(1);
+      expect(screen.getByRole('dialog')).toHaveTextContent(
+        'has collected 300 answers'
+      );
+    });
+
+    it('admits it could not check rather than implying nobody has', () => {
+      render(<Harness answersPerQuestion={null} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+
+      expect(screen.getByRole('dialog')).toHaveTextContent('could not be checked');
+    });
+
+    it('tells a screen reader what happened to the answers', () => {
+      render(<Harness answersPerQuestion={[undefined, 47, undefined]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question' }));
+
+      // The dialog is gone by the time this matters, so the live region is the
+      // only place the outcome is stated at all.
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Question 2 removed. Its 47 answers are kept under Removed questions in the results.'
+      );
+    });
+
+    it('survives the list shrinking past the card its dialog is about', () => {
+      // Both lookups miss: the card is gone AND the captured index is now past
+      // the end. The count lookup dereferenced whichever it got, so the whole
+      // authoring surface came down with a render-time TypeError - while the
+      // confirm handler eleven lines below had guarded this exact case all
+      // along.
+      render(<Harness answersPerQuestion={[undefined, undefined, 12]} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 3' }));
+      fireEvent.click(screen.getByRole('button', { name: 'shorten from outside' }));
+
+      // Still rendered, and honest: it no longer knows what it was about.
+      expect(screen.getByRole('dialog')).toHaveTextContent('could not be checked');
+      expect(screen.getByRole('button', { name: 'Remove question 1' })).toBeInTheDocument();
+    });
+
+    it('tells a screen reader the outcome even when the count is unknown', () => {
+      // The dialog has just promised that any answers are kept. Falling back to
+      // the bare "removed" sentence tells the one reader who cannot see the
+      // screen least, having shown them the most cautious dialog.
+      render(<Harness answersPerQuestion={null} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question' }));
+
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Question 2 removed. Whether it had been answered could not be checked; any answers are kept under Removed questions in the results.'
+      );
+    });
+
+    it('leaves a list that offers no counts exactly as it was', () => {
+      // The recorded task list passes none, because "Removed questions" is a
+      // section of the SURVEY results and a task list's author has nowhere to
+      // go and look. It must not inherit "could not be checked" for a check
+      // nothing ever tried to make.
+      render(<Harness />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Remove question 2' }));
+
+      const dialog = screen.getByRole('dialog');
+      expect(dialog).not.toHaveTextContent('could not be checked');
+      expect(dialog).not.toHaveTextContent('collected');
+    });
   });
 });
 

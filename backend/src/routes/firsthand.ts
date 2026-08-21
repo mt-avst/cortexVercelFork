@@ -18,7 +18,11 @@ import {
   createStudyRequestSchema,
   updateStudyRequestSchema
 } from '../../../shared/firsthand/study-input';
-import { listResponsesForStudy } from '../firsthand/survey-results-repository';
+import {
+  answerCountsByStep,
+  listResponsesForStudy
+} from '../firsthand/survey-results-repository';
+import { stepKeyOf } from '../../../shared/firsthand/step-identity';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
 import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
 
@@ -202,7 +206,90 @@ router.get('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, 
   // and getting the unowned-legacy case wrong.
   const can_edit = canWriteStudy(stored.study.owner_user_id, studyRequester(req));
 
-  return res.json({ study: stored.study, steps: stored.steps, can_edit });
+  /**
+   * How many answers each question has collected, so the authoring form can
+   * tell an author what removing one would do to them.
+   *
+   * Keyed by STEP KEY, not by the stored step id. The key is the only half of
+   * that id the form holds - a question card's `_clientId` IS its step key -
+   * and keeping the `${studyId}_` namespacing on the server is the whole
+   * arrangement step-identity.ts sets up: the client never mints or handles a
+   * whole id, so it cannot produce one claiming to belong to another study.
+   *
+   * A count whose id falls outside this study's namespace is DROPPED rather
+   * than passed through under its raw id. Nothing this product writes produces
+   * one - the form is offered such a study read-only - but a raw id in this map
+   * either matches no card, which is merely useless, or collides with a real
+   * key, which would report another study's answers against this one's
+   * question.
+   *
+   * `null` survives as `null`. It means the count could not be read, which is a
+   * different fact from "no question has any answers", and flattening the two
+   * would drop the warning exactly when the runtime database is under the
+   * pressure that suggests there are participants answering right now.
+   *
+   * NOT READ AT ALL unless this caller could act on the answer, and that is a
+   * disclosure boundary rather than an optimisation. `updateLinkedStudyContent`
+   * moved its ownership check AHEAD of `studyHasResponses` for exactly this
+   * reason: whether a study has collected answers, and how many, is a fact
+   * about somebody else's research that a colleague was never granted.
+   *
+   * Three conditions, and each is load-bearing:
+   *
+   * `can_edit`, because these counts exist to warn an author BEFORE they remove
+   * a question, and a reader shown the study read-only has no Remove control to
+   * be warned about. Nothing is lost by withholding them.
+   *
+   * A KNOWN OWNER, which `can_edit` alone does not give. `canWriteStudy` fails
+   * OPEN for `owner_user_id IS NULL` so legacy rows stay editable by whoever
+   * wrote them - right for a write, which adopts the row, and wrong here.
+   * `requireSuperadminForStudyResults` above already made this exact call for
+   * the results read and wrote down why: a read cannot adopt the row the way a
+   * write does, and an unowned study is precisely the case where nobody can be
+   * held accountable for the data. This is a read, so it follows the read.
+   * Every admin can list launched studies and the picker fetches any of them to
+   * preview, so without this an unattributed legacy study would report its
+   * per-question participation volume to anyone.
+   *
+   * And `kind === 'survey'`, because "Removed questions" is a section of the
+   * survey results view. A recorded task list has no surface on which its
+   * author could be shown a count, so reading one spends a runtime connection
+   * and widens the response for a value nothing consumes.
+   *
+   * WITHHELD IS NOT THE SAME AS UNKNOWN, and the response says which.
+   *
+   * `answer_counts: null` means the count was attempted and could not be
+   * established, and the form renders that as "could not be checked". OMITTING
+   * the key means no count is being offered at all - the three conditions above
+   * said no, or this is a backend older than the field. The form then says
+   * nothing about answers, exactly as it did before any of this existed.
+   *
+   * Collapsing the two put the cautious wording on every card of every unowned
+   * legacy survey, permanently - including a card the author had minted seconds
+   * earlier and which provably cannot have been answered by anyone. That is the
+   * dialog-fatigue the empty-card exemption exists to prevent, and it would
+   * have disabled that exemption for exactly the studies nobody is accountable
+   * for.
+   */
+  const mayReadCounts =
+    can_edit && stored.study.owner_user_id !== null && stored.study.kind === 'survey';
+
+  const storedCounts = mayReadCounts ? await answerCountsByStep(stored.study.id) : undefined;
+
+  const answer_counts =
+    storedCounts === undefined || storedCounts === null
+      ? storedCounts
+      : Object.fromEntries(
+          Object.entries(storedCounts).flatMap(([stepId, count]) => {
+            const key = stepKeyOf(stepId, stored.study.id);
+            return key === null ? [] : [[key, count] as const];
+          })
+        );
+
+  // `undefined` is dropped by JSON.stringify, so a withheld count leaves the
+  // key off the response rather than sending a value the client has to
+  // interpret.
+  return res.json({ study: stored.study, steps: stored.steps, can_edit, answer_counts });
 }));
 
 // PUT /api/firsthand/studies/:studyId - update a study

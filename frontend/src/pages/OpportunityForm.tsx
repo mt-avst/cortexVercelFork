@@ -5,6 +5,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
 import { getFirstHandStudy } from '../api/firsthand-studies';
+import {
+  answersDetachedBy,
+  detachedAnswersMessage,
+  detachedAnswersTitle,
+  type DetachedAnswers
+} from '../lib/opportunity-authoring/answer-counts';
 import { getPrimaryTargetUrl } from '../lib/recording/task-target';
 import {
   withoutClientIds,
@@ -659,6 +665,40 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // need a second round trip to learn a value this load already had.
   const [linkedStudyUpdatedAt, setLinkedStudyUpdatedAt] = useState<string | null>(null);
   /**
+   * How many answers each linked question has already collected, keyed by the
+   * `_clientId` its card carries - which is the same value the stored step is
+   * identified by, since F2 promoted it to the question's persisted identity.
+   *
+   * Three states, and the form must keep them apart. A map is a count that was
+   * read; `null` is a count that could NOT be read; `undefined` is a form that
+   * is not editing a stored study, so nothing on it could have answers. Only
+   * the first two mean anything to the author, and only the second warrants
+   * saying "could not check".
+   *
+   * Refreshed by `loadOpportunity`, which runs again after every successful
+   * edit save. That is not incidental: a map left stale across a save would go
+   * on naming a question that was removed by the save that made it stale, and
+   * warn about the same answers on every subsequent save forever.
+   */
+  const [answerCounts, setAnswerCounts] = useState<
+    Record<string, number> | null | undefined
+  >(undefined);
+  /**
+   * The answers a save would detach, while the author is being asked about
+   * them. Null means no such confirmation is open.
+   */
+  const [pendingDetach, setPendingDetach] = useState<DetachedAnswers | null>(null);
+  /**
+   * Whether the author has just confirmed that summary, for the one save that
+   * follows.
+   *
+   * A ref and not state: confirming resolves by calling `handleSubmit` again in
+   * the same tick, and a `setState` would not be visible to it - the save would
+   * bounce off its own confirmation forever. Cleared as it is read, so this can
+   * never authorise a second save the author was not asked about.
+   */
+  const detachConfirmedRef = useRef(false);
+  /**
    * The linked study's `updated_at` as it stands on the server after a save was
    * refused for being stale, and the banner flag that goes with it.
    *
@@ -1037,6 +1077,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       let readOnly = false;
       let readOnlyReason: StudyReadOnlyReason = null;
       let studyUpdatedAt: string | null = null;
+      /**
+       * Undefined until a study is actually read. An opportunity with no linked
+       * study, or one whose study could not be loaded at all, has no stored
+       * question that could hold an answer - which is a different thing from a
+       * study whose answers could not be counted, and the removal warning says
+       * something different about each.
+       */
+      let studyAnswerCounts: Record<string, number> | null | undefined;
 
       // The vocabulary this opportunity's form authors in, or null when it
       // authors nothing. An external poll can carry a study id it no longer
@@ -1058,6 +1106,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           const authored = authoredStepsOf(linked.steps);
 
           studyUpdatedAt = linked.study.updated_at ?? null;
+          // Carried through as-is, all three states of it.
+          //
+          // A map is a count that was read. `null` is a count that could not be
+          // established, and the removal dialog says so. ABSENT is neither: the
+          // route withholds counts it will not serve - a study nobody owns, a
+          // recorded task list - and a backend older than the field sends
+          // nothing either. Both mean "no count is on offer", and the form says
+          // nothing about answers rather than claiming a check it never made.
+          //
+          // `?? null` here is what put the cautious wording on every card of
+          // every unowned legacy survey, including cards minted seconds earlier
+          // that provably cannot have answers.
+          studyAnswerCounts = linked.answer_counts;
           // Absent means "not stated", not false: create and update responses
           // do not carry can_edit, and treating a missing value as a refusal
           // would lock the author out of their own study.
@@ -1237,6 +1298,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       });
 
       setHasLinkedStudy(Boolean(opportunity.firsthand_study_id));
+      setAnswerCounts(studyAnswerCounts);
       setStudyIsReadOnly(readOnly);
       setStudyReadOnlyReason(readOnlyReason);
       setLinkedStudyUpdatedAt(studyUpdatedAt);
@@ -2490,6 +2552,23 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       e.preventDefault();
     }
 
+    /**
+     * Read and cleared in one move, at the top, before anything can return.
+     *
+     * Consuming it further down - just before the save - looked equivalent and
+     * was not: `saving`, `studyLoadError` and a validation refusal all return
+     * BETWEEN the confirmation and that point. Confirm the summary, then have
+     * the re-entered save refused for a missing prompt, and the flag survived
+     * with nothing to spend it on: the NEXT save skipped the summary entirely,
+     * silently removing the one control this exists to add, at the moment the
+     * author is already dealing with a refusal.
+     *
+     * Clearing it on a path that does not save is the safe direction. The worst
+     * it costs is being asked again about a save that has not happened yet.
+     */
+    const detachAlreadyConfirmed = detachConfirmedRef.current;
+    detachConfirmedRef.current = false;
+
     // Prevent double-clicks - return early if already saving
     if (saving) {
       logger.debug('Already saving, ignoring duplicate click');
@@ -2522,6 +2601,50 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       logger.error('Validation errors', { errors });
       refuse(errors);
       return undefined;
+    }
+
+    /**
+     * The last thing between an ordinary save and somebody's research moving
+     * into a different section of the results.
+     *
+     * Per-card confirmations cannot cover this on their own. An author who
+     * deletes every question and adds replacements gets a fresh identity on
+     * each new card, so every stored question is gone and every answer
+     * detaches - through a run of dialogs each of which was individually about
+     * one question, or through none at all if the cards were emptied first.
+     * Nothing on screen adds them up. This does, once, naming both numbers.
+     *
+     * Placed AFTER validation on purpose, and that ordering is load-bearing
+     * rather than tidy. A survey cannot be saved with no questions at all, so
+     * emptying the list is REFUSED - and that save would have removed nothing
+     * anyway, because an empty list sends no `inline_survey` and the study
+     * keeps every question it has. Asking first would promise a removal that
+     * cannot happen, on a save that is not going to happen either.
+     *
+     * Gated on `authoringKind` as well as on the counts. `inline_survey_questions`
+     * is always empty on a form that is not authoring a survey, so a populated
+     * map would make every stored question look removed and block every save on
+     * a recorded task list behind a dialog naming a "Removed questions" section
+     * that author's results view does not have. The route withholds counts for
+     * a recorded study today and that is why this is currently unreachable -
+     * which is exactly why the invariant belongs here, next to the code that
+     * depends on it, rather than only on the server.
+     *
+     * Gated on a ref rather than on state, because the confirmation resolves by
+     * calling this function again and a state update would not have landed by
+     * then. Read and cleared at the very top of this function, so no early
+     * return can carry the authorisation into a later save.
+     */
+    if (!detachAlreadyConfirmed && authoringKind === 'survey') {
+      const detached = answersDetachedBy(
+        (formData.inline_survey_questions ?? []).map((question) => question._clientId),
+        answerCounts
+      );
+
+      if (detached) {
+        setPendingDetach(detached);
+        return undefined;
+      }
     }
 
     try {
@@ -2915,6 +3038,27 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // and would throw away everything on screen.
         const refusedWith = axiosError.response.data?.current_updated_at;
 
+        /**
+         * The answer counts are now KNOWN to be stale, so they must stop
+         * claiming anything.
+         *
+         * This is the one path that does not reload, deliberately - the whole
+         * point of the refusal is that the author's unsaved work survives it -
+         * and it is also the one path where the map is provably out of date:
+         * somebody else wrote this study since it was read. A question they
+         * added, and the answers it has since collected, are in neither this
+         * map nor this form's list of cards. So the next save - the deliberate
+         * overwrite F1 exists to offer - would detach those answers with no
+         * per-card dialog and no summary, on the very save the conflict banner
+         * has just told the author is contentious.
+         *
+         * `null` rather than a re-read here: this branch is the one that costs
+         * no extra request and cannot fail, and buying a count back is not
+         * worth making it fail. "Could not be checked" is the honest wording
+         * for "somebody changed this underneath you".
+         */
+        setAnswerCounts(null);
+
         if (refusedWith) {
           setStaleStudyUpdatedAt(refusedWith);
         } else {
@@ -2923,6 +3067,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             if (linked.study.updated_at) {
               setStaleStudyUpdatedAt(linked.study.updated_at);
             }
+            // This branch DID re-read, so it has fresh counts and should use
+            // them rather than the null set above: a question the colleague
+            // added is in this map, and its answers then show up in the summary
+            // as what the next save would detach - which is true, and is
+            // exactly what the author needs to see before overwriting.
+            setAnswerCounts(linked.answer_counts ?? null);
           } catch (refreshError) {
             logger.warn('Could not refresh the study revision after a conflict', {
               studyId: conflictedStudyId,
@@ -3650,6 +3800,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           onCopyFromStudy={(studyId) => copyFromStudy(studyId, 'survey')}
                           onPreviewStudy={openPreview}
                           currentUserId={user?.id}
+                          answerCounts={answerCounts}
                         />
 
                         {/* The author's own questions, run as a participant
@@ -3934,6 +4085,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           }
         }}
         onCancel={() => setPendingExit(null)}
+      />
+
+      {/*
+        The one place a save that detaches answers is added up and named.
+
+        Mounted only when there is something to say - `answersDetachedBy`
+        returns null both when nothing answered is being removed and when the
+        counts could not be read at all, and neither is a dialog worth showing.
+        Confirming re-enters `handleSubmit`, which is why the ref is set before
+        the state is cleared: the second pass has to see the authorisation, and
+        state written here would not have landed by then.
+      */}
+      <ConfirmationModal
+        show={pendingDetach !== null}
+        title={pendingDetach ? detachedAnswersTitle(pendingDetach) : ''}
+        message={pendingDetach ? detachedAnswersMessage(pendingDetach) : ''}
+        confirmLabel="Save and remove them"
+        cancelLabel="Go back"
+        variant="danger"
+        onConfirm={() => {
+          detachConfirmedRef.current = true;
+          setPendingDetach(null);
+          void handleSubmit();
+        }}
+        onCancel={() => setPendingDetach(null)}
       />
       </div>
     </>

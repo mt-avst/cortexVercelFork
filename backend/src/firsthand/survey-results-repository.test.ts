@@ -4,6 +4,17 @@ const isPostgresRuntimeConfigured = vi.fn(() => true);
 const captured: Array<{ sql: string; params: unknown[] }> = [];
 const rowsToReturn: Array<Record<string, unknown>> = [];
 
+/**
+ * What the runtime pool does instead of answering, when a test asks it to fail.
+ *
+ * The five-connection FirstHand pool is shared with live participant sessions,
+ * so "the read did not happen" is an ordinary operating state rather than an
+ * exotic one, and the readers here differ in how they must answer it. Without a
+ * way to make the client throw, every test in this file would only ever
+ * describe the happy path.
+ */
+let queryFailure: Error | null = null;
+
 vi.mock("./runtime-database", () => ({
   isPostgresRuntimeConfigured: () => isPostgresRuntimeConfigured(),
   withRuntimeDatabaseClient: async (
@@ -14,12 +25,18 @@ vi.mock("./runtime-database", () => ({
     run({
       query: async (sql: string, params: unknown[]) => {
         captured.push({ sql, params });
+        if (queryFailure) throw queryFailure;
         return { rows: [...rowsToReturn] };
       }
     })
 }));
 
+vi.mock("../utils/logger", () => ({
+  logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() }
+}));
+
 import {
+  answerCountsByStep,
   listResponsesForOpportunity,
   listResponsesForStudy,
   studyHasResponses
@@ -37,6 +54,7 @@ describe("survey results readers", () => {
   beforeEach(() => {
     captured.length = 0;
     rowsToReturn.length = 0;
+    queryFailure = null;
     isPostgresRuntimeConfigured.mockReturnValue(true);
   });
 
@@ -226,6 +244,7 @@ describe("studyHasResponses", () => {
   beforeEach(() => {
     captured.length = 0;
     rowsToReturn.length = 0;
+    queryFailure = null;
     isPostgresRuntimeConfigured.mockReturnValue(true);
   });
 
@@ -270,5 +289,126 @@ describe("studyHasResponses", () => {
 
     expect(await studyHasResponses("study_abc")).toBe(true);
     expect(captured).toHaveLength(0);
+  });
+});
+
+/**
+ * How many answers each question currently holds.
+ *
+ * The reader behind the removal warning on the authoring form: before F2 an
+ * author could not delete a question of a live study at all, and now they can,
+ * so the only thing standing between "tidying the form" and "moving somebody's
+ * research into a separate section of the results" is being told the number
+ * first.
+ *
+ * Its failure direction is neither of the two above, which is why it has its
+ * own describe. `listResponsesFor*` answer `[]` when there is nowhere to read
+ * from, because an empty result is the honest answer to "show me the answers".
+ * `studyHasResponses` answers `true`, because it drives a REFUSAL and the
+ * misconfiguration must not disable the guard. This one drives a SENTENCE, and
+ * a sentence has a third option neither of those has: say that it does not
+ * know.
+ */
+describe("answerCountsByStep", () => {
+  beforeEach(() => {
+    captured.length = 0;
+    rowsToReturn.length = 0;
+    queryFailure = null;
+    isPostgresRuntimeConfigured.mockReturnValue(true);
+  });
+
+  it("counts per question without joining the sessions table", async () => {
+    rowsToReturn.push(
+      { step_id: "study_abc_q1", answers: "47" },
+      { step_id: "study_abc_q2", answers: "3" }
+    );
+
+    const counts = await answerCountsByStep("study_abc");
+
+    expect(counts).toEqual({ "study_abc_q1": 47, "study_abc_q2": 3 });
+
+    // THE SCOPE, asserted on the SQL itself rather than on the parameter.
+    //
+    // A bound parameter stays bound whether or not the statement uses it, so
+    // `params` alone cannot tell `WHERE r.study_id = $1` from no WHERE clause
+    // at all. Dropping it makes this count EVERY study's answers and report
+    // them against this study's questions: the form warns on ordinary saves,
+    // and one researcher's participation volume is served to another. The
+    // route's own tests mock this module, so nothing above here would see it.
+    expect(captured[0].sql).toContain("r.study_id = $1");
+    expect(captured[0].params).toEqual(["study_abc"]);
+
+    // And the column it groups BY, not merely that it groups. `GROUP BY
+    // r.study_id` returns one row for the whole study under a key no card
+    // holds, so every question reports zero and the warning silently never
+    // fires again.
+    expect(captured[0].sql).toContain("GROUP BY r.step_id");
+
+    // 0015 put `study_id` on the answer row and indexed `(study_id, step_id)`,
+    // which is what lets this read that index directly rather than making the
+    // join every other reader in this file has to. A join creeping back in
+    // would turn a read that runs on every form load into one that also walks
+    // runtime_sessions, on the pool live participants share.
+    expect(captured[0].sql).not.toContain("JOIN");
+  });
+
+  it("counts a bigint as a number rather than passing the driver's string through", async () => {
+    // node-pg returns COUNT(*) as a STRING, because a bigint does not fit a JS
+    // number safely. Passed through unconverted it survives JSON, reaches the
+    // form as "47", and `count > 0` is true for "0" - so a question with no
+    // answers would warn, which is the exact noise this feature exists to avoid.
+    rowsToReturn.push({ step_id: "study_abc_q1", answers: "0" });
+
+    const counts = await answerCountsByStep("study_abc");
+
+    expect(counts).toEqual({ "study_abc_q1": 0 });
+  });
+
+  it("reports a question with no answers by omitting it", async () => {
+    const counts = await answerCountsByStep("study_abc");
+
+    // Not null. A read that returned no rows is a KNOWN "nothing has been
+    // answered", and the caller must be able to tell it apart from a read that
+    // did not happen - one is silence on every card, the other is a warning on
+    // every card.
+    expect(counts).toEqual({});
+  });
+
+  it("excludes an answer already detached from its question", async () => {
+    await answerCountsByStep("study_abc");
+
+    // A detached row has both `study_id` and `step_id` NULL together, so the
+    // study filter alone would already miss it. The explicit clause is what
+    // stops a future widening of that filter counting removed questions'
+    // answers against the questions that remain.
+    expect(captured[0].sql).toContain("step_id IS NOT NULL");
+  });
+
+  it("answers unknown, not no-answers, when there is no runtime database", async () => {
+    isPostgresRuntimeConfigured.mockReturnValue(false);
+
+    const counts = await answerCountsByStep("study_abc");
+
+    // `studyHasResponses` reads THIS SAME predicate and answers `true`,
+    // "assume there are answers", because it gates a destructive rewrite.
+    // Answering `{}` here made the form tell an author every question had zero
+    // answers and removal was free, and the save then refused them naming
+    // answers already collected - two readers of one fact contradicting each
+    // other in one click. `null` does not agree with `true` exactly, but it no
+    // longer contradicts it.
+    expect(counts).toBeNull();
+    expect(captured).toHaveLength(0);
+  });
+
+  it("answers unknown rather than throwing when the read fails", async () => {
+    queryFailure = new Error("sorry, too many clients already");
+
+    const counts = await answerCountsByStep("study_abc");
+
+    // This runs inside GET /api/firsthand/studies/:studyId, which is on the
+    // critical path for opening the opportunity form. A pool exhausted by live
+    // participants must not 500 the form and lock the author out of editing;
+    // null lets the form load and say it could not check.
+    expect(counts).toBeNull();
   });
 });

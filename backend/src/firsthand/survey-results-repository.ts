@@ -3,6 +3,7 @@ import {
   withRuntimeDatabaseClient
 } from "./runtime-database";
 import type { StoredResponse } from "./survey-results";
+import { logger } from "../utils/logger";
 import { AppError } from "../../../shared/types";
 
 type ResponseRow = {
@@ -191,4 +192,121 @@ export async function studyHasResponses(studyId: string): Promise<boolean> {
 
     return result.rows.length > 0;
   });
+}
+
+/**
+ * How many answers each of a study's questions currently holds, keyed by the
+ * stored step id.
+ *
+ * The reader behind the authoring form's removal warning. Before F2, changing
+ * the questions of a study that had collected answers was refused outright, so
+ * there was nothing to warn about; F2 narrows that refusal to type and scale
+ * changes, and a question can now be DELETED from a live study. 0015's
+ * `ON DELETE SET NULL` means that keeps the answers - they surface under
+ * "Removed questions" in the results - but the author is the one person who
+ * cannot see that happening, because the Remove control behaves identically
+ * whether the question has none or three hundred.
+ *
+ * Deliberately a COUNT per step rather than the study-wide existence check
+ * `studyHasResponses` already offers. A study-level boolean can only produce
+ * "this study has answers somewhere", which fires on a question nobody has
+ * answered as readily as on one three hundred people have - and a dialog that
+ * cries wolf on every card is a dialog authors learn to dismiss. This file
+ * already refuses to confirm the removal of an empty card for that exact
+ * reason.
+ *
+ * NO JOIN, unlike every other reader here, and that is what makes it cheap
+ * enough to run on an ordinary form load. The others reach `runtime_sessions`
+ * because `participant_responses` had no study of its own; 0015 gave it one and
+ * indexed `(study_id, step_id)`, so this reads that index directly and returns
+ * one row per QUESTION rather than one per answer. Keep it that way: a join
+ * creeping back in would put a walk of `runtime_sessions` on the
+ * five-connection runtime pool that live participant sessions share, on every
+ * form load.
+ *
+ * Measured rather than assumed - EXPLAIN against a real Postgres 16 with every
+ * firsthand migration applied:
+ *
+ *   GroupAggregate -> Sort -> Bitmap Heap Scan on participant_responses
+ *     -> Bitmap Index Scan on participant_responses_step_idx
+ *        Index Cond: study_id = $1 AND step_id IS NOT NULL
+ *
+ * So it is NOT index-only: there is a heap recheck and a sort, and the scan
+ * covers every answer row of the study rather than stopping at the first the
+ * way `studyHasResponses` does. It is still bounded work on the right index
+ * with no join, and what crosses the wire is bounded by the question count -
+ * but it is not free, which is the reason the caller does not run it at all
+ * for a reader who could not act on the answer.
+ *
+ * Two answers:
+ *
+ *  - a map, when the read succeeded. A question absent from it has no answers;
+ *    there is no row to count and inventing a zero would only make the caller
+ *    iterate two collections instead of one
+ *  - `null` when the count could not be established, which the caller must
+ *    render as "not known" and never as "none"
+ *
+ * `null` covers BOTH an attempted read that failed and a runtime database that
+ * is not configured, and collapsing those two is a correction rather than
+ * laziness. The first version answered `{}` for the unconfigured case, on the
+ * reasoning that a deployment with nowhere to store an answer cannot have one.
+ * That reasoning is fine in isolation and wrong beside its neighbour:
+ * `studyHasResponses` reads the SAME env predicate - `isPostgresRuntimeConfigured`
+ * is `Boolean(getRuntimeDatabaseUrl())`, a config check and not a connectivity
+ * one - and answers `true`, "assume there are answers", because it gates a
+ * destructive rewrite and must fail closed.
+ *
+ * Both are consulted about one study in one click. With `{}` here, the form
+ * told an author every question had zero answers and removal was free, and
+ * `updateLinkedStudyContent` then refused their save naming answers already
+ * collected. Two readers of one fact, contradicting each other on screen. `null`
+ * does not agree with `true` exactly - it says "unknown" where the guard says
+ * "assume the worst" - but it no longer CONTRADICTS it, and the sentence the
+ * author gets ("could not be checked") is true of that deployment.
+ *
+ * Caught rather than thrown for the same reason. This runs inside
+ * `GET /api/firsthand/studies/:studyId`, which the opportunity form loads
+ * before it can render anything; a pool exhausted by live participants must not
+ * 500 the form and lock an author out of editing their own study. The warning
+ * degrades, the form does not.
+ */
+export async function answerCountsByStep(
+  studyId: string
+): Promise<Record<string, number> | null> {
+  if (!isPostgresRuntimeConfigured()) {
+    // Unknown, not zero. See the docblock: `studyHasResponses` reads this same
+    // predicate and answers "assume there are answers", and the two must not
+    // tell one author opposite things about one study.
+    return null;
+  }
+
+  try {
+    return await withRuntimeDatabaseClient(async (client) => {
+      const result = await client.query<{ step_id: string; answers: string }>(
+        `
+          SELECT r.step_id, COUNT(*) AS answers
+          FROM participant_responses AS r
+          WHERE r.study_id = $1 AND r.step_id IS NOT NULL
+          GROUP BY r.step_id
+        `,
+        [studyId]
+      );
+
+      /**
+       * `Number`, because node-pg hands back COUNT(*) as a STRING - a bigint
+       * does not fit a JS number safely, so the driver refuses to guess. Passed
+       * through it survives JSON and reaches the form as `"0"`, which is
+       * truthy: every question with no answers would warn.
+       */
+      return Object.fromEntries(
+        result.rows.map((row) => [row.step_id, Number(row.answers)])
+      );
+    });
+  } catch (error) {
+    logger.warn("Could not count answers per question", {
+      studyId,
+      error: error instanceof Error ? error.message : "Unknown error"
+    });
+    return null;
+  }
 }

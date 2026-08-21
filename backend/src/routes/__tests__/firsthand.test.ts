@@ -21,6 +21,7 @@ jest.mock('../../firsthand/studies-repository', () => ({
 }));
 jest.mock('../../firsthand/survey-results-repository', () => ({
   listResponsesForStudy: jest.fn(),
+  answerCountsByStep: jest.fn(),
 }));
 jest.mock('../../utils/database', () => ({ isDatabaseAvailable: jest.fn() }));
 // redactSensitiveUrl belongs here too: errorHandler imports it from this
@@ -44,7 +45,10 @@ import {
   updateStudy,
   deleteStudy,
 } from '../../firsthand/studies-repository';
-import { listResponsesForStudy } from '../../firsthand/survey-results-repository';
+import {
+  answerCountsByStep,
+  listResponsesForStudy,
+} from '../../firsthand/survey-results-repository';
 import { isDatabaseAvailable } from '../../utils/database';
 import { logger } from '../../utils/logger';
 
@@ -55,6 +59,7 @@ const mockGetStudyById = (getStudyById as jest.MockedFunction<typeof getStudyByI
 const mockUpdateStudy = (updateStudy as jest.MockedFunction<typeof updateStudy>);
 const mockDeleteStudy = (deleteStudy as jest.MockedFunction<typeof deleteStudy>);
 const mockListResponsesForStudy = (listResponsesForStudy as jest.MockedFunction<typeof listResponsesForStudy>);
+const mockAnswerCountsByStep = (answerCountsByStep as jest.MockedFunction<typeof answerCountsByStep>);
 const mockIsDatabaseAvailable = (isDatabaseAvailable as jest.MockedFunction<typeof isDatabaseAvailable>);
 const mockLogger = logger as unknown as {
   info: jest.Mock;
@@ -128,6 +133,7 @@ describe('FirstHand Express router', () => {
     jest.clearAllMocks();
     mockIsStudiesPersistenceConfigured.mockReturnValue(true);
     mockIsDatabaseAvailable.mockResolvedValue(true);
+    mockAnswerCountsByStep.mockResolvedValue({});
   });
 
   // ── Studies CRUD (B3a, in-process) ────────────────────────────────────────
@@ -316,6 +322,169 @@ describe('FirstHand Express router', () => {
         expect(res.body.can_edit).toBe(expected);
       }
     );
+
+    /**
+     * `answer_counts` is what lets the authoring form tell an author that the
+     * question they are about to remove has been answered by people.
+     *
+     * Reported keyed by STEP KEY rather than by the stored step id, because the
+     * key is the only half of that id the form ever holds: `_clientId` on a
+     * question card IS its step key, minted when the question was created and
+     * carried through every edit and reorder. Sending whole ids would make the
+     * client re-derive the namespacing, which is the split step-identity.ts
+     * exists to keep on the server.
+     */
+    /**
+     * The study whose counts this caller may legitimately read: a SURVEY, owned
+     * by them.
+     *
+     * `storedStudy` is neither - it is a recorded task list with no owner - and
+     * using it here is what made the first version of these tests assert the
+     * leak rather than the guard: `canWriteStudy` fails open on an unowned row,
+     * so `can_edit` was true and the counts were served to an admin who did not
+     * own the study.
+     */
+    const ownedSurvey = {
+      ...storedStudy,
+      study: {
+        ...storedStudy.study,
+        kind: 'survey' as const,
+        owner_user_id: 'admin-1',
+      },
+    } as NonNullable<Awaited<ReturnType<typeof getStudyById>>>;
+
+    it('reports answer counts keyed by the step key the form holds', async () => {
+      mockGetStudyById.mockResolvedValue(ownedSurvey);
+      mockAnswerCountsByStep.mockResolvedValue({
+        study_abc_step_001: 47,
+      });
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      expect(res.body.answer_counts).toEqual({ step_001: 47 });
+      expect(mockAnswerCountsByStep).toHaveBeenCalledWith('study_abc');
+    });
+
+    it('omits an answer count whose step id is outside this study', async () => {
+      mockGetStudyById.mockResolvedValue(ownedSurvey);
+      mockAnswerCountsByStep.mockResolvedValue({
+        study_abc_step_001: 47,
+        // Nothing this product writes produces one, but a de-namespaced id
+        // passed through raw would land in the map under a key no card holds
+        // at best, and collide with a real key at worst.
+        study_other_step_001: 9000,
+      });
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      expect(res.body.answer_counts).toEqual({ step_001: 47 });
+    });
+
+    it('reports null rather than an empty map when the count could not be read', async () => {
+      mockGetStudyById.mockResolvedValue(ownedSurvey);
+      mockAnswerCountsByStep.mockResolvedValue(null);
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      // Flattened to `{}` this would read as "no question has any answers" and
+      // silence the warning at exactly the moment the runtime database is under
+      // the pressure that suggests there are participants answering. And it is
+      // NULL rather than absent: the count was attempted and failed, which is a
+      // claim, where an absent key makes none.
+      expect(res.body.answer_counts).toBeNull();
+    });
+
+    /**
+     * Whether a study has collected answers - and how many, per question - is a
+     * fact about another researcher's work.
+     *
+     * `updateLinkedStudyContent` moved its ownership check ahead of
+     * `studyHasResponses` precisely because a refusal naming "already collected
+     * answers" told a caller who could not write the study something they had
+     * never been granted. Reporting the counts on the read side would give that
+     * away far more precisely, and to every admin rather than only to one who
+     * tried to save.
+     */
+    it('does not count answers for a reader who may not write the study', async () => {
+      mockGetStudyById.mockResolvedValue({
+        ...ownedSurvey,
+        study: { ...ownedSurvey.study, owner_user_id: 'someone-else' },
+      } as Awaited<ReturnType<typeof getStudyById>>);
+      mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      expect(res.body.can_edit).toBe(false);
+      // ABSENT, not null. Null is reserved for a count that was attempted and
+      // could not be established, which the form renders as "could not be
+      // checked"; withholding one says nothing about answers at all.
+      expect(res.body).not.toHaveProperty('answer_counts');
+      // And not merely filtered out of the response: the read never happens, so
+      // a colleague browsing studies cannot make the runtime pool work either.
+      expect(mockAnswerCountsByStep).not.toHaveBeenCalled();
+    });
+
+    /**
+     * The fail-open in `canWriteStudy` is right for a WRITE and wrong for this.
+     *
+     * An unowned legacy study is editable by any admin, because 0007's backfill
+     * could not attribute it and locking those rows would strand them. A write
+     * adopts the row and makes somebody accountable for it. A read adopts
+     * nothing, so serving counts here would report per-question participation
+     * volume for research nobody is accountable for, to every admin - and the
+     * study picker fetches any listed study to preview it, so no crafted
+     * request is needed to reach it.
+     *
+     * `requireSuperadminForStudyResults` already refuses the unowned case for
+     * exactly this reason, and says so in its own docblock.
+     */
+    it('does not count answers for a study nobody owns, where the write path fails open', async () => {
+      mockGetStudyById.mockResolvedValue({
+        ...ownedSurvey,
+        study: { ...ownedSurvey.study, owner_user_id: null },
+      } as Awaited<ReturnType<typeof getStudyById>>);
+      mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      // Editable, and still not entitled to the counts. The two answers differ
+      // on purpose, which is the whole finding.
+      expect(res.body.can_edit).toBe(true);
+      expect(res.body).not.toHaveProperty('answer_counts');
+      expect(mockAnswerCountsByStep).not.toHaveBeenCalled();
+    });
+
+    /**
+     * "Removed questions" is a section of the SURVEY results view. A recorded
+     * task list has no surface on which its author could be shown a count, so
+     * reading one spends a connection from the five-connection runtime pool
+     * that live participants share, and puts a value on the wire that nothing
+     * reads.
+     */
+    it('does not count answers for a recorded task list, which has nowhere to show them', async () => {
+      mockGetStudyById.mockResolvedValue({
+        ...ownedSurvey,
+        study: { ...ownedSurvey.study, kind: 'recorded' as const },
+      } as Awaited<ReturnType<typeof getStudyById>>);
+      mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
+
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      expect(res.body).not.toHaveProperty('answer_counts');
+      expect(mockAnswerCountsByStep).not.toHaveBeenCalled();
+    });
+
+    it('still returns the study when the answer count is unavailable', async () => {
+      mockGetStudyById.mockResolvedValue(ownedSurvey);
+      mockAnswerCountsByStep.mockResolvedValue(null);
+
+      // The opportunity form cannot render at all until this route answers, so
+      // an advisory count must never be able to take the form down with it.
+      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+
+      expect(res.body.study.id).toBe('study_abc');
+      expect(res.body.steps).toHaveLength(2);
+    });
   });
 
   describe('PUT /api/firsthand/studies/:studyId', () => {

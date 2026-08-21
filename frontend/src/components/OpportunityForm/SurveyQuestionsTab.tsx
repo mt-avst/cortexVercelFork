@@ -127,6 +127,14 @@ interface SurveyQuestionsTabProps {
   onPreviewStudy?: (study: FirstHandStudyWithSteps) => void;
   /** Decides whether a row reads as "Yours". */
   currentUserId?: string;
+  /**
+   * How many answers each linked question has already collected, keyed by the
+   * `_clientId` its card carries.
+   *
+   * `null` means the count could not be read; undefined means this form is not
+   * editing a stored study at all, so there is nothing that could have answers.
+   */
+  answerCounts?: Record<string, number> | null;
 }
 
 /**
@@ -149,7 +157,8 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   readOnlyReason,
   onCopyFromStudy,
   onPreviewStudy,
-  currentUserId
+  currentUserId,
+  answerCounts
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
   const [loading, setLoading] = useState(true);
@@ -418,6 +427,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               }
               addLabel="Add question"
               emptyMessage="No questions yet. Add the first thing you want to ask."
+              answerCounts={answerCounts}
               renderTypeFields={({ item, index, update }) => (
                 <>
                   {CHOICE_TYPES.has(item.type) && (
