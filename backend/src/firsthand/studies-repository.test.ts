@@ -467,6 +467,325 @@ describe("studies repository ownership", () => {
       expect(committed(client)).toBe(true);
     });
 
+    describe("createStudy stamps the editor too", () => {
+      it("writes the creator as updated_by_user_id", async () => {
+        // Migration 0014's own justification is "set on every write". The
+        // update half had three tests and the create half had none, so dropping
+        // the parameter from the INSERT left the whole suite green.
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.createStudy({
+          id: "study_new",
+          title: "A study",
+          intro_text: "Intro",
+          consent_text: "Consent",
+          owner_user_id: "user-creator",
+          steps: [baseStep, endStep]
+        });
+
+        const insert = client.query.mock.calls.find((call) =>
+          String(call[0]).includes("INSERT INTO studies")
+        );
+
+        expect(insert).toBeDefined();
+        expect(String(insert?.[0])).toContain("updated_by_user_id");
+        expect(insert?.[1] as unknown[]).toContain("user-creator");
+      });
+
+      it("leaves it null for a caller with no user context", async () => {
+        // A script or a fixture. NULL is the honest value; inventing one would
+        // put a name against a write nobody made.
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.createStudy({
+          id: "study_new",
+          title: "A study",
+          intro_text: "Intro",
+          consent_text: "Consent",
+          steps: [baseStep, endStep]
+        });
+
+        const insert = client.query.mock.calls.find((call) =>
+          String(call[0]).includes("INSERT INTO studies")
+        );
+        const values = insert?.[1] as unknown[];
+
+        // The last parameter is updated_by_user_id - checked by position
+        // because null is not distinctive enough to find by value.
+        expect(values[values.length - 1]).toBeNull();
+      });
+    });
+
+    describe("the optimistic-concurrency precondition", () => {
+      // The row as the lock reads it, modelled as the `Date` node-postgres
+      // builds for a TIMESTAMPTZ. A JS Date cannot hold microseconds, so this
+      // fixture is millisecond-precise and deliberately does NOT stand in for
+      // the microsecond case - that one has its own test below, with a string
+      // row value, because a string is the only row shape that can carry the
+      // extra digits at all.
+      const storedAt = new Date("2026-08-21T09:15:30.123Z");
+      // What the client was served, and echoes back.
+      const servedAt = "2026-08-21T09:15:30.123Z";
+
+      it("refuses a stale precondition, writes nothing, and says what is stored now", async () => {
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine", steps: [baseStep, endStep] },
+          owner,
+          // One second behind what is stored: this client loaded the study,
+          // somebody else saved, and this save would have silently won.
+          "2026-08-21T09:15:29.123Z"
+        );
+
+        expect(result).toEqual({
+          ok: false,
+          reason: "stale",
+          current_updated_at: "2026-08-21T09:15:30.123Z"
+        });
+
+        // Not merely "the answer was a conflict". Nothing may have reached the
+        // table - including the DELETE that replaces the step rows, which is
+        // the irreversible half.
+        expect(updateStatements(client)).toHaveLength(0);
+        expect(
+          client.query.mock.calls.filter((call) =>
+            /DELETE FROM|INSERT INTO/.test(String(call[0]))
+          )
+        ).toHaveLength(0);
+        expect(rolledBack(client)).toBe(true);
+        expect(committed(client)).toBe(false);
+      });
+
+      it("accepts a precondition that matches, and writes", async () => {
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          servedAt
+        );
+
+        expect(result.ok).toBe(true);
+        expect(updateStatements(client)).toHaveLength(1);
+        expect(committed(client)).toBe(true);
+      });
+
+      it("accepts the same instant expressed as an offset rather than Z", async () => {
+        // A client that round-tripped the value through its own Date and
+        // serialised it differently is not a stale client, and refusing it
+        // would be a lost save dressed up as a safety feature.
+        arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          "2026-08-21T10:15:30.123+01:00"
+        );
+
+        expect(result.ok).toBe(true);
+      });
+
+      it("matches a row whose stored value carries microseconds", async () => {
+        // The failure this whole comparison is shaped to avoid, exercised
+        // rather than asserted in a comment.
+        //
+        // Postgres stores TIMESTAMPTZ to MICROsecond precision. What the client
+        // was served is `toIsoString(row.updated_at)` - `new Date(x)
+        // .toISOString()`, so millisecond. Compare the two as strings, or as
+        // anything that does not put both sides through the same truncation,
+        // and the extra three digits mean no save on a microsecond-bearing row
+        // could ever match its own precondition again.
+        const client = arrangeOwnedStudy("user-owner", {
+          updated_at: "2026-08-21T09:15:30.123456+00:00"
+        });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          // Exactly what a client is served for that row: the same instant,
+          // truncated to milliseconds.
+          "2026-08-21T09:15:30.123Z"
+        );
+
+        expect(result.ok).toBe(true);
+        expect(updateStatements(client)).toHaveLength(1);
+      });
+
+      it("proceeds when no precondition is asserted", async () => {
+        // Fail-open, and deliberately: an absent precondition is an older
+        // bundle or a script, not a claim of freshness. See updateStudy's
+        // docstring for why failing closed would break every save for the
+        // length of a rolling deploy.
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner
+        );
+
+        expect(result.ok).toBe(true);
+        expect(updateStatements(client)).toHaveLength(1);
+      });
+
+      it("treats an explicit null as absence, not as an unreadable claim", async () => {
+        // `null` is what a client with no stored revision sends through a field
+        // typed `string | null`. Reading it as a failed assertion would refuse
+        // every save on a study whose updated_at never reached the form - the
+        // fail-CLOSED direction, arrived at by accident.
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          null
+        );
+
+        expect(result.ok).toBe(true);
+        expect(updateStatements(client)).toHaveLength(1);
+      });
+
+      it("refuses a precondition it cannot parse rather than ignoring it", async () => {
+        // An assertion nobody can read is not an assertion. Writing over
+        // somebody on the strength of one is the worst available answer.
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          "not-a-date"
+        );
+
+        expect(result).toEqual({
+          ok: false,
+          reason: "stale",
+          current_updated_at: "2026-08-21T09:15:30.123Z"
+        });
+        expect(updateStatements(client)).toHaveLength(0);
+      });
+
+      it("answers forbidden, not stale, when the caller may not write it at all", async () => {
+        // Ordering, and it is a disclosure decision rather than a preference.
+        // A 409 tells the caller the study exists AND that somebody wrote it
+        // recently. Neither fact is owed to a caller who was refused the row.
+        arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Theirs" },
+          intruder,
+          "2026-08-21T09:15:29.123Z"
+        );
+
+        expect(result).toEqual({ ok: false, reason: "forbidden" });
+      });
+
+      it("reads the precondition off the statement that takes the row lock", async () => {
+        // Read outside the lock, the precondition would be decorative: the row
+        // could be written between the read and the write, which is the exact
+        // race it exists to close.
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          servedAt
+        );
+
+        const lockStatements = client.query.mock.calls.filter((call) =>
+          String(call[0]).includes("FOR UPDATE")
+        );
+
+        expect(lockStatements).toHaveLength(1);
+        expect(String(lockStatements[0][0])).toContain("updated_at");
+      });
+    });
+
+    describe("updated_by_user_id", () => {
+      it("stamps the requester on a column edit", async () => {
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.updateStudy("study_abc", { title: "Renamed" }, owner);
+
+        const [sql, values] = updateStatements(client)[0];
+        expect(String(sql)).toContain("updated_by_user_id");
+        expect(String(sql)).toContain("updated_at = clock_timestamp()");
+        expect(values as unknown[]).toContain("user-owner");
+      });
+
+      it("stamps the requester on a steps-only edit, not just on a column edit", async () => {
+        // The steps-only path used to bump `updated_at` from a SECOND statement
+        // of its own, and an editor id added to the other site would simply
+        // never have been written here. The `toContain` lines are what prove
+        // that; the count is a weaker claim, since the old two-site code also
+        // emitted exactly one `UPDATE studies` on this path.
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.updateStudy(
+          "study_abc",
+          { steps: [baseStep, endStep] },
+          owner
+        );
+
+        const statements = updateStatements(client);
+        expect(statements).toHaveLength(1);
+        expect(String(statements[0][0])).toContain("updated_at = clock_timestamp()");
+        expect(String(statements[0][0])).toContain("updated_by_user_id");
+        expect(statements[0][1] as unknown[]).toContain("user-owner");
+      });
+
+      it("takes the editor from the session and never from the payload", async () => {
+        // A body-supplied editor id would let an author attribute their own
+        // edit to a colleague, which is worse than recording nothing.
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        const forced = {
+          title: "Renamed",
+          updated_by_user_id: "user-somebody-else"
+        } as Parameters<typeof studiesRepository.updateStudy>[1];
+
+        await studiesRepository.updateStudy("study_abc", forced, superadmin);
+
+        const [, values] = updateStatements(client)[0];
+        expect(values as unknown[]).toContain("user-super");
+        expect(values as unknown[]).not.toContain("user-somebody-else");
+      });
+
+      it("writes nothing at all for a request that changes nothing", async () => {
+        // A no-op must not look like an edit to the next person's
+        // precondition: bumping updated_at here would refuse their save for a
+        // change nobody made.
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.updateStudy("study_abc", {}, owner);
+
+        expect(updateStatements(client)).toHaveLength(0);
+      });
+    });
+
     it("refuses a non-owner and writes nothing", async () => {
       const client = arrangeOwnedStudy("user-owner");
       const studiesRepository = await import("./studies-repository");
@@ -775,8 +1094,13 @@ describe("studies repository ownership", () => {
    * `FOR UPDATE` owner probe returns; null models a row created before
    * migration 0007.
    */
-  function arrangeOwnedStudy(ownerUserId: string | null) {
-    return arrangeClient({ ownerRows: [{ owner_user_id: ownerUserId }] });
+  function arrangeOwnedStudy(
+    ownerUserId: string | null,
+    lockRow: { updated_at?: Date | string; kind?: string } = {}
+  ) {
+    return arrangeClient({
+      ownerRows: [{ owner_user_id: ownerUserId, ...lockRow }]
+    });
   }
 
   /**
@@ -789,7 +1113,16 @@ describe("studies repository ownership", () => {
   }
 
   function arrangeClient(input: {
-    ownerRows: { owner_user_id: string | null }[];
+    ownerRows: {
+      owner_user_id: string | null;
+      // Read by the optimistic-concurrency precondition off the same
+      // SELECT ... FOR UPDATE that takes the row lock. Modelled as `Date`
+      // because that is what node-postgres hands back for a TIMESTAMPTZ, and
+      // the millisecond truncation that happens on the way through it is the
+      // whole reason the comparison is not a string equality.
+      updated_at?: Date | string;
+      kind?: string;
+    }[];
     studyExists?: boolean;
   }) {
     const studyExists = input.studyExists ?? true;
@@ -808,7 +1141,11 @@ describe("studies repository ownership", () => {
         return { rowCount: input.ownerRows.length, rows: input.ownerRows };
       }
 
-      if (sql.startsWith("DELETE FROM studies") || sql.startsWith("UPDATE studies")) {
+      if (
+        sql.startsWith("DELETE FROM studies") ||
+        sql.startsWith("UPDATE studies") ||
+        sql.includes("INSERT INTO studies")
+      ) {
         return { rowCount: 1, rows: [] };
       }
 

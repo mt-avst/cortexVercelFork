@@ -648,6 +648,25 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // precondition and D2 sends it with an autosave, and both would otherwise
   // need a second round trip to learn a value this load already had.
   const [linkedStudyUpdatedAt, setLinkedStudyUpdatedAt] = useState<string | null>(null);
+  /**
+   * The linked study's `updated_at` as it stands on the server after a save was
+   * refused for being stale, and the banner flag that goes with it.
+   *
+   * Held APART from `linkedStudyUpdatedAt`, which cannot be reused for this:
+   * that value is the remount `key` on `<ConsentStep>`, so advancing it after a
+   * conflict would remount the consent step and discard the author's consent
+   * edits - the exact loss the conflict was raised to prevent. This one feeds
+   * the next save's precondition and nothing else.
+   */
+  const [staleStudyUpdatedAt, setStaleStudyUpdatedAt] = useState<string | null>(
+    null
+  );
+  /**
+   * Whether the last save was refused because somebody else had written the
+   * linked study first. Kept out of `error`, which is the dead-end banner: a
+   * conflict is recoverable and the banner has to say how.
+   */
+  const [studyConflict, setStudyConflict] = useState(false);
   // Set when the linked study could not be read. Saving is refused while it is
   // set: the form would otherwise show an empty task list that a save would
   // then write over the real one.
@@ -2364,6 +2383,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setError('');
       setRefusalShown(false);
       setSuccessMessage('');
+      setStudyConflict(false);
 
       // inline_study is not on the shared CreateOpportunityRequest: shared/types
       // is flattened into one file when copied here, so it cannot import the
@@ -2375,6 +2395,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // into the flattened shared types, so it is added at the call site.
         inline_survey?: InlineSurveyPayload;
         delivery_mode?: 'native' | 'external';
+        /**
+         * Optimistic-concurrency precondition for the LINKED STUDY, sent only
+         * on an edit that authors content into one. Top-level rather than
+         * inside `inline_study`/`inline_survey` because both branches feed the
+         * same in-place update on the server and a concurrency token is not
+         * authored content - see UpdateOpportunitySchema for the rest.
+         */
+        expected_study_updated_at?: string;
       }> = {
         type: formData.type as CreateOpportunityRequest['type'],
         title: formData.title.trim(),
@@ -2561,6 +2589,23 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         data.display_width = formData.display_width;
       }
 
+      // The optimistic-concurrency precondition, and the only thing this
+      // revision stamp is for. Captured by A1 at load (`linkedStudyUpdatedAt`),
+      // refreshed by a conflict, and sent only where it can be acted on: a save
+      // that authors content into an EXISTING linked study. A create has no
+      // stored row to race, and a save that carries no inline content performs
+      // no study write for the server to refuse.
+      //
+      // `staleStudyUpdatedAt` takes precedence when set: after a conflict it
+      // holds what is actually stored, which is what makes the next save a
+      // deliberate overwrite rather than a guaranteed second refusal.
+      if (isEdit && (data.inline_study || data.inline_survey)) {
+        const precondition = staleStudyUpdatedAt ?? linkedStudyUpdatedAt;
+        if (precondition) {
+          data.expected_study_updated_at = precondition;
+        }
+      }
+
 
       let savedOpportunity: Opportunity;
       // False only when the opportunity saved and its time slots did not.
@@ -2615,6 +2660,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         // trip per save; correctness of the thing the Save button reports is
         // worth more than that.
         await loadOpportunity();
+
+        // Cleared HERE and nowhere else, and the placement is the whole fix.
+        //
+        // `staleStudyUpdatedAt` takes precedence over `linkedStudyUpdatedAt`
+        // when the precondition is built, which is right while a conflict is
+        // unresolved and wrong the moment one is. `loadOpportunity` above has
+        // just refreshed `linkedStudyUpdatedAt` to what this save produced, so
+        // leaving the conflict token set would permanently shadow it with a
+        // revision that is now two writes old: every later save in the session
+        // would be refused, and the banner would accuse a colleague who had
+        // done nothing. Not cleared in the pre-save reset either - the whole
+        // point of the deliberate second save is that it carries this value.
+        setStaleStudyUpdatedAt(null);
+
         // Show success message for edit mode
         const isDraft = formData.status === 'draft';
         setSuccessMessage(
@@ -2675,7 +2734,61 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       return savedOpportunity?.id;
 
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } } };
+      const axiosError = err as {
+        response?: {
+          status?: number;
+          data?: { error?: string; message?: string; current_updated_at?: string };
+        };
+      };
+
+      const conflictedStudyId = formData.firsthand_study_id?.trim();
+
+      // Both conditions, never the status alone. `errorHandler` maps a unique
+      // constraint violation and a lock timeout to 409 as well, and treating
+      // one of those as a stale-study conflict would tell the author a
+      // colleague had saved when none had - and then advance the precondition,
+      // so the next click would overwrite a colleague who genuinely had.
+      if (
+        axiosError.response?.status === 409 &&
+        axiosError.response.data?.error === 'stale_study' &&
+        conflictedStudyId
+      ) {
+        // Nothing else moves: no field is reset, no reload is triggered, no
+        // step is remounted. The whole point of the refusal is that the
+        // author's unsaved work survives it.
+        //
+        // The revision comes from the REFUSAL itself, so recovering from a
+        // conflict costs no extra request and cannot fail. A second round trip
+        // to learn what to save against is a request that can itself fail -
+        // and when it does, the author is refused in a loop with no control
+        // anywhere that would let them keep their work.
+        //
+        // Re-reading the study is the fallback for a refusal that carried no
+        // revision, and it reads the STUDY rather than the opportunity on
+        // purpose: `loadOpportunity` rebuilds the entire form from the server
+        // and would throw away everything on screen.
+        const refusedWith = axiosError.response.data?.current_updated_at;
+
+        if (refusedWith) {
+          setStaleStudyUpdatedAt(refusedWith);
+        } else {
+          try {
+            const linked = await getFirstHandStudy(conflictedStudyId);
+            if (linked.study.updated_at) {
+              setStaleStudyUpdatedAt(linked.study.updated_at);
+            }
+          } catch (refreshError) {
+            logger.warn('Could not refresh the study revision after a conflict', {
+              studyId: conflictedStudyId,
+              error: String(refreshError)
+            });
+          }
+        }
+
+        setStudyConflict(true);
+        return undefined;
+      }
+
       setError(axiosError.response?.data?.error || 'Failed to save opportunity');
     } finally {
       setSaving(false);
@@ -3108,6 +3221,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
                   <AlertTriangle size={18} className="me-2" />
                   {error}
+                </div>
+              )}
+
+              {/* A conflict is a warning, not a danger: nothing is broken and
+                  nothing is lost. It gets its own banner rather than reusing
+                  the danger one above because the two say different things -
+                  that one is a dead end, this one has a way out - and because
+                  the same event gets the same treatment in StudyEditor.
+
+                  No reload control, deliberately. Reloading rebuilds this whole
+                  form from the server and would discard exactly the unsaved
+                  edits the refusal exists to protect; a second tab shows the
+                  saved version beside them instead. */}
+              {studyConflict && (
+                <div className="alert alert-warning mx-4 mt-4 mb-0" role="alert">
+                  <AlertTriangle size={18} className="me-2" />
+                  <strong>Somebody else saved this while you were editing.</strong>{' '}
+                  Nothing has been saved and your edits are still here. Open this
+                  opportunity in a new tab to see what changed, then either copy
+                  their changes across or save again to replace their version.
                 </div>
               )}
 

@@ -242,6 +242,36 @@ function extractSaveError(caught: unknown): string {
   return 'Save failed';
 }
 
+/**
+ * The server's current `updated_at` when a save was refused as stale, or null
+ * when the failure was anything else.
+ *
+ * Reads the STATUS, not the message. `extractSaveError` deliberately discards
+ * the status and returns prose, so a 409 was previously indistinguishable from
+ * a 400 - and matching on the sentence would make the client's recovery
+ * behaviour depend on the server's copy, which is the kind of coupling that
+ * breaks silently the first time somebody rewords a message.
+ *
+ * Both conditions are required. A 409 with no `current_updated_at` cannot be
+ * recovered from - re-sending the same stale precondition would be refused
+ * again forever - so it is left to the generic error path, which at least tells
+ * the author something true.
+ */
+function staleStudyUpdatedAt(caught: unknown): string | null {
+  const response = (caught as {
+    response?: { status?: number; data?: { error?: string; current_updated_at?: string } };
+  })?.response;
+
+  if (response?.status !== 409) return null;
+  if (response.data?.error !== 'stale_study') return null;
+
+  const currentUpdatedAt = response.data.current_updated_at;
+
+  return typeof currentUpdatedAt === 'string' && currentUpdatedAt.length > 0
+    ? currentUpdatedAt
+    : null;
+}
+
 type StudyEditorFormProps = {
   initialStudy?: FirstHandStudy;
   initialSteps?: StudyStep[];
@@ -308,6 +338,31 @@ export function StudyEditorForm({
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The `updated_at` this form is editing against - the optimistic-concurrency
+   * precondition, sent on every save.
+   *
+   * STATE rather than `initialStudy.updated_at` read at submit time, for two
+   * reasons that pull the same way. A conflict has to be able to advance it
+   * without the parent re-fetching and remounting this form, because a remount
+   * would discard exactly the local edits the conflict exists to protect. And a
+   * successful save advances the row, so a form that stayed open would fail its
+   * own precondition on the second save - this one does navigate away today, but
+   * a state variable makes that an incidental fact rather than a load-bearing
+   * one.
+   */
+  const [expectedUpdatedAt, setExpectedUpdatedAt] = useState<string | undefined>(
+    initialStudy?.updated_at
+  );
+  /**
+   * Set when the server refused a save because somebody else got there first.
+   *
+   * Held apart from `error`, which is a dead end. This one is recoverable and
+   * the banner says how: the local edits are untouched, the precondition has
+   * been advanced to what is actually stored, and saving again replaces the
+   * other version deliberately rather than by accident.
+   */
+  const [conflict, setConflict] = useState<{ occurred: true } | null>(null);
   const [acknowledgedNoTaskPageUrl, setAcknowledgedNoTaskPageUrl] =
     useState(false);
 
@@ -479,6 +534,7 @@ export function StudyEditorForm({
     // immediately with the same field rules the backend enforces. Validate with
     // the schema for the operation so the parsed value matches the CRUD call.
     setError(null);
+    setConflict(null);
     setSubmitting(true);
 
     try {
@@ -489,7 +545,15 @@ export function StudyEditorForm({
         // thing strictness exists to surface. The schema still tolerates it,
         // deliberately, so a bundle cached across a deploy keeps working.
         const { id: _unusedOnUpdate, ...updatePayload } = payload;
-        const parsed = updateStudyRequestSchema.safeParse(updatePayload);
+        const parsed = updateStudyRequestSchema.safeParse({
+          ...updatePayload,
+          // The optimistic-concurrency precondition. Omitted rather than sent
+          // as null when the study was served without one: the schema takes
+          // `string | undefined`, and an absent precondition means "no claim"
+          // on the server, which is the honest reading of a row whose
+          // `updated_at` never reached this form.
+          ...(expectedUpdatedAt ? { expected_updated_at: expectedUpdatedAt } : {})
+        });
         if (!parsed.success) {
           setError(parsed.error.issues[0]?.message ?? 'The task list is not valid.');
           return;
@@ -506,6 +570,20 @@ export function StudyEditorForm({
 
       navigate('/admin/studies');
     } catch (caught) {
+      const conflictUpdatedAt = staleStudyUpdatedAt(caught);
+
+      if (conflictUpdatedAt) {
+        // Nothing else is touched: no field is reset, no navigation happens, no
+        // remount is triggered. The author's edits are the thing being
+        // protected, so the only state that moves is the precondition itself -
+        // advanced to what is now stored, which is what turns "save again" from
+        // a guaranteed second refusal into a deliberate overwrite.
+        setExpectedUpdatedAt(conflictUpdatedAt);
+        setConflict({ occurred: true });
+        setError(null);
+        return;
+      }
+
       setError(extractSaveError(caught));
 
       // A client-minted primary key makes a create retry non-idempotent. If the
@@ -528,6 +606,37 @@ export function StudyEditorForm({
         <Alert variant="danger" className="mb-4">
           <strong>Could not save task list.</strong>
           <p className="mb-0">{error}</p>
+        </Alert>
+      ) : null}
+
+      {/*
+        A conflict is a warning, not a danger: nothing is broken and nothing is
+        lost. It is modelled on the missing-task-page block below, which is the
+        other banner here that asks the author to do something rather than just
+        telling them a thing failed.
+
+        The link opens a NEW TAB deliberately. "Reload" is the obvious
+        affordance and it is the wrong one: every field in this form comes from
+        a one-shot useState initialiser, so reloading means remounting, and
+        remounting means discarding the very edits that were just refused. A
+        second tab shows the saved version beside the unsaved one, which is what
+        an author actually needs in order to decide what to keep.
+      */}
+      {conflict ? (
+        <Alert variant="warning" className="mb-4" id="study-conflict-notice">
+          <strong>Somebody else saved this task list while you were editing.</strong>
+          <p className="mb-2">
+            Nothing has been saved and your edits are still here. Open the saved
+            version to see what changed, then either copy their changes across or
+            save again to replace their version.
+          </p>
+          <a
+            href={`/admin/studies/${encodeURIComponent(initialStudy?.id ?? '')}/edit`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open the saved version in a new tab
+          </a>
         </Alert>
       ) : null}
 

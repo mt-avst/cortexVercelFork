@@ -293,7 +293,82 @@ async function assertLinkedStudyKindMatches(
  * StudyEditor. The existing title drift after an opportunity rename is a known
  * deferral and stays exactly as it is rather than being half-fixed here.
  */
-type InPlaceStudyUpdate = 'updated' | 'forbidden' | 'missing';
+type InPlaceStudyUpdate = 'updated' | 'forbidden' | 'missing' | 'stale';
+
+/**
+ * The optimistic-concurrency refusal, carrying what the caller needs to recover.
+ *
+ * `stale` is returned as an outcome rather than thrown from inside the helper so
+ * that both call sites below are forced to handle it - and in particular so that
+ * neither can fall through to the "mint a replacement study" branch, which is
+ * what `missing` does. Minting on a conflict would repoint the opportunity at a
+ * fresh study and abandon the one the colleague just saved: precisely the data
+ * loss this whole step exists to prevent, reached from the other direction.
+ */
+/**
+ * The 409 both in-place branches answer, as a thrown `ConflictError` rather than
+ * a direct `res.status(409)`, matching how the sibling `forbidden` case throws
+ * `ForbiddenError` - this route's refusals all go through `errorHandler` and its
+ * `{ error, code, timestamp, requestId }` envelope.
+ *
+ * The message names WHEN nothing more. The row records who wrote it (migration
+ * 0014) and the log line below puts that within reach of an operator; putting a
+ * colleague's identity in the response body is a different act, and the reasons
+ * are set out at the twin 409 in routes/firsthand.ts.
+ *
+ * `subject` is the whole noun phrase the caller already sees for this thing -
+ * "this task list", "these questions" - because a sentence that says "study" to
+ * somebody looking at a screen that never uses the word is not a legible
+ * refusal, and because the two differ in number as well as in wording.
+ */
+function logStaleStudyWrite(studyId: string, userId: string) {
+  logger.info('Refused a stale study write', {
+    studyId,
+    userId,
+    via: 'opportunity-form'
+  });
+}
+
+function sendStaleStudyConflict(
+  res: Response,
+  studyId: string,
+  userId: string,
+  subject: string,
+  currentUpdatedAt: string
+) {
+  logStaleStudyWrite(studyId, userId);
+
+  // Answered DIRECTLY, in the same body shape as the twin 409 in
+  // routes/firsthand.ts, rather than thrown as a ConflictError. Two reasons,
+  // and the first one is a real defect rather than tidiness.
+  //
+  // `ConflictError` stamps `code: 'CONFLICT'` on every 409 this route can
+  // produce - including the two `mapDatabaseError` raises, for a unique
+  // constraint violation and for lock-not-available, both plausible transients
+  // on a busy opportunity row. A client with no better discriminator than the
+  // status would show "somebody else saved this, save again to replace their
+  // version" for a lock timeout, which is false; and it would then advance its
+  // precondition to whatever is stored, so the NEXT click would overwrite a
+  // colleague who had genuinely saved in the meantime, with no conflict raised
+  // at all. That is this step's own failure mode, reached through its own
+  // recovery path.
+  //
+  // And the envelope `errorHandler` builds for an AppError has no slot for
+  // `current_updated_at`. Without it the client can only re-read the study to
+  // learn what to save against - a second request that can itself fail, leaving
+  // an author refused in a loop with no control anywhere that would let them
+  // keep their work. The study route already returns it; this returns the same
+  // thing, so one logical refusal has one shape.
+  return res.status(409).json({
+    error: 'stale_study',
+    message: `Somebody else saved changes to ${subject} after you opened this opportunity. Nothing has been saved, and your edits are still here - save again to replace their version, or open the opportunity in a new tab to compare first.`,
+    current_updated_at: currentUpdatedAt
+  });
+}
+
+type InPlaceStudyOutcome =
+  | { outcome: Exclude<InPlaceStudyUpdate, 'stale'> }
+  | { outcome: 'stale'; currentUpdatedAt: string };
 
 /**
  * Whether the steps about to be written are the same sequence already stored.
@@ -370,12 +445,18 @@ async function updateLinkedStudyContent(
     estimated_duration_minutes?: number | null;
     steps: StudyStep[];
   },
-  requester: StudyRequester
-): Promise<InPlaceStudyUpdate> {
+  requester: StudyRequester,
+  /**
+   * The `updated_at` the opportunity form was served for this study when it
+   * loaded. See `updateStudy` for why absence means "no claim" rather than
+   * "overwrite whatever is there".
+   */
+  expectedUpdatedAt: string | undefined
+): Promise<InPlaceStudyOutcome> {
   const stored = await getStudyById(studyId);
 
   if (!stored) {
-    return 'missing';
+    return { outcome: 'missing' };
   }
 
   // Checked before the write, not left to updateStudy's own vocabulary guard:
@@ -403,7 +484,7 @@ async function updateLinkedStudyContent(
   // narrow race where ownership changes in the gap fails closed rather than
   // disclosing anything.
   if (!canWriteStudy(stored.study.owner_user_id, requester)) {
-    return 'forbidden';
+    return { outcome: 'forbidden' };
   }
 
   // Keep the identity the stored steps already have.
@@ -470,13 +551,35 @@ async function updateLinkedStudyContent(
   const result = await updateStudy(
     studyId,
     { ...content, steps: incomingSteps },
-    requester
+    requester,
+    expectedUpdatedAt
   );
 
   if (!result.ok) {
+    if (result.reason === 'stale') {
+      return { outcome: 'stale', currentUpdatedAt: result.current_updated_at };
+    }
+
     // A study deleted between the read above and the row lock inside
     // updateStudy. Same answer as never having existed.
-    return result.reason === 'not_found' ? 'missing' : 'forbidden';
+    return { outcome: result.reason === 'not_found' ? 'missing' : 'forbidden' };
+  }
+
+  if (expectedUpdatedAt === undefined) {
+    // Fail-open is deliberate (see updateStudy's docstring) but must not be
+    // silent: a bundle that stopped sending the precondition would otherwise
+    // lose the protection with nothing anywhere to say so.
+    //
+    // Logged AFTER the write, past every branch that returns without one -
+    // `not_found`, `forbidden`, and the raw throw from the vocabulary guard.
+    // A line reading "study updated with no precondition" for a request that
+    // updated nothing is noise in exactly the place an operator is looking for
+    // signal. Same placement as the twin in routes/firsthand.ts.
+    logger.warn('Study updated with no concurrency precondition', {
+      studyId,
+      userId: requester.userId,
+      via: 'opportunity-form'
+    });
   }
 
   if (result.claimed) {
@@ -490,7 +593,7 @@ async function updateLinkedStudyContent(
     });
   }
 
-  return 'updated';
+  return { outcome: 'updated' };
 }
 
 /**
@@ -515,6 +618,16 @@ type UpdateOpportunityBody = UpdateOpportunityRequest & {
   inline_study?: InlineStudy;
   inline_survey?: InlineSurvey;
   delivery_mode?: DeliveryMode;
+  /**
+   * The optimistic-concurrency precondition for the LINKED STUDY, not for the
+   * opportunity. Declared top-level rather than inside `inline_study` /
+   * `inline_survey` on purpose: both branches feed the same in-place update, a
+   * concurrency token is not authored content, and the two inline schemas
+   * disagree about unknown keys - `inlineSurveySchema` is `.strict()` and
+   * refuses them, `inlineStudySchema` is not and drops them in silence. One
+   * declared field has one failure mode instead of two.
+   */
+  expected_study_updated_at?: string;
 };
 
 // `validateUrl` used to live here. Its body moved to
@@ -1120,9 +1233,15 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // inline_study is consumed to build a study and must NOT survive into the
   // generic field loop below, which maps every remaining key straight to a
   // column name - it is not a column on opportunities.
+  //
+  // `expected_study_updated_at` is destructured out for the same reason and it
+  // is not optional housekeeping: leaving it in `data` would emit
+  // `SET expected_study_updated_at = $n` against a column that does not exist,
+  // and answer 500 on every save the moment the client starts sending it.
   const {
     inline_study: inlineStudyInput,
     inline_survey: inlineSurveyInput,
+    expected_study_updated_at: expectedStudyUpdatedAt,
     ...data
   }: UpdateOpportunityBody = req.body;
   // Note: Data is already validated by validateRequest(UpdateOpportunitySchema) middleware
@@ -1475,10 +1594,11 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
             inlineStudyInput.target_url
           )
         },
-        studyRequesterForThisWrite
+        studyRequesterForThisWrite,
+        expectedStudyUpdatedAt
       );
 
-      if (outcome === 'forbidden') {
+      if (outcome.outcome === 'forbidden') {
         // The security event, logged here for the same reason the study route
         // logs its own: a ForbiddenError reaches errorHandler, which records
         // the URL and the user but NOT the study id, and cannot be told apart
@@ -1496,10 +1616,20 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         );
       }
 
-      if (outcome === 'updated') {
+      if (outcome.outcome === 'stale') {
+        return sendStaleStudyConflict(
+          res,
+          linkedStudyId,
+          req.user!.id,
+          'this task list',
+          outcome.currentUpdatedAt
+        );
+      }
+
+      if (outcome.outcome === 'updated') {
         updatedStudyInPlace = true;
       }
-      if (outcome === 'missing') {
+      if (outcome.outcome === 'missing') {
         // Falls through to the mint below, which repoints the dangling link at
         // a study that exists. Logged for the same reason as an explicit
         // repoint: the dangling id is the only clue to which study went
@@ -1575,10 +1705,11 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
             : {}),
           steps: toSurveySteps(inlineSurveyInput.steps, linkedStudyId)
         },
-        studyRequesterForThisWrite
+        studyRequesterForThisWrite,
+        expectedStudyUpdatedAt
       );
 
-      if (outcome === 'forbidden') {
+      if (outcome.outcome === 'forbidden') {
         // The security event, logged here for the same reason the study route
         // logs its own: a ForbiddenError reaches errorHandler, which records
         // the URL and the user but NOT the study id, and cannot be told apart
@@ -1596,7 +1727,17 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         );
       }
 
-      if (outcome === 'updated') {
+      if (outcome.outcome === 'stale') {
+        return sendStaleStudyConflict(
+          res,
+          linkedStudyId,
+          req.user!.id,
+          'these questions',
+          outcome.currentUpdatedAt
+        );
+      }
+
+      if (outcome.outcome === 'updated') {
         updatedStudyInPlace = true;
       }
     }

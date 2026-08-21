@@ -597,6 +597,237 @@ describe('reopening an opportunity that has a task list', () => {
     expect(savedBody().firsthand_study_id).toBeUndefined();
   });
 
+  /**
+   * F1. A1 captured the linked study's `updated_at` into form state and logged
+   * it; this is where it starts being used for the thing it was captured for.
+   *
+   * Asserted on the REQUEST BODY, never on a rendered string, for the reason
+   * this whole file states at the top: a banner can be right while the payload
+   * has quietly stopped carrying the precondition, and a precondition that is
+   * not sent is a lost-update protection that does not exist.
+   */
+  describe('optimistic concurrency on the linked study', () => {
+    /** A 409 shaped as PATCH /api/opportunities/:id answers one. */
+    const staleRejection = (currentUpdatedAt = '2026-08-21T11:00:00.000Z') => ({
+      response: {
+        status: 409,
+        data: {
+          error: 'stale_study',
+          message:
+            'Somebody else saved changes to this task list after you opened this opportunity. Nothing has been saved, and your edits are still here - save again to replace their version, or open the opportunity in a new tab to compare first.',
+          current_updated_at: currentUpdatedAt
+        }
+      }
+    });
+
+    const openEditedForm = async () => {
+      vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+      vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);
+
+      renderEdit('/admin/opportunities/opp-1/edit');
+
+      const title = await screen.findByDisplayValue('Checkout walkthrough');
+      fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
+
+      return title;
+    };
+
+    const save = async () =>
+      fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
+
+    it('sends the study revision it loaded as the precondition', async () => {
+      await openEditedForm();
+      await save();
+
+      await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+      expect(sentBody().expected_study_updated_at).toBe('2026-08-19T09:30:00.000Z');
+    });
+
+    it('omits the precondition when the study was served without one', async () => {
+      // Absent has to mean "no claim". A null would be refused by the schema
+      // and would 400 every save from a study whose row predates the field.
+      vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+      vi.mocked(getFirstHandStudy).mockResolvedValue(
+        study({ updated_at: undefined }) as never
+      );
+
+      renderEdit('/admin/opportunities/opp-1/edit');
+      const title = await screen.findByDisplayValue('Checkout walkthrough');
+      fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
+      await save();
+
+      await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
+
+      expect(sentBody()).not.toHaveProperty('expected_study_updated_at');
+    });
+
+    it('keeps every local edit when the save is refused as stale', async () => {
+      vi.mocked(updateOpportunity).mockRejectedValueOnce(staleRejection());
+
+      await openEditedForm();
+      await save();
+
+      await screen.findByText(/Somebody else saved this while you were editing/i);
+
+      // The promise the banner makes, checked against the form rather than
+      // against the sentence.
+      expect(screen.getByDisplayValue('Checkout walkthrough v2')).toBeTruthy();
+    });
+
+    it('does not reload the opportunity behind the conflict', async () => {
+      // `loadOpportunity` rebuilds the whole form from the server, so a reload
+      // here would discard exactly the unsaved work the refusal protects. The
+      // narrow study read that refreshes the precondition is a different call
+      // and is expected.
+      vi.mocked(updateOpportunity).mockRejectedValueOnce(staleRejection());
+
+      await openEditedForm();
+      const loadsBefore = vi.mocked(getOpportunity).mock.calls.length;
+      await save();
+
+      await screen.findByText(/Somebody else saved this while you were editing/i);
+
+      expect(vi.mocked(getOpportunity).mock.calls.length).toBe(loadsBefore);
+    });
+
+    it('saves again against what is now stored, so the author is not locked out', async () => {
+      // Without advancing the precondition the second save re-sends the same
+      // stale revision and is refused again, forever - and there is no other
+      // control anywhere that would let the author keep their work.
+      vi.mocked(updateOpportunity).mockRejectedValueOnce(
+        staleRejection('2026-08-21T11:00:00.000Z')
+      );
+
+      await openEditedForm();
+      await save();
+      await screen.findByText(/Somebody else saved this while you were editing/i);
+
+      await save();
+
+      await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(2));
+
+      const second = JSON.parse(
+        JSON.stringify(vi.mocked(updateOpportunity).mock.calls[1][1])
+      );
+      expect(second.expected_study_updated_at).toBe('2026-08-21T11:00:00.000Z');
+    });
+
+    /**
+     * The regression the review caught, and it is the one an author hits within
+     * minutes of the feature working as designed.
+     *
+     * `staleStudyUpdatedAt` takes precedence over `linkedStudyUpdatedAt` when
+     * the precondition is built. Left set after a save succeeds, it permanently
+     * shadows the value `loadOpportunity` has just refreshed - so every later
+     * save in the session is refused against a revision two writes old, and the
+     * banner accuses a colleague who did nothing.
+     */
+    it('does not manufacture a second conflict after recovering from a real one', async () => {
+      vi.mocked(updateOpportunity).mockRejectedValueOnce(
+        staleRejection('2026-08-21T11:00:00.000Z')
+      );
+
+      vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
+      // What the study looks like after the second (successful) save, which is
+      // what `loadOpportunity` re-reads and what the THIRD save must carry.
+      vi.mocked(getFirstHandStudy)
+        .mockResolvedValueOnce(study() as never)
+        .mockResolvedValue(
+          study({ updated_at: '2026-08-21T12:00:00.000Z' }) as never
+        );
+
+      renderEdit('/admin/opportunities/opp-1/edit');
+      const title = await screen.findByDisplayValue('Checkout walkthrough');
+      fireEvent.change(title, { target: { value: 'Checkout walkthrough v2' } });
+
+      await save();
+      await screen.findByText(/Somebody else saved this while you were editing/i);
+
+      // The deliberate re-save, which succeeds.
+      await save();
+      await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(2));
+      // Wait for the save to settle before the next one: handleSubmit has a
+      // double-click guard, so clicking again while `saving` is still true is
+      // refused before it builds a payload. The conflict banner clearing is
+      // the observable end of that second save.
+      await waitFor(() =>
+        expect(
+          screen.queryByText(/Somebody else saved this while you were editing/i)
+        ).toBeNull()
+      );
+
+      // A third, ordinary save. It must carry what the row holds NOW, not the
+      // revision the conflict handed back two writes ago.
+      //
+      // The successful save re-runs `loadOpportunity`, which rebuilds the form
+      // from the server - so the title field is back to the stored value here,
+      // and waiting for that is also how this test knows the reload finished.
+      const reloaded = await screen.findByDisplayValue('Checkout walkthrough');
+      fireEvent.change(reloaded, {
+        target: { value: 'Checkout walkthrough v3' }
+      });
+
+      // Wait for the button to come back rather than clicking blind. The save
+      // controls are disabled while `saving` is true AND for as long as the
+      // success message is up - 3000ms on a draft, which this fixture is - so
+      // the wait has to outlast that timer or the third click never lands.
+      const saveButton = await screen.findByRole('button', {
+        name: /Save Changes/i
+      });
+      await waitFor(() => expect(saveButton).not.toBeDisabled(), {
+        timeout: 5000
+      });
+      fireEvent.click(saveButton);
+
+      await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(3));
+
+      const third = JSON.parse(
+        JSON.stringify(vi.mocked(updateOpportunity).mock.calls[2][1])
+      );
+      expect(third.expected_study_updated_at).toBe('2026-08-21T12:00:00.000Z');
+      expect(third.expected_study_updated_at).not.toBe('2026-08-21T11:00:00.000Z');
+    });
+
+    it('does not treat a lock-timeout 409 as somebody else saving', async () => {
+      // errorHandler maps a unique-constraint violation and lock-not-available
+      // to 409 as well. Reading the status alone would tell the author a
+      // colleague had saved when none had - and then advance the precondition,
+      // so the next click would overwrite a colleague who genuinely had.
+      vi.mocked(updateOpportunity).mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: {
+            error: 'Resource is currently locked, please try again',
+            code: 'CONFLICT'
+          }
+        }
+      });
+
+      await openEditedForm();
+      await save();
+
+      await screen.findByText('Resource is currently locked, please try again');
+      expect(
+        screen.queryByText(/Somebody else saved this while you were editing/i)
+      ).toBeNull();
+    });
+
+    it('does not show the conflict banner for an ordinary failure', async () => {
+      vi.mocked(updateOpportunity).mockRejectedValueOnce({
+        response: { status: 400, data: { error: 'Something else went wrong' } }
+      });
+
+      await openEditedForm();
+      await save();
+
+      await screen.findByText('Something else went wrong');
+      expect(
+        screen.queryByText(/Somebody else saved this while you were editing/i)
+      ).toBeNull();
+    });
+  });
+
   it('renders the author their own tasks instead of the reuse picker', async () => {
     vi.mocked(getOpportunity).mockResolvedValue(recordedOpportunity as never);
     vi.mocked(getFirstHandStudy).mockResolvedValue(study() as never);

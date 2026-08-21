@@ -62,7 +62,20 @@ export type StudyRecord = Study & {
    */
   copied_from_study_id: string | null;
   created_at: string;
+  /**
+   * When the row was last written, and the value the optimistic-concurrency
+   * precondition is asserted against - see `updateStudy`. Served to clients so
+   * they can echo it back on save.
+   */
   updated_at: string;
+  // No `updated_by_user_id` here, deliberately, though migration 0014 adds the
+  // column and every write sets it. StudyRecord is what the study LIST and the
+  // single-study GET serve, and that list is unfiltered by owner - so surfacing
+  // it would hand every admin the user id of whoever last touched every other
+  // admin's study, which is a wider disclosure than the 409 it was added to
+  // support and one nothing in the product asked for. It is written and logged;
+  // a surface that needs to show it can join to public.users and decide the
+  // question then, on its own merits.
 };
 
 export type StudyWithSteps = {
@@ -88,9 +101,35 @@ export type StudyWriteFailure = { ok: false; reason: "not_found" | "forbidden" }
  * Returned rather than logged here so the repository stays free of request
  * context, and so the transfer is visible to a test without a logger mock.
  */
+/**
+ * The optimistic-concurrency refusal.
+ *
+ * Deliberately NOT folded into `StudyWriteFailure`, which `deleteStudy` shares:
+ * a delete has no precondition, and widening the shared type would let a route
+ * answer 409 for an operation that can never produce one. Keeping it separate
+ * also makes the compiler point at every caller that has to decide what a
+ * conflict means for it, rather than letting one fall through a `not_found`
+ * branch.
+ *
+ * `current_updated_at` is the row's value as it stands NOW, and it is here so
+ * the loser of a race is not locked out. Without it the client can only re-send
+ * the same stale token and lose again, forever; with it, the client can offer a
+ * deliberate "I have looked, save mine anyway" that re-sends against what is
+ * actually stored. The precondition is a "you have seen this" gate, not a lock.
+ *
+ * It carries no user identity. See the 409 handling in routes/firsthand.ts for
+ * why `updated_by_user_id` is recorded and logged but never returned.
+ */
+export type StudyStaleWriteFailure = {
+  ok: false;
+  reason: "stale";
+  current_updated_at: string;
+};
+
 export type StudyUpdateResult =
   | ({ ok: true; claimed: boolean } & StudyWithSteps)
-  | StudyWriteFailure;
+  | StudyWriteFailure
+  | StudyStaleWriteFailure;
 
 export type StudyDeleteResult = { ok: true } | StudyWriteFailure;
 
@@ -330,8 +369,9 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
           INSERT INTO studies (
             id, title, intro_text, consent_text, brand_name,
             estimated_duration_minutes, locale, status, kind, owner_user_id,
-            copied_from_study_id, consent_template_id, consent_template_version
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            copied_from_study_id, consent_template_id, consent_template_version,
+            updated_by_user_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         `,
         [
           studyId,
@@ -346,7 +386,14 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
           input.owner_user_id ?? null,
           input.copied_from_study_id ?? null,
           consentTemplate.id,
-          consentTemplate.version
+          consentTemplate.version,
+          // The creator, taken from `owner_user_id` rather than added as a
+          // second parameter, because at create they are the same person by
+          // construction: every HTTP caller sets `owner_user_id: req.user!.id`
+          // from the session, and the field exists on this input only so a
+          // caller with no user context - a script, a fixture - can still
+          // insert. Two knobs for one fact would let them disagree.
+          input.owner_user_id ?? null
         ]
       );
 
@@ -367,10 +414,46 @@ export async function createStudy(input: CreateStudyInput): Promise<StudyWithSte
   });
 }
 
+/**
+ * @param expectedUpdatedAt
+ *   The `updated_at` the caller loaded, echoed back as an optimistic-concurrency
+ *   precondition. A mismatch means somebody else wrote the row in between, and
+ *   the update is refused with `stale` rather than silently overwriting them.
+ *
+ *   OPTIONAL, and absence means "no precondition asserted" - the write proceeds.
+ *   That is fail-open, and it is chosen rather than defaulted:
+ *
+ *     - The two HTTP callers both send it. A request that omits it is either an
+ *       SPA bundle older than the backend serving it - a real fifteen-to-thirty
+ *       minute window on every rolling deploy, which the `id` field on
+ *       `updateStudyRequestSchema` already records as a trap worth designing
+ *       around - or a script, which has no concurrent editor to race.
+ *     - Absence is not a claim. A caller who omits the field is not asserting
+ *       freshness, so there is nothing to refuse; failing closed would break
+ *       every save for the length of a deploy in exchange for protection
+ *       against a race that only two humans in two browsers can create.
+ *     - It costs no security. Anyone able to omit the precondition already had
+ *       the right to write the row - `canWriteStudy` has passed by then - so
+ *       omitting it gains an attacker nothing they did not already have.
+ *
+ *   The routes log the omission, so a client that silently stopped sending it is
+ *   discoverable rather than invisible.
+ *
+ *   A value that is present but unparseable fails CLOSED - an assertion nobody
+ *   can read is not an assertion. Both HTTP callers reject the shape at their
+ *   own schema and answer 400 before reaching here; the repository still holds
+ *   the line for a direct caller.
+ *
+ *   An explicit `null` is treated as absence, not as an unreadable claim: it is
+ *   what a client with no stored revision has to send through a field typed
+ *   `string | null`, and reading it as a failed assertion would refuse every
+ *   save on a study whose `updated_at` never reached the form.
+ */
 export async function updateStudy(
   studyId: string,
   input: UpdateStudyInput,
-  requester: StudyRequester
+  requester: StudyRequester,
+  expectedUpdatedAt?: string | null
 ): Promise<StudyUpdateResult> {
   ensurePostgresConfigured();
 
@@ -389,8 +472,13 @@ export async function updateStudy(
       const ownerResult = await client.query<{
         owner_user_id: string | null;
         kind: string;
+        updated_at: Date | string;
       }>(
-        `SELECT owner_user_id, kind FROM studies WHERE id = $1 FOR UPDATE`,
+        // `updated_at` rides along on the statement that already takes the lock
+        // rather than in a second round trip. Reading it OUTSIDE the lock would
+        // make the precondition decorative: the row could be written between the
+        // read and the write, which is the exact race this exists to close.
+        `SELECT owner_user_id, kind, updated_at FROM studies WHERE id = $1 FOR UPDATE`,
         [studyId]
       );
       const ownerRow = ownerResult.rows[0];
@@ -405,6 +493,58 @@ export async function updateStudy(
         // FOR UPDATE lock promptly matters more than the empty transaction.
         await client.query("ROLLBACK");
         return { ok: false, reason: "forbidden" } as const;
+      }
+
+      // The optimistic-concurrency precondition, AFTER the ownership decision
+      // and before anything else.
+      //
+      // After, deliberately. A 409 tells the caller that the study exists and
+      // that somebody wrote it recently. Answering that ahead of the ownership
+      // check would hand both facts to a caller who was refused read-write
+      // access to the row, which is the same disclosure the early ownership
+      // check in `updateLinkedStudyContent` was added to close. A caller who
+      // cannot write the study gets 403 whether their token is fresh or not.
+      //
+      // Before the vocabulary check, equally deliberately: if the row moved
+      // under the caller, the validity of their payload against it is moot, and
+      // a conflict is the more actionable answer than a step-shape complaint
+      // about content they are about to be told to re-derive.
+      if (expectedUpdatedAt !== undefined && expectedUpdatedAt !== null) {
+        const storedUpdatedAt = new Date(ownerRow.updated_at).getTime();
+        const claimedUpdatedAt = new Date(expectedUpdatedAt).getTime();
+
+        // Compared as epoch milliseconds, not as strings, and this is the
+        // difference between a working precondition and one that refuses every
+        // save.
+        //
+        // The column is TIMESTAMPTZ, which Postgres stores to MICROsecond
+        // precision. What the caller was served is `toIsoString(row.updated_at)`
+        // - a JS Date, so millisecond precision - and a millisecond-truncated
+        // value can never equal a microsecond one. Both sides here go through
+        // `new Date(...)`, which is the same truncation the caller's copy
+        // already went through, so the two are symmetric by construction.
+        // Epoch numbers rather than the ISO strings also means a client that
+        // round-tripped the value through its own Date, or serialised `+00:00`
+        // where we sent `Z`, still matches.
+        //
+        // An unparseable claim fails CLOSED, and it falls out of this one
+        // comparison rather than needing a guard of its own: `new Date("nonsense")
+        // .getTime()` is NaN, and NaN is not equal to anything including
+        // itself, so `!==` is already true. An explicit `Number.isNaN` test
+        // beside it would be dead code with a comment claiming it did work.
+        //
+        // Both HTTP callers validate the shape at their own schema and answer
+        // 400 first; this covers a direct repository caller. An assertion
+        // nobody can read is not an assertion, and writing over somebody on the
+        // strength of one is the worst of the available answers.
+        if (claimedUpdatedAt !== storedUpdatedAt) {
+          await client.query("ROLLBACK");
+          return {
+            ok: false,
+            reason: "stale",
+            current_updated_at: toIsoString(ownerRow.updated_at)
+          } as const;
+        }
       }
 
       // The vocabulary check that create does from its payload. An update
@@ -492,8 +632,39 @@ export async function updateStudy(
         push("owner_user_id", requester.userId);
       }
 
-      if (updates.length > 0) {
-        updates.push("updated_at = NOW()");
+      // ONE write site for the row's audit columns, where there used to be two.
+      //
+      // `updated_at = NOW()` was pushed here for a column edit and bumped again
+      // by a separate statement further down for the steps-only case. Nothing in
+      // the database maintains either column - firsthand has no BEFORE UPDATE
+      // trigger, unlike the app schema - so every write path has to remember
+      // them, and two sites means a third path can bump one without the other
+      // and leave a row whose "who" and "when" disagree. `updated_by_user_id`
+      // arrives in this MR and would have had to be added twice.
+      //
+      // The condition is exactly what the two old sites covered between them, so
+      // a request that changes nothing - a bare `PUT {}` parses, per
+      // updateStudyRequestSchema - still bumps nothing. A no-op must not look
+      // like an edit to the next person's precondition.
+      const touchesTheRow = updates.length > 0 || Boolean(input.steps);
+
+      if (touchesTheRow) {
+        // clock_timestamp(), not NOW(). `NOW()` is `transaction_timestamp()` -
+        // the moment the transaction OPENED, not the moment it wrote.
+        //
+        // That was decorative while `updated_at` was only a sort key. It is the
+        // correctness primitive now. Under contention writer B can BEGIN before
+        // writer A commits, block on A's `FOR UPDATE`, and then stamp a time
+        // computed before the wait - so the column can move backwards, and two
+        // overlapping writers can land close enough to collide once the value is
+        // truncated to milliseconds for the client. Either would make a
+        // precondition answer about a write it was not looking at.
+        // clock_timestamp() is read when the statement runs, so it cannot.
+        updates.push("updated_at = clock_timestamp()");
+        // From the authenticated requester, never from the input. A
+        // body-supplied editor id would let an author attribute their edit to a
+        // colleague, which is worse than recording nothing at all.
+        push("updated_by_user_id", requester.userId);
         values.push(studyId);
         await client.query(
           `UPDATE studies SET ${updates.join(", ")} WHERE id = $${values.length}`,
@@ -504,12 +675,6 @@ export async function updateStudy(
       if (input.steps) {
         await client.query(`DELETE FROM study_steps WHERE study_id = $1`, [studyId]);
         await insertStudySteps(client, studyId, input.steps);
-
-        if (updates.length === 0) {
-          await client.query(`UPDATE studies SET updated_at = NOW() WHERE id = $1`, [
-            studyId
-          ]);
-        }
       }
 
       const stored = await loadStudyWithSteps(client, studyId);
