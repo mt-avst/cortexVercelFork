@@ -77,7 +77,11 @@ export function OpportunityRow({ opportunity, role }: OpportunityRowProps) {
             )}
           </p>
 
-          <h3 className="opportunity-row__title">{opportunity.title}</h3>
+          {/* h2, not h3: the listing page's only preceding heading is its h1, so
+              an h3 here skips a level and axe reports heading-order. Light-mode
+              h1-h3 all take the display face and the size comes from the class,
+              so this renders identically. */}
+          <h2 className="opportunity-row__title">{opportunity.title}</h2>
 
           {opportunity.purpose_one_liner && (
             <p className="opportunity-row__purpose">{opportunity.purpose_one_liner}</p>

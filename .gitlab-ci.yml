@@ -138,8 +138,11 @@ lint:
 # so they run in .pre alongside lint, and a red suite stops the pipeline before
 # it spends anything on building images.
 #
-# Not covered here, deliberately: the e2e suite, which needs postgres and a
-# seeded database, and three of whose specs create and publish studies.
+# Not covered here, deliberately: the rest of the e2e suite, which needs
+# postgres and a seeded database, and three of whose specs create and publish
+# studies. e2e/accessibility.test.ts is the exception - it stubs the two API
+# calls it depends on, so it runs against a static build with no backend at
+# all. See test-a11y below.
 #
 # Image pinned to the same Node the apps build on, matching lint and
 # backend/Dockerfile. Root `npm ci` comes first in every job: the suites import
@@ -217,6 +220,62 @@ typecheck:
     # kaniko builds do compile the source, but later in the pipeline and never
     # over the tests.
     - cd "$CI_PROJECT_DIR" && npm run typecheck
+
+# Accessibility. axe-core over the pages in e2e/accessibility.test.ts, and the
+# only Playwright job in this pipeline.
+#
+# Why it exists: seven of these tests failed for an unknown length of time
+# without anyone noticing, because nothing here ran them. The brand terracotta
+# #dd6e42 had spread into text roles where it measures 2.95-3.28 against the
+# light surfaces, well under the 4.5 WCAG AA needs.
+#
+# It blocks. A contrast or ARIA regression is a defect in the product, not a
+# warning about one, and a job that only warns is a job that gets ignored -
+# which is the failure mode this whole thing is here to fix.
+#
+# No backend and no database. The spec stubs /api/me and /api/opportunities,
+# every other call fails against the static server, and the pages under test
+# render their empty and error states. What that costs, stated plainly: the
+# data-populated states are NOT covered - a booking list, a populated admin
+# table, a rendered survey. Those still need the local run against a seeded
+# stack. What IS covered is everything the theme paints regardless of data,
+# which is where every failure found so far has lived.
+#
+# The node image rather than mcr.microsoft.com/playwright: every other job in
+# this file pulls through registry.hub.docker.com, so the browser is installed
+# in the job instead. Swap the image for mcr.microsoft.com/playwright:v1.56.1-noble
+# if that registry is ever allowed - it ships the browsers and the ~40s install
+# below disappears. Bookworm rather than alpine because Playwright does not
+# support musl.
+test-a11y:
+  extends: .test-base
+  image: registry.hub.docker.com/library/node:20.20.2-bookworm
+  script:
+    - npm ci
+    # No version argument: `npx playwright install` resolves the browser build
+    # from the @playwright/test in package-lock.json. Naming a version here
+    # would be a second place to bump, and a browser built for a different
+    # Playwright fails with "Executable doesn't exist" - which reads as a
+    # broken runner rather than a version skew.
+    - npx playwright install --with-deps chromium
+    - cd frontend && npm ci && npm run build
+    # `vite preview` serves the build that was just produced, so the job tests
+    # the bundle rather than the dev server's on-the-fly transform.
+    - npx vite preview --port 3100 --strictPort &
+    - |
+      for i in $(seq 1 30); do
+        curl -sf -o /dev/null http://localhost:3100/ && break
+        [ "$i" = 30 ] && { echo "preview server never came up"; exit 1; }
+        sleep 1
+      done
+    - cd "$CI_PROJECT_DIR"
+    - BASE_URL=http://localhost:3100 npx playwright test --config=playwright.accessibility.config.ts
+  artifacts:
+    when: on_failure
+    expire_in: 1 week
+    paths:
+      - playwright-report/
+      - test-results/
 
 test-scripts:
   extends: .test-base

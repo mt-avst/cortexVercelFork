@@ -192,9 +192,12 @@ body.theme-light {
   --cta-text-hover: #ffffff;
   --cta-border: var(--fs-ink);
 
-  /* Links — terracotta */
-  --link: var(--fs-accent);
-  --link-hover: var(--fs-accent-strong);
+  /* Links — terracotta at the ramp step that passes as text. 500 is 2.95 on
+     the cream page and 3.14 on the cool listing surface; see ACCESSIBLE
+     ACCENT ROLES above. Hover keeps the same colour because a:hover already
+     adds an underline (_base.css), so the state change does not rely on it. */
+  --link: var(--accent-text-on-light);
+  --link-hover: var(--accent-text-on-light);
 
   /* Focus — terracotta ring on navy-friendly field */
   --focus-ring: var(--fs-accent);
@@ -203,6 +206,11 @@ body.theme-light {
   /* Accent */
   --accent-coral: var(--fs-accent);
   --accent-amber: #c27a2d;
+  /* #c27a2d is 3.08-3.43 across the light surfaces, so it cannot carry
+     text. Same split as the terracotta roles above: the amber stays as
+     it is for fills and borders, and text uses this darker twin
+     (5.17 on cream, 5.67 on a white card, 5.76 on white). */
+  --accent-amber-text: #8f5a1c;
   --accent-teal: #2f6f5e;
 
   /* Status — FirstHand success / danger */
@@ -746,7 +754,7 @@ body.theme-light .home-intro-tagline {
 }
 
 body.theme-light .home-intro-tagline em {
-  color: var(--brand-orange-600);
+  color: var(--accent-text-on-light);
 }
 
 /* Spinner */
@@ -863,7 +871,7 @@ body.theme-light .hero-subtitle-centered {
 }
 
 body.theme-light .hero-subtitle-centered .subtitle-emphasis {
-  color: var(--brand-orange-600); /* Brand Orange */
+  color: var(--accent-text-on-light);
 }
 
 body.theme-light .hero-title-large {
@@ -896,7 +904,7 @@ body.theme-light .hero-demo-link {
 }
 
 body.theme-light .hero-demo-link:hover {
-  color: var(--brand-orange-600);
+  color: var(--accent-text-on-light);
 }
 
 body.theme-light .hero-demo-divider {
@@ -1644,7 +1652,7 @@ body.theme-light .admin-tabs .nav-link.active {
 
 /* Admin tab buttons - light mode (Cortex Underline Style) */
 body.theme-light .custom-tab-button {
-  color: #6B7280;
+  color: var(--text-muted); /* #6B7280 was 4.33 on the cream page */
   background: transparent;
   border: none;
   border-bottom: 2px solid transparent;
@@ -1796,7 +1804,7 @@ body.theme-light .badge--poll,
 body.theme-light .badge--interview,
 body.theme-light .badge--test {
   background: rgba(255, 122, 51, 0.1);
-  color: var(--brand-orange-600);
+  color: var(--accent-text-on-light);
 }
 
 /* Success (Green) */
@@ -2992,7 +3000,7 @@ body.theme-light .opportunity-form .opportunity-form-tab:hover {
 body.theme-light .opportunity-form .opportunity-form-tab.active {
   background-color: rgba(255, 122, 51, 0.05);
   border-bottom: 2px solid var(--color-brand-orange);
-  color: var(--color-brand-orange);
+  color: var(--accent-text-on-light);
   font-weight: 600;
 }
 
@@ -3005,7 +3013,7 @@ body.theme-light .opportunity-form .opportunity-form-tab .tab-description {
 }
 
 body.theme-light .opportunity-form .opportunity-form-tab.active .tab-description {
-  color: rgba(255, 122, 51, 0.8);
+  color: var(--accent-text-on-light);
 }
 
 /* Light-theme twin of the block above. The greens and greys here are picked
@@ -3032,14 +3040,14 @@ body.theme-light .opportunity-form .border-bottom {
 }
 
 body.theme-light .opportunity-form .btn-primary {
-  background-color: var(--brand-orange-600);
-  border-color: var(--brand-orange-600);
+  background-color: var(--accent-fill-on-light);
+  border-color: var(--accent-fill-on-light);
   color: #FFFFFF;
 }
 
 body.theme-light .opportunity-form .btn-primary:hover {
-  background-color: var(--brand-orange-700);
-  border-color: var(--brand-orange-700);
+  background-color: var(--accent-text-on-light);
+  border-color: var(--accent-text-on-light);
 }
 
 body.theme-light .opportunity-form .btn-success {
@@ -3060,12 +3068,12 @@ body.theme-light .opportunity-form .btn-outline-secondary:hover {
 }
 
 body.theme-light .opportunity-form .btn-outline-primary {
-  border-color: var(--brand-orange-600);
-  color: var(--brand-orange-600);
+  border-color: var(--accent-fill-on-light);
+  color: var(--accent-text-on-light);
 }
 
 body.theme-light .opportunity-form .btn-outline-primary:hover {
-  background-color: var(--brand-orange-600);
+  background-color: var(--accent-fill-on-light);
   color: #FFFFFF;
 }
 
@@ -3423,7 +3431,7 @@ body.theme-light .sales-walkthrough-btn {
 
 body.theme-light .sales-walkthrough-btn:hover {
   border-color: var(--brand-primary);
-  color: var(--brand-primary);
+  color: var(--accent-text-on-light);
 }
 
 /* ============================================================
@@ -3497,6 +3505,64 @@ body.theme-dark .sales-faq-item {
 body.theme-dark .sales-step-index {
   background: var(--surface-glass-current);
   border-color: var(--brand-primary);
+}
+
+/* ============================================================
+   ACCESSIBLE ACCENT TEXT ROLES - LIGHT
+
+   These components take their colour from an unscoped rule in
+   _components.css or _utilities.css, so in light mode they resolve to
+   --brand-orange-500 (#dd6e42), which fails WCAG AA as text on every
+   light surface this app paints:
+     cream page #f7f2ea 2.95 | listing #f8fafc 3.14 | card #fffbf6 3.19
+   Each moves to the ramp step documented under ACCESSIBLE ACCENT ROLES
+   at the top of this file - 800 where the colour IS the text (5.80 to
+   6.46 across those surfaces), 700 where white text sits on it (4.77).
+   500 keeps its job for fills, borders, icons and the logo, where
+   nothing has to be read off it.
+
+   Deliberately not listed here, and still on 500:
+     .cortex-brand-title, .landing-parent-brand  - logotype
+     .adaptabits-page-title svg, .section-icon   - icons, not text
+     .cortex-stat-value, .sales-proof-metric-number - 40px and 32px, so
+       WCAG large-text applies and 3.14 already clears the 3:1 threshold
+   ============================================================ */
+
+body.theme-light .btn-outline-primary {
+  color: var(--accent-text-on-light);
+  border-color: var(--accent-fill-on-light);
+}
+
+body.theme-light .btn-outline-primary:hover {
+  background: var(--accent-fill-on-light);
+  border-color: var(--accent-fill-on-light);
+  color: #FFFFFF;
+}
+
+body.theme-light .badge--poll,
+body.theme-light .badge--interview {
+  color: var(--accent-text-on-light);
+}
+
+/* font-size-xs and font-size-body respectively - small text, 4.5:1 */
+body.theme-light .stat-hud-value--positive,
+body.theme-light .leaderboard-list-score {
+  color: var(--accent-text-on-light);
+}
+
+body.theme-light .text-brand-primary,
+body.theme-light .cortex-highlight-orange {
+  color: var(--accent-text-on-light);
+}
+
+/* Warning as text - the fill keeps --status-warning (see the token note) */
+body.theme-light .text-warning {
+  color: var(--accent-amber-text);
+}
+
+/* 20px, below the 24px large-text threshold */
+body.theme-light .sales-step-index {
+  color: var(--accent-text-on-light);
 }
 
 /* ============================================================
