@@ -660,6 +660,33 @@ Closed sessions:
 - Check that users have clicked the poll/survey link
 - Data may take a moment to update
 
+### "Somebody else saved this while you were editing"
+
+Cortex refuses a save that would silently overwrite a colleague. You see this
+when someone else saved the same task list, or the same opportunity's questions,
+after you opened yours.
+
+**Nothing you typed has been lost.** Your edits are still on screen, and nothing
+of yours has been written.
+
+You have two choices, and neither loses your work:
+
+- **Look at theirs first.** Use the link in the message to open the saved
+  version in a new tab. Your unsaved edits stay untouched in the original tab,
+  so you can compare and copy across what you want to keep
+- **Keep yours.** Save again. The second save goes through and replaces their
+  version - deliberately, now that you have been told
+
+Deliberately re-saving overwrites the other person's changes, so it is worth
+looking first if you are not sure what they changed.
+
+Two things worth knowing:
+
+- Task lists are shared. The Task Lists area lists every admin's, not just
+  yours, so somebody editing the same one is normal rather than a mistake
+- Cortex does not name who saved it. If you need to know, ask - or check with
+  whoever else works on that study
+
 ### Email Notifications Not Working
 
 - Check Settings page for notification preferences
