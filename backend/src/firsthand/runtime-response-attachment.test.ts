@@ -21,8 +21,18 @@ vi.mock("pg", () => ({
  *
  * Driven against a mocked pg rather than a real database, so what is asserted
  * is the statement and its parameters. That is the honest limit of these: they
- * pin what is SENT, not what Postgres does with it. The foreign key itself was
- * proved to bite by the database refusing an insert, which no mock can show.
+ * pin what is SENT, not what Postgres does with it.
+ *
+ * That limit had teeth. Every test here passed while the statement wrote a row
+ * 0015's CHECK refuses - study_id bound to the session while step_id resolved
+ * to NULL - which aborted the whole session save and lost the participant's
+ * progress. No assertion over SQL text could have caught it, because the text
+ * was the text these tests were written against.
+ *
+ * So `runtime-response-attachment-postgres.test.ts` now runs the same paths
+ * against a real Postgres with 0015 applied, and it is the one that proves
+ * behaviour. Keep the consequence-level assertions there and the shape-level
+ * ones here; when the two disagree, the database is right.
  */
 describe("attaching a participant's answer to a step", () => {
   beforeEach(() => {
@@ -174,17 +184,30 @@ describe("attaching a participant's answer to a step", () => {
     // detaching one answer.
     const [insert] = find(await answerOnce(), "INSERT INTO participant_responses");
 
-    expect(insert.sql).toContain("SELECT ss.id FROM study_steps ss");
+    expect(insert.sql).toContain("FROM study_steps ss");
     expect(insert.sql).toContain("ss.study_id = $3 AND ss.id = $4");
-    // The lock the foreign key takes for itself. Without it the subquery reads
+    // The lock the foreign key takes for itself. Without it the lookup reads
     // one snapshot and the constraint check reads another, and a concurrent
     // delete between them aborts the whole session write.
     expect(insert.sql).toContain("FOR KEY SHARE");
   });
 
-  it("files the answer under the session's own study", async () => {
+  it("takes both the study and the step from that one looked-up row", async () => {
+    // Not a stylistic preference about CTEs. 0015's CHECK makes BOTH columns
+    // null the only legal detached state, so passing the session's own study id
+    // straight into the column while step_id falls out of the lookup writes a
+    // half-detached row the database refuses - aborting the entire session save
+    // for exactly the case the lookup exists to survive.
+    //
+    // The real-Postgres companion (runtime-response-attachment-postgres.test.ts)
+    // is what proves the consequence; this pins the shape so the two columns
+    // cannot drift back to separate sources.
     const [insert] = find(await answerOnce(), "INSERT INTO participant_responses");
 
+    expect(insert.sql).toContain("(SELECT study_id FROM attached_step)");
+    expect(insert.sql).toContain("(SELECT id FROM attached_step)");
+    // $3 and $4 now scope the lookup rather than being stored directly, which
+    // is what keeps one study's answer from borrowing another study's step.
     expect(insert.params[2]).toBe("study_survey");
     expect(insert.params[3]).toBe("study_survey_alpha");
   });
