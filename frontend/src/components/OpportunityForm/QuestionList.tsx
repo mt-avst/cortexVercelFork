@@ -16,6 +16,8 @@ import {
   type WithClientId
 } from '../../lib/opportunity-authoring/client-ids';
 import './question-list.css';
+import FieldError from './FieldError';
+import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
 
 /**
  * The least an authored item has to be for this list to render it.
@@ -42,6 +44,14 @@ export interface QuestionListProps<T extends AuthoredItem> {
   errorPrefix: string;
   /** DOM id prefix, e.g. `question`. */
   idPrefix: string;
+  /**
+   * Revalidate one item's field on blur, by its full error key.
+   *
+   * The key rather than the field name, because these rules are per item and
+   * the collector produces `inline_survey_questions.2.prompt`. Optional so a
+   * caller that has no validator to offer still renders.
+   */
+  onBlurField?: (errorKey: string) => void;
   /** What the author calls one of these: `question`, `task`. */
   noun: string;
   /** And several of them: `questions`, `tasks`. */
@@ -103,6 +113,7 @@ function QuestionList<T extends AuthoredItem>({
   validationErrors,
   errorPrefix,
   idPrefix,
+  onBlurField,
   noun,
   nounPlural,
   typeLabels,
@@ -132,8 +143,19 @@ function QuestionList<T extends AuthoredItem>({
    */
   const Noun = `${noun.charAt(0).toUpperCase()}${noun.slice(1)}`;
 
-  const errorFor = (index: number, field: string): string | undefined =>
-    validationErrors[`${errorPrefix}.${index}.${field}`];
+  /**
+   * The message for one item's field, with its live position substituted in.
+   *
+   * `resolveMessage` rather than the raw string: per-item messages carry a
+   * `{n}` placeholder, and the key this reads it by is the item's CURRENT
+   * index, so a reorder renumbers the sentence. The summary resolves the same
+   * stored string the same way, which is what keeps the two saying one thing.
+   */
+  const errorFor = (index: number, field: string): string | undefined => {
+    const key = `${errorPrefix}.${index}.${field}`;
+    const message = validationErrors[key];
+    return message === undefined ? undefined : resolveMessage(key, message);
+  };
 
   const itemHasError = (index: number): boolean =>
     Object.keys(validationErrors).some((key) =>
@@ -303,7 +325,13 @@ function QuestionList<T extends AuthoredItem>({
           {emptyMessage}
         </p>
       ) : (
-        <ol className="question-list__items list-unstyled">
+        // Named, because the error summary above renders a list too and a bare
+        // `getAllByRole('listitem')` used to span both - a test counting
+        // question cards silently started counting summary entries.
+        <ol
+          className="question-list__items list-unstyled"
+          aria-label={`${nounPlural} in this list`}
+        >
           {items.map((item, index) => {
             const expanded = isExpanded(item._clientId);
             const bodyId = `${idPrefix}-body-${item._clientId}`;
@@ -465,11 +493,10 @@ function QuestionList<T extends AuthoredItem>({
                         onChange={(event) =>
                           updateAt(index, { prompt: event.target.value } as Partial<T>)
                         }
+                        onBlur={() => onBlurField?.(`${errorPrefix}.${index}.prompt`)}
                       />
                       {errorFor(index, 'prompt') && (
-                        <div className="validation-error" role="alert">
-                          {errorFor(index, 'prompt')}
-                        </div>
+                        <FieldError>{errorFor(index, 'prompt')}</FieldError>
                       )}
                     </div>
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
+import FieldError from './FieldError';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -20,7 +21,7 @@ interface ExternalLinkTabProps {
    * at save time is the weaker half of this fix: the point is to say where the
    * problem is at the moment they make it.
    */
-  handleBlur: (field: string, value: FormFieldValue) => void;
+  handleBlur: (field: string) => void;
 }
 
 const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
@@ -59,11 +60,11 @@ const ExternalLinkTab: React.FC<ExternalLinkTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                 value={formData.external_link_optional}
                 onChange={(e) => handleInputChange('external_link_optional', e.target.value)}
-                onBlur={(e) => handleBlur('external_link_optional', e.target.value)}
+                onBlur={() => handleBlur('external_link_optional')}
                 placeholder="https://forms.google.com/your-form or https://maze.co/your-test"
               />
               {validationErrors.external_link_optional && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.external_link_optional}</div>
+                <FieldError>{validationErrors.external_link_optional}</FieldError>
               )}
             </div>
           </div>

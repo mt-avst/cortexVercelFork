@@ -19,6 +19,7 @@ import { getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { logger } from '../../utils/logger';
 import type { StudyStep } from '../../shared/firsthand/contract';
+import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
 
 /**
  * Edit mode round-tripping what the author wrote (A1).
@@ -1059,8 +1060,11 @@ describe('emptying a list that is linked', () => {
 
     submitFromLastStep(/^Save changes$/);
 
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['inline_study_steps']);
+    // And beside the list itself, not only at the top of the page.
     expect(
-      await screen.findByText(/A task list needs at least one task/i)
+      inlineErrorText(/A task list needs at least one task/i)
     ).toBeInTheDocument();
     expect(updateOpportunity).not.toHaveBeenCalled();
   });

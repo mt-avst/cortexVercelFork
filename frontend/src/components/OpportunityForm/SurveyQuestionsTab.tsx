@@ -19,6 +19,8 @@ import ReadOnlyStudyContent from './ReadOnlyStudyContent';
 import StudyProvenanceNote from './StudyProvenanceNote';
 import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
 import StudySourcePicker from './StudySourcePicker';
+import FieldError from './FieldError';
+import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
 
 type FormFieldValue = string | number | boolean | undefined;
 
@@ -81,6 +83,13 @@ interface SurveyQuestionsTabProps {
   /** Questions are an array, which handleInputChange's scalar signature cannot carry. */
   handleQuestionsChange: (questions: WithClientId<SurveyQuestion>[]) => void;
   /**
+   * Revalidate one field on blur, by the same rules a save runs.
+   *
+   * Keyed by the FULL error key, because the rules on this step are per item:
+   * `inline_survey_questions.2.options`, not `options`.
+   */
+  onBlurField?: (errorKey: string) => void;
+  /**
    * True when the opportunity already has questions of its own. Hides the
    * source choice: "where should this content come from" has been answered, and
    * the answer is "it is already here".
@@ -128,6 +137,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   validationErrors,
   handleInputChange,
   handleQuestionsChange,
+  onBlurField,
   hasLinkedStudy,
   studyIsReadOnly,
   readOnlyReason,
@@ -331,9 +341,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
             made it unreachable: the author was routed to this step by the error
             summary and landed on a list with no error text on it. */}
         {validationErrors.inline_survey_questions && (
-          <div className="validation-error mb-2" role="alert">
-            {validationErrors.inline_survey_questions}
-          </div>
+          <FieldError>{validationErrors.inline_survey_questions}</FieldError>
         )}
 
         {studyIsReadOnly ? (
@@ -368,6 +376,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                   automatic={automaticDuration}
                   estimate={estimate}
                   error={validationErrors.inline_survey_duration_minutes}
+              onBlur={() => onBlurField?.('inline_survey_duration_minutes')}
                   derivedFrom={`${questions.length} ${
                     questions.length === 1 ? 'question' : 'questions'
                   }`}
@@ -387,6 +396,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               validationErrors={validationErrors}
               errorPrefix="inline_survey_questions"
               idPrefix="question"
+              onBlurField={onBlurField}
               noun="question"
               nounPlural="questions"
               typeLabels={QUESTION_TYPE_LABELS}
@@ -403,12 +413,38 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               renderTypeFields={({ item, index, update }) => (
                 <>
                   {CHOICE_TYPES.has(item.type) && (
-                    <div className="form-group mb-3">
+                    <div
+                      className="form-group mb-3"
+                      /* The "at least two answers" rule fires when focus leaves
+                          the WHOLE group, not each box. Per-box blur meant
+                          typing into answer 1 and tabbing to answer 2 raised
+                          "Enter at least two answers" - assertively announced -
+                          while the author was visibly half-way through the
+                          task, on every choice question ever authored.
+                          `relatedTarget` is null when focus leaves the document
+                          entirely, which counts as leaving. */
+                      onBlur={(event) => {
+                        if (
+                          !event.currentTarget.contains(
+                            event.relatedTarget as Node | null
+                          )
+                        ) {
+                          onBlurField?.(`inline_survey_questions.${index}.options`);
+                        }
+                      }}
+                    >
                       <label className="form-label">Answers</label>
                       {(item.options ?? []).map((option, optionIndex) => (
                         <div className="input-group mb-2" key={optionIndex}>
                           <input
                             className="form-control"
+                            /* Addressable, so the error summary's "Enter at
+                               least two answers for question 3" can land on the
+                               box the author will type into. There is no single
+                               control for "at least two", and a link that
+                               opened the step and then did nothing is the
+                               failure the summary exists to fix. */
+                            id={`question-option-${item._clientId}-${optionIndex}`}
                             aria-label={`Answer ${optionIndex + 1} for question ${index + 1}`}
                             value={option}
                             onChange={(e) =>
@@ -447,13 +483,14 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                       {validationErrors[
                         `inline_survey_questions.${index}.options`
                       ] && (
-                        <div className="validation-error" role="alert">
-                          {
+                        <FieldError>
+                          {resolveMessage(
+                            `inline_survey_questions.${index}.options`,
                             validationErrors[
                               `inline_survey_questions.${index}.options`
                             ]
-                          }
-                        </div>
+                          )}
+                        </FieldError>
                       )}
                     </div>
                   )}
@@ -470,6 +507,9 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                         type="number"
                         className="form-control"
                         id={`question-scale-${item._clientId}`}
+                        onBlur={() =>
+                          onBlurField?.(`inline_survey_questions.${index}.config`)
+                        }
                         min={RATING_SCALE_BOUNDS.min}
                         max={RATING_SCALE_BOUNDS.max}
                         style={{ maxWidth: '8rem' }}
@@ -486,13 +526,14 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                       {validationErrors[
                         `inline_survey_questions.${index}.config`
                       ] && (
-                        <div className="validation-error" role="alert">
-                          {
+                        <FieldError>
+                          {resolveMessage(
+                            `inline_survey_questions.${index}.config`,
                             validationErrors[
                               `inline_survey_questions.${index}.config`
                             ]
-                          }
-                        </div>
+                          )}
+                        </FieldError>
                       )}
                       <div className="form-text">
                         Between {RATING_SCALE_BOUNDS.min} and{' '}

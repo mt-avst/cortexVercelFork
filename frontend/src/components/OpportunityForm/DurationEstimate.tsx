@@ -1,6 +1,7 @@
 import React from 'react';
 
 import { INLINE_STUDY_LIMITS } from '../../shared/firsthand/inline-study';
+import FieldError from './FieldError';
 
 interface DurationEstimateProps {
   /** The form field this control writes, used for its id and its label. */
@@ -16,6 +17,8 @@ interface DurationEstimateProps {
   derivedFrom: string;
   onValueChange: (value: number | undefined) => void;
   onAutomaticChange: (automatic: boolean) => void;
+  /** Revalidate this field on blur, by the same rules a save runs. */
+  onBlur?: () => void;
 }
 
 /**
@@ -39,7 +42,8 @@ const DurationEstimate: React.FC<DurationEstimateProps> = ({
   error,
   derivedFrom,
   onValueChange,
-  onAutomaticChange
+  onAutomaticChange,
+  onBlur
 }) => (
   <div className="form-group mb-4">
     <label
@@ -66,14 +70,13 @@ const DurationEstimate: React.FC<DurationEstimateProps> = ({
             event.target.value === '' ? undefined : Number(event.target.value)
           )
         }
+        onBlur={onBlur}
       />
       <span aria-hidden="true">minutes</span>
     </div>
 
     {error && (
-      <div className="validation-error" role="alert">
-        {error}
-      </div>
+      <FieldError>{error}</FieldError>
     )}
 
     <div className="form-text mt-1" id={`${field}-help`}>

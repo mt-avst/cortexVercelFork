@@ -226,11 +226,6 @@
       "count": 1
     }
   },
-  "frontend/src/components/OpportunityForm/BasicInfoTab.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "frontend/src/components/SessionEditor.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 6

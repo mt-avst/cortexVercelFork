@@ -15,6 +15,7 @@ import {
   describeConsentDiff,
   diffConsentText
 } from '../../lib/opportunity-authoring/consent-diff';
+import FieldError from './FieldError';
 
 
 export interface ConsentSelection {
@@ -24,6 +25,8 @@ export interface ConsentSelection {
 }
 
 export interface ConsentStepProps {
+  /** Revalidate the consent field on blur, by the same rules a save runs. */
+  onBlur?: () => void;
   /** Which template family applies. Decided by the study, never by this step. */
   kind: ConsentKind;
   consentText: string;
@@ -102,7 +105,8 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
   awaitingContent,
   contentStepTitle,
   onGoToContent,
-  onChange
+  onChange,
+  onBlur
 }) => {
   /**
    * The template this study started this editing session on, captured once.
@@ -196,9 +200,7 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
   }
 
   const refusal = validationError ? (
-    <div className="validation-error mb-2" role="alert">
-      {validationError}
-    </div>
+    <FieldError>{validationError}</FieldError>
   ) : null;
 
   if (studyIsReadOnly) {
@@ -278,6 +280,7 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
               rows={6}
               value={consentText}
               onChange={(event) => applyText(event.target.value)}
+              onBlur={onBlur}
             />
             <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
               {templateId === CUSTOM_CONSENT_TEMPLATE_ID

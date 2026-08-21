@@ -7,6 +7,12 @@ import OpportunityForm from '../OpportunityForm';
 import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
 import { PUBLISH_PROBLEM_MESSAGES } from '../../shared/firsthand/publish-readiness';
 import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '../../shared/firsthand/url-safety';
+import {
+  errorSummary,
+  inlineErrorText,
+  queryErrorSummary,
+  summarisedErrorKeys,
+} from './helpers/error-summary';
 
 /**
  * The Review step, and the commit point that moved onto it.
@@ -751,14 +757,15 @@ describe('a refusal does not follow the author off the step that caused it', () 
     // No type chosen: step 2's forward control refuses and reports.
     fireEvent.click(strip()[1]);
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
-    // By TEXT, not by role: a refused step also carries the type error's own
-    // alert, so `getByRole('alert')` is ambiguous here.
-    expect(screen.getByText(/Please fix these fields/i)).toBeInTheDocument();
+    // By its own heading, not by role alone: a refused step also carries the
+    // type error's inline alert, so `getByRole('alert')` is ambiguous here.
+    expect(errorSummary()).toBeInTheDocument();
+    expect(summarisedErrorKeys()).toEqual(['type']);
 
     // Moving on clears it...
     fillBasics('poll');
     fireEvent.click(forwardControl()!);
-    expect(screen.queryByText(/Please fix these fields/i)).not.toBeInTheDocument();
+    expect(queryErrorSummary()).toBeNull();
 
     // ...and so does an Edit link from Review, which is a separate code path.
     walkForward();
@@ -766,7 +773,7 @@ describe('a refusal does not follow the author off the step that caused it', () 
     fireEvent.click(screen.getByRole('button', { name: /^Continue: / }));
     walkForward();
     fireEvent.click(screen.getByRole('button', { name: 'Edit Basic Information' }));
-    expect(screen.queryByText(/Please fix these fields/i)).not.toBeInTheDocument();
+    expect(queryErrorSummary()).toBeNull();
     // The Edit link's own job, asserted here too so this cannot pass by the
     // click having done nothing at all.
     expect(document.activeElement?.id).toBe('title');
@@ -824,7 +831,11 @@ describe('the form refuses a link the server would refuse', () => {
     fireEvent.click(strip()[strip().length - 1]);
     fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
 
-    expect(screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))).toBeInTheDocument();
+    // Scoped OUT of the summary. Since D1 the summary carries the same
+    // sentence, and this test's name promises the message is beside the field.
+    expect(
+      inlineErrorText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+    ).toBeInTheDocument();
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
 
@@ -870,7 +881,7 @@ describe('an opportunity stored with a bad link can still be repaired', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(
-      screen.getByText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
+      inlineErrorText(new RegExp(EXTERNAL_LINK_PROTOCOL_MESSAGE.slice(0, 30), 'i'))
     ).toBeInTheDocument();
     expect(vi.mocked(updateOpportunity)).not.toHaveBeenCalled();
   });

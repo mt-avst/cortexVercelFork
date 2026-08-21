@@ -8,12 +8,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, {
   clearTypeConditionalErrors,
-  describeValidationFailure,
   FIELD_LOCATIONS,
   locateField,
   UNMODERATED_EXTERNAL_PARTICIPANT_ERROR,
   stepAfterShapeChange,
 } from '../OpportunityForm';
+import { firstStepHoldingError } from '../../lib/opportunity-authoring/error-summary';
+import {
+  inlineErrorText,
+  queryErrorSummary,
+  summarisedErrorKeys,
+  summaryMessageFor,
+} from './helpers/error-summary';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
@@ -578,8 +584,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     });
     submitFromLastStep(/^Create/i);
 
+    // Beside the field, not only in the summary. Since D1 both carry the same
+    // sentence, so an unscoped query finds two nodes and proves neither.
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/http\(s\) address, or a path beginning with a single/i)
+      inlineErrorText(/http\(s\) address, or a path beginning with a single/i)
     ).toBeInTheDocument();
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
 
@@ -678,8 +687,9 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     // The payload is only built when a task exists, so without this the URL
     // would vanish and the save would look like it worked.
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/a starting URL on its own has nothing/i)
+      inlineErrorText(/a starting URL on its own has nothing/i)
     ).toBeInTheDocument();
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
@@ -1487,7 +1497,8 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // Visible, not merely present in validationErrors: the chooser is the
     // whole tab body in copy mode with nothing picked yet, so the message has
     // to render ABOVE it or it is unreachable.
-    const message = await screen.findByText(
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    const message = inlineErrorText(
       /Choose a task list to start from, or switch to writing the tasks here/i
     );
     expect(message).toBeVisible();
@@ -1509,8 +1520,10 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
     submitFromLastStep(/^Create/i);
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['inline_study_steps']);
     expect(
-      await screen.findByText(/Add at least one task before publishing/i)
+      inlineErrorText(/Add at least one task before publishing/i)
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -1519,9 +1532,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
     await screen.findByText(/Copied from/i);
 
+    // Gone from BOTH places. Checking only the inline copy would pass while the
+    // summary went on naming a problem the author has just fixed.
     expect(
-      screen.queryByText(/Add at least one task before publishing/i)
-    ).not.toBeInTheDocument();
+      screen.queryAllByText(/Add at least one task before publishing/i)
+    ).toEqual([]);
   });
 });
 
@@ -1552,21 +1567,32 @@ describe('locateField', () => {
     expect(locateField('inline_survey_questions').tab).toBe(3);
   });
 
-  it('names a task by its position, not by its state key', () => {
-    // The author never sees "inline_study_steps.0.prompt" anywhere in the UI.
-    expect(locateField('inline_study_steps.0.prompt')).toEqual({
-      tab: 3,
-      label: 'Task 1',
-    });
-    expect(locateField('inline_study_steps.2.options').label).toBe('Task 3');
+  it('routes a per-task key to the step that renders the task list', () => {
+    // No control id: the id of a task's prompt box is built from its client id,
+    // which only the component holds, so these resolve to a step here and get
+    // their control from `controlForError`.
+    expect(locateField('inline_study_steps.0.prompt')).toEqual({ tab: 3 });
+    expect(locateField('inline_study_steps.2.options')).toEqual({ tab: 3 });
+    expect(locateField('inline_survey_questions.4.config')).toEqual({ tab: 3 });
   });
 
-  it('falls back to the first tab for a key it does not know', () => {
+  it('falls back to the first step for a key it does not know', () => {
     // A new validation rule must never route the author nowhere.
-    expect(locateField('some_future_field')).toEqual({
-      tab: 1,
-      label: 'some_future_field',
-    });
+    expect(locateField('some_future_field')).toEqual({ tab: 1 });
+  });
+
+  it('names a control for every field that has one on screen', () => {
+    // The summary link's whole promise is that activating it lands the caret on
+    // the offending control. An entry whose `control` names an id nothing
+    // renders keeps that promise silently unkept - focus() on a missing id
+    // throws nothing and does nothing.
+    //
+    // `firsthand_study_id` is the one deliberate absence: its step renders a
+    // read-only list with no focusable control at all.
+    const withoutControl = Object.entries(FIELD_LOCATIONS)
+      .filter(([, location]) => !location.control)
+      .map(([key]) => key);
+    expect(withoutControl).toEqual(['firsthand_study_id']);
   });
 
   it('does not mistake an inherited Object property for a known field', () => {
@@ -1574,34 +1600,28 @@ describe('locateField', () => {
     // truthy inherited values, which would sail past a `??` fallback and
     // produce a banner naming no field and no tab to open.
     ['constructor', 'toString', '__proto__', 'hasOwnProperty'].forEach((key) => {
-      expect(locateField(key)).toEqual({ tab: 1, label: key });
+      expect(locateField(key)).toEqual({ tab: 1 });
     });
   });
 });
 
-describe('describeValidationFailure', () => {
-  it('opens the earliest tab holding a problem, and names every failing field', () => {
-    const { tab, message } = describeValidationFailure({
-      inline_study_consent_text: 'Consent text is required',
-      title: 'Title is required',
-    });
-
-    // Earliest, not first-inserted: the object above lists the tab-3 error
-    // first, and sending the author to tab 3 would leave the title untouched.
-    expect(tab).toBe(1);
-    expect(message).toBe('Please fix these fields: Title, Consent text');
+describe('firstStepHoldingError', () => {
+  it('opens the earliest step holding a problem', () => {
+    // Earliest, not first-inserted: the object below lists the step-4 error
+    // first, and sending the author to step 4 would leave the title untouched.
+    expect(
+      firstStepHoldingError(
+        {
+          inline_study_consent_text: 'Enter the consent text participants agree to',
+          title: 'Enter a title',
+        },
+        locateField
+      )
+    ).toBe(1);
   });
 
-  it('names a field once even when it fails twice', () => {
-    const { message } = describeValidationFailure({
-      'inline_study_steps.0.prompt': 'Add what the participant should see',
-      'inline_study_steps.0.options': 'A choice task needs at least two options',
-    });
-    expect(message).toBe('Please fix these fields: Task 1');
-  });
-
-  it('holds the current tab when there is nothing to report', () => {
-    expect(describeValidationFailure({})).toEqual({ tab: null, message: '' });
+  it('holds the current step when there is nothing to report', () => {
+    expect(firstStepHoldingError({}, locateField)).toBeNull();
   });
 });
 
@@ -1661,14 +1681,16 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
 
-    expect(
-      await screen.findByText('Please fix these fields: Research Study Type')
-    ).toBeInTheDocument();
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['type']);
     // Back on the tab that holds the field, with the field itself marked.
     expect(
       screen.getByRole('combobox', { name: /Research Study Type/i })
     ).toBeInvalid();
-    expect(screen.getByText('Please select a research study type')).toBeInTheDocument();
+    // The SAME sentence in both places. A summary that paraphrases the field is
+    // two vocabularies wearing one coat, which is what D1 deleted.
+    expect(summaryMessageFor('type')).toBe('Choose a research study type');
+    expect(inlineErrorText('Choose a research study type')).toBeInTheDocument();
     expect(window.scrollTo).toHaveBeenCalled();
   });
 
@@ -1691,11 +1713,11 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     submitFromLastStep(/^Create/i);
 
-    expect(
-      await screen.findByText('Please fix these fields: Title')
-    ).toBeInTheDocument();
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['title']);
     expect(screen.getByLabelText(/^Title/i)).toBeInvalid();
-    expect(screen.getByText('Title is required')).toBeInTheDocument();
+    expect(summaryMessageFor('title')).toBe('Enter a title');
+    expect(inlineErrorText('Enter a title')).toBeInTheDocument();
     expect(window.scrollTo).toHaveBeenCalled();
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
@@ -1736,13 +1758,10 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     submitFromLastStep(/^Create/i);
 
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['participant_type_specific_details']);
     expect(
-      await screen.findByText('Please fix these fields: Specific Criteria')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Specific participant criteria is required when "Specific" is selected'
-      )
+      inlineErrorText('Describe the participants you need')
     ).toBeInTheDocument();
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
@@ -1761,17 +1780,13 @@ describe('OpportunityForm - a refused action always says so', () => {
         .getByRole('button', { name: /Content & Details/i })
     );
     fireEvent.click(screen.getByRole('button', { name: /^Continue/i }));
-    expect(
-      screen.getByText('Please fix these fields: Research Study Type')
-    ).toBeInTheDocument();
+    expect(summarisedErrorKeys()).toEqual(['type']);
 
     selectType('poll');
 
-    expect(
-      screen.queryByText('Please fix these fields: Research Study Type')
-    ).not.toBeInTheDocument();
-    // The banner has to GO, not just empty out: rendering the alert box off a
-    // flag while its text comes from elsewhere leaves a red bar saying nothing.
+    expect(queryErrorSummary()).toBeNull();
+    // The summary has to GO, not just empty out: rendering the alert box off a
+    // flag while its list comes from elsewhere leaves a red bar saying nothing.
     expect(container.querySelector('.alert-danger')).toBeNull();
   });
 
@@ -1803,9 +1818,8 @@ describe('OpportunityForm - a refused action always says so', () => {
 
     submitFromLastStep(/^Create/i);
 
-    expect(
-      await screen.findByText('Please fix these fields: Consent text')
-    ).toBeInTheDocument();
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['inline_study_consent_text']);
     // Still on the Consent step, with the field that failed on screen.
     expect(screen.getByLabelText(/Consent text/i)).toBeInTheDocument();
     // And the STEP repeats the refusal beside the control, not only the banner
@@ -1814,7 +1828,7 @@ describe('OpportunityForm - a refused action always says so', () => {
     // the wrong one wired in there is simply no message here at all.
     expect(
       within(screen.getByTestId('consent-step')).getByRole('alert')
-    ).toHaveTextContent('Consent text is required');
+    ).toHaveTextContent('Enter the consent text participants agree to');
     expect(screen.getByLabelText(/Consent text/i)).toHaveClass('is-invalid');
     expect(vi.mocked(createOpportunity)).not.toHaveBeenCalled();
   });
@@ -1858,10 +1872,11 @@ describe('OpportunityForm - a refused action always says so', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: /Save Changes/i }));
 
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    expect(summarisedErrorKeys()).toEqual(['default_duration_minutes']);
     expect(
-      await screen.findByText('Please fix these fields: Default Duration (minutes)')
+      inlineErrorText('Enter a session length between 5 and 240 minutes')
     ).toBeInTheDocument();
-    expect(screen.getByText('Duration must be between 5 and 240 minutes')).toBeInTheDocument();
     expect(vi.mocked(updateOpportunity)).not.toHaveBeenCalled();
   });
 });
