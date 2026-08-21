@@ -2532,15 +2532,34 @@ body.theme-dark .my-bookings-page .booking-card-upcoming:hover {
   transform: translateY(-2px);
 }
 
-/* Past Cards - Muted state */
+/* Past Cards - Muted state.
+
+   Recessed by SURFACE, never by opacity or filter over the text.
+
+   This was `opacity: 0.7; filter: saturate(0.7)`, and every readable thing on
+   the card went through both. Nineteen axe nodes failed here - the metadata
+   labels at 3.11, the cancelled badge at 4.09, the "Not confirmed" outcome at
+   4.35 - none of them from a colour anyone had chosen. The declared colours all
+   pass; the multiplier was the whole defect, exactly as `opacity: 0.6` was on
+   .stat-scope-note.
+
+   The filter is worse than the opacity, and it has to go for a second reason:
+   axe models opacity and does NOT model `filter`. A grayscale or saturate pass
+   over a card means the numbers the accessibility gate reports are not the
+   colours a person actually sees, so a green run would prove nothing.
+
+   A darker, flatter card against the raised upcoming one carries the same
+   "this is over" message, and text gains contrast against it rather than
+   losing it. */
 body.theme-dark .my-bookings-page .booking-card-past {
-  opacity: 0.7;
-  filter: saturate(0.7);
+  background: rgba(8, 8, 10, 0.85);
+  border-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
 }
 
 body.theme-dark .my-bookings-page .booking-card-past:hover {
-  opacity: 0.85;
-  filter: saturate(0.8);
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: none;
 }
 
 /* Card Footer */
@@ -2613,21 +2632,42 @@ body.theme-light .my-bookings-page .booking-card-upcoming:hover {
   transform: translateY(-2px);
 }
 
-/* Past Cards - Archival state */
+/* Past Cards - Archival state.
+
+   Same correction as the dark rule above, and the same reasoning. This carried
+   `opacity: 0.75; filter: grayscale(80%)`, which composited 34 axe nodes below
+   AA: the metadata labels to 2.92, the type badges to 2.78, the timezone to
+   3.65, "Attendance confirmed" to 3.22. Undimmed, nearly all of those colours
+   already pass.
+
+   Archival now reads as a flat, faintly cool card with no lift, beside the
+   white raised card an upcoming booking gets. The wash is 3%, so it moves the
+   background luminance far too little to cost the text anything. */
 body.theme-light .my-bookings-page .booking-card-past {
-  opacity: 0.75;
-  filter: grayscale(80%);
+  background: rgba(20, 33, 61, 0.03);
+  border-color: rgba(20, 33, 61, 0.08);
+  box-shadow: none;
 }
 
 body.theme-light .my-bookings-page .booking-card-past:hover {
-  opacity: 0.9;
-  filter: grayscale(60%);
+  border-color: rgba(20, 33, 61, 0.16);
+  box-shadow: none;
 }
 
 /* Card Footer - Light mode */
 body.theme-light .my-bookings-page .booking-card-footer {
   background: #F8FAFC;
   border-top-color: rgba(0, 0, 0, 0.06);
+}
+
+/* A past card's footer must not be LIGHTER than the card it sits in. #F8FAFC
+   reads as recessed against the white of an upcoming card, which is what it was
+   drawn for; against the archival card's faint navy wash it inverts and the
+   footer strip pops forward instead. It only became visible once the blanket
+   opacity came off - the dimming had been flattening both surfaces together. */
+body.theme-light .my-bookings-page .booking-card-past .booking-card-footer {
+  background: transparent;
+  border-top-color: rgba(20, 33, 61, 0.08);
 }
 
 /* Empty Card - Light mode */

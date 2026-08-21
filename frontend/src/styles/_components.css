@@ -6652,9 +6652,15 @@ body.theme-light .booking-card-upcoming:hover {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
 }
 
-/* Past Booking Cards - Archival State */
+/* Past Booking Cards - Archival State.
+
+   The `opacity` and `filter` that used to sit here are gone; see the two
+   .booking-card-past blocks in _themes.css for what replaced them and why.
+   Those blocks are scoped to .my-bookings-page and out-specify this one, so
+   leaving a multiplier here would have gone unnoticed until the day a past card
+   is rendered somewhere else - and then it would dim that card's text below AA
+   with nothing pointing at the cause. */
 .booking-card-past {
-  opacity: 0.7;
   pointer-events: auto;
 }
 
@@ -6665,16 +6671,13 @@ body.theme-light .booking-card-upcoming:hover {
 
 /* Past cards in Light Mode - archive styling with readable text */
 body.theme-light .booking-card-past {
-  opacity: 0.85;
-  filter: grayscale(100%);
   background: transparent;
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: none;
 }
 
 body.theme-light .booking-card-past:hover {
-  opacity: 0.95;
-  filter: grayscale(80%);
+  border-color: rgba(0, 0, 0, 0.16);
 }
 
 /* ============================================================
@@ -6828,8 +6831,33 @@ body.theme-light .meeting-link:hover {
   text-decoration: none;
 }
 
+/* --brand-primary is the terracotta 500, and white on it is 3.28. This is the
+   same swap !195 made everywhere else the brand colour was carrying text: the
+   700 step exists for exactly this role and puts white at 4.77. It was missed
+   here only because an upcoming booking never rendered in a scan - the fixture
+   the a11y spec now carries is what surfaced it. */
 body.theme-light .btn-booking-join {
-  background: var(--brand-primary);
+  background: var(--accent-fill-on-light);
+  color: #FFFFFF;
+}
+
+/* Dark mode has the same defect and needed measuring by hand to find it. Its
+   --brand-primary is #d35f1d and white on that is 3.87, but axe reported the
+   whole upcoming card as `incomplete` rather than failing - the decorative
+   neural canvas is a fixed, full-viewport element, so axe treats every card as
+   overlapped and declines to judge any of it. The accessibility spec now strips
+   that canvas before scanning in dark mode; this is the violation doing so
+   uncovered.
+
+   800 rather than 700, because the two themes carry different ramps: the light
+   700 is #b9552d, the base 700 is #D35F1D, and it is the base one that applies
+   here. Note that `--brand-primary` resolves to that same base 700 and is
+   labelled in _tokens.css as "WCAG AA where used with white text", which is not
+   true of it - 3.87. Only this button is corrected here; the token's claim is
+   wrong for every dark component that trusts it, and that is a wider change
+   than this one. */
+body.theme-dark .btn-booking-join {
+  background: var(--brand-orange-800);
   color: #FFFFFF;
 }
 
@@ -6864,14 +6892,18 @@ body.theme-light .btn-booking-join:hover {
   cursor: not-allowed;
 }
 
+/* Red 600 on red 100 is 3.95. Red 700 on the same fill is 5.30 - and it was
+   already this button's hover colour, so the resting state simply arrives where
+   hovering used to take it. Hover moves down a further step to keep the state
+   change visible: red 800 on red 200 is 5.94. */
 body.theme-light .btn-booking-cancel {
   background: #FEE2E2;
-  color: #DC2626;
+  color: #B91C1C;
 }
 
 body.theme-light .btn-booking-cancel:hover:not(:disabled) {
   background: #FECACA;
-  color: #B91C1C;
+  color: #991B1B;
 }
 
 /* Reschedule Button */
@@ -6954,9 +6986,13 @@ body.theme-light .booking-badge-upcoming {
   color: #4DD0E1;
 }
 
+/* Cyan 800 on this pale cyan is 4.06, so the pair failed on its own terms as
+   well as under the card's dimming. Cyan 900 on the same background is 6.60.
+   The other three light badges already pass undimmed: poll 4.79, survey 5.71,
+   cancelled 6.87. */
 body.theme-light .booking-badge-test {
   background: #E0F7FA;
-  color: #00838F;
+  color: #006064;
 }
 
 .booking-badge-poll {
@@ -7201,8 +7237,11 @@ body.theme-light .booking-metadata {
   text-transform: capitalize;
 }
 
+/* #64748B measures 4.42 on a white card - under AA before any dimming is
+   applied, which the old opacity had been hiding rather than causing. The
+   muted token is the same slate a step darker, at 5.30. */
 body.theme-light .booking-metadata-label {
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 .booking-metadata-value {
@@ -12814,19 +12853,38 @@ body.theme-dark {
 
 /* The zone sits with the time, quieter than it, because it is a
    qualifier rather than the fact. Times were rendered with no zone
-   at all for a company spread across the UK and the US. */
+   at all for a company spread across the UK and the US.
+
+   "Quieter" is a colour, not an `opacity: 0.7` over whatever the parent
+   happens to be. That multiplier stacked on top of the past card's own,
+   composited a 12px label to 3.65, and would have kept doing it at whatever
+   ratio the two numbers happened to produce - a value nobody chose and nobody
+   could read off the stylesheet. */
 .booking-timezone {
   font-size: 0.8em;
-  opacity: 0.7;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
+body.theme-dark .booking-timezone {
+  color: rgba(255, 255, 255, 0.72);
+}
+
 /* Replaces a permanently disabled "Reschedule" button. The path that
-   works, stated in words, rather than a control that never will. */
+   works, stated in words, rather than a control that never will.
+
+   Explicit colour rather than `opacity: 0.7`, for the reason above. This one
+   was not in the failing set - it sits on an upcoming card, which carries no
+   dimming of its own - but it is the same construction, and leaving it would
+   have left a 12.8px note one stacked multiplier away from the same defect. */
 .booking-reschedule-note {
   margin: 10px 0 0;
   font-size: 0.8rem;
-  opacity: 0.7;
+  color: var(--text-muted);
+}
+
+body.theme-dark .booking-reschedule-note {
+  color: rgba(255, 255, 255, 0.72);
 }
 
 /* What became of a past booking - previously not shown at all, so an
