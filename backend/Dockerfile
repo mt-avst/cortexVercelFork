@@ -68,6 +68,23 @@ USER nodejs
 # Expose port
 EXPOSE 3001
 
+# Which commit this image was built from, surfaced at GET /api/health so a
+# deploy is verifiable from outside with one unauthenticated request rather
+# than inferred from a green pipeline and a guess at the ArgoCD lag.
+#
+# The COMMIT and not the release version, because the version does not exist
+# yet at this point: images are built on the main-branch pipeline and
+# semantic-release cuts the tag afterwards, so CI_COMMIT_REF_NAME here is
+# `main`. See backend/src/utils/buildInfo.ts for the full reasoning and for
+# how a version is recovered from the sha.
+#
+# Declared LAST so that changing commit does not invalidate the cached layers
+# for npm ci and the build above. Defaults to empty rather than to a fake sha:
+# buildInfo.ts reports `unknown` for anything that is not a commit sha, so a
+# build argument that never arrives is visible rather than silently plausible.
+ARG APP_COMMIT_SHA=""
+ENV APP_COMMIT_SHA=$APP_COMMIT_SHA
+
 # Defence in depth for the mock-data gate in utils/database.ts: with no
 # NODE_ENV and no database configured, the app would serve demo fixtures.
 # Kubera sets NODE_ENV=production explicitly; this makes the image safe on

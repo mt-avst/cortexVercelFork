@@ -41,6 +41,29 @@ include:
 variables:
   APP_1: backend
   APP_2: frontend
+  # Bake the commit into both images so GET /api/health can report which build
+  # is running (backend/src/utils/buildInfo.ts). Without it the deployed backend
+  # served nothing that changed between releases, so "has my fix rolled out?"
+  # had no answer short of cluster access.
+  #
+  # The COMMIT rather than the release version, because the version does not
+  # exist yet at build time: images are built on the main-branch pipeline and
+  # semantic-release cuts the tag afterwards, so $CI_COMMIT_REF_NAME here is
+  # `main`. $CI_COMMIT_SHA is identical for the snapshot and release images of
+  # a commit, which is what makes it a reliable marker.
+  #
+  # SET HERE AND NOT AS THE DOCKER COMPONENT'S `build-args` INPUT, which is the
+  # obvious place and does not work: a later include sets DOCKER_BUILD_ARGS as a
+  # global variable, and that silently wins over the value the input generates.
+  # Passing the input produced a config the CI lint called valid and in which
+  # APP_COMMIT_SHA appeared exactly zero times. Verify a change here by linting
+  # the resolved config and grepping for APP_COMMIT_SHA rather than by reading
+  # this file.
+  #
+  # `--ignore-path /workspace` is carried over from the value this replaces and
+  # must stay: it is what that later include was setting, and dropping it
+  # changes what kaniko snapshots.
+  DOCKER_BUILD_ARGS: "--ignore-path /workspace --build-arg APP_COMMIT_SHA=$CI_COMMIT_SHA"
 
 .docker-base:
   parallel:
