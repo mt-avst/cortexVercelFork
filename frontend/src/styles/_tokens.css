@@ -128,11 +128,48 @@
   --brand-orange-700: #D35F1D; /* Dark - light mode hover */
   --brand-orange-800: #C54E12; /* Darkest - deep accents */
   
-  /* Semantic Brand Aliases - WCAG AA where used with white text */
+  /* Semantic Brand Aliases.
+
+     These are IDENTITY colours. None of them may carry text, and the comment
+     that used to sit here said the opposite - "WCAG AA where used with white
+     text" - which is not true of any of them. Measured, white text on each:
+
+       --brand-headline  / 500  #FF7A33  2.60
+       --brand-secondary / 400  #FF8F4D  2.14
+       --brand-primary   / 700  #D35F1D  3.87   <- and 3.29 in light mode,
+                                                   where it resolves to #dd6e42
+
+     Nothing on the base ramp clears 4.5 under white until 800 (#C54E12, 4.70).
+     The false claim was load-bearing: it is why an active leaderboard tab, an
+     outline button's hover fill and the .bg-primary utility all put white text
+     on 3.87, and why the light theme had to be corrected separately in !195
+     while the dark theme was left as it was.
+
+     Use these for fills, borders, icons and the logotype - anywhere nothing has
+     to be read off the colour. When a fill has to carry text, use
+     --accent-fill-text-safe below. */
   --brand-headline: var(--brand-orange-500);
   --brand-primary: var(--brand-orange-700);
   --brand-secondary: var(--brand-orange-400);
   --brand-gradient: linear-gradient(135deg, var(--brand-orange-500) 0%, var(--brand-orange-600) 100%);
+
+  /* The accent fill that is allowed to carry white text, resolved PER THEME so
+     one unscoped rule is correct in both.
+
+     !195 introduced --accent-fill-on-light / --accent-text-on-light, and they
+     do their job, but their name commits them to one theme: they are declared
+     only under `body.theme-light`, so every rule using them must itself be
+     scoped to light, and the dark half of the same component is a separate edit
+     that somebody has to remember. Nobody did, which is the defect this fixes.
+
+     This token carries the base (dark) value here and is redefined under
+     `body.theme-light` in _themes.css. The two ramps differ - base 700 is
+     #D35F1D where light 700 is #b9552d - so the safe step is not the same
+     number in each: 800 here at 4.70, 700 there at 4.77.
+
+     --accent-fill-on-light keeps working and keeps its value; light-scoped
+     rules already using it are correct and are left alone. */
+  --accent-fill-text-safe: var(--brand-orange-800);
 
   /* Cortex Brand Identity */
   --color-cortex-orange: var(--brand-orange-500);

@@ -116,6 +116,12 @@ body.theme-light {
   --accent-text-on-light: var(--brand-orange-800);
   --accent-fill-on-light: var(--brand-orange-700);
 
+  /* Light half of --accent-fill-text-safe (see _tokens.css for what it is for).
+     Same colour as --accent-fill-on-light; the point of the second name is that
+     it is defined in BOTH themes, so a rule using it needs no theme scoping and
+     cannot be fixed in one theme and forgotten in the other. */
+  --accent-fill-text-safe: var(--accent-fill-on-light);
+
   /* Background Colors — warm paper field + translucent cards */
   --bg-app: var(--fs-bg);
   --bg-app-gradient-top: #fbf6f0;
@@ -179,7 +185,9 @@ body.theme-light {
   --text-muted: var(--fs-muted);
   --text-on-dark: var(--fs-ink);
 
-  /* Brand — headline navy; primary actions use ink; warm accent for emphasis */
+  /* Brand — headline navy; primary actions use ink; warm accent for emphasis.
+     --brand-primary is #dd6e42 here and cannot carry text either: white on it
+     is 3.29. Fills that carry text use --accent-fill-text-safe above. */
   --brand-headline: var(--fs-ink);
   --brand-primary: var(--fs-accent);
   --brand-secondary: var(--fs-accent-strong);
@@ -585,8 +593,8 @@ body.theme-light .btn-outline-secondary {
 }
 
 body.theme-light .btn-outline-secondary:hover {
-  background: var(--brand-primary);
-  border-color: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
+  border-color: var(--accent-fill-text-safe);
   color: #FFFFFF;
 }
 
@@ -1836,9 +1844,9 @@ body.theme-light .admin-settings-btn {
 }
 
 body.theme-light .admin-settings-btn:hover {
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
-  border-color: var(--brand-primary);
+  border-color: var(--accent-fill-text-safe);
 }
 
 body.theme-light .admin-create-btn {
@@ -1977,7 +1985,7 @@ body.theme-dark .cortex-period-btn:hover {
 }
 
 body.theme-dark .cortex-period-btn--active {
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
 }
 
@@ -2106,7 +2114,7 @@ body.theme-light .cortex-period-btn:hover {
 }
 
 body.theme-light .cortex-period-btn--active {
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
 }
 
@@ -2895,8 +2903,12 @@ body.theme-dark .opportunity-form .btn-outline-primary {
   color: var(--brand-orange-500);
 }
 
+/* 500 under white text is 2.60 - the worst measurement in this sweep, and on
+   the authoring form's own controls. The resting rule above keeps 500 for the
+   label and border, where it sits on the dark panel and is read as text at a
+   ratio the dark ground supports; only the FILLED hover state moves. */
 body.theme-dark .opportunity-form .btn-outline-primary:hover {
-  background-color: var(--brand-orange-500);
+  background-color: var(--accent-fill-text-safe);
   color: #FFFFFF;
 }
 

@@ -671,6 +671,86 @@ test.describe('Accessibility Tests', () => {
     expectBookingContrastActuallyMeasured(results, 'My Bookings (populated, dark)');
   });
 
+  /**
+   * The accent fill that is allowed to carry text must actually be able to.
+   *
+   * Nothing else in this file can catch this. axe scans a resting DOM, so it
+   * never sees a `:hover` fill, and it only judges what is on the page - the
+   * leaderboard's active tab and the period buttons are not on any route
+   * scanned here. That is how `--brand-primary` sat at 3.87 under white text in
+   * dark mode while carrying a comment in _tokens.css claiming it was AA, and
+   * how the skip link's own fallback arm resolved to it.
+   *
+   * So this asserts the token rather than a rendering: resolve it in a real
+   * browser in both themes and measure it against white. Every rule that fills
+   * behind white text uses this one token, so one assertion per theme covers
+   * all of them - including the states no scan can reach.
+   */
+  const WHITE: [number, number, number] = [255, 255, 255];
+
+  const relativeLuminance = ([r, g, b]: [number, number, number]): number => {
+    const channel = (v: number) => {
+      const c = v / 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+
+  const contrastRatio = (a: [number, number, number], b: [number, number, number]): number => {
+    const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+
+  const resolveColourToken = async (
+    page: import('@playwright/test').Page,
+    token: string
+  ): Promise<[number, number, number]> => {
+    const rgb = await page.evaluate((name) => {
+      /* Paint the token on a throwaway element and read back what the browser
+         actually resolved, rather than trusting the stylesheet source - that is
+         the whole difference between the two halves of this defect. */
+      const probe = document.createElement('div');
+      probe.style.position = 'fixed';
+      probe.style.left = '-9999px';
+      probe.style.backgroundColor = `var(${name})`;
+      document.body.appendChild(probe);
+      const value = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return value;
+    }, token);
+    const parts = rgb.match(/[\d.]+/g);
+    if (!parts || parts.length < 3) {
+      throw new Error(`${token} did not resolve to a colour (got "${rgb}") - it is probably undefined in this theme`);
+    }
+    return [Number(parts[0]), Number(parts[1]), Number(parts[2])];
+  };
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`Accent fill carries white text at AA in ${theme} mode`, async ({ page }) => {
+      await page.goto('/');
+      await page.evaluate((t) => localStorage.setItem('theme', t), theme);
+      await page.goto('/');
+      await page.waitForLoadState('load');
+      await expect(page.locator(`body.theme-${theme}`)).toHaveCount(1);
+
+      const fill = await resolveColourToken(page, '--accent-fill-text-safe');
+      const ratio = contrastRatio(WHITE, fill);
+      const asHex = `#${fill.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+      console.log(`  --accent-fill-text-safe in ${theme}: ${asHex}, white text ${ratio.toFixed(2)}:1`);
+
+      expect(
+        ratio,
+        `white text on --accent-fill-text-safe (${asHex}) measures ${ratio.toFixed(2)} in ${theme} mode, below the 4.5 AA threshold for small text`
+      ).toBeGreaterThanOrEqual(4.5);
+
+      /* And prove the check has teeth: the identity colour it replaced must
+         still be the thing that fails, so a future edit collapsing the two back
+         into one token cannot pass this test quietly. */
+      const identity = await resolveColourToken(page, '--brand-primary');
+      expect(contrastRatio(WHITE, identity)).toBeLessThan(4.5);
+    });
+  }
+
   test('Feedback page should be accessible', async ({ page }) => {
     await page.route('**/api/me', async (route) => {
       await route.fulfill({

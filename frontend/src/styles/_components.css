@@ -718,8 +718,16 @@
   border-color: var(--brand-primary);
 }
 
+/* The hover fill carries the button's label, so it takes the text-safe step,
+   not the identity colour. White on --brand-primary is 3.87 in dark and 3.29 in
+   light. The light theme already overrode this rule onto --accent-fill-on-light
+   in !195; this base rule is what dark was still falling through to.
+
+   Worth stating: axe scans a resting DOM and never hovers, so no accessibility
+   run this project has could have caught this one. It was found by reading the
+   token, not by a test. */
 .btn-outline-primary:hover {
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   color: var(--cta-text-hover);
   transform: translateY(-1px) scale(1.01);
 }
@@ -1793,9 +1801,14 @@ body.theme-light .badge--question {
   top: -40px;
   left: 0;
   /* An accessibility feature that failed contrast: white on --brand-primary
-     resolves to 3.29 in light mode. Falls back to --brand-primary where the
-     light-only token is undefined (i.e. dark mode, where it already passes). */
-  background: var(--accent-fill-on-light, var(--brand-primary));
+     resolves to 3.29 in light mode.
+
+     The fallback this used to carry said dark mode "already passes". It does
+     not - the fallback arm resolves to --brand-primary, which is #D35F1D there,
+     and white on it is 3.87. The light half was measured and the dark half was
+     assumed, on the skip link of all things. No fallback is needed now, because
+     --accent-fill-text-safe is defined in both themes. */
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
   padding: var(--spacing-2) var(--spacing-4);
   text-decoration: none;
@@ -1818,10 +1831,19 @@ body.theme-light .badge--question {
   outline-offset: 2px;
 }
 
+/* !195 corrected the skip link's resting fill and left its hover on
+   --brand-secondary, which is #FF8F4D in dark - white on it is 2.14, the worst
+   ratio in the whole sweep, on the one control that exists purely for
+   accessibility. Found by the stylesheet policy test, not by a scan: the skip
+   link is off-screen until focused and axe never hovers.
+
+   The state change is an underline rather than a second colour, so it does not
+   need a darker step to stay distinguishable - and it survives for anyone who
+   cannot tell the two fills apart anyway. */
 .skip-link:hover {
-  background: var(--brand-secondary);
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 /* ============================================================
@@ -6820,7 +6842,9 @@ body.theme-light .meeting-link:hover {
   border: none;
   cursor: pointer;
   transition: background var(--transition-button), color var(--transition-button);
-  background: var(--brand-primary);
+  /* Both themes override this below, so this declaration is what a third theme
+     or an unscoped render would get - and it carried white text on 3.87. */
+  background: var(--accent-fill-text-safe);
   color: #FFFFFF;
   text-decoration: none;
 }
@@ -11048,9 +11072,13 @@ body.theme-light .admin-subtitle {
   border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* White label on the fill, so the fill must be the text-safe step. !195 fixed
+   the light half of this in a body.theme-light block; dark still resolved to
+   #D35F1D at 3.87. The border keeps the identity colour - nothing is read off a
+   1px edge. */
 .leaderboard-tab--active {
   color: #FFFFFF;
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   border-color: var(--brand-primary);
 }
 
@@ -11721,9 +11749,12 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   padding: var(--card-padding);
 }
 
+/* 500 is the identity colour and cannot carry the badge's white label: 3.29 in
+   light, 2.60 in dark. This one failed in BOTH themes, so !195's light-only
+   pass would not have caught it either. */
 .sales-pitch-badge {
   margin-bottom: var(--spacing-2);
-  background-color: var(--brand-orange-500) !important;
+  background-color: var(--accent-fill-text-safe) !important;
   color: #FFFFFF !important;
 }
 
