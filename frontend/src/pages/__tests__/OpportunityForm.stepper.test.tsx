@@ -73,7 +73,8 @@ vi.mock('../../api/client', () => ({
   getFirstHandStudies: vi.fn().mockResolvedValue([]),
 }));
 
-vi.mock('../../api/firsthand-studies', () => ({
+vi.mock('../../api/firsthand-studies', async (importActual) => ({
+  ...(await importActual<typeof import('../../api/firsthand-studies')>()),
   getFirstHandStudy: vi.fn().mockRejectedValue(new Error('not stubbed')),
 }));
 

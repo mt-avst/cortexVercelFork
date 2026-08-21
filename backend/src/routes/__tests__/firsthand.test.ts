@@ -35,7 +35,13 @@ jest.mock('../../utils/logger', () => ({
 }));
 
 // ─── Typed references to mocked functions ────────────────────────────────────
-import firsthandRouter from '../firsthand';
+import firsthandRouter, {
+  resetFirsthandStudyLimits,
+  studyReadLimiter,
+  studyWriteLimiter,
+  studyResultsLimiter,
+} from '../firsthand';
+import { requireAdmin } from '../../middleware/authenticate';
 import { errorHandler } from '../../utils/errorHandler';
 import {
   isStudiesPersistenceConfigured,
@@ -134,6 +140,12 @@ describe('FirstHand Express router', () => {
     mockIsStudiesPersistenceConfigured.mockReturnValue(true);
     mockIsDatabaseAvailable.mockResolvedValue(true);
     mockAnswerCountsByStep.mockResolvedValue({});
+    // The counters live in an in-process MemoryStore that outlives a test, so
+    // without this a suite exercising these routes hundreds of times as one
+    // admin starts answering 429 partway through and every later assertion
+    // fails for a reason none of them names.
+    resetFirsthandStudyLimits(adminUser.id);
+    resetFirsthandStudyLimits('other-admin');
   });
 
   // ── Studies CRUD (B3a, in-process) ────────────────────────────────────────
@@ -1115,6 +1127,282 @@ describe('FirstHand Express router', () => {
         .expect(404);
       expect(res.body).toMatchObject({ error: 'Survey not found', code: 'NOT_FOUND' });
       expect(mockLogger.warn).not.toHaveBeenCalled();
+    });
+  });
+
+
+  /**
+   * The ceiling this router had none of.
+   *
+   * `GET /studies/:studyId` takes TWO connections from the five-connection
+   * FirstHand runtime pool that live participant sessions share, and the second
+   * scans every answer row the study has collected. With `max: 5`,
+   * `connectionTimeoutMillis: 10_000` and no statement timeout anywhere, a
+   * caller looping this above five concurrent makes participants writing their
+   * answers queue on `pool.connect()` and fail after ten seconds, mid-survey.
+   */
+  describe('per-user rate limits', () => {
+    /** Fire one endpoint n times and return the status codes in order. */
+    const hammer = async (n: number, call: () => request.Test): Promise<number[]> => {
+      const codes: number[] = [];
+      for (let i = 0; i < n; i += 1) {
+        codes.push((await call()).status);
+      }
+      return codes;
+    };
+
+    beforeEach(() => {
+      mockGetStudyById.mockResolvedValue(
+        storedStudy as Awaited<ReturnType<typeof getStudyById>>
+      );
+      mockListStudies.mockResolvedValue([]);
+    });
+
+    it('refuses a 61st read in a minute, and not the 60th', async () => {
+      const codes = await hammer(61, () =>
+        request(app).get('/api/firsthand/studies/study_abc')
+      );
+
+      // Both halves. Asserting only the 429 would pass against a ceiling of
+      // one, which would refuse an author who simply reopened a form.
+      expect(codes.slice(0, 60).every((code) => code !== 429)).toBe(true);
+      expect(codes[60]).toBe(429);
+    });
+
+    it('refuses a 31st write in a minute, and not the 30th', async () => {
+      const codes = await hammer(31, () =>
+        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+      );
+
+      expect(codes.slice(0, 30).every((code) => code !== 429)).toBe(true);
+      expect(codes[30]).toBe(429);
+    });
+
+    /**
+     * The ENVELOPE, not just the status.
+     *
+     * Every 429 assertion in this repository checks `.status` and none reads
+     * `.body`, so the shape the message travels in was pinned nowhere at all.
+     * `perUserLimiter` sends `{ error: message }`; hand express-rate-limit a
+     * bare string instead and it replies `text/html`, `data.error` is
+     * undefined, and the frontend's `extractSaveError` falls through to
+     * "Request failed with status code 429". The three carefully worded
+     * sentences this router adds would be the one thing with no test.
+     */
+    it('refuses in the envelope the frontend reads, not just with a status', async () => {
+      await hammer(30, () =>
+        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+      );
+
+      const refused = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .send(validStudyBody);
+
+      expect(refused.status).toBe(429);
+      expect(refused.body).toEqual({
+        error: 'Too many changes in a short time. Wait a minute and try again.'
+      });
+    });
+
+    it('keeps reads and writes on separate buckets', async () => {
+      await hammer(30, () =>
+        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+      );
+
+      // The write budget is spent. Reading is a different surface with a
+      // different cost, and an author who has just saved thirty times must
+      // still be able to see what they saved.
+      const read = await request(app).get('/api/firsthand/studies/study_abc');
+      expect(read.status).not.toBe(429);
+    });
+
+    it('keys the bucket on the user, not the ingress', async () => {
+      await hammer(61, () => request(app).get('/api/firsthand/studies/study_abc'));
+
+      // Behind two proxy hops `trust proxy: 1` resolves req.ip to the INGRESS,
+      // so an IP-keyed bucket would be shared by every admin in the estate and
+      // one runaway loop would refuse all of them.
+      const other = await request(
+        buildApp({ id: 'other-admin', name: 'B', email: 'b@test.com', role: 'researcher_admin' })
+      ).get('/api/firsthand/studies/study_abc');
+
+      expect(other.status).not.toBe(429);
+    });
+
+    /**
+     * THE ORDERING, which is what `perUserLimiter`'s own docstring is about.
+     *
+     * Mounted BEFORE `requireAdmin` the limiter spends a bucket on requests
+     * that never reach a handler, and every one of them keys to the same
+     * `'unauthenticated'` fallback - so anyone who can reach the route
+     * unauthenticated could exhaust one shared bucket and refuse every admin.
+     * The 401s must cost nothing.
+     */
+    it('spends no budget on requests that never authenticated', async () => {
+      const anonymous = buildApp(null);
+
+      const refused = await hammer(70, () =>
+        request(anonymous).get('/api/firsthand/studies/study_abc')
+      );
+      expect(refused.every((code) => code === 401)).toBe(true);
+
+      // Seventy unauthenticated attempts later, an admin is unaffected.
+      const admin = await request(app).get('/api/firsthand/studies/study_abc');
+      expect(admin.status).toBe(200);
+    });
+
+/**
+     * THE CLASS, not the instances.
+     *
+     * The behavioural tests below each name ONE route, so the first version of
+     * them left four of the seven unguarded and every one of those mutations
+     * survived the whole suite. A route added later with no ceiling would be
+     * just as invisible, and its failure mode is not a red test - it is
+     * participants queueing on a five-connection pool.
+     *
+     * Walks the router's own stack, so it covers whatever this file grows.
+     */
+    /**
+     * THE CLASS, not the instances - and WHICH bucket, not merely that there is
+     * one.
+     *
+     * The behavioural tests below each name ONE route, so the first version of
+     * them left four of the seven unguarded and every one of those mutations
+     * survived the whole suite. Walking the router's own stack fixed that. But
+     * asking only "does this route carry one of the limiters" left a second
+     * hole behind it: a new route with the 200,001-row cost of the results read
+     * could be mounted on the 60-a-minute READ bucket and pass, because
+     * structurally it is correct and only semantically wrong.
+     *
+     * So this is a TABLE. A route added later is absent from it and fails,
+     * which forces whoever adds it to write the bucket down as a decision
+     * rather than inherit whichever one their copy-paste source used.
+     */
+    const EXPECTED_LIMITER: Record<string, unknown> = {
+      'GET /studies': studyReadLimiter,
+      'POST /studies': studyWriteLimiter,
+      'GET /studies/:studyId': studyReadLimiter,
+      'PUT /studies/:studyId': studyWriteLimiter,
+      'DELETE /studies/:studyId': studyWriteLimiter,
+      'GET /studies/:studyId/results': studyResultsLimiter,
+      'GET /studies/:studyId/results.csv': studyResultsLimiter,
+    };
+
+    /**
+     * Router-level middleware this router is allowed to carry.
+     *
+     * An allow-list rather than a blanket "there must be none", because the
+     * blanket version goes red for a GOOD change - `ensureStudiesPersistence`
+     * repeats at the top of six handlers and the natural tidy-up is
+     * `router.use`. Red for that reads as "the test is wrong" and gets fixed by
+     * deleting the line that catches a route with no ceiling. Add to this list
+     * deliberately; never add a route handler to it.
+     */
+    const ROUTER_LEVEL_MIDDLEWARE: unknown[] = [];
+
+    it('mounts the RIGHT limiter on every route, after the auth gate', () => {
+      const stack = (firsthandRouter as unknown as {
+        stack: Array<{
+          handle?: unknown;
+          route?: {
+            path: string;
+            methods: Record<string, boolean>;
+            stack: Array<{ handle: unknown; name: string }>;
+          };
+        }>;
+      }).stack;
+
+      // A handler registered with `router.use`, or a nested sub-router, has no
+      // `.route` - so filtering those out silently and asserting only the
+      // survivors would let one ship unguarded and green.
+      for (const layer of stack.filter((entry) => !entry.route)) {
+        expect(ROUTER_LEVEL_MIDDLEWARE).toContain(layer.handle);
+      }
+
+      const layers = stack.filter((entry) => entry.route);
+
+      // If this ever reads zero the assertions below are vacuous and the whole
+      // test passes while checking nothing.
+      expect(layers.length).toBeGreaterThanOrEqual(7);
+
+      const seen: string[] = [];
+
+      for (const layer of layers) {
+        const route = layer.route!;
+        const method = Object.keys(route.methods)[0].toUpperCase();
+        const key = `${method} ${route.path}`;
+        seen.push(key);
+
+        const handlers = route.stack.map((entry) => entry.handle);
+        const authIndex = handlers.indexOf(requireAdmin as unknown);
+        const limiterIndex = handlers.findIndex((handle) => handle === EXPECTED_LIMITER[key]);
+
+        expect({ key, authed: authIndex >= 0 }).toEqual({ key, authed: true });
+        // Absent from the table, or on a different bucket than the table says.
+        expect({ key, onItsBucket: limiterIndex >= 0 }).toEqual({ key, onItsBucket: true });
+        // AFTER the auth gate, never before. Mounted first the limiter spends a
+        // bucket on requests that never reach a handler, and every one of them
+        // keys to the same `'unauthenticated'` fallback - one shared bucket
+        // anyone could exhaust to refuse every admin.
+        expect({ key, ordered: limiterIndex > authIndex }).toEqual({ key, ordered: true });
+      }
+
+      // And the table has no entries for routes that no longer exist, which
+      // would otherwise rot into a list nobody trusts.
+      expect(seen.sort()).toEqual(Object.keys(EXPECTED_LIMITER).sort());
+    });
+
+    it('puts the study list on the same read bucket as a single study', async () => {
+      await hammer(60, () => request(app).get('/api/firsthand/studies/study_abc'));
+
+      expect((await request(app).get('/api/firsthand/studies')).status).toBe(429);
+    });
+
+    it.each([
+      ['create', () => request(app).post('/api/firsthand/studies').send(validStudyBody)],
+      ['delete', () => request(app).delete('/api/firsthand/studies/study_abc')]
+    ])('puts %s on the same write bucket as an update', async (_label, call) => {
+      await hammer(30, () =>
+        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+      );
+
+      expect((await call()).status).toBe(429);
+    });
+
+    it('puts the results CSV on the same bucket as the results read', async () => {
+      const superApp = buildApp({
+        id: 'super-2', name: 'Super', email: 'super2@test.com', role: 'superadmin'
+      });
+      mockListResponsesForStudy.mockResolvedValue([]);
+      resetFirsthandStudyLimits('super-2');
+
+      await hammer(10, () =>
+        request(superApp).get('/api/firsthand/studies/study_abc/results')
+      );
+
+      expect(
+        (await request(superApp).get('/api/firsthand/studies/study_abc/results.csv')).status
+      ).toBe(429);
+    });
+
+    it('limits the study-wide results read far tighter than its per-opportunity twin', async () => {
+      const superApp = buildApp({
+        id: 'super-1', name: 'Super', email: 'super@test.com', role: 'superadmin'
+      });
+      mockListResponsesForStudy.mockResolvedValue([]);
+      resetFirsthandStudyLimits('super-1');
+
+      const codes = await hammer(11, () =>
+        request(superApp).get('/api/firsthand/studies/study_abc/results')
+      );
+
+      // 10, not the 60 `surveyResultsLimiter` uses. This read spans every
+      // opportunity that ever used the study, no frontend calls it at all, and
+      // each in-flight request can materialise 200,001 rows in the heap before
+      // it decides to answer 413 - so enough of them together is an OOM of the
+      // pod, which drops every live participant session.
+      expect(codes.slice(0, 10).every((code) => code !== 429)).toBe(true);
+      expect(codes[10]).toBe(429);
     });
   });
 

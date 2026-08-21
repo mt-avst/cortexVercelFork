@@ -59,7 +59,8 @@ vi.mock('../../api/client', () => ({
  * fetch fails, and the form refuses to save at all - which is the correct
  * behaviour for an unreadable study and a very confusing test failure.
  */
-vi.mock('../../api/firsthand-studies', () => ({
+vi.mock('../../api/firsthand-studies', async (importActual) => ({
+  ...(await importActual<typeof import('../../api/firsthand-studies')>()),
   getFirstHandStudy: vi.fn(async () => ({
     study: {
       id: 'study_questions',

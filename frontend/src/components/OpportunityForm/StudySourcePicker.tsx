@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 
 import {
   getFirstHandStudy,
-  type FirstHandStudyWithSteps
+  type FirstHandStudyWithSteps,
+  wasRateLimited
 } from '../../api/firsthand-studies';
 import type { FirstHandStudy } from '../../api/types';
 import ConsentStateChip from '../ConsentStateChip';
@@ -132,10 +133,12 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
     try {
       const loaded = await getFirstHandStudy(studyId);
       setLoadedStudies((previous) => ({ ...previous, [studyId]: loaded }));
-    } catch {
+    } catch (error) {
       setPreviewErrors((previous) => ({
         ...previous,
-        [studyId]: `Could not load that ${setNoun} to preview it.`
+        [studyId]: wasRateLimited(error)
+          ? `Too many previews in a short time. Wait a minute and try again.`
+          : `Could not load that ${setNoun} to preview it.`
       }));
       // Collapsed by id, so a failure cannot close whichever row the author
       // happens to have open now.

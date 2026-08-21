@@ -4,7 +4,7 @@ import { useNavigate, useParams, useMatch, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
-import { getFirstHandStudy } from '../api/firsthand-studies';
+import { getFirstHandStudy, wasRateLimited } from '../api/firsthand-studies';
 import {
   answersDetachedBy,
   detachedAnswersMessage,
@@ -3137,8 +3137,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     let loaded;
     try {
       loaded = await getFirstHandStudy(studyId);
-    } catch {
-      return `Those ${noun} could not be loaded, so nothing was copied. Try again.`;
+    } catch (error) {
+      // "Try again" is the wrong advice for the one failure that is certain to
+      // repeat, and it spends another request against the bucket that just
+      // refused this one.
+      return wasRateLimited(error)
+        ? `Too many requests in a short time, so nothing was copied. Wait a minute and try again.`
+        : `Those ${noun} could not be loaded, so nothing was copied. Try again.`;
     }
 
     const sourceKind: AuthoringKind = loaded.study.kind === 'survey' ? 'survey' : 'recorded';

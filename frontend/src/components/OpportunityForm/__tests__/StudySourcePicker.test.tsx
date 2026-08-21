@@ -7,7 +7,13 @@ import { getFirstHandStudy } from '../../../api/firsthand-studies';
 import type { FirstHandStudyWithSteps } from '../../../api/firsthand-studies';
 import type { FirstHandStudy } from '../../../api/types';
 
-vi.mock('../../../api/firsthand-studies', () => ({
+vi.mock('../../../api/firsthand-studies', async (importActual) => ({
+  // The real module, with only the network call stubbed. `wasRateLimited`
+  // is a pure predicate over an error object, so a stub could only make
+  // these tests agree with a fiction - and spreading the actual module
+  // means the next export added there does not break this factory for a
+  // reason no assertion names.
+  ...(await importActual<typeof import('../../../api/firsthand-studies')>()),
   getFirstHandStudy: vi.fn()
 }));
 
