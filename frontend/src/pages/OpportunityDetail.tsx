@@ -986,7 +986,10 @@ const OpportunityDetail: React.FC = () => {
                               borderRadius: '4px',
                               cursor: 'pointer',
                               transition: 'all 0.15s ease',
-                              backgroundColor: viewMode === 'table' ? 'var(--brand-primary)' : 'transparent',
+                              // Text-safe step, not the identity colour: this
+                              // fill carries the white "Table" label, and
+                              // --brand-primary under white is 3.87 / 3.29.
+                              backgroundColor: viewMode === 'table' ? 'var(--accent-fill-text-safe)' : 'transparent',
                               color: viewMode === 'table' ? '#FFFFFF' : 'var(--text-muted)',
                               boxShadow: viewMode === 'table' ? '0 1px 2px rgba(0,0,0,0.1)' : 'none'
                             }}

@@ -409,8 +409,11 @@ hr {
    SELECTION
    ============================================================ */
 
+/* Selected text still has to be read, and this pairs white with the identity
+   colour at 3.87 dark / 3.29 light. WCAG does not name a selection highlight
+   explicitly, which is exactly why it goes unexamined. */
 ::selection {
-  background: var(--brand-primary);
+  background: var(--accent-fill-text-safe);
   color: white;
 }
 

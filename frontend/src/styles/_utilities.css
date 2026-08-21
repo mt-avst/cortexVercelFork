@@ -335,6 +335,9 @@
 .bg-app { background-color: var(--bg-app); }
 .bg-card { background-color: var(--bg-card); }
 .bg-hover { background-color: var(--bg-hover); }
+/* No text colour of its own, so what lands on it is whatever the context
+   inherits; it stays the identity colour deliberately. If you put text on this,
+   use .bg-primary or --accent-fill-text-safe instead. */
 .bg-brand { background-color: var(--brand-primary); }
 .bg-success { background-color: var(--status-success); }
 .bg-warning { background-color: var(--status-warning); }
@@ -645,7 +648,10 @@
 
 .bg-dark { background-color: #212529; color: #FFFFFF; }
 .bg-light { background-color: #FFFFFF; color: #212529; }
-.bg-primary { background-color: var(--brand-primary); color: #FFFFFF; }
+/* This one declares the fill and the white text in the same rule, so the
+   mismatch was visible on a single line: --brand-primary is 3.87 under white in
+   dark and 3.29 in light. Used for role badges in AdminManagement. */
+.bg-primary { background-color: var(--accent-fill-text-safe); color: #FFFFFF; }
 
 /* ============================================================
    BOOTSTRAP COMPATIBILITY - Extended Padding Utilities
