@@ -12,6 +12,13 @@ import {
   type WithClientId
 } from '../lib/opportunity-authoring/client-ids';
 import { remapAuthoringErrors } from '../lib/opportunity-authoring/authoring-errors';
+import {
+  buildErrorSummary,
+  errorsForStep,
+  firstStepHoldingError,
+  POSITION_PLACEHOLDER,
+  replaceStepErrors
+} from '../lib/opportunity-authoring/error-summary';
 import { hasUnsavedChanges } from '../lib/opportunity-authoring/dirty-signature';
 import {
   STEP_STATUS_LABEL,
@@ -53,7 +60,7 @@ import type { StudySourceMode } from '../components/OpportunityForm/StudySourceC
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { BasicInfoTab, ConsentStep, ContentDetailsTab, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
+import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
 import {
@@ -124,46 +131,94 @@ export const clearTypeConditionalErrors = (
   // unmoderated, and switching to unmoderated coerces an external participant
   // type back to 'any', so this error is stale after any type change.
   delete next.participant_type_required;
+
+  /*
+   * The session fields, which are rendered - and validated - for `test` and
+   * `interview` only.
+   *
+   * These two were missing, and the result was a step chip that could not be
+   * cleared. Blur or a refused save on a `test` leaves
+   * `default_duration_minutes` in the map; switching to `question` unmounts the
+   * field, so the message vanishes from the screen while the key stays - and
+   * `reportedErrorSteps` paints step 1 "Needs attention" over a step holding
+   * nothing wrong and offering nothing to fix. Reproduced by driving the form,
+   * not by reading it.
+   *
+   * D1 made this easier to reach rather than causing it: before D1 the blur
+   * validator for this field was unreachable, because no input in BasicInfoTab
+   * wired `onBlur` at all, so only a refused save could set the key.
+   */
+  if (newType !== 'test' && newType !== 'interview') {
+    delete next.default_duration_minutes;
+    delete next.meeting_location_optional;
+  }
+
   return next;
 };
 
 /**
- * Which tab renders each validation error, and what the author sees that field
- * called. The form spans three or four steps depending on the type, and the
- * save controls only exist on the last one, so a refused save is almost always
- * about a field that is not on screen: naming it and opening its step is the
- * whole point. Labels are the
- * on-screen label text minus the required marker - not the state key, which
- * appears nowhere in the UI.
+ * Which step renders each validation error, and which control on it.
+ *
+ * The form spans three to five steps depending on the type, and the save
+ * controls only exist on the last one, so a refused save is almost always
+ * about a field that is not on screen: opening its step and landing on the
+ * control is the whole point.
+ *
+ * `label` is gone, and its absence is the change D1 is most about. It held the
+ * on-screen name of each field and fed a banner reading "Please fix these
+ * fields: Title, Consent text" - a SECOND vocabulary, describing the same
+ * failure in different words from the message the field itself showed. The
+ * summary now renders the validator's own messages, so there is one sentence
+ * per problem and it says the same thing in both places.
+ *
+ * `control` is the DOM id to focus. Where it is undefined the field has no
+ * addressable control of its own and the summary link opens the step without
+ * moving the caret; that is a smaller promise, honestly kept.
  */
-export const FIELD_LOCATIONS: Record<string, { tab: number; label: string }> = {
-  type: { tab: 1, label: 'Research Study Type' },
-  title: { tab: 1, label: 'Title' },
-  meeting_location_optional: { tab: 1, label: 'Meeting Location' },
-  purpose_one_liner: { tab: 1, label: 'Purpose' },
-  default_duration_minutes: { tab: 1, label: 'Default Duration (minutes)' },
-  participant_type_required: { tab: 2, label: 'Participant Type' },
-  participant_type_specific_details: { tab: 2, label: 'Specific Criteria' },
-  external_link_optional: { tab: 3, label: 'External Link' },
+export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> = {
+  type: { tab: 1, control: 'type' },
+  title: { tab: 1, control: 'title' },
+  meeting_location_optional: { tab: 1, control: 'meeting_location_optional' },
+  purpose_one_liner: { tab: 1, control: 'purpose_one_liner' },
+  default_duration_minutes: { tab: 1, control: 'default_duration_minutes' },
+  participant_type_required: { tab: 2, control: 'participant_type_required' },
+  participant_type_specific_details: {
+    tab: 2,
+    control: 'participant_type_specific_details'
+  },
+  external_link_optional: { tab: 3, control: 'external_link_optional' },
   // Set on neither authoring surface any more - copy mode sends `inline_*` and
   // never this id. It survives for the one state that still carries it: a
-  // linked study this author may not change here, which is saved by id. Named
-  // for neither tab, because naming one makes the banner lie on the other half
-  // of the time.
-  firsthand_study_id: { tab: 3, label: 'Existing study content' },
-  inline_study_target_url: { tab: 3, label: 'Starting URL' },
-  inline_study_duration_minutes: { tab: 3, label: 'Estimated completion time' },
-  inline_study_steps: { tab: 3, label: 'Task List' },
+  // linked study this author may not change here, which is saved by id. No
+  // control: the read-only rendering of that study is an `<ol>` with no id and
+  // nothing on the step is editable, so there is nothing to focus.
+  firsthand_study_id: { tab: 3 },
+  inline_study_target_url: { tab: 3, control: 'inline_study_target_url' },
+  inline_study_duration_minutes: {
+    tab: 3,
+    control: 'inline_study_duration_minutes'
+  },
+  // The step HEADING carries this id and `tabIndex={-1}`, not a form control:
+  // "add at least one task" is about the list, and the list may be empty, so
+  // there is no input to land on.
+  inline_study_steps: { tab: 3, control: 'inline_study_steps' },
   // Step 4 on the two authoring paths, and there is no other kind of
   // opportunity that can produce this error: only an unmoderated study carries
   // a task list, and only an unmoderated study has a Consent step. Same for its
   // survey twin below. A type with no study never sets either key -
   // clearTypeConditionalErrors deletes them on a type change - so a fixed 4 is
   // unambiguous here in a way it would not be for a field two shapes share.
-  inline_study_consent_text: { tab: 4, label: 'Consent text' },
-  inline_survey_questions: { tab: 3, label: 'Questions' },
-  inline_survey_duration_minutes: { tab: 3, label: 'Estimated completion time' },
-  inline_survey_consent_text: { tab: 4, label: 'Consent text' }
+  //
+  // The HEADING again, and for a sharper reason: consent is locked to the
+  // approved wording by default, and while it is locked the textarea carrying
+  // the field id is not rendered at all. C3 found this by driving the form.
+  inline_study_consent_text: { tab: 4, control: 'inline_study_consent_text-heading' },
+  inline_survey_questions: { tab: 3, control: 'inline_survey_questions' },
+  inline_survey_duration_minutes: {
+    tab: 3,
+    control: 'inline_survey_duration_minutes'
+  },
+  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' }
 };
 
 /**
@@ -207,56 +262,86 @@ export const clearDeliveryConditionalErrors = (
 };
 
 /**
- * Resolve one validation error key to the tab that renders it and the name the
- * author knows it by. Per-task errors are keyed `inline_study_steps.<i>.<field>`
- * and are named by position, since tasks have no other identity on screen.
- * An unknown key falls back to the first tab rather than routing nowhere.
+ * The participant-type twin of the two `clear*ConditionalErrors` above.
+ *
+ * `participant_type_specific_details` is rendered only while the participant
+ * type is `specific`. Switching back to "Anyone" unmounts the field, and
+ * `handleInputChange` clears only the key it just edited - so the details error
+ * stayed in the map with nothing on screen to answer it.
+ *
+ * Exactly the dead end the session-field clear was added for, one field over:
+ * step 2's chip reads "Needs attention" over a step holding nothing wrong, and
+ * the summary keeps a link whose control id nothing renders - so activating it
+ * calls `focus()` on a missing element, which throws nothing, does nothing, and
+ * drops the author on `document.body`.
+ */
+export const clearParticipantConditionalErrors = (
+  errors: Record<string, string>,
+  newParticipantType: string
+): Record<string, string> => {
+  // Defensive, and unobservable today: the only transition that reaches this
+  // function with `'specific'` is one INTO it, at which point a details error
+  // can only be stale anyway. A mutation removing the guard survives the suite,
+  // and that is recorded rather than papered over with a test that would only
+  // be asserting the guard exists. It stays because the day another type
+  // requires this field, an unconditional delete is silently wrong.
+  if (newParticipantType === 'specific') {
+    return errors;
+  }
+  const next = { ...errors };
+  delete next.participant_type_specific_details;
+  return next;
+};
+
+/**
+ * Resolve one validation error key to the step that renders it, and the
+ * control on that step it is about. Per-task errors are keyed
+ * `inline_study_steps.<i>.<field>`; their control id depends on the item's
+ * client id, which only the component holds, so they resolve to a step here
+ * and get their control from `controlForError` below.
+ *
+ * An unknown key falls back to the first step rather than routing nowhere.
  *
  * The lookup is `hasOwn`-guarded, not `??`: a plain object inherits
  * `constructor`, `toString` and friends, so those keys would return a truthy
- * inherited value, skip the fallback, and yield a banner naming no field and no
- * tab to open - this fix's own failure mode, reintroduced. No user-supplied
- * string becomes an error key today, but backend zod issue paths are one commit
- * away from being mapped straight into these.
+ * inherited value, skip the fallback, and yield a summary entry with no step to
+ * open - this fix's own failure mode, reintroduced. No user-supplied string
+ * becomes an error key today, but backend zod issue paths are one commit away
+ * from being mapped straight into these.
  */
-export const locateField = (key: string): { tab: number; label: string } => {
-  const step = /^inline_study_steps\.(\d+)\./.exec(key);
-  if (step) {
-    return { tab: 3, label: `Task ${Number(step[1]) + 1}` };
+export const locateField = (key: string): { tab: number; control?: string } => {
+  if (/^inline_study_steps\.\d+\./.test(key)) {
+    return { tab: 3 };
   }
 
-  // Questions have no other identity on screen either, so they are named by
-  // position for the same reason tasks are.
-  const question = /^inline_survey_questions\.(\d+)\./.exec(key);
-  if (question) {
-    return { tab: 3, label: `Question ${Number(question[1]) + 1}` };
+  if (/^inline_survey_questions\.\d+\./.test(key)) {
+    return { tab: 3 };
   }
   // `Object.hasOwn` would read better but needs the es2022 lib, and widening
   // the compiler target for one call is not a trade worth making.
   return Object.prototype.hasOwnProperty.call(FIELD_LOCATIONS, key)
     ? FIELD_LOCATIONS[key]
-    : { tab: 1, label: key };
+    : { tab: 1 };
 };
 
 /**
- * Turn a set of validation errors into the two things a refusal owes the
- * author: which tab to open, and which fields to fix. The tab is the earliest
- * one holding a problem, so the author works forwards rather than being sent
- * to the last failure and back. Every failing field is named once, in tab
- * order, because fixing them one banner at a time is the same silent failure
- * in slow motion.
+ * Which item, and which part of it, an indexed error key is about.
+ *
+ * Returned rather than resolved here because the control's id is built from
+ * the item's `_clientId` - a per-item identity the page holds and this module
+ * scope does not. Exported so the mapping is testable without rendering a form.
  */
-export const describeValidationFailure = (
-  errors: Record<string, string>
-): { tab: number | null; message: string } => {
-  const located = Object.keys(errors)
-    .map(locateField)
-    .sort((a, b) => a.tab - b.tab);
-  if (located.length === 0) {
-    return { tab: null, message: '' };
-  }
-  const labels = Array.from(new Set(located.map((field) => field.label)));
-  return { tab: located[0].tab, message: `Please fix these fields: ${labels.join(', ')}` };
+export const parseIndexedErrorKey = (
+  key: string
+): { list: 'inline_study_steps' | 'inline_survey_questions'; index: number; field: string } | null => {
+  const match = /^(inline_study_steps|inline_survey_questions)\.(\d+)\.(.+)$/.exec(key);
+  return match
+    ? {
+        list: match[1] as 'inline_study_steps' | 'inline_survey_questions',
+        index: Number(match[2]),
+        field: match[3]
+      }
+    : null;
 };
 
 /**
@@ -1230,29 +1315,29 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
     // Validate research study type
     if (!formData.type) {
-      errors.type = 'Please select a research study type';
+      errors.type = 'Choose a research study type';
     }
 
     if (!formData.title.trim()) {
-      errors.title = 'Title is required';
+      errors.title = 'Enter a title';
     } else if (formData.title.trim().length < 4) {
-      errors.title = 'Title must be at least 4 characters';
+      errors.title = 'Enter a title of at least 4 characters';
     } else if (formData.title.trim().length > 140) {
-      errors.title = 'Title must be no more than 140 characters';
+      errors.title = 'Shorten the title to 140 characters or fewer';
     }
 
     if (!formData.purpose_one_liner.trim()) {
-      errors.purpose_one_liner = 'Purpose is required';
+      errors.purpose_one_liner = 'Enter a purpose';
     } else if (formData.purpose_one_liner.trim().length < 10) {
-      errors.purpose_one_liner = 'Purpose must be at least 10 characters';
+      errors.purpose_one_liner = 'Enter a purpose of at least 10 characters';
     } else if (formData.purpose_one_liner.trim().length > 180) {
-      errors.purpose_one_liner = 'Purpose must be no more than 180 characters';
+      errors.purpose_one_liner = 'Shorten the purpose to 180 characters or fewer';
     }
 
     // Only validate meeting location and duration for test and interview type opportunities
     if (formData.type === 'test' || formData.type === 'interview') {
       if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
-        errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
+        errors.meeting_location_optional = 'Enter where the session takes place';
       }
       // Number.isFinite first: clearing the field stores NaN (parseInt('')), and
       // NaN < 5 and NaN > 240 are BOTH false, so an empty duration passed every
@@ -1262,7 +1347,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         formData.default_duration_minutes < 5 ||
         formData.default_duration_minutes > 240
       ) {
-        errors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
+        errors.default_duration_minutes =
+          'Enter a session length between 5 and 240 minutes';
       }
     }
 
@@ -1274,7 +1360,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // every save over a field the payload does not carry.
       if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
-          errors.firsthand_study_id = 'This opportunity has no task list to publish';
+          errors.firsthand_study_id =
+            'Add a task list before publishing - this opportunity has none';
         }
       } else if (formData.inline_study_steps.length === 0) {
         // Named against the thing the author does, not the object model. The
@@ -1294,7 +1381,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       // The recorded twin's reasoning applies here unchanged.
       if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
-          errors.firsthand_study_id = 'This opportunity has no questions to publish';
+          errors.firsthand_study_id =
+            'Add questions before publishing - this opportunity has none';
         }
       } else if (formData.inline_survey_questions.length === 0) {
         errors.inline_survey_questions =
@@ -1304,7 +1392,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
       if (!formData.external_link_optional?.trim()) {
-        errors.external_link_optional = 'External link is required for published polls, surveys, and questions';
+        errors.external_link_optional =
+          'Enter the link participants will follow to take part';
       }
     }
 
@@ -1393,17 +1482,27 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
     (authoringQuestions ? formData.inline_survey_questions : []).forEach((question, index) => {
       if (!question.prompt.trim()) {
+        // Numbered, because a summary link is the author's only route to a card
+        // that may be collapsed and below the fold. "Add what the participant
+        // is asked" named no question, so a list of six of them said the same
+        // sentence six times and none of them said which one to open.
+        //
+        // The number is a PLACEHOLDER, not the index. Baking `index + 1` in
+        // here froze it: `remapAuthoringErrors` moves an error's key when its
+        // item moves but carries the message through verbatim, so after a
+        // reorder the card labelled "1." read "Enter the text for question 3".
+        // Both renderers substitute from the live key instead.
         errors[`inline_survey_questions.${index}.prompt`] =
           question.type === 'instruction'
-            ? 'Add what the participant should read'
-            : 'Add what the participant is asked';
+            ? `Enter what the participant reads at question ${POSITION_PLACEHOLDER}`
+            : `Enter the text for question ${POSITION_PLACEHOLDER}`;
       }
 
       if (question.type === 'single_choice' || question.type === 'multi_choice') {
         const answers = (question.options ?? []).map((o) => o.trim()).filter(Boolean);
         if (answers.length < 2) {
           errors[`inline_survey_questions.${index}.options`] =
-            'A choice question needs at least two answers';
+            `Enter at least two answers for question ${POSITION_PLACEHOLDER}`;
         }
       }
 
@@ -1421,7 +1520,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           scale > RATING_SCALE_BOUNDS.max
         ) {
           errors[`inline_survey_questions.${index}.config`] =
-            `A rating scale needs between ${RATING_SCALE_BOUNDS.min} and ${RATING_SCALE_BOUNDS.max} points`;
+            `Set a scale between ${RATING_SCALE_BOUNDS.min} and ${RATING_SCALE_BOUNDS.max} points for question ${POSITION_PLACEHOLDER}`;
         }
       }
     });
@@ -1431,7 +1530,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.inline_survey_questions.length > 0 &&
       !formData.inline_survey_consent_text.trim()
     ) {
-      errors.inline_survey_consent_text = 'Consent text is required';
+      errors.inline_survey_consent_text =
+        'Enter the consent text participants agree to';
     }
 
     // The input carries min={1}, and the browser used to enforce it on this
@@ -1453,10 +1553,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (surveyDuration !== undefined) {
         if (!Number.isInteger(surveyDuration) || surveyDuration < 1) {
           errors.inline_survey_duration_minutes =
-            'Give a length of at least 1 minute, or leave it empty';
+            'Enter a length of at least 1 minute, or leave it empty';
         } else if (surveyDuration > INLINE_STUDY_LIMITS.maxDurationMinutes) {
           errors.inline_survey_duration_minutes =
-            `Keep it under ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes`;
+            `Shorten the length to ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes or fewer`;
         }
       }
     }
@@ -1468,12 +1568,14 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (formData.type === 'unmoderated' && !studyIsReadOnly) {
       formData.inline_study_steps.forEach((step, index) => {
         if (!step.prompt.trim()) {
-          errors[`inline_study_steps.${index}.prompt`] = 'Add what the participant should see';
+          errors[`inline_study_steps.${index}.prompt`] =
+            `Enter the text for task ${POSITION_PLACEHOLDER}`;
         }
         if (step.type === 'single_choice') {
           const filled = (step.options ?? []).filter((option) => option.trim()).length;
           if (filled < 2) {
-            errors[`inline_study_steps.${index}.options`] = 'A choice task needs at least two options';
+            errors[`inline_study_steps.${index}.options`] =
+              `Enter at least two options for task ${POSITION_PLACEHOLDER}`;
           }
         }
       });
@@ -1482,7 +1584,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         formData.inline_study_steps.length > 0 &&
         !formData.inline_study_consent_text.trim()
       ) {
-        errors.inline_study_consent_text = 'Consent text is required';
+        errors.inline_study_consent_text =
+          'Enter the consent text participants agree to';
       }
 
       // Optional, but if given it must be openable. Mirrors isSafeTargetUrl on
@@ -1502,10 +1605,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (duration !== undefined) {
         if (!Number.isFinite(duration) || duration < 1) {
           errors.inline_study_duration_minutes =
-            'Give a length of at least 1 minute, or leave it empty';
+            'Enter a length of at least 1 minute, or leave it empty';
         } else if (duration > INLINE_STUDY_LIMITS.maxDurationMinutes) {
           errors.inline_study_duration_minutes =
-            `Keep it under ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes`;
+            `Shorten the length to ${INLINE_STUDY_LIMITS.maxDurationMinutes} minutes or fewer`;
         }
       }
 
@@ -1514,7 +1617,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         errors.inline_study_target_url = UNSAFE_TARGET_URL_MESSAGE;
       } else if (targetUrl.length > INLINE_STUDY_LIMITS.maxTargetUrlLength) {
         // Mirrored so an over-long URL fails here rather than as a server 400.
-        errors.inline_study_target_url = `Keep the URL under ${INLINE_STUDY_LIMITS.maxTargetUrlLength} characters`;
+        errors.inline_study_target_url =
+          `Shorten the URL to ${INLINE_STUDY_LIMITS.maxTargetUrlLength} characters or fewer`;
       }
 
       // A URL with no tasks would be silently dropped: the payload is only
@@ -1535,9 +1639,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Validate specific participant details when required
     if (formData.participant_type_required === 'specific') {
       if (!formData.participant_type_specific_details.trim()) {
-        errors.participant_type_specific_details = 'Specific participant criteria is required when "Specific" is selected';
+        errors.participant_type_specific_details =
+          'Describe the participants you need';
       } else if (formData.participant_type_specific_details.trim().length < 10) {
-        errors.participant_type_specific_details = 'Specific participant criteria must be at least 10 characters';
+        errors.participant_type_specific_details =
+          'Describe the participants you need, in at least 10 characters';
       }
     }
 
@@ -1659,6 +1765,77 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     setActiveTab(stepId);
     setPendingFocusFieldId(focusFieldId ?? null);
   };
+
+  /**
+   * The same move, made from the error summary, and it does NOT clear the
+   * summary.
+   *
+   * A refusal naming five problems that disappears the moment the author acts
+   * on the first one has told them about one problem and hidden four. The
+   * summary stays until a save or a Continue is attempted again, at which point
+   * it is rebuilt from the rules rather than edited.
+   */
+  const goToErrorAndFocus = (stepId: number, focusFieldId?: string) => {
+    setActiveTab(stepId);
+    setPendingFocusFieldId(focusFieldId ?? null);
+  };
+
+  /**
+   * The DOM id of the control an error key is about.
+   *
+   * Per-item controls are addressed by the item's `_clientId` rather than by
+   * its position, so an error that survives a reorder still points at its own
+   * question. Position would point at whatever moved into the slot.
+   *
+   * `options` resolves to the FIRST answer box rather than to a container.
+   * There is no single control for "at least two answers"; landing on the box
+   * the author will type into is the nearest true thing.
+   */
+  const controlForError = (key: string): string | undefined => {
+    const indexed = parseIndexedErrorKey(key);
+    if (!indexed) {
+      return locateField(key).control;
+    }
+
+    const item =
+      indexed.list === 'inline_survey_questions'
+        ? formData.inline_survey_questions[indexed.index]
+        : formData.inline_study_steps[indexed.index];
+    if (!item) {
+      return undefined;
+    }
+
+    // `question` and `task` are the `idPrefix` values QuestionList renders
+    // with on the two surfaces. Named here rather than derived, because they
+    // are strings on both sides and a derivation that guessed wrong would fail
+    // silently - a focus() on a missing id does nothing at all.
+    const prefix = indexed.list === 'inline_survey_questions' ? 'question' : 'task';
+    switch (indexed.field) {
+      case 'prompt':
+        return `${prefix}-prompt-${item._clientId}`;
+      case 'options':
+        return `${prefix}-option-${item._clientId}-0`;
+      case 'config':
+        return `question-scale-${item._clientId}`;
+      default:
+        return undefined;
+    }
+  };
+
+  /**
+   * What the summary lists, rebuilt from the reported map on every render.
+   *
+   * From `validationErrors`, not from the live rules: the summary is the
+   * record of a refusal that HAPPENED. Deriving it live would grow the list as
+   * the author walked into new steps, and shrink it under them as they typed,
+   * which is a different component with a different job.
+   */
+  const errorSummaryEntries = buildErrorSummary({
+    errors: validationErrors,
+    locate: locateField,
+    resolveControl: controlForError,
+    order: Object.keys(FIELD_LOCATIONS)
+  });
 
   /**
    * The check-answers screen, derived on EVERY render rather than snapshotted
@@ -1831,92 +2008,47 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     );
   }, [activeTab, tabs, statusOfStep]);
 
-  // Validate single field
-  const validateField = (fieldName: string, value: string | number | boolean | undefined) => {
-    const fieldErrors: Record<string, string> = { ...validationErrors };
-    const stringValue = typeof value === 'string' ? value : '';
-    const numValue = typeof value === 'number' ? value : 0;
-
-    switch (fieldName) {
-      case 'title':
-        if (!stringValue.trim()) {
-          fieldErrors.title = 'Title is required';
-        } else if (stringValue.trim().length < 4) {
-          fieldErrors.title = 'Title must be at least 4 characters';
-        } else if (stringValue.trim().length > 140) {
-          fieldErrors.title = 'Title must be no more than 140 characters';
-        } else {
-          delete fieldErrors.title;
-        }
-        break;
-      case 'purpose_one_liner':
-        if (!stringValue.trim()) {
-          fieldErrors.purpose_one_liner = 'Purpose is required';
-        } else if (stringValue.trim().length < 10) {
-          fieldErrors.purpose_one_liner = 'Purpose must be at least 10 characters';
-        } else if (stringValue.trim().length > 180) {
-          fieldErrors.purpose_one_liner = 'Purpose must be no more than 180 characters';
-        } else {
-          delete fieldErrors.purpose_one_liner;
-        }
-        break;
-      case 'meeting_location_optional':
-        if (!stringValue.trim()) {
-          fieldErrors.meeting_location_optional = 'Meeting location is required';
-        } else {
-          delete fieldErrors.meeting_location_optional;
-        }
-        break;
-      case 'default_duration_minutes':
-        if (formData.type === 'test' || formData.type === 'interview') {
-          if (numValue < 5 || numValue > 240) {
-            fieldErrors.default_duration_minutes = 'Duration must be between 5 and 240 minutes';
-          } else {
-            delete fieldErrors.default_duration_minutes;
-          }
-        }
-        break;
-      case 'external_link_optional': {
-        /*
-         * The THIRD validator of this field, and it had its own bare
-         * `new URL(...)` and its own wording ("External link must be a valid
-         * URL") - so on blur the author was told a `javascript:` link was fine,
-         * and on submit told it was not, in different words. One predicate and
-         * one message now, imported like the other two.
-         *
-         * Same split as the submit path: presence is publish-gated, the scheme
-         * is not.
-         */
-        const link = stringValue.trim();
-        const requiresLink =
-          formData.status === 'published' &&
-          ['poll', 'survey', 'question'].includes(formData.type);
-
-        if (requiresLink && !link) {
-          fieldErrors.external_link_optional = 'External link is required for published polls, surveys, and questions';
-        } else if (link && !isPublishableExternalLink(stringValue)) {
-          fieldErrors.external_link_optional = EXTERNAL_LINK_PROTOCOL_MESSAGE;
-        } else {
-          delete fieldErrors.external_link_optional;
-        }
-        break;
+  /**
+   * One field, revalidated on blur, by the ONE set of rules.
+   *
+   * This used to be a switch with six hand-written cases, and it was the third
+   * vocabulary in the form: on blur an over-long title said nothing at all
+   * about the 140 limit on some paths, and a `javascript:` external link was
+   * called "not a valid URL" here and something else on submit. Two of the six
+   * cases were unreachable in any case, because the inputs they named never
+   * wired `onBlur` - the prop was threaded into `BasicInfoTab` and
+   * `ContentDetailsTab` and used by neither.
+   *
+   * Now it runs the collector and takes ONE key out of the answer. Every field
+   * with a rule is covered by construction, including the indexed per-question
+   * and per-task keys, and a rule added to the collector is a rule this
+   * enforces on blur the same day. The value argument is gone: every input
+   * here is controlled, so `formData` already holds what was typed by the time
+   * blur fires, and taking the value from the event was the thing that let the
+   * two disagree.
+   */
+  const validateField = (fieldName: string) => {
+    const fresh = computeValidationErrors();
+    setValidationErrors((previous) => {
+      const next = { ...previous };
+      if (fresh[fieldName]) {
+        next[fieldName] = fresh[fieldName];
+      } else {
+        // SHADOWED today, and kept anyway. `handleInputChange` already deletes
+        // this key the moment the author types, and `remapAuthoringErrors` does
+        // the same for a per-item key whose content changed - so nothing can
+        // currently reach blur holding a corrected value and a live error, and
+        // a mutation deleting this branch survives the suite.
+        //
+        // It stays because the alternative is a validator that can only ever
+        // ADD messages, which is one refactor of the eager clear away from
+        // being a field the author cannot un-flag. The BEHAVIOUR is covered -
+        // "clears the message on blur once the value is corrected" - by
+        // whichever half is carrying it.
+        delete next[fieldName];
       }
-      case 'participant_type_specific_details':
-        if (formData.participant_type_required === 'specific') {
-          if (!stringValue.trim()) {
-            fieldErrors.participant_type_specific_details = 'Specific participant criteria is required when "Specific" is selected';
-          } else if (stringValue.trim().length < 10) {
-            fieldErrors.participant_type_specific_details = 'Specific participant criteria must be at least 10 characters';
-          } else {
-            delete fieldErrors.participant_type_specific_details;
-          }
-        } else {
-          delete fieldErrors.participant_type_specific_details;
-        }
-        break;
-    }
-
-    setValidationErrors(fieldErrors);
+      return next;
+    });
   };
 
   // Check if form has been modified
@@ -2217,28 +2349,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     const errors = collectValidationErrors();
     if (Object.keys(errors).length > 0) {
       // A save refused in silence is indistinguishable from a save that did
-      // nothing: the create controls only exist on the last tab, so the field
-      // at fault is usually two tabs away and its inline error is off screen.
-      const { tab } = describeValidationFailure(errors);
-      logger.error('Validation errors', { errors });
-      showRefusal();
-      setSuccessMessage('');
-      // Only to a step this shape actually HAS. FIELD_LOCATIONS is a static map
-      // over every field in the form, so it names step 4 for consent - and the
-      // shapes with no study have no step 4. Setting one anyway renders no step
-      // body at all, because the render guards key off `currentStep`, which
-      // `tabs.find` returns undefined for: the author would be told to fix a
-      // field and shown a blank page.
+      // nothing: the create controls only exist on the last step, so the field
+      // at fault is usually two steps away and its inline error is off screen.
       //
-      // Also defence only, for the same reason the clamp above is:
-      // `clearTypeConditionalErrors` deletes both consent keys on every type
-      // change, so no consent error survives into a shape that lacks step 4.
-      // The guard costs a predicate and removes a whole class of blank-page
-      // failure from every future change to the step set.
-      if (tab && tabs.some((candidate) => candidate.id === tab)) {
-        setActiveTab(tab);
-      }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Unlike Continue this reports EVERY step's errors, and that asymmetry is
+      // the point: Submit is the commit, so the author is owed the whole list.
+      logger.error('Validation errors', { errors });
+      refuse(errors);
       return undefined;
     }
 
@@ -2677,6 +2794,65 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     setRefusalCount(count => count + 1);
   };
 
+  /**
+   * Continue, refusing what Submit would refuse.
+   *
+   * This is the whole of D1's first task. Step 1's forward control used to run
+   * a hand-written copy of four of the collector's rules, and the copy was
+   * missing the title's 140-character ceiling, the purpose's 180, and the
+   * 5-240 session-length bound. All three were measured, not assumed: a
+   * 150-character title walked through Continue and was refused three steps
+   * later from Review, with nothing on the way to say so.
+   *
+   * `errorsForStep` narrows the same rules to the step the author is standing
+   * on, because a forward control that refused over a field further along
+   * would be unfixable from where they are. `type` stays in scope on every
+   * step - it decides which steps exist at all.
+   */
+  const continueFromStep = (advance: () => void) => {
+    const fresh = computeValidationErrors();
+    const mine = errorsForStep(fresh, activeTab, locateField);
+
+    // The reported map keeps what every OTHER step has already been told
+    // about. Writing this step's narrow object wholesale - which is what the
+    // deleted validator did - erased those, and the stepper reads this map to
+    // decide which steps say "Needs attention".
+    setValidationErrors((previous) =>
+      replaceStepErrors(previous, mine, activeTab, locateField)
+    );
+
+    if (Object.keys(mine).length > 0) {
+      refuse(mine);
+      return;
+    }
+
+    setRefusalShown(false);
+    advance();
+  };
+
+  /**
+   * Report a refusal: say so, and open the step holding the earliest problem.
+   *
+   * Focus is NOT moved here. The summary component takes it when it appears,
+   * keyed on `refusalCount` so a repeat refusal over the same fields moves
+   * focus again rather than changing nothing in silence.
+   */
+  const refuse = (errors: Record<string, string>) => {
+    showRefusal();
+    setSuccessMessage('');
+    const step = firstStepHoldingError(errors, locateField);
+    // Only to a step this shape actually HAS. FIELD_LOCATIONS is a static map
+    // over every field in the form, so it names step 4 for consent - and the
+    // shapes with no study have no step 4. Setting one anyway renders no step
+    // body at all, because the render guards key off `currentStep`, which
+    // `tabs.find` returns undefined for: the author would be told to fix a
+    // field and shown a blank page.
+    if (step && tabs.some((candidate) => candidate.id === step)) {
+      setActiveTab(step);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const handleInputChange = (
     field: string,
     // `null` is here for `consent_template_version`, which is null exactly when
@@ -2762,11 +2938,72 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         clearDeliveryConditionalErrors(prev, value === 'native' ? 'native' : 'external')
       );
     }
+    // And the third: leaving "Specific" unmounts the criteria field.
+    if (field === 'participant_type_required') {
+      setValidationErrors(prev =>
+        clearParticipantConditionalErrors(prev, String(value ?? ''))
+      );
+    }
   };
 
-  const handleBlur = (field: string, value: string | number | boolean | undefined) => {
-    // Validate field on blur
-    validateField(field, value);
+  /**
+   * Blur is where an author finds out, and it now covers every field with a
+   * rule rather than the two that happened to be wired.
+   *
+   * The value is deliberately not a parameter. The caller has it, and passing
+   * it invited a second reading of the same input - `e.target.value` on a
+   * number field is a string, which is how a cleared duration used to blur
+   * clean and then fail at submit.
+   */
+  /**
+   * Blur is where an author finds out - but only about a field they have
+   * actually been in.
+   *
+   * `type`, `title` and `purpose_one_liner` are the first three tab stops on a
+   * blank form. Validating unconditionally meant that TABBING THROUGH a form
+   * you had not filled in yet raised three refusals, each with `role="alert"`,
+   * before the author had typed a character. Nothing did that before D1,
+   * because no input on this step wired `onBlur` at all.
+   *
+   * So an untouched, still-empty field is left alone. Once it holds something -
+   * or once the author has been in it and left it non-empty - it is fair game,
+   * and the CLEARING half always runs so a corrected field un-flags itself
+   * whatever its history.
+   */
+  const handleBlur = (field: string) => {
+    const alreadyReported = validationErrors[field] !== undefined;
+    // A per-item field is touched BY EXISTING: the author added the question or
+    // the task on purpose, so there is no "walked past it" case to protect.
+    // Without this the gate below silently switched off blur for every indexed
+    // key - caught by a test of the answer-group rule, not by review.
+    const isPerItem = parseIndexedErrorKey(field) !== null;
+    const holdsSomething = isPerItem || fieldHoldsSomething(field);
+
+    if (!alreadyReported && !holdsSomething) {
+      // Never been filled and nothing to complain about yet. Walking past a
+      // field is not an attempt at it.
+      return;
+    }
+    validateField(field);
+  };
+
+  /**
+   * Whether a field the author has just left holds anything at all.
+   *
+   * Keyed off `formData` rather than a `touched` set, because the two questions
+   * that matter here - "did they type something" and "is it still empty" - are
+   * both answered by the value, and a parallel set of touched flags is one more
+   * thing that can disagree with the form.
+   */
+  const fieldHoldsSomething = (field: string): boolean => {
+    const value = (formData as unknown as Record<string, unknown>)[field];
+    if (typeof value === 'string') {
+      return value.trim().length > 0;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value);
+    }
+    return value !== undefined && value !== null;
   };
 
   // Show loading spinner while checking authentication
@@ -2859,15 +3096,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             </div>
 
             <div className="card-body p-0">
-              {refusalShown && describeValidationFailure(validationErrors).message && (
-                <div
-                  key={`refusal-${refusalCount}`}
-                  className="alert alert-danger mx-4 mt-4 mb-0"
-                  role="alert"
-                >
-                  <AlertTriangle size={18} className="me-2" />
-                  {describeValidationFailure(validationErrors).message}
-                </div>
+              {refusalShown && (
+                <ErrorSummary
+                  entries={errorSummaryEntries}
+                  refusalCount={refusalCount}
+                  onSelect={goToErrorAndFocus}
+                />
               )}
 
               {error && (
@@ -3042,40 +3276,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         disabled={saveControlsDisabled}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
                         {...continueControl}
-                        onNext={() => {
-                          // Validate basic info before continuing
-                          const errors: Record<string, string> = {};
-
-                          if (!formData.type) {
-                            errors.type = 'Please select a research study type';
-                          }
-                          if (!formData.title.trim()) {
-                            errors.title = 'Title is required';
-                          } else if (formData.title.trim().length < 4) {
-                            errors.title = 'Title must be at least 4 characters';
-                          }
-                          if (!formData.purpose_one_liner.trim()) {
-                            errors.purpose_one_liner = 'Purpose is required';
-                          } else if (formData.purpose_one_liner.trim().length < 10) {
-                            errors.purpose_one_liner = 'Purpose must be at least 10 characters';
-                          }
-                          // Only require meeting location for test/interview types
-                          if ((formData.type === 'test' || formData.type === 'interview') && !formData.meeting_location_optional?.trim()) {
-                            errors.meeting_location_optional = 'Meeting location is required for tests and interviews';
-                          }
-
-                          if (Object.keys(errors).length > 0) {
-                            setValidationErrors(errors);
-                            // Reported the same way as every other refusal
-                            // in this form, so the author learns one shape.
-                            showRefusal();
-                            // Scroll to top to see errors
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            return;
-                          }
-
-                          continueControl.onNext();
-                        }}
+                        onNext={() => continueFromStep(continueControl.onNext)}
                       />
                       )}
                     </>
@@ -3112,35 +3313,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           until a type is chosen there is nothing to name.
                         */
                         nextLabel={formData.type ? continueControl.nextLabel : 'Continue'}
-                        onNext={() => {
-                          /*
-                           * Asks the question it actually means.
-                           *
-                           * This used to read "is there a step after 2", which
-                           * was a true proxy for "has a type been chosen" only
-                           * while the shapes ended at the type-dependent step.
-                           * Review now sits after step 2 on every shape,
-                           * including the one with no type, so the proxy
-                           * silently became "yes, always" - and the author who
-                           * never picked a type would have been walked past the
-                           * only choice that decides what this form is for.
-                           *
-                           * The step headers are directly clickable, so this
-                           * step is reachable with no type set. Send them to the
-                           * field that is blocking them rather than forward.
-                           */
-                          if (!formData.type) {
-                            setValidationErrors(prev => ({
-                              ...prev,
-                              type: 'Please select a research study type'
-                            }));
-                            showRefusal();
-                            setActiveTab(1);
-                            window.scrollTo({ top: 0, behavior: 'smooth' });
-                            return;
-                          }
-                          continueControl.onNext();
-                        }}
+                        /*
+                          The missing type is still refused here, and it is now
+                          refused by the same rules as everywhere else.
+
+                          It used to be a hand-written guard, because this step
+                          is reachable with no type set - the step headers are
+                          directly clickable - and continuing would have walked
+                          the author past the only choice that decides what this
+                          form is for. `errorsForStep` keeps `type` in scope on
+                          every step for exactly that reason, so the guard is
+                          now the general rule rather than a special case that
+                          could stop agreeing with it.
+                        */
+                        onNext={() => continueFromStep(continueControl.onNext)}
                       />
                       )}
                     </>
@@ -3154,6 +3340,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           validationErrors={validationErrors}
                           handleInputChange={handleInputChange}
                           handleQuestionsChange={handleQuestionsChange}
+                          onBlurField={handleBlur}
                           hasLinkedStudy={hasLinkedStudy && !studyMissing}
                           studyIsReadOnly={studyIsReadOnly}
                           readOnlyReason={studyReadOnlyReason}
@@ -3186,6 +3373,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleStepsChange={handleStepsChange}
+                        onBlurField={handleBlur}
                         hasLinkedStudy={hasLinkedStudy && !studyMissing}
                         studyIsReadOnly={studyIsReadOnly}
                         readOnlyReason={studyReadOnlyReason}
@@ -3233,6 +3421,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           authoringKind === 'survey'
                             ? formData.inline_survey_consent_template_version
                             : formData.inline_study_consent_template_version
+                        }
+                        onBlur={() =>
+                          handleBlur(
+                            authoringKind === 'survey'
+                              ? 'inline_survey_consent_text'
+                              : 'inline_study_consent_text'
+                          )
                         }
                         fieldId={
                           authoringKind === 'survey'

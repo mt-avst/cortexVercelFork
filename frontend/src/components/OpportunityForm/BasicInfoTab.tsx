@@ -1,6 +1,7 @@
 import React from 'react';
 import { SESSION_DURATION } from '../../shared/constants';
 import { OpportunityFormData } from '../../api/types';
+import FieldError from './FieldError';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -9,7 +10,7 @@ interface BasicInfoTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
-  handleBlur?: (field: string, value: FormFieldValue) => void;
+  handleBlur?: (field: string) => void;
   allowUserSubmission?: boolean;
 }
 
@@ -98,6 +99,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
                 value={formData.type}
                 onChange={(e) => handleInputChange('type', e.target.value)}
+                onBlur={() => handleBlur?.('type')}
                 aria-describedby={validationErrors.type ? 'type-error type-help' : 'type-help'}
                 aria-invalid={validationErrors.type ? 'true' : 'false'}
                 aria-required="true"
@@ -119,7 +121,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Recorded study - Self-guided, recorded in the browser</option>
               </select>
                 {validationErrors.type && (
-                <div id="type-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.type}</div>
+                <FieldError id="type-error">{validationErrors.type}</FieldError>
               )}
             </div>
           </div>
@@ -209,7 +211,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
                 </select>
                 {validationErrors.status && (
-                  <div id="status-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.status}</div>
+                  <FieldError id="status-error">{validationErrors.status}</FieldError>
                 )}
               </div>
             </div>
@@ -232,6 +234,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
                 value={formData.title}
                 onChange={(e) => handleInputChange('title', e.target.value)}
+                onBlur={() => handleBlur?.('title')}
                 placeholder="e.g., User Interface Testing Session"
                 aria-describedby={validationErrors.title ? 'title-error title-help' : 'title-help'}
                 aria-invalid={validationErrors.title ? 'true' : 'false'}
@@ -239,7 +242,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.title && (
-                <div id="title-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.title}</div>
+                <FieldError id="title-error">{validationErrors.title}</FieldError>
               )}
             </div>
           </div>
@@ -261,6 +264,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
                   value={formData.meeting_location_optional || ''}
                   onChange={(e) => handleInputChange('meeting_location_optional', e.target.value)}
+                  onBlur={() => handleBlur?.('meeting_location_optional')}
                   placeholder="e.g., https://zoom.us/j/123456789 or https://meet.google.com/abc-defg-hij"
                   aria-describedby={validationErrors.meeting_location_optional ? 'meeting_location-error meeting_location-help' : 'meeting_location-help'}
                   aria-invalid={validationErrors.meeting_location_optional ? 'true' : 'false'}
@@ -268,7 +272,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   required
                 />
                 {validationErrors.meeting_location_optional && (
-                  <div id="meeting_location-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.meeting_location_optional}</div>
+                  <FieldError id="meeting_location-error">{validationErrors.meeting_location_optional}</FieldError>
                 )}
               </div>
             </div>
@@ -291,6 +295,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 rows={3}
                 value={formData.purpose_one_liner}
                 onChange={(e) => handleInputChange('purpose_one_liner', e.target.value)}
+                onBlur={() => handleBlur?.('purpose_one_liner')}
                 placeholder="e.g., Help us test the new dashboard interface to improve user experience"
                 aria-describedby={validationErrors.purpose_one_liner ? 'purpose-error purpose-help' : 'purpose-help'}
                 aria-invalid={validationErrors.purpose_one_liner ? 'true' : 'false'}
@@ -298,7 +303,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 required
               />
               {validationErrors.purpose_one_liner && (
-                <div id="purpose-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.purpose_one_liner}</div>
+                <FieldError id="purpose-error">{validationErrors.purpose_one_liner}</FieldError>
               )}
             </div>
           </div>
@@ -327,6 +332,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                       : ''
                   }
                   onChange={(e) => handleInputChange('default_duration_minutes', parseInt(e.target.value))}
+                  onBlur={() => handleBlur?.('default_duration_minutes')}
                   min={SESSION_DURATION.MIN_MINUTES}
                   max={SESSION_DURATION.MAX_MINUTES}
                   aria-describedby={validationErrors.default_duration_minutes ? 'duration-error duration-help' : 'duration-help'}
@@ -335,7 +341,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   required
                 />
                 {validationErrors.default_duration_minutes && (
-                  <div id="duration-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.default_duration_minutes}</div>
+                  <FieldError id="duration-error">{validationErrors.default_duration_minutes}</FieldError>
                 )}
               </div>
             </div>
@@ -372,7 +378,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   aria-invalid={validationErrors.start_date ? 'true' : 'false'}
                 />
                 {validationErrors.start_date && (
-                  <div id="start_date-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.start_date}</div>
+                  <FieldError id="start_date-error">{validationErrors.start_date}</FieldError>
                 )}
               </div>
             </div>
@@ -395,7 +401,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   aria-invalid={validationErrors.end_date ? 'true' : 'false'}
                 />
                 {validationErrors.end_date && (
-                  <div id="end_date-error" className="fw-semibold validation-error" role="alert" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.end_date}</div>
+                  <FieldError id="end_date-error">{validationErrors.end_date}</FieldError>
                 )}
               </div>
             </div>

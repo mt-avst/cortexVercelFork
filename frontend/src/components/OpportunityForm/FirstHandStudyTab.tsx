@@ -16,6 +16,8 @@ import ReadOnlyStudyContent from './ReadOnlyStudyContent';
 import StudyProvenanceNote from './StudyProvenanceNote';
 import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
 import StudySourcePicker from './StudySourcePicker';
+import FieldError from './FieldError';
+import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
 
 /**
  * What a researcher calls each task type, for the collapsed summary row.
@@ -62,6 +64,13 @@ export type InlineStudyFormFields = {
 };
 
 interface FirstHandStudyTabProps {
+  /**
+   * Revalidate one field on blur, by the same rules a save runs.
+   *
+   * Keyed by the FULL error key, because the rules on this step are per item:
+   * `inline_study_steps.1.options`, not `options`.
+   */
+  onBlurField?: (errorKey: string) => void;
   formData: OpportunityFormData & InlineStudyFormFields;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
@@ -115,6 +124,7 @@ interface FirstHandStudyTabProps {
  */
 const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   formData,
+  onBlurField,
   validationErrors,
   handleInputChange,
   handleStepsChange,
@@ -334,13 +344,19 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                       if (normalised !== e.target.value) {
                         handleInputChange('inline_study_target_url', normalised);
                       }
+                      // Safe to validate against the PRE-normalised value in
+                      // state: the collector normalises this field itself
+                      // before checking it, so both readings agree. Anywhere
+                      // else, validating in the same tick as a change would
+                      // read the state this render closed over, not the new one.
+                      onBlurField?.('inline_study_target_url');
                     }}
                     placeholder="https://example.com/checkout"
                   />
                   {validationErrors.inline_study_target_url && (
-                    <div className="invalid-feedback d-block">
+                    <FieldError>
                       {validationErrors.inline_study_target_url}
-                    </div>
+                    </FieldError>
                   )}
                   <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
                     The page the participant opens and shares before recording starts.
@@ -366,6 +382,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                   automatic={automaticDuration}
                   estimate={estimate}
                   error={validationErrors.inline_study_duration_minutes}
+                  onBlur={() => onBlurField?.('inline_study_duration_minutes')}
                   derivedFrom={`${steps.length} ${
                     steps.length === 1 ? 'task' : 'tasks'
                   }`}
@@ -385,6 +402,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               validationErrors={validationErrors}
               errorPrefix="inline_study_steps"
               idPrefix="task"
+              onBlurField={onBlurField}
               noun="task"
               nounPlural="tasks"
               typeLabels={TASK_TYPE_LABELS}
@@ -399,7 +417,19 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
               emptyMessage="No tasks yet. Add the first thing you want the participant to do."
               renderTypeFields={({ item, index, update }) =>
                 item.type === 'single_choice' ? (
-                  <div className="mb-2">
+                  <div
+                    className="mb-2"
+                    /* Group blur, not per box - see the survey twin. */
+                    onBlur={(event) => {
+                      if (
+                        !event.currentTarget.contains(
+                          event.relatedTarget as Node | null
+                        )
+                      ) {
+                        onBlurField?.(`inline_study_steps.${index}.options`);
+                      }
+                    }}
+                  >
                     <label
                       className="form-label mb-1"
                       style={{ fontSize: '0.9rem', fontWeight: 600 }}
@@ -410,6 +440,10 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                       <input
                         key={optionIndex}
                         className="form-control mb-2"
+                        /* Addressable, so the summary's "Enter at least two
+                           options for task 2" can land on the box the author
+                           will type into. */
+                        id={`task-option-${item._clientId}-${optionIndex}`}
                         value={option}
                         aria-label={`Task ${index + 1} option ${optionIndex + 1}`}
                         onChange={(e) =>
@@ -444,9 +478,12 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                       )}
                     </div>
                     {validationErrors[`inline_study_steps.${index}.options`] && (
-                      <div className="validation-error" role="alert">
-                        {validationErrors[`inline_study_steps.${index}.options`]}
-                      </div>
+                      <FieldError>
+                        {resolveMessage(
+                          `inline_study_steps.${index}.options`,
+                          validationErrors[`inline_study_steps.${index}.options`]
+                        )}
+                      </FieldError>
                     )}
                   </div>
                 ) : null

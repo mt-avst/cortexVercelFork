@@ -1,5 +1,6 @@
 import React from 'react';
 import { OpportunityFormData } from '../../api/types';
+import FieldError from './FieldError';
 
 /** Form field value type for opportunity form handlers */
 type FormFieldValue = string | number | boolean | undefined;
@@ -8,13 +9,14 @@ interface ContentDetailsTabProps {
   formData: OpportunityFormData;
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
-  handleBlur?: (field: string, value: FormFieldValue) => void;
+  handleBlur?: (field: string) => void;
 }
 
 const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
   formData,
   validationErrors,
-  handleInputChange
+  handleInputChange,
+  handleBlur
 }) => {
   return (
     <div className="tab-pane active">
@@ -48,7 +50,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 placeholder="Provide detailed information about the opportunity, what participants will be doing, what they need to prepare, etc."
               />
               {validationErrors.description_optional && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.description_optional}</div>
+                <FieldError>{validationErrors.description_optional}</FieldError>
               )}
             </div>
           </div>
@@ -73,7 +75,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 placeholder="e.g., Mobile App, Dashboard, API, etc."
               />
               {validationErrors.product_optional && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.product_optional}</div>
+                <FieldError>{validationErrors.product_optional}</FieldError>
               )}
             </div>
           </div>
@@ -94,6 +96,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                 value={formData.participant_type_required}
                 onChange={(e) => handleInputChange('participant_type_required', e.target.value)}
+                onBlur={() => handleBlur?.('participant_type_required')}
               >
                 <option value="any" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Anyone</option>
                 <option value="internal" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Internal employees only</option>
@@ -103,7 +106,7 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                 <option value="specific" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>Specific criteria</option>
               </select>
               {validationErrors.participant_type_required && (
-                <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.participant_type_required}</div>
+                <FieldError>{validationErrors.participant_type_required}</FieldError>
               )}
               {formData.type === 'unmoderated' && (
                 <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
@@ -129,11 +132,12 @@ const ContentDetailsTab: React.FC<ContentDetailsTabProps> = ({
                   style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto' }}
                   value={formData.participant_type_specific_details}
                   onChange={(e) => handleInputChange('participant_type_specific_details', e.target.value)}
+                  onBlur={() => handleBlur?.('participant_type_specific_details')}
                   placeholder="e.g., Users with admin access, Mobile users, etc."
                   required={formData.participant_type_required === 'specific'}
                 />
                 {validationErrors.participant_type_specific_details && (
-                  <div className="fw-semibold" style={{ fontSize: '0.875rem', display: 'block' }}>{validationErrors.participant_type_specific_details}</div>
+                  <FieldError>{validationErrors.participant_type_specific_details}</FieldError>
                 )}
               </div>
             )}

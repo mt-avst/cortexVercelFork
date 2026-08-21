@@ -8,6 +8,7 @@ import OpportunityForm, { getTabsForType } from '../OpportunityForm';
 import { SURVEY_CONSENT_TEMPLATE } from '../../shared/firsthand/consent-templates';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
+import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
 
 /**
  * Authoring a native poll or survey on the opportunity form.
@@ -509,8 +510,13 @@ describe('authoring a native survey', () => {
     await user.click(screen.getByRole('button', { name: /^Add question$/i }));
 
     await submitFromLastStep(user, /^Create opportunity$/);
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    // The message is NUMBERED now, which is what makes a summary of six empty
+    // questions readable - and what makes this assertion able to tell which
+    // question the error is about without counting cards.
+    expect(summarisedErrorKeys()).toEqual(['inline_survey_questions.1.prompt']);
     expect(
-      await screen.findByText('Add what the participant is asked')
+      inlineErrorText('Enter the text for question 2')
     ).toBeInTheDocument();
     expect(createOpportunity).not.toHaveBeenCalled();
 
@@ -519,13 +525,29 @@ describe('authoring a native survey', () => {
     // Still there, and now on the FIRST card - which is where the empty
     // question went. Asserting only that it survived would pass against an
     // error left behind on the question the author already filled in.
-    const cards = screen.getAllByRole('listitem');
+    //
+    // And RENUMBERED. This block used to assert that the message kept its
+    // ORIGINAL number, on the stated grounds that re-deriving it "would need a
+    // save" - which was untrue, and enshrined a real defect: after this very
+    // move, the card labelled "1." read "Enter the text for question 2". The
+    // number is a placeholder resolved from the error KEY, and
+    // `remapAuthoringErrors` rewrites that key when the item moves, so both the
+    // card and the summary say 1.
+    //
+    // Scoped to the question list. The error summary renders `<li>` entries of
+    // its own, so an unscoped listitem query returns the summary's items FIRST
+    // and every index below shifts.
+    const cards = within(
+      screen.getByRole('list', { name: /questions in this list/i })
+    ).getAllByRole('listitem');
     expect(
-      within(cards[0]).getByText('Add what the participant is asked')
+      within(cards[0]).getByText('Enter the text for question 1')
     ).toBeInTheDocument();
     expect(
-      within(cards[1]).queryByText('Add what the participant is asked')
+      within(cards[1]).queryByText(/Enter the text for question/i)
     ).toBeNull();
+    // The stale number is nowhere on screen.
+    expect(screen.queryAllByText('Enter the text for question 2')).toEqual([]);
   });
 
   /**
@@ -805,8 +827,9 @@ describe('authoring a native survey', () => {
     // On the SPECIFIC message, which only this rule produces. Asserting merely
     // that nothing was sent passed with the rule removed, because the number
     // input's own constraint was blocking the submit instead.
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/rating scale needs between 2 and 10 points/i)
+      inlineErrorText(/Set a scale between 2 and 10 points for question 1/i)
     ).toBeInTheDocument();
   });
 
@@ -1357,7 +1380,8 @@ describe('starting a survey from an existing set of questions', () => {
 
     await submitFromLastStep(user, /^Create opportunity$/);
 
-    const message = await screen.findByText(
+    await screen.findByRole('alert', { name: /There is a problem/i });
+    const message = inlineErrorText(
       /Choose a set of questions to start from, or switch to writing them here/i
     );
     expect(message).toBeVisible();
@@ -1377,8 +1401,9 @@ describe('starting a survey from an existing set of questions', () => {
     await user.selectOptions(screen.getByLabelText(/Status/i), 'published');
     await user.click(screen.getByRole('button', { name: /Questions/i }));
     await submitFromLastStep(user, /^Create opportunity$/);
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/Add at least one question before publishing/i)
+      inlineErrorText(/Add at least one question before publishing/i)
     ).toBeInTheDocument();
 
     await user.click(
@@ -1389,9 +1414,11 @@ describe('starting a survey from an existing set of questions', () => {
     );
     await screen.findByText(/Copied from/i);
 
+    // Gone from BOTH places. Checking only the inline copy would pass while the
+    // summary went on naming a problem the author has just fixed.
     expect(
-      screen.queryByText(/Add at least one question before publishing/i)
-    ).not.toBeInTheDocument();
+      screen.queryAllByText(/Add at least one question before publishing/i)
+    ).toEqual([]);
   });
 });
 
@@ -1662,8 +1689,9 @@ describe('the forward control on the Questions tab', () => {
     await submitFromLastStep(user, /^Save changes$/);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/at least 1 minute, or leave it empty/i)
+      inlineErrorText(/at least 1 minute, or leave it empty/i)
     ).toBeInTheDocument();
   });
 
@@ -1689,8 +1717,9 @@ describe('the forward control on the Questions tab', () => {
     await submitFromLastStep(user, /^Save changes$/);
 
     expect(updateOpportunity).not.toHaveBeenCalled();
+    await screen.findByRole('alert', { name: /There is a problem/i });
     expect(
-      await screen.findByText(/rating scale needs between 2 and 10 points/i)
+      inlineErrorText(/Set a scale between 2 and 10 points for question 1/i)
     ).toBeInTheDocument();
   });
 });
