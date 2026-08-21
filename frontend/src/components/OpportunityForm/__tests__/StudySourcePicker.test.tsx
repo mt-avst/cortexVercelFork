@@ -51,6 +51,7 @@ interface RenderOverrides {
   onChoose?: (studyId: string) => Promise<string | null>;
   currentUserId?: string;
   onCancel?: () => void;
+  onPreviewStudy?: (study: FirstHandStudyWithSteps) => void;
 }
 
 const renderPicker = (overrides: RenderOverrides = {}) => {
@@ -66,6 +67,7 @@ const renderPicker = (overrides: RenderOverrides = {}) => {
       onChoose={onChoose}
       currentUserId={overrides.currentUserId}
       onCancel={overrides.onCancel}
+      onPreviewStudy={overrides.onPreviewStudy}
       noun="question"
       setNoun="set of questions"
       idPrefix={ID_PREFIX}
@@ -90,13 +92,15 @@ const rowFor = (title: string): HTMLElement => {
 };
 
 const withSteps = (
-  steps: FirstHandStudyWithSteps['steps']
+  steps: FirstHandStudyWithSteps['steps'],
+  study?: Partial<FirstHandStudyWithSteps['study']>
 ): FirstHandStudyWithSteps => ({
   study: {
     id: 'irrelevant',
     title: 'irrelevant',
     intro_text: '',
-    consent_text: ''
+    consent_text: '',
+    ...study
   },
   steps
 });
@@ -563,5 +567,64 @@ describe('StudySourcePicker - consent state', () => {
     // render from one that flagged the wrong study.
     expect(flagged!.querySelector('[data-testid="consent-state-chip"]')).not.toBeNull();
     expect(clean!.querySelector('[data-testid="consent-state-chip"]')).toBeNull();
+  });
+});
+
+/**
+ * E1's entry point into the participant preview, from a set that already
+ * exists. The row's own disclosure answers "what is in this set"; this answers
+ * "what will it be like to be asked it", which is what a copy commits to.
+ */
+describe('previewing a stored set as a participant', () => {
+  const OPENED = withSteps(
+    [
+      { step_id: 's1', order: 1, type: 'open_text', prompt: 'Q1' },
+      { step_id: 'send', order: 2, type: 'end', prompt: 'Done' }
+    ],
+    { id: 'study-second', title: 'Onboarding survey', kind: 'survey' }
+  );
+
+  it('hands up the whole loaded study for the row that was expanded', async () => {
+    const onPreviewStudy = vi.fn();
+    mockedGetFirstHandStudy.mockResolvedValue(OPENED);
+    renderPicker({ onPreviewStudy });
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview Onboarding survey' })
+    );
+    await waitFor(() =>
+      expect(
+        within(rowFor('Onboarding survey')).getByRole('button', {
+          name: 'See this as a participant Onboarding survey'
+        })
+      ).toBeInTheDocument()
+    );
+
+    fireEvent.click(
+      within(rowFor('Onboarding survey')).getByRole('button', {
+        name: 'See this as a participant Onboarding survey'
+      })
+    );
+
+    // The study itself, not an id: the caller unmounts this component to draw
+    // the preview, so refetching from there would be a second request for
+    // content already in hand.
+    expect(onPreviewStudy).toHaveBeenCalledWith(OPENED);
+  });
+
+  it('does not offer the control when the caller cannot show a preview', async () => {
+    mockedGetFirstHandStudy.mockResolvedValue(OPENED);
+    renderPicker();
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Preview Onboarding survey' })
+    );
+    await waitFor(() => expect(screen.getByText('Q1')).toBeInTheDocument());
+
+    // Offered-and-inert is worse than absent: it is a control that says it
+    // does something.
+    expect(
+      screen.queryByRole('button', { name: /See this as a participant/ })
+    ).toBeNull();
   });
 });

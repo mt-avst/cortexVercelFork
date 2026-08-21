@@ -7,6 +7,7 @@ import SkipLink from './components/SkipLink';
 import Header from './components/Header';
 import LoadingSpinner from './components/LoadingSpinner';
 import FeedbackFooter from './components/FeedbackFooter';
+import { opportunityFormRoutes } from './pages/OpportunityForm.routes';
 
 // Eagerly load the home page for fast initial load
 import Home from './pages/Home';
@@ -94,8 +95,11 @@ function App() {
                   <Route path="/admin/studies" element={<Studies />} />
                   <Route path="/admin/studies/new" element={<StudyEditor />} />
                   <Route path="/admin/studies/:id/edit" element={<StudyEditor />} />
-                  <Route path="/admin/opportunities/new" element={<OpportunityForm />} />
-                  <Route path="/admin/opportunities/:id/edit" element={<OpportunityForm />} />
+                  {/*
+                      Declared in OpportunityForm.routes so the preview test can
+                      assert on the SAME declaration rather than a copy of it -
+                      see there for why the nesting is load-bearing. */}
+                  {opportunityFormRoutes(<OpportunityForm />)}
                   <Route path="/admin/opportunities/:id/analytics" element={<OpportunityAnalyticsPage />} />
                   <Route path="/admin/opportunities/:id/sessions/:sessionId/review" element={<SessionReviewPage />} />
                   <Route path="/my-bookings" element={<MyBookings />} />

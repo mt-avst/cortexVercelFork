@@ -16,6 +16,7 @@ import ReadOnlyStudyContent from './ReadOnlyStudyContent';
 import StudyProvenanceNote from './StudyProvenanceNote';
 import StudySourceChoice, { type StudySourceMode } from './StudySourceChoice';
 import StudySourcePicker from './StudySourcePicker';
+import type { FirstHandStudyWithSteps } from '../../api/firsthand-studies';
 import FieldError from './FieldError';
 import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
 
@@ -106,6 +107,11 @@ interface FirstHandStudyTabProps {
   readOnlyReason: StudyReadOnlyReason;
   /** Takes the copy. Resolves to a refusal message, or null when it worked. */
   onCopyFromStudy: (studyId: string) => Promise<string | null>;
+  /**
+   * Opens the participant preview on a stored set, before it is copied. Passed
+   * straight to the picker; absent means the control is not offered.
+   */
+  onPreviewStudy?: (study: FirstHandStudyWithSteps) => void;
   /** Decides whether a row reads as "Yours". */
   currentUserId?: string;
 }
@@ -132,6 +138,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
   studyIsReadOnly,
   readOnlyReason,
   onCopyFromStudy,
+  onPreviewStudy,
   currentUserId
 }) => {
   const [studies, setStudies] = useState<FirstHandStudy[]>([]);
@@ -308,6 +315,7 @@ const FirstHandStudyTab: React.FC<FirstHandStudyTabProps> = ({
                 return failure;
               }}
               onCancel={copiedFromId && chooserOpen ? () => setChooserOpen(false) : undefined}
+              onPreviewStudy={onPreviewStudy}
               currentUserId={currentUserId}
               noun="task"
               setNoun="task list"
