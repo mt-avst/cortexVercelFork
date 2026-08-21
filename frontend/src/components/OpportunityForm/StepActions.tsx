@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, ArrowRight, CheckCircle, Save } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle, DoorOpen, Save } from 'lucide-react';
 
 /**
  * The forward control, which is one thing or the other and never both. Written
@@ -51,6 +51,17 @@ type StepActionsProps = ForwardControl &
   BackwardControl & {
   /** The green shortcut. Given only for an edit that has changed something. */
   onSave?: () => void;
+  /**
+   * Save what is here and leave, on EVERY step.
+   *
+   * The row already had a Save shortcut and it was given only on an edit that
+   * had changed something, which leaves the commonest unfinished-work case -
+   * a create, halfway down step two - with no way out that keeps the work
+   * except walking forward to Review. Passed in rather than derived here for
+   * the same reason the labels are: this component does not get to decide
+   * which controls a step has.
+   */
+  onSaveAndExit?: () => void;
   isEdit: boolean;
   saving: boolean;
   /**
@@ -89,6 +100,7 @@ const StepActions: React.FC<StepActionsProps> = ({
   onSubmit,
   submitLabel,
   onSave,
+  onSaveAndExit,
   isEdit,
   saving,
   disabled,
@@ -129,6 +141,19 @@ const StepActions: React.FC<StepActionsProps> = ({
               Save Changes
             </>
           )}
+        </button>
+      )}
+
+      {onSaveAndExit && (
+        <button
+          type="button"
+          className="btn btn-outline-primary px-4 py-2 fw-semibold"
+          onClick={onSaveAndExit}
+          disabled={disabled}
+          style={{ fontSize: '0.95rem' }}
+        >
+          <DoorOpen size={16} className="me-2" />
+          Save and exit
         </button>
       )}
 

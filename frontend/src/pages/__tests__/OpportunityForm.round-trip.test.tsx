@@ -947,13 +947,34 @@ describe('reopening an opportunity that has a task list', () => {
       });
       fireEvent.click(saveButton);
 
-      await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(3));
-
-      const third = JSON.parse(
-        JSON.stringify(vi.mocked(updateOpportunity).mock.calls[2][1])
+      await waitFor(() =>
+        expect(vi.mocked(updateOpportunity).mock.calls.length).toBeGreaterThanOrEqual(3)
       );
-      expect(third.expected_study_updated_at).toBe('2026-08-21T12:00:00.000Z');
-      expect(third.expected_study_updated_at).not.toBe('2026-08-21T11:00:00.000Z');
+
+      /**
+       * EVERY save after the recovery, not just the third one.
+       *
+       * The count used to be exactly three, which stopped being a fact about
+       * the product the moment D2 gave this form an autosave: the five-second
+       * wait for the button below is long enough for the timer to fire, so the
+       * deliberate save is no longer at a known index.
+       *
+       * Asserting over all of them is the stronger claim anyway. The defect
+       * this test exists for is a conflict token that is never cleared and
+       * therefore shadows the real revision on every LATER save - so "no save
+       * from here on carries the superseded revision" is closer to the thing
+       * that must be true than "the one at index two does not".
+       */
+      const afterRecovery = vi
+        .mocked(updateOpportunity)
+        .mock.calls.slice(2)
+        .map((call) => JSON.parse(JSON.stringify(call[1])));
+
+      expect(afterRecovery.length).toBeGreaterThan(0);
+      for (const body of afterRecovery) {
+        expect(body.expected_study_updated_at).toBe('2026-08-21T12:00:00.000Z');
+        expect(body.expected_study_updated_at).not.toBe('2026-08-21T11:00:00.000Z');
+      }
     });
 
     it('does not treat a lock-timeout 409 as somebody else saving', async () => {
