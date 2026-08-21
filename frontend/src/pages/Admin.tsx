@@ -525,7 +525,7 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
             {/* Navigation Tabs */}
             <div className="admin-tabs-container tabs-container">
               <ul className="nav nav-tabs nav-fill" role="tablist" style={{ border: 'none', margin: 0 }}>
-                <li className="nav-item">
+                <li className="nav-item" role="presentation">
                   <button
                     className={`custom-tab-button ${activeTab === 'opportunities' ? 'active' : ''}`}
                     onClick={() => setActiveTab('opportunities')}
@@ -538,7 +538,7 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                     <span>Research Studies</span>
                   </button>
                 </li>
-                <li className="nav-item">
+                <li className="nav-item" role="presentation">
                   <button
                     className={`custom-tab-button ${activeTab === 'approvals' ? 'active' : ''}`}
                     onClick={() => setActiveTab('approvals')}
@@ -552,7 +552,7 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                   </button>
                 </li>
                 {/* Feedback tab - all admins (researcher_admin and superadmin) */}
-                <li className="nav-item">
+                <li className="nav-item" role="presentation">
                   <button
                     className={`custom-tab-button ${activeTab === 'feedback' ? 'active' : ''}`}
                     onClick={() => setActiveTab('feedback')}
@@ -731,7 +731,10 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                 }
                               }}
                               tabIndex={-1}
-                              role="presentation"
+                              /* No role="presentation" here: the row is focusable and
+                                 carries an aria-label, and axe reports the combination as
+                                 presentation-role-conflict. It is a real row, so it keeps
+                                 the implicit row role. */
                               aria-label={`Opportunity: ${opportunity.title}`}
                               onFocus={(e) => {
                                 // Prevent focus on table rows

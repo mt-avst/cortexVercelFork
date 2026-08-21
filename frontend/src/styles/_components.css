@@ -7046,7 +7046,7 @@ body.theme-light .booking-badge-survey {
 }
 
 body.theme-light .my-bookings-subtitle {
-  color: #64748B;
+  color: var(--text-muted); /* #64748B was 4.27 on the cream page */
 }
 
 /* ============================================================
@@ -12851,7 +12851,10 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  opacity: 0.6;
+  /* Was opacity: 0.6, which composited this 11px uppercase label down to
+     2.73 against the cream page. A muted colour says the same thing and
+     measures 4.87. */
+  color: var(--text-muted);
   margin: 0 0 8px;
 }
 
