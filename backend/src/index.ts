@@ -9,6 +9,7 @@ import { config, pool } from './config';
 import { logger } from './utils/logger';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
+import { getBuildRevision } from './utils/buildInfo';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
 import { runFirstHandMaintenance } from './firsthand/maintenance';
@@ -212,6 +213,13 @@ app.get('/api/health', healthLimiter, (_req: express.Request, res: express.Respo
         // - an immediate refusal versus a blackholed connection sitting at the
         // timeout - and `status` already carries everything monitoring needs.
         ...(database.healthy ? { databaseLatencyMs: database.latencyMs } : {}),
+        // Reported on BOTH paths, unlike databaseLatencyMs above. Which build
+        // is running is most worth knowing precisely when the app is
+        // unhealthy - "is this the broken release or the fix?" - so withholding
+        // it on the failure path would answer the question only when nobody
+        // needs to ask it. It is a commit sha rather than recon detail: it says
+        // nothing about the state of the system, only which source produced it.
+        revision: getBuildRevision(),
         timestamp: new Date().toISOString(),
       });
     })

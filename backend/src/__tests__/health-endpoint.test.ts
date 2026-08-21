@@ -1,4 +1,4 @@
-import { describe, it, expect, jest, beforeEach } from '@jest/globals';
+import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
 
 // Controls the verdict without needing a database. Factory uses only inline
@@ -22,8 +22,18 @@ mockCreateProbe.mockReturnValue(probe);
 import app from '../index';
 
 describe('GET /api/health', () => {
+  const ORIGINAL_SHA = process.env.APP_COMMIT_SHA;
+
   beforeEach(() => {
     probe.mockReset();
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_SHA === undefined) {
+      delete process.env.APP_COMMIT_SHA;
+    } else {
+      process.env.APP_COMMIT_SHA = ORIGINAL_SHA;
+    }
   });
 
   it('answers 200 ok/up when the database responds', async () => {
@@ -107,4 +117,41 @@ describe('GET /api/health', () => {
 
     expect(response.status).toBeGreaterThanOrEqual(500);
   });
+
+  // The whole point of the field: a deploy is verifiable from outside with one
+  // unauthenticated request, instead of inferred from a green pipeline and a
+  // guess at the ArgoCD lag.
+  it('reports the commit the running image was built from', async () => {
+    probe.mockResolvedValue({ healthy: true, latencyMs: 12 });
+    process.env.APP_COMMIT_SHA = '79e9ac615137ef892b5824bfa2b9ca8b32150dad';
+
+    const response = await request(app).get('/api/health');
+
+    expect(response.body.revision).toBe('79e9ac615137ef892b5824bfa2b9ca8b32150dad');
+  });
+
+  // Deliberately NOT treated like databaseLatencyMs, which is withheld on the
+  // failure path. Which build is running is most worth knowing precisely when
+  // the app is unhealthy - "is this the broken release or the fix?" is the
+  // first question asked during an incident, and withholding it there would
+  // leave the endpoint answering it only when nobody needs to ask.
+  it('still reports the revision when the database is down', async () => {
+    probe.mockResolvedValue({ healthy: false, reason: 'timeout', latencyMs: 2000 });
+    process.env.APP_COMMIT_SHA = '79e9ac615137ef892b5824bfa2b9ca8b32150dad';
+
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).toBe(503);
+    expect(response.body.revision).toBe('79e9ac615137ef892b5824bfa2b9ca8b32150dad');
+  });
+
+  it('reports unknown rather than omitting the field when the build argument is absent', async () => {
+    probe.mockResolvedValue({ healthy: true, latencyMs: 12 });
+    delete process.env.APP_COMMIT_SHA;
+
+    const response = await request(app).get('/api/health');
+
+    expect(response.body.revision).toBe('unknown');
+  });
+
 });
