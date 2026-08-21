@@ -1162,20 +1162,36 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     fireEvent.click(saveAgain);
 
     await vi.waitFor(() => {
-      expect(vi.mocked(updateOpportunity)).toHaveBeenCalledTimes(2);
+      expect(vi.mocked(updateOpportunity).mock.calls.length).toBeGreaterThanOrEqual(2);
     });
 
-    const secondPayload = updatedPayload(1);
-    expect(secondPayload.inline_study?.steps).toEqual([
-      // Recovered from the stored id the re-read returned
-      // (`study_demo_step_1`), not minted again. The second save therefore
-      // writes the SAME step id as the first - which is what keeps an answer
-      // collected between the two saves attached to the task that produced it.
-      { step_key: 'step_1', type: 'instruction', prompt: 'Find the export button' }
-    ]);
-    // Exactly one of the two, never both - the backend refuses a payload
-    // carrying an id alongside authored content rather than guessing.
-    expect(secondPayload.firsthand_study_id).toBeUndefined();
+    /**
+     * EVERY save after the first, not only the one at index one.
+     *
+     * D2's autosave writes on a timer, and the five-second wait above for the
+     * success banner to clear is long enough for it to fire - so the
+     * deliberate second save is no longer at a fixed index. Asserting over all
+     * of them says the thing that actually has to be true: no save from here
+     * on re-mints the step id, however many saves there turn out to be.
+     */
+    const laterPayloads = vi
+      .mocked(updateOpportunity)
+      .mock.calls.slice(1)
+      .map((call) => call[1] as unknown as SubmittedPayload);
+
+    expect(laterPayloads.length).toBeGreaterThan(0);
+    for (const payload of laterPayloads) {
+      expect(payload.inline_study?.steps).toEqual([
+        // Recovered from the stored id the re-read returned
+        // (`study_demo_step_1`), not minted again. Every later save therefore
+        // writes the SAME step id as the first - which is what keeps an answer
+        // collected between two saves attached to the task that produced it.
+        { step_key: 'step_1', type: 'instruction', prompt: 'Find the export button' }
+      ]);
+      // Exactly one of the two, never both - the backend refuses a payload
+      // carrying an id alongside authored content rather than guessing.
+      expect(payload.firsthand_study_id).toBeUndefined();
+    }
   });
 
   it('loads a linked task list into the editor rather than swapping to the picker', async () => {

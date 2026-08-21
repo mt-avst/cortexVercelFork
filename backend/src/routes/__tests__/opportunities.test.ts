@@ -728,6 +728,58 @@ describe('Opportunities API', () => {
         );
       });
 
+      /**
+       * The CREATE route's half of the precondition contract, and it had none.
+       *
+       * A mutation setting this path's value to null left both suites green,
+       * because nothing anywhere asserted the create response carries the
+       * field at all. The consequence is the PATCH failure one step earlier: a
+       * draft the autosave creates would hold no precondition, so every save
+       * after it writes under F1's fail-open - logged, and otherwise silent.
+       */
+      it('returns the minted study revision, so the next save has a precondition', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_new', updated_at: '2026-08-21T19:45:00.000Z' },
+          steps: []
+        } as never);
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '12', type: 'survey', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(body({ status: 'draft' }))
+          .expect(201);
+
+        expect(response.body.linked_study_updated_at).toBe('2026-08-21T19:45:00.000Z');
+      });
+
+      /**
+       * ABSENT, not null, when the request wrote no study - the same rule the
+       * PATCH response follows, and for the same reason: a client reading a
+       * present-but-null field as "there is no study" would clear a
+       * precondition it should have kept.
+       */
+      it('says nothing about a study when the request created none', async () => {
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '14', type: 'question', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send({
+            type: 'question',
+            title: 'A quick question',
+            purpose_one_liner: 'Nothing here carries a study at all',
+            status: 'draft'
+          })
+          .expect(201);
+
+        expect(Object.keys(response.body)).not.toContain('linked_study_updated_at');
+      });
+
       it('namespaces the step ids by study, so a second survey cannot collide', async () => {
         mockCreateStudy.mockResolvedValueOnce({
           study: { id: 'study_new' },
@@ -858,6 +910,104 @@ describe('Opportunities API', () => {
           }
           return request(app).patch('/api/opportunities/1').send(body);
         };
+
+        /**
+         * The revision the caller needs for its NEXT save, carried on the
+         * response rather than left to a second request.
+         *
+         * This is what makes a repeated save possible at all. A successful
+         * save moves the study's `updated_at`, so a client that keeps sending
+         * the revision it loaded is refused as stale by its own previous
+         * write - forever, and with a banner blaming a colleague who does not
+         * exist. The authoring form's autosave cannot re-read the study to
+         * find out, because rebuilding the form from the server would discard
+         * whatever the author typed while the request was in flight.
+         *
+         * Asserted on the response BODY, not on what the repository returned.
+         * The value is only useful if it reaches the wire.
+         */
+        it('returns the study revision after rewriting one in place', async () => {
+          mockGetStudyById.mockResolvedValueOnce({
+            study: {
+              id: 'study_existing',
+              title: 'A survey',
+              intro_text: 'Intro',
+              consent_text: 'Consent',
+              kind: 'survey',
+              owner_user_id: 'test-user-id',
+              created_at: '2026-08-16T10:00:00.000Z',
+              updated_at: '2026-08-16T10:00:00.000Z'
+            },
+            steps: []
+          } as never);
+          mockUpdateStudy.mockResolvedValueOnce({
+            ok: true as const,
+            claimed: false,
+            study: {
+              id: 'study_existing',
+              title: 'A survey',
+              intro_text: 'Intro',
+              consent_text: 'Consent',
+              kind: 'survey' as const,
+              status: 'launched',
+              owner_user_id: 'test-user-id',
+              created_at: '2026-08-16T10:00:00.000Z',
+              updated_at: '2026-08-21T18:30:00.000Z'
+            },
+            steps: []
+          } as never);
+
+          const response = await patch(
+            { inline_survey: questions },
+            'study_existing',
+            true
+          ).expect(200);
+
+          expect(response.body.linked_study_updated_at).toBe(
+            '2026-08-21T18:30:00.000Z'
+          );
+        });
+
+        /**
+         * ABSENT, not null, when the request wrote no study.
+         *
+         * The distinction is the contract. A client reading a present-but-null
+         * field as "there is no study" would clear the precondition it should
+         * have kept, and the next save would go through the fail-open with
+         * nothing anywhere recording that the protection had been dropped.
+         * Asserted after serialisation, because `{ key: undefined }` still has
+         * the key as far as an object comparison is concerned while the API
+         * never sends it.
+         */
+        it('says nothing about a study on a save that wrote none', async () => {
+          const response = await patch({ title: 'Retitled only' }, null, true).expect(200);
+
+          expect(Object.keys(response.body)).not.toContain('linked_study_updated_at');
+        });
+
+        /**
+         * The CREATE route's twin of the absence rule.
+         *
+         * The two response builders are independent conditional spreads and
+         * can drift; a mutation setting the create path's value to null left
+         * both suites green, because nothing anywhere asserted the create
+         * response carries the field at all. The consequence is the PATCH case
+         * one step earlier: an autosave-created draft would hold no
+         * precondition, and every later save would write under F1's fail-open
+         * - logged, and otherwise silent.
+         */
+        it('returns the revision of a study it minted', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_new', updated_at: '2026-08-21T18:45:00.000Z' },
+            steps: []
+          } as never);
+
+          const response = await patch({ inline_survey: questions }, null, true).expect(200);
+
+          expect(response.body.linked_study_updated_at).toBe(
+            '2026-08-21T18:45:00.000Z'
+          );
+        });
 
         it('writes the questions on a draft that has none yet', async () => {
           mockCreateStudy.mockResolvedValueOnce({
@@ -1598,6 +1748,33 @@ describe('Opportunities API', () => {
           steps: [{ type: 'open_text', prompt: 'What did you expect to happen?' }]
         }
       };
+
+      /**
+       * The RECORDED create's half of the precondition contract.
+       *
+       * An independent mutation pass deleted this line and 284 tests still
+       * passed: the survey create was covered and this one was not, which is
+       * the shape where the uncovered half quietly stops working. A recorded
+       * draft created by the autosave would then hold no precondition, and
+       * every later save would write under F1's fail-open.
+       */
+      it('returns the minted study revision, so the next save has a precondition', async () => {
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_generated', updated_at: '2026-08-21T20:15:00.000Z' },
+          steps: []
+        });
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        mockQuery.mockResolvedValueOnce({
+          rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
+        });
+
+        const response = await request(app)
+          .post('/api/opportunities')
+          .send(inlineBody)
+          .expect(201);
+
+        expect(response.body.linked_study_updated_at).toBe('2026-08-21T20:15:00.000Z');
+      });
 
       // The inline body above omits estimated_duration_minutes, which is the
       // common case: the field is optional and most researchers will leave it.
@@ -2457,6 +2634,42 @@ describe('Opportunities API', () => {
         return calls[0];
       };
 
+      /**
+       * The recorded twin of the survey revision assertion.
+       *
+       * Written because a mutation proved it was missing: deleting the line
+       * that carries the revision out of THIS branch left every test in the
+       * file green, while the survey branch's identical line was caught. Both
+       * branches feed the same in-place update and both are read by the same
+       * autosave, so one covered and one not is the shape where the uncovered
+       * half quietly stops working.
+       */
+      it('returns the rewritten study revision, as the survey branch does', async () => {
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: true as const,
+          claimed: false,
+          study: {
+            id: 'study_already_linked',
+            title: 'A study',
+            intro_text: 'Intro',
+            consent_text: 'We record your screen.',
+            kind: 'recorded' as const,
+            status: 'launched',
+            owner_user_id: 'test-user-id',
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-21T19:15:00.000Z'
+          },
+          steps: []
+        } as never);
+
+        const response = await patchLinked(
+          { title: 'A new title', inline_study: inlineStudy },
+          true
+        ).expect(200);
+
+        expect(response.body.linked_study_updated_at).toBe('2026-08-21T19:15:00.000Z');
+      });
+
       it('rewrites the linked study rather than minting a second one', async () => {
         await patchLinked({ title: 'A new title', inline_study: inlineStudy }, true)
           .expect(200);
@@ -2529,6 +2742,29 @@ describe('Opportunities API', () => {
         // Carried so the client can recover without a second request that can
         // itself fail and strand the author in a loop.
         expect(res.body.current_updated_at).toBe('2026-08-21T09:15:30.123Z');
+      });
+
+      /**
+       * The dangling-link REPAIR path also has to hand back a precondition.
+       *
+       * An independent mutation pass deleted the line that carries it here and
+       * 284 tests passed. This is the branch an opportunity takes when the
+       * study it pointed at has gone: the route mints a replacement and
+       * repoints the row. Without the revision, the very next autosave on a
+       * just-repaired opportunity writes under F1's fail-open - and this is
+       * the path reached by exactly the rows nobody is watching.
+       */
+      it('returns the replacement study revision when it repairs a dangling link', async () => {
+        mockGetStudyById.mockResolvedValueOnce(null as never);
+        mockCreateStudy.mockResolvedValueOnce({
+          study: { id: 'study_replacement', updated_at: '2026-08-21T20:20:00.000Z' },
+          steps: []
+        } as never);
+
+        const response = await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+        expect(mockCreateStudy).toHaveBeenCalled();
+        expect(response.body.linked_study_updated_at).toBe('2026-08-21T20:20:00.000Z');
       });
 
       /**

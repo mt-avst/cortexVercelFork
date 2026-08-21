@@ -368,7 +368,25 @@ function sendStaleStudyConflict(
 }
 
 type InPlaceStudyOutcome =
-  | { outcome: Exclude<InPlaceStudyUpdate, 'stale'> }
+  | { outcome: Exclude<InPlaceStudyUpdate, 'stale' | 'updated'> }
+  /**
+   * The revision the write LANDED ON, carried out of here rather than left for
+   * the caller to fetch again.
+   *
+   * A successful save moves `updated_at`, so the precondition the client is
+   * holding goes stale the instant its own save commits. A form that saves
+   * once and then reloads never notices - `loadOpportunity` refreshes the
+   * value on the way back in. An autosave cannot reload: rebuilding the form
+   * from the server would discard whatever the author typed while the request
+   * was in flight, which is the one thing autosave exists to prevent.
+   *
+   * So without this the SECOND autosave is refused as stale against the FIRST
+   * one's own write, and so is every save after it, forever - a conflict
+   * banner accusing a colleague who does not exist. Returning the value costs
+   * nothing: `updateStudy` already read it under the row lock it took to do
+   * the write.
+   */
+  | { outcome: 'updated'; updatedAt: string }
   | { outcome: 'stale'; currentUpdatedAt: string };
 
 /**
@@ -680,7 +698,7 @@ async function updateLinkedStudyContent(
     });
   }
 
-  return { outcome: 'updated' };
+  return { outcome: 'updated', updatedAt: result.study.updated_at };
 }
 
 /**
@@ -1140,6 +1158,18 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   // same database. The compensating delete below is what keeps a failed insert
   // from leaving behind a launched study nobody asked for.
   let createdStudyId: string | null = null;
+  /**
+   * The minted study's `updated_at`, for the caller's FIRST concurrency
+   * precondition.
+   *
+   * The create response is the only place a client that authored content here
+   * can learn it without a second round trip, and an autosave needs it
+   * immediately: its very next save is a PATCH carrying `inline_*`, which
+   * without a precondition writes under the fail-open. See the PATCH
+   * handler's twin for why absence rather than null is the honest signal for
+   * "this request wrote no study".
+   */
+  let linkedStudyUpdatedAt: string | null = null;
 
   if (inlineStudy) {
     if (!isStudiesPersistenceConfigured()) {
@@ -1180,6 +1210,7 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       steps: toStudySteps(inlineStudy.steps, studyId, inlineStudy.target_url)
     });
     createdStudyId = stored.study.id;
+    linkedStudyUpdatedAt = stored.study.updated_at;
   } else if (inlineSurvey) {
     if (!isStudiesPersistenceConfigured()) {
       throw new AppError('Questions require a configured PostgreSQL database.', 503);
@@ -1210,6 +1241,7 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       steps: toSurveySteps(inlineSurvey.steps, studyId)
     });
     createdStudyId = stored.study.id;
+    linkedStudyUpdatedAt = stored.study.updated_at;
   } else if (linkedStudyId && isStudiesPersistenceConfigured()) {
     // Reusing an existing study. If it is one of the legacy rows migration
     // 0007 could not attribute, claim it now: publishing an opportunity is the
@@ -1275,7 +1307,11 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     updated_at: result.rows[0].updated_at.toISOString(),
     start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
     end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
-    sessions: []
+    sessions: [],
+    // Same contract as the PATCH response: present only when this request
+    // actually wrote a study, so absence means "nothing to say" rather than
+    // "there is no study".
+    ...(linkedStudyUpdatedAt ? { linked_study_updated_at: linkedStudyUpdatedAt } : {})
   };
   
   res.status(201).json(opportunity);
@@ -1597,6 +1633,18 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   // "No fields to update" for a request that in fact saved everything it
   // carried.
   let updatedStudyInPlace = false;
+  /**
+   * The linked study's `updated_at` as it stands AFTER this request, returned
+   * to the caller so a client saving repeatedly can advance its own
+   * concurrency precondition without re-reading the study.
+   *
+   * Set on both paths that leave a study written: an in-place rewrite, and a
+   * fresh mint. Null when this request wrote no study at all, which is the
+   * honest answer for a save that carried no authored content - the caller
+   * must keep whatever precondition it already held rather than treating
+   * silence as "no study".
+   */
+  let linkedStudyUpdatedAt: string | null = null;
 
   const linkedStudyId = existingFirstHandStudyId?.trim() || null;
   const studyRequesterForThisWrite: StudyRequester = {
@@ -1716,6 +1764,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
       if (outcome.outcome === 'updated') {
         updatedStudyInPlace = true;
+        linkedStudyUpdatedAt = outcome.updatedAt;
       }
       if (outcome.outcome === 'missing') {
         // Falls through to the mint below, which repoints the dangling link at
@@ -1756,6 +1805,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         steps: toStudySteps(inlineStudyInput.steps, studyId, inlineStudyInput.target_url)
       });
       createdStudyId = stored.study.id;
+      linkedStudyUpdatedAt = stored.study.updated_at;
       // Routed through the same field loop as everything else so the id lands in
       // the UPDATE without a second code path.
       data.firsthand_study_id = createdStudyId;
@@ -1828,6 +1878,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
       if (outcome.outcome === 'updated') {
         updatedStudyInPlace = true;
+        linkedStudyUpdatedAt = outcome.updatedAt;
       }
     }
 
@@ -1857,6 +1908,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         steps: toSurveySteps(inlineSurveyInput.steps, studyId)
       });
       createdStudyId = stored.study.id;
+      linkedStudyUpdatedAt = stored.study.updated_at;
       data.firsthand_study_id = createdStudyId;
     }
   }
@@ -1987,7 +2039,20 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     updated_at: result.rows[0].updated_at.toISOString(),
     start_date: result.rows[0].start_date ? result.rows[0].start_date.toISOString() : null,
     end_date: result.rows[0].end_date ? result.rows[0].end_date.toISOString() : null,
-    sessions: []
+    sessions: [],
+    /**
+     * The linked study's revision after this write, for the caller's NEXT
+     * precondition.
+     *
+     * OMITTED rather than sent as null when this request wrote no study, and
+     * the distinction is the whole reason this is spelled with a conditional
+     * spread. A client that reads a present-but-null field as "there is no
+     * study" would clear a precondition it should have kept, and the save
+     * after that would go through fail-open with nothing anywhere saying the
+     * protection had been dropped. Absent means "this request says nothing
+     * about the study", which is what a title-only save actually means.
+     */
+    ...(linkedStudyUpdatedAt ? { linked_study_updated_at: linkedStudyUpdatedAt } : {})
   };
 
   res.json(opportunity);

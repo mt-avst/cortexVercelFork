@@ -89,6 +89,24 @@ export interface Opportunity {
   end_date?: string; // Study end date for countdown display
   created_at: string;
   updated_at: string;
+  /**
+   * The LINKED STUDY's `updated_at` after this write - not the opportunity's,
+   * which is the field above.
+   *
+   * Present only on the responses to a create or an update that actually wrote
+   * a study, and absent otherwise. That distinction is load-bearing rather
+   * than tidy: a client reading a present-but-null field as "there is no
+   * study" would clear the optimistic-concurrency precondition it should have
+   * kept, and the next save would go through the fail-open with nothing
+   * anywhere recording that the protection had been dropped. Absent means
+   * "this response says nothing about the study".
+   *
+   * It exists for a caller that saves repeatedly and cannot reload between
+   * saves - the authoring form's autosave. A successful save moves the study's
+   * revision, so without this the save after it is refused as stale against
+   * its own predecessor.
+   */
+  linked_study_updated_at?: string;
   // Admin responses only (populated by API joins) - stripped from public/participant responses
   owner_name?: string;
   owner_email?: string;

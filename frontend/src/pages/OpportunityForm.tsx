@@ -3,7 +3,7 @@ import { useNavigate, useParams, useMatch, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { createOpportunity, updateOpportunity, getOpportunity, getSessions } from '../api/client';
+import { createOpportunity, updateOpportunity, deleteOpportunity, getOpportunity, getSessions } from '../api/client';
 import { getFirstHandStudy, wasRateLimited } from '../api/firsthand-studies';
 import {
   answersDetachedBy,
@@ -25,6 +25,22 @@ import {
   replaceStepErrors
 } from '../lib/opportunity-authoring/error-summary';
 import { hasUnsavedChanges } from '../lib/opportunity-authoring/dirty-signature';
+import {
+  buildSavePayload,
+  type SavePayload,
+  type SavePayloadFormState
+} from '../lib/opportunity-authoring/save-payload';
+import {
+  AUTOSAVE_MAX_ATTEMPTS,
+  decideAutosave,
+  forAutosave,
+  meetsCreateThreshold,
+  saveStateMessage,
+  saveStateView,
+  type AutosaveBlock,
+  type AutosaveState
+} from '../lib/opportunity-authoring/autosave';
+import { dirtySignature } from '../lib/opportunity-authoring/dirty-signature';
 import {
   STEP_STATUS_LABEL,
   deriveStepStatus,
@@ -54,9 +70,7 @@ import {
   copiedSurveyFields,
   isAwaitingCopiedContent,
   studyRoundTripsCleanly,
-  toInlineStudyPayloadStep,
   toInlineStudyStep,
-  toSurveyPayloadStep,
   toSurveyQuestion,
   withStoredIdentity,
   type AuthoringKind,
@@ -87,14 +101,14 @@ import {
 } from '../shared/firsthand/consent-templates';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
-  type InlineSurvey as InlineSurveyPayload,
+  inlineSurveySchema,
   type SurveyQuestion
 } from '../shared/firsthand/survey-authoring';
 import {
   DEFAULT_CONSENT_TEXT,
   INLINE_STUDY_LIMITS,
   UNSAFE_TARGET_URL_MESSAGE,
-  type InlineStudy as InlineStudyPayload,
+  inlineStudySchema,
   type InlineStudyStep
 } from '../shared/firsthand/inline-study';
 import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
@@ -531,6 +545,37 @@ export const getTabsForType = (
  * be unreadable. None of that should stop an opportunity opening - it only
  * changes what the note on screen can say.
  */
+/**
+ * One sentence for the author out of a schema refusal.
+ *
+ * The FIRST issue rather than all of them, and phrased as a nudge rather than
+ * as a validation error, because this is not the validation surface: D1's
+ * error summary is, and it names the step and moves focus. This only has to
+ * say enough that "not saved" does not read as "something is broken" - the
+ * author is usually mid-sentence in the very field it is about.
+ */
+const firstSchemaComplaint = (
+  error: { issues: { path: (string | number)[] }[] },
+  kind: 'survey' | 'recorded'
+): string => {
+  const path = error.issues[0]?.path ?? [];
+  // `steps` and `questions` are the only arrays here, and their index is the
+  // one part of the path worth saying out loud - "question 3" locates it,
+  // whereas "prompt" on its own does not.
+  const index = path.find((segment) => typeof segment === 'number');
+  const field = [...path].reverse().find((segment) => typeof segment === 'string');
+
+  if (typeof index === 'number') {
+    // "task" or "question" by which vocabulary this study speaks. A recorded
+    // task list has tasks; calling them questions describes a surface the
+    // author is not looking at.
+    const item = kind === 'survey' ? 'question' : 'task';
+    return `${item} ${index + 1} needs ${field === 'prompt' ? 'a prompt' : `its ${String(field)}`}`;
+  }
+
+  return field ? `${String(field)} is not complete yet` : 'this is not ready to save yet';
+};
+
 const resolveSourceTitle = async (studyId: string): Promise<string> => {
   try {
     const source = await getFirstHandStudy(studyId);
@@ -737,6 +782,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   // saved as draft, so the study silently never published.
   const [loadingOpportunity, setLoadingOpportunity] = useState(isEdit);
   const [saving, setSaving] = useState(false);
+  const [discarding, setDiscarding] = useState(false);
+  /** The discard confirmation, open when true. */
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -752,6 +800,127 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const [refusalCount, setRefusalCount] = useState(0);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [opportunityId, setOpportunityId] = useState<string>('');
+  /**
+   * The id of a draft THIS session created by autosaving, before the route had
+   * one.
+   *
+   * `useParams` cannot answer this. The form opens at
+   * `/admin/opportunities/new` with no id, and the first autosave POSTs a
+   * draft and rewrites the URL - but every save after that has to be a PATCH
+   * against the row that now exists, and reading the route alone would POST
+   * again on every keystroke, minting an opportunity per save. That is the
+   * exact failure the "a hundred saves produce one study" criterion is about.
+   */
+  const [draftId, setDraftId] = useState<string | null>(null);
+  /**
+   * The stored row this form is editing, whether the route named it or this
+   * session created it.
+   */
+  const persistedOpportunityId = id ?? draftId;
+  const isPersisted = Boolean(persistedOpportunityId);
+  /**
+   * An id this session minted, so the load effect can tell it apart from one
+   * the author navigated to.
+   *
+   * Rewriting the URL makes `useParams().id` appear, which fires the load
+   * effect, which rebuilds the entire form from the server - discarding
+   * whatever was typed while the create request was in flight. The server has
+   * nothing to teach us about a row we wrote a moment ago from the state on
+   * screen, so the load is skipped for it. A ref rather than state: the effect
+   * has to see the value in the same tick the id changes.
+   */
+  const selfCreatedIdRef = useRef<string | null>(null);
+  const [autosaveState, setAutosaveState] = useState<AutosaveState>({
+    inFlight: false,
+    lastRequestAt: null,
+    lastSavedAt: null,
+    consecutiveFailures: 0
+  });
+  /**
+   * The form as it was last successfully stored, as one comparable string.
+   *
+   * The same instrument the exit guard uses, for the same reason: a list of
+   * fields to compare is a list that goes out of date, and this one decides
+   * whether somebody's work is on the server.
+   */
+  const savedSignatureRef = useRef<string | null>(null);
+  /** Re-runs the autosave decision when a timer says its moment has come. */
+  const [autosaveTick, setAutosaveTick] = useState(0);
+  /**
+   * The autosave currently in flight, so a deliberate save can wait for it.
+   *
+   * Two writes in flight at once against the same study is the failure F1
+   * exists to catch, arriving from inside one browser tab: whichever lands
+   * second carries a precondition the first has already spent, so the author
+   * is shown a conflict banner naming a colleague who is themselves. Worse, if
+   * the deliberate save wins the race its content is then overwritten by the
+   * autosave's older payload.
+   *
+   * A ref rather than state because `handleSubmit` has to see it in the tick
+   * it is called, and nothing renders differently for it.
+   */
+  const autosaveInFlightRef = useRef<Promise<void> | null>(null);
+  /**
+   * Whether a DELIBERATE save is running, as a ref rather than as `saving`.
+   *
+   * `setSaving(true)` is state and is not visible to a second click in the
+   * same tick, nor to the autosave timer's decision until a render has
+   * happened. Both need a synchronous answer.
+   */
+  const manualSaveRef = useRef(false);
+  /**
+   * The body of the last save that SUCCEEDED, so the same one is never sent
+   * twice in a row.
+   *
+   * A backstop rather than an optimisation, and it closes a whole class rather
+   * than a bug. Everything that decides whether to fire is a guard, and a
+   * guard that stops working leaves a timer whose payload never changes,
+   * whose dirty flag therefore never clears, and which fires for ever - a
+   * write every five seconds, for as long as the tab is open, spending the
+   * shared budget to change nothing.
+   *
+   * An independent mutation pass found that shape twice, and the way it found
+   * it is the point: removing either guard made the test suite HANG rather
+   * than fail. In CI that is a job timeout with no named failing test, which
+   * is the hardest kind of regression to diagnose. With this in place the same
+   * removal produces one save and then silence - an assertion failure with a
+   * name.
+   */
+  const lastSentBodyRef = useRef<string | null>(null);
+  /**
+   * The server's own sentence when it REFUSED an autosave, as opposed to
+   * failing to answer one. Cleared the moment the author changes anything,
+   * because the next save is a different request.
+   */
+  const [autosaveRefusal, setAutosaveRefusal] = useState<string | null>(null);
+  /**
+   * The form as the SERVER is known to hold it, which is not the same thing as
+   * the form as it was LOADED.
+   *
+   * Two rules inside the payload builder ask "did this request change it" and
+   * both used `originalFormData`, which only `loadOpportunity` ever sets. That
+   * was sound while the only writer was a save that reloaded afterwards. An
+   * autosave writes to the stored row and deliberately never reloads, so the
+   * load baseline goes out of date the moment the timer fires - and the rules
+   * built on it start answering about a state nobody is in:
+   *
+   *  - `delivery_mode` is sent only when it differs from the baseline, because
+   *    sending it on every save trips the backend's publish and linkage guards
+   *    and locks a row out of repair. A poll stored `external`, switched to
+   *    Native (autosaved), then switched BACK, matches the stale baseline - so
+   *    the key is omitted and the row stays native, serving a survey to people
+   *    who were meant to get a handoff.
+   *  - a duration CLEARED after being autosaved sends `undefined` rather than
+   *    `null`, so the old number stays stored while the field reads blank.
+   *
+   * Advanced by every successful save with exactly what that save sent, which
+   * is honest for these two scalar comparisons in a way that reusing
+   * `originalFormData` is not. It is NOT used to decide whether there is
+   * anything to save - `savedSignatureRef` does that - and it deliberately
+   * does not replace `originalFormData`, which still means "what the server
+   * served us" for the round-trip checks that need it.
+   */
+  const storedFormRef = useRef<SavePayloadFormState | null>(null);
   const [activeTab, setActiveTab] = useState<number>(1);
   /**
    * Steps the author has been on and left, which is what separates "Completed"
@@ -1333,6 +1502,19 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         delivery_mode: opportunity.delivery_mode ?? 'external'
       };
       setOriginalFormData(originalData);
+      /**
+       * The autosave baseline, stamped from the SAME object the change
+       * comparison uses.
+       *
+       * Until this is set the ref is null and no autosave can fire, which is
+       * deliberate rather than incidental: an edit form is fully typeable
+       * while its load is still in flight, and a baseline seeded from the
+       * blank initial state would read as "everything has changed" and write
+       * an empty form over a real opportunity, on a timer, before the author
+       * had seen its content.
+       */
+      savedSignatureRef.current = dirtySignature(originalData);
+      storedFormRef.current = originalData;
 
       // Load sessions - always try to load fresh sessions from API when editing
       // The opportunity object might have stale session data
@@ -1406,8 +1588,27 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     // Only the route id: everything else it touches is a setter.
   }, [id]);
 
+  /**
+   * A create has no server baseline to load, so its baseline is the empty form
+   * it opened as - stamped once, on mount.
+   *
+   * Without this the ref stays null and autosave never fires at all on the
+   * path it was mainly built for.
+   */
   useEffect(() => {
-    if (isEdit && id) {
+    if (isEdit) return;
+    if (savedSignatureRef.current !== null) return;
+    savedSignatureRef.current = dirtySignature(openingFormData.current);
+    // Refs only besides `isEdit`, so there is nothing else to depend on.
+  }, [isEdit]);
+
+  useEffect(() => {
+    // Skipped for an id THIS session just created by autosaving. Rewriting the
+    // URL makes `id` appear, which would otherwise rebuild the whole form from
+    // the server and discard everything typed while the create request was in
+    // flight - on the one feature whose entire purpose is not losing
+    // keystrokes. The server holds exactly what we sent it a moment ago.
+    if (isEdit && id && selfCreatedIdRef.current !== id) {
       loadOpportunity();
     }
   }, [isEdit, id, loadOpportunity]);
@@ -2375,6 +2576,53 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   const openingFormData = useRef(formData);
 
   /**
+   * The whole form as one comparable string, recomputed each render.
+   *
+   * Used by three things that must agree: the autosave's notion of dirty, the
+   * effect that stamps when a change happened, and the unload guard. One
+   * instrument rather than three comparisons.
+   */
+  const changeSignature = dirtySignature(formData);
+
+  /**
+   * Whether this form autosaves at all.
+   *
+   * DRAFTS ONLY, and this is a product decision rather than a technical one,
+   * so it is worth stating where it is made.
+   *
+   * The plan's rule is "autosave writes draft state only". The narrow reading
+   * is "never set status to published", which `forAutosave` already
+   * guarantees. The broader one - only autosave something that is still a
+   * draft - is the one taken here, because of what the alternative means for
+   * a study that is already running: a researcher rewording a question on a
+   * live opportunity would have that wording reach participants two seconds
+   * later, mid-session, with nobody having pressed anything. Some of those
+   * participants would have already answered the previous wording, and
+   * nothing records which version anybody saw.
+   *
+   * A published opportunity therefore goes back to saving deliberately, which
+   * is what it did before D2 and what its Save control still says it does.
+   * Unsaved work is still protected there - by the exit guard and the route
+   * blocker, which warn rather than write.
+   *
+   * The STORED status, not the one in the form. An author who has selected
+   * Published on the Review step but not yet committed is about to make a
+   * deliberate decision, and a timer must not make it for them.
+   *
+   * Read from `storedFormRef` rather than from `originalFormData`, and the
+   * difference is a real one on the path this feature creates. A draft THIS
+   * session minted by autosaving has no `originalFormData` at all - the load
+   * effect is skipped for a self-minted id - so the fallback was the form's
+   * own status. Setting Status to Published on step one then switched autosave
+   * off, taking the save-state line, the Discard control and the timer with
+   * it, and everything typed after that was unsaved with nothing on screen
+   * saying so. `storedFormRef` is set by the create response as well as by the
+   * load, so it has an answer on both paths.
+   */
+  const autosaveApplies =
+    !allowUserSubmission && (storedFormRef.current?.status ?? formData.status) === 'draft';
+
+  /**
    * Would leaving now lose something.
    *
    * An edit asks `hasChanges`, which is the same question the Save Changes
@@ -2403,6 +2651,36 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       return true;
     }
 
+    /**
+     * The timer has already saved it, so there is nothing to lose.
+     *
+     * Checked BEFORE the two comparisons below, because both measure against
+     * the baseline the LOAD produced and an autosave deliberately does not
+     * refresh that - declaring that what we sent is now what is stored is the
+     * mistake A1 exists to undo, and re-reading the opportunity mid-sentence
+     * is the loss autosave exists to prevent. So on an autosaved form both
+     * instruments report unsaved work indefinitely, and the author is warned
+     * about losing something that is already on the server. Warned every time,
+     * they learn to click through it - which is how the warning stops working
+     * on the day it is telling the truth.
+     *
+     * `savedSignatureRef` is the honest instrument for this one question:
+     * it holds exactly what was last successfully STORED, so a match means the
+     * server has what is on screen. It is null until a baseline exists, and
+     * this is skipped then.
+     *
+     * The temporary-sessions check above still stands, and stands FIRST: slots
+     * held in memory are outside `formData` entirely, so no signature can see
+     * them.
+     */
+    if (
+      autosaveApplies &&
+      savedSignatureRef.current !== null &&
+      savedSignatureRef.current === changeSignature
+    ) {
+      return false;
+    }
+
     // Both instruments, not one. `hasChanges` enumerates its comparisons
     // because it decides whether to OFFER a save; that list has been wrong
     // twice, and being wrong about a warning costs the author their work
@@ -2429,32 +2707,753 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * only moved back one step. D2 replaces this with a real save; until then,
    * asking is the least this can do.
    */
+  /**
+   * Take the study revision a write just produced.
+   *
+   * The alternative is re-reading the study after every save, which is a
+   * request that can fail on a path that must not - and which would tell the
+   * author nothing they could act on when it did. The write already knew the
+   * answer; this is only a matter of it being carried back.
+   *
+   * Absence means "this response says nothing about a study", which is what a
+   * title-only save means, so the precondition is KEPT rather than cleared.
+   * Clearing it would silently drop the protection on the next save.
+   */
+  const adoptStudyRevision = (saved: Opportunity) => {
+    if (saved.linked_study_updated_at) {
+      setLinkedStudyUpdatedAt(saved.linked_study_updated_at);
+      // A revision we just wrote makes any conflict token two writes old, and
+      // a stale token permanently shadows the real one - refusing every later
+      // save and blaming a colleague who did nothing.
+      setStaleStudyUpdatedAt(null);
+    }
+  };
+
+  /**
+   * The payload this form would send right now.
+   *
+   * Built from the same builder the manual save uses, so an autosave and a
+   * Finish cannot disagree about what a save carries.
+   */
+  const currentPayload = useCallback(
+    (): SavePayload =>
+      buildSavePayload({
+        formData,
+        // What the server HOLDS, falling back to what it served when nothing
+        // has been saved since. See storedFormRef for why the two differ.
+        originalFormData: storedFormRef.current ?? originalFormData,
+        isEdit: isPersisted,
+        tabs,
+        deliveryMode,
+        authoringInlineStudy,
+        authoringInlineSurvey,
+        isSuperadmin: user?.role === 'superadmin',
+        allowUserSubmission,
+        linkedStudyUpdatedAt,
+        staleStudyUpdatedAt
+      }),
+    [
+      formData,
+      originalFormData,
+      isPersisted,
+      tabs,
+      deliveryMode,
+      authoringInlineStudy,
+      authoringInlineSurvey,
+      user?.role,
+      allowUserSubmission,
+      linkedStudyUpdatedAt,
+      staleStudyUpdatedAt
+    ]
+  );
+
+  /**
+   * Why an autosave cannot go out right now, in words the author can act on.
+   *
+   * A block is NOT an error. Nothing has gone wrong; the payload simply is not
+   * one the server would accept yet, which is the ordinary state of a question
+   * somebody is halfway through typing. Reporting it as a failure would teach
+   * the author to ignore the one message that means their work is at risk.
+   *
+   * The authored content is checked against the SHARED schemas - the very
+   * objects the server validates with, imported from `shared/firsthand` - not
+   * against a restatement of their rules. A second copy of "a prompt must not
+   * be empty" is a copy that can disagree with the server about when a save
+   * would be refused, and the direction it would disagree in is silent: the
+   * form would fire a POST, take a 400, and tell the author saving had failed.
+   */
+  const autosaveBlock = (payload: SavePayload): AutosaveBlock | null => {
+    // A study that could not be READ must never be written over, and that
+    // outranks everything: the form is showing default consent text and an
+    // empty task list because the fetch failed, not because that is what the
+    // study holds. `handleSubmit` refuses for the same reason.
+    if (studyLoadError) {
+      return { code: 'read-only', detail: 'this task list could not be read' };
+    }
+
+    /**
+     * A conflict is unresolved until the author decides what to do about it,
+     * and the TOKEN outlives the banner.
+     *
+     * `studyConflict` alone was not enough. `handleSubmit` clears that flag at
+     * the top of its own try, and its catch only sets it again for another
+     * `stale_study` 409 - so a deliberate re-save that failed for ANY other
+     * reason left `staleStudyUpdatedAt` armed with the banner gone. The timer
+     * then performed the deliberate overwrite that the author had authorised
+     * for exactly one click, against a colleague's work, with `answerCounts`
+     * null so the answer-detachment summary could not fire either.
+     *
+     * Gated on the token as well, so the overwrite stays a deliberate act.
+     */
+    if (studyConflict || staleStudyUpdatedAt !== null) {
+      return {
+        code: 'needs-confirmation',
+        detail: 'somebody else has changed this since you opened it'
+      };
+    }
+
+    if (!isPersisted && !meetsCreateThreshold(formData)) {
+      return { code: 'below-threshold' };
+    }
+
+    // The server refused the last attempt and said why. Repeat its sentence
+    // rather than a generic failure, and do not send the same body again.
+    if (autosaveRefusal) {
+      return { code: 'incomplete', detail: autosaveRefusal };
+    }
+
+    /**
+     * A status the timer will never carry.
+     *
+     * `forAutosave` omits `status` on an edit deliberately, so a form whose
+     * status differs from the stored one has a delta autosave cannot close.
+     * Left to run, every pass would send an identical body, stay dirty, and
+     * fire again on the next tick - spending the shared write budget forever
+     * to change nothing.
+     *
+     * A block rather than a silent stop, because the author has made a
+     * decision that is NOT being saved and is owed that sentence. The exit
+     * guard warns about it too, now that the signature is honest about what
+     * was stored.
+     */
+    if (
+      storedFormRef.current &&
+      formData.status !== storedFormRef.current.status
+    ) {
+      return {
+        code: 'needs-confirmation',
+        detail: 'changing the status is saved when you press Save'
+      };
+    }
+
+    if (payload.inline_survey) {
+      const parsed = inlineSurveySchema.safeParse(payload.inline_survey);
+      if (!parsed.success) {
+        return { code: 'incomplete', detail: firstSchemaComplaint(parsed.error, 'survey') };
+      }
+    }
+
+    if (payload.inline_study) {
+      const parsed = inlineStudySchema.safeParse(payload.inline_study);
+      if (!parsed.success) {
+        return { code: 'incomplete', detail: firstSchemaComplaint(parsed.error, 'recorded') };
+      }
+    }
+
+    /**
+     * A removal that would detach somebody's answers is never done on a timer.
+     *
+     * `handleSubmit` puts this behind a confirmation naming both numbers, and
+     * an autosave that went round it would remove research nobody was asked
+     * about - silently, seconds after the card left the screen. So the timer
+     * holds and says so, and the removal happens when the author saves
+     * deliberately and confirms.
+     */
+    if (authoringKind === 'survey') {
+      const detached = answersDetachedBy(
+        (formData.inline_survey_questions ?? []).map((question) => question._clientId),
+        answerCounts
+      );
+
+      if (detached) {
+        return {
+          code: 'needs-confirmation',
+          detail: 'removing a question that has answers needs confirming'
+        };
+      }
+    }
+
+    /**
+     * Never send the same body twice in a row.
+     *
+     * LAST, after every block that has something to say. If the payload is
+     * byte-for-byte what the last successful save sent, then whatever still
+     * reads as unsaved is something this request cannot carry - and if that
+     * thing has a name, one of the blocks above has already given it, so this
+     * must not pre-empt them.
+     *
+     * A backstop rather than an optimisation. Every other guard decides
+     * whether to fire; if one stops working, the timer is left with a payload
+     * that never changes and a dirty flag that therefore never clears, and it
+     * fires for ever. An independent mutation pass found that shape twice, and
+     * both times the suite HUNG rather than failed - in CI a job timeout with
+     * no named failing test. With this, the same removal produces one save and
+     * then silence, which has a name.
+     */
+    if (
+      lastSentBodyRef.current !== null &&
+      JSON.stringify(forAutosave(payload, isPersisted)) === lastSentBodyRef.current
+    ) {
+      return { code: 'nothing-new' };
+    }
+
+    return null;
+  };
+
+  /**
+   * Reopening a draft OFFERS the step that needs attention. It does not go
+   * there.
+   *
+   * The plan's words are "land the author on the first step that needs
+   * attention", and this is a deliberate departure from the literal reading,
+   * so the reasoning belongs here rather than in a commit message nobody will
+   * find.
+   *
+   * Moving somebody on load, before they have looked at anything, is the wrong
+   * shape twice over. An author who deliberately left step three blank to come
+   * back and finish step one first is taken somewhere they did not ask to go,
+   * with no explanation and nothing on screen saying why the form did not open
+   * where they expected. And "the first thing that is invalid" is a VALIDATION
+   * affordance, not a resumption one - D1 already built that affordance, in
+   * the error summary, and it works by offering a route rather than taking it.
+   * Two mechanisms doing the same job by different rules is how a form starts
+   * behaving unpredictably.
+   *
+   * So the author is told, once, in one line, and one click takes them there.
+   * They arrive having chosen to.
+   *
+   * Review is never the answer: it reports "needs attention" whenever the
+   * opportunity is not publishable, which on a half-finished draft is always,
+   * so it would win this search every time and offer a summary of work that
+   * has not been done.
+   */
+  const resumeStep = useMemo(() => {
+    if (!originalFormData || originalFormData.status !== 'draft') return null;
+
+    return (
+      tabs.find((step) => {
+        if (step.id === REVIEW_STEP_ID) return false;
+        const status = statusOfStep(step);
+        return status === 'needsAttention' || status === 'notStarted';
+      }) ?? null
+    );
+  }, [originalFormData, tabs, statusOfStep]);
+
+
+  /**
+   * WHEN the form last changed, computed during render rather than recorded in
+   * an effect.
+   *
+   * It was an effect first, and that was wrong in a way only a real browser
+   * showed. An effect runs AFTER the render that first sees the new signature,
+   * so on that render the autosave decision read the PREVIOUS change time -
+   * which, on the first edit after a save, is minutes old. The debounce was
+   * therefore already satisfied and the save went out on the first keystroke:
+   * the exact behaviour the debounce exists to prevent, and the one the plan
+   * names. Measured at 39ms after a single keystroke; jsdom never showed it,
+   * because nothing there types twice with a save in between.
+   *
+   * `useMemo` keyed on the signature recomputes exactly when the form's
+   * content changes and never otherwise, so it is a timestamp OF that change
+   * rather than a reading taken near it - and it is available on the same
+   * render, which is the whole point.
+   */
+  const lastChangeAt = useMemo(
+    () => Date.now(),
+    // The clock is read when the signature changes. That is the value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [changeSignature]
+  );
+
+  /**
+   * Warn before the BROWSER takes the page away.
+   *
+   * This is the refresh, the close and the back button - the three exits no
+   * router hears about. It is deliberately narrow, and being honest about
+   * what it does NOT cover matters more than the code:
+   *
+   *  - It cannot cover in-app navigation. That is what `requestExit` and its
+   *    confirmation are for, and every control on this form that leaves goes
+   *    through it.
+   *  - A true route blocker would use `useBlocker`, which needs a data router.
+   *    This app mounts `BrowserRouter` with a `Routes` tree, so the hook is
+   *    not available here and moving the whole app onto `createBrowserRouter`
+   *    is not a change that belongs in this step.
+   *  - The browser decides the wording. Every current browser ignores the
+   *    string and shows its own, which is why none is set.
+   *
+   * Only armed when there is genuinely something to lose. An unconditional
+   * handler is the dialog everyone learns to dismiss without reading, and it
+   * would fire on a form that autosaved thirty seconds ago and has nothing
+   * outstanding at all.
+   */
+  const somethingToLose = hasUnsavedWork();
+
+  useEffect(() => {
+    if (!somethingToLose) return;
+
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      // Assigned as well as prevented: Chrome and Safari still gate the
+      // dialog on returnValue being set, however deprecated it is.
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+    // The ANSWER, not the function. `hasUnsavedWork` is redefined every
+    // render, so depending on it would add and remove the listener on every
+    // keystroke - which works, and is a lot of churn to say the same thing a
+    // boolean says.
+  }, [somethingToLose]);
+
+
+  /**
+   * The signature of what is on screen, against what was last stored.
+   *
+   * `savedSignatureRef` is seeded by the load and re-stamped by every
+   * successful save, so "dirty" means exactly "differs from what the server
+   * holds" rather than "differs from what we last sent" - a distinction that
+   * matters the moment the server normalises something we sent it.
+   */
+  const autosaveDirty =
+    savedSignatureRef.current !== null && changeSignature !== savedSignatureRef.current;
+
+  const pendingPayload = currentPayload();
+  const rawBlock = autosaveBlock(pendingPayload);
+
+  // The block, flattened to two primitives, because a fresh object every
+  // render would re-run the effect every render. The detail as well as the
+  // code: two `incomplete` blocks with different sentences are different
+  // states to the author, and depending on the code alone would leave the
+  // first sentence on screen after the reason for it changed.
+  const currentBlockCode = rawBlock?.code ?? null;
+  const currentBlockDetail =
+    rawBlock && 'detail' in rawBlock ? rawBlock.detail : null;
+
+  /**
+   * Rebuilt from those two primitives rather than passed through, so its
+   * identity changes only when its MEANING does.
+   *
+   * `autosaveBlock` runs on every render and returns a fresh object each time,
+   * which as an effect dependency would re-run the timer decision on every
+   * keystroke - re-arming the debounce forever and, at the limit, never
+   * saving at all.
+   */
+  const currentBlock = useMemo<AutosaveBlock | null>(
+    () =>
+      currentBlockCode === null
+        ? null
+        : ({
+            code: currentBlockCode,
+            ...(currentBlockDetail !== null ? { detail: currentBlockDetail } : {})
+          } as AutosaveBlock),
+    [currentBlockCode, currentBlockDetail]
+  );
+
+  const saveState = saveStateView({
+    dirty: autosaveDirty,
+    block: currentBlock,
+    inFlight: autosaveState.inFlight,
+    lastSavedAt: autosaveState.lastSavedAt,
+    consecutiveFailures: autosaveState.consecutiveFailures
+  });
+
+  /**
+   * Send one autosave.
+   *
+   * Deliberately NOT `handleSubmit`. A manual save validates the whole form,
+   * confirms detachments, writes time slots, re-reads the opportunity and then
+   * navigates away - every one of which is wrong on a timer, and the re-read
+   * most of all: rebuilding the form mid-sentence is the loss this feature
+   * exists to prevent.
+   *
+   * What it shares with `handleSubmit` is the only thing that must not drift:
+   * the payload.
+   */
+  const runAutosave = useCallback(async () => {
+    // Read once, before the create branch below changes what `isPersisted`
+    // would say on the next render.
+    const wasPersisted = isPersisted;
+    const payload = forAutosave(currentPayload(), wasPersisted);
+
+    setAutosaveState((previous) => ({
+      ...previous,
+      inFlight: true,
+      lastRequestAt: Date.now()
+    }));
+
+    try {
+      if (persistedOpportunityId) {
+        const saved = await updateOpportunity(
+          persistedOpportunityId,
+          payload as UpdateOpportunityRequest
+        );
+        adoptStudyRevision(saved);
+      } else {
+        const created = await createOpportunity(payload as CreateOpportunityRequest);
+        adoptStudyRevision(created);
+        setDraftId(created.id);
+        setOpportunityId(created.id);
+        selfCreatedIdRef.current = created.id;
+        // What is stored is now the baseline for "would leaving lose
+        // anything", exactly as the manual create path does it.
+        openingFormData.current = formData;
+        /**
+         * The URL rewrite, so a refresh recovers the draft rather than opening
+         * an empty form.
+         *
+         * A real navigation rather than `history.replaceState`, because the
+         * router would otherwise disagree with the address bar and the next
+         * `navigate` would compute the wrong base path. It is safe because
+         * both paths render the SAME element - React reconciles them to one
+         * position and the component is not remounted, which was measured
+         * rather than assumed - and because the load effect skips an id this
+         * session minted.
+         */
+        navigate(`/admin/opportunities/${created.id}/edit`, { replace: true });
+      }
+
+      /**
+       * ONE object describing what this request left stored, and BOTH
+       * instruments derived from it.
+       *
+       * They were derived separately, and the gap between them was a
+       * data-loss defect. `forAutosave` carries a strict SUBSET of the form -
+       * it deletes `status` on an edit - so stamping the signature with the
+       * whole form recorded a field the request never sent as saved. Set
+       * Status to Published on a stored draft and the timer fired, carried no
+       * status, and then reported "Saved 15:42" while suppressing the exit
+       * warning: the author's publish decision existed nowhere but the tab
+       * they were about to close.
+       *
+       * `status` is INSIDE the signature, so widening the signature cannot
+       * reach it. The fix has to be that both instruments describe the same
+       * thing - what the server now holds - rather than one describing the
+       * form.
+       */
+      const storedAfterThisSave: SavePayloadFormState = {
+        ...formData,
+        // A create says `draft` however the form is set; an edit omits the key
+        // so the stored status is whatever it already was.
+        status: wasPersisted ? storedFormRef.current?.status ?? formData.status : 'draft'
+      };
+
+      savedSignatureRef.current = dirtySignature(storedAfterThisSave);
+      storedFormRef.current = storedAfterThisSave;
+      lastSentBodyRef.current = JSON.stringify(payload);
+      setAutosaveState((previous) => ({
+        ...previous,
+        inFlight: false,
+        lastSavedAt: Date.now(),
+        consecutiveFailures: 0
+      }));
+    } catch (err: unknown) {
+      const axiosError = err as {
+        response?: {
+          status?: number;
+          data?: { error?: string; current_updated_at?: string };
+        };
+      };
+
+      /**
+       * A stale-study conflict stops the timer rather than retrying it.
+       *
+       * Both conditions, never the status alone - `errorHandler` maps a lock
+       * timeout and a unique violation to 409 too, and treating one of those
+       * as a colleague's write would accuse somebody who did nothing and then
+       * advance the precondition past them.
+       *
+       * Nothing is reset and nothing is reloaded: the author's unsaved work
+       * surviving the refusal is the entire point. `studyConflict` then reads
+       * as a block, so the timer holds instead of failing in a loop, and the
+       * banner offers the deliberate overwrite F1 built.
+       */
+      if (
+        axiosError.response?.status === 409 &&
+        axiosError.response.data?.error === 'stale_study'
+      ) {
+        const refusedWith = axiosError.response.data?.current_updated_at;
+        if (refusedWith) {
+          setStaleStudyUpdatedAt(refusedWith);
+        }
+        // Known to be out of date: somebody else has written this study since
+        // it was read, so a question they added and the answers it has
+        // collected are in neither this map nor this form.
+        setAnswerCounts(null);
+        setStudyConflict(true);
+        setAutosaveState((previous) => ({ ...previous, inFlight: false }));
+        return;
+      }
+
+      /**
+       * A REFUSAL is not a failure, and retrying one is pure waste.
+       *
+       * A 4xx will not fix itself. Retrying it four more times spends the
+       * shared write budget for nothing and ends by telling the author
+       * "Unable to save" with no reason - while the server sent one. It is
+       * reachable without doing anything strange: change the type of a draft
+       * that already has a linked study, and every save from then on is a 400
+       * naming a vocabulary mismatch the author could act on if they were
+       * shown it.
+       *
+       * So a refusal becomes a BLOCK carrying the server's own sentence, which
+       * stops the timer without counting as a failure, and only a genuine
+       * failure - a 5xx, a dropped connection - retries.
+       */
+      const status = axiosError.response?.status ?? 0;
+      /**
+       * Not every 4xx is a refusal, and treating them alike was wrong in the
+       * direction that costs the author work.
+       *
+       * A refusal is the server saying "this body is wrong" - it will say the
+       * same thing to the same body for ever, so retrying is waste and the
+       * only useful response is to show its sentence and stop. But a request
+       * timeout, a lock timeout and a rate limit are all 4xx and all TRANSIENT:
+       * the same body succeeds a moment later. Reporting one of those as a
+       * permanent refusal strands a save that would have worked, and a lock
+       * timeout under contention is exactly when the author most needs the
+       * timer to keep trying.
+       *
+       * 409 appears here as retryable because the ONE 409 that is not - a
+       * stale-study conflict - is handled above and has already returned.
+       */
+      const TRANSIENT = [408, 409, 425, 429];
+      const refused = status >= 400 && status < 500 && !TRANSIENT.includes(status);
+
+      /**
+       * A CREATE whose outcome is unknown is never retried.
+       *
+       * There is no idempotency key on this endpoint, so a request that failed
+       * without a response - a dropped connection, a timeout - may or may not
+       * have committed a row. That is precisely the case the retry loop used
+       * to treat as "try again", and trying again is how one draft becomes
+       * two, both of them the author's, neither of them obviously the wrong
+       * one.
+       *
+       * A PATCH is idempotent enough to retry: it names a row, and the
+       * precondition refuses it if somebody else moved underneath. A POST is
+       * not. So an unknown-outcome create stops and says so, and the author's
+       * work is still on the page - the honest end state, and a recoverable
+       * one, because pressing Save then either creates it or updates the row
+       * that did land once the page is reloaded.
+       */
+      if (!wasPersisted && status === 0) {
+        setAutosaveRefusal(
+          'the connection dropped while creating this draft, so it may or may ' +
+            'not have been saved - press Save to be sure'
+        );
+        setAutosaveState((previous) => ({ ...previous, inFlight: false }));
+        return;
+      }
+
+      logger.warn(refused ? 'Autosave refused' : 'Autosave failed', {
+        opportunityId: persistedOpportunityId,
+        status
+      });
+
+      if (refused) {
+        setAutosaveRefusal(
+          axiosError.response?.data?.error || 'the server refused this change'
+        );
+        setAutosaveState((previous) => ({ ...previous, inFlight: false }));
+        return;
+      }
+
+      setAutosaveState((previous) => ({
+        ...previous,
+        inFlight: false,
+        consecutiveFailures: previous.consecutiveFailures + 1
+      }));
+    }
+    // Every dependency this reads is either state the effect below already
+    // depends on or a setter. Listed exhaustively rather than trimmed, because
+    // a stale closure here would save yesterday's content.
+  }, [currentPayload, formData, isPersisted, persistedOpportunityId, navigate]);
+
+  /**
+   * The timer, and the only one.
+   *
+   * `decideAutosave` owns every rule; this arranges to ask it again at the
+   * moment it named. One timeout at a time, replaced on each decision, so a
+   * burst of keystrokes cannot arm a queue of saves.
+   */
+  useEffect(() => {
+    if (allowUserSubmission) return;
+    if (!autosaveApplies) return;
+
+    const decision = decideAutosave({
+      now: Date.now(),
+      dirty: autosaveDirty,
+      block: currentBlock,
+      ...autosaveState,
+      lastChangeAt,
+      // A deliberate save counts as in flight. Without this the timer can
+      // start a second write while `handleSubmit` is mid-request, which is the
+      // same one-tab conflict the wait in `handleSubmit` prevents from the
+      // other direction.
+      inFlight: autosaveState.inFlight || saving || manualSaveRef.current
+    });
+
+    if (decision.action === 'send') {
+      const running = runAutosave();
+      autosaveInFlightRef.current = running;
+      void running.finally(() => {
+        // Cleared only if this is still the current one, so a later autosave
+        // is not un-registered by an earlier one finishing.
+        if (autosaveInFlightRef.current === running) {
+          autosaveInFlightRef.current = null;
+        }
+      });
+      return;
+    }
+
+    if (decision.action === 'wait') {
+      const timer = setTimeout(
+        () => setAutosaveTick((tick) => tick + 1),
+        decision.afterMs
+      );
+      return () => clearTimeout(timer);
+    }
+    // `autosaveTick` is in the list precisely because nothing else changes
+    // when a wait expires - it is what turns the timer into a new decision.
+  }, [
+    autosaveDirty,
+    currentBlock,
+    lastChangeAt,
+    autosaveState,
+    autosaveTick,
+    allowUserSubmission,
+    autosaveApplies,
+    saving,
+    runAutosave
+  ]);
+
+  /**
+   * A fresh edit is a fresh chance.
+   *
+   * Without this a form that gave up stays given up for the rest of the
+   * session, however long the backend has been back. Only the failure count
+   * lives here now - the change TIME is derived during render above, because
+   * an effect sees it a render too late to be a debounce.
+   */
+  useEffect(() => {
+    if (savedSignatureRef.current === null) return;
+    if (changeSignature === savedSignatureRef.current) return;
+
+    setAutosaveState((previous) =>
+      previous.consecutiveFailures >= AUTOSAVE_MAX_ATTEMPTS
+        ? { ...previous, consecutiveFailures: 0 }
+        : previous
+    );
+    setAutosaveRefusal(null);
+  }, [changeSignature]);
+
+  /**
+   * "Saved 15:42", in the reader's own locale and timezone.
+   *
+   * Hours and minutes only. A second-precision timestamp on a save that
+   * happens every few seconds reads as a stopwatch, and the question this
+   * answers is "is my work safe", not "exactly when".
+   */
+  const formatSavedAt = (at: number) =>
+    new Date(at).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+  /**
+   * Save what is on screen and leave.
+   *
+   * Routed through `handleSubmit` with navigation skipped rather than through
+   * the autosave, and the difference is the point: this is a DELIBERATE save,
+   * so it gets the full validation, the detachment confirmation and the time
+   * slots - everything the timer deliberately does not do. Leaving only
+   * happens if it actually saved.
+   *
+   * `skipNavigation` because the destination is this control's, not
+   * `handleSubmit`'s: an author leaving from step two is going back to the
+   * dashboard, not to whatever the create path would have chosen.
+   */
+  const handleSaveAndExit = async () => {
+    const savedId = await handleSubmit(undefined, true);
+
+    // Undefined means the save did not happen - a validation refusal, a
+    // conflict, a detachment waiting to be confirmed. Every one of those has
+    // put something on screen explaining itself, and walking the author out of
+    // the form would discard the work AND the explanation.
+    if (!savedId) return;
+
+    navigate('/admin', {
+      state: {
+        refresh: true,
+        timestamp: Date.now(),
+        message:
+          formData.status === 'draft'
+            ? '⚠️ Saved as DRAFT - Not visible to users yet. Change status to Published to make it visible.'
+            : 'Changes saved successfully!'
+      }
+    });
+  };
+
+  /**
+   * Throw away a draft.
+   *
+   * The OPPORTUNITY only. `DELETE /api/opportunities/:id` removes that row and
+   * nothing else, so a task list or question set authored here survives in the
+   * Task Lists area, owned by its author. That is the endpoint's existing
+   * behaviour and it is defensible - a study can be referenced by more than
+   * one opportunity - but it is not what "discard this draft" sounds like, so
+   * the confirmation says which of the two goes rather than implying both.
+   *
+   * Only ever offered for a DRAFT. Autosave means an abandoned attempt leaves
+   * a real row behind - that is decision D-3, taken deliberately, on the
+   * grounds that a local-only draft cannot survive the device change the
+   * whole feature exists to survive. The price of that decision is that
+   * "abandon this" has to become a real control, because the alternative is a
+   * dashboard slowly filling with half-written opportunities nobody can
+   * remove.
+   *
+   * The confirmation is not optional and not a toast: this deletes stored
+   * work, and it is the one control on this form that does.
+   */
+  const handleDiscardDraft = async () => {
+    if (!persistedOpportunityId) return;
+
+    setDiscarding(true);
+    try {
+      await deleteOpportunity(persistedOpportunityId);
+      navigate('/admin', {
+        state: {
+          refresh: true,
+          timestamp: Date.now(),
+          message: 'Draft discarded.'
+        }
+      });
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: { error?: string } } };
+      setError(axiosError.response?.data?.error || 'Could not discard this draft');
+      setDiscarding(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const requestExit = (destination: string) => {
     if (hasUnsavedWork()) {
       setPendingExit(destination);
       return;
     }
     navigate(destination);
-  };
-
-  /**
-   * What to send for a duration the author may have cleared.
-   *
-   * `undefined` omits the key, which the in-place update path reads as "this
-   * request says nothing about the duration" and leaves the stored value
-   * alone. That is right for a form that never showed the field - and wrong
-   * now that it does: an author who cleared a populated field got a successful
-   * save and the old number still stored, with no way to remove it at all.
-   *
-   * So an empty field is `null` when the study HAD one at load (a deliberate
-   * clear) and `undefined` when it did not (nothing to say).
-   */
-  const durationToSend = (
-    current: number | undefined,
-    original: number | undefined
-  ): number | null | undefined => {
-    if (current) return current;
-    return original === undefined ? undefined : null;
   };
 
   /**
@@ -2553,6 +3552,48 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     }
 
     /**
+     * A deliberate save that arrives DURING an autosave restarts itself once
+     * that autosave has landed. It does not resume.
+     *
+     * This waited and then carried on, and the difference is the whole
+     * finding. Everything below - `persistedOpportunityId`, the precondition,
+     * `formData` itself - is a render-scope const captured when this handler
+     * was bound, and awaiting does not re-read a const. So a Save pressed
+     * while the first autosave was creating the draft resumed believing
+     * nothing had been created and created a SECOND opportunity, plus a second
+     * study if the form was authoring content; and a Save pressed during any
+     * later autosave sent the precondition it had captured rather than the one
+     * that autosave had just learned, which is refused 409 and shown to the
+     * author as a colleague who is themselves.
+     *
+     * Re-entering through the ref picks up the handler the render AFTER the
+     * autosave rebound, so every value below is current by construction. That
+     * is worth more than mirroring four values into refs and remembering to
+     * add the fifth.
+     *
+     * Ahead of the detach flag deliberately: the re-entered call has to see
+     * that authorisation, and reading it here would consume it on a pass that
+     * never saves.
+     */
+    if (autosaveInFlightRef.current) {
+      await autosaveInFlightRef.current;
+      return handleSubmitRef.current(undefined, skipNavigation);
+    }
+
+    /**
+     * A synchronous re-entrancy guard, because `saving` is not one.
+     *
+     * `setSaving(true)` is state, so it is not visible to a second click in
+     * the same tick - and with the wait above, two clicks during one autosave
+     * both used to get past the `saving` test and both proceed. A ref is set
+     * and seen immediately.
+     */
+    if (manualSaveRef.current) {
+      logger.debug('A deliberate save is already running, ignoring duplicate');
+      return undefined;
+    }
+
+    /**
      * Read and cleared in one move, at the top, before anything can return.
      *
      * Consuming it further down - just before the save - looked equivalent and
@@ -2573,6 +3614,20 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (saving) {
       logger.debug('Already saving, ignoring duplicate click');
       return undefined;
+    }
+
+    /**
+     * Let any autosave already in flight finish first.
+     *
+     * Not politeness - correctness. Both writes carry the same
+     * `expected_study_updated_at`, so whichever lands second is refused as
+     * stale and the author is shown a conflict banner naming a colleague who
+     * is themselves; and in the ordering where the deliberate save wins, the
+     * autosave's older payload lands on top of it. Waiting costs at most one
+     * request and makes the precondition current before this one is built.
+     */
+    if (autosaveInFlightRef.current) {
+      await autosaveInFlightRef.current;
     }
 
     // Refuse every save while the linked study could not be read.
@@ -2647,6 +3702,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
     }
 
+    /**
+     * Claimed HERE rather than at the check above, so no early return can leak
+     * it and lock the form out of saving for the rest of the session.
+     *
+     * Safe despite the distance: every line between the check and this one is
+     * synchronous, and a click handler runs to completion before the next one
+     * starts, so a second click cannot arrive in the gap. Released in the
+     * `finally` below, which every path from here reaches.
+     */
+    manualSaveRef.current = true;
+
     try {
       setSaving(true);
       setError('');
@@ -2654,233 +3720,36 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setSuccessMessage('');
       setStudyConflict(false);
 
-      // inline_study is not on the shared CreateOpportunityRequest: shared/types
-      // is flattened into one file when copied here, so it cannot import the
-      // inline-study contract. Added at the call site instead.
-      const data: Partial<CreateOpportunityRequest & {
-        display_width?: 'single' | 'double';
-        inline_study?: InlineStudyPayload;
-        // Same reason as inline_study: the survey contract cannot be imported
-        // into the flattened shared types, so it is added at the call site.
-        inline_survey?: InlineSurveyPayload;
-        delivery_mode?: 'native' | 'external';
-        /**
-         * Optimistic-concurrency precondition for the LINKED STUDY, sent only
-         * on an edit that authors content into one. Top-level rather than
-         * inside `inline_study`/`inline_survey` because both branches feed the
-         * same in-place update on the server and a concurrency token is not
-         * authored content - see UpdateOpportunitySchema for the rest.
-         */
-        expected_study_updated_at?: string;
-      }> = {
-        type: formData.type as CreateOpportunityRequest['type'],
-        title: formData.title.trim(),
-        purpose_one_liner: formData.purpose_one_liner.trim(),
-        description_optional: formData.description_optional.trim() || undefined,
-        product_optional: formData.product_optional.trim() || undefined,
-        meeting_location_optional: formData.meeting_location_optional.trim(),
-        /*
-         * Sent only on the shapes that HAVE an External Link step.
-         *
-         * It used to be sent unconditionally, which is what made a legacy bad
-         * value unrepairable. An unmoderated, test, interview or native-survey
-         * row holding a `javascript:` link from before the schema was hardened
-         * resends it on every save, is refused 400 by the schema, and has no
-         * External Link input anywhere in its step list to fix it in - the
-         * refusal banner even routes to tab 3, which on those shapes is Task
-         * List or Session Management. Found by the security gate; my own repair
-         * test only covered `question`, the one shape that has the step.
-         *
-         * Derived from the step list, not from a type test, for the same reason
-         * everything else on this form is.
-         */
-        ...(tabs.some((step) => step.key === 'externalLink')
-          ? { external_link_optional: formData.external_link_optional.trim() || undefined }
-          : {}),
-        participant_type_required: formData.participant_type_required,
-        participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
-        status: allowUserSubmission ? 'draft' : formData.status
-      };
-
-      // Only include default_duration_minutes for test and interview types
-      if (formData.type === 'test' || formData.type === 'interview') {
-        data.default_duration_minutes = formData.default_duration_minutes;
-      }
-
-      // Include start_date, end_date, and firsthand_study_id for external link / unmoderated types
-      if (['poll', 'survey', 'question', 'unmoderated'].includes(formData.type)) {
-        data.start_date = formData.start_date || undefined;
-        data.end_date = formData.end_date || undefined;
-      }
-
-      if (formData.type === 'unmoderated') {
-        // Authoring is available on create, on an edit of a draft saved before
-        // its tasks were written, AND on an edit of a task list this author may
-        // change - which A1 added and A0 made safe by updating the linked study
-        // in place instead of minting a second one. Only a list this form
-        // cannot author here (someone else's, or one holding a step type this
-        // form cannot represent) still sends its id and is edited in the Task
-        // Lists area.
-        const authoringInline = authoringInlineStudy;
-
-        // Exactly one of the two, never both. An opportunity that already has
-        // a study keeps `firsthand_study_id` in state, so authoring content
-        // into it must OMIT the id rather than send it or null it: the PATCH
-        // guards test `!== undefined`, and a null would be read as "clear the
-        // link" in the same breath as rewriting the study it pointed at.
-        data.firsthand_study_id = authoringInline
-          ? undefined
-          : formData.firsthand_study_id?.trim() || undefined;
-
-        if (authoringInline) {
-          // Must match what collectValidationErrors checked, or a value could pass
-          // validation and then be sent in a different shape.
-          const targetUrl = normaliseTargetUrl(formData.inline_study_target_url);
-
-          data.inline_study = {
-            // Omitted rather than sent empty: its absence is meaningful, and
-            // the contract rejects an empty string.
-            ...(targetUrl ? { target_url: targetUrl } : {}),
-            consent_text: formData.inline_study_consent_text.trim(),
-            // Sent as a claim, not as an instruction. The server checks it
-            // against the wording beside it and writes `custom` when the two
-            // disagree, so nothing this form sends can make a study claim
-            // approval it does not have. `custom` is omitted rather than sent:
-            // it is the server's answer, never the client's assertion.
-            ...(formData.inline_study_consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID &&
-            formData.inline_study_consent_template_version !== null
-              ? {
-                  consent_template_id: formData.inline_study_consent_template_id,
-                  consent_template_version:
-                    formData.inline_study_consent_template_version
-                }
-              : {}),
-            // The study's OWN duration, not the opportunity's. This used to
-            // send `default_duration_minutes`, which unmoderated never shows,
-            // so every recorded study inherited that field's default and told
-            // participants a length nobody had chosen.
-            // The automatic estimate is what a save sends while it is in
-            // force. Derived HERE from the same list the tab shows it from, so
-            // a stale copy in state cannot be sent instead of the number the
-            // author was actually looking at.
-            estimated_duration_minutes: durationToSend(
-              formData.inline_study_duration_auto
-                ? estimateRecordedMinutes(formData.inline_study_steps) ?? undefined
-                : formData.inline_study_duration_minutes,
-              originalFormData?.inline_study_duration_minutes
-            ),
-            // Built by the same function studyRoundTripsCleanly checks with,
-            // so the fields this sends and the fields the form claims it can
-            // reproduce cannot drift apart again. They did, and it deleted
-            // helper_text and is_required from every task list built in the
-            // Task Lists area.
-            steps: formData.inline_study_steps.map(toInlineStudyPayloadStep),
-            // Provenance travels with the content that came from it. Omitted
-            // rather than sent empty: `inlineStudySchema` takes a non-empty
-            // string, and the column is NULL for anything authored from blank.
-            ...(formData.copied_from_study_id
-              ? { copied_from_study_id: formData.copied_from_study_id }
-              : {})
-          };
-        }
-      }
-
-      if (formData.type === 'poll' || formData.type === 'survey') {
-        // Sent only when it actually CHANGED.
-        //
-        // The backend deliberately gates its publish and linkage checks on the
-        // request changing the shape, so an unrelated edit to a row already in
-        // a bad state stays allowed and the row can be repaired. Sending this
-        // on every save made both conditions permanently true for polls and
-        // surveys: a published poll whose external link was somehow null could
-        // no longer have its TITLE corrected through the form, and a native
-        // survey whose study had been deleted was refused every edit. That is
-        // the same lock-out the backend guard was gated to prevent,
-        // reintroduced from the client.
-        if (
-          !isEdit ||
-          deliveryMode !== (originalFormData?.delivery_mode ?? 'external')
-        ) {
-          data.delivery_mode = deliveryMode;
-        }
-
-        if (deliveryMode === 'native') {
-          // Same shape as the task-list branch above, and the same reason for
-          // exactly one of the two: the stored id stays in state, and copy mode
-          // authors content rather than pointing at somebody else's study.
-          const authoringInline = authoringInlineSurvey;
-
-          data.firsthand_study_id = authoringInline
-            ? undefined
-            : formData.firsthand_study_id?.trim() || undefined;
-
-          if (authoringInline) {
-            data.inline_survey = {
-              consent_text: formData.inline_survey_consent_text.trim(),
-              ...(formData.inline_survey_consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID &&
-              formData.inline_survey_consent_template_version !== null
-                ? {
-                    consent_template_id: formData.inline_survey_consent_template_id,
-                    consent_template_version:
-                      formData.inline_survey_consent_template_version
-                  }
-                : {}),
-              // Same rule as the task-list branch above.
-              estimated_duration_minutes: durationToSend(
-                formData.inline_survey_duration_auto
-                  ? estimateSurveyMinutes(formData.inline_survey_questions) ?? undefined
-                  : formData.inline_survey_duration_minutes,
-                originalFormData?.inline_survey_duration_minutes
-              ),
-              // Same function studyRoundTripsCleanly checks with. This branch
-              // was already faithful; sharing the serialiser is what stops it
-              // drifting the way the task-list branch did.
-              steps: formData.inline_survey_questions.map(toSurveyPayloadStep),
-              // The recorded twin carries this too. `inlineSurveySchema` is
-              // `.strict()`, so an unknown key here is a refused save rather
-              // than a dropped field - which is exactly why both twins were
-              // changed in the same breath.
-              ...(formData.copied_from_study_id
-                ? { copied_from_study_id: formData.copied_from_study_id }
-                : {})
-            };
-          }
-        }
-        // No `else` clearing inline_survey: the payload is built fresh on every
-        // submit and only the native branch above ever sets it, so an external
-        // handoff cannot carry authored questions. A defensive assignment here
-        // was dead code, and the mutation proved it - the test asserting their
-        // absence passes without it, because the absence is structural.
-      }
-
-      // Only superadmins can set display_width
-      if (user?.role === 'superadmin') {
-        data.display_width = formData.display_width;
-      }
-
-      // The optimistic-concurrency precondition, and the only thing this
-      // revision stamp is for. Captured by A1 at load (`linkedStudyUpdatedAt`),
-      // refreshed by a conflict, and sent only where it can be acted on: a save
-      // that authors content into an EXISTING linked study. A create has no
-      // stored row to race, and a save that carries no inline content performs
-      // no study write for the server to refuse.
-      //
-      // `staleStudyUpdatedAt` takes precedence when set: after a conflict it
-      // holds what is actually stored, which is what makes the next save a
-      // deliberate overwrite rather than a guaranteed second refusal.
-      if (isEdit && (data.inline_study || data.inline_survey)) {
-        const precondition = staleStudyUpdatedAt ?? linkedStudyUpdatedAt;
-        if (precondition) {
-          data.expected_study_updated_at = precondition;
-        }
-      }
+      // ONE builder, shared with the autosave, so the two cannot disagree
+      // about what a save carries. See save-payload.ts for why that matters
+      // more here than it usually would.
+      const data = buildSavePayload({
+        formData,
+        originalFormData: storedFormRef.current ?? originalFormData,
+        isEdit,
+        tabs,
+        deliveryMode,
+        authoringInlineStudy,
+        authoringInlineSurvey,
+        isSuperadmin: user?.role === 'superadmin',
+        allowUserSubmission,
+        linkedStudyUpdatedAt,
+        staleStudyUpdatedAt
+      });
 
 
       let savedOpportunity: Opportunity;
       // False only when the opportunity saved and its time slots did not.
       let sessionsPersisted = true;
-      if (isEdit && id) {
-        savedOpportunity = await updateOpportunity(id, data as UpdateOpportunityRequest);
+      // `persistedOpportunityId`, not the route id. An autosave may already
+      // have created this draft and rewritten the URL, and POSTing again here
+      // would mint a second opportunity for the same piece of work - the
+      // author having done nothing but press Finish.
+      if (persistedOpportunityId) {
+        savedOpportunity = await updateOpportunity(
+          persistedOpportunityId,
+          data as UpdateOpportunityRequest
+        );
 
         await persistTemporarySessions(savedOpportunity.id);
       } else {
@@ -2888,8 +3757,13 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         setOpportunityId(savedOpportunity.id);
 
         // What is on screen has now been stored, so it is the new baseline
-        // for "would leaving lose anything".
+        // for "would leaving lose anything" - and for whether an autosave has
+        // anything left to send.
         openingFormData.current = formData;
+        savedSignatureRef.current = dirtySignature(formData);
+        storedFormRef.current = formData;
+        setDraftId(savedOpportunity.id);
+        selfCreatedIdRef.current = savedOpportunity.id;
 
         logger.debug('CREATE MODE - Opportunity created');
 
@@ -2910,7 +3784,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       // Update original form data after successful save
-      if (isEdit) {
+      if (persistedOpportunityId) {
         // RE-READ, rather than declaring that what we sent is now what is
         // stored.
         //
@@ -2955,7 +3829,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       }
 
       // For edit mode, return the existing opportunity ID
-      if (isEdit && savedOpportunity) {
+      if (persistedOpportunityId && savedOpportunity) {
         return savedOpportunity.id;
       }
 
@@ -3010,7 +3884,24 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         };
       };
 
+      /**
+       * WHICH study the conflict is about.
+       *
+       * `formData.firsthand_study_id` is empty on a draft whose study the
+       * AUTOSAVE minted - the timer never writes the new id into form state,
+       * because a payload carrying an id alongside authored content is refused
+       * by the route. So on that draft the guard below used to fail its third
+       * condition, fall through, and show the author the literal string
+       * `stale_study` as an error - with no revision recorded, so the retry was
+       * refused identically and there was no way out of the loop.
+       *
+       * `linkedStudyUpdatedAt` is the honest test for "this form is editing a
+       * stored study": it is set by the load AND by every save that wrote one.
+       * The id is still preferred when the form has it, because the recovery
+       * path below re-reads the study by id.
+       */
       const conflictedStudyId = formData.firsthand_study_id?.trim();
+      const editingAStoredStudy = Boolean(conflictedStudyId) || linkedStudyUpdatedAt !== null;
 
       // Both conditions, never the status alone. `errorHandler` maps a unique
       // constraint violation and a lock timeout to 409 as well, and treating
@@ -3020,7 +3911,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       if (
         axiosError.response?.status === 409 &&
         axiosError.response.data?.error === 'stale_study' &&
-        conflictedStudyId
+        editingAStoredStudy
       ) {
         // Nothing else moves: no field is reset, no reload is triggered, no
         // step is remounted. The whole point of the refusal is that the
@@ -3061,7 +3952,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
         if (refusedWith) {
           setStaleStudyUpdatedAt(refusedWith);
-        } else {
+        } else if (conflictedStudyId) {
           try {
             const linked = await getFirstHandStudy(conflictedStudyId);
             if (linked.study.updated_at) {
@@ -3088,8 +3979,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       setError(axiosError.response?.data?.error || 'Failed to save opportunity');
     } finally {
       setSaving(false);
+      manualSaveRef.current = false;
     }
   };
+
+  /**
+   * The latest `handleSubmit`, for the one caller that must not use a stale
+   * one: a deliberate save re-entering after waiting for an autosave.
+   */
+  const handleSubmitRef = useRef(handleSubmit);
+  handleSubmitRef.current = handleSubmit;
 
   /**
    * Steps are an array, which handleInputChange's scalar signature cannot
@@ -3645,6 +4544,128 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                 an `onClick` on a `type="button"` - so refusing the event costs
                 nothing and closes both steps at once.
               */}
+              {/*
+                The save state, and it is on screen on every step rather than
+                appearing only when something happens.
+
+                An indicator that shows up to say "Saved" and then disappears
+                cannot say anything about the state it is most important to
+                report - that nothing has been saved for the last ten minutes.
+                Every state has a sentence including the ones that are nobody's
+                fault, so "not saved" never has to be inferred from silence.
+
+                `role="status"` and polite: an author typing must not have the
+                caret pulled away from them by a save they did not ask for, but
+                a screen-reader user is owed the same information the sighted
+                one has.
+              */}
+              {autosaveApplies && saveStateMessage(saveState, formatSavedAt) && (
+                <div
+                  className={`d-flex align-items-center gap-2 px-4 py-2 small ${
+                    saveState.kind === 'failed'
+                      ? 'text-danger fw-semibold'
+                      : saveState.kind === 'retrying'
+                        ? 'text-warning-emphasis'
+                        : 'text-body-secondary'
+                  }`}
+                  data-testid="autosave-state"
+                >
+                  {saveState.kind === 'saving' && (
+                    <span
+                      className="spinner-border spinner-border-sm"
+                      aria-hidden="true"
+                    ></span>
+                  )}
+                  {saveState.kind === 'failed' && (
+                    <AlertTriangle size={14} aria-hidden="true" />
+                  )}
+                  {saveState.kind === 'saved' && (
+                    <CheckCircle size={14} aria-hidden="true" />
+                  )}
+                  <span aria-hidden="true">
+                    {saveStateMessage(saveState, formatSavedAt)}
+                  </span>
+
+                  {/*
+                    Announced SELECTIVELY, and the selection is the whole
+                    design.
+
+                    A live region carrying every routine state would read
+                    "Saving, Saved 15:42" into a screen reader every few
+                    seconds for as long as the form is open - while the author
+                    is typing into it. That is not equal access to the
+                    information, it is a form nobody can use.
+
+                    So the states that mean something has gone wrong or that
+                    work is NOT being saved are announced, and the ordinary
+                    rhythm of a working autosave is not. The sentence is
+                    identical either way; only whether it interrupts differs,
+                    which is why the visible copy above is the same string.
+
+                    The region is always mounted, empty when there is nothing
+                    to say: a live region added to the DOM at the same moment
+                    as its content is unreliably announced.
+                  */}
+                  <span className="visually-hidden" aria-live="polite">
+                    {saveState.kind === 'failed' ||
+                    saveState.kind === 'retrying' ||
+                    saveState.kind === 'blocked'
+                      ? saveStateMessage(saveState, formatSavedAt)
+                      : ''}
+                  </span>
+
+                </div>
+              )}
+
+              {/*
+                Discard, which is NOT part of the save-state line and must not
+                inherit its visibility.
+
+                It lived inside that line first, and the line only renders when
+                there is something to say - so on a clean, fully saved draft
+                the control disappeared. That is precisely the moment an author
+                decides to abandon one: nothing is outstanding, they have read
+                it back, and they do not want it.
+
+                Autosave means an abandoned attempt leaves a real row behind -
+                decision D-3, taken deliberately because a local-only draft
+                cannot survive the device change this feature exists to
+                survive. This control is the price of that decision: without it
+                the dashboard fills with half-written opportunities nobody can
+                remove.
+              */}
+              {autosaveApplies && persistedOpportunityId && (
+                <div className="px-4 pb-2">
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm text-danger p-0"
+                    onClick={() => setConfirmingDiscard(true)}
+                    disabled={discarding}
+                  >
+                    Discard draft
+                  </button>
+                </div>
+              )}
+
+              {/*
+                One line, offered once, for an author coming back to an
+                unfinished draft. Dismissed by acting on it or simply by
+                walking to that step - `resumeStep` stops naming a step the
+                moment it stops needing attention.
+              */}
+              {resumeStep && resumeStep.id !== activeTab && (
+                <div className="px-4 pb-2">
+                  <button
+                    type="button"
+                    className="btn btn-link btn-sm p-0"
+                    onClick={() => setActiveTab(resumeStep.id)}
+                  >
+                    Pick up where you left off: {resumeStep.title} needs
+                    attention
+                  </button>
+                </div>
+              )}
+
               <form onSubmit={(event) => event.preventDefault()}>
                 {/* Tab Navigation */}
                 <div className="border-bottom">
@@ -3730,6 +4751,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
@@ -3752,6 +4774,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
@@ -3822,6 +4845,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         {continueControl && (
                         <StepActions
                           isEdit={isEdit}
+                          onSaveAndExit={handleSaveAndExit}
                           saving={saving}
                           disabled={saveControlsDisabled}
                           {...backwardControl}
@@ -3853,6 +4877,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
@@ -3938,6 +4963,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
@@ -3961,6 +4987,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       {continueControl && (
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
@@ -4043,6 +5070,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
                       <StepActions
                         isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
                         saving={saving}
                         disabled={saveControlsDisabled}
                         {...backwardControl}
@@ -4102,6 +5130,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         the state is cleared: the second pass has to see the authorisation, and
         state written here would not have landed by then.
       */}
+      {/*
+        Deleting stored work, which is the one thing on this form that does.
+        Not a toast and not undoable.
+
+        The wording names what actually goes. `DELETE /api/opportunities/:id`
+        removes the opportunity row alone, so questions authored here remain in
+        the Task Lists area - and a confirmation that claimed to delete
+        "anything authored on it" would be telling the author their questions
+        were gone when they were not, which is the wrong direction to be wrong
+        in on the one irreversible control here.
+      */}
+      <ConfirmationModal
+        show={confirmingDiscard}
+        title="Discard this draft?"
+        message="This deletes the draft opportunity and cannot be undone. Any questions or tasks you authored here stay in the Task Lists area, where you can delete them separately."
+        confirmLabel="Discard it"
+        cancelLabel="Keep working on it"
+        variant="danger"
+        onConfirm={() => {
+          setConfirmingDiscard(false);
+          void handleDiscardDraft();
+        }}
+        onCancel={() => setConfirmingDiscard(false)}
+      />
+
       <ConfirmationModal
         show={pendingDetach !== null}
         title={pendingDetach ? detachedAnswersTitle(pendingDetach) : ''}

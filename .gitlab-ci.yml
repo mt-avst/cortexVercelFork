@@ -214,20 +214,27 @@ test-backend:
     # suite - real infrastructure, not a unit test. 8 tests, reported as
     # skipped rather than passed, so the log never claims more than it ran.
     FIRSTHAND_SKIP_S3_TESTS: "1"
-    # Same bargain, different dependency. One vitest file -
-    # runtime-response-attachment-postgres.test.ts - starts a real Postgres and
-    # applies the firsthand migrations so that 0015's constraints (the composite
-    # foreign key, ON DELETE SET NULL, and the CHECK requiring study_id and
-    # step_id to be NULL together) are actually evaluated rather than mocked
-    # away. It exists because the mocked companion asserted the right SQL string
-    # while that statement wrote a row the CHECK refuses, aborting a
-    # participant's whole session save.
+    # Same bargain, different dependency. TWO vitest files -
+    # runtime-response-attachment-postgres.test.ts and
+    # studies-repository-autosave-postgres.test.ts - start a real Postgres and
+    # apply the firsthand migrations so that the constraints are actually
+    # evaluated rather than mocked away: 0004's per-statement
+    # UNIQUE (study_id, step_order), 0010's composite primary key, and 0015's
+    # composite foreign key, ON DELETE SET NULL and the CHECK requiring
+    # study_id and step_id to be NULL together.
     #
-    # What that costs: those 5 tests do NOT run here, and no other job in this
+    # The first exists because its mocked companion asserted the right SQL
+    # string while that statement wrote a row the CHECK refuses, aborting a
+    # participant's whole session save. The second exists because D2 turned
+    # updateStudy into something a timer calls every few seconds, and "a
+    # hundred saves leave one study" is a claim about rows that no individual
+    # response can make.
+    #
+    # What that costs: those 11 tests do NOT run here, and no other job in this
     # pipeline evaluates a database constraint. The shape-level assertions in
-    # runtime-response-attachment.test.ts DO run, so a change to the statement
-    # is still caught here - what is not caught is a change to what Postgres
-    # does with it. They run locally, where Docker is available.
+    # the mocked companions DO run, so a change to a statement is still caught
+    # here - what is not caught is a change to what Postgres does with it. They
+    # run locally, where Docker is available.
     FIRSTHAND_SKIP_DB_TESTS: "1"
   script:
     - npm ci
