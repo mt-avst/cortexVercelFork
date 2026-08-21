@@ -85,7 +85,8 @@ router.use('/stats', statsRouter);
 // regardless of what routes firsthandRouter grows later.
 router.use('/firsthand/session', firsthandSessionRouter);
 
-// Mount FirstHand integration routes (admin studies CRUD + HMAC callbacks)
+// Mount FirstHand studies routes (admin CRUD plus the study-wide results
+// reads). The HMAC callback receiver this comment used to name is gone.
 router.use('/firsthand', firsthandRouter);
 
 export default router;

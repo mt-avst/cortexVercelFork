@@ -79,3 +79,15 @@ export const updateFirstHandStudy = async (
 export const deleteFirstHandStudy = async (studyId: string): Promise<void> => {
   await api.delete(`/firsthand/studies/${encodeURIComponent(studyId)}`);
 };
+
+/**
+ * Whether a failed request was refused by a rate limiter rather than lost.
+ *
+ * The difference matters to what the author is told to do next. Every other
+ * read failure here is worth retrying immediately - a dropped connection, a
+ * 500 - and a 429 is the one that is guaranteed to fail again if they do.
+ * Telling them to "try again" is then advice that wastes their time and spends
+ * another request against the bucket that refused them.
+ */
+export const wasRateLimited = (error: unknown): boolean =>
+  (error as { response?: { status?: number } })?.response?.status === 429;

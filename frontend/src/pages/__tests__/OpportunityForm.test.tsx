@@ -82,7 +82,8 @@ vi.mock('../../api/client', () => ({
 // opportunity without saying what that study CONTAINS is not describing a real
 // state, and the form's load-failure path (which refuses to save) is the honest
 // answer to it. Tests that mean a real study queue a resolved value.
-vi.mock('../../api/firsthand-studies', () => ({
+vi.mock('../../api/firsthand-studies', async (importActual) => ({
+  ...(await importActual<typeof import('../../api/firsthand-studies')>()),
   getFirstHandStudy: vi.fn().mockRejectedValue(new Error('not stubbed')),
 }));
 

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 
 import { requireAdmin } from '../middleware/authenticate';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import { logger } from '../utils/logger';
 import { asyncHandler, ForbiddenError, NotFoundError } from '../utils/errorHandler';
 import {
@@ -27,6 +28,110 @@ import { aggregateSurveyResults } from '../firsthand/survey-results';
 import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
 
 const router: Router = Router();
+
+/**
+ * Reading a study is not free, and this router was the one runtime-pool
+ * consumer with no ceiling on it at all.
+ *
+ * Exported, with its two siblings, so the test can assert WHICH bucket each
+ * route is on rather than merely that it is on one. A tuple of "any of these"
+ * was the first shape and it could not tell a cheap metadata read from a
+ * 200,001-row export sharing its ceiling - see the table in firsthand.test.ts.
+ *
+ * `GET /studies/:studyId` takes TWO connections from the five-connection
+ * FirstHand runtime pool that live participant sessions share - one for
+ * `getStudyById`, a second for `answerCountsByStep` - and the second is a scan
+ * over every answer row the study has collected. The pool has
+ * `connectionTimeoutMillis: 10_000` and no statement timeout, so a caller
+ * looping this at any concurrency above five makes participants writing their
+ * answers queue on `pool.connect()` and fail after ten seconds, mid-survey.
+ * Their own limiter does not protect them from that; it limits THEM.
+ *
+ * 60 a minute leaves the real workflow untouched. The opportunity form re-reads
+ * the linked study on load and again after every successful save, and an author
+ * moving between opportunities does several a minute legitimately.
+ *
+ * A backstop against a runaway loop, not a quota - the same status as every
+ * other limiter here. The MemoryStore is per PROCESS, so with more than one
+ * backend pod the effective ceiling is this times the pod count.
+ *
+ * AND IT BOUNDS ARRIVALS, NOT OCCUPANCY, which is the honest limit of this
+ * control and is written here so nobody reads the finding it answers as closed.
+ * Sixty permitted reads fired at once are sixty concurrent handlers taking two
+ * pool checkouts each, and a participant's write then queues behind them and
+ * fails at `connectionTimeoutMillis`. What this stops is SUSTAINED abuse; a
+ * single burst inside the ceiling still competes with participants. Bounding
+ * that needs a concurrency cap on admin-originated checkouts, which is a change
+ * to `withRuntimeDatabaseClient` and its own piece of work.
+ */
+export const studyReadLimiter = perUserLimiter(
+  60,
+  'Too many requests for these questions. Wait a minute and try again.'
+);
+
+/**
+ * Writing is heavier again: `updateStudy` rewrites the step rows for the whole
+ * study, and `createStudy` inserts a study plus up to 51 steps, all on that same
+ * five-connection pool.
+ *
+ * 30 a minute matches `opportunityWriteLimiter`, which guards the other door
+ * into the same tables for the same reason. Two ceilings on one cost that
+ * disagreed would be the drift `perUserLimiter`'s own docstring was written
+ * about.
+ */
+export const studyWriteLimiter = perUserLimiter(
+  30,
+  'Too many changes in a short time. Wait a minute and try again.'
+);
+
+/**
+ * The study-wide results reads, which are superadmin-only and unpaginated.
+ *
+ * 10 a minute, and NOT the 60 its per-opportunity twin uses. Matching
+ * `surveyResultsLimiter` was the first instinct and it is the wrong axis on
+ * both counts:
+ *
+ * `listResponsesForOpportunity` reads one opportunity's answers.
+ * `listResponsesForStudy` reads every opportunity that ever used the study - a
+ * strict superset, multiplied by the reuse the study picker actively
+ * encourages. The same number prices two different orders of magnitude.
+ *
+ * And the justification behind the 60 does not carry: it exists because the
+ * Responses tab refetches on every visit. NOTHING in the frontend calls either
+ * of these two routes. They are a superadmin surface reached by hand, so a
+ * tight ceiling costs no UX at all.
+ *
+ * The cost being bounded here is MEMORY as much as the pool.
+ * `listResponsesWhere` materialises up to 200,001 rows in the heap BEFORE it
+ * decides to answer 413, then the aggregator or the CSV writer builds a second
+ * structure over them and the response body a third. The 413 protects the
+ * caller from a truncated answer; it does nothing for the process. Enough of
+ * these in flight together is an OOM of the pod, which drops every live
+ * participant session and not just the caller's.
+ *
+ * Its own bucket rather than sharing `studyReadLimiter`: a superadmin reading
+ * results and an author reloading a form are different surfaces, and spending
+ * one budget should not refuse the other.
+ */
+export const studyResultsLimiter = perUserLimiter(
+  10,
+  'Too many requests for these responses. Wait a minute and try again.'
+);
+
+/**
+ * Clears this router's limiters for one caller. A test seam, and only that.
+ *
+ * The counters live in an in-process MemoryStore that outlives an individual
+ * test, so a suite exercising these routes hundreds of times as one admin
+ * exhausts them and every later assertion fails as a 429 - which reads as a
+ * route bug rather than as the limiter working. Same seam, same reasoning, as
+ * `resetParticipantRouteLimits` in opportunities.ts.
+ */
+export function resetFirsthandStudyLimits(userId: string): void {
+  studyReadLimiter.resetKey(userId);
+  studyWriteLimiter.resetKey(userId);
+  studyResultsLimiter.resetKey(userId);
+}
 
 // ─── Studies CRUD (B3a) ──────────────────────────────────────────────────────
 // In-process studies persistence, replacing the FirstHand HMAC proxy. Gated on
@@ -157,7 +262,7 @@ function requireSuperadminForStudyResults(req: Request): void {
 // already showed - and copying grants no new read capability: the picker
 // could always see (and select) any launched study, it just used to link to
 // it rather than copy it.
-router.get('/studies', requireAdmin, asyncHandler(async (_req: Request, res: Response) => {
+router.get('/studies', requireAdmin, studyReadLimiter, asyncHandler(async (_req: Request, res: Response) => {
   // listStudies() returns [] when persistence is unconfigured, matching the
   // FirstHand list endpoint's soft-empty behaviour.
   const studies = await listStudies();
@@ -165,7 +270,7 @@ router.get('/studies', requireAdmin, asyncHandler(async (_req: Request, res: Res
 }));
 
 // POST /api/firsthand/studies - create a study
-router.post('/studies', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.post('/studies', requireAdmin, studyWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const parsed = createStudyRequestSchema.safeParse(req.body);
@@ -187,7 +292,7 @@ router.post('/studies', requireAdmin, asyncHandler(async (req: Request, res: Res
 }));
 
 // GET /api/firsthand/studies/:studyId - fetch a single study with its steps
-router.get('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/studies/:studyId', requireAdmin, studyReadLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const stored = await getStudyById(req.params.studyId);
@@ -293,7 +398,7 @@ router.get('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, 
 }));
 
 // PUT /api/firsthand/studies/:studyId - update a study
-router.put('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.put('/studies/:studyId', requireAdmin, studyWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const parsed = updateStudyRequestSchema.safeParse(req.body);
@@ -399,7 +504,7 @@ router.put('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, 
 }));
 
 // DELETE /api/firsthand/studies/:studyId - delete a study
-router.delete('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.delete('/studies/:studyId', requireAdmin, studyWriteLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const removed = await deleteStudy(req.params.studyId, studyRequester(req));
@@ -416,7 +521,7 @@ router.delete('/studies/:studyId', requireAdmin, asyncHandler(async (req: Reques
 // without an admin session.
 
 // GET /api/firsthand/studies/:studyId/results - aggregated answers
-router.get('/studies/:studyId/results', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const stored = await getStudyById(req.params.studyId);
@@ -437,7 +542,7 @@ router.get('/studies/:studyId/results', requireAdmin, asyncHandler(async (req: R
 }));
 
 // GET /api/firsthand/studies/:studyId/results.csv - raw answers for export
-router.get('/studies/:studyId/results.csv', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const stored = await getStudyById(req.params.studyId);
