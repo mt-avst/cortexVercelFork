@@ -448,10 +448,21 @@ describe('the strip reports steps other than the first', () => {
 
     await screen.findByDisplayValue('A native survey');
 
+    // Waited for, not read once. The title field appears on the first render
+    // after the opportunity resolves, but the step strip's completion state is
+    // derived from form data that settles in a LATER commit - so reading the
+    // strip immediately is a race that this machine wins and a loaded CI
+    // runner loses. It turned main red the first time these two branches were
+    // in the same tree, having passed on both of them separately.
+    //
+    // This does not weaken the assertion: a regression that never marks
+    // Consent complete times out here and fails exactly as it did before. The
+    // rest are read after the wait, when the strip has settled.
+    await waitFor(() => expect(steps()[3]).toHaveTextContent('Completed'));
+
     const rendered = steps();
     expect(rendered).toHaveLength(5);
     expect(rendered[3]).toHaveTextContent('Step 4 of 5');
-    expect(rendered[3]).toHaveTextContent('Completed');
     expect(rendered[2]).toHaveTextContent('Completed');
     // Review, previously left out of this test entirely: the fifth slot is
     // exactly the one an id-keyed (rather than key-keyed) history tracker
