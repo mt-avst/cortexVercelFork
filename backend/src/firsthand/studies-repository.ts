@@ -673,8 +673,7 @@ export async function updateStudy(
       }
 
       if (input.steps) {
-        await client.query(`DELETE FROM study_steps WHERE study_id = $1`, [studyId]);
-        await insertStudySteps(client, studyId, input.steps);
+        await applyStudySteps(client, studyId, input.steps);
       }
 
       const stored = await loadStudyWithSteps(client, studyId);
@@ -888,6 +887,76 @@ async function loadStudyWithSteps(
   };
 }
 
+/**
+ * Bring a study's stored steps in line with what the caller sent, WITHOUT
+ * deleting the ones that survive.
+ *
+ * This used to be `DELETE FROM study_steps WHERE study_id = $1` followed by a
+ * fresh insert of everything, and that is the write half of the defect F2
+ * closes. Every save destroyed every step row and minted them again, so a step
+ * had no continuous existence at all - its id was whatever the payload happened
+ * to derive this time. Now that `participant_responses` has a foreign key to
+ * these rows, a blanket delete would also detach every answer on every save,
+ * which turns an ordinary edit into data loss.
+ *
+ * So: rows whose id is no longer in the payload are deleted (and their answers
+ * detached, deliberately - see 0015). Rows that survive are UPDATED in place
+ * and keep their identity. New ids are inserted.
+ *
+ * The negation pass exists because of `UNIQUE (study_id, step_order)` from
+ * 0004. A pure reorder wants to give step B the position step A currently
+ * holds, and the constraint is checked per statement, so writing the new orders
+ * directly collides on the first swap. Parking every survivor at a negative
+ * order first is enough: incoming orders are always positive (`stepSchema`
+ * requires it), so nothing can collide with a parked row, and negating a set of
+ * distinct values leaves them distinct.
+ *
+ * A deferred constraint would express this more directly, but that means
+ * dropping and re-adding a constraint on a deployed database by name, which
+ * this buys nothing over.
+ */
+async function applyStudySteps(
+  client: PoolClient,
+  studyId: string,
+  steps: StudyStep[]
+) {
+  const keptIds = steps.map((step) => step.step_id);
+
+  // `<> ALL` over an empty array is TRUE for every row, so a study whose
+  // payload has no steps is emptied - which is right, and unreachable anyway
+  // because validateSteps refuses an empty list.
+  //
+  // A NULL element would be the dangerous input rather than a special
+  // character: `x <> ALL(ARRAY[NULL])` is NULL, not TRUE, so the DELETE would
+  // remove NOTHING and leave rows parked at a negative step_order that sort
+  // ahead of everything on the next read. `stepSchema` types step_id as a
+  // non-empty string and validateSteps has already run, so it cannot arrive -
+  // but it is the one value that turns this statement into silent corruption
+  // rather than an error, which is why it is written down.
+  await client.query(
+    `DELETE FROM study_steps WHERE study_id = $1 AND id <> ALL($2::text[])`,
+    [studyId, keptIds]
+  );
+
+  await client.query(
+    `UPDATE study_steps SET step_order = -step_order WHERE study_id = $1 AND step_order > 0`,
+    [studyId]
+  );
+
+  await insertStudySteps(client, studyId, steps);
+}
+
+/**
+ * Write each step, replacing any row that already holds its id.
+ *
+ * `ON CONFLICT (study_id, id) DO UPDATE` rather than a plain insert, because
+ * `applyStudySteps` calls this over a list that may contain both new steps and
+ * ones that already exist. The conflict target is the composite primary key
+ * added in 0010. Every column is written, so an updated row is exactly what a
+ * freshly inserted one would have been - a partial update here would be a field
+ * that silently keeps a stale value across an edit, which is the class of bug
+ * `studyRoundTripsCleanly` exists to catch on the other side.
+ */
 async function insertStudySteps(
   client: PoolClient,
   studyId: string,
@@ -900,6 +969,15 @@ async function insertStudySteps(
           id, study_id, step_order, type, prompt, target_url,
           helper_text, is_required, options, config
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        ON CONFLICT (study_id, id) DO UPDATE SET
+          step_order = EXCLUDED.step_order,
+          type = EXCLUDED.type,
+          prompt = EXCLUDED.prompt,
+          target_url = EXCLUDED.target_url,
+          helper_text = EXCLUDED.helper_text,
+          is_required = EXCLUDED.is_required,
+          options = EXCLUDED.options,
+          config = EXCLUDED.config
       `,
       [
         step.step_id,
@@ -990,6 +1068,17 @@ function validateSteps(steps: StudyStep[]) {
 
     if (stepOrders.has(step.order)) {
       throw new Error(`Duplicate step order: ${step.order}`);
+    }
+
+    // Positive, and checked HERE rather than left to the zod boundary.
+    // `applyStudySteps` parks surviving rows at a NEGATIVE step_order to get
+    // them out of the way of the incoming positive ones, and that only works
+    // because incoming orders are all positive. `stepSchema` enforces it for an
+    // HTTP caller; this function is the repository's own gate and the one a
+    // script reaches, so the invariant belongs beside the code that depends on
+    // it rather than one layer away.
+    if (!Number.isInteger(step.order) || step.order <= 0) {
+      throw new Error(`Step order must be a positive integer: ${step.order}`);
     }
 
     // The rules come from the contract rather than being restated here. This

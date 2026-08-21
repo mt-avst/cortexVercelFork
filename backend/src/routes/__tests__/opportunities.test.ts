@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, beforeEach, jest } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
 import express from 'express';
 
@@ -140,6 +140,7 @@ import { logger } from '../../utils/logger';
 // The real serialiser, so the unchanged-sequence fixture is what the route
 // actually computes rather than a hand-built shape that could never match.
 import { toStudySteps } from '../../../../shared/firsthand/inline-study';
+import { toSurveySteps } from '../../../../shared/firsthand/survey-authoring';
 
 const mockQuery = pool.query as jest.MockedFunction<any>;
 const mockConnect = pool.connect as jest.MockedFunction<any>;
@@ -975,6 +976,222 @@ describe('Opportunities API', () => {
             steps: { step_id: string }[];
           };
           expect(written.steps[0].step_id.startsWith('study_existing_')).toBe(true);
+        });
+
+        /**
+         * The config half of the re-meaning refusal, on the survey branch -
+         * which is the only vocabulary that HAS a config to change.
+         *
+         * The recorded branch's tests cover a changed `type`; a comparison that
+         * looked at `type` alone would pass every one of them while letting a
+         * researcher lower a rating scale from 10 to 5 on a live question, which
+         * silently drops every answer above 5 out of `answered` and out of the
+         * mean. The two vocabularies are separate code paths in this route, and
+         * the untested half is the half that has bitten before.
+         */
+        /**
+         * The key-less refusal, driven through the SURVEY branch.
+         *
+         * An independent mutation pass found that hardcoding
+         * `identityIsAuthored` to `true` at the survey call site ALONE left the
+         * whole suite green: every other test of this guard sends
+         * `inline_study`. The two inline branches are separate code in this
+         * route, not a shared helper, and in this repository the untested half
+         * of a two-vocabulary pair is the half that has bitten before.
+         */
+        describe('a key-less survey payload', () => {
+          const unkeyedSurvey = (prompts: string[]) => ({
+            consent_text:
+              'Your answers are stored for research analysis and are visible to the research team. Nothing is recorded.',
+            steps: prompts.map((prompt) => ({ type: 'open_text' as const, prompt }))
+          });
+
+          const linkedUnkeyedSurvey = () => {
+            mockGetStudyById.mockResolvedValueOnce({
+              study: {
+                id: 'study_existing',
+                title: 'A survey',
+                intro_text: 'Intro',
+                consent_text: 'Consent',
+                kind: 'survey',
+                estimated_duration_minutes: undefined,
+                status: 'launched',
+                owner_user_id: 'test-user-id',
+                copied_from_study_id: null,
+                created_at: '2026-08-16T10:00:00.000Z',
+                updated_at: '2026-08-16T10:00:00.000Z',
+              },
+              steps: toSurveySteps(
+                unkeyedSurvey(['What did you expect?', 'What surprised you?']).steps as never,
+                'study_existing'
+              ),
+            } as never);
+          };
+
+          afterEach(() => {
+            mockStudyHasResponses.mockResolvedValue(false);
+          });
+
+          it('is refused when it reorders a survey that has answers', async () => {
+            mockStudyHasResponses.mockResolvedValue(true);
+            linkedUnkeyedSurvey();
+
+            const response = await patch(
+              {
+                inline_survey: unkeyedSurvey([
+                  'What surprised you?',
+                  'What did you expect?'
+                ])
+              },
+              'study_existing'
+            ).expect(400);
+
+            expect(response.body.error).toMatch(/already collected answers/);
+            expect(mockUpdateStudy).not.toHaveBeenCalled();
+          });
+
+          it('is allowed when the survey has no answers', async () => {
+            // The pair, so the assertion above cannot be satisfied by a rule
+            // that refuses every key-less survey save.
+            mockStudyHasResponses.mockResolvedValue(false);
+            linkedUnkeyedSurvey();
+
+            await patch(
+              {
+                inline_survey: unkeyedSurvey([
+                  'What surprised you?',
+                  'What did you expect?'
+                ])
+              },
+              'study_existing',
+              true
+            ).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
+
+          it('keeps the stored ids positionally when the sequence is unchanged', async () => {
+            // The survey twin of the task-list assertion above. A key-less
+            // payload cannot say which question is which, so the route holds on
+            // to the identity the stored steps already have rather than taking
+            // the payload's positional ids.
+            mockGetStudyById.mockResolvedValueOnce({
+              study: {
+                id: 'study_existing',
+                title: 'A survey',
+                intro_text: 'Intro',
+                consent_text: 'Consent',
+                kind: 'survey',
+                estimated_duration_minutes: undefined,
+                status: 'launched',
+                owner_user_id: 'test-user-id',
+                copied_from_study_id: null,
+                created_at: '2026-08-16T10:00:00.000Z',
+                updated_at: '2026-08-16T10:00:00.000Z',
+              },
+              // Zero-padded, the way StudyEditor numbers them, so the unpadded
+              // positional ids the payload derives are visibly different.
+              steps: [
+                {
+                  step_id: 'study_existing_step_001',
+                  order: 1,
+                  type: 'open_text',
+                  prompt: 'What did you expect?'
+                },
+                {
+                  step_id: 'study_existing_step_end',
+                  order: 2,
+                  type: 'end',
+                  prompt: 'Thanks - that is the end of the study.'
+                }
+              ],
+            } as never);
+
+            await patch(
+              { inline_survey: unkeyedSurvey(['What did you expect?']) },
+              'study_existing',
+              true
+            ).expect(200);
+
+            const written = mockUpdateStudy.mock.calls[0][1] as {
+              steps: { step_id: string }[];
+            };
+            expect(written.steps.map((step) => step.step_id)).toEqual([
+              'study_existing_step_001',
+              'study_existing_step_end',
+            ]);
+          });
+        });
+
+        describe('changing a live question\'s scale', () => {
+          const ratingSurvey = (scaleMax: number) => ({
+            consent_text:
+              'Your answers are stored for research analysis and are visible to the research team. Nothing is recorded.',
+            steps: [
+              {
+                step_key: 'alpha',
+                type: 'rating' as const,
+                prompt: 'How easy was that?',
+                config: { scale_max: scaleMax }
+              }
+            ]
+          });
+
+          const linkedRatingSurvey = () => {
+            mockGetStudyById.mockResolvedValueOnce({
+              study: {
+                id: 'study_existing',
+                title: 'A survey',
+                intro_text: 'Intro',
+                consent_text: 'Consent',
+                kind: 'survey',
+                estimated_duration_minutes: undefined,
+                status: 'launched',
+                owner_user_id: 'test-user-id',
+                copied_from_study_id: null,
+                created_at: '2026-08-16T10:00:00.000Z',
+                updated_at: '2026-08-16T10:00:00.000Z',
+              },
+              steps: toSurveySteps(ratingSurvey(10).steps as never, 'study_existing'),
+            } as never);
+          };
+
+          afterEach(() => {
+            mockStudyHasResponses.mockResolvedValue(false);
+          });
+
+          it('refuses to shrink the scale once people have answered', async () => {
+            mockStudyHasResponses.mockResolvedValue(true);
+            linkedRatingSurvey();
+
+            const response = await patch(
+              { inline_survey: ratingSurvey(5) },
+              'study_existing'
+            ).expect(400);
+
+            expect(response.body.error).toMatch(/type and scale cannot be changed/);
+            expect(mockUpdateStudy).not.toHaveBeenCalled();
+          });
+
+          it('allows it while nobody has answered', async () => {
+            mockStudyHasResponses.mockResolvedValue(false);
+            linkedRatingSurvey();
+
+            await patch({ inline_survey: ratingSurvey(5) }, 'study_existing', true).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
+
+          it('does not refuse a save that leaves the scale alone', async () => {
+            // Otherwise every ordinary save on a live survey is refused, which
+            // is the failure mode the pre-F2 guard actually had.
+            mockStudyHasResponses.mockResolvedValue(true);
+            linkedRatingSurvey();
+
+            await patch({ inline_survey: ratingSurvey(10) }, 'study_existing', true).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
         });
 
         /**
@@ -2781,6 +2998,267 @@ describe('Opportunities API', () => {
           'study_already_linked_step_001',
           'study_already_linked_step_end',
         ]);
+      });
+
+      /**
+       * F2. When the payload carries identity, the two mitigations above are
+       * turned OFF - and that is the point of the step rather than a relaxation
+       * of it.
+       *
+       * Both of them exist only because a key-less payload's ids are derived
+       * from array position and therefore mean nothing. A payload where every
+       * item carries a `step_key` was built by a client that has tracked each
+       * question's identity since the moment it was created, so its ids ARE the
+       * identity: positionally rewriting them is the corruption, and refusing
+       * the save protects nothing while making a live study uneditable.
+       */
+      describe('when the payload carries each question\'s identity', () => {
+        type KeyedStep = {
+          step_key: string;
+          type: 'open_text' | 'instruction';
+          prompt: string;
+        };
+
+        const keyedStudy: { consent_text: string; steps: KeyedStep[] } = {
+          consent_text: 'We record your screen.',
+          steps: [
+            { step_key: 'alpha', type: 'open_text', prompt: 'What did you expect?' },
+            { step_key: 'bravo', type: 'open_text', prompt: 'What surprised you?' },
+          ],
+        };
+
+        // Restored here rather than only at the end of each test that sets it:
+        // `jest.clearAllMocks()` in the suite's beforeEach clears CALLS but not
+        // implementations, so one failing assertion would otherwise leave
+        // "this study has answers" true for the rest of the file and turn a
+        // single failure into dozens.
+        afterEach(() => {
+          mockStudyHasResponses.mockResolvedValue(false);
+        });
+
+        /** The two keyed steps as they are already stored, in the same order. */
+        const storedKeyed = {
+          study: {
+            id: 'study_already_linked',
+            title: 'A keyed study',
+            intro_text: 'Intro',
+            consent_text: 'We record your screen.',
+            kind: 'recorded',
+            estimated_duration_minutes: undefined,
+            status: 'launched',
+            owner_user_id: 'test-user-id',
+            copied_from_study_id: null,
+            created_at: '2026-08-16T10:00:00.000Z',
+            updated_at: '2026-08-16T10:00:00.000Z',
+          },
+          steps: toStudySteps(keyedStudy.steps as never, 'study_already_linked', undefined),
+        };
+
+        it('lets the author reorder a study that has already collected answers', async () => {
+          // Before F2 this was a 400 telling the author to go to the Task Lists
+          // area. The reorder is safe now because the ids move WITH the
+          // questions, which the next assertion is what actually proves.
+          mockStudyHasResponses.mockResolvedValue(true);
+          mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+          await patchLinked(
+            { inline_study: { ...keyedStudy, steps: [...keyedStudy.steps].reverse() } },
+            true
+          ).expect(200);
+
+          expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+        });
+
+        it('writes the reordered questions under the SAME ids they already had', async () => {
+          // The whole of F2, as one assertion. Question `bravo` is now first
+          // and still carries the id it has always carried, so the answers
+          // stored against `study_already_linked_bravo` still belong to "What
+          // surprised you?".
+          //
+          // A count assertion, or an assertion on the prompts, passes against
+          // the positional ids that re-attributed four participants' answers.
+          mockStudyHasResponses.mockResolvedValue(true);
+          mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+          await patchLinked(
+            { inline_study: { ...keyedStudy, steps: [...keyedStudy.steps].reverse() } },
+            true
+          ).expect(200);
+
+          const written = mockUpdateStudy.mock.calls[0][1] as {
+            steps: { step_id: string; prompt: string }[];
+          };
+
+          expect(written.steps.map((step) => [step.step_id, step.prompt])).toEqual([
+            ['study_already_linked_bravo', 'What surprised you?'],
+            ['study_already_linked_alpha', 'What did you expect?'],
+            ['study_already_linked_step_end', 'Thanks - that is the end of the study.'],
+          ]);
+        });
+
+        it('does not rewrite a keyed payload\'s ids from the stored positions', async () => {
+          // The positional-preserve mitigation must not run here. Its
+          // condition - equal lengths - is satisfied by a reorder, so leaving
+          // it on would take the STORED id at each index and hand it to
+          // whichever question the author dragged there: the original defect,
+          // reintroduced by the code written to prevent it.
+          mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+          await patchLinked(
+            { inline_study: { ...keyedStudy, steps: [...keyedStudy.steps].reverse() } },
+            true
+          ).expect(200);
+
+          const written = mockUpdateStudy.mock.calls[0][1] as {
+            steps: { step_id: string }[];
+          };
+          expect(written.steps[0].step_id).toBe('study_already_linked_bravo');
+        });
+
+        it('lets the author delete a question that has answers', async () => {
+          // Deliberate, and it is the decision migration 0015 records: the
+          // deleted question's answers are DETACHED by the foreign key, not
+          // destroyed and not moved onto another question. Refusing instead
+          // would make a study with one answer permanently unmaintainable.
+          mockStudyHasResponses.mockResolvedValue(true);
+          mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+          await patchLinked(
+            { inline_study: { ...keyedStudy, steps: [keyedStudy.steps[0]] } },
+            true
+          ).expect(200);
+
+          const written = mockUpdateStudy.mock.calls[0][1] as {
+            steps: { step_id: string }[];
+          };
+          expect(written.steps.map((step) => step.step_id)).toEqual([
+            'study_already_linked_alpha',
+            'study_already_linked_step_end',
+          ]);
+        });
+
+        /**
+         * What stable identity does NOT make safe, found by both review gates
+         * independently and very nearly shipped.
+         *
+         * The refusal this step made conditional was never only about
+         * ordering: `stepSequenceIsUnchanged` compared type and config too.
+         * Keeping an id while changing what the question MEANS leaves every
+         * stored answer attached and reinterprets it - which is a different
+         * route to the same wrong number.
+         */
+        describe('and the question changes its meaning rather than its position', () => {
+          const retyped = (steps: KeyedStep[]) => ({ ...keyedStudy, steps });
+
+          it('refuses to change the TYPE of a question that has answers', async () => {
+            // The concrete harm: 300 ratings of 1 to 5 on a question retyped to
+            // `nps` are all <= 6, so the study reports an NPS of -100 over 300
+            // respondents. Nothing is dangling, nothing is missing, and the
+            // number is wrong.
+            mockStudyHasResponses.mockResolvedValue(true);
+            mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+            const response = await patchLinked({
+              inline_study: retyped([
+                { ...keyedStudy.steps[0], type: 'instruction' as const },
+                keyedStudy.steps[1]
+              ])
+            }).expect(400);
+
+            expect(response.body.error).toMatch(/type and scale cannot be changed/);
+            expect(mockUpdateStudy).not.toHaveBeenCalled();
+          });
+
+          it('allows the same type change when nobody has answered', async () => {
+            // The pair. Without it the refusal above is satisfied by a rule that
+            // refuses every edit, which would make a draft uneditable.
+            mockStudyHasResponses.mockResolvedValue(false);
+            mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+            await patchLinked(
+              {
+                inline_study: retyped([
+                  { ...keyedStudy.steps[0], type: 'instruction' as const },
+                  keyedStudy.steps[1]
+                ])
+              },
+              true
+            ).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
+
+          it('still lets the author REWORD a question that has answers', async () => {
+            // Deliberately allowed, and it is one of the things F2 exists to
+            // make possible - a live survey could not have a typo fixed at all
+            // before. What makes it safe rather than silent is that the wording
+            // each participant saw is recorded beside their answer and reported
+            // back as `asked_as`.
+            mockStudyHasResponses.mockResolvedValue(true);
+            mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+            await patchLinked(
+              {
+                inline_study: retyped([
+                  { ...keyedStudy.steps[0], prompt: 'What did you expect, exactly?' },
+                  keyedStudy.steps[1]
+                ])
+              },
+              true
+            ).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
+
+          it('does not refuse a type change on a question that is NEW', async () => {
+            // Matched by id, not by position. A question the author just added
+            // has no stored counterpart and therefore no answers to reinterpret,
+            // so it must not be caught by the same rule.
+            mockStudyHasResponses.mockResolvedValue(true);
+            mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+            await patchLinked(
+              {
+                inline_study: retyped([
+                  ...keyedStudy.steps,
+                  {
+                    step_key: 'charlie',
+                    type: 'instruction' as const,
+                    prompt: 'A note added just now'
+                  }
+                ])
+              },
+              true
+            ).expect(200);
+
+            expect(mockUpdateStudy).toHaveBeenCalledTimes(1);
+          });
+        });
+
+        it('still refuses when only SOME of the questions carry identity', async () => {
+          // A half-keyed payload is a client bug, not a state worth supporting.
+          // Treating it as authoritative would let the un-keyed half fall back
+          // to positional ids that can collide with the keyed half.
+          //
+          // The same REORDER the keyed tests above are allowed to make, so the
+          // only difference between a 200 and this 400 is whether every step
+          // carried identity.
+          mockStudyHasResponses.mockResolvedValue(true);
+          mockGetStudyById.mockResolvedValueOnce(storedKeyed as never);
+
+          const response = await patchLinked({
+            inline_study: {
+              ...keyedStudy,
+              steps: [
+                { type: 'open_text' as const, prompt: 'What surprised you?' },
+                keyedStudy.steps[0],
+              ],
+            },
+          }).expect(400);
+
+          expect(response.body.error).toMatch(/already collected answers/);
+          expect(mockUpdateStudy).not.toHaveBeenCalled();
+        });
       });
 
       it('does not refuse an unrelated edit just because the ids are padded', async () => {
@@ -4858,8 +5336,8 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
-        { session_id: 's2', step_id: 'q1', step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
+        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
 
       const response = await request(app)
@@ -5005,7 +5483,7 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
       mockListResponsesForOpportunity.mockResolvedValueOnce([
-        { session_id: 's1', step_id: 'q1', step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
       ]);
 
       const response = await request(app)

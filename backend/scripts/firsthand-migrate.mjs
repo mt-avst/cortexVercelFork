@@ -80,6 +80,18 @@ try {
 
   const client = await pool.connect();
 
+  // A migration that says something has to be able to be heard.
+  //
+  // node-postgres surfaces a Postgres NOTICE as a `notice` event and DROPS it
+  // when nothing is listening, so a `RAISE NOTICE` in a migration file reached
+  // nobody. 0015 deletes rows and raises the count as its only audit record;
+  // without this line that record did not exist, and the initContainer log -
+  // the sole debugging surface in the cluster - would have shown the migration
+  // applying and nothing about what it removed.
+  client.on("notice", (notice) => {
+    console.info(`[firsthand-migrate] ${notice.message}`);
+  });
+
   try {
     await client.query(`CREATE SCHEMA IF NOT EXISTS ${FIRSTHAND_SCHEMA}`);
     await client.query(`

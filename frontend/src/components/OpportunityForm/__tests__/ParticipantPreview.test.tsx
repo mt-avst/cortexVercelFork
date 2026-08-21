@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import ParticipantPreview from '../ParticipantPreview';
+import { withClientIds } from '../../../lib/opportunity-authoring/client-ids';
 import {
   buildRecordedPreview,
   buildSurveyPreview
@@ -31,24 +32,24 @@ const surveyPreview = buildSurveyPreview({
   title: 'Design system survey',
   introText: 'A few questions.',
   consentText: 'Nothing is recorded.',
-  questions: [
-    { type: 'open_text', prompt: 'What would you change?' },
+  questions: withClientIds([
+    { type: 'open_text' as const, prompt: 'What would you change?' },
     {
-      type: 'single_choice',
+      type: 'single_choice' as const,
       prompt: 'Which do you use most?',
       options: ['Jira', 'Confluence']
     }
-  ]
+  ])
 });
 
 const recordedPreview = buildRecordedPreview({
   title: 'Checkout study',
   introText: 'Two tasks.',
   consentText: 'This records your screen and microphone.',
-  steps: [
-    { type: 'instruction', prompt: 'Open the basket' },
-    { type: 'instruction', prompt: 'Find the delivery options' }
-  ],
+  steps: withClientIds([
+    { type: 'instruction' as const, prompt: 'Open the basket' },
+    { type: 'instruction' as const, prompt: 'Find the delivery options' }
+  ]),
   targetUrl: 'https://shop.example.com/basket'
 });
 

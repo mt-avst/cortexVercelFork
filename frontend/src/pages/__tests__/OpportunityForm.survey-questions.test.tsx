@@ -11,6 +11,18 @@ import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
 
 /**
+ * The shape of an identity minted for a question that has never been saved.
+ *
+ * A v4 uuid from `mintClientId`, matched rather than compared, because the
+ * value is random by design. Written as a pattern rather than `expect.any
+ * (String)` so that the positional fallback - `step_1`, the very thing F2
+ * replaced - would fail it.
+ */
+const A_MINTED_IDENTITY = expect.stringMatching(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+);
+
+/**
  * Authoring a native poll or survey on the opportunity form.
  *
  * Polls and surveys were external-link-only, so the third tab was always
@@ -266,7 +278,10 @@ describe('authoring a native survey', () => {
 
     expect(body.delivery_mode).toBe('native');
     expect(body.inline_survey?.steps).toEqual([
-      { type: 'open_text', prompt: 'How easy was that?' }
+      // A brand new question, so its identity is freshly MINTED - a uuid, not
+      // a position. This is what makes the stored step id stable across every
+      // later reorder.
+      { step_key: A_MINTED_IDENTITY, type: 'open_text', prompt: 'How easy was that?' }
     ]);
   });
 
@@ -400,6 +415,7 @@ describe('authoring a native survey', () => {
     };
 
     expect(body.inline_survey?.steps[0]).toEqual({
+      step_key: A_MINTED_IDENTITY,
       type: 'nps',
       prompt: 'How easy was that?'
     });
@@ -440,6 +456,7 @@ describe('authoring a native survey', () => {
     // 7, not the default 5. A re-seeded scale would look like preservation and
     // would silently change the data every study on it produces.
     expect(body.inline_survey?.steps[0]).toEqual({
+      step_key: A_MINTED_IDENTITY,
       type: 'rating',
       prompt: 'How easy was that?',
       config: { scale_max: 7 }
@@ -481,6 +498,7 @@ describe('authoring a native survey', () => {
     };
 
     expect(body.inline_survey?.steps[0]).toEqual({
+      step_key: A_MINTED_IDENTITY,
       type: 'single_choice',
       prompt: 'Which delivery option would you pick?',
       options: ['Standard', 'Next day']
@@ -632,6 +650,7 @@ describe('authoring a native survey', () => {
     };
 
     expect(body.inline_survey?.steps[0]).toEqual({
+      step_key: A_MINTED_IDENTITY,
       type: 'instruction',
       prompt: 'Before we start, a note about how this works'
     });
@@ -1061,15 +1080,31 @@ describe('starting a survey from an existing set of questions', () => {
     // The whole array, in order, with the edit applied to the RIGHT question -
     // a single-item read here could not tell question 2 from question 1.
     expect(body.inline_survey?.steps).toEqual([
-      { type: 'open_text', prompt: 'What did you set up first?' },
+      // FRESHLY MINTED, not inherited from the source study. A copied question
+      // is a new question: taking the source's identity would leave two studies
+      // claiming the same keys, and the copy is about to be stored under a
+      // study id of its own anyway.
+      { step_key: A_MINTED_IDENTITY, type: 'open_text', prompt: 'What did you set up first?' },
       {
+        step_key: A_MINTED_IDENTITY,
         type: 'multi_choice',
         prompt: 'Which docs did you actually open?',
         options: ['Getting started', 'API reference', 'Nothing'],
         is_required: true
       },
-      { type: 'rating', prompt: 'How clear was it?', config: { scale_max: 7 } }
+      {
+        step_key: A_MINTED_IDENTITY,
+        type: 'rating',
+        prompt: 'How clear was it?',
+        config: { scale_max: 7 }
+      }
     ]);
+    // Three DIFFERENT identities. `expect.stringMatching` is satisfied by three
+    // copies of one value, and three questions sharing an identity would store
+    // as a single row - a copied survey silently two questions shorter.
+    expect(
+      new Set(body.inline_survey?.steps.map((step) => step.step_key)).size
+    ).toBe(3);
     expect(body.inline_survey?.consent_text).toBe(
       'The wording this researcher actually wrote'
     );

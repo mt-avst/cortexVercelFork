@@ -1,5 +1,5 @@
 import type { StudyStep } from "../../../shared/firsthand/contract";
-import type { StoredResponse } from "./survey-results";
+import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
 
 /**
  * The raw responses as CSV: one row per participant, one column per question.
@@ -109,11 +109,52 @@ function answerFor(step: StudyStep, payload: Record<string, unknown>) {
   };
 }
 
+/**
+ * Marks a column whose question the study no longer has.
+ *
+ * In the header rather than only in the JSON view, because a CSV is where a
+ * finding gets computed: a column silently missing its question would be
+ * averaged alongside the live ones with nothing to say it is no longer being
+ * asked. Suffixed rather than prefixed so the prompt still sorts and reads
+ * first, and applied AFTER neutralisation of the prompt itself.
+ */
+const REMOVED_COLUMN_SUFFIX = " (removed question)";
+
+/**
+ * A removed question's answers, as a column.
+ *
+ * Keyed by `(step_type, step_prompt)` for the same reason `removedQuestionsFrom`
+ * groups on that pair: a detached answer's step id was nulled when the question
+ * was deleted, so the prompt the participant was shown is the only identity
+ * left. The key is the map key AND the lookup key, so the two cannot drift.
+ */
+const detachedKey = (stepType: string, prompt: string) =>
+  `${stepType}\u0000${prompt}`;
+
 export function toResponsesCsv(
   steps: StudyStep[],
   responses: StoredResponse[]
 ): string {
   const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
+
+  // Answers whose question has been removed. Exported rather than dropped: the
+  // participant answered, and an export that quietly omits it is a smaller data
+  // set than the researcher believes they are looking at.
+  const detached = responses.filter(
+    (row) => row.step_id === null && QUESTION_TYPES.has(row.step_type)
+  );
+
+  const removed = [
+    ...new Map(
+      detached.map((row) => [
+        detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
+        {
+          type: row.step_type,
+          prompt: row.step_prompt ?? UNKNOWN_REMOVED_PROMPT
+        }
+      ])
+    ).values()
+  ];
 
   // Every question keeps its column even when nobody answered it: an absent
   // column reads as a question that was never asked. Prompts are
@@ -121,30 +162,47 @@ export function toResponsesCsv(
   // human-authored cell; the fixed "Participant" label is ours.
   const header = [
     cell("Participant", false),
-    ...questions.map((step) => cell(step.prompt, true))
+    ...questions.map((step) => cell(step.prompt, true)),
+    ...removed.map((question) =>
+      cell(neutralise(question.prompt) + REMOVED_COLUMN_SUFFIX, false)
+    )
   ];
 
   const byParticipant = new Map<string, Map<string, Record<string, unknown>>>();
 
   for (const row of responses) {
     const existing = byParticipant.get(row.session_id) ?? new Map();
-    existing.set(row.step_id, row.response_payload ?? {});
+    existing.set(
+      row.step_id ??
+        detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
+      row.response_payload ?? {}
+    );
     byParticipant.set(row.session_id, existing);
   }
 
   const lines = [...byParticipant.entries()].map(([sessionId, answers]) => {
-    const cells = questions.map((step) => {
-      const payload = answers.get(step.step_id);
-
+    const columnFor = (
+      step: Pick<StudyStep, "type">,
+      payload: Record<string, unknown> | undefined
+    ) => {
       if (!payload) {
         return "";
       }
 
-      const { text, participantAuthored } = answerFor(step, payload);
+      const { text, participantAuthored } = answerFor(step as StudyStep, payload);
       return cell(text, participantAuthored);
-    });
+    };
 
-    return [cell(sessionId, false), ...cells].join(",");
+    const cells = questions.map((step) => columnFor(step, answers.get(step.step_id)));
+
+    const removedCells = removed.map((question) =>
+      columnFor(
+        { type: question.type as StudyStep["type"] },
+        answers.get(detachedKey(question.type, question.prompt))
+      )
+    );
+
+    return [cell(sessionId, false), ...cells, ...removedCells].join(",");
   });
 
   // CRLF is what RFC 4180 specifies and what Excel expects.

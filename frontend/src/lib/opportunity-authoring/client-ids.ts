@@ -6,11 +6,22 @@
  * and uncommitted keystrokes landed on the wrong one - the author typed into
  * question 3 and the text appeared under question 5's prompt.
  *
- * This id NEVER leaves the browser. `surveyQuestionSchema` is `.strict()` and
- * would refuse a question carrying it, so the payload builders in
- * `hydrate-study.ts` list the fields they send rather than spreading the item -
- * and a test mutates that mapper to a spread to prove the guard is the reason
- * the id stays behind, not an accident of shape.
+ * F2 PROMOTED IT. It used to be stated here that this id never leaves the
+ * browser; it does now, as the payload's `step_key`, and it is what the stored
+ * `study_steps.id` is derived from. The reasoning is the same reasoning
+ * enlarged: an identity that survives a reorder in the DOM is exactly the
+ * identity that has to survive a reorder in the database, and minting a second
+ * one beside it would be two knobs for one fact. See
+ * `shared/firsthand/step-identity.ts` for the stored half, and
+ * `withStoredIdentity` in `hydrate-study.ts` for how an existing study's
+ * identity is recovered into this field.
+ *
+ * The FIELD still never leaves the browser: `surveyQuestionSchema` is
+ * `.strict()` and would refuse a question carrying `_clientId`, so the payload
+ * builders in `hydrate-study.ts` list the fields they send rather than
+ * spreading the item, and copy the value into `step_key` by hand. A test
+ * mutates that mapper to a spread to prove the guard is the reason the field
+ * stays behind, not an accident of shape.
  */
 
 /** An authored item with the identity the list keys on. */

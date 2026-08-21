@@ -156,7 +156,7 @@ const FINISHED_SESSION_STATES = new Set(["completed", "abandoned", "failed"]);
 /**
  * Refuses to rewrite an answer once the session is over.
  *
- * `persistRuntimeSession` stores responses by deleting every row for the
+ * `persistRuntimeSession` stores responses by deleting every LIVE row for the
  * session and reinserting the current set, so a later submission does not
  * supersede the earlier answer - it ERASES it, leaving nothing that says the
  * answer ever differed. A researcher who reads their results twice could see
@@ -1024,11 +1024,24 @@ async function getRuntimeSessionById(client: PoolClient, sessionId: string) {
     `,
     [sessionId]
   );
+  // DETACHED answers are excluded from the live session, and are not lost by
+  // it.
+  //
+  // A NULL step_id means the researcher removed the question after this
+  // participant answered it (0015's ON DELETE SET NULL). The runtime record
+  // requires a step id on every response - correctly, since it drives which
+  // step the runner considers answered - and there is no live step for this one
+  // to belong to any more.
+  //
+  // What keeps it is the matching filter on the DELETE in
+  // `persistRuntimeSession`: a detached row is never re-read, and never
+  // rewritten, so it stays exactly as the participant left it and remains
+  // readable in the results view under the prompt they were shown.
   const responseRows = await client.query<ParticipantResponseRow>(
     `
       SELECT id, session_id, step_id, step_type, response_payload, saved_at
       FROM participant_responses
-      WHERE session_id = $1
+      WHERE session_id = $1 AND step_id IS NOT NULL
       ORDER BY step_id ASC, saved_at ASC
     `,
     [sessionId]
@@ -1292,9 +1305,14 @@ async function persistRuntimeSession(
   await client.query("DELETE FROM runtime_events WHERE session_id = $1", [
     session.sessionId
   ]);
-  await client.query("DELETE FROM participant_responses WHERE session_id = $1", [
-    session.sessionId
-  ]);
+  // `step_id IS NOT NULL`, so a save cannot destroy an answer whose question
+  // was removed. Those rows are excluded from the session record on load too,
+  // so they are never in `session.responses` and cannot be reinserted - the two
+  // filters are one decision and have to agree.
+  await client.query(
+    "DELETE FROM participant_responses WHERE session_id = $1 AND step_id IS NOT NULL",
+    [session.sessionId]
+  );
   await client.query("DELETE FROM recording_assets WHERE session_id = $1", [
     session.sessionId
   ]);
@@ -1316,16 +1334,58 @@ async function persistRuntimeSession(
     );
   }
 
+  // The prompt each answer was given against, taken from the session's OWN step
+  // list rather than from the study as it stands now. That list is the study as
+  // this participant was served it, so it is the only record of what they were
+  // actually asked - which is the whole point of storing it beside the answer.
+  const promptByStepId = new Map(
+    session.steps.map((step) => [step.stepId, step.prompt])
+  );
+
   for (const response of session.responses) {
     await client.query(
       `
-        INSERT INTO participant_responses (id, session_id, step_id, step_type, response_payload, saved_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO participant_responses (
+          id, session_id, study_id, step_id, step_prompt, step_type,
+          response_payload, saved_at
+        )
+        VALUES (
+          $1, $2, $3,
+          -- Resolved against the table rather than taken from the record, and
+          -- this is load-bearing rather than defensive.
+          --
+          -- Every save of a session DELETEs and re-INSERTs all of its
+          -- responses, and the in-memory record keeps the step id the answer
+          -- was given against for the life of the session. So if a researcher
+          -- removes that question in the meantime, 0015's ON DELETE SET NULL
+          -- detaches the stored row - and the next save would write the dead id
+          -- straight back and be refused by the foreign key, failing the whole
+          -- session save and losing the participant's progress.
+          --
+          -- Selecting the id back means a step that still exists is attached
+          -- and one that does not resolves to NULL: the answer is detached
+          -- rather than lost, which is exactly what SET NULL did.
+          --
+          -- FOR KEY SHARE, and it is load-bearing rather than belt-and-braces.
+          -- Under READ COMMITTED a plain sub-SELECT reads its own snapshot
+          -- while the foreign key's own check runs against a fresh one, so a
+          -- researcher's save deleting this step in the gap between the two
+          -- would turn "detach the answer" into a constraint violation that
+          -- aborts the WHOLE session write - a participant losing their
+          -- progress because somebody else edited the form. The lock is the
+          -- same one the foreign key takes for itself, so taking it in the
+          -- subquery makes the two agree instead of racing, and takes it in the
+          -- same order the delete side does.
+          (SELECT ss.id FROM study_steps ss WHERE ss.study_id = $3 AND ss.id = $4 FOR KEY SHARE),
+          $5, $6, $7, $8
+        )
       `,
       [
         response.id,
         response.sessionId,
+        session.studyId,
         response.stepId,
+        promptByStepId.get(response.stepId) ?? null,
         response.stepType,
         JSON.stringify(response.responsePayload),
         response.savedAt

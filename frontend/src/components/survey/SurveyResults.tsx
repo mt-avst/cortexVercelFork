@@ -25,11 +25,30 @@ export type QuestionResult = {
   detractors?: number;
   score?: number | null;
   answers?: { session_id: string; text: string }[];
+  /**
+   * Wordings this question was asked in that are not its current wording,
+   * recorded beside each answer at the moment it was given.
+   *
+   * Rendered because an author may now fix a typo on a live survey, and a
+   * researcher reading the results has to be able to see that some of the
+   * answers underneath were given against something else.
+   */
+  asked_as?: { prompt: string; answered: number }[];
 };
 
 export type SurveyResultsData = {
   respondents: number;
   questions: QuestionResult[];
+  /**
+   * Answers to questions this study no longer has, because the author removed
+   * them after these participants had already answered.
+   *
+   * Their own section, under their own heading, rather than mixed in with the
+   * live questions - the numbers are real but nobody is being asked them any
+   * more, and a reader scanning denominators down one list would have no way to
+   * tell. Optional because it is omitted rather than sent empty.
+   */
+  removed_questions?: QuestionResult[];
 };
 
 function Bar({ percent }: { percent: number }) {
@@ -83,15 +102,41 @@ function TallyTable({
   );
 }
 
-function QuestionCard({ question }: { question: QuestionResult }) {
+/**
+ * @param headingLevel
+ *   Which heading element the prompt renders as. The page is h1 and this
+ *   component's own container is h2, so a question is h3 by default - but the
+ *   removed-questions section adds an h3 of its own, and the questions inside
+ *   it are subordinate to that heading rather than siblings of it. Hardcoding
+ *   h3 in both places would tell a screen-reader user that a removed question
+ *   sits at the same level as the section explaining what removed questions
+ *   are.
+ */
+function QuestionCard({
+  question,
+  headingLevel = 'h3'
+}: {
+  question: QuestionResult;
+  headingLevel?: 'h3' | 'h4';
+}) {
   const { type } = question;
+  const Heading = headingLevel;
 
   return (
     <section className="result-question">
-      <h3>{question.prompt}</h3>
+      <Heading>{question.prompt}</Heading>
 
       {question.answered === 0 ? (
         <p className="result-empty">No answers yet.</p>
+      ) : null}
+
+      {question.asked_as?.length ? (
+        <p className="result-note">
+          Some of these answers were given against different wording:{' '}
+          {question.asked_as
+            .map((wording) => `"${wording.prompt}" (${wording.answered})`)
+            .join(', ')}
+        </p>
       ) : null}
 
       {(type === "single_choice" || type === "multi_choice") &&
@@ -228,6 +273,29 @@ export function SurveyResults({
           <QuestionCard key={question.step_id} question={question} />
         ))
       )}
+
+      {results.removed_questions?.length ? (
+        <section className="survey-results-removed">
+          <h3>Removed questions</h3>
+          <p className="result-note">
+            These questions are no longer part of the study. The answers below
+            were given while they still were, and are shown under the wording
+            each participant actually saw.
+          </p>
+          {results.removed_questions.map((question, index) => (
+            // Indexed, deliberately: a removed question HAS no step id - it was
+            // nulled when the question was deleted - so `step_id` is the empty
+            // string on every one of these and would collapse the list to a
+            // single key. The list is rendered from a value that never changes
+            // between renders, so the index is stable identity here.
+            <QuestionCard
+              key={`removed-${index}`}
+              question={question}
+              headingLevel="h4"
+            />
+          ))}
+        </section>
+      ) : null}
     </div>
   );
 }

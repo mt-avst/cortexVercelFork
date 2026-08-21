@@ -14,9 +14,10 @@ import {
   PREVIEW_SESSION_TOKEN,
   PREVIEW_STUDY_ID
 } from '../participant-preview';
+import { withClientIds } from '../client-ids';
 
 /** One of every authorable survey type, as the manual verification asks for. */
-const everyQuestionType = [
+const everyQuestionType = withClientIds([
   { type: 'instruction' as const, prompt: 'A short note before the questions.' },
   { type: 'open_text' as const, prompt: 'What would you change?' },
   {
@@ -37,7 +38,7 @@ const everyQuestionType = [
     is_required: true
   },
   { type: 'nps' as const, prompt: 'How likely are you to recommend it?' }
-];
+]);
 
 describe('the adapter output is checked by the contract, not by this file', () => {
   /**
@@ -68,10 +69,10 @@ describe('the adapter output is checked by the contract, not by this file', () =
       title: 'Checkout study',
       introText: 'Three tasks.',
       consentText: 'This records your screen.',
-      steps: [
+      steps: withClientIds([
         { type: 'instruction', prompt: 'Open the basket.' },
         { type: 'open_text', prompt: 'Find the delivery options.' }
-      ],
+      ]),
       targetUrl: 'https://shop.example.com/basket'
     });
 
@@ -86,7 +87,7 @@ describe('the identity a preview carries', () => {
     const preview = buildSurveyPreview({
       title: 'T',
       introText: 'I',
-      questions: [{ type: 'open_text', prompt: 'Why?' }]
+      questions: withClientIds([{ type: 'open_text', prompt: 'Why?' }])
     });
 
     expect(preview.previewable).toBe(true);
@@ -142,7 +143,7 @@ describe('previewing live authoring state', () => {
     const preview = buildSurveyPreview({
       title: 'Edited in the form, never saved',
       introText: 'Also unsaved.',
-      questions: [{ type: 'open_text', prompt: 'A prompt typed a second ago' }]
+      questions: withClientIds([{ type: 'open_text', prompt: 'A prompt typed a second ago' }])
     });
 
     expect(preview.previewable).toBe(true);
@@ -159,9 +160,9 @@ describe('previewing live authoring state', () => {
     const preview = buildSurveyPreview({
       title: 'T',
       introText: 'I',
-      questions: [
-        { type: 'nps', prompt: 'How likely?', config: { scale_max: 5 } }
-      ]
+      questions: withClientIds([
+        { type: 'nps' as const, prompt: 'How likely?', config: { scale_max: 5 } }
+      ])
     });
 
     expect(preview.previewable).toBe(true);
@@ -177,12 +178,12 @@ describe('previewing live authoring state', () => {
     const survey = buildSurveyPreview({
       title: 'T',
       introText: 'I',
-      questions: [{ type: 'open_text', prompt: 'Q' }]
+      questions: [{ _clientId: 'k1', type: 'open_text', prompt: 'Q' }]
     });
     const recorded = buildRecordedPreview({
       title: 'T',
       introText: 'I',
-      steps: [{ type: 'instruction', prompt: 'Do the thing' }]
+      steps: [{ _clientId: 'k1', type: 'instruction', prompt: 'Do the thing' }]
     });
 
     for (const preview of [survey, recorded]) {
@@ -199,7 +200,7 @@ describe('previewing live authoring state', () => {
 
   it('previews a draft that has no title yet rather than refusing', () => {
     const preview = buildSurveyPreview({
-      questions: [{ type: 'open_text', prompt: 'Q' }]
+      questions: [{ _clientId: 'k1', type: 'open_text', prompt: 'Q' }]
     });
 
     expect(preview.previewable).toBe(true);
@@ -229,7 +230,7 @@ describe('when there is nothing to show', () => {
     const preview = buildSurveyPreview({
       title: 'T',
       introText: 'I',
-      questions: [{ type: 'single_choice', prompt: 'Pick one', options: [] }]
+      questions: [{ _clientId: 'k1', type: 'single_choice', prompt: 'Pick one', options: [] }]
     });
 
     expect(preview).toEqual({ previewable: false, reason: 'incomplete' });
@@ -318,7 +319,7 @@ describe('the starting page, as a participant would see it', () => {
     const preview = buildRecordedPreview({
       title: 'T',
       introText: 'I',
-      steps: [{ type: 'instruction', prompt: 'Go' }],
+      steps: [{ _clientId: 'k1', type: 'instruction', prompt: 'Go' }],
       targetUrl: 'https://app.example.com/checkout'
     });
 

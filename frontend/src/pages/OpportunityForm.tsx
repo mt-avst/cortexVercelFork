@@ -7,7 +7,6 @@ import { createOpportunity, updateOpportunity, getOpportunity, getSessions } fro
 import { getFirstHandStudy } from '../api/firsthand-studies';
 import { getPrimaryTargetUrl } from '../lib/recording/task-target';
 import {
-  withClientIds,
   withoutClientIds,
   type WithClientId
 } from '../lib/opportunity-authoring/client-ids';
@@ -53,6 +52,7 @@ import {
   toInlineStudyStep,
   toSurveyPayloadStep,
   toSurveyQuestion,
+  withStoredIdentity,
   type AuthoringKind,
   type StudyReadOnlyReason
 } from '../lib/opportunity-authoring/hydrate-study';
@@ -1080,8 +1080,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
           readOnly = readOnlyReason !== null;
 
           if (kind === 'survey') {
-            authoredFields.inline_survey_questions = withClientIds(
-              authored.map(toSurveyQuestion)
+            // withStoredIdentity, not withClientIds: an EDIT must carry each
+            // question's stored identity into the form, so that reordering and
+            // saving writes the same step ids back and every answer already
+            // collected stays attached to the question that produced it. A COPY
+            // is the opposite case and still mints fresh ids - see
+            // copiedSurveyFields.
+            authoredFields.inline_survey_questions = withStoredIdentity(
+              authored.map(toSurveyQuestion),
+              authored,
+              linked.study.id
             );
             authoredFields.inline_survey_consent_text = linked.study.consent_text;
             authoredFields.inline_survey_consent_template_id =
@@ -1096,8 +1104,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             // about something else entirely.
             authoredFields.inline_survey_duration_auto = false;
           } else {
-            authoredFields.inline_study_steps = withClientIds(
-              authored.map(toInlineStudyStep)
+            // Same rule as the survey twin above.
+            authoredFields.inline_study_steps = withStoredIdentity(
+              authored.map(toInlineStudyStep),
+              authored,
+              linked.study.id
             );
             authoredFields.inline_study_consent_text = linked.study.consent_text;
             // A stored NULL is a row whose provenance was never established -

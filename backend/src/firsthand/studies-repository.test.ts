@@ -755,6 +755,145 @@ describe("studies repository ownership", () => {
         expect(statements[0][1] as unknown[]).toContain("user-owner");
       });
 
+      /**
+       * F2. A save applies a DIFF, and this is where that is pinned.
+       *
+       * `updateStudy` used to run `DELETE FROM study_steps WHERE study_id = $1`
+       * and reinsert everything, so a step had no continuous existence: its id
+       * was whatever the payload happened to derive that time. Now that
+       * `participant_responses` has a foreign key to these rows (migration
+       * 0015, ON DELETE SET NULL), a blanket delete would also DETACH every
+       * answer on every ordinary save - a title edit quietly emptying a study's
+       * results.
+       *
+       * Asserted on the statements and their parameters rather than on a
+       * returned shape, because the mock client is the only thing between this
+       * test and a real database, and the parameters are where the diff lives.
+       */
+      describe("applying steps as a diff", () => {
+        const stepStatements = (client: MockClient, prefix: string) =>
+          client.query.mock.calls.filter((call) =>
+            String(call[0]).trim().startsWith(prefix)
+          );
+
+        it("deletes only the steps the payload no longer names", async () => {
+          const client = arrangeOwnedStudy("user-owner");
+          const studiesRepository = await import("./studies-repository");
+
+          await studiesRepository.updateStudy(
+            "study_abc",
+            { steps: [baseStep, choiceStep, endStep] },
+            owner
+          );
+
+          const deletes = stepStatements(client, "DELETE FROM study_steps");
+          expect(deletes).toHaveLength(1);
+
+          // The id filter IS the diff. Without it this is the old blanket
+          // delete, and every assertion about what was reinserted still
+          // passes - which is exactly how the previous behaviour looked
+          // correct.
+          expect(String(deletes[0][0])).toContain("id <> ALL($2::text[])");
+          expect(deletes[0][1]).toEqual([
+            "study_abc",
+            [baseStep.step_id, choiceStep.step_id, endStep.step_id]
+          ]);
+        });
+
+        it("writes surviving steps in place instead of recreating them", async () => {
+          const client = arrangeOwnedStudy("user-owner");
+          const studiesRepository = await import("./studies-repository");
+
+          await studiesRepository.updateStudy(
+            "study_abc",
+            { steps: [baseStep, endStep] },
+            owner
+          );
+
+          const inserts = stepStatements(client, "INSERT INTO study_steps");
+          expect(inserts).toHaveLength(2);
+
+          for (const [sql] of inserts) {
+            // The conflict target is 0010's composite primary key. A plain
+            // INSERT here would raise a duplicate-key error on any step that
+            // survived the delete above, which is every unchanged step.
+            expect(String(sql)).toContain("ON CONFLICT (study_id, id) DO UPDATE");
+          }
+        });
+
+        it("rewrites EVERY column of a step it updates in place", async () => {
+          // An independent mutation pass found this gap: dropping `prompt` -
+          // or `options` - from the DO UPDATE SET list left the whole suite
+          // green, and the product would then accept an edit, report success,
+          // and keep showing participants the old wording. Only a step the
+          // author had just ADDED would look right, which is the worst way for
+          // it to be discovered.
+          //
+          // Derived from the statement's own column list rather than restated,
+          // so a column added to the INSERT later is covered by this without
+          // anybody remembering to come back.
+          const client = arrangeOwnedStudy("user-owner");
+          const studiesRepository = await import("./studies-repository");
+
+          await studiesRepository.updateStudy(
+            "study_abc",
+            { steps: [baseStep, endStep] },
+            owner
+          );
+
+          const sql = String(stepStatements(client, "INSERT INTO study_steps")[0][0]);
+          const inserted = sql
+            .slice(sql.indexOf("(") + 1, sql.indexOf(")"))
+            .split(",")
+            .map((column) => column.trim())
+            .filter(Boolean);
+
+          // Everything except the conflict target itself, which by definition
+          // already matches and cannot be reassigned.
+          const mustBeRewritten = inserted.filter(
+            (column) => column !== "id" && column !== "study_id"
+          );
+
+          expect(mustBeRewritten.length).toBeGreaterThan(5);
+
+          for (const column of mustBeRewritten) {
+            expect(sql).toContain(`${column} = EXCLUDED.${column}`);
+          }
+        });
+
+        it("parks the surviving orders out of the way before rewriting them", async () => {
+          // `UNIQUE (study_id, step_order)` from 0004 is checked per statement,
+          // so a pure reorder collides on the first swap without this. Nothing
+          // else in the suite would notice: the mock accepts every statement,
+          // and only a real database refuses.
+          const client = arrangeOwnedStudy("user-owner");
+          const studiesRepository = await import("./studies-repository");
+
+          await studiesRepository.updateStudy(
+            "study_abc",
+            { steps: [baseStep, endStep] },
+            owner
+          );
+
+          const order = client.query.mock.calls.map((call) => String(call[0]).trim());
+          const parkAt = order.findIndex((sql) =>
+            sql.startsWith("UPDATE study_steps SET step_order = -step_order")
+          );
+          const firstInsertAt = order.findIndex((sql) =>
+            sql.startsWith("INSERT INTO study_steps")
+          );
+          const deleteAt = order.findIndex((sql) =>
+            sql.startsWith("DELETE FROM study_steps")
+          );
+
+          expect(parkAt).toBeGreaterThan(-1);
+          // After the delete - parking a row that is about to be removed is
+          // wasted work - and before any insert, which is the part that matters.
+          expect(parkAt).toBeGreaterThan(deleteAt);
+          expect(parkAt).toBeLessThan(firstInsertAt);
+        });
+      });
+
       it("takes the editor from the session and never from the payload", async () => {
         // A body-supplied editor id would let an author attribute their own
         // edit to a colleague, which is worse than recording nothing.
@@ -1149,7 +1288,16 @@ describe("studies repository ownership", () => {
         return { rowCount: 1, rows: [] };
       }
 
-      if (sql.includes("DELETE FROM study_steps") || sql.includes("INSERT INTO study_steps")) {
+      if (
+        sql.includes("DELETE FROM study_steps") ||
+        sql.includes("INSERT INTO study_steps") ||
+        // The order-parking pass of the diffing update. `UPDATE study_steps`
+        // rather than the whole statement, so a change to the parking value
+        // does not have to be mirrored into this router - but narrow enough
+        // that a genuinely new statement against the table still reaches the
+        // throw below.
+        sql.includes("UPDATE study_steps")
+      ) {
         return { rowCount: 1, rows: [] };
       }
 

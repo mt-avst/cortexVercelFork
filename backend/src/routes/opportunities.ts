@@ -35,6 +35,7 @@ import {
 import type { RecordedStudyBrief } from '../../../shared/types';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
+import { stepKeysAreComplete } from '../../../shared/firsthand/step-identity';
 import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/survey-authoring';
 import type { StudyKind } from '../../../shared/firsthand/study-input';
 import {
@@ -373,12 +374,18 @@ type InPlaceStudyOutcome =
 /**
  * Whether the steps about to be written are the same sequence already stored.
  *
- * This is the safety condition for rewriting a study that has collected
- * answers, and it is what it is BECAUSE step ids are positional. `step_id` is
- * `${studyId}_step_${index + 1}` (shared/firsthand/inline-study.ts,
- * shared/firsthand/survey-authoring.ts), updateStudy deletes and re-inserts
- * every step, and `participant_responses.step_id` is bare TEXT with no foreign
- * key - so an id survives a rewrite while the question it names does not.
+ * ONLY consulted for a request that could not express identity of its own - see
+ * `identityIsAuthored` on `updateLinkedStudyContent`. It is what it is BECAUSE
+ * such a request still gets positional ids: `step_id` falls back to
+ * `${studyId}_step_${index + 1}` when a step carries no `step_key`
+ * (shared/firsthand/inline-study.ts, shared/firsthand/survey-authoring.ts), so
+ * an id survives a rewrite while the question it names does not.
+ *
+ * Two of the three things that made that dangerous are gone as of F2:
+ * `updateStudy` now diffs rather than deleting and re-inserting every step, and
+ * `participant_responses.step_id` has a real foreign key (migration 0015). What
+ * remains is that a key-less payload's ids mean nothing, and this is what
+ * refuses to act on them.
  *
  * Type and config are compared as well as the prompt, because the results
  * projection interprets each stored answer using the CURRENT step's type: a
@@ -451,7 +458,19 @@ async function updateLinkedStudyContent(
    * loaded. See `updateStudy` for why absence means "no claim" rather than
    * "overwrite whatever is there".
    */
-  expectedUpdatedAt: string | undefined
+  expectedUpdatedAt: string | undefined,
+  /**
+   * Whether the ids in `content.steps` came from identity the AUTHOR minted,
+   * rather than from array position.
+   *
+   * True when every authored item in the request carried a `step_key`
+   * (`stepKeysAreComplete`), which is what the current form always sends. It
+   * turns off both mitigations below, and it has to be decided by the caller
+   * because only the caller can see the request before `toStudySteps` /
+   * `toSurveySteps` has flattened it into ids that no longer say where they
+   * came from.
+   */
+  identityIsAuthored: boolean
 ): Promise<InPlaceStudyOutcome> {
   const stored = await getStudyById(studyId);
 
@@ -487,7 +506,18 @@ async function updateLinkedStudyContent(
     return { outcome: 'forbidden' };
   }
 
-  // Keep the identity the stored steps already have.
+  // Keep the identity the stored steps already have - ONLY for a request that
+  // could not express identity of its own.
+  //
+  // F2 made that the exception rather than the rule. When `identityIsAuthored`
+  // is true, every incoming id was derived from a key the author's client
+  // minted when the question was created and has carried unchanged ever since,
+  // so the payload's ids ARE the identity and rewriting them positionally is
+  // the very corruption this block was written to avoid. A reorder then moves
+  // `step_order` and nothing else, and answers stay with their questions.
+  //
+  // What follows describes the remaining case: a script, or an SPA bundle older
+  // than the backend serving it, neither of which sends keys.
   //
   // The incoming ids are derived from array position by toStudySteps and
   // toSurveySteps, in an UNPADDED form (`_step_1`). A study built by hand in
@@ -511,7 +541,7 @@ async function updateLinkedStudyContent(
   // positional identity outright; this keeps the route from destroying the
   // identity that already exists in the meantime.
   const incomingSteps =
-    content.steps.length === stored.steps.length
+    !identityIsAuthored && content.steps.length === stored.steps.length
       ? content.steps.map((step, index) => ({
           ...step,
           step_id: stored.steps[index].step_id
@@ -536,15 +566,72 @@ async function updateLinkedStudyContent(
   // common save - consent or duration edited, questions untouched - down to
   // the reads it already does.
   //
-  // The proper fix is stable persisted ids, which is a step of its own. This
-  // is the guard that holds until then, and it is deliberately fail-closed:
-  // studyHasResponses answers true when it cannot check.
+  // The proper fix is stable persisted ids, and F2 is it - which is why this
+  // refusal is now conditional. A request whose identity the author minted
+  // cannot MOVE an answer: an id that does not appear in the payload is a
+  // question the author DELETED, and 0015's foreign key detaches its answers
+  // rather than moving them onto somebody else's question.
+  //
+  // It stays for the key-less case, unchanged and still fail-closed:
+  // studyHasResponses answers true when it cannot check. A client that cannot
+  // say which question is which must not be allowed to rewrite the questions of
+  // a study that has answers, and the Task Lists area remains a real remedy
+  // because StudyEditor sends stored ids explicitly.
   if (
+    !identityIsAuthored &&
     !stepSequenceIsUnchanged(stored.steps, incomingSteps) &&
     (await studyHasResponses(studyId))
   ) {
     throw new ValidationError(
       'This study has already collected answers, so its questions cannot be changed here - editing them would re-attribute those answers to the wrong questions. Edit it in the Task Lists area, which preserves each question\'s identity'
+    );
+  }
+
+  // And the half stable identity does NOT solve, found by both review gates
+  // independently and very nearly shipped.
+  //
+  // The refusal above was never only about ordering. `stepSequenceIsUnchanged`
+  // compared type and config as well, and turning it off wholesale left a
+  // question free to CHANGE ITS MEANING while keeping the id its answers are
+  // attached to. Every result path interprets a stored answer with the step's
+  // CURRENT type: 300 ratings of 1 to 5 on a question retyped to `nps` are all
+  // `<= 6`, so the study reports an NPS of -100 over 300 respondents, and a
+  // `scale_max` lowered from 10 to 5 silently drops every answer above 5 out of
+  // the mean. Reordering is safe now; re-meaning never was.
+  //
+  // Matched BY ID rather than by position - that is the whole point of the ids
+  // now being stable - and only for steps that already exist, so adding and
+  // deleting questions stay allowed.
+  //
+  // `prompt` is deliberately NOT in this comparison. Fixing a typo on a live
+  // survey is one of the things F2 exists to make possible, and the answer is
+  // still an answer to the same question. What makes that safe rather than
+  // silent is that the wording each participant actually saw is recorded beside
+  // their answer and reported back - see `asked_as` in survey-results.ts. And
+  // `options` is not here either: an answer naming an option the question no
+  // longer offers is already surfaced as `retired_options` rather than
+  // disappearing into a denominator.
+  const storedById = new Map(stored.steps.map((step) => [step.step_id, step]));
+  const reMeaned = incomingSteps.find((step) => {
+    // The completion marker is excluded for the same reason
+    // stepSequenceIsUnchanged excludes it: nothing can answer it, so no
+    // comparison involving it can produce anything but a false refusal.
+    if (step.type === 'end') {
+      return false;
+    }
+
+    const priorStep = storedById.get(step.step_id);
+
+    return (
+      priorStep !== undefined &&
+      (priorStep.type !== step.type ||
+        JSON.stringify(priorStep.config ?? null) !== JSON.stringify(step.config ?? null))
+    );
+  });
+
+  if (identityIsAuthored && reMeaned && (await studyHasResponses(studyId))) {
+    throw new ValidationError(
+      'This question has already been answered, so its type and scale cannot be changed - the answers people gave would be read as if they had answered the new question. Reword it, or add a new question and remove this one, which keeps the answers already given under the question that was actually asked'
     );
   }
 
@@ -1595,7 +1682,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
           )
         },
         studyRequesterForThisWrite,
-        expectedStudyUpdatedAt
+        expectedStudyUpdatedAt,
+        stepKeysAreComplete(inlineStudyInput.steps)
       );
 
       if (outcome.outcome === 'forbidden') {
@@ -1706,7 +1794,8 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
           steps: toSurveySteps(inlineSurveyInput.steps, linkedStudyId)
         },
         studyRequesterForThisWrite,
-        expectedStudyUpdatedAt
+        expectedStudyUpdatedAt,
+        stepKeysAreComplete(inlineSurveyInput.steps)
       );
 
       if (outcome.outcome === 'forbidden') {
