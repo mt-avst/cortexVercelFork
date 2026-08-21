@@ -1345,38 +1345,62 @@ async function persistRuntimeSession(
   for (const response of session.responses) {
     await client.query(
       `
+        -- The step this answer is attached to, resolved against the table
+        -- rather than taken from the record, and this is load-bearing rather
+        -- than defensive.
+        --
+        -- Every save of a session DELETEs and re-INSERTs all of its responses,
+        -- and the in-memory record keeps the step id the answer was given
+        -- against for the life of the session. So if a researcher removes that
+        -- question in the meantime, 0015's ON DELETE SET NULL detaches the
+        -- stored row - and the next save would write the dead id straight back
+        -- and be refused by the foreign key, failing the whole session save and
+        -- losing the participant's progress.
+        --
+        -- Selecting the row back means a step that still exists is attached and
+        -- one that does not yields no row at all: the answer is detached rather
+        -- than lost, which is exactly what SET NULL did.
+        --
+        -- BOTH columns come from this one row, and that is the point of hoisting
+        -- it into a CTE rather than writing the lookup inline against step_id
+        -- alone. 0015 carries a CHECK - (study_id IS NULL) = (step_id IS NULL)
+        -- - so "detached" means BOTH columns null and nothing else is legal.
+        -- Passing the session's own study_id straight through while letting only
+        -- step_id fall to NULL produces exactly the half-detached row that CHECK
+        -- forbids, and Postgres rejects it: the participant loses the whole save
+        -- for the very reason the lookup exists to prevent. Taking the pair from
+        -- one row makes the two columns null together by construction, so the
+        -- invariant cannot drift the way two parallel sub-SELECTs could.
+        --
+        -- It does not reopen the hole the CHECK closes. study_id is read back
+        -- from study_steps, not trusted from the caller, so it is non-null only
+        -- when a matching step really exists - the composite foreign key still
+        -- has both columns to check, and the MATCH SIMPLE escape the CHECK
+        -- exists to block is still blocked.
+        --
+        -- FOR KEY SHARE, and it is load-bearing rather than belt-and-braces.
+        -- Under READ COMMITTED a plain sub-SELECT reads its own snapshot while
+        -- the foreign key's own check runs against a fresh one, so a
+        -- researcher's save deleting this step in the gap between the two would
+        -- turn "detach the answer" into a constraint violation that aborts the
+        -- WHOLE session write - a participant losing their progress because
+        -- somebody else edited the form. The lock is the same one the foreign
+        -- key takes for itself, so taking it here makes the two agree instead of
+        -- racing, and takes it in the same order the delete side does.
+        WITH attached_step AS (
+          SELECT ss.study_id, ss.id
+            FROM study_steps ss
+           WHERE ss.study_id = $3 AND ss.id = $4
+           FOR KEY SHARE
+        )
         INSERT INTO participant_responses (
           id, session_id, study_id, step_id, step_prompt, step_type,
           response_payload, saved_at
         )
         VALUES (
-          $1, $2, $3,
-          -- Resolved against the table rather than taken from the record, and
-          -- this is load-bearing rather than defensive.
-          --
-          -- Every save of a session DELETEs and re-INSERTs all of its
-          -- responses, and the in-memory record keeps the step id the answer
-          -- was given against for the life of the session. So if a researcher
-          -- removes that question in the meantime, 0015's ON DELETE SET NULL
-          -- detaches the stored row - and the next save would write the dead id
-          -- straight back and be refused by the foreign key, failing the whole
-          -- session save and losing the participant's progress.
-          --
-          -- Selecting the id back means a step that still exists is attached
-          -- and one that does not resolves to NULL: the answer is detached
-          -- rather than lost, which is exactly what SET NULL did.
-          --
-          -- FOR KEY SHARE, and it is load-bearing rather than belt-and-braces.
-          -- Under READ COMMITTED a plain sub-SELECT reads its own snapshot
-          -- while the foreign key's own check runs against a fresh one, so a
-          -- researcher's save deleting this step in the gap between the two
-          -- would turn "detach the answer" into a constraint violation that
-          -- aborts the WHOLE session write - a participant losing their
-          -- progress because somebody else edited the form. The lock is the
-          -- same one the foreign key takes for itself, so taking it in the
-          -- subquery makes the two agree instead of racing, and takes it in the
-          -- same order the delete side does.
-          (SELECT ss.id FROM study_steps ss WHERE ss.study_id = $3 AND ss.id = $4 FOR KEY SHARE),
+          $1, $2,
+          (SELECT study_id FROM attached_step),
+          (SELECT id FROM attached_step),
           $5, $6, $7, $8
         )
       `,
