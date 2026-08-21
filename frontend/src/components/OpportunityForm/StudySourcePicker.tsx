@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 
-import { getFirstHandStudy } from '../../api/firsthand-studies';
+import {
+  getFirstHandStudy,
+  type FirstHandStudyWithSteps
+} from '../../api/firsthand-studies';
 import type { FirstHandStudy } from '../../api/types';
-import type { StudyStep } from '../../shared/firsthand/contract';
 import ConsentStateChip from '../ConsentStateChip';
 
 interface StudySourcePickerProps {
@@ -28,6 +30,16 @@ interface StudySourcePickerProps {
    * "Choose a different set" was a one-way door.
    */
   onCancel?: () => void;
+  /**
+   * Opens E1's participant preview on a stored set, before it is copied.
+   *
+   * Optional: a caller that cannot show a preview passes nothing and the
+   * control is not offered, rather than being offered and doing nothing. The
+   * whole loaded study is handed up rather than an id, because the caller
+   * unmounts this component to draw the preview - so refetching from there
+   * would mean a second request for content already in hand.
+   */
+  onPreviewStudy?: (study: FirstHandStudyWithSteps) => void;
   /** `question` / `task`, singular, lower case. */
   noun: string;
   /** What this surface calls a whole set, e.g. "set of questions". */
@@ -71,13 +83,24 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
   onRetry,
   onChoose,
   onCancel,
+  onPreviewStudy,
   currentUserId,
   noun,
   setNoun,
   idPrefix
 }) => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [previewSteps, setPreviewSteps] = useState<Record<string, StudyStep[]>>({});
+  /**
+   * The loaded study, whole, keyed by id - not just its steps.
+   *
+   * It used to hold the filtered step list alone. E1's participant preview
+   * needs the study's title, intro and consent wording as well, and keeping a
+   * second map for those would be two things read from one response that can
+   * fall out of step with each other. One map, filtered where it is rendered.
+   */
+  const [loadedStudies, setLoadedStudies] = useState<
+    Record<string, FirstHandStudyWithSteps>
+  >({});
   const [copyingId, setCopyingId] = useState<string | null>(null);
 
   /**
@@ -103,17 +126,12 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
       return;
     }
     setExpandedId(studyId);
-    if (previewSteps[studyId]) return;
+    if (loadedStudies[studyId]) return;
 
     setPreviewLoadingIds((previous) => [...previous, studyId]);
     try {
       const loaded = await getFirstHandStudy(studyId);
-      setPreviewSteps((previous) => ({
-        ...previous,
-        // The completion marker is machinery, not something anyone authored,
-        // so it is not offered as one of the questions being previewed.
-        [studyId]: loaded.steps.filter((step) => step.type !== 'end')
-      }));
+      setLoadedStudies((previous) => ({ ...previous, [studyId]: loaded }));
     } catch {
       setPreviewErrors((previous) => ({
         ...previous,
@@ -186,7 +204,10 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
       <ul className="list-unstyled mb-0" data-testid={`${idPrefix}-source-list`}>
         {studies.map((study) => {
           const expanded = expandedId === study.id;
-          const steps = previewSteps[study.id] ?? [];
+          const loaded = loadedStudies[study.id];
+          // The completion marker is machinery, not something anyone authored,
+          // so it is not listed as one of the questions being previewed.
+          const steps = (loaded?.steps ?? []).filter((step) => step.type !== 'end');
           const previewLoading = previewLoadingIds.includes(study.id);
           const previewFailure = previewErrors[study.id];
           const copyFailure = copyErrors[study.id];
@@ -293,13 +314,36 @@ const StudySourcePicker: React.FC<StudySourcePickerProps> = ({
                       This {setNoun} has nothing in it.
                     </div>
                   ) : (
-                    <ol className="mb-0 ps-3" style={{ fontSize: '0.9rem' }}>
-                      {steps.map((step) => (
-                        <li key={step.step_id} className="mb-1">
-                          {step.prompt}
-                        </li>
-                      ))}
-                    </ol>
+                    <>
+                      <ol className="mb-0 ps-3" style={{ fontSize: '0.9rem' }}>
+                        {steps.map((step) => (
+                          <li key={step.step_id} className="mb-1">
+                            {step.prompt}
+                          </li>
+                        ))}
+                      </ol>
+
+                      {/*
+                        The list above answers "what is in this set"; this
+                        answers "what will it be like to be asked it", which is
+                        the question a copy actually commits to. Deliberately
+                        NOT worded with "Preview": the disclosure control on
+                        the row above already carries that word, and an
+                        accessible name is matched as a SUBSTRING - two
+                        controls in one row both answering to "Preview" is
+                        ambiguous to a speech-input user and to a test.
+                      */}
+                      {onPreviewStudy && loaded && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary mt-3"
+                          onClick={() => onPreviewStudy(loaded)}
+                        >
+                          See this as a participant
+                          <span className="visually-hidden"> {study.title}</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}

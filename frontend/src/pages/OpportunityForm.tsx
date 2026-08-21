@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, useParams, Navigate } from 'react-router-dom';
+import { useNavigate, useParams, useMatch, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -57,6 +57,16 @@ import {
   type StudyReadOnlyReason
 } from '../lib/opportunity-authoring/hydrate-study';
 import type { StudySourceMode } from '../components/OpportunityForm/StudySourceChoice';
+import ParticipantPreview, {
+  PreviewParticipantButton
+} from '../components/OpportunityForm/ParticipantPreview';
+import {
+  buildRecordedPreview,
+  buildStoredStudyPreview,
+  buildSurveyPreview,
+  type ParticipantPreview as ParticipantPreviewModel
+} from '../lib/opportunity-authoring/participant-preview';
+import type { FirstHandStudyWithSteps } from '../api/firsthand-studies';
 import { logger } from '../utils/logger';
 import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -731,6 +741,26 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * is built from the same labels the strip renders, so the two cannot drift.
    */
   const [stepAnnouncement, setStepAnnouncement] = useState('');
+  /**
+   * A STORED set the author asked to look at from the reuse picker, or null
+   * when the preview is showing this form's own live draft.
+   *
+   * Held here rather than in the picker because the preview is a page, not a
+   * panel: it replaces this component's render, so the picker is not mounted
+   * while it is open. Cleared on close and on every live-draft preview, so a
+   * stale pick can never be shown as though it were the author's own work.
+   */
+  const [previewingStoredStudy, setPreviewingStoredStudy] =
+    useState<FirstHandStudyWithSteps | null>(null);
+  /**
+   * Whether the preview currently open was pushed by this form, as against
+   * reached by a direct link. Decides whether closing pops or replaces - see
+   * `closePreview`. A ref rather than state: nothing renders differently for
+   * it, and it must not schedule a render mid-navigation.
+   */
+  const openedPreviewHere = useRef(false);
+  /** The control the preview was opened from, so focus can be handed back. */
+  const previewOpener = useRef<HTMLElement | null>(null);
 
   // Absent means external, matching the column default and every poll and
   // survey that existed before the choice did.
@@ -824,6 +854,111 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     : tabs.some((tab) => tab.key === 'taskList')
     ? 'recorded'
     : null;
+
+  /**
+   * The participant preview, at `<this form's path>/preview`.
+   *
+   * A CHILD route of this one - see App.tsx. A route rather than a modal
+   * because it takes the whole page and Back should close it; a child rather
+   * than a sibling because a sibling would unmount this component, and the
+   * unsaved draft it holds is the entire thing being previewed.
+   */
+  const formBasePath = isEdit
+    ? `/admin/opportunities/${id}/edit`
+    : '/admin/opportunities/new';
+  const isPreviewing = useMatch(`${formBasePath}/preview`) !== null;
+
+  const openPreview = (stored: FirstHandStudyWithSteps | null = null) => {
+    setPreviewingStoredStudy(stored);
+    openedPreviewHere.current = true;
+    previewOpener.current = document.activeElement as HTMLElement | null;
+    navigate(`${formBasePath}/preview`);
+  };
+
+  /**
+   * Focus returns to whatever opened the preview, once the form is visible
+   * again.
+   *
+   * It belongs here rather than in a cleanup inside `ParticipantPreview`, and
+   * that is not a style preference: React runs a deleted component's effect
+   * cleanups during the mutation phase, before sibling DOM updates land, so the
+   * form was still `display: none` at that moment and `focus()` did nothing at
+   * all - the browser dropped focus to `body` and an author who opened the
+   * preview from task seven had to tab through the whole form to get back. A
+   * passive effect here runs after the commit that reveals the form, so the
+   * element is focusable by the time it is asked to take focus.
+   */
+  useEffect(() => {
+    if (isPreviewing) return;
+
+    const opener = previewOpener.current;
+    previewOpener.current = null;
+    // Guarded because the control that opened the preview need not still be
+    // rendered - the reuse picker's row closes behind its own button.
+    if (opener && document.contains(opener)) opener.focus();
+  }, [isPreviewing]);
+
+  /**
+   * Closing POPS the entry the preview pushed, when this session pushed it.
+   *
+   * Replacing it unconditionally was the first version, and it made Back a dead
+   * key: the entry before the preview is the form too, so an author who pressed
+   * Back to leave the form saw nothing happen and had to press it twice.
+   * Popping restores the history the author would expect.
+   *
+   * The ref is what tells the two cases apart. A preview reached by a direct
+   * link has no entry to pop - `navigate(-1)` would leave the app - so that one
+   * still replaces.
+   */
+  const closePreview = () => {
+    setPreviewingStoredStudy(null);
+    if (openedPreviewHere.current) {
+      openedPreviewHere.current = false;
+      navigate(-1);
+      return;
+    }
+    navigate(formBasePath, { replace: true });
+  };
+
+  /**
+   * Built at render time rather than memoised.
+   *
+   * A `useMemo` over the question list would run the contract parser on every
+   * keystroke the author makes in the form, for a value read only while the
+   * preview route is matched. Calling it here costs nothing on any other render
+   * because nothing calls it.
+   */
+  const buildActivePreview = (): ParticipantPreviewModel => {
+    if (previewingStoredStudy) {
+      return buildStoredStudyPreview(
+        previewingStoredStudy.study,
+        previewingStoredStudy.steps
+      );
+    }
+
+    // The same two fields the server reads for a study's title and intro - see
+    // the inline branches of `routes/opportunities.ts`. Taken from live state,
+    // not from what was loaded, so an unsaved rewrite of either shows up here.
+    const frame = {
+      title: formData.title,
+      introText: formData.purpose_one_liner
+    };
+
+    return authoringKind === 'survey'
+      ? buildSurveyPreview({
+          ...frame,
+          consentText: formData.inline_survey_consent_text,
+          questions: formData.inline_survey_questions
+        })
+      : buildRecordedPreview({
+          ...frame,
+          consentText: formData.inline_study_consent_text,
+          steps: formData.inline_study_steps,
+          // Normalised the way the payload builder normalises it, so the host
+          // shown is the host that would be stored rather than the raw typing.
+          targetUrl: normaliseTargetUrl(formData.inline_study_target_url)
+        });
+  };
 
   /**
    * Shared with the content step's own chooser gate, so the two cannot disagree
@@ -3154,7 +3289,31 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
   }
 
   return (
-    <div className="admin-page-bg">
+    <>
+      {/*
+        While the preview is up the form is HIDDEN, not unmounted.
+
+        Unmounting it was the first shape of this and it was wrong in a way
+        that only showed up in a test: the draft itself lives in this
+        component's state and survived, but `QuestionList` keeps its own
+        expansion state, so every card an author had open came back collapsed
+        from a preview they opened to check one of them.
+
+        `display: none` takes the form out of the accessibility tree and out of
+        the tab order, so hiding it costs none of what unmounting bought: there
+        is still exactly one reachable surface, and still no scroll lock or
+        focus trap to keep correct. `hidden` and the inline style together
+        because a class on this element could otherwise re-establish a display
+        value and put a whole silent form back behind the preview.
+      */}
+      {isPreviewing && (
+        <ParticipantPreview preview={buildActivePreview()} onClose={closePreview} />
+      )}
+      <div
+        className="admin-page-bg"
+        hidden={isPreviewing}
+        style={isPreviewing ? { display: 'none' } : undefined}
+      >
       {/* Theme-aware Background: Dark Mode gets neural particles */}
       {isDark && <SlowNeuralBackground />}
 
@@ -3478,8 +3637,15 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                           studyIsReadOnly={studyIsReadOnly}
                           readOnlyReason={studyReadOnlyReason}
                           onCopyFromStudy={(studyId) => copyFromStudy(studyId, 'survey')}
+                          onPreviewStudy={openPreview}
                           currentUserId={user?.id}
                         />
+
+                        {/* The author's own questions, run as a participant
+                            gets them. Above the step controls rather than
+                            beside them: it is a way of CHECKING this step, not
+                            a way of leaving it. */}
+                        <PreviewParticipantButton onClick={() => openPreview()} />
 
                         {/* Not the last step, and after C3 no step but Review
                             is. The green Save Changes shortcut this row
@@ -3511,8 +3677,11 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         studyIsReadOnly={studyIsReadOnly}
                         readOnlyReason={studyReadOnlyReason}
                         onCopyFromStudy={(studyId) => copyFromStudy(studyId, 'recorded')}
+                        onPreviewStudy={openPreview}
                         currentUserId={user?.id}
                       />
+
+                      <PreviewParticipantButton onClick={() => openPreview()} />
 
                       {continueControl && (
                       <StepActions
@@ -3698,22 +3867,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                       />
 
                       {/*
-                        E1's "Preview participant experience" entry point belongs
-                        here, and it is deliberately absent rather than stubbed.
-
-                        E1 has not landed - it is a parallel branch of this plan
-                        that rebuilds the participant read-through, and its own
-                        brief says its entry point is added by C3 rather than by
-                        E1. So this is the seam. A disabled button or one wired
-                        to nothing would read to an author as a broken feature,
-                        which is worse than a feature that is not there yet: the
-                        whole point of this screen is that every control on it
-                        does what it says.
-
-                        When E1 lands it goes between the summary and the action
-                        row, so an author checks their answers, looks at what the
+                        The seam C3 left, now filled. It sits between the
+                        summary and the action row for the reason C3 gave: an
+                        author checks their answers, looks at what the
                         participant will see, and then commits - in that order.
                       */}
+                      <PreviewParticipantButton onClick={() => openPreview()} />
 
                       <StepActions
                         isEdit={isEdit}
@@ -3765,7 +3924,8 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }}
         onCancel={() => setPendingExit(null)}
       />
-    </div>
+      </div>
+    </>
   );
 };
 

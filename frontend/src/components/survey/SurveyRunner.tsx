@@ -51,11 +51,25 @@ const RUNTIME_TRANSPORT: SurveyTransport = {
  * as the participant advances and a dropped connection costs one answer rather
  * than the whole response.
  */
+/**
+ * What the completion screen says happened to the answers.
+ *
+ * Overridable for the same reason `transport` is, and it must be changed with
+ * it: this sentence is a CLAIM ABOUT THE TRANSPORT, so a runner on a transport
+ * that goes nowhere and a completion screen saying answers were recorded is a
+ * screen that lies. The preview hit exactly that - its own banner says nothing
+ * is recorded, and this sentence sat underneath contradicting it.
+ */
+const RECORDED_COMPLETION_MESSAGE =
+  "Your answers have been recorded. You can close this page.";
+
 export function SurveyRunner({
+  completionMessage = RECORDED_COMPLETION_MESSAGE,
   onComplete,
   payload,
   transport = RUNTIME_TRANSPORT
 }: {
+  completionMessage?: string;
   onComplete?: () => void;
   payload: SessionPayload;
   transport?: SurveyTransport;
@@ -196,9 +210,7 @@ export function SurveyRunner({
     return (
       <section className="survey-runner">
         <h1>Thank you</h1>
-        <p className="body-copy">
-          Your answers have been recorded. You can close this page.
-        </p>
+        <p className="body-copy">{completionMessage}</p>
       </section>
     );
   }
