@@ -237,24 +237,6 @@ UPDATE sessions s SET booked_count = LEAST(s.capacity, (
 ))
 WHERE s.id::text LIKE '05e00001-0000-4000-8000-%';
 
--- --------------------------------------------------------------- clicks
--- view/action clicks spread over the last 30 days so analytics charts have a curve
-INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, clicked_at, ip_hash)
-SELECT o.id,
-       NULL,
-       CASE WHEN random() < 0.35 THEN 'action' ELSE 'view' END,
-       now() - (random() * interval '30 days'),
-       md5(o.id::text || g::text)
-FROM opportunities o
-CROSS JOIN generate_series(1, 18) g
-WHERE o.status = 'published'
-  -- Scoped to the opportunities THIS FILE created. Without it, 18 fabricated
-  -- view/action rows were written for every published study in whatever
-  -- database was on the other end - including real researchers' studies,
-  -- whose engagement analytics then read as fiction.
-  AND o.id::text LIKE '0aa00001-0000-4000-8000-%'
-  AND NOT EXISTS (SELECT 1 FROM opportunity_clicks c WHERE c.opportunity_id = o.id);
-
 -- ------------------------------------------------------------ AdaptaBits
 INSERT INTO points_transactions (id, user_id, points, reason, opportunity_id, created_at) VALUES
   ('70000001-0000-4000-8000-000000000001', 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', 25, 'Completed a usability test',        '0aa00001-0000-4000-8000-000000000001', now() - interval '5 days'),
@@ -269,8 +251,10 @@ INSERT INTO points_transactions (id, user_id, points, reason, opportunity_id, cr
   ('70000001-0000-4000-8000-00000000000a', 'aa000001-0000-4000-8000-000000000003', 15, 'Completed a survey',                '0aa00001-0000-4000-8000-00000000000a', now() - interval '6 days'),
   ('70000001-0000-4000-8000-00000000000b', 'aa000001-0000-4000-8000-000000000004', 20, 'Completed an interview',            '0aa00001-0000-4000-8000-000000000004', now() - interval '4 days'),
   ('70000001-0000-4000-8000-00000000000c', 'aa000001-0000-4000-8000-000000000005', 10, 'Answered a poll',                   '0aa00001-0000-4000-8000-000000000008', now() - interval '9 days'),
-  ('70000001-0000-4000-8000-00000000000d', 'aa000001-0000-4000-8000-000000000006', 10, 'Answered a poll',                   '0aa00001-0000-4000-8000-000000000007', now() - interval '3 days'),
-  ('70000001-0000-4000-8000-00000000000e', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', 25, 'Completed a recorded study',        '9f0d4f19-2708-4bf6-83c6-3a4600e8ad28', now() - interval '1 day')
+  ('70000001-0000-4000-8000-00000000000d', 'aa000001-0000-4000-8000-000000000006', 10, 'Answered a poll',                   '0aa00001-0000-4000-8000-000000000007', now() - interval '3 days')
+-- The recorded-study award used to sit here as a fifteenth row and made this
+-- whole file unrunnable. It is now further down, immediately after the
+-- opportunity it credits - see "AdaptaBits for the recorded study".
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO user_achievements (user_id, achievement_id, earned_at)
@@ -347,6 +331,59 @@ VALUES
    now() - interval '6 days', now() + interval '24 days', 'single',
    'study_seed0001-pipeline-triage', now() - interval '6 days')
 ON CONFLICT (id) DO NOTHING;
+
+-- ------------------------------------ AdaptaBits for the recorded study
+--
+-- HERE, and not in the AdaptaBits block above, because points_transactions has
+-- a foreign key to opportunities and the opportunity it credits is the one
+-- created immediately above. Sitting in that earlier block it referenced a row
+-- that did not exist yet, so the FK refused it and - because the whole file
+-- runs in one transaction - took every other statement down with it. The file
+-- had never been run end to end: it inserted 8 users, 15 slots, 17 bookings and
+-- 162 clicks, then rolled all of it back.
+--
+-- It also named an opportunity id belonging to no row this file writes
+-- (9f0d4f19-...), an unstructured v4 among fixed 0aa00001-... ids, so it had
+-- been copied from a real database. Had that id happened to exist in the target
+-- database, this would have written a fabricated points transaction against
+-- somebody's REAL opportunity - the same failure the scoping comment on the
+-- opportunity_clicks insert above was added to prevent.
+--
+-- ANYTHING ELSE REFERENCING AN OPPORTUNITY MUST ALSO COME AFTER THE INSERT THAT
+-- CREATES IT. Ordering is load-bearing in this file, not cosmetic.
+INSERT INTO points_transactions (id, user_id, points, reason, opportunity_id, created_at) VALUES
+  ('70000001-0000-4000-8000-00000000000e', 'b2c3d4e5-f6a7-8901-bcde-f12345678901', 25, 'Completed a recorded study',        '0aa00001-0000-4000-8000-00000000000c', now() - interval '1 day')
+ON CONFLICT (id) DO NOTHING;
+
+-- --------------------------------------------------------------- clicks
+-- view/action clicks spread over the last 30 days so analytics charts have a curve.
+--
+-- AFTER every opportunity insert, deliberately, and it used to be well before
+-- the recorded study below. Two things went wrong because of that. The
+-- recorded study - the one study whose reviewer surface this file exists to let
+-- you walk - got NO clicks on a fresh database, so its analytics chart was flat
+-- while every other study had a curve. And the file stopped being idempotent
+-- despite the header saying it is: a second run found that opportunity now
+-- existing and still clickless, and wrote it 18 rows, so run 1 and run 2 left
+-- different databases (162 clicks, then 180).
+--
+-- The NOT EXISTS guard is per-opportunity, so it cannot cover an opportunity
+-- that does not exist yet. Ordering is what makes it work.
+INSERT INTO opportunity_clicks (opportunity_id, user_id, click_type, clicked_at, ip_hash)
+SELECT o.id,
+       NULL,
+       CASE WHEN random() < 0.35 THEN 'action' ELSE 'view' END,
+       now() - (random() * interval '30 days'),
+       md5(o.id::text || g::text)
+FROM opportunities o
+CROSS JOIN generate_series(1, 18) g
+WHERE o.status = 'published'
+  -- Scoped to the opportunities THIS FILE created. Without it, 18 fabricated
+  -- view/action rows were written for every published study in whatever
+  -- database was on the other end - including real researchers' studies,
+  -- whose engagement analytics then read as fiction.
+  AND o.id::text LIKE '0aa00001-0000-4000-8000-%'
+  AND NOT EXISTS (SELECT 1 FROM opportunity_clicks c WHERE c.opportunity_id = o.id);
 
 -- --------------------------------------------------- completed session #1
 --
