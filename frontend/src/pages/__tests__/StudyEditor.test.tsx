@@ -205,6 +205,208 @@ describe('StudyEditorForm - edit', () => {
     expect(mockedCreate).not.toHaveBeenCalled();
   });
 
+  describe('optimistic concurrency', () => {
+    const editableStudy = {
+      id: 'study_abc',
+      title: 'Existing study',
+      intro_text: 'Existing intro',
+      consent_text: 'Existing consent',
+      status: 'launched' as const,
+      updated_at: '2026-08-21T09:15:30.123Z',
+    };
+
+    const editableSteps = [
+      {
+        step_id: 'step_001',
+        order: 1,
+        type: 'instruction' as const,
+        prompt: 'Do the thing',
+        target_url: 'https://example.com',
+      },
+    ];
+
+    /** A 409 shaped exactly as PUT /api/firsthand/studies/:studyId answers one. */
+    const staleRejection = (currentUpdatedAt = '2026-08-21T10:00:00.000Z') => ({
+      response: {
+        status: 409,
+        data: {
+          error: 'stale_study',
+          message:
+            'Somebody else saved changes to this task list after you opened it. Your edits have not been saved and are still here.',
+          current_updated_at: currentUpdatedAt,
+        },
+      },
+    });
+
+    it('sends the updated_at it loaded as the precondition', async () => {
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+      expect(
+        (mockedUpdate.mock.calls[0][1] as { expected_updated_at?: string })
+          .expected_updated_at
+      ).toBe('2026-08-21T09:15:30.123Z');
+    });
+
+    it('omits the precondition entirely when the study was served without one', async () => {
+      // Absent must mean "no claim", not `null` or an empty string. The schema
+      // takes `string | undefined`, and a null would 400 the save outright.
+      const { updated_at: _absent, ...withoutTimestamp } = editableStudy;
+      renderForm({ initialStudy: withoutTimestamp, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(1));
+      expect(mockedUpdate.mock.calls[0][1]).not.toHaveProperty(
+        'expected_updated_at'
+      );
+    });
+
+    it('keeps every local edit when the save is refused as stale', async () => {
+      // The whole promise of the refusal. A banner that said "your edits are
+      // still here" over a form that had reset them would be worse than no
+      // banner at all.
+      mockedUpdate.mockRejectedValueOnce(staleRejection());
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.change(screen.getByLabelText('Title'), {
+        target: { value: 'My unsaved title' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await screen.findByText(
+        /Somebody else saved this task list while you were editing/i
+      );
+
+      expect(screen.getByLabelText('Title')).toHaveValue('My unsaved title');
+      expect(screen.getByLabelText('Intro text')).toHaveValue('Existing intro');
+    });
+
+    it('offers the saved version in a NEW TAB rather than a reload', async () => {
+      // Reloading remounts the form, and every field here comes from a
+      // one-shot useState initialiser - so a reload control would discard
+      // exactly the edits the refusal exists to protect.
+      mockedUpdate.mockRejectedValueOnce(staleRejection());
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      const link = await screen.findByRole('link', {
+        name: /Open the saved version in a new tab/i,
+      });
+      expect(link).toHaveAttribute('href', '/admin/studies/study_abc/edit');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    });
+
+    it('saves again against what is now stored, so the author is not locked out', async () => {
+      // Without advancing the precondition the second save re-sends the same
+      // stale token and is refused again, forever. The author would have no
+      // way to keep their own work short of retyping it somewhere else.
+      mockedUpdate.mockRejectedValueOnce(staleRejection('2026-08-21T10:00:00.000Z'));
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+      await screen.findByText(
+        /Somebody else saved this task list while you were editing/i
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() => expect(mockedUpdate).toHaveBeenCalledTimes(2));
+      expect(
+        (mockedUpdate.mock.calls[1][1] as { expected_updated_at?: string })
+          .expected_updated_at
+      ).toBe('2026-08-21T10:00:00.000Z');
+    });
+
+    it('does not treat an ordinary failure as a conflict', async () => {
+      // The conflict branch reads the STATUS and the error CODE, not the
+      // prose. A 400 that happened to mention the same words must still land
+      // in the dead-end banner.
+      mockedUpdate.mockRejectedValueOnce({
+        response: {
+          status: 400,
+          data: { error: 'update_failed', message: 'Somebody else saved this' },
+        },
+      });
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await screen.findByText('Could not save task list.');
+      expect(
+        screen.queryByRole('link', { name: /Open the saved version/i })
+      ).toBeNull();
+    });
+
+    it('does not treat a different 409 as somebody else saving', async () => {
+      // The CODE half of the guard, which nothing exercised: the two negative
+      // tests beside this one defeat different halves - one sends a 400, the
+      // other a 409 with no current_updated_at - so dropping the
+      // `error === 'stale_study'` check left the suite green.
+      mockedUpdate.mockRejectedValueOnce({
+        response: {
+          status: 409,
+          data: {
+            error: 'duplicate_step_id',
+            message: 'Resource already exists',
+            current_updated_at: '2026-08-21T10:00:00.000Z'
+          }
+        }
+      });
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await screen.findByText('Could not save task list.');
+      expect(
+        screen.queryByRole('link', { name: /Open the saved version/i })
+      ).toBeNull();
+    });
+
+    it('clears the conflict banner once a save goes through', async () => {
+      // A banner that outlives its condition is a lie the author stares at for
+      // the rest of the session.
+      mockedUpdate.mockRejectedValueOnce(staleRejection());
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+      await screen.findByText(
+        /Somebody else saved this task list while you were editing/i
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await waitFor(() =>
+        expect(
+          screen.queryByText(
+            /Somebody else saved this task list while you were editing/i
+          )
+        ).toBeNull()
+      );
+    });
+
+    it('falls back to the ordinary failure banner for a 409 it cannot recover from', async () => {
+      // A 409 with no current_updated_at leaves nothing to advance the
+      // precondition to, so offering "save again" would be a lie. Better the
+      // generic banner, which at least says something true.
+      mockedUpdate.mockRejectedValueOnce({
+        response: { status: 409, data: { error: 'stale_study' } },
+      });
+      renderForm({ initialStudy: editableStudy, initialSteps: editableSteps });
+
+      fireEvent.click(screen.getByRole('button', { name: /Save changes/i }));
+
+      await screen.findByText('Could not save task list.');
+      expect(
+        screen.queryByRole('link', { name: /Open the saved version/i })
+      ).toBeNull();
+    });
+  });
+
   /**
    * This surface has to carry the consent classification it loaded, or it will
    * silently reclassify studies the day a second template version ships.

@@ -178,6 +178,25 @@ export const UpdateOpportunitySchema = z.object({
   // a draft before writing them is legitimate, so they have to be writable on
   // the way back in.
   inline_survey: inlineSurveySchema.optional(),
+  /**
+   * Optimistic-concurrency precondition for the LINKED STUDY, not for the
+   * opportunity: the `updated_at` the form was served when it loaded that
+   * study, echoed back so an in-place rewrite can be refused with 409 rather
+   * than silently overwriting a colleague.
+   *
+   * DECLARED, and that is the whole reason this line exists. This schema is
+   * `z.object`, not strict, so an undeclared key is stripped in silence - the
+   * precondition would simply never arrive, the write would proceed under the
+   * fail-open, and nothing anywhere would say so. A silently-dropped safety
+   * field is worse than an absent one.
+   *
+   * The PATCH handler destructures it out of the body before the generic field
+   * loop, which maps every remaining key straight to a column name.
+   *
+   * `offset: true` accepts both the `Z` the API serves and a `+00:00` a client
+   * may have round-tripped it into.
+   */
+  expected_study_updated_at: z.string().datetime({ offset: true }).optional(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),

@@ -134,6 +134,9 @@ import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked
 import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
 import { toResponsesCsv } from '../../firsthand/survey-csv';
 import { errorHandler, AppError } from '../../utils/errorHandler';
+// Spied per-test rather than module-mocked: the route logs from a dozen places
+// and silencing all of them for the whole file would hide more than it proves.
+import { logger } from '../../utils/logger';
 // The real serialiser, so the unchanged-sequence fixture is what the route
 // actually computes rather than a hand-built shape that could never match.
 import { toStudySteps } from '../../../../shared/firsthand/inline-study';
@@ -972,6 +975,86 @@ describe('Opportunities API', () => {
             steps: { step_id: string }[];
           };
           expect(written.steps[0].step_id.startsWith('study_existing_')).toBe(true);
+        });
+
+        /**
+         * F1's survey twin, and it is not ceremony.
+         *
+         * The two inline branches are separate code, not a shared helper. Every
+         * other F1 test in this file drives `inline_study`, so an omitted
+         * precondition on the survey call - or a `stale` check placed after
+         * `if (!updatedStudyInPlace)` - would have left the suite green while
+         * the survey branch minted a replacement study and abandoned the
+         * colleague's save. Given this repo's two-vocabularies history, the
+         * untested half is the half that has bitten before.
+         */
+        describe('optimistic concurrency on the survey branch', () => {
+          const linkedSurvey = () => {
+            mockGetStudyById.mockResolvedValueOnce({
+              study: {
+                id: 'study_existing',
+                title: 'A survey',
+                intro_text: 'Intro',
+                consent_text: 'Consent',
+                kind: 'survey',
+                estimated_duration_minutes: undefined,
+                status: 'launched',
+                owner_user_id: 'test-user-id',
+                copied_from_study_id: null,
+                created_at: '2026-08-16T10:00:00.000Z',
+                updated_at: '2026-08-16T10:00:00.000Z',
+              },
+              steps: [],
+            } as never);
+          };
+
+          it('forwards the precondition to the survey in-place update', async () => {
+            linkedSurvey();
+
+            await patch(
+              {
+                inline_survey: questions,
+                expected_study_updated_at: '2026-08-21T09:15:30.123Z'
+              },
+              'study_existing',
+              true
+            ).expect(200);
+
+            expect(mockUpdateStudy.mock.calls[0][3]).toBe('2026-08-21T09:15:30.123Z');
+          });
+
+          it('answers 409 and mints nothing when the questions moved under the caller', async () => {
+            linkedSurvey();
+            mockUpdateStudy.mockResolvedValueOnce({
+              ok: false,
+              reason: 'stale',
+              current_updated_at: '2026-08-21T09:15:30.123Z'
+            } as never);
+
+            const res = await patch(
+              {
+                inline_survey: questions,
+                expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+              },
+              'study_existing',
+              false
+            ).expect(409);
+
+            expect(res.body.error).toBe('stale_study');
+            expect(res.body.message).toMatch(/these questions/i);
+            expect(res.body.current_updated_at).toBe('2026-08-21T09:15:30.123Z');
+
+            // The expensive half. `missing` deliberately falls through to the
+            // mint; a conflict falling through the same branch would repoint
+            // the opportunity at a fresh study and abandon the one the
+            // colleague had just saved.
+            expect(mockCreateStudy).not.toHaveBeenCalled();
+            expect(
+              (mockQuery.mock.calls as unknown as [string, unknown[]][]).filter(
+                ([sql]) => typeof sql === 'string' && sql.includes('UPDATE opportunities')
+              )
+            ).toHaveLength(0);
+          });
         });
 
         /** The survey twin of the recorded in-place claim assertion. */
@@ -2173,6 +2256,257 @@ describe('Opportunities API', () => {
         // Namespaced against the study that already exists, so the ids the
         // collected answers were written against keep resolving.
         expect(written.steps[0].step_id.startsWith('study_already_linked_')).toBe(true);
+      });
+
+      /**
+       * F1. The precondition has to arrive as an ARGUMENT to updateStudy and
+       * has to be gone from the payload, and both halves matter.
+       *
+       * UpdateOpportunitySchema is `z.object`, not strict, so an undeclared
+       * field is stripped in silence - the precondition would simply never
+       * arrive, the write would proceed under the fail-open, and nothing
+       * anywhere would say so. And a field that survived into `data` would be
+       * emitted by the generic field loop as `SET expected_study_updated_at =
+       * $n` against a column that does not exist, answering 500 on every save.
+       */
+      it('forwards the study precondition and keeps it out of the opportunity columns', async () => {
+        await patchLinked(
+          {
+            inline_study: inlineStudy,
+            expected_study_updated_at: '2026-08-21T09:15:30.123Z'
+          },
+          true
+        ).expect(200);
+
+        expect(mockUpdateStudy.mock.calls[0][3]).toBe('2026-08-21T09:15:30.123Z');
+
+        const [sql, values] = opportunityWrite();
+        expect(sql).not.toContain('expected_study_updated_at');
+        expect(values as unknown[]).not.toContain('2026-08-21T09:15:30.123Z');
+      });
+
+      it('answers 409 when the linked study moved under the caller', async () => {
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'stale',
+          current_updated_at: '2026-08-21T09:15:30.123Z'
+        } as never);
+
+        const res = await patchLinked(
+          {
+            inline_study: inlineStudy,
+            expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+          },
+          false
+        ).expect(409);
+
+        // The SAME body shape the study route answers, deliberately - one
+        // logical refusal, one shape. `error` is a discriminator and not prose,
+        // because errorHandler maps a unique-constraint violation and a lock
+        // timeout to 409 as well, and a client with only the status to go on
+        // would treat one of those as a colleague's save.
+        expect(res.body.error).toBe('stale_study');
+        expect(res.body.message).toMatch(/somebody else/i);
+        // The sentence has to promise what the refusal actually delivers.
+        expect(res.body.message).toMatch(/still here/i);
+        // Carried so the client can recover without a second request that can
+        // itself fail and strand the author in a loop.
+        expect(res.body.current_updated_at).toBe('2026-08-21T09:15:30.123Z');
+      });
+
+      /**
+       * The failure mode this outcome exists to prevent, and it is the
+       * expensive one.
+       *
+       * `missing` deliberately falls through to minting a replacement study.
+       * A conflict that fell through the same branch would repoint the
+       * opportunity at a brand-new study and abandon the one the colleague had
+       * just saved - the data loss F1 exists to close, reached from the other
+       * direction and with no error anywhere to show for it.
+       */
+      it('mints nothing when the write is refused as stale', async () => {
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'stale',
+          current_updated_at: '2026-08-21T09:15:30.123Z'
+        } as never);
+
+        await patchLinked(
+          {
+            inline_study: inlineStudy,
+            expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+          },
+          false
+        ).expect(409);
+
+        expect(mockCreateStudy).not.toHaveBeenCalled();
+        expect(
+          (mockQuery.mock.calls as unknown as [string, unknown[]][]).filter(
+            ([sql]) => typeof sql === 'string' && sql.includes('UPDATE opportunities')
+          )
+        ).toHaveLength(0);
+      });
+
+      /**
+       * The fail-open is only defensible because it is DISCOVERABLE, and until
+       * this test nothing checked that the discovery mechanism existed.
+       *
+       * Spied rather than module-mocked: this file does not mock the logger,
+       * and mocking it wholesale here would silence every other line the route
+       * emits for the rest of the suite.
+       */
+      it('warns when the linked study is rewritten with no precondition', async () => {
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+        try {
+          await patchLinked({ inline_study: inlineStudy }, true).expect(200);
+
+          expect(warn).toHaveBeenCalledWith(
+            'Study updated with no concurrency precondition',
+            {
+              studyId: 'study_already_linked',
+              userId: 'test-user-id',
+              via: 'opportunity-form'
+            }
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it('stays silent when the precondition WAS sent', async () => {
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+        try {
+          await patchLinked(
+            {
+              inline_study: inlineStudy,
+              expected_study_updated_at: '2026-08-21T09:15:30.123Z'
+            },
+            true
+          ).expect(200);
+
+          expect(warn).not.toHaveBeenCalledWith(
+            'Study updated with no concurrency precondition',
+            expect.anything()
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it('does not claim an unprotected update for a write that was refused', async () => {
+        // The placement. Logged before `updateStudy`, this line fired for a
+        // `forbidden` and a `not_found` too - a claim that an unprotected
+        // update happened when none did.
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'forbidden'
+        } as never);
+
+        try {
+          await patchLinked({ inline_study: inlineStudy }, false).expect(403);
+
+          expect(warn).not.toHaveBeenCalledWith(
+            'Study updated with no concurrency precondition',
+            expect.anything()
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+
+      it('records a refused stale write, so it is not silent', async () => {
+        // The 409 body carries no identity by design; this line is what keeps
+        // "who" answerable to an operator.
+        const info = jest.spyOn(logger, 'info').mockImplementation(() => logger);
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'stale',
+          current_updated_at: '2026-08-21T09:15:30.123Z'
+        } as never);
+
+        try {
+          await patchLinked(
+            {
+              inline_study: inlineStudy,
+              expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+            },
+            false
+          ).expect(409);
+
+          expect(info).toHaveBeenCalledWith('Refused a stale study write', {
+            studyId: 'study_already_linked',
+            userId: 'test-user-id',
+            via: 'opportunity-form'
+          });
+        } finally {
+          info.mockRestore();
+        }
+      });
+
+      it('names the task list, not the questions, on the recorded branch', async () => {
+        // The two branches say different sentences, and a sentence that names
+        // the wrong thing sends the author to the wrong screen.
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'stale',
+          current_updated_at: '2026-08-21T09:15:30.123Z'
+        } as never);
+
+        const res = await patchLinked(
+          {
+            inline_study: inlineStudy,
+            expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+          },
+          false
+        ).expect(409);
+
+        expect(res.body.message).toMatch(/this task list/i);
+        expect(res.body.message).not.toMatch(/these questions/i);
+      });
+
+      it('names no user in the conflict it reports', async () => {
+        mockUpdateStudy.mockResolvedValueOnce({
+          ok: false,
+          reason: 'stale',
+          current_updated_at: '2026-08-21T09:15:30.123Z'
+        } as never);
+
+        const res = await patchLinked(
+          {
+            inline_study: inlineStudy,
+            expected_study_updated_at: '2026-08-21T09:15:29.123Z'
+          },
+          false
+        ).expect(409);
+
+        // The KEY SET, not an absence-of-substring check. Asserting that
+        // 'updated_by' does not appear would pass just as happily if the route
+        // started returning `{ lastEditor: 'admin-1' }` - this repo has been
+        // bitten by exactly that shape of assertion before.
+        expect(Object.keys(res.body).sort()).toEqual([
+          'current_updated_at',
+          'error',
+          'message'
+        ]);
+      });
+
+      it('refuses a malformed precondition before any study write', async () => {
+        // Deliberately NOT through `patchLinked`: validateRequest rejects this
+        // body before a single query runs, so queuing rows here would leave
+        // three unreached once-values behind for the next test to consume. See
+        // the note on `expectUpdate` above - that is the shape of poisoning
+        // this file has already been bitten by.
+        await request(app)
+          .patch('/api/opportunities/1')
+          .send({ inline_study: inlineStudy, expected_study_updated_at: 'yesterday' })
+          .expect(400);
+
+        expect(mockQuery).not.toHaveBeenCalled();
+        expect(mockUpdateStudy).not.toHaveBeenCalled();
+        expect(mockCreateStudy).not.toHaveBeenCalled();
       });
 
       /**

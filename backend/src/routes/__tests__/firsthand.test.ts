@@ -330,8 +330,248 @@ describe('FirstHand Express router', () => {
       expect(mockUpdateStudy).toHaveBeenCalledWith(
         'study_abc',
         { title: 'Renamed' },
-        { userId: 'admin-1', isSuperadmin: false }
+        { userId: 'admin-1', isSuperadmin: false },
+        // The fourth argument is the optimistic-concurrency precondition, and
+        // it is undefined here because this request asserted none.
+        undefined
       );
+    });
+
+    it('forwards the precondition as an argument, not as a column to write', async () => {
+      // `expected_updated_at` is a PRECONDITION. Leaving it in the payload
+      // would put a non-column into UpdateStudyInput, where the next field
+      // added to the repository's dynamic update builder could pick it up.
+      // `as never`, not `as any`: this file's `any` budget is pinned exactly in
+      // eslint-suppressions.json and that budget is shrink-only.
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Renamed',
+            expected_updated_at: '2026-08-21T09:15:30.123Z'
+          })
+        )
+        .expect(200);
+
+      expect(mockUpdateStudy).toHaveBeenCalledWith(
+        'study_abc',
+        { title: 'Renamed' },
+        { userId: 'admin-1', isSuperadmin: false },
+        '2026-08-21T09:15:30.123Z'
+      );
+    });
+
+    it('answers 409 when the study moved under the caller, and says what is stored now', async () => {
+      mockUpdateStudy.mockResolvedValue({
+        ok: false,
+        reason: 'stale',
+        current_updated_at: '2026-08-21T09:15:30.123Z'
+      } as never);
+
+      const res = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Mine',
+            expected_updated_at: '2026-08-21T09:15:29.123Z'
+          })
+        )
+        .expect(409);
+
+      expect(res.body.error).toBe('stale_study');
+      // Returned so the client can offer a deliberate re-save. Without it the
+      // author can only re-send a token that can never match again, and is
+      // locked out of their own study.
+      expect(res.body.current_updated_at).toBe('2026-08-21T09:15:30.123Z');
+      // Legible, and it has to say the edits survived - that is the whole
+      // promise the refusal is making.
+      expect(res.body.message).toMatch(/somebody else/i);
+      expect(res.body.message).toMatch(/still here/i);
+    });
+
+    /**
+     * The whole written justification for shipping a fail-open is that the
+     * omission is DISCOVERABLE. Nothing verified that, so deleting the warning -
+     * or inverting its condition, so it fired on protected requests and stayed
+     * silent on unprotected ones - left the suite green and the justification
+     * false.
+     */
+    it('warns when a study is updated with no precondition at all', async () => {
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(JSON.stringify({ title: 'Renamed' }))
+        .expect(200);
+
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Study updated with no concurrency precondition',
+        { studyId: 'study_abc', userId: 'admin-1' }
+      );
+    });
+
+    it('stays silent when the precondition WAS sent', async () => {
+      // The inverted-condition mutation: a warning that fires on the protected
+      // request and not the unprotected one is worse than none, because it
+      // points an operator at exactly the wrong sessions.
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Renamed',
+            expected_updated_at: '2026-08-21T09:15:30.123Z'
+          })
+        )
+        .expect(200);
+
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        'Study updated with no concurrency precondition',
+        expect.anything()
+      );
+    });
+
+    it('does not claim an unprotected update for a request that updated nothing', async () => {
+      // The placement, not just the presence. Logged on the way IN, this line
+      // would fire for a 404 and a 403 too - noise in exactly the place an
+      // operator is looking for signal.
+      mockUpdateStudy.mockResolvedValue({ ok: false, reason: 'not_found' } as never);
+
+      await request(app)
+        .put('/api/firsthand/studies/missing')
+        .type('json')
+        .send(JSON.stringify({ title: 'Renamed' }))
+        .expect(404);
+
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        'Study updated with no concurrency precondition',
+        expect.anything()
+      );
+    });
+
+    it('records a refused stale write, so it is not silent', async () => {
+      // The row records WHO through updated_by_user_id and the response body
+      // deliberately does not. This line is what keeps that answerable.
+      mockUpdateStudy.mockResolvedValue({
+        ok: false,
+        reason: 'stale',
+        current_updated_at: '2026-08-21T09:15:30.123Z'
+      } as never);
+
+      await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Mine',
+            expected_updated_at: '2026-08-21T09:15:29.123Z'
+          })
+        )
+        .expect(409);
+
+      expect(mockLogger.info).toHaveBeenCalledWith('Refused a stale study write', {
+        studyId: 'study_abc',
+        userId: 'admin-1'
+      });
+    });
+
+    /**
+     * The precondition runs BEFORE the vocabulary check, and this pins it.
+     *
+     * If the row moved under the caller, the validity of their payload against
+     * it is moot - and a step-shape complaint about content they are about to
+     * be told to re-derive is the less actionable of the two answers.
+     */
+    it('answers the conflict, not a payload complaint, when both are true', async () => {
+      mockUpdateStudy.mockResolvedValue({
+        ok: false,
+        reason: 'stale',
+        current_updated_at: '2026-08-21T09:15:30.123Z'
+      } as never);
+
+      const res = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Mine',
+            expected_updated_at: '2026-08-21T09:15:29.123Z'
+          })
+        )
+        .expect(409);
+
+      expect(res.body.error).toBe('stale_study');
+    });
+
+    it('names no user in the 409 body', async () => {
+      // The row records who wrote it and the server logs it; the BODY does not
+      // carry it. GET /api/firsthand/studies is unfiltered by owner and
+      // canWriteStudy fails open on an unowned legacy study, so the audience
+      // for this sentence is every researcher_admin - a wider disclosure than
+      // anything the product asked for.
+      mockUpdateStudy.mockResolvedValue({
+        ok: false,
+        reason: 'stale',
+        current_updated_at: '2026-08-21T09:15:30.123Z'
+      } as never);
+
+      const res = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({
+            title: 'Mine',
+            expected_updated_at: '2026-08-21T09:15:29.123Z'
+          })
+        )
+        .expect(409);
+
+      const body = JSON.stringify(res.body);
+      expect(body).not.toContain('updated_by');
+      expect(body).not.toContain('user-');
+      expect(Object.keys(res.body).sort()).toEqual([
+        'current_updated_at',
+        'error',
+        'message'
+      ]);
+    });
+
+    it('refuses a malformed precondition at the schema rather than passing it down', async () => {
+      mockUpdateStudy.mockResolvedValue({
+        ok: true,
+        claimed: false,
+        ...storedStudy
+      } as never);
+
+      const res = await request(app)
+        .put('/api/firsthand/studies/study_abc')
+        .type('json')
+        .send(
+          JSON.stringify({ title: 'Renamed', expected_updated_at: 'yesterday' })
+        )
+        .expect(400);
+
+      expect(res.body.error).toBe('invalid_payload');
+      expect(mockUpdateStudy).not.toHaveBeenCalled();
     });
 
     /**
@@ -389,7 +629,8 @@ describe('FirstHand Express router', () => {
           consent_template_id: 'recorded-default',
           consent_template_version: 1
         },
-        { userId: 'admin-1', isSuperadmin: false }
+        { userId: 'admin-1', isSuperadmin: false },
+        undefined
       );
     });
 
@@ -406,7 +647,8 @@ describe('FirstHand Express router', () => {
       expect(mockUpdateStudy).toHaveBeenCalledWith(
         'study_abc',
         { title: 'Renamed' },
-        { userId: 'super-1', isSuperadmin: true }
+        { userId: 'super-1', isSuperadmin: true },
+        undefined
       );
     });
 
@@ -518,7 +760,8 @@ describe('FirstHand Express router', () => {
       expect(mockUpdateStudy).toHaveBeenCalledWith(
         'study_abc',
         { owner_user_id: 'user-rightful' },
-        { userId: 'admin-1', isSuperadmin: false }
+        { userId: 'admin-1', isSuperadmin: false },
+        undefined
       );
     });
 

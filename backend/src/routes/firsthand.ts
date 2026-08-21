@@ -216,9 +216,69 @@ router.put('/studies/:studyId', requireAdmin, asyncHandler(async (req: Request, 
 
   try {
     const requester = studyRequester(req);
-    const updated = await updateStudy(req.params.studyId, parsed.data, requester);
+
+    // Split out of the payload rather than passed through with it. It is a
+    // PRECONDITION, not a column: `UpdateStudyInput` is the set of things to
+    // write, and leaving a non-column in it would invite the next field added
+    // to the dynamic update builder to pick it up.
+    const { expected_updated_at: expectedUpdatedAt, ...studyInput } = parsed.data;
+
+    const updated = await updateStudy(
+      req.params.studyId,
+      studyInput,
+      requester,
+      expectedUpdatedAt
+    );
+
+    if (updated.ok === false && updated.reason === 'stale') {
+      // The security event's quiet twin: a refused write nobody would otherwise
+      // hear about. `updated_by_user_id` is logged HERE and not returned to the
+      // caller - see below.
+      logger.info('Refused a stale study write', {
+        studyId: req.params.studyId,
+        userId: requester.userId
+      });
+
+      return res.status(409).json({
+        error: 'stale_study',
+        // Names WHEN, not WHO, and that is a decision rather than an omission.
+        //
+        // The row records who wrote it (migration 0014) and the line above puts
+        // it within reach of an operator. Putting a colleague's identity in this
+        // BODY is a different act: `GET /api/firsthand/studies` is unfiltered by
+        // owner and `canWriteStudy` fails open on an unowned legacy study, so
+        // the audience for this sentence is every researcher_admin, not just the
+        // study's owner. Telling all of them which colleague edited which study
+        // is a disclosure the product has not asked for and this MR should not
+        // decide by accident. Resolving the id to a name would also mean
+        // reaching into the app schema's `users` table from this router, which
+        // has never touched the other pool.
+        message:
+          'Somebody else saved changes to this task list after you opened it. Your edits have not been saved and are still here.',
+        // The row as it stands now, so the client can offer a deliberate
+        // re-save instead of leaving the author stuck re-sending a token that
+        // can never match again.
+        current_updated_at: updated.current_updated_at
+      });
+    }
+
     if (!updated.ok) {
       return sendStudyWriteFailure(res, updated, 'edit', req);
+    }
+
+    if (expectedUpdatedAt === undefined) {
+      // Fail-open is deliberate (see updateStudy's docstring) but must not be
+      // silent: a bundle that stopped sending the precondition would otherwise
+      // lose the protection with nothing anywhere to say so.
+      //
+      // Logged HERE, after the write, rather than on the way in. A request that
+      // 404s or 403s updated nothing, and a line claiming an unprotected update
+      // for one would be noise in exactly the place an operator is looking for
+      // signal.
+      logger.warn('Study updated with no concurrency precondition', {
+        studyId: req.params.studyId,
+        userId: requester.userId
+      });
     }
 
     if (updated.claimed) {

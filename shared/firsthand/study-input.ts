@@ -160,6 +160,27 @@ export const updateStudyRequestSchema = z.strictObject({
   // is not a repair. See updateStudy in backend/src/firsthand/
   // studies-repository.ts for why this is the only way to correct an owner.
   owner_user_id: z.string().min(1).optional(),
+  /**
+   * The optimistic-concurrency precondition: the `updated_at` this client was
+   * served when it loaded the study, echoed back so the write can be refused
+   * with 409 if somebody else has written the row since.
+   *
+   * A PRECONDITION, not a column. It is deliberately named `expected_` rather
+   * than `updated_at` so that neither a reader nor a future write path can read
+   * it as "set updated_at to this": the repository takes it as a separate
+   * argument and the dynamic update builder has no way to push it.
+   *
+   * Declared here because this object is strict - the same trap
+   * `consent_template_id` records two fields up. It has to arrive in the same
+   * release as the client that sends it, or every save 400s.
+   *
+   * OPTIONAL, and the repository's own docstring carries the reasoning: a
+   * missing precondition means an older bundle or a script, not a claim of
+   * freshness, and failing closed would break every save for the length of a
+   * rolling deploy. `offset: true` accepts both the `Z` we serve and a
+   * `+00:00` a client may have round-tripped it into.
+   */
+  expected_updated_at: z.string().datetime({ offset: true }).optional(),
   steps: z.array(stepSchema).min(1).optional()
 })
   .superRefine((value, ctx) => {
