@@ -11,10 +11,12 @@ import {
   toInlineStudyPayloadStep,
   toInlineStudyStep,
   toSurveyPayloadStep,
-  toSurveyQuestion
+  toSurveyQuestion,
+  withStoredIdentity
 } from '../../lib/opportunity-authoring/hydrate-study';
 import { withClientId } from '../../lib/opportunity-authoring/client-ids';
 import { toStudySteps } from '../../shared/firsthand/inline-study';
+import { toSurveySteps } from '../../shared/firsthand/survey-authoring';
 import { getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { logger } from '../../utils/logger';
@@ -144,6 +146,18 @@ const study = (overrides: Record<string, unknown> = {}) => ({
   steps: (overrides.steps as StudyStep[]) ?? RECORDED_STEPS,
   can_edit: overrides.can_edit ?? true
 });
+
+/**
+ * The shape of an identity minted for a question that has never been saved.
+ *
+ * A v4 uuid from `mintClientId`, matched rather than compared, because the
+ * value is random by design. Written as a pattern rather than `expect.any
+ * (String)` so that the positional fallback - `step_1`, the very thing F2
+ * replaced - would fail it.
+ */
+const A_MINTED_IDENTITY = expect.stringMatching(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+);
 
 const renderEdit = (path: string) =>
   render(
@@ -275,7 +289,17 @@ describe('the pure hydration helpers', () => {
     });
     // And the payload keeps what hydration kept. These two lists disagreeing is
     // the whole defect, so they are asserted together rather than in two files.
-    expect(toInlineStudyPayloadStep(toInlineStudyStep(RECORDED_STEPS[1]))).toEqual({
+    expect(
+      toInlineStudyPayloadStep({
+        ...toInlineStudyStep(RECORDED_STEPS[1]),
+        _clientId: 'task-identity'
+      })
+    ).toEqual({
+      // The identity F2 promoted. Asserted here rather than only in its own
+      // test because this is the list that decides what a save carries, and a
+      // payload builder that stopped sending it would restore positional ids
+      // with every other assertion in this file still green.
+      step_key: 'task-identity',
       type: 'single_choice',
       prompt: 'Which delivery option would you pick?',
       options: ['Standard', 'Next day'],
@@ -349,12 +373,126 @@ describe('the pure hydration helpers', () => {
  * What the payload builders send, listed rather than spread.
  *
  * B2 hangs a client-side `_clientId` on every authored item so the list can key
- * on identity instead of position. `surveyQuestionSchema` is `.strict()`, so a
- * question carrying that id would be REFUSED - the whole save, not the field.
- * Nothing deletes it: the builders name the fields they send, and these
- * assertions are on the exact key set so both widening the mapper to a spread
- * and quietly dropping a real field fail here.
+ * on identity instead of position, and F2 made that value the question's
+ * PERSISTED identity - sent as `step_key`, never as `_clientId` itself.
+ * `surveyQuestionSchema` is `.strict()`, so a question carrying the raw field
+ * would be REFUSED - the whole save, not the field. Nothing deletes it: the
+ * builders name the fields they send, and these assertions are on the exact key
+ * set, so widening the mapper to a spread, quietly dropping a real field, and
+ * dropping the identity all fail here.
  */
+/**
+ * F2. Where a question's persisted identity comes from, and what happens when
+ * it cannot be recovered.
+ */
+describe('the identity a hydrated study carries', () => {
+  it('recovers each question\'s identity from the id it is already stored under', () => {
+    const authored = authoredStepsOf(RECORDED_STEPS);
+
+    expect(
+      withStoredIdentity(authored.map(toInlineStudyStep), authored, 'study_demo').map(
+        (item) => item._clientId
+      )
+    ).toEqual(['step_1', 'step_2']);
+  });
+
+  it('round-trips a stored id back to itself, unchanged', () => {
+    // The one property everything rests on. If it does not hold, a save
+    // renumbers every question and detaches every answer already collected.
+    //
+    // NOT `SURVEY_STEPS`, and that is the whole reason this fixture is local.
+    // Those ids are `_step_1`.._step_3`, which is exactly what the POSITIONAL
+    // fallback produces - so a `toSurveySteps` that ignored identity entirely
+    // would rebuild the same three ids and this assertion would pass against
+    // the defect it exists to catch. An independent mutation pass proved that:
+    // the headline mutation survived the whole frontend suite. Keys that are
+    // not positions are what make the test capable of failing.
+    const authored: StudyStep[] = [
+      { step_id: 'study_questions_aaaa1111', order: 1, type: 'open_text', prompt: 'Which tool slows you down?' },
+      {
+        step_id: 'study_questions_bbbb2222',
+        order: 2,
+        type: 'rating',
+        prompt: 'How happy are you with the build times?',
+        config: { scale_max: 7 }
+      },
+      { step_id: 'study_questions_cccc3333', order: 3, type: 'nps', prompt: 'Would you recommend it?' }
+    ];
+
+    const rewritten = toSurveySteps(
+      withStoredIdentity(authored.map(toSurveyQuestion), authored, 'study_questions').map(
+        toSurveyPayloadStep
+      ),
+      'study_questions'
+    );
+
+    expect(
+      rewritten.filter((step) => step.type !== 'end').map((step) => step.step_id)
+    ).toEqual([
+      'study_questions_aaaa1111',
+      'study_questions_bbbb2222',
+      'study_questions_cccc3333'
+    ]);
+  });
+
+  it('keeps each question on its own id when the author reorders them', () => {
+    // The behaviour the whole step exists for, asserted on the FRONTEND side
+    // rather than only in the shared module's own tests - the frontend imports
+    // a committed COPY of that module, and a mutation applied to both copies at
+    // once satisfies the drift check.
+    const authored: StudyStep[] = [
+      { step_id: 'study_questions_aaaa1111', order: 1, type: 'open_text', prompt: 'First' },
+      { step_id: 'study_questions_bbbb2222', order: 2, type: 'open_text', prompt: 'Second' },
+      { step_id: 'study_questions_cccc3333', order: 3, type: 'open_text', prompt: 'Third' }
+    ];
+
+    const hydrated = withStoredIdentity(
+      authored.map(toSurveyQuestion),
+      authored,
+      'study_questions'
+    );
+
+    const rewritten = toSurveySteps(
+      [...hydrated].reverse().map(toSurveyPayloadStep),
+      'study_questions'
+    ).filter((step) => step.type !== 'end');
+
+    // Reversed, and every id still names the question whose prompt it arrived
+    // with. Asserting the prompts alone, or the count, passes against the
+    // positional ids that re-attributed four participants' answers.
+    expect(rewritten.map((step) => [step.step_id, step.prompt, step.order])).toEqual([
+      ['study_questions_cccc3333', 'Third', 1],
+      ['study_questions_bbbb2222', 'Second', 2],
+      ['study_questions_aaaa1111', 'First', 3]
+    ]);
+  });
+
+  it('offers a study read-only when its ids are outside its own namespace', () => {
+    // Nothing this product writes produces such an id, and if one existed this
+    // form could not write it back unchanged - the save would renumber every
+    // question. `studyRoundTripsCleanly` is what turns that into a read-only
+    // banner instead of silent damage, and it catches it BY RUNNING THE ROUND
+    // TRIP rather than by a rule anybody had to remember to add.
+    const foreign: StudyStep[] = [
+      { step_id: 'a-bare-id', order: 1, type: 'instruction', prompt: 'Open the basket' },
+      { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ];
+
+    expect(studyRoundTripsCleanly(foreign, 'recorded', 'study_demo')).toBe(false);
+  });
+
+  it('still authors a study whose ids ARE in its namespace', () => {
+    // The pair. Without it the assertion above is satisfied by a check that
+    // refuses everything.
+    const owned: StudyStep[] = [
+      { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket' },
+      { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
+    ];
+
+    expect(studyRoundTripsCleanly(owned, 'recorded', 'study_demo')).toBe(true);
+  });
+});
+
 describe('the fields a payload carries', () => {
   it('sends exactly the survey fields the contract accepts', () => {
     const built = toSurveyPayloadStep(
@@ -372,6 +510,7 @@ describe('the fields a payload carries', () => {
       'is_required',
       'options',
       'prompt',
+      'step_key',
       'type'
     ]);
     expect(built.prompt).toBe('Which delivery option would you pick?');
@@ -391,6 +530,7 @@ describe('the fields a payload carries', () => {
       'helper_text',
       'is_required',
       'prompt',
+      'step_key',
       'type'
     ]);
   });
@@ -404,11 +544,12 @@ describe('the fields a payload carries', () => {
   it('leaves a preserved scale behind when the question is a recommendation score', () => {
     expect(
       toSurveyPayloadStep({
+        _clientId: 'k',
         type: 'nps',
         prompt: 'Would you recommend us?',
         config: { scale_max: 7 }
       })
-    ).toEqual({ type: 'nps', prompt: 'Would you recommend us?' });
+    ).toEqual({ step_key: 'k', type: 'nps', prompt: 'Would you recommend us?' });
   });
 
   /**
@@ -422,12 +563,14 @@ describe('the fields a payload carries', () => {
   it('sends the selection bounds a multiple choice can carry', () => {
     expect(
       toSurveyPayloadStep({
+        _clientId: 'k',
         type: 'multi_choice',
         prompt: 'Which of these do you use?',
         options: ['Jira', 'Confluence', 'Bitbucket'],
         config: { min_selections: 1, max_selections: 2 }
       })
     ).toEqual({
+      step_key: 'k',
       type: 'multi_choice',
       prompt: 'Which of these do you use?',
       options: ['Jira', 'Confluence', 'Bitbucket'],
@@ -454,11 +597,13 @@ describe('the fields a payload carries', () => {
   it('still sends the scale a rating actually needs', () => {
     expect(
       toSurveyPayloadStep({
+        _clientId: 'k',
         type: 'rating',
         prompt: 'How happy are you with it?',
         config: { scale_max: 7 }
       })
     ).toEqual({
+      step_key: 'k',
       type: 'rating',
       prompt: 'How happy are you with it?',
       config: { scale_max: 7 }
@@ -536,14 +681,18 @@ describe('the hydrate → save round trip is lossless', () => {
     ];
 
     const authored = authoredStepsOf(stored);
-    const payload = authored.map(toInlineStudyStep).map(toInlineStudyPayloadStep);
+    const payload = withStoredIdentity(
+      authored.map(toInlineStudyStep),
+      authored,
+      'study_demo'
+    ).map(toInlineStudyPayloadStep);
     const rewritten = authoredStepsOf(
       toStudySteps(payload, 'study_demo', 'https://shop.test/basket')
     );
 
-    // step_id is excluded on purpose: the form does not author it, and the
-    // backend preserves the stored ids positionally rather than taking the
-    // payload's. Everything the participant can see must survive.
+    // Everything the participant can see must survive. step_id is checked
+    // separately below rather than here, so a failure says which of the two
+    // things broke.
     const visible = (step: StudyStep) => ({
       type: step.type,
       prompt: step.prompt,
@@ -554,6 +703,16 @@ describe('the hydrate → save round trip is lossless', () => {
     });
 
     expect(rewritten.map(visible)).toEqual(authored.map(visible));
+
+    // And the IDENTITY survives, which is the half a content comparison cannot
+    // see. These stored ids are ZERO-PADDED (`_step_002`, what StudyEditor
+    // mints) while the positional fallback is unpadded, so a builder that had
+    // gone back to deriving ids from position would produce `_step_2` here and
+    // this assertion would fail where every content assertion above still
+    // passed.
+    expect(rewritten.map((step) => step.step_id)).toEqual(
+      authored.map((step) => step.step_id)
+    );
   });
 });
 
@@ -578,6 +737,12 @@ describe('reopening an opportunity that has a task list', () => {
       estimated_duration_minutes: 18,
       steps: [
         {
+          // The identity recovered from the STORED id (`study_demo_step_1`),
+          // not a freshly minted one - so this save writes the same step id
+          // back and anything already answered against it stays attached. A
+          // hydrator that minted new ids would still pass every content
+          // assertion below.
+          step_key: 'step_1',
           type: 'instruction',
           prompt: 'Open the basket and read what is in it aloud',
           // Both of these used to be hydrated and then dropped here, so the
@@ -585,6 +750,7 @@ describe('reopening an opportunity that has a task list', () => {
           helper_text: 'Say what you notice as you go'
         },
         {
+          step_key: 'step_2',
           type: 'single_choice',
           prompt: 'Which delivery option would you pick?',
           options: ['Standard', 'Next day'],
@@ -923,13 +1089,16 @@ describe('reopening an opportunity that has questions', () => {
       // participant is then told.
       estimated_duration_minutes: undefined,
       steps: [
-        { type: 'open_text', prompt: 'Which tool slows you down?' },
+        // Each identity recovered from its STORED id (`study_questions_step_N`),
+        // so a save writes the same three ids back. See the task-list twin.
+        { step_key: 'step_1', type: 'open_text', prompt: 'Which tool slows you down?' },
         {
+          step_key: 'step_2',
           type: 'rating',
           prompt: 'How happy are you with the build times?',
           config: { scale_max: 7 }
         },
-        { type: 'nps', prompt: 'Would you recommend it?' }
+        { step_key: 'step_3', type: 'nps', prompt: 'Would you recommend it?' }
       ]
     });
     expect(savedBody().firsthand_study_id).toBeUndefined();
@@ -1516,7 +1685,10 @@ describe('when the linked study no longer exists', () => {
     // Content reaches the payload as inline_study, which is what makes the
     // backend mint a replacement rather than 400ing on a dangling id.
     expect(sentBody().inline_study.steps).toEqual([
-      { type: 'instruction', prompt: 'Find the export button' }
+      // A brand new task, so its identity is freshly MINTED rather than
+      // recovered - a uuid, not a position. A builder that had fallen back to
+      // deriving keys from the index would send `step_1` and fail here.
+      { step_key: A_MINTED_IDENTITY, type: 'instruction', prompt: 'Find the export button' }
     ]);
     expect(savedBody().firsthand_study_id).toBeUndefined();
   });
@@ -1587,7 +1759,7 @@ describe('when the linked set of questions no longer exists', () => {
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalled());
 
     expect(sentBody().inline_survey.steps).toEqual([
-      { type: 'open_text', prompt: 'How easy was that?' }
+      { step_key: A_MINTED_IDENTITY, type: 'open_text', prompt: 'How easy was that?' }
     ]);
     expect(savedBody().firsthand_study_id).toBeUndefined();
   });

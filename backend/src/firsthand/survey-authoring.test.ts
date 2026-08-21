@@ -387,6 +387,98 @@ describe("toSurveySteps", () => {
 });
 
 /**
+ * F2. The property the whole step exists for.
+ *
+ * These assert the IDS, before and after. A count assertion, or an assertion
+ * that the prompts came back in the new order, passes just as happily against
+ * the positional ids that re-attributed four participants' answers to the wrong
+ * four questions - which is what made the defect invisible for as long as it
+ * was.
+ */
+describe("a question keeps its identity when the author reorders the list", () => {
+  const keyed = inlineSurveySchema.parse({
+    consent_text: "Your answers are stored for research analysis.",
+    steps: [
+      { step_key: "alpha", type: "open_text", prompt: "About the checkout?" },
+      { step_key: "bravo", type: "open_text", prompt: "About the search?" },
+      { step_key: "charlie", type: "open_text", prompt: "About the basket?" }
+    ]
+  });
+
+  it("derives the stored id from the key rather than from the position", () => {
+    expect(
+      toSurveySteps(keyed.steps, "study_abc").map((step) => step.step_id)
+    ).toEqual([
+      "study_abc_alpha",
+      "study_abc_bravo",
+      "study_abc_charlie",
+      "study_abc_step_end"
+    ]);
+  });
+
+  it("gives a reversed list the SAME ids in the reversed order", () => {
+    const before = toSurveySteps(keyed.steps, "study_abc");
+    const after = toSurveySteps([...keyed.steps].reverse(), "study_abc");
+
+    const authoredIdsOf = (steps: typeof before) =>
+      steps.filter((step) => step.type !== "end").map((step) => step.step_id);
+
+    // Reversed, and the SET is unchanged - so no id has changed which question
+    // it names. Under positional ids this was `[step_1, step_2, step_3]` on
+    // both sides, and the answers stored against step_1 silently became
+    // question 3's.
+    expect(authoredIdsOf(after)).toEqual([...authoredIdsOf(before)].reverse());
+  });
+
+  it("moves step_order without moving identity", () => {
+    const after = toSurveySteps([...keyed.steps].reverse(), "study_abc");
+    const charlie = after.find((step) => step.step_id === "study_abc_charlie");
+
+    expect(charlie).toMatchObject({ order: 1, prompt: "About the basket?" });
+  });
+
+  it("keeps the positional id for a question that carries no key", () => {
+    // The fallback a script and a stale SPA bundle both land on. Asserted so
+    // that removing it - or letting it drift - is a failure here rather than a
+    // 400 discovered by whoever is mid-deploy.
+    const unkeyed = inlineSurveySchema.parse({
+      consent_text: "Your answers are stored for research analysis.",
+      steps: [{ type: "open_text", prompt: "About the checkout?" }]
+    });
+
+    expect(toSurveySteps(unkeyed.steps, "study_abc")[0].step_id).toBe(
+      "study_abc_step_1"
+    );
+  });
+
+  it("refuses two questions claiming the same identity", () => {
+    // They would store as ONE row: a saved survey silently one question
+    // shorter, with one of the two prompts gone.
+    const result = inlineSurveySchema.safeParse({
+      consent_text: "Your answers are stored for research analysis.",
+      steps: [
+        { step_key: "alpha", type: "open_text", prompt: "About the checkout?" },
+        { step_key: "alpha", type: "open_text", prompt: "About the search?" }
+      ]
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(["steps", 1, "step_key"]);
+  });
+
+  it("refuses a key that is not a legal key", () => {
+    const result = inlineSurveySchema.safeParse({
+      consent_text: "Your answers are stored for research analysis.",
+      steps: [
+        { step_key: "not a key", type: "open_text", prompt: "About the checkout?" }
+      ]
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+/**
  * A study's steps must be written in the vocabulary its `kind` declares.
  *
  * `createStudyRequestSchema` validates steps with `stepSchema`, which permits

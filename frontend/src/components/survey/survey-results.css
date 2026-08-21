@@ -24,12 +24,33 @@
   flex: 1 1 auto;
 }
 
+/*
+ * Answers to questions the study no longer has.
+ *
+ * Set apart by a rule and a heading rather than by colour alone: the point is
+ * that these numbers are real but no longer being collected, and a reader must
+ * not mistake them for live questions further up the page.
+ */
+.survey-results-removed {
+  display: grid;
+  gap: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.survey-results-removed h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.4;
+}
+
 .result-question {
   display: grid;
   gap: 0.75rem;
 }
 
-.result-question h3 {
+.result-question h3,
+.result-question h4 {
   margin: 0;
   font-size: 1.05rem;
   line-height: 1.4;

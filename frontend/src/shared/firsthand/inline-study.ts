@@ -12,6 +12,12 @@ import { z } from "zod";
 
 import type { StepShapeProblem, StudyStep } from "./contract";
 import { findStepShapeProblem } from "./contract";
+import {
+  DUPLICATE_STEP_KEY_MESSAGE,
+  findDuplicateStepIdentity,
+  stepIdFor,
+  stepKeySchema
+} from "./step-identity";
 import { isSafeTargetUrl } from "./url-safety";
 
 /**
@@ -106,11 +112,19 @@ export const INLINE_STUDY_LIMITS = {
  * who started that study got a 500. Trimming inside the schema means the
  * validated value is the stored value.
  *
- * `step_id` and `order` are absent by design: they are bookkeeping the author
- * should never have to invent, and `toStudySteps` derives both from array
- * position, which is also the only ordering the form can express.
+ * `order` is absent by design: it is bookkeeping the author should never have
+ * to invent, and `toStudySteps` derives it from array position, which is also
+ * the only ordering the form can express. `step_id` is absent for a different
+ * reason - the server namespaces `step_key` into one, so a caller cannot mint
+ * an id claiming to belong to another study.
  */
 export const inlineStudyStepSchema = z.object({
+  /**
+   * The task's identity, minted once by the client that created it and sent
+   * back unchanged on every save. Same field, same reasoning and the same
+   * optionality as `surveyQuestionSchema`'s - see step-identity.ts.
+   */
+  step_key: stepKeySchema.optional(),
   type: authorableStepTypeSchema,
   prompt: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxPromptLength),
   options: z
@@ -220,6 +234,18 @@ export const inlineStudySchema = z
         });
       }
     });
+
+    // Two tasks sharing one identity would store as a single row, so this is a
+    // save that silently loses a task. Mirrors the survey twin.
+    const duplicate = findDuplicateStepIdentity(value.steps);
+
+    if (duplicate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: DUPLICATE_STEP_KEY_MESSAGE,
+        path: ["steps", duplicate.index, "step_key"]
+      });
+    }
   });
 
 export type InlineStudyStep = z.infer<typeof inlineStudyStepSchema>;
@@ -259,6 +285,10 @@ export const DEFAULT_CONSENT_TEXT =
  * completion marker. Optional fields are omitted rather than set to undefined
  * so the result matches what `stepSchema` expects for an absent field.
  *
+ * A step that carries a `step_key` gets an id derived from it, unchanged by its
+ * position in the list. A step with no key falls back to the pre-F2 positional
+ * id - see `toSurveySteps` for why that fallback is kept rather than removed.
+ *
  * `studyId` is required and prefixes every step id, because step ids are NOT
  * scoped to their study in storage: `firsthand.study_steps.id` is a global
  * `TEXT PRIMARY KEY` (0004_firsthand_studies.sql), and `insertStudySteps`
@@ -274,7 +304,9 @@ export function toStudySteps(
   targetUrl?: string
 ): StudyStep[] {
   const authored: StudyStep[] = steps.map((step, index) => ({
-    step_id: `${studyId}_step_${index + 1}`,
+    step_id: step.step_key
+      ? stepIdFor(studyId, step.step_key)
+      : `${studyId}_step_${index + 1}`,
     order: index + 1,
     type: step.type,
     prompt: step.prompt.trim(),

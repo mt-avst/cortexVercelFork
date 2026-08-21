@@ -8,15 +8,21 @@ const step = (over: Partial<StudyStep> & Pick<StudyStep, "type" | "step_id">) =>
   ({ order: 1, prompt: "Question", ...over }) as StudyStep;
 
 const response = (
-  stepId: string,
+  stepId: string | null,
   sessionId: string,
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  over: Partial<StoredResponse> = {}
 ): StoredResponse => ({
   session_id: sessionId,
   step_id: stepId,
+  // Spelled out rather than defaulted away, because a fixture that omits a
+  // field cannot test what the field does - and this one decides whether an
+  // answer is reported under a live question or a removed one.
+  step_prompt: null,
   step_type: "x",
   response_payload: payload,
-  saved_at: "2026-08-16T09:00:00.000Z"
+  saved_at: "2026-08-16T09:00:00.000Z",
+  ...over
 });
 
 const rows = (csv: string) => csv.trim().split("\r\n");
@@ -242,5 +248,79 @@ describe("toCsvContentDisposition", () => {
     expect(toCsvContentDisposition("你好")).toContain(
       'filename="survey responses.csv"'
     );
+  });
+});
+
+/**
+ * F2. Columns for questions the study no longer has.
+ *
+ * The export is where a finding actually gets computed, so a detached answer
+ * that quietly did not appear would hand a researcher a smaller data set than
+ * they believe they are looking at - with nothing on the sheet saying so.
+ */
+describe("answers to a removed question", () => {
+  const live = [step({ step_id: "q1", type: "open_text", prompt: "Still asked" })];
+
+  const detached = (
+    prompt: string | null,
+    sessionId: string,
+    payload: Record<string, unknown>,
+    stepType = "open_text"
+  ) => response(null, sessionId, payload, { step_prompt: prompt, step_type: stepType });
+
+  it("gets a column of its own, marked as removed", () => {
+    const csv = toResponsesCsv(live, [
+      response("q1", "s1", { text: "live" }),
+      detached("What did you think of the old checkout?", "s1", { text: "detached" })
+    ]);
+
+    expect(rows(csv)[0]).toBe(
+      "Participant,Still asked,What did you think of the old checkout? (removed question)"
+    );
+    expect(rows(csv)[1]).toBe("s1,live,detached");
+  });
+
+  it("does not spill a detached answer into a live question's column", () => {
+    // The two are keyed differently - one by step id, one by prompt and type -
+    // and a shared key would put the detached answer under "Still asked".
+    const csv = toResponsesCsv(live, [
+      detached("Removed", "s1", { text: "detached" })
+    ]);
+
+    expect(rows(csv)[1]).toBe("s1,,detached");
+  });
+
+  it("leaves the cell blank for a participant who never saw the removed question", () => {
+    const csv = toResponsesCsv(live, [
+      response("q1", "s1", { text: "live" }),
+      detached("Removed", "s2", { text: "detached" })
+    ]);
+
+    expect(rows(csv).slice(1)).toEqual(["s1,live,", "s2,,detached"]);
+  });
+
+  it("neutralises a removed prompt that would run as a formula", () => {
+    // The suffix must not become the thing that makes the cell safe: the
+    // prompt is still researcher-authored free text, and the person opening
+    // this export is the highest-privileged user in the system.
+    const csv = toResponsesCsv(live, [
+      detached('=HYPERLINK("http://evil.test")', "s1", { text: "a" })
+    ]);
+
+    expect(rows(csv)[0]).toContain('"\t=HYPERLINK(""http://evil.test"") (removed question)"');
+  });
+
+  it("names the column plainly when the wording was never recorded", () => {
+    const csv = toResponsesCsv(live, [detached(null, "s1", { text: "a" })]);
+
+    expect(rows(csv)[0]).toBe(
+      "Participant,Still asked,A question that has since been removed (removed question)"
+    );
+  });
+
+  it("adds no columns when nothing was removed", () => {
+    const csv = toResponsesCsv(live, [response("q1", "s1", { text: "live" })]);
+
+    expect(rows(csv)[0]).toBe("Participant,Still asked");
   });
 });

@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SurveyResults, type SurveyResultsData } from "../SurveyResults";
 
@@ -247,5 +247,192 @@ describe("the page as a whole", () => {
     );
 
     expect(screen.getByText("No answers yet.")).toBeInTheDocument();
+  });
+});
+
+/**
+ * F2. Answers to questions the study no longer has.
+ *
+ * Removing a question DETACHES its answers rather than deleting them. This
+ * section is where a researcher finds them, and the reason it is a section
+ * rather than another card in the list: nobody is being asked these any more,
+ * and a reader scanning denominators down one list would have no way to tell.
+ */
+describe("removed questions", () => {
+  const withRemoved = (): SurveyResultsData => ({
+    respondents: 2,
+    questions: [
+      {
+        step_id: "q1",
+        prompt: "Still asked",
+        type: "open_text",
+        answered: 1,
+        answers: [{ session_id: "s1", text: "a live answer" }]
+      }
+    ],
+    removed_questions: [
+      {
+        step_id: "",
+        prompt: "What did you think of the old checkout?",
+        type: "open_text",
+        answered: 1,
+        answers: [{ session_id: "s2", text: "a detached answer" }]
+      }
+    ]
+  });
+
+  it("shows the answers under their own heading, with the prompt as it was", () => {
+    render(<SurveyResults results={withRemoved()} title="Survey" />);
+
+    const section = screen
+      .getByRole("heading", { name: "Removed questions" })
+      .closest("section") as HTMLElement;
+
+    expect(
+      within(section).getByRole("heading", {
+        name: "What did you think of the old checkout?"
+      })
+    ).toBeInTheDocument();
+    expect(within(section).getByText("a detached answer")).toBeInTheDocument();
+    // And the live answer is NOT in there. Scoping the first assertion without
+    // this one would pass against a component that rendered every question
+    // twice.
+    expect(within(section).queryByText("a live answer")).not.toBeInTheDocument();
+  });
+
+  it("gives each removed question a key of its own", () => {
+    // `step_id` is the empty string on ALL of these - there is no id once the
+    // question is deleted - so keying the list on it hands React the same key
+    // twice. An independent mutation pass proved that is invisible here
+    // otherwise: React still renders both children, so the "renders every
+    // removed question" assertion below passes, and the only signal is a
+    // warning on stderr that vitest does not fail on. Reconciliation with
+    // duplicate keys is undefined enough that a list which grows or reorders
+    // later would reuse the wrong node.
+    const errors: unknown[][] = [];
+    const spy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      errors.push(args);
+    });
+
+    const results = withRemoved();
+    results.removed_questions = [
+      ...(results.removed_questions ?? []),
+      {
+        step_id: "",
+        prompt: "Which docs did you read?",
+        type: "open_text",
+        answered: 1,
+        answers: [{ session_id: "s2", text: "the API reference" }]
+      }
+    ];
+
+    render(<SurveyResults results={results} title="Survey" />);
+    spy.mockRestore();
+
+    expect(
+      errors.filter((args) => String(args[0]).includes("same key"))
+    ).toEqual([]);
+  });
+
+  it("renders every removed question, not just the first", () => {
+    // `step_id` is the empty string on all of them - there is no id once the
+    // question is deleted - so keying the list on it would collapse them to one.
+    const results = withRemoved();
+    results.removed_questions = [
+      ...(results.removed_questions ?? []),
+      {
+        step_id: "",
+        prompt: "Which docs did you read?",
+        type: "open_text",
+        answered: 1,
+        answers: [{ session_id: "s2", text: "the API reference" }]
+      }
+    ];
+
+    render(<SurveyResults results={results} title="Survey" />);
+
+    expect(
+      screen.getByRole("heading", { name: "What did you think of the old checkout?" })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Which docs did you read?" })
+    ).toBeInTheDocument();
+  });
+
+  it("puts a removed question BELOW the section heading in the outline", () => {
+    // The section heading explains what these are, so a question inside it is
+    // subordinate to that explanation. Rendering both at h3 would tell a screen
+    // reader they are siblings.
+    render(<SurveyResults results={withRemoved()} title="Survey" />);
+
+    expect(
+      screen.getByRole("heading", { name: "Removed questions", level: 3 })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: "What did you think of the old checkout?",
+        level: 4
+      })
+    ).toBeInTheDocument();
+    // The live question stays at h3, directly under the results heading.
+    expect(
+      screen.getByRole("heading", { name: "Still asked", level: 3 })
+    ).toBeInTheDocument();
+  });
+
+  it("renders no section at all when nothing was removed", () => {
+    render(
+      <SurveyResults
+        results={{ respondents: 1, questions: [], removed_questions: [] }}
+        title="Survey"
+      />
+    );
+
+    expect(
+      screen.queryByRole("heading", { name: "Removed questions" })
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * F2. A question reworded after people answered it.
+ *
+ * The card labels every answer with the question's CURRENT wording, so a
+ * researcher reading it has to be told when some of those answers were given
+ * against something else. Without this the reword is invisible, and the
+ * migration that records the wording would be storing a column nobody reads.
+ */
+describe("earlier wordings", () => {
+  const reworded = (): SurveyResultsData => ({
+    respondents: 3,
+    questions: [
+      {
+        step_id: "q1",
+        prompt: "How was support?",
+        type: "open_text",
+        answered: 3,
+        answers: [{ session_id: "s1", text: "slow" }],
+        asked_as: [{ prompt: "How was checkout?", answered: 2 }]
+      }
+    ]
+  });
+
+  it("says which wording those answers were given against, and how many", () => {
+    render(<SurveyResults results={reworded()} title="Survey" />);
+
+    expect(
+      screen.getByText(/Some of these answers were given against different wording/)
+    ).toHaveTextContent('"How was checkout?" (2)');
+  });
+
+  it("says nothing when every answer was given against the current wording", () => {
+    const results = reworded();
+    delete results.questions[0].asked_as;
+
+    render(<SurveyResults results={results} title="Survey" />);
+
+    expect(
+      screen.queryByText(/given against different wording/)
+    ).not.toBeInTheDocument();
   });
 });

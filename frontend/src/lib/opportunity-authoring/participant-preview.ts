@@ -12,6 +12,7 @@ import {
   toSurveySteps,
   type SurveyQuestion
 } from '../../shared/firsthand/survey-authoring';
+import type { WithClientId } from './client-ids';
 import {
   toInlineStudyPayloadStep,
   toSurveyPayloadStep
@@ -27,11 +28,13 @@ import {
  * therefore cannot name a row that exists, whatever else happens to it.
  *
  * That matters because these ids are what `toSurveySteps` namespaces step ids
- * with, and `participant_responses.step_id` is bare `TEXT` with no foreign key
- * (`0001:44`). If a preview answer ever DID reach the runtime, it would have to
- * be against a session token that no session row has, so the write 404s rather
- * than landing under a plausible-looking id. Two independent guards, because
- * the whole promise of this feature is that it writes nothing.
+ * with. If a preview answer ever DID reach the runtime, it would have to be
+ * against a session token that no session row has, so the write 404s rather
+ * than landing under a plausible-looking id - and since migration 0015,
+ * `participant_responses` has a foreign key to `study_steps (study_id, id)`, so
+ * a step id under a study that does not exist cannot be stored at all. THREE
+ * independent guards now, because the whole promise of this feature is that it
+ * writes nothing.
  *
  * They are also readable on sight, so a value that surfaces in a log or a
  * database says what it is rather than looking like an id somebody could chase.
@@ -201,7 +204,7 @@ const parseOrBlocked = (
 
 /** A survey preview from live authoring state, unsaved edits included. */
 export const buildSurveyPreview = (
-  fields: FrameFields & { questions: readonly SurveyQuestion[] }
+  fields: FrameFields & { questions: readonly WithClientId<SurveyQuestion>[] }
 ): ParticipantPreview => {
   if (fields.questions.length === 0) {
     return { previewable: false, reason: 'no-content' };
@@ -229,7 +232,7 @@ export const buildSurveyPreview = (
 /** A recorded-study read-through from live authoring state. */
 export const buildRecordedPreview = (
   fields: FrameFields & {
-    steps: readonly InlineStudyStep[];
+    steps: readonly WithClientId<InlineStudyStep>[];
     targetUrl?: string;
   }
 ): ParticipantPreview => {

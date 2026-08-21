@@ -16,6 +16,12 @@ import {
   END_STEP_PROMPT,
   INLINE_STUDY_LIMITS
 } from "./inline-study";
+import {
+  DUPLICATE_STEP_KEY_MESSAGE,
+  findDuplicateStepIdentity,
+  stepIdFor,
+  stepKeySchema
+} from "./step-identity";
 
 /**
  * Authoring for a native poll or survey.
@@ -68,6 +74,20 @@ export const authorableSurveyStepTypeSchema = z.enum(authorableSurveyStepTypes);
  * enough to time out a participant.
  */
 export const surveyQuestionSchema = z.object({
+  /**
+   * The question's identity, minted once by the client that created it and sent
+   * back unchanged on every save. See step-identity.ts for why this exists and
+   * why the server namespaces it rather than accepting a whole step id.
+   *
+   * OPTIONAL, and absence is a real case rather than laxness: a script has no
+   * identity to express, and an SPA bundle older than the backend serving it -
+   * a real window on every rolling deploy - does not send one. Absence means
+   * "this client cannot express identity", and `toSurveySteps` falls back to the
+   * pre-F2 positional id for it while the opportunity route keeps its
+   * fail-closed guard over that case. What absence must never do is silently
+   * look like identity.
+   */
+  step_key: stepKeySchema.optional(),
   type: authorableSurveyStepTypeSchema,
   prompt: z.string().trim().min(1).max(INLINE_STUDY_LIMITS.maxPromptLength),
   options: z
@@ -169,6 +189,19 @@ export const inlineSurveySchema = z
         });
       }
     });
+
+    // Refused here as well as in the repository, which throws a bare Error the
+    // routes answer as a 500. Two questions sharing one identity would store as
+    // one row, so this is a save that silently loses a question.
+    const duplicate = findDuplicateStepIdentity(value.steps);
+
+    if (duplicate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: DUPLICATE_STEP_KEY_MESSAGE,
+        path: ["steps", duplicate.index, "step_key"]
+      });
+    }
   });
 
 /**
@@ -197,13 +230,28 @@ export type InlineSurvey = z.infer<typeof inlineSurveySchema>;
  * schema level, but the namespacing stays - de-namespacing would make
  * `participant_responses.step_id` values indistinguishable across studies
  * without their session context.
+ *
+ * A question that carries a `step_key` gets an id derived from it, and that id
+ * is the same one whatever position the question is in. That is the whole of
+ * F2: reordering four questions no longer regenerates four ids against
+ * different prompts, so answers already collected stay attached to the question
+ * that produced them.
+ *
+ * A question with no key falls back to the pre-F2 positional id. Kept, not
+ * removed, because a script and a stale SPA bundle both send key-less payloads
+ * and both worked before this change - and because the ids it produces are
+ * exactly what an existing study already holds, so nothing has to be rewritten.
+ * What protects a key-less UPDATE is the opportunity route's own guard, which
+ * still refuses to rewrite the steps of a study that has collected answers.
  */
 export function toSurveySteps(
   questions: SurveyQuestion[],
   studyId: string
 ): StudyStep[] {
   const authored: StudyStep[] = questions.map((question, index) => ({
-    step_id: `${studyId}_step_${index + 1}`,
+    step_id: question.step_key
+      ? stepIdFor(studyId, question.step_key)
+      : `${studyId}_step_${index + 1}`,
     order: index + 1,
     type: question.type,
     prompt: question.prompt.trim(),

@@ -76,6 +76,7 @@ describe("survey results readers", () => {
       rowsToReturn.push({
         session_id: "session_1",
         step_id: "q1",
+        step_prompt: "How easy was that?",
         step_type: "rating",
         response_payload: { rating: 4 },
         saved_at: "2026-08-17T10:00:00.000Z"
@@ -90,11 +91,56 @@ describe("survey results readers", () => {
         {
           session_id: "session_1",
           step_id: "q1",
+          step_prompt: "How easy was that?",
           step_type: "rating",
           response_payload: { rating: 4 },
           saved_at: "2026-08-17T10:00:00.000Z"
         }
       ]);
+    });
+
+    it("carries a detached answer through rather than dropping it", async () => {
+      // A null step_id is a question the researcher removed after this person
+      // answered it. The reader has to surface it - `removed_questions` is
+      // built from exactly these rows - and the scoping join is on the SESSION,
+      // so nulling the response's own study_id cannot hide it.
+      rowsToReturn.push({
+        session_id: "session_1",
+        step_id: null,
+        step_prompt: "A question that was removed",
+        step_type: "open_text",
+        response_payload: { text: "an answer nobody should lose" },
+        saved_at: "2026-08-17T10:00:00.000Z"
+      });
+
+      const responses = await listResponsesForOpportunity({
+        opportunityId: "opportunity-777",
+        studyId: "study_abc"
+      });
+
+      expect(responses).toHaveLength(1);
+      expect(responses[0].step_id).toBeNull();
+      expect(responses[0].step_prompt).toBe("A question that was removed");
+    });
+
+    it("asks the database for the prompt each answer was given against", async () => {
+      // An independent mutation pass found this gap: dropping `r.step_prompt`
+      // from the SELECT left every test green. The mapper reads a column that
+      // is simply not there, `step_prompt` comes back undefined on every row,
+      // and both `asked_as` and `removed_questions` silently stop reporting -
+      // which is the whole reason 0015 stores it.
+      await listResponsesForOpportunity({
+        opportunityId: "opportunity-777",
+        studyId: "study_abc"
+      });
+
+      const selected = captured[0].sql
+        .split(/\bSELECT\b/)[1]
+        .split(/\bFROM\b/)[0];
+
+      for (const column of ["r.session_id", "r.step_id", "r.step_prompt", "r.step_type"]) {
+        expect(selected).toContain(column);
+      }
     });
 
     it("reads nothing at all when the runtime database is not configured", async () => {

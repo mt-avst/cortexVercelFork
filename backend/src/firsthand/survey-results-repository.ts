@@ -7,7 +7,10 @@ import { AppError } from "../../../shared/types";
 
 type ResponseRow = {
   session_id: string;
-  step_id: string;
+  /** NULL once the question this answer was given against has been removed. */
+  step_id: string | null;
+  /** The prompt the participant was shown. NULL for rows written before 0015. */
+  step_prompt: string | null;
   step_type: string;
   response_payload: Record<string, unknown>;
   saved_at: Date | string;
@@ -38,11 +41,15 @@ const MAX_RESPONSE_ROWS = 200_000;
 /**
  * The one projection both readers use.
  *
- * `participant_responses` has no study_id of its own - it hangs off
- * `runtime_sessions`, which does - so the join is how a study's answers are
- * identified at all. Only the WHERE clause differs between the two callers,
- * and it is the clause that decides who is allowed to see what, so it is
- * passed in explicitly rather than assembled from optional arguments.
+ * The join is how a study's answers are identified, and it is still the join
+ * rather than `participant_responses.study_id` - which 0015 added, but which
+ * exists to carry the foreign key and is NULLED when a question is removed.
+ * Scoping on it would silently drop exactly the detached answers this reader
+ * has to surface. `runtime_sessions.study_id` never moves.
+ *
+ * Only the WHERE clause differs between the two callers, and it is the clause
+ * that decides who is allowed to see what, so it is passed in explicitly rather
+ * than assembled from optional arguments.
  */
 async function listResponsesWhere(
   filter: ResponseFilter,
@@ -55,7 +62,8 @@ async function listResponsesWhere(
   return withRuntimeDatabaseClient(async (client) => {
     const result = await client.query<ResponseRow>(
       `
-        SELECT r.session_id, r.step_id, r.step_type, r.response_payload, r.saved_at
+        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
+               r.response_payload, r.saved_at
         FROM participant_responses AS r
         JOIN runtime_sessions AS s ON s.session_id = r.session_id
         WHERE ${filter}
@@ -85,6 +93,7 @@ async function listResponsesWhere(
     return result.rows.map((row) => ({
       session_id: row.session_id,
       step_id: row.step_id,
+      step_prompt: row.step_prompt,
       step_type: row.step_type,
       response_payload: row.response_payload ?? {},
       saved_at: new Date(row.saved_at).toISOString()
@@ -152,9 +161,8 @@ export async function listResponsesForOpportunity(input: {
  *
  * `LIMIT 1` and `SELECT 1`, so Postgres stops at the first matching row.
  *
- * Same join as every other read here, for the same reason:
- * `participant_responses` has no `study_id` of its own and hangs off
- * `runtime_sessions`, which does.
+ * Same join as every other read here, and for the same reason: the study id
+ * that never moves is the session's, not the response's own nullable one.
  *
  * Fails CLOSED when the runtime database is unconfigured - it answers `true`,
  * "assume there are answers". Every other read in this file answers `[]` for

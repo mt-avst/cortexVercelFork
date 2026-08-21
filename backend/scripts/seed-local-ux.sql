@@ -330,7 +330,7 @@ INSERT INTO firsthand.study_steps (id, study_id, step_order, type, prompt, targe
 -- (study_id, id), not (id). study_steps.id used to be a global primary key and
 -- migration 0010 scoped it to its study, so an ON CONFLICT naming `id` alone
 -- now matches no constraint and the whole statement errors. Found by running
--- this file, not by reading it - no application query upserts study_steps, so
+-- this file, not by reading it - no application query upserted study_steps when this was written (insertStudySteps does now, on the composite primary key), so
 -- nothing else in the repo pointed at it.
 ON CONFLICT (study_id, id) DO NOTHING;
 

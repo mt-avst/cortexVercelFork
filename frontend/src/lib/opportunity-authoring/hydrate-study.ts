@@ -1,4 +1,5 @@
-import { withClientIds, type WithClientId } from './client-ids';
+import { mintClientId, withClientIds, type WithClientId } from './client-ids';
+import { stepKeyOf } from '../../shared/firsthand/step-identity';
 import { getPrimaryTargetUrl } from '../recording/task-target';
 import type { StudyStep } from '../../shared/firsthand/contract';
 import { CUSTOM_CONSENT_TEMPLATE_ID } from '../../shared/firsthand/consent-templates';
@@ -59,13 +60,54 @@ export const authoredStepsOf = (steps: StudyStep[]): StudyStep[] =>
   steps.filter((step) => step.type !== 'end');
 
 /**
+ * A hydrated list, carrying the identity its stored steps already have.
+ *
+ * This is what makes a reorder safe. `_clientId` started as a rendering key -
+ * something for React to key a card on that reordering does not change - and F2
+ * promotes it to the question's PERSISTED identity: it is recovered here from
+ * the stored step id, sent back as `step_key` by the payload builders below,
+ * and namespaced back into the same id by `toSurveySteps`/`toStudySteps`. So a
+ * question keeps one identity from the moment it is created until it is
+ * deleted, whatever position it is dragged to in between.
+ *
+ * Positional by index rather than matched by anything, because that is exactly
+ * what it is: `items` is `steps.map(...)`, the two lists are the same list at
+ * this instant, and no reordering has happened yet.
+ *
+ * The `?? mintClientId()` fallback is for a stored id that is NOT in this
+ * study's namespace, which nothing this product writes produces. It is not a
+ * silent repair: a minted id round-trips to a DIFFERENT step id, so
+ * `studyRoundTripsCleanly` refuses the study and the author is offered it
+ * read-only rather than handed a form that would renumber it on save.
+ *
+ * NOT used for a copy. A copied question is a new question and gets a fresh
+ * identity from `withClientIds` - inheriting the source's would make two
+ * studies' questions claim the same keys for no benefit, since the stored ids
+ * are namespaced per study anyway.
+ */
+export const withStoredIdentity = <T extends object>(
+  items: readonly T[],
+  steps: StudyStep[],
+  studyId: string
+): WithClientId<T>[] =>
+  items.map((item, index) => ({
+    ...item,
+    _clientId: stepKeyOf(steps[index]?.step_id ?? '', studyId) ?? mintClientId()
+  }));
+
+/**
  * A stored step as the task-list form holds it.
  *
- * `step_id` and `order` are deliberately absent: `inlineStudyStepSchema` does
- * not accept them, and the backend preserves the stored ids positionally on an
- * in-place update rather than taking them from the payload. `target_url` is
- * absent because it is read once, study-level, via `getPrimaryTargetUrl` -
- * `toStudySteps` writes it back onto every step.
+ * `step_id` and `order` are deliberately absent, and the reason for `step_id`
+ * changed with F2: the backend used to preserve the stored ids POSITIONALLY on
+ * an in-place update, and now the form carries identity explicitly instead -
+ * as `_clientId` here (`withStoredIdentity`) and as `step_key` in the payload.
+ * A whole id is still never sent, so a caller cannot mint one claiming to
+ * belong to another study. `order` stays derived from array position, which is
+ * the only ordering the form can express.
+ *
+ * `target_url` is absent because it is read once, study-level, via
+ * `getPrimaryTargetUrl` - `toStudySteps` writes it back onto every step.
  */
 export const toInlineStudyStep = (step: StudyStep): InlineStudyStep => ({
   type: step.type as InlineStudyStep['type'],
@@ -98,7 +140,14 @@ export const toSurveyQuestion = (step: StudyStep): SurveyQuestion => ({
  * scaffolding, and `inlineStudyStepSchema` rejects an empty string, so a
  * trailing blank would fail the whole save.
  */
-export const toInlineStudyPayloadStep = (step: InlineStudyStep): InlineStudyStep => ({
+export const toInlineStudyPayloadStep = (
+  step: WithClientId<InlineStudyStep>
+): InlineStudyStep => ({
+  // The task's identity, promoted from the rendering key. This is the ONE field
+  // whose absence would silently restore positional ids, so it is listed first
+  // and `step_key` is declared on `inlineStudyStepSchema` - which is not
+  // `.strict()`, and would therefore have dropped it in silence.
+  step_key: step._clientId,
   type: step.type,
   prompt: step.prompt.trim(),
   ...(step.type === 'single_choice'
@@ -142,7 +191,14 @@ const CONFIGURABLE_QUESTION_TYPES: ReadonlySet<SurveyQuestion['type']> = new Set
 ]);
 
 /** An authored question as the save payload carries it. */
-export const toSurveyPayloadStep = (question: SurveyQuestion): SurveyQuestion => ({
+export const toSurveyPayloadStep = (
+  question: WithClientId<SurveyQuestion>
+): SurveyQuestion => ({
+  // See `toInlineStudyPayloadStep`. `surveyQuestionSchema` IS `.strict()`, so
+  // here the field had to be declared on the schema or the whole save would
+  // have been refused rather than quietly losing identity - which is the better
+  // of the two failures, and is why this one was found first.
+  step_key: question._clientId,
   type: question.type,
   prompt: question.prompt.trim(),
   ...(question.type === 'single_choice' || question.type === 'multi_choice'
@@ -159,13 +215,23 @@ export const toSurveyPayloadStep = (question: SurveyQuestion): SurveyQuestion =>
  * The fields a comparison of two steps should actually look at, normalised the
  * way the payload normalises them.
  *
- * `step_id` and `order` are excluded because the form does not author them and
- * the backend preserves the stored ones. Strings are trimmed on BOTH sides so
- * that a stored prompt with trailing whitespace - which the payload would trim
- * - does not read as a difference the author did not make.
+ * `step_id` is INCLUDED, and that inclusion is the point after F2. The form now
+ * round-trips a question's identity as well as its content, so a study whose
+ * stored ids this form would not write back unchanged is a study it must not
+ * edit - the save would renumber every question and detach every answer already
+ * collected. Excluding it would have made that the one kind of loss this check
+ * could not see, which is precisely the failure the check was built to end.
+ *
+ * `order` is still excluded: it is derived from array position at both ends, so
+ * it can only restate what the comparison already knows.
+ *
+ * Strings are trimmed on BOTH sides so that a stored prompt with trailing
+ * whitespace - which the payload would trim - does not read as a difference the
+ * author did not make.
  */
 const comparableStep = (step: StudyStep) =>
   JSON.stringify([
+    step.step_id,
     step.type,
     step.prompt.trim(),
     (step.options ?? []).map((option) => option.trim()).filter(Boolean),
@@ -212,9 +278,16 @@ export const studyRoundTripsCleanly = (
 
   const rewritten =
     kind === 'survey'
-      ? toSurveySteps(authored.map(toSurveyQuestion).map(toSurveyPayloadStep), studyId)
+      ? toSurveySteps(
+          withStoredIdentity(authored.map(toSurveyQuestion), authored, studyId).map(
+            toSurveyPayloadStep
+          ),
+          studyId
+        )
       : toStudySteps(
-          authored.map(toInlineStudyStep).map(toInlineStudyPayloadStep),
+          withStoredIdentity(authored.map(toInlineStudyStep), authored, studyId).map(
+            toInlineStudyPayloadStep
+          ),
           studyId,
           getPrimaryTargetUrl(steps) ?? undefined
         );

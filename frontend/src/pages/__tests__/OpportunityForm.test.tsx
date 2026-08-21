@@ -23,6 +23,18 @@ import {
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 
+/**
+ * The shape of an identity minted for a task that has never been saved.
+ *
+ * A v4 uuid from `mintClientId`, matched rather than compared, because the
+ * value is random by design. Written as a pattern rather than `expect.any
+ * (String)` so that the positional fallback - `step_1`, the very thing F2
+ * replaced - would fail it.
+ */
+const A_MINTED_IDENTITY = expect.stringMatching(
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+);
+
 // OpportunityForm is an admin-gated, context-heavy page. Model a signed-in
 // researcher_admin so the auth gate lets the form render, and keep the theme
 // light so the WebGL background (rendered only when isDark) never mounts under jsdom.
@@ -821,15 +833,23 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     // The whole array, in order, carrying the fields a shallow or lossy copy
     // would flatten: the options and the required flag.
     expect(payload.inline_study?.steps).toEqual([
-      { type: 'instruction', prompt: 'Open the basket' },
-      { type: 'open_text', prompt: 'What did you try first?' },
+      // FRESHLY MINTED identities, not the source's. A copied task is a new
+      // task; inheriting `step_1`..`step_3` would leave two studies claiming
+      // the same keys for no benefit.
+      { step_key: A_MINTED_IDENTITY, type: 'instruction', prompt: 'Open the basket' },
+      { step_key: A_MINTED_IDENTITY, type: 'open_text', prompt: 'What did you try first?' },
       {
+        step_key: A_MINTED_IDENTITY,
         type: 'single_choice',
         prompt: 'Which delivery would you pick?',
         options: ['Standard', 'Next day'],
         is_required: true
       }
     ]);
+    // Three DIFFERENT identities. `expect.stringMatching` is satisfied by three
+    // copies of one value, and three tasks sharing an identity would store as a
+    // single row - a copied task list silently two tasks shorter.
+    expect(new Set(payload.inline_study?.steps?.map((step) => step.step_key)).size).toBe(3);
     expect(payload.inline_study?.copied_from_study_id).toBe('study_demo');
     // The source's stored duration is carried rather than re-derived: a copy of
     // a decision is still a decision. linkedStudy() stores 12; the automatic
@@ -1035,7 +1055,21 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       .mockResolvedValueOnce(draft as never)
       .mockResolvedValue({ ...draft, firsthand_study_id: 'study_created_on_save' } as never);
     vi.mocked(getFirstHandStudy).mockResolvedValue(
-      linkedStudy({ steps: [{ step_id: 's1', order: 1, type: 'instruction', prompt: 'Find the export button' }] })
+      // The step id is namespaced under the study id, as every id this product
+      // writes is. A bare `s1` here is not merely unrealistic since F2: an id
+      // outside the study's namespace has no recoverable identity, so the form
+      // correctly refuses to author the study at all and the assertions below
+      // fail on a missing editor rather than on what they are about.
+      linkedStudy({
+        steps: [
+          {
+            step_id: 'study_demo_step_1',
+            order: 1,
+            type: 'instruction',
+            prompt: 'Find the export button'
+          }
+        ]
+      })
     );
     vi.mocked(updateOpportunity).mockResolvedValueOnce({
       id: 'opp-3',
@@ -1132,7 +1166,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
 
     const secondPayload = updatedPayload(1);
     expect(secondPayload.inline_study?.steps).toEqual([
-      { type: 'instruction', prompt: 'Find the export button' }
+      // Recovered from the stored id the re-read returned
+      // (`study_demo_step_1`), not minted again. The second save therefore
+      // writes the SAME step id as the first - which is what keeps an answer
+      // collected between the two saves attached to the task that produced it.
+      { step_key: 'step_1', type: 'instruction', prompt: 'Find the export button' }
     ]);
     // Exactly one of the two, never both - the backend refuses a payload
     // carrying an id alongside authored content rather than guessing.

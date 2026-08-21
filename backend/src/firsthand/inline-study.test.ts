@@ -215,3 +215,55 @@ describe("inlineStudySchema", () => {
     expect(result.success && result.data.copied_from_study_id).toBe("study_source");
   });
 });
+
+/**
+ * F2, on the recorded twin. See `survey-authoring.test.ts` for the fuller set;
+ * this pins that the two vocabularies behave identically, because they are the
+ * two places a fix applied to one and forgotten on the other silently rots.
+ */
+describe("a task keeps its identity when the author reorders the list", () => {
+  const keyed = [
+    { step_key: "alpha", type: "instruction" as const, prompt: "Open the basket" },
+    { step_key: "bravo", type: "instruction" as const, prompt: "Check out" },
+    { step_key: "charlie", type: "open_text" as const, prompt: "What stalled you?" }
+  ];
+
+  it("derives the stored id from the key rather than from the position", () => {
+    expect(toStudySteps(keyed, "study_x").map((step) => step.step_id)).toEqual([
+      "study_x_alpha",
+      "study_x_bravo",
+      "study_x_charlie",
+      "study_x_step_end"
+    ]);
+  });
+
+  it("gives a reversed list the SAME ids in the reversed order", () => {
+    const authoredIds = (steps: ReturnType<typeof toStudySteps>) =>
+      steps.filter((step) => step.type !== "end").map((step) => step.step_id);
+
+    expect(authoredIds(toStudySteps([...keyed].reverse(), "study_x"))).toEqual(
+      [...authoredIds(toStudySteps(keyed, "study_x"))].reverse()
+    );
+  });
+
+  it("keeps the positional id for a task that carries no key", () => {
+    expect(
+      toStudySteps([{ type: "open_text", prompt: "A" }], "study_x")[0].step_id
+    ).toBe("study_x_step_1");
+  });
+
+  it("refuses two tasks claiming the same identity", () => {
+    // `inlineStudySchema` is NOT `.strict()`, so this rule has to be a refusal
+    // rather than a dropped field - an undeclared key here vanishes in silence.
+    const result = inlineStudySchema.safeParse({
+      consent_text: "This session records your screen.",
+      steps: [
+        { step_key: "alpha", type: "open_text", prompt: "A" },
+        { step_key: "alpha", type: "open_text", prompt: "B" }
+      ]
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(["steps", 1, "step_key"]);
+  });
+});

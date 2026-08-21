@@ -43,6 +43,7 @@ const copies: Array<{ source: string; copy: string }> = [
   { source: 'shared/firsthand/contract.ts', copy: 'src/shared/firsthand/contract.ts' },
   { source: 'shared/firsthand/inline-study.ts', copy: 'src/shared/firsthand/inline-study.ts' },
   { source: 'shared/firsthand/publish-readiness.ts', copy: 'src/shared/firsthand/publish-readiness.ts' },
+  { source: 'shared/firsthand/step-identity.ts', copy: 'src/shared/firsthand/step-identity.ts' },
   { source: 'shared/firsthand/study-input.ts', copy: 'src/shared/firsthand/study-input.ts' },
   { source: 'shared/firsthand/survey-answers.ts', copy: 'src/shared/firsthand/survey-answers.ts' },
   { source: 'shared/firsthand/survey-authoring.ts', copy: 'src/shared/firsthand/survey-authoring.ts' },
