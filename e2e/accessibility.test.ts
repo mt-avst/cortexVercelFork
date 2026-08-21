@@ -20,6 +20,83 @@ import AxeBuilder from '@axe-core/playwright';
  * confident failures for somebody else's application.
  */
 
+/**
+ * Assert a clean scan, and say what failed in a form somebody can act on.
+ *
+ * `expect(violations).toEqual([])` on a failing scan prints the whole axe result
+ * object - upwards of a thousand lines of nested JSON for a page with a handful
+ * of contrast failures - and the CSS selector you actually need is buried in it.
+ * This logs one line per node first: rule, impact, selector, and the measured
+ * reason. The assertion underneath is unchanged, so the test still fails on
+ * exactly what it failed on before.
+ */
+interface AxeNode {
+  target: unknown[];
+  failureSummary?: string;
+}
+
+interface AxeViolation {
+  id: string;
+  impact?: string | null;
+  nodes: AxeNode[];
+}
+
+const expectNoViolations = (results: { violations: AxeViolation[] }, label: string): void => {
+  if (results.violations.length > 0) {
+    const lines = results.violations.flatMap((violation) =>
+      violation.nodes.map((node) => {
+        const target = node.target.map((part) => String(part)).join(' ');
+        const reason = (node.failureSummary || '').replace(/\s+/g, ' ').trim();
+        return `  [${violation.impact || 'unknown'}] ${violation.id} - ${target}\n      ${reason}`;
+      })
+    );
+    console.log(
+      `\n${label}: ${lines.length} axe node(s) across ${results.violations.length} rule(s)\n${lines.join('\n')}\n`
+    );
+  }
+  expect(results.violations).toEqual([]);
+};
+
+/**
+ * Refuse a green result that was green because axe declined to look.
+ *
+ * axe puts a node in `incomplete` - not `violations` - when it cannot work out
+ * what is behind it, and nothing here has ever asserted on that bucket. In dark
+ * mode that is not a rare edge case: the decorative neural canvas is a fixed,
+ * full-viewport element, so axe called the entire upcoming card "overlapped by
+ * another element" and reported ZERO violations for a page carrying a 3.87
+ * contrast failure on its only primary button.
+ *
+ * A handful of `incomplete` entries are unavoidable and unrelated - the header's
+ * gradient-filled nav buttons among them - so this does not demand an empty
+ * bucket. It demands that nothing this page exists to render ended up in it.
+ */
+const expectBookingContrastActuallyMeasured = (
+  results: { incomplete: AxeViolation[] },
+  label: string
+): void => {
+  /* One element axe will not judge in either theme, and it is not a defect.
+     It reports `.booking-reschedule-note` as "partially overlaps other
+     elements", but the footer's boxes do not overlap - the actions row ends at
+     698.3 and the note starts at 708.3 - so this is axe's heuristic, not a
+     layout fault. Measured directly instead: #4b5563 on #f8fafc is 7.22 in
+     light, #cbcbcb on #09090b is 12.2 in dark.
+
+     Named individually rather than loosening the pattern, so that a new booking
+     element sliding into the `incomplete` bucket still fails this. */
+  const knownUnmeasurable = ['.booking-reschedule-note'];
+
+  const deferred = results.incomplete
+    .filter((rule) => rule.id === 'color-contrast')
+    .flatMap((rule) => rule.nodes.map((node) => node.target.map(String).join(' ')))
+    .filter((target) => /\.booking-|\.btn-booking-|\.my-bookings-/.test(target))
+    .filter((target) => !knownUnmeasurable.includes(target));
+  if (deferred.length > 0) {
+    console.log(`\n${label}: axe declined to measure ${deferred.length} booking node(s)\n  ${deferred.join('\n  ')}\n`);
+  }
+  expect(deferred).toEqual([]);
+};
+
 test.describe('Accessibility Tests', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     // Set viewport size
@@ -335,7 +412,157 @@ test.describe('Accessibility Tests', () => {
     }
   });
 
-  test('My Bookings page should be accessible', async ({ page }) => {
+  /**
+   * My Bookings, empty and populated.
+   *
+   * The stub used to be `**\/api\/bookings\/me**`, and the page calls
+   * `/bookings/my/bookings`. Nothing matched, the request failed, and the test
+   * scanned the "Failed to load bookings" error state believing it was scanning
+   * the empty state - so an empty My Bookings had never actually been checked
+   * either.
+   *
+   * Both states now get a scan. The populated one matters most: every card on
+   * this page is data, so with no fixture the whole card - title, description,
+   * metadata list, badges, outcome - is a region axe has never once looked at.
+   * A local run against a seeded stack found 38 colour-contrast nodes there
+   * that no backend-free run could reach.
+   */
+
+  const bookingsRoute = '**/api/bookings/my/bookings';
+  const sessionEventsRoute = '**/api/me/session-events';
+
+  const hoursFromNow = (hours: number) =>
+    new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+
+  /* Relative, never literal: a fixture dated `2026-01-05` stops being a past
+     booking the moment the clock passes it, and the card it was there to render
+     quietly disappears from the scan. */
+  const populatedBookings = {
+    upcoming: [
+      {
+        id: 'booking-upcoming-1',
+        user_id: 'user-1',
+        session_id: 'session-upcoming-1',
+        status: 'booked',
+        created_at: hoursFromNow(-72),
+        updated_at: hoursFromNow(-72),
+        session_start_time: hoursFromNow(48),
+        session_end_time: hoursFromNow(49),
+        session_capacity: 5,
+        session_location: 'https://meet.google.com/abc-defg-hij',
+        opportunity_title: 'Upcoming moderated interview',
+        opportunity_type: 'interview',
+        opportunity_purpose: 'Understand how researchers plan a round of sessions.',
+        owner_name: 'Ada Researcher',
+        owner_email: 'ada@example.com',
+      },
+    ],
+    /* The past section is where the contrast failures live, because it is the
+       only place `.booking-card-past` is applied. One card per visual variant
+       the section can produce: a confirmed attendance, a rejected one, an
+       unresolved one, and a cancellation. */
+    past: [
+      {
+        id: 'booking-past-approved',
+        user_id: 'user-1',
+        session_id: 'session-past-1',
+        status: 'booked',
+        completion_status: 'approved',
+        completed_at: hoursFromNow(-48),
+        created_at: hoursFromNow(-240),
+        updated_at: hoursFromNow(-48),
+        session_start_time: hoursFromNow(-72),
+        session_end_time: hoursFromNow(-71),
+        session_capacity: 5,
+        opportunity_title: 'Past usability test, attendance confirmed',
+        opportunity_type: 'test',
+        opportunity_purpose: 'Check whether the booking flow reads clearly on a phone.',
+        owner_name: 'Ada Researcher',
+        owner_email: 'ada@example.com',
+      },
+      {
+        id: 'booking-past-rejected',
+        user_id: 'user-1',
+        session_id: 'session-past-2',
+        status: 'booked',
+        completion_status: 'rejected',
+        created_at: hoursFromNow(-360),
+        updated_at: hoursFromNow(-120),
+        session_start_time: hoursFromNow(-168),
+        session_end_time: hoursFromNow(-167),
+        session_capacity: 8,
+        opportunity_title: 'Past poll, not confirmed',
+        opportunity_type: 'poll',
+        opportunity_purpose: 'Gauge which onboarding step people abandon.',
+        owner_name: 'Grace Researcher',
+        owner_email: 'grace@example.com',
+      },
+      {
+        id: 'booking-past-pending',
+        user_id: 'user-1',
+        session_id: 'session-past-3',
+        status: 'booked',
+        created_at: hoursFromNow(-400),
+        updated_at: hoursFromNow(-200),
+        session_start_time: hoursFromNow(-200),
+        session_end_time: hoursFromNow(-199),
+        session_capacity: 3,
+        opportunity_title: 'Past survey, awaiting confirmation',
+        opportunity_type: 'survey',
+        opportunity_purpose: 'Collect views on the new results export.',
+        owner_name: 'Grace Researcher',
+        owner_email: 'grace@example.com',
+      },
+      {
+        id: 'booking-past-cancelled',
+        user_id: 'user-1',
+        session_id: 'session-past-4',
+        status: 'cancelled',
+        cancelled_at: hoursFromNow(-300),
+        created_at: hoursFromNow(-500),
+        updated_at: hoursFromNow(-300),
+        session_start_time: hoursFromNow(-264),
+        session_end_time: hoursFromNow(-263),
+        session_capacity: 4,
+        opportunity_title: 'Cancelled question session',
+        opportunity_type: 'question',
+        opportunity_purpose: 'Ask five people what they expect the Cortex tab to do.',
+        owner_name: 'Ada Researcher',
+        owner_email: 'ada@example.com',
+      },
+    ],
+  };
+
+  /* Self-guided sessions render `.booking-card-past` too, from a different
+     endpoint and in a section that only appears when this array is non-empty -
+     so an empty stub leaves it unscanned exactly as an empty bookings stub
+     leaves the cards unscanned. */
+  const populatedSessionEvents = [
+    {
+      id: 'event-1',
+      opportunity_id: 'opp-1',
+      opportunity_title: 'Self-guided unmoderated walkthrough',
+      firsthand_session_id: 'fh-session-1',
+      event_type: 'session_completed',
+      occurred_at: hoursFromNow(-96),
+      received_at: hoursFromNow(-96),
+    },
+    {
+      id: 'event-2',
+      opportunity_id: 'opp-2',
+      opportunity_title: 'Self-guided session that was abandoned',
+      firsthand_session_id: 'fh-session-2',
+      event_type: 'session_abandoned',
+      occurred_at: hoursFromNow(-140),
+      received_at: hoursFromNow(-140),
+    },
+  ];
+
+  const stubParticipant = async (
+    page: import('@playwright/test').Page,
+    bookings: unknown,
+    sessionEvents: unknown
+  ) => {
     await page.route('**/api/me', async (route) => {
       await route.fulfill({
         status: 200,
@@ -348,20 +575,100 @@ test.describe('Accessibility Tests', () => {
         }),
       });
     });
-    await page.route('**/api/bookings/me**', async (route) => {
+    await page.route(bookingsRoute, async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ upcoming: [], past: [] }),
+        body: JSON.stringify(bookings),
       });
     });
+    await page.route(sessionEventsRoute, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(sessionEvents),
+      });
+    });
+  };
+
+  /**
+   * Prove the fixture actually rendered before trusting a clean scan.
+   *
+   * axe reports no violations on a page with no cards on it, so a stub that
+   * silently stopped matching - a renamed route, a changed response shape -
+   * would turn this test green while deleting everything it exists to cover.
+   * That is the failure the old `bookings/me` stub had, undetected.
+   */
+  const expectPopulatedBookings = async (page: import('@playwright/test').Page) => {
+    await expect(page.locator('.booking-card-upcoming')).toHaveCount(1);
+    await expect(page.locator('.booking-card-past')).toHaveCount(
+      populatedBookings.past.length + populatedSessionEvents.length
+    );
+    /* Two, not one: the cancelled booking and the abandoned self-guided
+       session share this badge class. */
+    await expect(page.locator('.booking-badge-cancelled')).toHaveCount(2);
+    await expect(page.locator('.booking-outcome-approved')).toHaveCount(1);
+  };
+
+  test('My Bookings page (empty) should be accessible', async ({ page }) => {
+    await stubParticipant(page, { upcoming: [], past: [] }, []);
     await page.goto('/');
     await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
     await page.goto('/my-bookings');
     await page.waitForLoadState('load');
     await page.waitForTimeout(500);
+    await expect(page.locator('.booking-card-empty')).toHaveCount(2);
     const results = await new AxeBuilder({ page }).analyze();
-    expect(results.violations).toEqual([]);
+    expectNoViolations(results, 'My Bookings (empty)');
+  });
+
+  test('My Bookings page (populated) should be accessible', async ({ page }) => {
+    await stubParticipant(page, populatedBookings, populatedSessionEvents);
+    await page.goto('/');
+    await page.evaluate(() => sessionStorage.setItem('loginRedirect', 'true'));
+    await page.goto('/my-bookings');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
+    await expectPopulatedBookings(page);
+    const results = await new AxeBuilder({ page }).analyze();
+    expectNoViolations(results, 'My Bookings (populated, light)');
+    expectBookingContrastActuallyMeasured(results, 'My Bookings (populated, light)');
+  });
+
+  /**
+   * The same page in dark mode.
+   *
+   * Past cards are dimmed in both themes, by two different rules, so a fix
+   * verified in one theme says nothing about the other. The theme is read from
+   * localStorage at first render, so it has to be set on the origin before the
+   * app mounts.
+   */
+  test('My Bookings page (populated, dark mode) should be accessible', async ({ page }) => {
+    await stubParticipant(page, populatedBookings, populatedSessionEvents);
+    await page.goto('/');
+    await page.evaluate(() => {
+      sessionStorage.setItem('loginRedirect', 'true');
+      localStorage.setItem('theme', 'dark');
+    });
+    await page.goto('/my-bookings');
+    await page.waitForLoadState('load');
+    await page.waitForTimeout(500);
+    await expect(page.locator('body.theme-dark')).toHaveCount(1);
+    await expectPopulatedBookings(page);
+    /* Remove the decorative background before scanning. It is a fixed,
+       full-viewport canvas, and with it in place axe defers on every card
+       instead of measuring it - 22 nodes `incomplete`, 0 violations, on a page
+       that had a real failure. Its own fill is #030305, the exact colour
+       `body.theme-dark .my-bookings-page` paints underneath it, so taking it
+       out changes no composited background: it changes only whether axe is
+       willing to compute one. */
+    await page.evaluate(() => {
+      document.querySelectorAll('.slow-neural-background').forEach((node) => node.remove());
+    });
+    await page.waitForTimeout(200);
+    const results = await new AxeBuilder({ page }).analyze();
+    expectNoViolations(results, 'My Bookings (populated, dark)');
+    expectBookingContrastActuallyMeasured(results, 'My Bookings (populated, dark)');
   });
 
   test('Feedback page should be accessible', async ({ page }) => {
