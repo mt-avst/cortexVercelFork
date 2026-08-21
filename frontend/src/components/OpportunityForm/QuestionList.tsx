@@ -15,6 +15,7 @@ import {
   mintClientId,
   type WithClientId
 } from '../../lib/opportunity-authoring/client-ids';
+import { answerCountFor, removalMessage } from '../../lib/opportunity-authoring/answer-counts';
 import './question-list.css';
 import FieldError from './FieldError';
 import { resolveMessage } from '../../lib/opportunity-authoring/error-summary';
@@ -81,6 +82,20 @@ export interface QuestionListProps<T extends AuthoredItem> {
   }) => React.ReactNode;
   addLabel: string;
   emptyMessage: string;
+  /**
+   * How many answers each item has already collected, keyed by `_clientId`.
+   *
+   * Optional, and absent for the recorded task list on purpose rather than by
+   * omission: "Removed questions" is a section of the SURVEY results view, so
+   * the sentence this drives would name a place a task list's author cannot go
+   * and look. Wiring it up there means giving recorded studies the same
+   * surfacing first.
+   *
+   * `null` is not the same as absent-and-therefore-empty. It means the count
+   * could not be read, and the confirmation says so rather than implying there
+   * are none - see `removalMessage`.
+   */
+  answerCounts?: Record<string, number> | null;
 }
 
 const summaryOf = (prompt: string): string => {
@@ -124,7 +139,8 @@ function QuestionList<T extends AuthoredItem>({
   promptPlaceholder,
   renderTypeFields,
   addLabel,
-  emptyMessage
+  emptyMessage,
+  answerCounts
 }: QuestionListProps<T>) {
   const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [announcement, setAnnouncement] = useState('');
@@ -259,20 +275,86 @@ function QuestionList<T extends AuthoredItem>({
     );
   };
 
+  /**
+   * How many answers this card has collected, or undefined when that could not
+   * be read.
+   *
+   * A list that does not offer counts at all - the recorded task list, which
+   * has no "Removed questions" surface to send anyone to - is not the same as
+   * one whose counts failed to load, and must not inherit the "could not be
+   * checked" sentence for a check nothing ever tried to make. It answers zero,
+   * which is what puts that list back on exactly the wording it had before this
+   * existed.
+   */
+  const offersAnswerCounts = answerCounts !== undefined;
+  const answersFor = (item: WithClientId<T>): number | undefined =>
+    offersAnswerCounts ? answerCountFor(item._clientId, answerCounts) : 0;
+
+  /**
+   * The count for the card an open dialog is about, or undefined when that card
+   * is no longer in the list.
+   *
+   * Resolved by id, not by the index captured when the dialog opened: the list
+   * can change underneath it, because the form re-reads itself after every
+   * successful save, and a count read by position would name a different
+   * question's answers in a sentence nothing else on screen contradicts.
+   *
+   * BOTH lookups can miss - the card gone AND the captured index now past the
+   * end, which is removing the last of three from outside with the dialog open
+   * - and the old code dereferenced the result either way, so the whole
+   * authoring surface went down with a render-time TypeError. The confirm
+   * handler below already guarded this exact condition, which is what made the
+   * omission an inconsistency rather than a decision.
+   */
+  const answersOfPending = (pending: { id: string; index: number }): number | undefined => {
+    const target =
+      items.find((item) => item._clientId === pending.id) ?? items[pending.index];
+    return target ? answersFor(target) : undefined;
+  };
+
   const removeAt = (index: number) => {
     const removed = items[index];
+    const answers = answersFor(removed);
     setExpandedIds((previous) => previous.filter((id) => id !== removed._clientId));
     onChange(items.filter((_, i) => i !== index));
-    setAnnouncement(`${Noun} ${index + 1} removed.`);
+    // Announced with the consequence, not just the act. A screen reader user
+    // who confirmed the dialog has already been told the number; one whose
+    // card had no answers hears the sentence this list has always said.
+    setAnnouncement(
+      answers === undefined
+        ? // The dialog just promised that any answers are kept. Falling back to
+          // the bare sentence here told the one reader who cannot see the
+          // screen least, having shown them the most cautious dialog.
+          `${Noun} ${index + 1} removed. Whether it had been answered could not be checked; any answers are kept under Removed questions in the results.`
+        : answers > 0
+          ? `${Noun} ${index + 1} removed. Its ${answers} ${
+              answers === 1 ? 'answer is' : 'answers are'
+            } kept under Removed questions in the results.`
+          : `${Noun} ${index + 1} removed.`
+    );
   };
 
   /**
-   * Confirmed only when there is something to lose. Confirming the removal of
-   * an empty card the author just added is a dialog that teaches people to
-   * dismiss dialogs.
+   * Confirmed when there is something to lose - and since F2 that is a wider
+   * question than it was.
+   *
+   * It used to mean only "has the author written anything into this card",
+   * because a question of a study with answers could not be removed at all:
+   * the API refused the save outright. F2 allows it, so a card can now be worth
+   * confirming for a reason that has nothing to do with what is typed in it -
+   * three hundred people may have answered it. A prompt cleared before the
+   * Remove button is pressed would otherwise skip the dialog entirely.
+   *
+   * The empty-card exemption stays for everything else. Confirming the removal
+   * of a blank card the author just added is a dialog that teaches people to
+   * dismiss dialogs, which is what makes the one that matters ineffective.
    */
   const requestRemove = (index: number) => {
-    if (!hasAuthoredContent(items[index])) {
+    const answers = answersFor(items[index]);
+    const worthConfirming =
+      hasAuthoredContent(items[index]) || answers === undefined || answers > 0;
+
+    if (!worthConfirming) {
       removeAt(index);
       return;
     }
@@ -531,9 +613,16 @@ function QuestionList<T extends AuthoredItem>({
         title={`Remove this ${noun}?`}
         message={
           pendingRemoval
-            ? `${Noun} ${
-                pendingRemoval.index + 1
-              } and everything written in it will be removed from this list of ${nounPlural}. This cannot be undone.`
+            ? removalMessage(
+                pendingRemoval.index + 1,
+                noun,
+                nounPlural,
+                // Resolved by id for the same reason the confirm handler below
+                // is: the list can change under an open dialog, and a count
+                // read by the index captured when it opened would name a
+                // different question's answers.
+                answersOfPending(pendingRemoval)
+              )
             : ''
         }
         confirmLabel={`Remove ${noun}`}

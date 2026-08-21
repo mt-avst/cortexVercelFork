@@ -34,6 +34,24 @@ export interface FirstHandStudyWithSteps {
    * own surface to read-only.
    */
   can_edit?: boolean;
+  /**
+   * How many answers each question has collected, keyed by its step key -
+   * which is the same value the authoring form carries as `_clientId` on a
+   * question card.
+   *
+   * A question absent from the map has no answers; there is no row to count.
+   *
+   * `null` means the count could not be READ, which is a third state and not a
+   * synonym for the empty map. The empty map is a known "nothing has been
+   * answered"; null is "the runtime database did not answer". A caller that
+   * collapses them tells an author a question is safe to remove at exactly the
+   * moment the database is under the pressure that suggests participants are
+   * answering it.
+   *
+   * Only GET sends it, like `can_edit` - so undefined means "not stated" and
+   * must not be read as "no answers" either.
+   */
+  answer_counts?: Record<string, number> | null;
 }
 
 export const getFirstHandStudy = async (
