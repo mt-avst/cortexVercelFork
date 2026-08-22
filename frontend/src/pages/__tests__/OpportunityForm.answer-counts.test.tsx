@@ -485,7 +485,17 @@ describe('removing a question people have answered', () => {
     expect(dialog).not.toHaveTextContent('has collected');
   });
 
-  it('warns per card but cannot summarise when the count could not be read', async () => {
+  it('still summarises a removal when the count could not be read', async () => {
+    /*
+     * This test used to assert the opposite, and asserting the opposite was the
+     * bug. `answersDetachedBy` derived everything from the counts map, so an
+     * unreadable map meant an empty removal list and no dialog at all - the one
+     * warning that covers the case no per-card dialog can, disappearing exactly
+     * when the database is under pressure.
+     *
+     * What cannot be enumerated is HOW MANY ANSWERS. WHICH QUESTIONS is known
+     * from the stored identities either way.
+     */
     vi.mocked(getFirstHandStudy).mockResolvedValue(study(null) as never);
 
     renderEdit();
@@ -497,9 +507,29 @@ describe('removing a question people have answered', () => {
 
     saveFromReview();
 
-    // Nothing to enumerate: with no counts there is no list of answered
-    // questions to compare against, so the honest summary is no summary. The
-    // per-card sentence above is where the author is told.
+    expect(
+      await screen.findByText(/Remove 1 question that may have been answered\?/)
+    ).toBeInTheDocument();
+    // Claims only what it knows: a removal, not a number of answers.
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('collected');
+    expect(updateOpportunity).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Save and remove them$/ }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not warn about an unreadable count when nothing stored is removed', async () => {
+    // The other half of failing closed. An unreadable count on a save that
+    // removes nothing must stay silent, or every save of a study whose counts
+    // happen to be unavailable carries a dialog nobody needs.
+    vi.mocked(getFirstHandStudy).mockResolvedValue(study(null) as never);
+
+    renderEdit();
+    fireEvent.change(await screen.findByDisplayValue('Developer experience pulse'), {
+      target: { value: 'Developer experience pulse v2' }
+    });
+    saveFromReview();
+
     await waitFor(() => expect(updateOpportunity).toHaveBeenCalledTimes(1));
   });
 });
