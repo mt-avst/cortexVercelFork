@@ -214,33 +214,74 @@ test-backend:
     # suite - real infrastructure, not a unit test. 8 tests, reported as
     # skipped rather than passed, so the log never claims more than it ran.
     FIRSTHAND_SKIP_S3_TESTS: "1"
-    # Same bargain, different dependency. TWO vitest files -
-    # runtime-response-attachment-postgres.test.ts and
-    # studies-repository-autosave-postgres.test.ts - start a real Postgres and
-    # apply the firsthand migrations so that the constraints are actually
-    # evaluated rather than mocked away: 0004's per-statement
-    # UNIQUE (study_id, step_order), 0010's composite primary key, and 0015's
-    # composite foreign key, ON DELETE SET NULL and the CHECK requiring
-    # study_id and step_id to be NULL together.
+    # Same bargain, different dependency - but only for THIS job. THREE vitest
+    # files - runtime-response-attachment-postgres.test.ts,
+    # studies-repository-autosave-postgres.test.ts and
+    # survey-csv-export-postgres.test.ts - need a real Postgres so that
+    # constraints, predicates, parameters and ordering are actually evaluated
+    # rather than mocked away: 0004's per-statement UNIQUE (study_id,
+    # step_order), 0010's composite primary key, 0015's composite foreign key,
+    # ON DELETE SET NULL and the CHECK requiring study_id and step_id to be
+    # NULL together, and the survey export's tenant-isolation predicate.
     #
-    # The first exists because its mocked companion asserted the right SQL
-    # string while that statement wrote a row the CHECK refuses, aborting a
-    # participant's whole session save. The second exists because D2 turned
-    # updateStudy into something a timer calls every few seconds, and "a
-    # hundred saves leave one study" is a claim about rows that no individual
-    # response can make.
-    #
-    # What that costs: those 11 tests do NOT run here, and no other job in this
-    # pipeline evaluates a database constraint. The shape-level assertions in
-    # the mocked companions DO run, so a change to a statement is still caught
-    # here - what is not caught is a change to what Postgres does with it. They
-    # run locally, where Docker is available.
+    # Skipped HERE because this job has no database. They are NOT skipped in
+    # the pipeline: test-backend-db below runs all sixteen of them against a
+    # Postgres service. That job is the reason this comment no longer ends
+    # with a list of things nothing checks.
     FIRSTHAND_SKIP_DB_TESTS: "1"
   script:
     - npm ci
     - cd backend && npm ci
     - npm test
     - npm run test:vitest
+
+# The suites that need a real database, which until now ran nowhere but on a
+# developer's machine.
+#
+# WHY THIS JOB EXISTS. The three *-postgres.test.ts files could only obtain a
+# database by starting a container, and these runners are tagged no-docker - so
+# `docker info` failed and the only honest thing left was to skip. The cost was
+# not evenly spread: survey-csv-export-postgres.test.ts is the only place the
+# survey CSV export's tenant-isolation predicate is evaluated at all. Collapsing
+# the per-opportunity scope to a study-wide one - which hands one researcher
+# every participant another recruited under different consent wording - passed
+# 588 tests under this pipeline's old configuration and fails two by name under
+# this job. That gap is the whole reason for the job.
+#
+# A GitLab `services:` container is not Docker-in-Docker: the executor provides
+# it, so the no-docker tag does not forbid it. The tests take the connection
+# string from FIRSTHAND_TEST_DATABASE_URL and each file creates its own database
+# on the shared server, because they all migrate into the same `firsthand`
+# schema and TRUNCATE it between tests - pointed at one database they would
+# truncate each other's fixtures.
+#
+# DELIBERATELY NOT DATABASE_URL, which .test-base blanks along with POSTGRES_URL,
+# POSTGRESQL_URL and DB_URL: with any of those set, race-condition.test.ts opens
+# a real connection and fails against a schema that does not exist. This name is
+# inert to every test that does not ask for it.
+#
+# `vitest run postgres` is a filename filter, so a new *-postgres.test.ts file
+# is picked up here without anyone remembering to add it.
+test-backend-db:
+  extends: .test-base
+  services:
+    - name: registry.hub.docker.com/library/postgres:17-alpine
+      alias: postgres
+  variables:
+    # A fixed test constant, not a credential: the server is a throwaway
+    # service container reachable only from this job, and it holds nothing but
+    # fixtures this job seeds.
+    POSTGRES_PASSWORD: "firsthand-ci-postgres-not-a-real-secret" # gitleaks:allow
+    POSTGRES_USER: postgres
+    POSTGRES_DB: postgres
+    FIRSTHAND_TEST_DATABASE_URL: "postgres://postgres:firsthand-ci-postgres-not-a-real-secret@postgres:5432/postgres" # gitleaks:allow
+    # Same opt-out as test-backend: MinIO needs a Docker daemon, a service
+    # container will not do, and these runners have none.
+    FIRSTHAND_SKIP_S3_TESTS: "1"
+  script:
+    - npm ci
+    - cd backend && npm ci
+    - npx vitest run postgres
 
 test-frontend:
   extends: .test-base

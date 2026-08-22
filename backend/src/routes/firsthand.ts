@@ -21,13 +21,15 @@ import {
 } from '../../../shared/firsthand/study-input';
 import {
   answerCountsByStep,
-  listResponsesForStudy
+  listResponsesForStudy,
+  openSurveyCsvExport
 } from '../firsthand/survey-results-repository';
+import { writeSurveyCsv } from '../firsthand/survey-csv-response';
 import { isRuntimePoolRefusal } from '../firsthand/runtime-pool-admission';
 import { boundResultsRead } from '../middleware/results-read-concurrency';
 import { stepKeyOf } from '../../../shared/firsthand/step-identity';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
-import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
+import { toCsvContentDisposition } from '../firsthand/survey-csv';
 
 const router: Router = Router();
 
@@ -566,18 +568,28 @@ router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, b
   // refusal that had already set Content-Disposition would still offer a file.
   requireSuperadminForStudyResults(req);
 
-  const responses = await listResponsesForStudy(req.params.studyId);
-
-  // Both the header and the body are built before either header is set. A
-  // throw after setHeader would be served as text/csv, so the browser would
-  // download the error rather than show it.
+  // STREAMED, a participant at a time. Building the whole export first put up
+  // to 200,001 rows in the heap, then an object graph from them, then the body
+  // - a few hundred megabytes for one request on a single-replica 2Gi pod.
+  //
+  // Every refusal still happens BEFORE a byte is written. `openSurveyCsvExport`
+  // does both preflight reads in an ordinary awaited call precisely so its 413
+  // cannot arrive with the response already committed - a generator body would
+  // not have run until the first pull, by which point the status is fixed. Same
+  // reason the disposition is built here rather than inside the writer: a throw
+  // after setHeader is served as text/csv and downloaded rather than shown.
   const disposition = toCsvContentDisposition(stored.study.title);
-  const body = toResponsesCsv(stored.steps, responses);
+  const csvExport = await openSurveyCsvExport({
+    kind: 'study',
+    studyId: req.params.studyId
+  });
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
 
-  return res.send(body);
+  return writeSurveyCsv(res, stored.steps, csvExport.removedQuestions, csvExport.participants(), {
+    studyId: req.params.studyId
+  });
 }));
 
 // The HMAC callback receiver (POST /api/firsthand/callbacks) is gone: the merge

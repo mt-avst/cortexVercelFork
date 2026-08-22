@@ -18,9 +18,14 @@ import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler 
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
 import { createSession } from '../firsthand/session-create';
 import { findParticipantSessionForOpportunity } from '../firsthand/runtime-repository';
-import { listResponsesForOpportunity, studyHasResponses } from '../firsthand/survey-results-repository';
+import {
+  listResponsesForOpportunity,
+  openSurveyCsvExport,
+  studyHasResponses
+} from '../firsthand/survey-results-repository';
+import { writeSurveyCsv } from '../firsthand/survey-csv-response';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
-import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
+import { toCsvContentDisposition } from '../firsthand/survey-csv';
 import {
   canWriteStudy,
   claimStudyIfUnowned,
@@ -2691,22 +2696,26 @@ router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, boundR
   // written after these headers would still have offered the download.
   const context = await loadOpportunityResultsContext(req);
 
-  const responses = await listResponsesForOpportunity({
-    opportunityId: context.canonicalOpportunityId,
-    studyId: context.studyId
-  });
-
-  // Everything that can throw is done BEFORE the first setHeader, not just
-  // everything that can refuse. Express keeps an already-set Content-Type
-  // through the error handler, so a throw below this line would have served a
-  // JSON error object as a file called "<title> responses.csv".
+  // STREAMED, a participant at a time - see the study-wide export in
+  // routes/firsthand.ts for why. Everything that can throw is still done BEFORE
+  // the first setHeader, not just everything that can refuse: Express keeps an
+  // already-set Content-Type through the error handler, so a throw below this
+  // line would serve a JSON error object as a file called
+  // "<title> responses.csv". `openSurveyCsvExport` is awaited here, rather than
+  // its generator being pulled after the headers, for exactly that reason.
   const disposition = toCsvContentDisposition(context.title);
-  const body = toResponsesCsv(context.steps, responses);
+  const csvExport = await openSurveyCsvExport({
+    kind: 'opportunity',
+    studyId: context.studyId,
+    opportunityId: context.canonicalOpportunityId
+  });
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
 
-  return res.send(body);
+  return writeSurveyCsv(res, context.steps, csvExport.removedQuestions, csvExport.participants(), {
+    studyId: context.studyId
+  });
 }));
 
 // DELETE /api/opportunities/:id - Delete opportunity

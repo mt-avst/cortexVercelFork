@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postgres-instance";
+
 /**
  * The same attachment rules as `runtime-response-attachment.test.ts`, but
  * against a real Postgres with 0015 actually applied.
@@ -30,8 +32,6 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 const execFileAsync = promisify(execFile);
 const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 
-const POSTGRES_PASSWORD = "firsthand-test-secret";
-const containerName = `firsthand-attachment-pg-${process.pid}`;
 const migrateScript = path.resolve(__dirname, "../../scripts/firsthand-migrate.mjs");
 
 const STUDY_ID = "study_survey";
@@ -45,64 +45,8 @@ const DOOMED_PROMPT_AS_SHOWN = "How easy was that, as this participant was asked
 
 let databaseUrl: string;
 let pool: pg.Pool;
+let postgres: TestPostgres;
 
-async function startPostgresContainer(): Promise<string> {
-  try {
-    await execFileAsync("docker", ["info"], { timeout: 10_000 });
-  } catch {
-    throw new Error(
-      "Docker is required for the participant-response attachment tests (real " +
-        "Postgres, so 0015's constraints are actually evaluated). Start Docker, " +
-        "or set FIRSTHAND_SKIP_DB_TESTS=1 to opt out explicitly."
-    );
-  }
-
-  await execFileAsync("docker", [
-    "run",
-    "-d",
-    "--rm",
-    "--name",
-    containerName,
-    "-e",
-    `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`,
-    "-e",
-    "POSTGRES_DB=firsthand",
-    "-p",
-    "127.0.0.1:0:5432",
-    "postgres:17"
-  ]);
-
-  const { stdout } = await execFileAsync("docker", ["port", containerName, "5432"]);
-  const mappedPort = stdout.trim().split("\n")[0]?.split(":").pop();
-  if (!mappedPort) {
-    throw new Error(`Could not determine the mapped Postgres port: ${stdout}`);
-  }
-
-  const connectionString = `postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${mappedPort}/firsthand`;
-
-  // A real connection from the host, not `pg_isready`. The postgres image runs
-  // a temporary server on a unix socket while initdb finishes, so pg_isready
-  // reports ready, the container then restarts it, and a client that trusted
-  // the first signal gets "Connection terminated unexpectedly".
-  const deadline = Date.now() + 60_000;
-  while (true) {
-    const client = new pg.Client({ connectionString, connectionTimeoutMillis: 2_000 });
-    try {
-      await client.connect();
-      await client.query("SELECT 1");
-      await client.end();
-      break;
-    } catch {
-      await client.end().catch(() => {});
-      if (Date.now() > deadline) {
-        throw new Error("Postgres did not accept a connection within 60s.");
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-
-  return connectionString;
-}
 
 const payload = () => ({
   contract_version: "1.0" as const,
@@ -161,7 +105,8 @@ const storedResponses = async () => {
 
 describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () => {
   beforeAll(async () => {
-    databaseUrl = await startPostgresContainer();
+    postgres = await startTestPostgres("attachment");
+    databaseUrl = postgres.connectionString;
 
     await execFileAsync("node", [migrateScript], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -173,7 +118,7 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
 
   afterAll(async () => {
     await pool?.end().catch(() => {});
-    await execFileAsync("docker", ["rm", "-f", containerName]).catch(() => {});
+    await postgres?.stop();
   });
 
   beforeEach(async () => {

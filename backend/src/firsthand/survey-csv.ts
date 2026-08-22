@@ -9,7 +9,16 @@ import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
  * anyone could look at it.
  */
 
-const QUESTION_TYPES = new Set([
+/**
+ * Exported so the SQL that finds removed-question columns can BIND this exact
+ * set rather than restate it. The two disagreeing is what let a detached
+ * non-question row become a phantom column.
+ *
+ * `ReadonlySet` because it now decides which participant rows become columns.
+ * A live `Set` crossing a module boundary into a bound SQL parameter is a
+ * predicate any importer could widen, process-wide, from anywhere.
+ */
+export const QUESTION_TYPES: ReadonlySet<string> = new Set([
   "open_text",
   "single_choice",
   "multi_choice",
@@ -131,20 +140,102 @@ const REMOVED_COLUMN_SUFFIX = " (removed question)";
 const detachedKey = (stepType: string, prompt: string) =>
   `${stepType}\u0000${prompt}`;
 
-export function toResponsesCsv(
+/**
+ * A removed question, as a column. The identity a detached answer has left.
+ */
+export type RemovedQuestion = { type: string; prompt: string };
+
+/**
+ * The header row, given the study's questions and the removed questions the
+ * answer set turned out to contain.
+ *
+ * Split out so the streaming export can emit it before it has read a single
+ * answer row. Both entry points below call this; there is no second copy of
+ * the column ordering to drift.
+ */
+export function toCsvHeaderRow(
   steps: StudyStep[],
-  responses: StoredResponse[]
+  removed: RemovedQuestion[]
 ): string {
   const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
 
-  // Answers whose question has been removed. Exported rather than dropped: the
-  // participant answered, and an export that quietly omits it is a smaller data
-  // set than the researcher believes they are looking at.
+  // Every question keeps its column even when nobody answered it: an absent
+  // column reads as a question that was never asked. Prompts are
+  // researcher-authored free text, so they are neutralised like any other
+  // human-authored cell; the fixed "Participant" label is ours.
+  return [
+    cell("Participant", false),
+    ...questions.map((step) => cell(step.prompt, true)),
+    ...removed.map((question) =>
+      cell(neutralise(question.prompt) + REMOVED_COLUMN_SUFFIX, false)
+    )
+  ].join(",");
+}
+
+/**
+ * One participant's row, from that participant's answers alone.
+ *
+ * The unit the streaming export works in: a row needs nothing but this
+ * participant's answers plus the column layout, which is why the export can
+ * hold one participant in memory instead of two hundred thousand rows.
+ */
+export function toCsvParticipantRow(
+  steps: StudyStep[],
+  removed: RemovedQuestion[],
+  sessionId: string,
+  answers: StoredResponse[]
+): string {
+  const questions = steps.filter((step) => QUESTION_TYPES.has(step.type));
+
+  const byColumn = new Map<string, Record<string, unknown>>();
+  for (const row of answers) {
+    byColumn.set(
+      row.step_id ??
+        detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
+      row.response_payload ?? {}
+    );
+  }
+
+  const columnFor = (
+    step: Pick<StudyStep, "type">,
+    payload: Record<string, unknown> | undefined
+  ) => {
+    if (!payload) {
+      return "";
+    }
+
+    const { text, participantAuthored } = answerFor(step as StudyStep, payload);
+    return cell(text, participantAuthored);
+  };
+
+  return [
+    cell(sessionId, false),
+    ...questions.map((step) => columnFor(step, byColumn.get(step.step_id))),
+    ...removed.map((question) =>
+      columnFor(
+        { type: question.type as StudyStep["type"] },
+        byColumn.get(detachedKey(question.type, question.prompt))
+      )
+    )
+  ].join(",");
+}
+
+/**
+ * The removed questions a set of answers contains, in first-appearance order.
+ *
+ * Deduped by `(step_type, step_prompt)` because a detached answer's step id was
+ * nulled when the question was deleted, so the prompt is the only identity
+ * left. The streaming export asks the database for this same list directly, so
+ * the two must agree on both the key and the order - hence one function.
+ */
+export function removedQuestionColumns(
+  responses: StoredResponse[]
+): RemovedQuestion[] {
   const detached = responses.filter(
     (row) => row.step_id === null && QUESTION_TYPES.has(row.step_type)
   );
 
-  const removed = [
+  return [
     ...new Map(
       detached.map((row) => [
         detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
@@ -155,56 +246,50 @@ export function toResponsesCsv(
       ])
     ).values()
   ];
+}
 
-  // Every question keeps its column even when nobody answered it: an absent
-  // column reads as a question that was never asked. Prompts are
-  // researcher-authored free text, so they are neutralised like any other
-  // human-authored cell; the fixed "Participant" label is ours.
-  const header = [
-    cell("Participant", false),
-    ...questions.map((step) => cell(step.prompt, true)),
-    ...removed.map((question) =>
-      cell(neutralise(question.prompt) + REMOVED_COLUMN_SUFFIX, false)
-    )
-  ];
+/** CRLF is what RFC 4180 specifies and what Excel expects. */
+export const CSV_LINE_ENDING = "\r\n";
 
-  const byParticipant = new Map<string, Map<string, Record<string, unknown>>>();
+/**
+ * The whole export as one string.
+ *
+ * NOTHING IN PRODUCTION CALLS THIS ANY MORE - both export routes stream, a
+ * participant at a time, because building the whole thing put a few hundred
+ * megabytes in the heap of a single-replica pod. It is kept, and kept here
+ * beside the pieces it composes, because it is the ORACLE the streamed path is
+ * checked against: assembling the same emitters all at once must produce the
+ * same bytes as assembling them one participant at a time, and that is the only
+ * thing batching can change.
+ *
+ * REIMPLEMENTED ON THE PIECES ABOVE rather than kept as a second
+ * implementation. The streaming export and this one now share the column
+ * ordering, the escaping, the formula neutralisation and the removed-question
+ * keying, so an equivalence test between them is checking the READERS agree -
+ * not re-verifying two copies of the same logic that could drift apart.
+ */
+export function toResponsesCsv(
+  steps: StudyStep[],
+  responses: StoredResponse[]
+): string {
+  const removed = removedQuestionColumns(responses);
 
+  const byParticipant = new Map<string, StoredResponse[]>();
   for (const row of responses) {
-    const existing = byParticipant.get(row.session_id) ?? new Map();
-    existing.set(
-      row.step_id ??
-        detachedKey(row.step_type, row.step_prompt ?? UNKNOWN_REMOVED_PROMPT),
-      row.response_payload ?? {}
-    );
-    byParticipant.set(row.session_id, existing);
+    const group = byParticipant.get(row.session_id);
+    if (group) {
+      group.push(row);
+    } else {
+      byParticipant.set(row.session_id, [row]);
+    }
   }
 
-  const lines = [...byParticipant.entries()].map(([sessionId, answers]) => {
-    const columnFor = (
-      step: Pick<StudyStep, "type">,
-      payload: Record<string, unknown> | undefined
-    ) => {
-      if (!payload) {
-        return "";
-      }
+  const lines = [...byParticipant.entries()].map(([sessionId, answers]) =>
+    toCsvParticipantRow(steps, removed, sessionId, answers)
+  );
 
-      const { text, participantAuthored } = answerFor(step as StudyStep, payload);
-      return cell(text, participantAuthored);
-    };
-
-    const cells = questions.map((step) => columnFor(step, answers.get(step.step_id)));
-
-    const removedCells = removed.map((question) =>
-      columnFor(
-        { type: question.type as StudyStep["type"] },
-        answers.get(detachedKey(question.type, question.prompt))
-      )
-    );
-
-    return [cell(sessionId, false), ...cells, ...removedCells].join(",");
-  });
-
-  // CRLF is what RFC 4180 specifies and what Excel expects.
-  return [header.join(","), ...lines].join("\r\n") + "\r\n";
+  return (
+    [toCsvHeaderRow(steps, removed), ...lines].join(CSV_LINE_ENDING) +
+    CSV_LINE_ENDING
+  );
 }
