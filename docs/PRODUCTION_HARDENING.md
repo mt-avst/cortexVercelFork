@@ -189,13 +189,54 @@ weaken the connection.
 
 ## Quick verification after deploy
 
-1. `curl -s https://adaptalabs.kubera-playground.adaptavist.net/api/csrf-token` → `{"csrfToken":"..."}` (200) — backend reachable through the nginx proxy
-2. `curl -s https://adaptalabs.kubera-playground.adaptavist.net/api/opportunities` → JSON (200) — confirms DB + env (`GET /` is `optionalAuth`, so this works without a session)
-3. Open the site in a browser; log in via Okta; submit feedback once to confirm auth and DB end to end.
+Run the script. It answers the only question that matters - is the change I merged actually being served - and it fails on the cases that otherwise read as success:
 
-Or run the verification script: `node scripts/verify-production.mjs` (or `npm run verify:prod`). Optional: `BASE_URL=<url>`.
+```bash
+npm run verify:prod
+```
 
-Budget 15–30 minutes of ArgoCD lag after a green `trigger-deployment-prod` before concluding a deploy is stuck; verify by the served asset, not by job status.
+```
+OK   backend        up (89ms)
+OK   frontend      version.json served as JSON
+OK   opportunities  database and environment reachable
+
+     backend  revision: 096898d5b98042cb88f3f476b531a4fd151e84a3
+     frontend revision: 096898d5b98042cb88f3f476b531a4fd151e84a3
+```
+
+To assert a SPECIFIC commit is live, which is usually what you want after merging something:
+
+```bash
+EXPECTED_REVISION=<merge-commit-sha> npm run verify:prod
+```
+
+`BASE_URL=<url>` targets another host.
+
+By hand, the same two facts:
+
+```bash
+curl -s https://adaptalabs.kubera-playground.adaptavist.net/api/health
+curl -s https://adaptalabs.kubera-playground.adaptavist.net/version.json
+```
+
+Both report `revision`, the commit their image was built from. Then `git merge-base --is-ancestor <your-commit> <reported-revision>` settles whether your change is in it, and `git tag --contains <reported-revision>` recovers the release.
+
+### Four ways this looks fine and is not
+
+Each of these produced a wrong reading in practice, which is why the script checks for them:
+
+- **A green `semantic-release` job can publish nothing.** If main moves between your merge and the job running, it logs `The local branch main is behind the remote one, therefore a new version won't be published` and exits **successfully**. Two merges three minutes apart published neither. The job status is not evidence of a release - the tag list is
+- **`/version.json` returns HTTP 200 with `index.html`** on any frontend pod that predates the file, because nginx falls back to the SPA. A status-code check reports success against a frontend that has not rolled at all. Check the content type, or pipe it through a JSON parse so the HTML case fails loudly
+- **`revision: "unknown"` is not a deploy failure.** It means the pod rolled but the `APP_COMMIT_SHA` build argument never reached the image, so the deploy cannot be verified. Both endpoints always emit the field rather than omitting it, so this case is visible rather than silent
+- **The two halves report different commits mid-roll.** Frontend and backend roll independently. That is a deploy in progress, not a fault - re-run in a few minutes
+
+### Comparing against the right commit
+
+MRs here are squashed, so **the commit you pushed to your branch never lands on main**. What lands is a new commit under a merge commit, and the images are stamped with the merge commit's sha. Checking your branch tip will report "not deployed" for a change that shipped an hour ago. Use the merge commit, or work backwards from the reported revision with `git tag --contains`.
+
+### ArgoCD lag
+
+Measured at **5-10 minutes** after a green `trigger-deployment-prod` (5 min at 7.51.0, 7-8 min at 7.52.0), not the 15-30 minutes previously recorded here. Poll the endpoints rather than waiting a fixed period, and never conclude a deploy is stuck from job status alone.
 
 ## Pre-production sign-off
 
