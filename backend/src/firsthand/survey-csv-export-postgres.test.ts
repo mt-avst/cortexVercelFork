@@ -363,7 +363,7 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
       res,
       steps,
       csvExport.removedQuestions,
-      csvExport.participants(),
+      () => csvExport.participants(new AbortController().signal),
       { studyId: "study_export" }
     );
 
@@ -536,7 +536,7 @@ describe.skipIf(skipDbTests)("the streamed CSV export, against real Postgres", (
     const csvExport = await openSurveyCsvExport({ kind: "study", studyId: STUDY_ID });
 
     const seen: string[] = [];
-    for await (const participant of csvExport.participants()) {
+    for await (const participant of csvExport.participants(new AbortController().signal)) {
       seen.push(participant.sessionId);
     }
 

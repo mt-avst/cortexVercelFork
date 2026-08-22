@@ -23,6 +23,8 @@ jest.mock('../../firsthand/studies-repository', () => ({
 jest.mock('../../firsthand/survey-results-repository', () => {
   const listed = jest.fn();
   const scopeSpy = jest.fn();
+  /** Records the AbortSignal the ROUTE passed into the export. */
+  const signalSpy = jest.fn();
   return {
     listResponsesForStudy: listed,
     // Records the scope the ROUTE chose, as opportunities.test.ts already
@@ -33,6 +35,7 @@ jest.mock('../../firsthand/survey-results-repository', () => {
     // superadmin downloads "Study A responses.csv" and gets study B's rows,
     // filename and all, with nothing on screen saying so.
     __scopeSpy: scopeSpy,
+    __signalSpy: signalSpy,
     /**
      * A FAITHFUL STAND-IN, not a stub.
      *
@@ -67,7 +70,15 @@ jest.mock('../../firsthand/survey-results-repository', () => {
 
       return {
         removedQuestions: removedQuestionColumns(rows),
-        participants: async function* () {
+        // TAKES THE SIGNAL AND RECORDS IT, which is the only way the route's
+        // side of the deadline plumbing can be seen from here. The route hands
+        // `csvExport.participants` over uncalled; a mutation handing over
+        // `() => csvExport.participants(new AbortController().signal)` instead
+        // type-checks and passes the whole suite, and silently unbounds the
+        // database half of the export's deadline. A required parameter stops a
+        // caller passing NOTHING; it cannot stop them passing something ELSE.
+        participants: async function* (signal: AbortSignal) {
+          signalSpy(signal);
           for (const [sessionId, answers] of byParticipant) {
             yield { sessionId, answers };
           }
@@ -126,6 +137,9 @@ const mockListResponsesForStudy = (listResponsesForStudy as jest.MockedFunction<
 const mockAnswerCountsByStep = (answerCountsByStep as jest.MockedFunction<typeof answerCountsByStep>);
 // Not a real export of the module, so it is reached through the mock registry
 // rather than the import list - the same route opportunities.test.ts takes.
+const { __signalSpy: mockSignalSpy } = jest.requireMock<{ __signalSpy: jest.Mock }>(
+  '../../firsthand/survey-results-repository'
+);
 const { __scopeSpy: mockScopeSpy } = jest.requireMock<{ __scopeSpy: jest.Mock }>(
   '../../firsthand/survey-results-repository'
 );
@@ -1089,6 +1103,69 @@ describe('FirstHand Express router', () => {
       // returns the same shape, and `study` is gone rather than duplicated.
       expect(res.body.study).toBeUndefined();
       expect(mockListResponsesForStudy).toHaveBeenCalledWith('study_abc');
+    });
+
+    /**
+     * THE ROUTE'S HALF OF THE DEADLINE (cto/AdaptaLabs#5).
+     *
+     * `writeSurveyCsv` owns a wall-clock deadline and hands its AbortSignal to
+     * the generator factory, so the bound reaches the batch reads rather than
+     * only the writes to the socket. The route's whole job is to pass
+     * `csvExport.participants` UNCALLED.
+     *
+     * A review gate broke exactly that with the suite green: substituting
+     * `() => csvExport.participants(new AbortController().signal)` type-checks,
+     * passes 831 jest and 622 vitest tests, and leaves the database half of the
+     * export unbounded. Nothing here could see it, because the stand-in
+     * generator took no parameter at all.
+     */
+    it('hands the export the deadline signal the writer will abort', async () => {
+      studyOwnedBy('other-admin-9');
+      mockSignalSpy.mockClear();
+
+      await request(listening(superadminApp))
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(200);
+
+      expect(mockSignalSpy).toHaveBeenCalledTimes(1);
+      const signal = mockSignalSpy.mock.calls[0][0] as AbortSignal;
+
+      // It IS a signal, and it is the writer's own: `writeSurveyCsv` aborts on
+      // every exit, so the one it created ends up aborted and a substituted
+      // one does not. That is the whole discriminator, and it is why the
+      // writer aborts on the success path rather than only on the deadline.
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal.aborted).toBe(true);
+    });
+
+    it('hands over a signal that is live when the export starts', async () => {
+      // THE CONTROL for the assertion above. A signal that arrived already
+      // aborted would satisfy `aborted === true` while bounding nothing.
+      //
+      // RECORDED IN THE MOCK, ASSERTED IN THE TEST BODY, and the first version
+      // did it the other way round. A gate proved why that was worthless: an
+      // `expect` thrown inside a jest mock implementation is caught by
+      // `writeSurveyCsv`'s own catch, logged as an export failure and turned
+      // into `res.destroy()`, so supertest reports `socket hang up` and jest
+      // records NO assertion failure at all. Inverting the assertion to a
+      // provably false one still passed 3 of 3 once the destroy was also
+      // mutated away. A control that cannot report its own failure is worse
+      // than no control - and in this repository `socket hang up` is the most
+      // available wrong answer there is.
+      studyOwnedBy('other-admin-9');
+      mockSignalSpy.mockClear();
+
+      let abortedAtFirstPull: boolean | undefined;
+      mockSignalSpy.mockImplementationOnce((...args: unknown[]) => {
+        abortedAtFirstPull = (args[0] as AbortSignal).aborted;
+      });
+
+      await request(listening(superadminApp))
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(200);
+
+      expect(mockSignalSpy).toHaveBeenCalledTimes(1);
+      expect(abortedAtFirstPull).toBe(false);
     });
 
     it('lets a superadmin export the CSV', async () => {
