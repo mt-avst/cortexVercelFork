@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, useLocation } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -351,6 +351,120 @@ describe('a sequence of autosaves', () => {
       )
     );
   });
+
+  /**
+   * ...and rewriting it must not move the author.
+   *
+   * `isEdit` is `Boolean(id)`, so the rewrite above flips it from false to
+   * true. A `useEffect` keyed on `[isEdit, opportunityId, formData.type]` then
+   * fired and sent the author back to the first step - two seconds after they
+   * started, mid-sentence, with no message and nothing to undo. An author who
+   * walked on to Content & Details while the debounce ran simply lost their
+   * place, and every save after that was fine, so it read as a glitch.
+   *
+   * Asserted on the step the author is STANDING on, not on the URL: the test
+   * above already pins the address, and a form that rewrote the address
+   * correctly and threw the author to step 1 would pass it.
+   *
+   * The same effect had a second symptom - an author who clicked a step in the
+   * window between the content arriving and the effect running had that click
+   * silently undone, which is what made the answer-counts spec flaky at
+   * roughly 3%. Both are fixed by choosing the landing step in
+   * `loadOpportunity`, in the same batch as the content, so no later render
+   * can move anyone.
+   */
+  it('does not move the author off the step they are on when it rewrites', async () => {
+    renderCreateForm();
+    fillCreateThreshold();
+
+    // Walk on, as an author who keeps working while the 2s debounce runs.
+    fireEvent.click(await screen.findByRole('button', { name: /^Continue: / }));
+    // The TITLE of the step, not the button's whole textContent: that ends in
+    // the status word, and `needsAttention` outranks `current`, so the same
+    // button can read "...Current step" before and "...Needs attention" after
+    // without the author having moved. A spurious failure in a test whose whole
+    // purpose is killing a flake would be a poor joke. `getByRole` with
+    // `current: 'step'` already guarantees there is exactly one.
+    const standingOn = () => {
+      const strip = screen.getByRole('navigation', { name: 'Form steps' });
+      return (
+        within(strip).getByRole('button', { current: 'step' }).textContent ?? ''
+      ).replace(/(Current step|Completed|Needs attention|Not started)$/, '');
+    };
+    const before = standingOn();
+    expect(before).toMatch(/Content & Details/);
+
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalledTimes(1), {
+      timeout: PAST_THE_DEBOUNCE
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId('location')).toHaveTextContent(
+        '/admin/opportunities/opp-new/edit'
+      )
+    );
+
+    expect(standingOn()).toBe(before);
+  }, 15_000);
+
+  /**
+   * ...and neither must the re-read that a deliberate save performs.
+   *
+   * The first version of this fix moved the defect rather than removing it. The
+   * landing is applied once per opportunity, keyed on a ref - but nothing on the
+   * autosave create path set that ref, because the load EFFECT skips an id this
+   * session minted (`selfCreatedIdRef`, which exists to avoid discarding
+   * keystrokes). So the ref was still null when the author's first manual save
+   * called `loadOpportunity()` directly, and the landing fired then instead:
+   * press Save on Review, land on Basic Information.
+   *
+   * That was WORSE than the bug it replaced, because pressing Save is
+   * deliberate. It is also a regression against the base - this test passes on
+   * the commit before the fix, where the effect's deps simply never changed on
+   * a save.
+   *
+   * `getOpportunity` is mocked here on purpose: create-flow tests leave it an
+   * unresolved `vi.fn()`, so the re-read silently does nothing and a probe
+   * without this mock reports success while exercising none of the path.
+   */
+  it('does not move the author when a deliberate save re-reads the draft', async () => {
+    renderCreateForm();
+    fillCreateThreshold();
+
+    await waitFor(() => expect(createOpportunity).toHaveBeenCalledTimes(1), {
+      timeout: PAST_THE_DEBOUNCE
+    });
+
+    // Walk to the end, as an author finishing the job before they save.
+    for (let guard = 0; guard < 6; guard += 1) {
+      const forward = screen.queryByRole('button', { name: /^Continue: /i });
+      if (!forward) break;
+      fireEvent.click(forward);
+    }
+    const standingOn = () => {
+      const strip = screen.getByRole('navigation', { name: 'Form steps' });
+      return (
+        within(strip).getByRole('button', { current: 'step' }).textContent ?? ''
+      ).replace(/(Current step|Completed|Needs attention|Not started)$/, '');
+    };
+    const before = standingOn();
+    expect(before).toMatch(/Review/);
+
+    vi.mocked(getOpportunity).mockResolvedValue({
+      ...draftOpportunity,
+      id: 'opp-new'
+    } as never);
+
+    fireEvent.click(screen.getByRole('button', { name: /^Save changes$/i }));
+    await waitFor(() => expect(updateOpportunity).toHaveBeenCalled(), {
+      timeout: 8_000
+    });
+    // The re-read itself, not just the write - the landing rides on the re-read.
+    await waitFor(() => expect(getOpportunity).toHaveBeenCalled(), {
+      timeout: 8_000
+    });
+
+    expect(standingOn()).toBe(before);
+  }, 25_000);
 
   /**
    * The keystrokes typed while the create request was in flight.

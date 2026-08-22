@@ -921,6 +921,17 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * served us" for the round-trip checks that need it.
    */
   const storedFormRef = useRef<SavePayloadFormState | null>(null);
+
+  /*
+   * Which opportunity has already had its landing step applied.
+   *
+   * `loadOpportunity` runs again after a successful save - the form re-reads
+   * so a later save lands on the same study - so landing unconditionally with
+   * the data would return the author to Basic Information every time they
+   * saved. Keyed on the id rather than a bare boolean so that genuinely
+   * opening a different opportunity still lands.
+   */
+  const landedForRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<number>(1);
   /**
    * Steps the author has been on and left, which is what separates "Completed"
@@ -1443,6 +1454,41 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         }
       }
 
+      /*
+       * Where the author lands, chosen with the content rather than after it.
+       *
+       * MUST STAY ABOVE `setFormData`. Automatic batching makes the two one
+       * commit today, but the statement ORDER is the load-bearing guarantee,
+       * not the batching: if anything ever puts a task boundary between them,
+       * the intermediate commit holds the landing id against a form whose type
+       * is still blank. That shape is `[1, 2, 5]`, so the `stepAfterShapeChange`
+       * clamp below rewrites an id of 3 to 2 - and once the real type arrives, 2
+       * is a valid member, so nothing corrects it back. The author lands on the
+       * wrong step, permanently, with no error. `loadOpportunity` already awaits
+       * mid-function, so this is an ordinary edit away.
+       *
+       * Read off the SHAPE by key rather than restating `type === 'test' ||
+       * type === 'interview' ? 3 : 1`. Id 3 is Task List, Questions, External
+       * Link or Session Management depending on the type, so a hardcoded 3 asks
+       * for a position and hopes it still means what it meant. `getTabsForType`
+       * makes the same argument about Consent a few lines down: a predicate
+       * saying the same thing in different words is a predicate that can stop
+       * agreeing. A future type that grows a sessions step gets the right
+       * landing for free.
+       *
+       * ONCE per opportunity: this function also runs on the re-read after a
+       * save, and landing again there would throw the author back to the first
+       * step every time they saved.
+       */
+      if (landedForRef.current !== opportunity.id) {
+        landedForRef.current = opportunity.id;
+        const shape = getTabsForType(
+          opportunity.type,
+          opportunity.delivery_mode ?? 'external'
+        );
+        setActiveTab((shape.find((step) => step.key === 'sessions') ?? shape[0]).id);
+      }
+
       setFormData({
         type: opportunity.type,
         title: opportunity.title,
@@ -1715,18 +1761,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     );
   }, [originalFormData]);
 
-  // Set active tab when editing existing opportunity
-  // Only user tests and interviews should go to tab 3 (Session Management)
-  // All other types should go to tab 1 (Basic Information)
-  useEffect(() => {
-    if (isEdit && opportunityId && formData.type) {
-      if (formData.type === 'test' || formData.type === 'interview') {
-        setActiveTab(3); // Go to tab 3 (Session Management) for tests and interviews
-      } else {
-        setActiveTab(1); // Go to tab 1 (Basic Information) for all other types
-      }
-    }
-  }, [isEdit, opportunityId, formData.type]);
+  /*
+   * The landing step is chosen in `loadOpportunity`, with the content - NOT in
+   * an effect keyed on the loaded values, which is what an effect here used to
+   * be. See the note beside the code there for why that shape undid the
+   * author's own navigation and threw them off their step mid-edit.
+   */
 
 
 
@@ -3106,6 +3146,12 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         setDraftId(created.id);
         setOpportunityId(created.id);
         selfCreatedIdRef.current = created.id;
+        // An id this session minted is already on the step the author chose, so
+        // it counts as landed. Without this the ref stays null through the whole
+        // create path, and the FIRST MANUAL SAVE - which re-reads via
+        // `loadOpportunity` - would fire the landing and throw the author off
+        // the step they were standing on when they pressed Save.
+        landedForRef.current = created.id;
         // What is stored is now the baseline for "would leaving lose
         // anything", exactly as the manual create path does it.
         openingFormData.current = formData;
@@ -3764,6 +3810,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         storedFormRef.current = formData;
         setDraftId(savedOpportunity.id);
         selfCreatedIdRef.current = savedOpportunity.id;
+        // Landed, for the same reason as the autosave create above: the author
+        // is already where they chose to be.
+        landedForRef.current = savedOpportunity.id;
 
         logger.debug('CREATE MODE - Opportunity created');
 
