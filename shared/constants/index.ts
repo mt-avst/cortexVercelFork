@@ -106,6 +106,16 @@ export const DB_ERROR_CODES = {
    * segment reaching a `uuid` column. Caller error, not server error.
    */
   INVALID_TEXT_REPRESENTATION: '22P02',
+  /**
+   * Postgres cancelled the statement because it hit `statement_timeout`.
+   *
+   * A new possibility rather than a latent one: nothing in this application
+   * set a statement timeout until the FirstHand runtime pool started issuing
+   * one per checkout, so before that a slow statement simply ran to
+   * completion. Lock waiting counts toward the timeout, so the realistic
+   * trigger is contention rather than a slow query.
+   */
+  QUERY_CANCELED: '57014',
 } as const;
 
 // ============================================================================

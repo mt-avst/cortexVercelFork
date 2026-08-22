@@ -84,7 +84,12 @@ describe("studies repository", () => {
     const operationClient = createMockClient({ missingRelations: [] });
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") {
+      // Matched by PREFIX, not equality: the checkout preamble also carries a
+      // statement timeout now. These tests are about repository SQL, so they
+      // deliberately do not pin the preamble - runtime-database.test.ts owns
+      // that pin as a whole string, and tightening this file to match would
+      // duplicate it in eighteen places.
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
 
@@ -253,7 +258,7 @@ describe("studies repository", () => {
     let stepInsertAttempts = 0;
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") {
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
 
@@ -328,7 +333,7 @@ describe("countStudyTasks", () => {
     const verificationClient = createMockClient({ missingRelations: [] });
     const operationClient = createMockClient({ missingRelations: [] });
     operationClient.query.mockImplementation(async (sql: string, params?: unknown[]) => {
-      if (sql === "SET search_path TO firsthand") {
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
       return handler(sql, params);
@@ -1269,7 +1274,7 @@ describe("studies repository ownership", () => {
     const operationClient = createMockClient({ missingRelations: [] });
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+      if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: null, rows: [] };
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
         return { rowCount: null, rows: [] };
       }
@@ -1394,7 +1399,7 @@ describe("studies repository ownership", () => {
 
 function createMockClient(input: { missingRelations: string[] }): MockClient {
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
-    if (sql === "SET search_path TO firsthand") {
+    if (sql.startsWith("SET search_path TO firsthand")) {
       return {
         rowCount: null,
         rows: []
@@ -1536,7 +1541,7 @@ describe("survey question storage", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") {
+        if (sql.startsWith("SET search_path TO firsthand")) {
           return { rowCount: null, rows: [] };
         }
 
@@ -1689,7 +1694,7 @@ describe("studies repository - study kind", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") {
+        if (sql.startsWith("SET search_path TO firsthand")) {
           return { rowCount: null, rows: [] };
         }
 
@@ -1832,7 +1837,7 @@ describe("studies repository - study kind", () => {
     const selects: string[] = [];
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") {
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
 
@@ -1900,7 +1905,7 @@ describe("studies repository - update respects the stored vocabulary", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") {
+        if (sql.startsWith("SET search_path TO firsthand")) {
           return { rowCount: null, rows: [] };
         }
 
@@ -2036,7 +2041,7 @@ describe("studies repository - copy provenance", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") {
+        if (sql.startsWith("SET search_path TO firsthand")) {
           return { rowCount: null, rows: [] };
         }
 
@@ -2194,7 +2199,7 @@ describe("studies repository - copy provenance", () => {
     const selects: string[] = [];
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") {
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
 
@@ -2279,7 +2284,7 @@ describe("studies repository - copy provenance", () => {
     let studySelectSql: string | null = null;
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") {
+      if (sql.startsWith("SET search_path TO firsthand")) {
         return { rowCount: null, rows: [] };
       }
 
@@ -2331,7 +2336,7 @@ describe("studies repository - copy provenance", () => {
     const operationClient = createMockClient({ missingRelations: [] });
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+      if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: null, rows: [] };
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
         return { rowCount: null, rows: [] };
       }
@@ -2504,7 +2509,7 @@ describe("studies repository - consent template governance", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+        if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: 0, rows: [] };
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
           return { rowCount: 0, rows: [] };
         }
@@ -2551,7 +2556,7 @@ describe("studies repository - consent template governance", () => {
 
     operationClient.query.mockImplementation(
       async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+        if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: 0, rows: [] };
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
           return { rowCount: 0, rows: [] };
         }
@@ -2768,7 +2773,7 @@ describe("studies repository - consent template governance", () => {
     let studySelectSql: string | null = null;
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: 0, rows: [] };
       if (sql.includes("FROM studies")) {
         studySelectSql = sql;
         return {
@@ -2814,7 +2819,7 @@ describe("studies repository - consent template governance", () => {
     const operationClient = createMockClient({ missingRelations: [] });
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: 0, rows: [] };
       if (sql.includes("FROM studies")) {
         return {
           rowCount: 1,
@@ -2846,7 +2851,7 @@ describe("studies repository - consent template governance", () => {
     const selects: string[] = [];
 
     operationClient.query.mockImplementation(async (sql: string) => {
-      if (sql === "SET search_path TO firsthand") return { rowCount: 0, rows: [] };
+      if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: 0, rows: [] };
       selects.push(sql);
       return {
         rowCount: 2,

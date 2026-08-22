@@ -259,8 +259,29 @@ export function SurveyResults({
           {results.respondents}{" "}
           {results.respondents === 1 ? "participant" : "participants"}
         </p>
+        {/*
+          A NEW TAB, because this href can now answer 503.
+
+          The export route is gated on a concurrency permit, and a refusal is a
+          JSON body. Followed in the current tab, that REPLACES the page the
+          researcher is reading with `{"error":"Too many result sets..."}` and
+          loses their state - and the gate makes that likelier, not less, since
+          the aggregate view they are looking at holds no permit but the export
+          needs one. A blank tab absorbs the error instead; on success the
+          browser takes the attachment and the tab never appears.
+
+          Not the whole fix. Fetching the CSV through the API client would let
+          this surface the same worded message as the aggregate above, at the
+          cost of holding the file in memory rather than streaming it to disk.
+          That is a deliberate deferral, named in !203, not an oversight.
+        */}
         {csvHref ? (
-          <a className="button button-secondary" href={csvHref}>
+          <a
+            className="button button-secondary"
+            href={csvHref}
+            rel="noopener"
+            target="_blank"
+          >
             Download CSV
           </a>
         ) : null}

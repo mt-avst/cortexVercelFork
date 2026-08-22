@@ -274,6 +274,32 @@ describe('Error Handler', () => {
       expect(result.statusCode).toBe(400);
     });
 
+    /**
+     * A cancelled statement is transient, and it is newly reachable.
+     *
+     * Nothing in this application set `statement_timeout` until the FirstHand
+     * runtime pool began issuing one per checkout, so 57014 previously could
+     * not happen. Unmapped it fell to the default arm and answered 500
+     * "Database operation failed" - which on the participant answer-save path
+     * tells somebody mid-survey that the server is broken, with no reason to
+     * retry, on the one path where not retrying loses answers they have
+     * already given.
+     */
+    it('maps a cancelled statement to a retryable 503, not a broken server', () => {
+      const result = mapDatabaseError({ code: DB_ERROR_CODES.QUERY_CANCELED });
+
+      expect(result.statusCode).toBe(503);
+      expect(result.code).toBe('DB_STATEMENT_TIMEOUT');
+      expect(result.message).toMatch(/try again/i);
+    });
+
+    // The literal, for the same reason 22P02 is pinned above: every assertion
+    // that reads the constant moves with it, so repointing DB_ERROR_CODES at a
+    // code Postgres never raises would leave the mapping dead and green.
+    it('maps the code Postgres actually raises for a timeout, 57014', () => {
+      expect(mapDatabaseError({ code: '57014' }).statusCode).toBe(503);
+    });
+
     it('does not report an unparseable value as a missing resource', () => {
       const result = mapDatabaseError({ code: DB_ERROR_CODES.INVALID_TEXT_REPRESENTATION });
 

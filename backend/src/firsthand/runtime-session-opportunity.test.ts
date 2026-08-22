@@ -78,7 +78,7 @@ describe("runtime session rows carry their opportunity", () => {
 
     const client = {
       query: vi.fn(async (sql: string, params?: unknown[]) => {
-        if (sql === "SET search_path TO firsthand") {
+        if (sql.startsWith("SET search_path TO firsthand")) {
           return { rowCount: null, rows: [] };
         }
 

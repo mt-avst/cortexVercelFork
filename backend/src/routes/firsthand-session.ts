@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { requireAuth } from '../middleware/authenticate';
 import { bindParticipantSession } from '../middleware/firsthand-session';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
+import { participantRuntimeWork } from '../middleware/runtime-work-class';
 import { asyncHandler } from '../utils/errorHandler';
 import { parseSessionAttemptNumber } from '../firsthand/session-attempts';
 import { runtimeMutationSchema } from '../firsthand/runtime-records';
@@ -47,6 +48,19 @@ import { recordInternalSessionEvent } from '../firsthand/completion-events';
 // routes; GET is auto-exempt.
 
 const router: Router = Router();
+
+/**
+ * Every route on this router is a participant acting on their own session, so
+ * the whole router is classified at once rather than route by route.
+ *
+ * `router.use` rather than a per-route entry deliberately: this is the one
+ * place where a route added later and left unmarked would put a participant's
+ * answer save behind the admin admission cap, and a `use` cannot be forgotten
+ * by a new route. Mounted FIRST, before `requireAuth`, because the
+ * classification costs nothing on a request that is about to 401 and applying
+ * it early means it holds for every code path below, refusals included.
+ */
+router.use(participantRuntimeWork);
 
 const PENDING_UPLOAD_VALIDITY_MS = 15 * 60 * 1000;
 

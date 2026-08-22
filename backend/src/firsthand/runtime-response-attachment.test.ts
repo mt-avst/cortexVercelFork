@@ -132,7 +132,7 @@ describe("attaching a participant's answer to a step", () => {
       query: vi.fn(async (sql: string, params?: unknown[]) => {
         calls.push({ sql: sql.trim(), params: params ?? [] });
 
-        if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+        if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: null, rows: [] };
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
           return { rowCount: null, rows: [] };
         }

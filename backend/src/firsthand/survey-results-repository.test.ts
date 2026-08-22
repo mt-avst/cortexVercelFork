@@ -15,20 +15,43 @@ const rowsToReturn: Array<Record<string, unknown>> = [];
  */
 let queryFailure: Error | null = null;
 
-vi.mock("./runtime-database", () => ({
+/**
+ * What the readers asked the pool for, checkout by checkout.
+ *
+ * Captured because the arguments are decisions, not plumbing: the results read
+ * asks for the loose per-statement bound, and the advisory count asks to be
+ * skipped rather than queued. Both are invisible in the SQL.
+ */
+const checkouts: Array<{ statementTimeoutMs?: number; whenBusy?: string }> = [];
+
+/**
+ * SPREADS THE REAL MODULE rather than listing its exports.
+ *
+ * A factory listing exports by hand does not fail where the omission is - it
+ * fails wherever the missing export is first read, with a message naming this
+ * file rather than the change that caused it. Adding
+ * RESULTS_STATEMENT_TIMEOUT_MS to runtime-database.ts broke nine tests here
+ * for a reason none of their assertions mention. Same trap !201 hit in five
+ * factories at once.
+ */
+vi.mock("./runtime-database", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./runtime-database")>()),
   isPostgresRuntimeConfigured: () => isPostgresRuntimeConfigured(),
   withRuntimeDatabaseClient: async (
     run: (client: {
       query: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>;
-    }) => Promise<unknown>
-  ) =>
-    run({
+    }) => Promise<unknown>,
+    options?: { statementTimeoutMs?: number; whenBusy?: string }
+  ) => {
+    checkouts.push({ ...options });
+    return run({
       query: async (sql: string, params: unknown[]) => {
         captured.push({ sql, params });
         if (queryFailure) throw queryFailure;
         return { rows: [...rowsToReturn] };
       }
-    })
+    });
+  }
 }));
 
 vi.mock("../utils/logger", () => ({
@@ -41,6 +64,9 @@ import {
   listResponsesForStudy,
   studyHasResponses
 } from "./survey-results-repository";
+import { RESULTS_STATEMENT_TIMEOUT_MS } from "./runtime-database";
+import { RuntimeDatabaseBusyError } from "./runtime-pool-admission";
+import { logger } from "../utils/logger";
 
 /**
  * The WHERE clause here IS the authorisation boundary.
@@ -53,6 +79,7 @@ import {
 describe("survey results readers", () => {
   beforeEach(() => {
     captured.length = 0;
+    checkouts.length = 0;
     rowsToReturn.length = 0;
     queryFailure = null;
     isPostgresRuntimeConfigured.mockReturnValue(true);
@@ -243,6 +270,7 @@ describe("survey results readers", () => {
 describe("studyHasResponses", () => {
   beforeEach(() => {
     captured.length = 0;
+    checkouts.length = 0;
     rowsToReturn.length = 0;
     queryFailure = null;
     isPostgresRuntimeConfigured.mockReturnValue(true);
@@ -312,6 +340,7 @@ describe("studyHasResponses", () => {
 describe("answerCountsByStep", () => {
   beforeEach(() => {
     captured.length = 0;
+    checkouts.length = 0;
     rowsToReturn.length = 0;
     queryFailure = null;
     isPostgresRuntimeConfigured.mockReturnValue(true);
@@ -410,5 +439,84 @@ describe("answerCountsByStep", () => {
     // participants must not 500 the form and lock the author out of editing;
     // null lets the form load and say it could not check.
     expect(counts).toBeNull();
+  });
+});
+
+/**
+ * How each reader asks for its connection.
+ *
+ * Neither of these facts appears in the SQL, and both are decisions about who
+ * gets starved when the five-connection pool is contended. Without these, the
+ * two arguments could be swapped - handing the unpaginated results read a
+ * fifteen-second bound it would routinely blow, and making an author's form
+ * load wait out the admission budget for a warning the form can do without -
+ * and every other test in this file would still pass.
+ */
+describe("how each reader asks for the runtime pool", () => {
+  beforeEach(() => {
+    checkouts.length = 0;
+    rowsToReturn.length = 0;
+    queryFailure = null;
+    isPostgresRuntimeConfigured.mockReturnValue(true);
+    // The logger mock is module-scoped, so calls from the describes above
+    // survive into this one. Asserting an absence against a shared spy is how
+    // a test comes to pass for a reason nothing to do with its subject.
+    vi.mocked(logger.info).mockClear();
+    vi.mocked(logger.warn).mockClear();
+  });
+
+  it("gives the study-wide results read the loose per-statement bound", async () => {
+    await listResponsesForStudy("study_abc");
+
+    expect(checkouts).toEqual([
+      { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+    ]);
+    // A results read has no fallback answer, so it must never be skipped.
+    expect(checkouts[0].whenBusy).toBeUndefined();
+  });
+
+  it("gives the per-opportunity results read the same bound", async () => {
+    await listResponsesForOpportunity({
+      opportunityId: "opp_1",
+      studyId: "study_abc"
+    });
+
+    expect(checkouts).toEqual([
+      { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+    ]);
+  });
+
+  it("skips the advisory answer count rather than queueing for it", async () => {
+    await answerCountsByStep("study_abc");
+
+    expect(checkouts).toEqual([{ whenBusy: "skip" }]);
+    // The default bound, not the loose one: this is an indexed group-by that
+    // runs on an ordinary form load, and nothing about it is slow by design.
+    expect(checkouts[0].statementTimeoutMs).toBeUndefined();
+  });
+
+  it("makes the destructive-rewrite guard wait its turn like any other read", async () => {
+    await studyHasResponses("study_abc");
+
+    // It gates a refusal, so it has to produce an answer. Skipping would make
+    // a busy pool read as "no answers collected" and silently disable the
+    // guard - which is the direction studyHasResponses documents it must
+    // never fail in.
+    expect(checkouts).toEqual([{}]);
+  });
+
+  it("answers unknown, not zero, when the pool refuses the advisory count", async () => {
+    queryFailure = new RuntimeDatabaseBusyError();
+
+    const counts = await answerCountsByStep("study_abc");
+
+    expect(counts).toBeNull();
+    // Told apart from a failed query in the log, because "the pool was busy"
+    // is a capacity fact and "the query went wrong" sends somebody to the SQL.
+    expect(logger.info).toHaveBeenCalledWith(
+      "Skipped counting answers per question: runtime pool busy",
+      { studyId: "study_abc" }
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 });
