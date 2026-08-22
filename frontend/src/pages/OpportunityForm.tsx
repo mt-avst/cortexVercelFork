@@ -729,6 +729,18 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     Record<string, number> | null | undefined
   >(undefined);
   /**
+   * The identities of the questions the linked study STORED, as at the last
+   * load or save.
+   *
+   * Held apart from `answerCounts` because it is known in cases where the
+   * counts are not, and that asymmetry is the whole point: a removal is
+   * detectable from this list alone, so an unreadable count downgrades the
+   * warning rather than deleting it. Deriving it from `originalFormData`
+   * instead would work today and would tie this warning to a value maintained
+   * for change detection, which is free to stop carrying identity.
+   */
+  const [storedQuestionKeys, setStoredQuestionKeys] = useState<string[]>([]);
+  /**
    * The answers a save would detach, while the author is being asked about
    * them. Null means no such confirmation is open.
    */
@@ -1514,6 +1526,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
 
       setHasLinkedStudy(Boolean(opportunity.firsthand_study_id));
       setAnswerCounts(studyAnswerCounts);
+      setStoredQuestionKeys(
+        (authoredFields.inline_survey_questions ?? []).map((question) => question._clientId)
+      );
       setStudyIsReadOnly(readOnly);
       setStudyReadOnlyReason(readOnlyReason);
       setLinkedStudyUpdatedAt(studyUpdatedAt);
@@ -2912,6 +2927,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (authoringKind === 'survey') {
       const detached = answersDetachedBy(
         (formData.inline_survey_questions ?? []).map((question) => question._clientId),
+        storedQuestionKeys,
         answerCounts
       );
 
@@ -3739,6 +3755,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     if (!detachAlreadyConfirmed && authoringKind === 'survey') {
       const detached = answersDetachedBy(
         (formData.inline_survey_questions ?? []).map((question) => question._clientId),
+        storedQuestionKeys,
         answerCounts
       );
 
