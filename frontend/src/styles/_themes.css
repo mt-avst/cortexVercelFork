@@ -1825,7 +1825,8 @@ body.theme-light .badge--survey {
 body.theme-light .badge--question,
 body.theme-light .badge--unmoderated {
   background: #F1F5F9;
-  color: #64748B;
+  /* slate 500 on slate 100 is 4.34, just under; slate 600 is 6.92 */
+  color: #475569;
 }
 
 /* Progress bar - light mode */
@@ -3102,9 +3103,11 @@ body.theme-light .opportunity-form .btn-primary:hover {
   border-color: var(--accent-text-on-light);
 }
 
+/* White on the Bootstrap green is 3.13. Green 700 takes it to 5.02 and keeps
+   the button unmistakably a success action. */
 body.theme-light .opportunity-form .btn-success {
-  background-color: #28a745;
-  border-color: #28a745;
+  background-color: #15803d;
+  border-color: #15803d;
   color: #FFFFFF;
 }
 
