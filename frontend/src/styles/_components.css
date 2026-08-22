@@ -885,7 +885,7 @@
 
 .btn-glass:hover {
   /* Solid Adaptavist Orange fill on hover */
-  background: #FF5A1F;
+  background: var(--accent-fill-text-safe);
   border-color: #FF5A1F;
   color: #FFFFFF;
   transform: translateY(-2px);
@@ -917,7 +917,7 @@ body.theme-light .btn-glass {
 
 body.theme-light .btn-glass:hover {
   /* Solid Adaptavist Orange fill on hover */
-  background: #FF5A1F;
+  background: var(--accent-fill-text-safe);
   border-color: #FF5A1F;
   color: #FFFFFF;
 }
@@ -4704,9 +4704,18 @@ body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
 /* ============================================================
    BOOKED SLOT - Brand Orange "Hero" (Your Booking)
    Mode Agnostic: Solid Brand Color in both modes
+
+   The fill is the text-safe accent step, not #FF5A1F. White on that orange is
+   3.12, and this slot carries a white time label - on the surface a participant
+   books from. The fill and the label live in different rules (the label is on
+   the child .timeslot-label), which is why the stylesheet policy test cannot
+   see this pairing; it was found by following the one it COULD see, on
+   .calendar-slot-selected, to the sibling states that had to match it.
+
+   The glow and borders below keep the identity orange: nothing is read off them.
    ============================================================ */
 .calendar-slot-booked {
-  background: #FF5A1F !important; /* Brand Orange - solid fill */
+  background: var(--accent-fill-text-safe) !important;
   border: 1px solid transparent !important;
   border-radius: 8px !important;
 }
@@ -4716,9 +4725,9 @@ body.theme-dark .calendar-slot-ghost:hover .timeslot-label {
   font-weight: 700 !important;
 }
 
-/* Dark mode: Same solid brand orange - the "hero" state */
+/* Dark mode: Same solid fill - the "hero" state */
 body.theme-dark .calendar-slot-booked {
-  background: #FF5A1F !important;
+  background: var(--accent-fill-text-safe) !important;
   border: 1px solid transparent !important;
   box-shadow: 0 0 10px rgba(255, 90, 31, 0.3) !important; /* subtle brand glow */
 }
@@ -4785,7 +4794,7 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
    Confirms "I am selecting this to make it mine"
    ============================================================ */
 .calendar-slot-selected {
-  background: #FF5A1F !important; /* Brand Orange */
+  background: var(--accent-fill-text-safe) !important; /* Brand Orange */
   border: 2px solid #EA580C !important; /* orange-600 */
   color: #FFFFFF !important;
   border-radius: 8px !important;
@@ -4799,9 +4808,9 @@ body.theme-dark .calendar-slot-conflict .timeslot-label {
   font-weight: 700 !important;
 }
 
-/* Dark mode: Same brand orange with glow */
+/* Dark mode: Same fill with glow */
 body.theme-dark .calendar-slot-selected {
-  background: #FF5A1F !important;
+  background: var(--accent-fill-text-safe) !important;
   border: 2px solid #EA580C !important;
   box-shadow: 0 0 20px rgba(255, 90, 31, 0.4), 0 10px 20px -3px rgba(0, 0, 0, 0.3) !important;
 }
@@ -5085,7 +5094,7 @@ body.theme-dark .booking-popover-time {
 
 /* Primary Button - Brand Orange */
 .booking-popover-confirm {
-  background-color: #FF5A1F; /* Brand Orange */
+  background-color: var(--accent-fill-text-safe); /* Brand Orange */
   color: #FFFFFF;
   border: none;
   border-radius: 8px;
@@ -5230,9 +5239,12 @@ body.theme-dark .legend-label-full {
   color: #9ca3af; /* gray-400 - slightly lighter for readability */
 }
 
-/* ---- YOUR BOOKING: The Hero (Mode Agnostic) ---- */
+/* ---- YOUR BOOKING: The Hero (Mode Agnostic) ----
+   The swatch has no text on it, so it needs no contrast of its own - but it is
+   the key to the booked slot, and a legend that does not match the thing it
+   explains is worse than a slightly lighter orange. It follows the fill. */
 .legend-booked {
-  background-color: #FF5A1F; /* Brand Orange - solid */
+  background-color: var(--accent-fill-text-safe);
   border: 1px solid transparent;
 }
 
@@ -5241,9 +5253,9 @@ body.theme-dark .legend-label-full {
   font-weight: 600;
 }
 
-/* Dark Mode: Same solid brand - with subtle glow */
+/* Dark Mode: Same solid fill - with subtle glow */
 body.theme-dark .legend-booked {
-  background-color: #FF5A1F;
+  background-color: var(--accent-fill-text-safe);
   border: 1px solid transparent;
   box-shadow: 0 0 8px rgba(255, 90, 31, 0.3);
 }
@@ -7001,7 +7013,8 @@ body.theme-light .booking-badge-cancelled {
 
 body.theme-light .booking-badge-upcoming {
   background: #DCFCE7;
-  color: #16A34A;
+  /* green 600 on green 100 is 3.00; 800 on the same wash is 6.49 */
+  color: #166534;
 }
 
 /* Type Badges */
@@ -9088,7 +9101,7 @@ body.theme-light .mission-scheduler .calendar-slot-selected,
 body.theme-light .calendar-hud .calendar-slot-selected,
 body.theme-dark .mission-scheduler .calendar-slot-selected,
 body.theme-dark .calendar-hud .calendar-slot-selected {
-  background: #FF5A1F !important; /* Brand Orange */
+  background: var(--accent-fill-text-safe) !important;
   border: 1px solid #EA580C !important; /* orange-600 */
   box-shadow: 0 4px 12px rgba(255, 90, 31, 0.3) !important;
 }
@@ -11400,7 +11413,9 @@ body.theme-light .admin-action-dropdown .dropdown-item.text-danger:hover,
 body.theme-light .admin-data-table .dropdown-menu .dropdown-item.text-danger:hover,
 body.theme-light .col-actions .dropdown-menu .dropdown-item.text-danger:hover {
   background: #FEF2F2 !important;
-  color: #DC2626 !important;
+  /* red 600 on red 50 is 4.41 - under by a hair, and this is a destructive
+     action's hover state. Red 700 on the same wash is 5.91. */
+  color: #B91C1C !important;
 }
 
 /* Menu Divider (Light Mode) */

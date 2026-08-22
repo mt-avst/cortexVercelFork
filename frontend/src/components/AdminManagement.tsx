@@ -209,17 +209,56 @@ const AdminManagement: React.FC = () => {
             border-radius: var(--tag-radius);
             white-space: nowrap;
           }
+          /* Role and status badges.
+
+             These were four hardcoded Bootstrap 4 fills that overrode the
+             design system with !important and set no text colour, so the label
+             came from .badge's --tag-text - which is WHITE in dark and navy
+             #14213d in light. A fixed fill under a colour that flips per theme
+             fails on one side or the other, and all four did:
+
+                            dark (white)   light (navy)
+               bg-primary   #007bff 3.98     3.98   (forced white both themes)
+               bg-danger    #dc3545 4.53     3.53
+               bg-success   #28a745 3.13     5.10
+               bg-secondary #6c757d 4.69     3.41
+
+             Fill and text are now declared together, per theme, in the idiom
+             the rest of the app already uses for badges (see .booking-badge-*
+             in _components.css): a pale wash with dark text in light, a
+             translucent wash with light text in dark. Measured, lowest is 5.30. */
           .admin-management .badge.bg-primary {
-            background-color: #007bff !important;
+            background-color: #E0F2FE !important;
+            color: #075985 !important;
           }
           .admin-management .badge.bg-danger {
-            background-color: #dc3545 !important;
+            background-color: #FEE2E2 !important;
+            color: #B91C1C !important;
           }
           .admin-management .badge.bg-success {
-            background-color: #28a745 !important;
+            background-color: #DCFCE7 !important;
+            color: #166534 !important;
           }
           .admin-management .badge.bg-secondary {
-            background-color: #6c757d !important;
+            background-color: #F3F4F6 !important;
+            color: #4B5563 !important;
+          }
+
+          body.theme-dark .admin-management .badge.bg-primary {
+            background-color: rgba(56, 189, 248, 0.15) !important;
+            color: #7DD3FC !important;
+          }
+          body.theme-dark .admin-management .badge.bg-danger {
+            background-color: rgba(220, 53, 69, 0.2) !important;
+            color: #FCA5A5 !important;
+          }
+          body.theme-dark .admin-management .badge.bg-success {
+            background-color: rgba(34, 197, 94, 0.15) !important;
+            color: #4ADE80 !important;
+          }
+          body.theme-dark .admin-management .badge.bg-secondary {
+            background-color: rgba(107, 114, 128, 0.2) !important;
+            color: #9CA3AF !important;
           }
           
           /* Button styling */
