@@ -1,0 +1,153 @@
+[
+  {
+    "id": "csv-writer-skips-rather-than-stops",
+    "why": "A participant whose answers vanished mid-export is an absence, not the end of the file. `break` turns a skip into silent truncation - the researcher gets a CSV that parses, holding part of their data, with nothing saying so. This mutation survived 825 jest, 590 vitest and 16 database tests.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "        continue;",
+    "mutation": "        break;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "writes no row for a participant whose answers vanished mid-export"
+  },
+  {
+    "id": "csv-writer-honours-backpressure",
+    "why": "Ignoring `res.write`'s return value turns a slow client into an unbounded heap at the socket - reintroducing, one layer up, exactly the problem streaming removes at the database. It also disarms the listener-leak test as a side effect, because a writer that never waits never attaches a listener.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "      if (res.write(chunk)) {",
+    "mutation": "      if (res.write(chunk) || true) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "writes nothing more until the socket drains"
+  },
+  {
+    "id": "csv-writer-destroys-rather-than-ends",
+    "why": "Once the header is written the status is 200 and cannot be taken back, so a failure part-way through must destroy the connection. `end()` hands over a short CSV that parses - a researcher computing a mean over part of their data.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "    res.destroy();",
+    "mutation": "    res.end();",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "destroys the socket rather than ending it, when a row throws"
+  },
+  {
+    "id": "csv-writer-removes-its-listeners",
+    "why": "A large export under backpressure accumulates one dead error listener per slow write - thousands of them, with the MaxListenersExceededWarning arriving long after the cause. The bug this fixed had no test, so it could come straight back.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "        res.off('drain', onDrain);\n        res.off('error', onError);\n        res.off('close', onClose);\n",
+    "mutation": "",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "leaves no listener behind, however many writes wait for a drain"
+  },
+  {
+    "id": "csv-writer-treats-a-hangup-as-a-hangup",
+    "why": "`close` settling a pending write must RESOLVE. Rejecting routes every ordinary cancellation - a closed tab, a navigation away - into the failure path and logs it as an export failure. The bytes are identical either way, so only the log can see it.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "      const onClose = done(() => resolve());",
+    "mutation": "      const onClose = done(() => reject(new Error('closed')));",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "treats an ordinary hangup as a hangup, not as a failure"
+  },
+  {
+    "id": "csv-participant-bound-is-detectable",
+    "why": "Without the +1 the `>` comparison is unsatisfiable, so the 413 becomes unreachable and a 200,001-participant study quietly exports the first 200,000 as a CSV that parses. Refusal turned into truncation. Survived 824 jest and 602 vitest tests.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        LIMIT ${MAX_CSV_PARTICIPANTS + 1}",
+    "mutation": "        LIMIT ${MAX_CSV_PARTICIPANTS}",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "asks the database for one participant more than it will return"
+  },
+  {
+    "id": "csv-participant-bound-admits-its-own-boundary",
+    "why": "Only the refusing side was pinned, so `>` becoming `>=` survived every test in the repository - and in production that turns the largest legitimate export into a 413 naming a limit it has not reached. A boundary needs both of its sides.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "      if (result.rows.length > MAX_CSV_PARTICIPANTS) {",
+    "mutation": "      if (result.rows.length >= MAX_CSV_PARTICIPANTS) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "admits a set that exactly fills the bound"
+  },
+  {
+    "id": "response-row-bound-is-detectable",
+    "why": "The same +1 detector on the unbatched reader, which decides the 413 for the aggregate routes. Without it the largest studies are silently truncated into a mean, an NPS and a chart.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        LIMIT ${MAX_RESPONSE_ROWS + 1}",
+    "mutation": "        LIMIT ${MAX_RESPONSE_ROWS}",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results-repository.test.ts",
+    "test": "asks the database for one row more than it will return"
+  },
+  {
+    "id": "response-row-bound-admits-its-own-boundary",
+    "why": "The accepting side of the row bound, for the same reason as the participant one: a limit that refuses the largest legitimate read is as wrong as one that truncates it.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "      if (result.rows.length > MAX_RESPONSE_ROWS) {",
+    "mutation": "      if (result.rows.length >= MAX_RESPONSE_ROWS) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results-repository.test.ts",
+    "test": "returns a result set that exactly fills the bound"
+  },
+  {
+    "id": "csv-batch-asks-for-its-own-ids",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n          [...params, batch]",
+    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n          [...params]",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "asks each batch for ITS OWN hundred ids, and never for everything"
+  },
+  {
+    "id": "opportunity-scope-is-not-study-wide",
+    "why": "Collapsing the per-opportunity scope to a study-wide one hands one researcher every participant another recruited, under different consent wording. It passed 588 tests in CI's configuration, because the only place the predicate is evaluated is a test that needs a real database.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        filter: \"s.study_id = $1 AND s.opportunity_id = $2\",\n        params: [scope.studyId, scope.opportunityId]",
+    "mutation": "        filter: \"s.study_id = $1\",\n        params: [scope.studyId]",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export-postgres.test.ts",
+    "test": "scopes a per-opportunity export to that opportunity alone",
+    "needsDatabase": true
+  },
+  {
+    "id": "results-read-ceiling-is-pinned-as-a-literal",
+    "why": "Every other test in that file derives its expectations from the constant, so they all keep passing at any ceiling - including one high enough to be no ceiling at all. This number is a memory budget on a single-replica 2Gi pod, and an OOM kill here drops every live participant session.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "export const MAX_CONCURRENT_RESULTS_READS = 1;",
+    "mutation": "export const MAX_CONCURRENT_RESULTS_READS = 2;",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "holds the ceiling at the number that was decided"
+  },
+  {
+    "id": "results-read-permit-comes-back-on-close",
+    "why": "The permit is released only on the response's close. Losing that release leaks a permit for the life of the process, and two of them shut all four results routes - 503 forever, for every admin including the superadmin, reachable by a tab close.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "    abandoned.abort();\n    release?.();",
+    "mutation": "    abandoned.abort();",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "gives the permit back when the response closes, however it ended"
+  },
+  {
+    "id": "results-gate-runs-before-the-study-is-read",
+    "why": "Loading first means a non-superadmin gets 404 for a study id that does not exist and 403 for one that does - an existence oracle over study ids, to a caller entitled to neither answer. It also makes an unentitled caller pay for a pool checkout.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "  requireSuperadminForStudyResults(req);\n\n  const stored = await getStudyById(req.params.studyId);\n  if (!stored) {\n    throw new NotFoundError('Survey');\n  }\n\n  const responses = await listResponsesForStudy(req.params.studyId);",
+    "mutation": "  const stored = await getStudyById(req.params.studyId);\n  if (!stored) {\n    throw new NotFoundError('Survey');\n  }\n\n  requireSuperadminForStudyResults(req);\n\n  const responses = await listResponsesForStudy(req.params.studyId);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "does not read the study at all before refusing"
+  },
+  {
+    "id": "opportunity-ownership-fails-closed",
+    "why": "`canWriteStudy` fails OPEN for an unowned study, because a write can adopt the row and a read can adopt nothing. The same shape here hands every admin the answers of any opportunity whose owner has been removed, and it passed all 293 tests in its own file.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    (!row || !row.owner_user_id || !callerId || row.owner_user_id !== callerId)",
+    "mutation": "    (!row || (row.owner_user_id != null && row.owner_user_id !== callerId))",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.test.ts",
+    "test": "refuses an opportunity nobody owns, rather than letting it fail open"
+  }
+]

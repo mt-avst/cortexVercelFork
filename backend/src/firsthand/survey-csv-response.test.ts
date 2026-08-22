@@ -7,6 +7,7 @@ vi.mock("../utils/logger", () => ({
 }));
 
 import { writeSurveyCsv } from "./survey-csv-response";
+import { logger } from "../utils/logger";
 import type { StudyStep } from "../../../shared/firsthand/contract";
 import type { StoredResponse } from "./survey-results";
 
@@ -97,6 +98,48 @@ function stalledResponse() {
     // full" - so the chunk IS recorded, exactly as a real socket would.
     write: (chunk: string) => {
       chunks.push(chunk);
+      return false;
+    },
+    end: () => {
+      (res as { writableEnded: boolean }).writableEnded = true;
+    },
+    destroy: () => {
+      (res as { destroyed: boolean }).destroyed = true;
+    }
+  });
+
+  return res;
+}
+
+/**
+ * A response that hangs up part-way through, mid-write.
+ *
+ * The ORDINARY cancellation: somebody closes the tab. `close` settles the
+ * pending write, and it must settle it as a RESOLVE - the loop's own hangup
+ * check then stops the export quietly. Rejecting instead routes an everyday
+ * event into the failure path and logs it as an export failure, and since the
+ * bytes are identical either way, only the log can see the difference.
+ */
+function hangsUpAfter(chunkCount: number) {
+  const emitter = new EventEmitter();
+  const chunks: string[] = [];
+  const res = emitter as unknown as Response &
+    EventEmitter & { chunks: string[] };
+
+  Object.assign(res, {
+    chunks,
+    destroyed: false,
+    writableEnded: false,
+    write: (chunk: string) => {
+      chunks.push(chunk);
+      setImmediate(() => {
+        if (chunks.length >= chunkCount) {
+          (res as { destroyed: boolean }).destroyed = true;
+          emitter.emit("close");
+        } else {
+          emitter.emit("drain");
+        }
+      });
       return false;
     },
     end: () => {
@@ -300,6 +343,32 @@ describe("writing the export to the socket", () => {
     expect(pulled).toEqual([]);
   });
 
+  it("treats an ordinary hangup as a hangup, not as a failure", async () => {
+    // `close` settling a pending write must RESOLVE. Rejecting sends every
+    // cancelled download - a closed tab, a navigation away - into the catch,
+    // which logs it as an export failure. Nothing about the RESPONSE can see
+    // the difference, which is why nothing did: only the log can.
+    vi.mocked(logger.error).mockClear();
+
+    const res = hangsUpAfter(3);
+    const ids = Array.from({ length: 50 }, (_unused, i) => `s${i}`);
+
+    await writeSurveyCsv(res, steps, [], participantsOf(ids), {
+      studyId: "study_1"
+    });
+
+    // The controls for the absence below, and what make it mean anything: the
+    // hangup really did happen mid-export, so there was a live write for
+    // `close` to settle, and the export really did stop for it.
+    expect(res.chunks.length).toBeGreaterThanOrEqual(3);
+    expect(res.chunks.length).toBeLessThan(ids.length);
+    expect(res.writableEnded).toBe(false);
+
+    // `logger.error` is proven able to fire by the test below, which drives a
+    // real failure through the same mock.
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
   it("destroys the socket rather than ending it, when a row throws", async () => {
     const res = backpressuredResponse();
 
@@ -308,11 +377,15 @@ describe("writing the export to the socket", () => {
       throw new Error("batch read failed");
     }
 
+    vi.mocked(logger.error).mockClear();
+
     await writeSurveyCsv(res, steps, [], exploding(), { studyId: "study" });
 
     // REFUSED, NOT TRUNCATED. `end()` here hands the researcher a CSV that
     // parses and holds part of their data.
     expect(res.destroyed).toBe(true);
     expect(res.writableEnded).toBe(false);
+    // The control arm for the hangup test above: this is the mock firing.
+    expect(logger.error).toHaveBeenCalled();
   });
 });

@@ -381,3 +381,61 @@ test-scripts:
     # which looks like a smaller suite, not a broken one.
     - cd backend && npm ci
     - cd "$CI_PROJECT_DIR" && npm run test:scripts
+
+# THE CURATED MUTATION CANARY - a manifest of load-bearing lines, each paired
+# with the ONE test that must fail when that line changes.
+#
+# WHY IT BLOCKS A MERGE. The most expensive recurring defect in this repository
+# is not wrong code; it is a test that CANNOT FAIL, where the fixture's natural
+# shape already satisfies the property, so the assertion is decorative. On !210
+# alone that happened five times and the fifth was inside the fix for the
+# fourth - every one found by hand, late, by an expensive review gate. Mutation
+# testing here was manual and ad hoc, which made the most valuable check the
+# one most easily skipped when tired or busy.
+#
+# Not Stryker. Stryker over this codebase is hours, and hours is a job nobody
+# blocks a merge on. Fourteen entries measured at 32 seconds locally; the
+# fifteenth migrates and seeds a database, so read a real job log for the
+# total rather than trusting an estimate here.
+#
+# THE DATABASE SERVICE IS NOT OPTIONAL HERE. One entry - the per-opportunity
+# scope predicate - is evaluated in exactly one place, and that place needs a
+# real Postgres. Collapsing that scope to a study-wide one hands one researcher
+# every participant another recruited, and it passed 588 tests under the
+# pipeline's old configuration. The runner REFUSES TO START rather than skip a
+# database entry without FIRSTHAND_TEST_DATABASE_URL, because a skipped entry
+# and a passing entry read identically in a green job.
+#
+# A GitLab `services:` container is not Docker-in-Docker: the executor provides
+# it, so the `no-docker` runner tag does not forbid it. Same arrangement as
+# test-backend-db above.
+mutation-canary:
+  extends: .test-base
+  services:
+    - name: registry.hub.docker.com/library/postgres:17-alpine
+      alias: postgres
+  variables:
+    # Fixed test constants, not credentials: the server is a throwaway service
+    # container reachable only from this job, and no session this secret signs
+    # outlives it.
+    POSTGRES_PASSWORD: "firsthand-ci-postgres-not-a-real-secret" # gitleaks:allow
+    POSTGRES_USER: postgres
+    POSTGRES_DB: postgres
+    FIRSTHAND_TEST_DATABASE_URL: "postgres://postgres:firsthand-ci-postgres-not-a-real-secret@postgres:5432/postgres" # gitleaks:allow
+    SESSION_SECRET: "gitlab-ci-test-constant-not-a-real-secret" # gitleaks:allow
+    FIRSTHAND_SKIP_S3_TESTS: "1"
+  before_script:
+    # The harness edits source files in place and refuses to start on a dirty
+    # tree - and it decides that with `git status`. The node alpine image has
+    # no git, which this file already says twice for test-scripts and
+    # check-release-will-deploy. Without this the guard threw rather than
+    # protecting anything, and before a review gate found it, the guard read a
+    # missing git as a clean tree and said nothing at all.
+    - apk add --no-cache git
+  script:
+    - npm ci
+    - cd backend && npm ci
+    # `npm ci` writes nothing tracked, so the clean-tree guard is satisfied and
+    # stays armed - it is what stops a run that died mid-mutation from being
+    # mistaken for a passing one.
+    - cd "$CI_PROJECT_DIR" && npm run test:canary
