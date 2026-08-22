@@ -60,6 +60,19 @@ For **Kubernetes**:
 
 Migrations run automatically in the backend initContainer (`npm run migrate && npm run seed`) on every deploy.
 
+### Confirming a deploy actually landed
+
+Both halves of the app report the commit their image was built from, so this needs no cluster access and no login:
+
+```bash
+npm run verify:prod                                  # or against another host: BASE_URL=<url>
+EXPECTED_REVISION=<merge-commit-sha> npm run verify:prod
+```
+
+Or by hand: `GET /api/health` (backend) and `GET /version.json` (frontend) each return a `revision`.
+
+A green pipeline is not evidence a deploy happened, and neither is a green `semantic-release` job - it can succeed while publishing nothing. See [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md#quick-verification-after-deploy) for the failure modes that look like success.
+
 ---
 
 ## See also
