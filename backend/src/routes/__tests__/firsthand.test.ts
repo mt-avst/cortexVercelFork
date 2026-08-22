@@ -20,10 +20,63 @@ jest.mock('../../firsthand/studies-repository', () => ({
     '../../firsthand/studies-repository'
   ).canWriteStudy,
 }));
-jest.mock('../../firsthand/survey-results-repository', () => ({
-  listResponsesForStudy: jest.fn(),
-  answerCountsByStep: jest.fn(),
-}));
+jest.mock('../../firsthand/survey-results-repository', () => {
+  const listed = jest.fn();
+  const scopeSpy = jest.fn();
+  return {
+    listResponsesForStudy: listed,
+    // Records the scope the ROUTE chose, as opportunities.test.ts already
+    // does for its own CSV route. Without it `studyId: req.params.studyId`
+    // can be replaced with any other study id and all 86 tests here still
+    // pass: the mocked reader ignores its arguments, so no assertion about
+    // the response CONTENT can ever see which study was asked for. The
+    // superadmin downloads "Study A responses.csv" and gets study B's rows,
+    // filename and all, with nothing on screen saying so.
+    __scopeSpy: scopeSpy,
+    /**
+     * A FAITHFUL STAND-IN, not a stub.
+     *
+     * The streamed export reads through `openSurveyCsvExport`, not through
+     * `listResponsesForStudy`, so a factory listing only the old exports left it
+     * `undefined` and the route answered 500 - for a reason no assertion in
+     * this file names. Fourth time a hand-listed mock factory has done that
+     * here.
+     *
+     * Built over the ALREADY-MOCKED reader and the REAL column grouping from
+     * survey-csv.ts, so every test that queues rows keeps working unchanged
+     * and the stand-in cannot disagree with production about which columns
+     * exist or what order they arrive in.
+     */
+    openSurveyCsvExport: async (...args: unknown[]) => {
+      scopeSpy(args[0]);
+      const rows = ((await listed(...args)) ?? []) as import('../../firsthand/survey-results').StoredResponse[];
+      const { removedQuestionColumns } =
+        jest.requireActual<typeof import('../../firsthand/survey-csv')>(
+          '../../firsthand/survey-csv'
+        );
+
+      const byParticipant = new Map<
+        string,
+        import('../../firsthand/survey-results').StoredResponse[]
+      >();
+      for (const row of rows) {
+        const group = byParticipant.get(row.session_id) ?? [];
+        group.push(row);
+        byParticipant.set(row.session_id, group);
+      }
+
+      return {
+        removedQuestions: removedQuestionColumns(rows),
+        participants: async function* () {
+          for (const [sessionId, answers] of byParticipant) {
+            yield { sessionId, answers };
+          }
+        },
+      };
+    },
+    answerCountsByStep: jest.fn(),
+  };
+});
 jest.mock('../../utils/database', () => ({ isDatabaseAvailable: jest.fn() }));
 // redactSensitiveUrl belongs here too: errorHandler imports it from this
 // module, so a factory listing only `logger` left it undefined, errorHandler
@@ -71,6 +124,11 @@ const mockUpdateStudy = (updateStudy as jest.MockedFunction<typeof updateStudy>)
 const mockDeleteStudy = (deleteStudy as jest.MockedFunction<typeof deleteStudy>);
 const mockListResponsesForStudy = (listResponsesForStudy as jest.MockedFunction<typeof listResponsesForStudy>);
 const mockAnswerCountsByStep = (answerCountsByStep as jest.MockedFunction<typeof answerCountsByStep>);
+// Not a real export of the module, so it is reached through the mock registry
+// rather than the import list - the same route opportunities.test.ts takes.
+const { __scopeSpy: mockScopeSpy } = jest.requireMock<{ __scopeSpy: jest.Mock }>(
+  '../../firsthand/survey-results-repository'
+);
 const mockIsDatabaseAvailable = (isDatabaseAvailable as jest.MockedFunction<typeof isDatabaseAvailable>);
 const mockLogger = logger as unknown as {
   info: jest.Mock;
@@ -1039,6 +1097,31 @@ describe('FirstHand Express router', () => {
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(200);
       expect(res.headers['content-type']).toContain('text/csv');
+    });
+
+    it('exports the study named in the URL, and the whole of it', async () => {
+      studyOwnedBy('other-admin-9');
+      mockScopeSpy.mockClear();
+
+      await request(listening(superadminApp))
+        .get('/api/firsthand/studies/study_abc/results.csv')
+        .expect(200);
+
+      // THE SCOPE THE ROUTE CHOSE, which no assertion on the body can reach:
+      // the mocked reader ignores its arguments, so replacing
+      // `studyId: req.params.studyId` with any other id leaves every one of
+      // this file's tests green while the superadmin downloads a CSV named
+      // after study_abc containing another study's rows.
+      //
+      // `kind` is pinned too. This route aggregates across EVERY opportunity
+      // using the study on purpose - that is why it is superadmin-only - so a
+      // drift to `kind: 'opportunity'` would silently narrow the export to one
+      // researcher's slice and report it as the whole study.
+      expect(mockScopeSpy).toHaveBeenCalledTimes(1);
+      expect(mockScopeSpy).toHaveBeenCalledWith({
+        kind: 'study',
+        studyId: 'study_abc'
+      });
     });
 
     // These results aggregate across EVERY opportunity using the study, and a

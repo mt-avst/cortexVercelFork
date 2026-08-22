@@ -33,16 +33,62 @@ jest.mock('../../firsthand/runtime-repository', () => ({
 // Defaults to "nobody answered". Every results test that cares queues its own
 // rows; the point of the default is that a test which never reaches the read
 // still gets a call count of zero to assert on.
-jest.mock('../../firsthand/survey-results-repository', () => ({
-  listResponsesForOpportunity: jest.fn(async () => []),
+jest.mock('../../firsthand/survey-results-repository', () => {
+  const listed = jest.fn(async () => [] as import('../../firsthand/survey-results').StoredResponse[]);
+  const scopeSpy = jest.fn();
+  return {
+    listResponsesForOpportunity: listed,
+    /**
+     * A FAITHFUL STAND-IN, not a stub. The streamed export reads through
+     * `openSurveyCsvExport`, not `listResponsesForOpportunity`, so a factory
+     * listing only the old exports left it `undefined` and the route answered
+     * 500 - for a reason no assertion here names. Built over the
+     * already-mocked reader and the REAL column grouping, so every test that
+     * queues rows keeps working and the stand-in cannot disagree with
+     * production about the columns or their order.
+     */
+    // Records the scope the ROUTE chose. Without it the route's
+    // `kind: 'opportunity'` can be mutated to `kind: 'study'` and every test
+    // still passes - handing a researcher every opportunity's answers for a
+    // study they merely share. The repository tests cannot see this: they
+    // exercise the clause, not the caller's choice of it.
+    __scopeSpy: scopeSpy,
+    openSurveyCsvExport: async (...args: unknown[]) => {
+      scopeSpy(args[0]);
+      const rows = (await listed(...(args as []))) ?? [];
+      const { removedQuestionColumns } =
+        jest.requireActual<typeof import('../../firsthand/survey-csv')>(
+          '../../firsthand/survey-csv'
+        );
+
+      const byParticipant = new Map<
+        string,
+        import('../../firsthand/survey-results').StoredResponse[]
+      >();
+      for (const row of rows) {
+        const group = byParticipant.get(row.session_id) ?? [];
+        group.push(row);
+        byParticipant.set(row.session_id, group);
+      }
+
+      return {
+        removedQuestions: removedQuestionColumns(rows),
+        participants: async function* () {
+          for (const [sessionId, answers] of byParticipant) {
+            yield { sessionId, answers };
+          }
+        },
+      };
+    },
   // Defaults to "nobody has answered yet", which is the state in which an
   // in-place study rewrite is safe. Every test that cares queues its own.
   //
   // Omitting it from this factory does not fail with a missing-mock message:
   // the route awaits `undefined(...)` and answers 500, which reads as a route
   // bug. Fourth occurrence of that shape in this repo.
-  studyHasResponses: jest.fn(async () => false),
-}));
+    studyHasResponses: jest.fn(async () => false),
+  };
+});
 
 // Real implementations, but spy-able: one test needs the CSV serialiser to
 // throw, to prove nothing that can throw runs after res.setHeader.
@@ -50,7 +96,13 @@ jest.mock('../../firsthand/survey-csv', () => {
   const actual = jest.requireActual<typeof import('../../firsthand/survey-csv')>(
     '../../firsthand/survey-csv'
   );
-  return { ...actual, toResponsesCsv: jest.fn(actual.toResponsesCsv) };
+  return {
+    ...actual,
+    // The streamed export never calls `toResponsesCsv`. The per-participant
+    // emitter is what it does call, and it is the only place left where a
+    // failure can happen AFTER the response has committed to 200.
+    toCsvParticipantRow: jest.fn(actual.toCsvParticipantRow),
+  };
 });
 
 jest.mock('../../firsthand/studies-repository', () => ({
@@ -133,7 +185,7 @@ import { createSession } from '../../firsthand/session-create';
 import { findParticipantSessionForOpportunity } from '../../firsthand/runtime-repository';
 import { claimStudyIfUnowned, countStudyTasks, createStudy, deleteStudyUnchecked, getStudyById, isStudiesPersistenceConfigured, updateStudy } from '../../firsthand/studies-repository';
 import { listResponsesForOpportunity, studyHasResponses } from '../../firsthand/survey-results-repository';
-import { toResponsesCsv } from '../../firsthand/survey-csv';
+import { toCsvParticipantRow } from '../../firsthand/survey-csv';
 import { errorHandler, AppError } from '../../utils/errorHandler';
 // Spied per-test rather than module-mocked: the route logs from a dozen places
 // and silencing all of them for the whole file would hide more than it proves.
@@ -168,7 +220,9 @@ const mockListResponsesForOpportunity =
   listResponsesForOpportunity as jest.MockedFunction<typeof listResponsesForOpportunity>;
 const mockStudyHasResponses =
   studyHasResponses as jest.MockedFunction<typeof studyHasResponses>;
-const mockToResponsesCsv = toResponsesCsv as jest.MockedFunction<typeof toResponsesCsv>;
+const mockToCsvParticipantRow = toCsvParticipantRow as jest.MockedFunction<
+  typeof toCsvParticipantRow
+>;
 
 const app = express();
 app.use(express.json());
@@ -5683,12 +5737,12 @@ describe('Opportunities API', () => {
       });
     });
 
-    it('serves a failure as JSON, not as a file, if serialising the CSV throws', async () => {
+    it('serves a failure as JSON, not as a file, if opening the export throws', async () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
-      mockToResponsesCsv.mockImplementationOnce(() => {
-        throw new Error('serialisation blew up');
-      });
+      mockListResponsesForOpportunity.mockRejectedValueOnce(
+        new Error('the read blew up')
+      );
 
       const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
@@ -5696,10 +5750,70 @@ describe('Opportunities API', () => {
 
       // The same hazard the 403 ordering guards against, one line lower down:
       // Express keeps an already-set Content-Type through the error handler,
-      // so headers set before the body was built would have made the browser
+      // so headers set before the body was opened would have made the browser
       // download the error object as "<title> responses.csv".
+      //
+      // Streaming makes this MORE important, not less: `openSurveyCsvExport`
+      // is awaited before the first setHeader precisely so that every refusal
+      // and every read failure still lands here, where a status can still be
+      // chosen.
       expect(response.headers['content-disposition']).toBeUndefined();
       expect(response.headers['content-type']).not.toMatch(/text\/csv/);
+    });
+
+    it('exports the answers of THIS opportunity, not the whole study', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+      await request(listening(app))
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
+        .expect(200);
+
+      // A study is reusable by an opportunity its author did not create, so
+      // `kind: 'study'` here would return every participant another researcher
+      // recruited, under their consent wording. And it is the canonical id
+      // Postgres parsed, never the raw path segment - `opportunity_id` is TEXT
+      // against a uuid, so a differently-cased URL would silently drop rows.
+      const { __scopeSpy } = jest.requireMock<{ __scopeSpy: jest.Mock }>(
+        '../../firsthand/survey-results-repository'
+      );
+      expect(__scopeSpy).toHaveBeenCalledWith({
+        kind: 'opportunity',
+        studyId: STUDY_ID,
+        opportunityId: CANONICAL_ID
+      });
+    });
+
+    it('destroys the download rather than finishing it short, if a row throws mid-stream', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+      mockListResponsesForOpportunity.mockResolvedValueOnce([
+        { session_id: 'session-1', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Fine' }, saved_at: '2026-08-17T10:00:00.000Z' },
+        { session_id: 'session-2', step_id: 'q1', step_prompt: null, step_type: 'open_text', response_payload: { text: 'Also fine' }, saved_at: '2026-08-17T10:01:00.000Z' },
+      ]);
+      // First participant writes, second blows up - after the 200 and the
+      // headers have already gone out.
+      mockToCsvParticipantRow
+        .mockImplementationOnce(() => 'session-1,Fine')
+        .mockImplementationOnce(() => {
+          throw new Error('row blew up');
+        });
+
+      // REFUSED, NOT TRUNCATED, at the only point where the tools are worse.
+      // The status is already 200 and cannot be taken back, so the honest
+      // failure is a transfer that ends early. `res.end()` here would hand the
+      // researcher a CSV that parses and contains part of their data - a mean
+      // computed over a subset with nothing on the page saying so.
+      // Asserted by SIGNATURE, not by `rejects.toThrow()` alone. The review
+      // gate was right that a bare toThrow accepts anything - and until !208
+      // landed, `socket hang up` was also the signature of the ambient
+      // supertest flake in this very file, so the test could have passed for a
+      // reason entirely unrelated to the destroy it claims to prove.
+      await expect(
+        request(listening(app)).get(
+          `/api/opportunities/${PATH_SEGMENT}/survey-results.csv`
+        )
+      ).rejects.toThrow(/socket hang up|ECONNRESET|aborted/i);
     });
 
     it('reports zero respondents as a real answer once it has looked', async () => {

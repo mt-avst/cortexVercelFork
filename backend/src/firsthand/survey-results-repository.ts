@@ -4,7 +4,8 @@ import {
   RESULTS_STATEMENT_TIMEOUT_MS
 } from "./runtime-database";
 import { RuntimeDatabaseBusyError } from "./runtime-pool-admission";
-import type { StoredResponse } from "./survey-results";
+import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
+import { QUESTION_TYPES, type RemovedQuestion } from "./survey-csv";
 import { logger } from "../utils/logger";
 import { AppError } from "../../../shared/types";
 
@@ -40,6 +41,18 @@ type ResponseFilter =
  * at five connections and shared with live participant sessions.
  */
 const MAX_RESPONSE_ROWS = 200_000;
+
+/** The one row mapping, shared by every reader in this file. */
+function toStoredResponse(row: ResponseRow): StoredResponse {
+  return {
+    session_id: row.session_id,
+    step_id: row.step_id,
+    step_prompt: row.step_prompt,
+    step_type: row.step_type,
+    response_payload: row.response_payload ?? {},
+    saved_at: new Date(row.saved_at).toISOString()
+  };
+}
 
 /**
  * The one projection both readers use.
@@ -94,14 +107,7 @@ async function listResponsesWhere(
         );
       }
 
-      return result.rows.map((row) => ({
-        session_id: row.session_id,
-        step_id: row.step_id,
-        step_prompt: row.step_prompt,
-        step_type: row.step_type,
-        response_payload: row.response_payload ?? {},
-        saved_at: new Date(row.saved_at).toISOString()
-      }));
+      return result.rows.map(toStoredResponse);
     },
     // The one read here that is expected to be slow, and the one the default
     // per-statement bound would refuse. `LIMIT 200001` bounds this in ROWS and
@@ -346,4 +352,305 @@ export async function answerCountsByStep(
     });
     return null;
   }
+}
+
+/**
+ * WHOSE ANSWERS, as a value rather than two more boolean arguments.
+ *
+ * The same distinction `listResponsesForStudy` and `listResponsesForOpportunity`
+ * draw, hoisted so the streaming reader below can take it once and reuse it
+ * across several statements. The clause it produces is still one of the two
+ * literals in `ResponseFilter`, so it still cannot be interpolated.
+ */
+export type ResponseScope =
+  | { kind: "study"; studyId: string }
+  | { kind: "opportunity"; studyId: string; opportunityId: string };
+
+function filterFor(scope: ResponseScope): {
+  filter: ResponseFilter;
+  params: unknown[];
+} {
+  return scope.kind === "study"
+    ? { filter: "s.study_id = $1", params: [scope.studyId] }
+    : {
+        filter: "s.study_id = $1 AND s.opportunity_id = $2",
+        params: [scope.studyId, scope.opportunityId]
+      };
+}
+
+/**
+ * How many participants' answers are read - and held - at once.
+ *
+ * The number that decides the export's memory ceiling. A hundred participants
+ * of a hundred-question survey is ten thousand rows in flight, a few megabytes,
+ * against the few hundred the unbatched reader holds for a large study.
+ *
+ * Not larger, because the ceiling is the point; not smaller, because each batch
+ * is a round trip AND a pool checkout, and a batch of one would turn a
+ * two-thousand-participant export into two thousand checkouts on the five
+ * connections live participants share.
+ */
+const CSV_PARTICIPANT_BATCH = 100;
+
+/**
+ * The most participants one export will stream.
+ *
+ * Still a refusal, and still decided BEFORE a byte of the body is written -
+ * the only place it can be decided, because a 413 is impossible once the
+ * response has started. But it bounds PARTICIPANTS where `listResponsesWhere`
+ * bounds ROWS, so it is strictly more permissive: five thousand people
+ * answering a hundred questions is half a million rows, which that reader
+ * refuses outright and this exports without difficulty.
+ *
+ * What has to fit in memory here is the LIST - an identifier each - not their
+ * answers.
+ */
+const MAX_CSV_PARTICIPANTS = 200_000;
+
+/**
+ * The removed-question columns, asked of the database directly.
+ *
+ * Grouped, FILTERED and ordered exactly as `removedQuestionColumns` does it in
+ * survey-csv.ts - by `(step_type, step_prompt)`, question types only, in
+ * first-appearance order - because the streamed header must match the columns
+ * the row emitter later fills.
+ *
+ * The type filter was missing, and both gates caught it. Without it a detached
+ * `instruction` row becomes a "(removed question)" column the unstreamed export
+ * never showed. No live write path can produce one today - the participant API
+ * refuses a non-answerable step - but legacy and imported rows can, and
+ * inline-study.ts anticipates machine-only step types.
+ *
+ * That the two agree is now asserted by survey-csv-export-postgres.ts, which
+ * compares the bytes of both paths over the same seeded rows. The previous
+ * version of this comment claimed such a test existed when it did not.
+ *
+ * Bounded by the number of DELETED QUESTIONS, so it stays small however many
+ * answers the study holds.
+ */
+export async function surveyCsvColumns(
+  scope: ResponseScope
+): Promise<RemovedQuestion[]> {
+  if (!isPostgresRuntimeConfigured()) {
+    return [];
+  }
+
+  const { filter, params } = filterFor(scope);
+
+  return withRuntimeDatabaseClient(
+    async (client) => {
+      const result = await client.query<{
+        step_type: string;
+        step_prompt: string | null;
+      }>(
+        `
+        SELECT r.step_type, r.step_prompt
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE ${filter} AND r.step_id IS NULL
+          AND r.step_type = ANY($${params.length + 1}::text[])
+        GROUP BY r.step_type, r.step_prompt
+        ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
+      `,
+        [...params, [...QUESTION_TYPES]]
+      );
+
+      return result.rows.map((row) => ({
+        type: row.step_type,
+        prompt: row.step_prompt ?? UNKNOWN_REMOVED_PROMPT
+      }));
+    },
+    { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+  );
+}
+
+/**
+ * Every participant who answered, in the order they first answered.
+ *
+ * `MIN(saved_at), MIN(id)` reproduces the order the unbatched CSV produced -
+ * it built its rows from a set ordered by `(saved_at, id)` and kept first
+ * appearance - EXCEPT WHERE TWO PARTICIPANTS TIE ON THE MILLISECOND of their
+ * first answer.
+ *
+ * That exception is real and was demonstrated on Postgres 16 by a review gate,
+ * against an earlier version of this comment which claimed the output was
+ * "byte-identical, not merely equivalent". It is not: `MIN(id)` is taken over
+ * the whole group independently of which row carries the minimum `saved_at`,
+ * and `participant_responses.id` is an application-generated uuid stored as
+ * TEXT, so its minimum is a lexicographic minimum of random values with no
+ * relation to insertion order. `saved_at` is client-supplied at millisecond
+ * precision, so ties are not exotic - imported and seeded data tie routinely.
+ *
+ * Left as it is rather than fixed, deliberately. Ordering by the first row
+ * instead needs a correlated subquery or `DISTINCT ON` over a
+ * `(saved_at, id)`-ordered scan on every export, and the consequence of the
+ * tie is that two participants swap places in a spreadsheet - not a wrong
+ * value, not a missing row. Recorded here so the next reader does not discover
+ * the claim was stronger than the code.
+ */
+async function surveyCsvParticipantIds(
+  scope: ResponseScope
+): Promise<string[]> {
+  const { filter, params } = filterFor(scope);
+
+  return withRuntimeDatabaseClient(
+    async (client) => {
+      const result = await client.query<{ session_id: string }>(
+        `
+        SELECT r.session_id
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE ${filter}
+        GROUP BY r.session_id
+        ORDER BY MIN(r.saved_at) ASC, MIN(r.id) ASC
+        LIMIT ${MAX_CSV_PARTICIPANTS + 1}
+      `,
+        params
+      );
+
+      if (result.rows.length > MAX_CSV_PARTICIPANTS) {
+        throw new AppError(
+          "This study has collected answers from more participants than can be exported in one request. Ask for a database export.",
+          413,
+          "RESPONSE_SET_TOO_LARGE"
+        );
+      }
+
+      return result.rows.map((row) => row.session_id);
+    },
+    { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+  );
+}
+
+/**
+ * The export, a participant at a time.
+ *
+ * ONE CHECKOUT PER BATCH, NOT ONE FOR THE WHOLE EXPORT, and that is the whole
+ * design. A server-side cursor or `COPY` is the obvious way to stream this and
+ * is the wrong one: either holds a runtime-pool connection open for the entire
+ * download, which is precisely the occupancy defect the admission cap exists to
+ * close. Streaming the export by inverting that fix would be a poor trade.
+ * Between batches this holds no connection at all, so a slow client costs the
+ * pool nothing.
+ *
+ * The consequence worth knowing: the batches are separate reads, so an answer
+ * saved DURING an export may or may not appear, depending on whether its
+ * participant had already been passed. The unbatched reader took one statement
+ * and therefore one snapshot. That is a real difference and an acceptable one -
+ * the alternative is holding a transaction open for the length of a download -
+ * and the participant LIST is fixed up front, so somebody who starts answering
+ * mid-export is consistently absent rather than half-present.
+ */
+async function* streamParticipants(
+  scope: ResponseScope,
+  participantIds: string[]
+): AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }> {
+  const { filter, params } = filterFor(scope);
+
+  for (
+    let index = 0;
+    index < participantIds.length;
+    index += CSV_PARTICIPANT_BATCH
+  ) {
+    const batch = participantIds.slice(index, index + CSV_PARTICIPANT_BATCH);
+
+    // `${filter}` in the statement below is DEFENCE IN DEPTH AND CANNOT BE
+    // TESTED, which is worth saying so nobody deletes it as dead or claims it
+    // is covered. `session_id` is the primary key of runtime_sessions and
+    // these ids came from the scoped preflight, so the `ANY(...)` clause
+    // already fixes the row set - collapsing this filter to a study-wide one
+    // is an equivalent mutant and survives every test, correctly. It stays
+    // because a later change to how the id list is built should not be able to
+    // widen the read silently.
+    //
+    // The BATCH clause is a different matter and IS pinned: deleting it with
+    // its bind parameter is caught in survey-csv-export.test.ts, on the
+    // parameters, by `asks each batch for ITS OWN hundred ids`.
+    const rows = await withRuntimeDatabaseClient(
+      async (client) => {
+        const result = await client.query<ResponseRow>(
+          `
+        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
+               r.response_payload, r.saved_at
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])
+        ORDER BY r.saved_at ASC, r.id ASC
+      `,
+          [...params, batch]
+        );
+
+        return result.rows.map(toStoredResponse);
+      },
+      { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+    );
+
+    const byParticipant = new Map<string, StoredResponse[]>();
+    for (const row of rows) {
+      const group = byParticipant.get(row.session_id);
+      if (group) {
+        group.push(row);
+      } else {
+        byParticipant.set(row.session_id, [row]);
+      }
+    }
+
+    // Yielded in the ORDER OF THE ID LIST, not the order the batch query
+    // happened to return them. The list is what carries first-answer order.
+    for (const sessionId of batch) {
+      yield { sessionId, answers: byParticipant.get(sessionId) ?? [] };
+    }
+  }
+}
+
+/**
+ * Everything that can REFUSE an export, done before the export begins.
+ *
+ * A generator body does not run until its first `next()`, so a design where the
+ * route set its headers and then started pulling would have discovered the
+ * participant bound - and its 413 - with the response already committed. Once a
+ * byte of the body is written the status is fixed, and the only honest failure
+ * left is to destroy the connection. So both preflight reads happen HERE, in an
+ * ordinary awaited call, and the caller gets a generator that is known to have
+ * something to say.
+ *
+ * That ordering is the same reason `toCsvContentDisposition` and
+ * `toResponsesCsv` were both built before any header was set in the unstreamed
+ * version: a throw after `setHeader` is served as text/csv, so the browser
+ * downloads the error instead of showing it.
+ */
+export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
+  removedQuestions: RemovedQuestion[];
+  participants: () => AsyncGenerator<{
+    sessionId: string;
+    answers: StoredResponse[];
+  }>;
+}> {
+  if (!isPostgresRuntimeConfigured()) {
+    return {
+      removedQuestions: [],
+      // eslint-disable-next-line require-yield
+      participants: async function* () {
+        return;
+      }
+    };
+  }
+
+  // THE BOUND FIRST, so the refusal is the cheap thing. Both reads scan
+  // participant_responses under the same 120s statement budget, but only this
+  // one is bounded - it carries `LIMIT MAX_CSV_PARTICIPANTS + 1` and decides
+  // the 413. Run second, as it was, a study too large to export still pays for
+  // the unbounded removed-columns grouping before anyone tells it no.
+  //
+  // Order is all that changes. Both are independent reads of the same scope
+  // and neither writes, so the only observable difference is WHICH refusal
+  // arrives first when both would fail - and both are pre-first-byte refusals,
+  // so either is honest.
+  const participantIds = await surveyCsvParticipantIds(scope);
+  const removedQuestions = await surveyCsvColumns(scope);
+
+  return {
+    removedQuestions,
+    participants: () => streamParticipants(scope, participantIds)
+  };
 }

@@ -1,10 +1,11 @@
 import { execFile } from "node:child_process";
-import { randomBytes } from "node:crypto";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import pg from "pg";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+
+import { startTestPostgres, type TestPostgres } from "../__tests__/helpers/postgres-instance";
 
 import type { StudyStep } from "../../../shared/firsthand/contract";
 
@@ -51,8 +52,6 @@ const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
  * whole range, so a later commit cannot clear a finding an earlier one
  * introduced. Cheaper to generate it than to argue with the scanner.
  */
-const POSTGRES_PASSWORD = randomBytes(16).toString("hex");
-const containerName = `firsthand-autosave-pg-${process.pid}`;
 const migrateScript = path.resolve(__dirname, "../../scripts/firsthand-migrate.mjs");
 
 const STUDY_ID = "study_autosave";
@@ -60,65 +59,8 @@ const AUTHOR = { userId: "author-1", isSuperadmin: false };
 
 let databaseUrl: string;
 let pool: pg.Pool;
+let postgres: TestPostgres;
 
-async function startPostgresContainer(): Promise<string> {
-  try {
-    await execFileAsync("docker", ["info"], { timeout: 10_000 });
-  } catch {
-    throw new Error(
-      "Docker is required for the autosave persistence tests (real Postgres, so " +
-        "the step-order, primary-key, foreign-key and CHECK constraints are " +
-        "actually evaluated). Start Docker, or set FIRSTHAND_SKIP_DB_TESTS=1 to " +
-        "opt out explicitly."
-    );
-  }
-
-  await execFileAsync("docker", [
-    "run",
-    "-d",
-    "--rm",
-    "--name",
-    containerName,
-    "-e",
-    `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`,
-    "-e",
-    "POSTGRES_DB=firsthand",
-    "-p",
-    "127.0.0.1:0:5432",
-    "postgres:17"
-  ]);
-
-  const { stdout } = await execFileAsync("docker", ["port", containerName, "5432"]);
-  const mappedPort = stdout.trim().split("\n")[0]?.split(":").pop();
-  if (!mappedPort) {
-    throw new Error(`Could not determine the mapped Postgres port: ${stdout}`);
-  }
-
-  const connectionString = `postgres://postgres:${POSTGRES_PASSWORD}@127.0.0.1:${mappedPort}/firsthand`;
-
-  // A real connection rather than `pg_isready`, for the reason the attachment
-  // test states: the image runs a temporary server on a unix socket while
-  // initdb finishes, so pg_isready reports ready and the container then
-  // restarts it under a client that trusted the first signal.
-  const deadline = Date.now() + 60_000;
-  for (;;) {
-    const client = new pg.Client({ connectionString, connectionTimeoutMillis: 2_000 });
-    try {
-      await client.connect();
-      await client.query("SELECT 1");
-      await client.end();
-      break;
-    } catch {
-      await client.end().catch(() => {});
-      if (Date.now() > deadline) {
-        throw new Error("Postgres did not accept a connection within 60s.");
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-
-  return connectionString;
-}
 
 const importRepository = async () => await import("./studies-repository");
 
@@ -235,7 +177,8 @@ const revisionFrom = (result: Awaited<ReturnType<typeof autosave>>): string => {
 
 describe.skipIf(skipDbTests)("a sequence of autosaves, against a real Postgres", () => {
   beforeAll(async () => {
-    databaseUrl = await startPostgresContainer();
+    postgres = await startTestPostgres("autosave");
+    databaseUrl = postgres.connectionString;
 
     await execFileAsync("node", [migrateScript], {
       env: { ...process.env, DATABASE_URL: databaseUrl },
@@ -247,7 +190,7 @@ describe.skipIf(skipDbTests)("a sequence of autosaves, against a real Postgres",
 
   afterAll(async () => {
     await pool?.end().catch(() => {});
-    await execFileAsync("docker", ["rm", "-f", containerName]).catch(() => {});
+    await postgres?.stop();
   });
 
   beforeEach(async () => {
