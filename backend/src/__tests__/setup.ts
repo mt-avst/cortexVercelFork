@@ -22,6 +22,15 @@ process.env.NODE_ENV = 'test';
 // .env.test - still wins, because this only fills an absent one.
 process.env.SESSION_SECRET ||= 'jest-local-test-constant-not-a-real-secret'; // gitleaks:allow
 
+// Every server opened by `listening()` is closed once the file's tests are
+// done. Global rather than per-file so a new test file cannot forget, and an
+// unclosed server cannot leave a jest worker hanging.
+import { closeListeningServers } from './helpers/listening';
+
+afterAll(async () => {
+  await closeListeningServers();
+});
+
 // Mock console methods in test environment to reduce noise
 if (process.env.NODE_ENV === 'test') {
   global.console = {

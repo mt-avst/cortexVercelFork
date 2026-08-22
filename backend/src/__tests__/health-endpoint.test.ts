@@ -1,5 +1,6 @@
 import { describe, it, expect, jest, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../__tests__/helpers/listening';
 
 // Controls the verdict without needing a database. Factory uses only inline
 // jest.fn() to avoid TDZ, per the house pattern.
@@ -39,7 +40,7 @@ describe('GET /api/health', () => {
   it('answers 200 ok/up when the database responds', async () => {
     probe.mockResolvedValue({ healthy: true, latencyMs: 12 });
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ status: 'ok', database: 'up', databaseLatencyMs: 12 });
@@ -48,7 +49,7 @@ describe('GET /api/health', () => {
   it('answers 503 degraded/down when the database does not', async () => {
     probe.mockResolvedValue({ healthy: false, reason: 'timeout', latencyMs: 2000 });
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.status).toBe(503);
     expect(response.body).toMatchObject({ status: 'degraded', database: 'down' });
@@ -60,7 +61,7 @@ describe('GET /api/health', () => {
   it('omits the latency oracle on the failure path', async () => {
     probe.mockResolvedValue({ healthy: false, reason: 'error', latencyMs: 4 });
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.body.databaseLatencyMs).toBeUndefined();
   });
@@ -68,7 +69,7 @@ describe('GET /api/health', () => {
   it('never leaks the coarse reason or any driver detail to the caller', async () => {
     probe.mockResolvedValue({ healthy: false, reason: 'error', latencyMs: 4 });
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(JSON.stringify(response.body)).not.toMatch(/reason|password|ECONNREFUSED|postgres/i);
   });
@@ -76,7 +77,7 @@ describe('GET /api/health', () => {
   it('marks the response no-store', async () => {
     probe.mockResolvedValue({ healthy: true, latencyMs: 5 });
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.headers['cache-control']).toBe('no-store');
   });
@@ -113,7 +114,7 @@ describe('GET /api/health', () => {
   it('does not hang or crash if the probe rejects', async () => {
     probe.mockRejectedValue(new Error('probe exploded'));
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.status).toBeGreaterThanOrEqual(500);
   });
@@ -125,7 +126,7 @@ describe('GET /api/health', () => {
     probe.mockResolvedValue({ healthy: true, latencyMs: 12 });
     process.env.APP_COMMIT_SHA = '79e9ac615137ef892b5824bfa2b9ca8b32150dad';
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.body.revision).toBe('79e9ac615137ef892b5824bfa2b9ca8b32150dad');
   });
@@ -139,7 +140,7 @@ describe('GET /api/health', () => {
     probe.mockResolvedValue({ healthy: false, reason: 'timeout', latencyMs: 2000 });
     process.env.APP_COMMIT_SHA = '79e9ac615137ef892b5824bfa2b9ca8b32150dad';
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.status).toBe(503);
     expect(response.body.revision).toBe('79e9ac615137ef892b5824bfa2b9ca8b32150dad');
@@ -149,7 +150,7 @@ describe('GET /api/health', () => {
     probe.mockResolvedValue({ healthy: true, latencyMs: 12 });
     delete process.env.APP_COMMIT_SHA;
 
-    const response = await request(app).get('/api/health');
+    const response = await request(listening(app)).get('/api/health');
 
     expect(response.body.revision).toBe('unknown');
   });

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // In-process outputs route + the media streaming route (B3c). The HMAC proxy is
@@ -131,27 +132,27 @@ describe('GET outputs - in-process assembly', () => {
   });
 
   it('returns 401 when unauthenticated', async () => {
-    const response = await request(buildApp(null)).get(OUTPUTS_PATH);
+    const response = await request(listening(buildApp(null))).get(OUTPUTS_PATH);
     expect(response.status).toBe(401);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
 
   it('returns 403 for a non-admin role', async () => {
-    const response = await request(buildApp(employeeUser)).get(OUTPUTS_PATH);
+    const response = await request(listening(buildApp(employeeUser))).get(OUTPUTS_PATH);
     expect(response.status).toBe(403);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
 
   it('returns 403 for an admin who does not own the opportunity', async () => {
     mockOwnershipRow('owner-user-id');
-    const response = await request(buildApp(otherAdminUser)).get(OUTPUTS_PATH);
+    const response = await request(listening(buildApp(otherAdminUser))).get(OUTPUTS_PATH);
     expect(response.status).toBe(403);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
 
   it('returns 503 when the database is unavailable', async () => {
     mockIsDatabaseAvailable.mockResolvedValue(false);
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
     expect(response.status).toBe(503);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
@@ -159,7 +160,7 @@ describe('GET outputs - in-process assembly', () => {
   it('returns 404 when the session does not belong to the opportunity', async () => {
     mockOwnershipRow();
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
     expect(response.status).toBe(404);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
@@ -168,14 +169,14 @@ describe('GET outputs - in-process assembly', () => {
     mockOwnershipRow();
     mockScopingHit();
     mockGetRuntimeSession.mockResolvedValue(null);
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
     expect(response.status).toBe(404);
   });
 
   it('returns 400 for an invalid attempt value', async () => {
     mockOwnershipRow();
     mockScopingHit();
-    const response = await request(ownerApp).get(`${OUTPUTS_PATH}?attempt=abc`);
+    const response = await request(listening(ownerApp)).get(`${OUTPUTS_PATH}?attempt=abc`);
     expect(response.status).toBe(400);
     expect(mockGetRuntimeSession).not.toHaveBeenCalled();
   });
@@ -186,7 +187,7 @@ describe('GET outputs - in-process assembly', () => {
     const session = buildRuntimeSession({ attemptNumber: 2 });
     mockGetRuntimeSession.mockResolvedValue(session);
     mockListAttempts.mockResolvedValue([session]);
-    const response = await request(ownerApp).get(`${OUTPUTS_PATH}?attempt=2`);
+    const response = await request(listening(ownerApp)).get(`${OUTPUTS_PATH}?attempt=2`);
     expect(response.status).toBe(200);
     expect(mockGetRuntimeSession).toHaveBeenCalledWith('session_abc', { attemptNumber: 2 });
     expect(mockListAttempts).toHaveBeenCalledWith('session_abc');
@@ -199,7 +200,7 @@ describe('GET outputs - in-process assembly', () => {
     mockGetRuntimeSession.mockResolvedValue(session);
     mockListAttempts.mockResolvedValue([session]);
 
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
 
     expect(response.status).toBe(200);
     expect(response.body.contract_version).toBe('1.0');
@@ -219,7 +220,7 @@ describe('GET outputs - in-process assembly', () => {
     // fall back to [session] so attempts satisfies the schema's min(1).
     mockListAttempts.mockResolvedValue([]);
 
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
 
     expect(response.status).toBe(200);
     expect(response.body.attempts).toHaveLength(1);
@@ -247,7 +248,7 @@ describe('GET outputs - in-process assembly', () => {
     mockGetRuntimeSession.mockResolvedValue(session);
     mockListAttempts.mockResolvedValue([session]);
 
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
 
     expect(response.status).toBe(200);
     expect(response.body.assets[0].media_url).toBeNull();
@@ -259,7 +260,7 @@ describe('GET outputs - in-process assembly', () => {
     const session = buildRuntimeSession();
     mockGetRuntimeSession.mockResolvedValue(session);
     mockListAttempts.mockResolvedValue([session]);
-    const response = await request(buildApp(superadminUser)).get(OUTPUTS_PATH);
+    const response = await request(listening(buildApp(superadminUser))).get(OUTPUTS_PATH);
     expect(response.status).toBe(200);
   });
 
@@ -270,7 +271,7 @@ describe('GET outputs - in-process assembly', () => {
     const session = buildRuntimeSession({ studyTitle: '' });
     mockGetRuntimeSession.mockResolvedValue(session);
     mockListAttempts.mockResolvedValue([session]);
-    const response = await request(ownerApp).get(OUTPUTS_PATH);
+    const response = await request(listening(ownerApp)).get(OUTPUTS_PATH);
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'outputs_assembly_failed' });
   });
@@ -284,34 +285,34 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
   });
 
   it('returns 401 when unauthenticated', async () => {
-    const response = await request(buildApp(null)).get(MEDIA_PATH);
+    const response = await request(listening(buildApp(null))).get(MEDIA_PATH);
     expect(response.status).toBe(401);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
 
   it('returns 403 for a non-admin role', async () => {
-    const response = await request(buildApp(employeeUser)).get(MEDIA_PATH);
+    const response = await request(listening(buildApp(employeeUser))).get(MEDIA_PATH);
     expect(response.status).toBe(403);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
 
   it('returns 403 for an admin who does not own the opportunity', async () => {
     mockOwnershipRow('owner-user-id');
-    const response = await request(buildApp(otherAdminUser)).get(MEDIA_PATH);
+    const response = await request(listening(buildApp(otherAdminUser))).get(MEDIA_PATH);
     expect(response.status).toBe(403);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
 
   it('returns 503 when the database is unavailable', async () => {
     mockIsDatabaseAvailable.mockResolvedValue(false);
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
     expect(response.status).toBe(503);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
 
   it('returns 404 when the opportunity does not exist', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
     expect(response.status).toBe(404);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
@@ -319,7 +320,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
   it('returns 404 when the session does not belong to the opportunity', async () => {
     mockOwnershipRow();
     mockQuery.mockResolvedValueOnce({ rows: [] });
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
     expect(response.status).toBe(404);
     expect(mockGetRuntimeAsset).not.toHaveBeenCalled();
   });
@@ -328,7 +329,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     mockOwnershipRow();
     mockScopingHit();
     mockGetRuntimeAsset.mockResolvedValue(null);
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
     expect(response.status).toBe(404);
     expect(mockGetRuntimeAsset).toHaveBeenCalledWith('session_abc', 'asset_1');
   });
@@ -337,7 +338,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     mockOwnershipRow();
     mockScopingHit();
     mockGetRuntimeAsset.mockResolvedValue({ id: 'asset_1', mimeType: 'text/html' });
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
     expect(response.status).toBe(404);
     expect(mockCreateAssetResponse).not.toHaveBeenCalled();
   });
@@ -353,7 +354,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
       })
     );
 
-    const response = await request(ownerApp).get(MEDIA_PATH).buffer(true);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH).buffer(true);
 
     expect(response.status).toBe(200);
     expect(response.headers['content-type']).toBe('video/webm');
@@ -377,7 +378,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
       })
     );
 
-    const response = await request(ownerApp)
+    const response = await request(listening(ownerApp))
       .get(MEDIA_PATH)
       .set('Range', 'bytes=0-4');
 
@@ -397,7 +398,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
       new Response('whole', { status: 200, headers: { 'Content-Type': 'video/webm' } })
     );
 
-    const response = await request(ownerApp)
+    const response = await request(listening(ownerApp))
       .get(MEDIA_PATH)
       .set('Range', 'bytes=abc-def');
 
@@ -419,7 +420,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
       })
     );
 
-    const response = await request(ownerApp)
+    const response = await request(listening(ownerApp))
       .get(MEDIA_PATH)
       .set('Range', 'bytes=999999-');
 
@@ -434,7 +435,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     const notFound = Object.assign(new Error('missing'), { name: 'NoSuchKey' });
     mockCreateAssetResponse.mockRejectedValue(notFound);
 
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
 
     expect(response.status).toBe(404);
   });
@@ -446,7 +447,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     const denied = Object.assign(new Error('access denied'), { name: 'AccessDenied' });
     mockCreateAssetResponse.mockRejectedValue(denied);
 
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
 
     expect(response.status).toBe(500);
   });
@@ -471,7 +472,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
       })
     );
 
-    const response = await request(ownerApp).get(MEDIA_PATH);
+    const response = await request(listening(ownerApp)).get(MEDIA_PATH);
 
     expect(response.status).toBe(500);
     expect(response.body).toEqual({ error: 'media_stream_failed' });

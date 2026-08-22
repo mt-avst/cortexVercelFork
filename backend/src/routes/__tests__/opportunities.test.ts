@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // Mock the database pool for testing (factory uses only inline jest.fn() to avoid TDZ)
@@ -239,7 +240,7 @@ describe('Opportunities API', () => {
 
       mockQuery.mockResolvedValueOnce({ rows: mockOpportunities });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities')
         .expect(200);
 
@@ -255,7 +256,7 @@ describe('Opportunities API', () => {
     it('should filter by type', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .get('/api/opportunities?type=test')
         .expect(200);
 
@@ -270,7 +271,7 @@ describe('Opportunities API', () => {
     it('should search by query', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .get('/api/opportunities?q=test')
         .expect(200);
 
@@ -300,7 +301,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert (result unused)
       mockQuery.mockResolvedValueOnce({ rows: [newOpportunity] }); // opportunity insert
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'test',
@@ -322,7 +323,7 @@ describe('Opportunities API', () => {
     it('should validate required fields', async () => {
       // Field presence is enforced by validateRequest(CreateOpportunitySchema) (zod),
       // which always responds with { error: 'Validation failed', details }.
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'test'
@@ -337,7 +338,7 @@ describe('Opportunities API', () => {
     });
 
     it('should validate title length', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'test',
@@ -352,7 +353,7 @@ describe('Opportunities API', () => {
     });
 
     it('should validate purpose length', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'test',
@@ -391,7 +392,7 @@ describe('Opportunities API', () => {
       ['vbscript:msgbox(1)'],
       ['ftp://example.com/file']
     ])('refuses %s on create', async (link) => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'question',
@@ -414,7 +415,7 @@ describe('Opportunities API', () => {
     ])('refuses %s on update too', async (link) => {
       // No stored-row mocks needed: the schema refuses before the handler runs,
       // which is the point - it is a boundary, not a guard inside the flow.
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ external_link_optional: link })
         .expect(400);
@@ -451,7 +452,7 @@ describe('Opportunities API', () => {
         ]
       }); // opportunity insert
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'question',
@@ -464,7 +465,7 @@ describe('Opportunities API', () => {
     });
 
     it('should require external link for published polls/surveys', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'poll',
@@ -487,7 +488,7 @@ describe('Opportunities API', () => {
      * where the participant is actually being sent somewhere else.
      */
     it('still requires an external link for a published poll delivered externally', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'poll',
@@ -504,7 +505,7 @@ describe('Opportunities API', () => {
     });
 
     it('does not ask a native survey for an external link, but does ask for a study', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'survey',
@@ -542,7 +543,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -573,7 +574,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'survey',
@@ -615,7 +616,7 @@ describe('Opportunities API', () => {
         rows: [{ id: '9', type: 'survey', created_at: new Date(), updated_at: new Date() }]
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'survey',
@@ -646,7 +647,7 @@ describe('Opportunities API', () => {
         rows: [{ id: '10', type: 'poll', created_at: new Date(), updated_at: new Date() }]
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'poll',
@@ -672,7 +673,7 @@ describe('Opportunities API', () => {
     it('refuses a study id that resolves to nothing rather than skipping the check', async () => {
       mockGetStudyById.mockResolvedValueOnce(null as never);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -721,7 +722,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '11', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(body()).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(body()).expect(201);
 
         expect(mockCreateStudy).toHaveBeenCalledWith(
           expect.objectContaining({ kind: 'survey', status: 'launched' })
@@ -747,7 +748,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '12', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(body({ status: 'draft' }))
           .expect(201);
@@ -767,7 +768,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '14', type: 'question', created_at: new Date(), updated_at: new Date() }]
         });
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({
             type: 'question',
@@ -790,7 +791,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '13', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(body()).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(body()).expect(201);
 
         const call = mockCreateStudy.mock.calls[0][0] as { id: string; steps: { step_id: string }[] };
         call.steps.forEach((step) => expect(step.step_id.startsWith(call.id)).toBe(true));
@@ -806,14 +807,14 @@ describe('Opportunities API', () => {
           rows: [{ id: '14', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send(body({ external_link_optional: undefined }))
           .expect(201);
       });
 
       it('refuses questions on a recorded study', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(body({ type: 'unmoderated', delivery_mode: undefined }))
           .expect(400);
@@ -828,7 +829,7 @@ describe('Opportunities API', () => {
        * both and nothing to disambiguate.
        */
       it('refuses a task list on a survey', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(body({
             inline_study: {
@@ -844,7 +845,7 @@ describe('Opportunities API', () => {
       });
 
       it('refuses questions alongside a linked study, rather than picking one', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(body({ firsthand_study_id: 'study_existing' }))
           .expect(400);
@@ -860,7 +861,7 @@ describe('Opportunities API', () => {
        * link instead.
        */
       it('refuses questions when the survey hands off externally', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(body({
             delivery_mode: 'external',
@@ -908,7 +909,7 @@ describe('Opportunities API', () => {
               rowCount: 1
             });
           }
-          return request(app).patch('/api/opportunities/1').send(body);
+          return request(listening(app)).patch('/api/opportunities/1').send(body);
         };
 
         /**
@@ -1542,7 +1543,7 @@ describe('Opportunities API', () => {
       });
 
       it('refuses a rating question with no scale, at the API not just the form', async () => {
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send(body({
             inline_survey: {
@@ -1567,7 +1568,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '17', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send(body({ inline_survey: { ...questions, copied_from_study_id: 'study_source' } }))
           .expect(201);
@@ -1584,7 +1585,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '18', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(body()).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(body()).expect(201);
 
         const created = mockCreateStudy.mock.calls[0][0];
         expect(created.copied_from_study_id).toBeNull();
@@ -1610,7 +1611,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '19', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send(
             body({
@@ -1639,7 +1640,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '20', type: 'survey', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(body()).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(body()).expect(201);
 
         const created = mockCreateStudy.mock.calls[0][0];
         expect(created.consent_template_id).toBeNull();
@@ -1648,7 +1649,7 @@ describe('Opportunities API', () => {
     });
 
     it('should require a study to publish an unmoderated opportunity (A1)', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -1690,7 +1691,7 @@ describe('Opportunities API', () => {
         ]
       }); // opportunity insert
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -1718,7 +1719,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
       mockQuery.mockResolvedValueOnce({ rows: [created] }); // opportunity insert
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -1768,7 +1769,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
         });
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(inlineBody)
           .expect(201);
@@ -1785,7 +1786,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
 
         // NOT 30, and not `default_duration_minutes`. That column is NOT NULL
         // DEFAULT 30, and falling back to it gave every recorded study a length
@@ -1804,7 +1805,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '9', type: 'unmoderated', firsthand_study_id: 'study_generated', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -1835,7 +1836,7 @@ describe('Opportunities API', () => {
           ]
         });
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(inlineBody)
           .expect(201);
@@ -1873,7 +1874,7 @@ describe('Opportunities API', () => {
         mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
         mockQuery.mockRejectedValueOnce(new Error('insert exploded'));
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(500);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(500);
 
         // Studies and opportunities sit on different pools, so this
         // compensating delete is the only thing preventing a launched study
@@ -1884,7 +1885,7 @@ describe('Opportunities API', () => {
       it('rejects a body carrying both a linked study and an authored one', async () => {
         // Resolving this by precedence silently discarded whichever lost, so
         // the ambiguity is refused instead.
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({ ...inlineBody, firsthand_study_id: 'study_existing' })
           .expect(400);
@@ -1911,7 +1912,7 @@ describe('Opportunities API', () => {
 
         const { inline_study, ...linkedOnly } = inlineBody;
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({ ...linkedOnly, firsthand_study_id: 'study_existing' })
           .expect(201);
@@ -1952,7 +1953,7 @@ describe('Opportunities API', () => {
 
         const { inline_study, ...linkedOnly } = inlineBody;
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({ ...linkedOnly, firsthand_study_id: 'study_existing' })
           .expect(201);
@@ -1973,7 +1974,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '12', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
 
         expect(mockClaimStudyIfUnowned).not.toHaveBeenCalled();
       });
@@ -1981,7 +1982,7 @@ describe('Opportunities API', () => {
       it('refuses to publish on a whitespace-only study id instead of storing null', async () => {
         const { inline_study, ...linkedOnly } = inlineBody;
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({ ...linkedOnly, firsthand_study_id: '   ' })
           .expect(400);
@@ -2000,8 +2001,8 @@ describe('Opportunities API', () => {
           rows: [{ id: 'x', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
 
         const first = mockCreateStudy.mock.calls[0][0];
         const second = mockCreateStudy.mock.calls[1][0];
@@ -2021,7 +2022,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '11', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2037,7 +2038,7 @@ describe('Opportunities API', () => {
       });
 
       it('refuses a starting url that could execute against the participant session', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2060,7 +2061,7 @@ describe('Opportunities API', () => {
         // The schema trims before min(1). Validating first and trimming later
         // stored "" and produced a study whose session payload could not be
         // assembled, so every participant got a 500 at run time.
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2076,7 +2077,7 @@ describe('Opportunities API', () => {
       });
 
       it('rejects whitespace-only consent text', async () => {
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2089,7 +2090,7 @@ describe('Opportunities API', () => {
 
       it('refuses an inline study on a type that cannot carry one', async () => {
         // Create used to drop this silently while PATCH rejected it.
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({ ...inlineBody, type: 'poll', external_link_optional: 'https://example.com' })
           .expect(400);
@@ -2104,7 +2105,7 @@ describe('Opportunities API', () => {
         // title and purpose_one_liner become the study's title and intro_text.
         // Validating them untrimmed let "    " satisfy min(4) and store '',
         // producing a study whose session payload cannot assemble.
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({ ...inlineBody, title: '      ' })
           .expect(400);
@@ -2114,7 +2115,7 @@ describe('Opportunities API', () => {
       });
 
       it('rejects a whitespace-only purpose, which becomes the study intro', async () => {
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({ ...inlineBody, purpose_one_liner: '             ' })
           .expect(400);
@@ -2125,13 +2126,13 @@ describe('Opportunities API', () => {
       it('answers 503, not 500, when the studies pool is not configured', async () => {
         mockIsStudiesPersistenceConfigured.mockReturnValueOnce(false);
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(503);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(503);
 
         expect(mockCreateStudy).not.toHaveBeenCalled();
       });
 
       it('rejects a choice step with fewer than two options', async () => {
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2164,7 +2165,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '15', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2184,7 +2185,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '16', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
 
         const created = mockCreateStudy.mock.calls[0][0];
         expect(created.copied_from_study_id).toBeNull();
@@ -2207,7 +2208,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '21', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app)
+        await request(listening(app))
           .post('/api/opportunities')
           .send({
             ...inlineBody,
@@ -2231,7 +2232,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '22', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(inlineBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(inlineBody).expect(201);
 
         const created = mockCreateStudy.mock.calls[0][0];
         expect(created.consent_template_id).toBeNull();
@@ -2240,7 +2241,7 @@ describe('Opportunities API', () => {
     });
 
     it('should reject an unmoderated opportunity with an external participant type (M2)', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities')
         .send({
           type: 'unmoderated',
@@ -2291,7 +2292,7 @@ describe('Opportunities API', () => {
       it('refuses to link a study owned by another researcher', async () => {
         mockGetStudyById.mockResolvedValueOnce(linkedStudy('someone-else'));
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .post('/api/opportunities')
           .send(linkBody)
           .expect(403);
@@ -2310,7 +2311,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '20', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(linkBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(linkBody).expect(201);
       });
 
       it('still links a study you own', async () => {
@@ -2320,7 +2321,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '21', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(app).post('/api/opportunities').send(linkBody).expect(201);
+        await request(listening(app)).post('/api/opportunities').send(linkBody).expect(201);
       });
 
       it('lets a superadmin link a study owned by someone else', async () => {
@@ -2346,7 +2347,7 @@ describe('Opportunities API', () => {
           rows: [{ id: '22', created_at: new Date(), updated_at: new Date() }]
         });
 
-        await request(superadminApp).post('/api/opportunities').send(linkBody).expect(201);
+        await request(listening(superadminApp)).post('/api/opportunities').send(linkBody).expect(201);
       });
     });
   });
@@ -2394,7 +2395,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'published', inline_study: inlineStudy })
         .expect(200);
@@ -2439,7 +2440,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({
           status: 'published',
@@ -2471,7 +2472,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({
           status: 'published',
@@ -2506,7 +2507,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'published', inline_study: inlineStudy })
         .expect(200);
@@ -2530,7 +2531,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ inline_study: inlineStudy })
         .expect(200);
@@ -2551,7 +2552,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: 'study_reused' })
         .expect(200);
@@ -2572,7 +2573,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: '   ' })
         .expect(200);
@@ -2612,7 +2613,7 @@ describe('Opportunities API', () => {
             rowCount: 1
           });
         }
-        return request(app).patch('/api/opportunities/1').send(body);
+        return request(listening(app)).patch('/api/opportunities/1').send(body);
       };
 
       /**
@@ -2952,7 +2953,7 @@ describe('Opportunities API', () => {
         // three unreached once-values behind for the next test to consume. See
         // the note on `expectUpdate` above - that is the shape of poisoning
         // this file has already been bitten by.
-        await request(app)
+        await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ inline_study: inlineStudy, expected_study_updated_at: 'yesterday' })
           .expect(400);
@@ -3042,7 +3043,7 @@ describe('Opportunities API', () => {
           rowCount: 1
         });
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ inline_study: inlineStudy })
           .expect(200);
@@ -3109,7 +3110,7 @@ describe('Opportunities API', () => {
           rowCount: 1
         });
 
-        await request(superadminApp)
+        await request(listening(superadminApp))
           .patch('/api/opportunities/1')
           .send({ inline_study: inlineStudy })
           .expect(200);
@@ -3681,7 +3682,7 @@ describe('Opportunities API', () => {
         // Deleted between the ownership check and the write.
         mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
-        await request(app)
+        await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ title: 'A new title', inline_study: inlineStudy })
           .expect(404);
@@ -3868,7 +3869,7 @@ describe('Opportunities API', () => {
         rows: [existingUnmoderated('study_already_linked')]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: null, inline_study: inlineStudy })
         .expect(400);
@@ -3891,7 +3892,7 @@ describe('Opportunities API', () => {
       // but matches nothing.
       mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 0 });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ inline_study: inlineStudy })
         .expect(404);
@@ -3908,7 +3909,7 @@ describe('Opportunities API', () => {
         rows: [existingUnmoderated('study_live', 'published')]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: null })
         .expect(400);
@@ -3926,7 +3927,7 @@ describe('Opportunities API', () => {
       // row access used to throw a TypeError straight into the 500 branch.
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ title: 'A perfectly fine new title' })
         .expect(404);
@@ -3950,7 +3951,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ participant_type_required: 'any' })
         .expect(200);
@@ -3985,7 +3986,7 @@ describe('Opportunities API', () => {
       });
 
       // Only the status. The link is never mentioned.
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'published' })
         .expect(200);
@@ -4011,7 +4012,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'published' })
         .expect(200);
@@ -4029,7 +4030,7 @@ describe('Opportunities API', () => {
         rows: [existingUnmoderated('study_live', 'published')]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: '   ' })
         .expect(400);
@@ -4054,7 +4055,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ type: 'poll' })
         .expect(400);
@@ -4087,7 +4088,7 @@ describe('Opportunities API', () => {
         ]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ delivery_mode: 'native' })
         .expect(400);
@@ -4139,7 +4140,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ delivery_mode: 'native' })
         .expect(200);
@@ -4178,7 +4179,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ title: 'A slightly better survey title' })
         .expect(200);
@@ -4205,7 +4206,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'draft' })
         .expect(200);
@@ -4243,7 +4244,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ delivery_mode: 'native' })
         .expect(400);
@@ -4255,7 +4256,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: 'study_x', inline_study: inlineStudy })
         .expect(400);
@@ -4275,7 +4276,7 @@ describe('Opportunities API', () => {
         rowCount: 1
       });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ firsthand_study_id: '   ' })
         .expect(200);
@@ -4297,7 +4298,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ inline_study: inlineStudy })
         .expect(503);
@@ -4314,7 +4315,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
       mockQuery.mockRejectedValueOnce(new Error('update exploded'));
 
-      await request(app)
+      await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ inline_study: inlineStudy })
         .expect(500);
@@ -4326,7 +4327,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
       mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated(null)] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ status: 'published' })
         .expect(400);
@@ -4364,7 +4365,7 @@ describe('Opportunities API', () => {
         mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_mine')] });
         mockGetStudyById.mockResolvedValueOnce(colleaguesStudy('someone-else'));
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ firsthand_study_id: 'study_colleagues' })
           .expect(403);
@@ -4390,7 +4391,7 @@ describe('Opportunities API', () => {
         });
         mockGetStudyById.mockResolvedValueOnce(colleaguesStudy('someone-else'));
 
-        await request(app)
+        await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ title: 'A retitled opportunity', firsthand_study_id: 'study_colleagues' })
           .expect(200);
@@ -4404,7 +4405,7 @@ describe('Opportunities API', () => {
           rowCount: 1
         });
 
-        await request(app)
+        await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ firsthand_study_id: null })
           .expect(200);
@@ -4426,7 +4427,7 @@ describe('Opportunities API', () => {
         mockQuery.mockResolvedValueOnce({ rows: [existingUnmoderated('study_mine')] });
         mockGetStudyById.mockResolvedValueOnce(null as never);
 
-        const response = await request(app)
+        const response = await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ firsthand_study_id: 'study_does_not_exist' })
           .expect(400);
@@ -4442,7 +4443,7 @@ describe('Opportunities API', () => {
           rowCount: 1
         });
 
-        await request(app)
+        await request(listening(app))
           .patch('/api/opportunities/1')
           .send({ title: 'A retitled opportunity' })
           .expect(200);
@@ -4483,7 +4484,7 @@ describe('Opportunities API', () => {
       // 3. The actual UPDATE ... RETURNING *
       mockQuery.mockResolvedValueOnce({ rows: [updatedOpportunity] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({
           title: 'Updated Title',
@@ -4510,7 +4511,7 @@ describe('Opportunities API', () => {
         rows: [{ type: 'unmoderated', external_link_optional: null, firsthand_study_id: 'study_abc123', participant_type_required: 'any' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({ participant_type_required: 'external' })
         .expect(400);
@@ -4526,7 +4527,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .patch('/api/opportunities/1')
         .send({
           title: 'Updated Title'
@@ -4566,7 +4567,7 @@ describe('Opportunities API', () => {
       // which is exactly what my first version of this test did.
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/sessions')
         .send([
           {
@@ -4596,7 +4597,7 @@ describe('Opportunities API', () => {
        */
       mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/sessions')
         .send([
           {
@@ -4623,7 +4624,7 @@ describe('Opportunities API', () => {
       // Mock delete query
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .delete('/api/opportunities/1')
         .expect(204);
     });
@@ -4634,7 +4635,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .delete('/api/opportunities/1')
         .expect(403);
 
@@ -4681,7 +4682,7 @@ describe('Opportunities API', () => {
       // Mock duplicate creation
       mockQuery.mockResolvedValueOnce({ rows: [duplicatedOpportunity] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/duplicate')
         .expect(201);
 
@@ -4698,7 +4699,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/duplicate')
         .expect(403);
 
@@ -4721,7 +4722,7 @@ describe('Opportunities API', () => {
       // autoCloseOpportunityIfNeeded's UPDATE
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/close-if-past')
         .expect(200);
 
@@ -4737,7 +4738,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/close-if-past')
         .expect(403);
 
@@ -4769,7 +4770,7 @@ describe('Opportunities API', () => {
         session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(200);
 
@@ -4781,7 +4782,7 @@ describe('Opportunities API', () => {
     });
 
     it('should reject an unauthenticated request with 401', async () => {
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(401);
 
@@ -4804,7 +4805,7 @@ describe('Opportunities API', () => {
         }]
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(404);
 
@@ -4821,7 +4822,7 @@ describe('Opportunities API', () => {
         }]
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(404);
 
@@ -4860,7 +4861,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(404);
 
@@ -4899,7 +4900,7 @@ describe('Opportunities API', () => {
         session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/{97BFE613-4E1F-472C-917E-B90D1C0326B8}/recorded-study-session')
         .expect(200);
 
@@ -4924,7 +4925,7 @@ describe('Opportunities API', () => {
         session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
       });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .send({ opportunity_id: 'someone-elses-opportunity' })
         .expect(200);
@@ -4940,7 +4941,7 @@ describe('Opportunities API', () => {
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'study_has_no_steps' });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(400);
       expect(response.body.error).toBe('Linked recorded study has no steps');
@@ -4955,7 +4956,7 @@ describe('Opportunities API', () => {
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(status);
       expect(response.body.error).toBe(message);
@@ -4969,7 +4970,7 @@ describe('Opportunities API', () => {
       });
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'payload_assembly_failed' });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(500);
       expect(response.body.error).toBe('Failed to assemble the recorded-study session');
@@ -4986,7 +4987,7 @@ describe('Opportunities API', () => {
       // guard. Its message must be static, not the interpolated raw value.
       mockCreateSession.mockResolvedValueOnce({ ok: false, error: 'firsthand.runtime_sessions boom' });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/recorded-study-session')
         .expect(500);
       expect(response.body.error).toBe('Failed to assemble the recorded-study session');
@@ -5010,7 +5011,7 @@ describe('Opportunities API', () => {
         session: { session_id: 'session_x', session_token: 'fh_tok', expires_at: '2026-07-22T00:00:00.000Z' }
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/firsthand-handoff')
         .expect(200);
 
@@ -5029,7 +5030,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
       mockCountStudyTasks.mockResolvedValueOnce(4);
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(200);
 
@@ -5047,7 +5048,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
       mockCountStudyTasks.mockResolvedValueOnce(4);
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(200);
 
@@ -5084,7 +5085,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(200);
 
@@ -5113,7 +5114,7 @@ describe('Opportunities API', () => {
         steps: []
       });
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(200);
 
@@ -5131,7 +5132,7 @@ describe('Opportunities API', () => {
     it('filters a non-admin to published opportunities in the query itself', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(unauthenticatedApp)
+      await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(404);
 
@@ -5145,7 +5146,7 @@ describe('Opportunities API', () => {
       });
       mockCountStudyTasks.mockResolvedValueOnce(4);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(200);
 
@@ -5158,7 +5159,7 @@ describe('Opportunities API', () => {
         rows: [{ ...publishedUnmoderatedRow, firsthand_study_id: null }]
       });
 
-      await request(unauthenticatedApp)
+      await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(404);
 
@@ -5177,7 +5178,7 @@ describe('Opportunities API', () => {
           rows: [{ ...publishedUnmoderatedRow, type }]
         });
 
-        await request(unauthenticatedApp)
+        await request(listening(unauthenticatedApp))
           .get('/api/opportunities/1/recorded-study-brief')
           .expect(404);
 
@@ -5189,7 +5190,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderatedRow] });
       mockCountStudyTasks.mockResolvedValueOnce(null);
 
-      await request(unauthenticatedApp)
+      await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/recorded-study-brief')
         .expect(404);
     });
@@ -5230,7 +5231,7 @@ describe('Opportunities API', () => {
         session: { session_id: 's', session_token: 'fh_tok', expires_at: '2026-09-01T00:00:00.000Z' }
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/survey-session')
         .expect(200);
 
@@ -5241,7 +5242,7 @@ describe('Opportunities API', () => {
     });
 
     it('rejects an unauthenticated request', async () => {
-      await request(unauthenticatedApp)
+      await request(listening(unauthenticatedApp))
         .post('/api/opportunities/1/survey-session')
         .expect(401);
     });
@@ -5256,7 +5257,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({
         rows: [surveyRow({ delivery_mode: 'external' })]
       });
-      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
 
       // The guard has to be the SOURCE of the 404, and asserting the study
       // was never read is what proves it: the file-level getStudyById
@@ -5274,7 +5275,7 @@ describe('Opportunities API', () => {
         study: { ...surveyStudy.study, kind: 'recorded' as const }
       });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
@@ -5284,7 +5285,7 @@ describe('Opportunities API', () => {
         rows: [surveyRow({ type: 'unmoderated' })]
       });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
 
       expect(mockGetStudyById).not.toHaveBeenCalled();
       expect(mockCreateSession).not.toHaveBeenCalled();
@@ -5298,7 +5299,7 @@ describe('Opportunities API', () => {
         session: { session_id: 's', session_token: 'fh_poll', expires_at: '2026-09-01T00:00:00.000Z' }
       });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(200);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(200);
 
       expect(mockCreateSession).toHaveBeenCalled();
     });
@@ -5317,7 +5318,7 @@ describe('Opportunities API', () => {
         sessionStatus: 'link_opened'
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/survey-session')
         .expect(200);
 
@@ -5333,7 +5334,7 @@ describe('Opportunities API', () => {
         sessionStatus: 'completed'
       });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(409);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(409);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
@@ -5351,7 +5352,7 @@ describe('Opportunities API', () => {
         study: { ...surveyStudy.study, status: 'draft' as const }
       });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
@@ -5360,7 +5361,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [surveyRow()] });
       mockGetStudyById.mockResolvedValueOnce(null as never);
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(404);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
@@ -5368,7 +5369,7 @@ describe('Opportunities API', () => {
     it('refuses a draft', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [surveyRow({ status: 'draft' })] });
 
-      await request(app).post('/api/opportunities/1/survey-session').expect(403);
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(403);
 
       expect(mockCreateSession).not.toHaveBeenCalled();
     });
@@ -5378,7 +5379,7 @@ describe('Opportunities API', () => {
         rows: [surveyRow({ firsthand_study_id: null })]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/survey-session')
         .expect(400);
 
@@ -5406,7 +5407,7 @@ describe('Opportunities API', () => {
       });
       mockQuery.mockResolvedValueOnce({ rows: sessionEventRows });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/session-events')
         .expect(200);
 
@@ -5415,7 +5416,7 @@ describe('Opportunities API', () => {
     });
 
     it('should reject an unauthenticated request with 401', async () => {
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/session-events')
         .expect(401);
 
@@ -5427,7 +5428,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id' }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/session-events')
         .expect(403);
 
@@ -5437,7 +5438,7 @@ describe('Opportunities API', () => {
     it('should return 404 when the opportunity does not exist', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .get('/api/opportunities/1/session-events')
         .expect(404);
     });
@@ -5464,7 +5465,7 @@ describe('Opportunities API', () => {
       });
       mockQuery.mockResolvedValueOnce({ rows: sessionEventRows });
 
-      const response = await request(superadminApp)
+      const response = await request(listening(superadminApp))
         .get('/api/opportunities/1/session-events')
         .expect(200);
 
@@ -5526,7 +5527,7 @@ describe('Opportunities API', () => {
     it('refuses an admin who does not own the opportunity, without reading any answers', async () => {
       queueOpportunity('a-different-researcher');
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(403);
 
@@ -5539,7 +5540,7 @@ describe('Opportunities API', () => {
     it('refuses the CSV export before any download header is set', async () => {
       queueOpportunity('a-different-researcher');
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
         .expect(403);
 
@@ -5555,7 +5556,7 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
 
-      await request(app)
+      await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(200);
 
@@ -5576,7 +5577,7 @@ describe('Opportunities API', () => {
         { session_id: 's2', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 5 }, saved_at: '2026-08-17T10:01:00.000Z' },
       ]);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(200);
 
@@ -5606,7 +5607,7 @@ describe('Opportunities API', () => {
       queueOpportunity('a-different-researcher');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
 
-      await request(superadminApp)
+      await request(listening(superadminApp))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(200);
 
@@ -5622,7 +5623,7 @@ describe('Opportunities API', () => {
       ['/survey-results'],
       ['/survey-results.csv'],
     ])('refusals on %s', (suffix) => {
-      const get = () => request(app).get(`/api/opportunities/${PATH_SEGMENT}${suffix}`);
+      const get = () => request(listening(app)).get(`/api/opportunities/${PATH_SEGMENT}${suffix}`);
 
       // Asserted on every refusal, not only the 403: any status that arrives
       // with these set has already offered the file.
@@ -5689,7 +5690,7 @@ describe('Opportunities API', () => {
         throw new Error('serialisation blew up');
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
         .expect(500);
 
@@ -5705,7 +5706,7 @@ describe('Opportunities API', () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
         .expect(200);
 
@@ -5722,7 +5723,7 @@ describe('Opportunities API', () => {
         { session_id: 's1', step_id: 'q1', step_prompt: null, step_type: 'rating', response_payload: { rating: 4 }, saved_at: '2026-08-17T10:00:00.000Z' },
       ]);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
         .expect(200);
 
@@ -5754,7 +5755,7 @@ describe('Opportunities API', () => {
     const fire = async (target: express.Express, path: string, times: number) => {
       const codes: number[] = [];
       for (let i = 0; i < times; i += 1) {
-        codes.push((await request(target).get(path)).status);
+        codes.push((await request(listening(target)).get(path)).status);
       }
       return codes;
     };
@@ -5774,7 +5775,7 @@ describe('Opportunities API', () => {
 
       // Deliberately one bucket: they read the same rows off the same pool, so
       // separate ceilings would double the exposure the limit exists to cap.
-      const response = await request(app).get('/api/opportunities/opp-1/survey-results.csv');
+      const response = await request(listening(app)).get('/api/opportunities/opp-1/survey-results.csv');
 
       expect(response.status).toBe(429);
     });
@@ -5783,7 +5784,7 @@ describe('Opportunities API', () => {
       const participant = appAsUser('participant-a', 'employee');
       const codes: number[] = [];
       for (let i = 0; i < 21; i += 1) {
-        codes.push((await request(participant).post('/api/opportunities/opp-1/survey-session')).status);
+        codes.push((await request(listening(participant)).post('/api/opportunities/opp-1/survey-session')).status);
       }
 
       // 60 sessions in under a second from one cookie was measured before this
@@ -5799,7 +5800,7 @@ describe('Opportunities API', () => {
       // 5-connection runtime pool live participant sessions share.
       const codes: number[] = [];
       for (let i = 0; i < 31; i += 1) {
-        codes.push((await request(app).delete('/api/opportunities/opp-1')).status);
+        codes.push((await request(listening(app)).delete('/api/opportunities/opp-1')).status);
       }
 
       expect(codes.slice(0, 30).every((code) => code !== 429)).toBe(true);
@@ -5808,12 +5809,12 @@ describe('Opportunities API', () => {
 
     it('keeps reading an opportunity off the write bucket', async () => {
       for (let i = 0; i < 31; i += 1) {
-        await request(app).delete('/api/opportunities/opp-1');
+        await request(listening(app)).delete('/api/opportunities/opp-1');
       }
 
       // Browsing is not writing. A researcher who saved a lot must still be
       // able to look at the list.
-      expect((await request(app).get('/api/opportunities')).status).not.toBe(429);
+      expect((await request(listening(app)).get('/api/opportunities')).status).not.toBe(429);
     });
 
     it('gives each caller their own bucket, so one cannot refuse another', async () => {
@@ -5829,7 +5830,7 @@ describe('Opportunities API', () => {
       const noisyCodes = await fire(noisy, '/api/opportunities/opp-1/survey-results', 61);
       expect(noisyCodes[60]).toBe(429);
 
-      const quietResponse = await request(quiet).get('/api/opportunities/opp-1/survey-results');
+      const quietResponse = await request(listening(quiet)).get('/api/opportunities/opp-1/survey-results');
       expect(quietResponse.status).not.toBe(429);
 
       resetParticipantRouteLimits('noisy-researcher');
@@ -5848,7 +5849,7 @@ describe('Opportunities API', () => {
       // mounted AFTER the auth middleware. Mounted before, an unauthenticated
       // flood would fill a bucket and lock out the real caller.
       expect(codes.every((code) => code === 401)).toBe(true);
-      expect((await request(app).get('/api/opportunities/opp-1/survey-results')).status).not.toBe(429);
+      expect((await request(listening(app)).get('/api/opportunities/opp-1/survey-results')).status).not.toBe(429);
     });
   });
 
@@ -5918,7 +5919,7 @@ describe('Opportunities API', () => {
     it('should return the full analytics breakdown for the opportunity owner', async () => {
       queueFullAnalyticsMocks();
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics')
         .expect(200);
 
@@ -5970,7 +5971,7 @@ describe('Opportunities API', () => {
     it('should default the period to 30 days and echo a valid requested period back', async () => {
       queueFullAnalyticsMocks();
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics')
         .expect(200);
 
@@ -5979,7 +5980,7 @@ describe('Opportunities API', () => {
       mockQuery.mockClear();
       queueFullAnalyticsMocks();
 
-      const response7d = await request(app)
+      const response7d = await request(listening(app))
         .get('/api/opportunities/1/analytics?period=7')
         .expect(200);
 
@@ -5989,7 +5990,7 @@ describe('Opportunities API', () => {
     it('should fall back to 30 days for an invalid period value', async () => {
       queueFullAnalyticsMocks();
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics?period=99')
         .expect(200);
 
@@ -6009,7 +6010,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [] }); // no weekday rows
       mockQuery.mockResolvedValueOnce({ rows: [{ count: 0 }] }); // no prior week
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics')
         .expect(200);
 
@@ -6043,7 +6044,7 @@ describe('Opportunities API', () => {
       // at the other end of the day.
       queueFullAnalyticsMocks();
 
-      await request(app).get('/api/opportunities/1/analytics').expect(200);
+      await request(listening(app)).get('/api/opportunities/1/analytics').expect(200);
 
       const sql: string[] = mockQuery.mock.calls.map((call: unknown[]) => String(call[0]));
       const daily = sql.find((q: string) => q.includes('AS date'));
@@ -6071,7 +6072,7 @@ describe('Opportunities API', () => {
       // the round trip that lost the day.
       queueFullAnalyticsMocks();
 
-      await request(app).get('/api/opportunities/1/analytics').expect(200);
+      await request(listening(app)).get('/api/opportunities/1/analytics').expect(200);
 
       const daily = mockQuery.mock.calls
         .map((call: unknown[]) => String(call[0]))
@@ -6091,7 +6092,7 @@ describe('Opportunities API', () => {
         { date: new Date(2026, 7, 16, 0, 0, 0), count: 2, views: 2, actions: 0 }
       ]);
 
-      const response = await request(app).get('/api/opportunities/1/analytics').expect(200);
+      const response = await request(listening(app)).get('/api/opportunities/1/analytics').expect(200);
 
       expect(response.body.clicks_by_day).toEqual([
         { date: '2026-08-16', count: 2, views: 2, actions: 0 }
@@ -6105,7 +6106,7 @@ describe('Opportunities API', () => {
         { date: '2026-08-16', count: 6, views: 4, actions: 2 }
       ]);
 
-      const response = await request(app).get('/api/opportunities/1/analytics?period=30').expect(200);
+      const response = await request(listening(app)).get('/api/opportunities/1/analytics?period=30').expect(200);
 
       expect(response.body.period_clicks_total).toBe(10);
       expect(response.body.period_views_total).toBe(7);
@@ -6114,7 +6115,7 @@ describe('Opportunities API', () => {
 
     it('names the zone its buckets were cut in', async () => {
       queueFullAnalyticsMocks();
-      const response = await request(app).get('/api/opportunities/1/analytics').expect(200);
+      const response = await request(listening(app)).get('/api/opportunities/1/analytics').expect(200);
       expect(response.body.time_zone).toBe('Europe/London');
     });
 
@@ -6123,7 +6124,7 @@ describe('Opportunities API', () => {
         rows: [{ owner_user_id: 'different-user-id', created_at: new Date('2026-01-01T00:00:00.000Z') }]
       });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics')
         .expect(403);
 
@@ -6133,7 +6134,7 @@ describe('Opportunities API', () => {
     it('should return 404 for a missing opportunity', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics')
         .expect(404);
 
@@ -6143,7 +6144,7 @@ describe('Opportunities API', () => {
     it('should return zeroed defaults for every field when the database is unavailable', async () => {
       mockIsDatabaseAvailable.mockResolvedValueOnce(false);
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/analytics?period=14')
         .expect(200);
 
@@ -6181,7 +6182,7 @@ describe('Opportunities API', () => {
     });
 
     it('should reject an unauthenticated request with 401', async () => {
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/analytics')
         .expect(401);
 
@@ -6203,7 +6204,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] }); // opportunity lookup
       mockQuery.mockResolvedValueOnce({ rows: [] }); // click insert
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/click')
         .send({ click_type: 'view' })
         .expect(200);
@@ -6220,7 +6221,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/click')
         .send({ click_type: 'action' })
         .expect(200);
@@ -6232,7 +6233,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedUnmoderated] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      await request(app)
+      await request(listening(app))
         .post('/api/opportunities/1/click')
         .expect(200);
 
@@ -6240,7 +6241,7 @@ describe('Opportunities API', () => {
     });
 
     it('rejects an invalid click_type without touching the database', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/1/click')
         .send({ click_type: 'bogus' })
         .expect(400);
@@ -6291,7 +6292,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunity lookup
       mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6312,7 +6313,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(employeeApp)
+      const response = await request(listening(employeeApp))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6343,7 +6344,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6372,7 +6373,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
 
-      const response = await request(employeeApp)
+      const response = await request(listening(employeeApp))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6389,7 +6390,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunity access check
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });   // sessions
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities/1/sessions')
         .expect(200);
 
@@ -6403,7 +6404,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
 
-      const response = await request(employeeApp)
+      const response = await request(listening(employeeApp))
         .get('/api/opportunities/1/sessions')
         .expect(200);
 
@@ -6414,7 +6415,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1/sessions')
         .expect(200);
 
@@ -6432,7 +6433,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [sessionRow] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6446,7 +6447,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities/1')
         .expect(200);
 
@@ -6461,7 +6462,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] }); // opportunities query
       mockQuery.mockResolvedValueOnce({ rows: [] }); // sessions batch
 
-      const response = await request(unauthenticatedApp)
+      const response = await request(listening(unauthenticatedApp))
         .get('/api/opportunities')
         .expect(200);
 
@@ -6476,7 +6477,7 @@ describe('Opportunities API', () => {
       mockQuery.mockResolvedValueOnce({ rows: [publishedRow] });
       mockQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/api/opportunities')
         .expect(200);
 
@@ -6510,7 +6511,7 @@ describe('Opportunities API', () => {
       });
 
       try {
-        const listResponse = await request(unauthenticatedApp)
+        const listResponse = await request(listening(unauthenticatedApp))
           .get('/api/opportunities')
           .expect(200);
 
@@ -6521,7 +6522,7 @@ describe('Opportunities API', () => {
           expect(opportunity).not.toHaveProperty('owner_email');
         }
 
-        const detailResponse = await request(unauthenticatedApp)
+        const detailResponse = await request(listening(unauthenticatedApp))
           .get('/api/opportunities/mock-owner-strip')
           .expect(200);
 
@@ -6549,7 +6550,7 @@ describe('Opportunities API', () => {
     it('surfaces 503 and the code on GET / rather than flattening to 500', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get('/api/opportunities');
+      const response = await request(listening(app)).get('/api/opportunities');
 
       expect(response.status).toBe(503);
       expect(response.body.code).toBe('DB_CONNECTION_FAILED');
@@ -6559,7 +6560,7 @@ describe('Opportunities API', () => {
     it('never answers 200 with fixture data during an outage', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get('/api/opportunities');
+      const response = await request(listening(app)).get('/api/opportunities');
 
       expect(response.status).not.toBe(200);
       expect(Array.isArray(response.body)).toBe(false);
@@ -6568,7 +6569,7 @@ describe('Opportunities API', () => {
     it('surfaces 503 on the sessions listing rather than 500', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get('/api/opportunities/some-id/sessions');
+      const response = await request(listening(app)).get('/api/opportunities/some-id/sessions');
 
       expect(response.status).toBe(503);
       expect(response.body.code).toBe('DB_CONNECTION_FAILED');
@@ -6580,7 +6581,7 @@ describe('Opportunities API', () => {
     it('surfaces 503 on POST /:id/sessions rather than 500', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/api/opportunities/some-id/sessions')
         .send([{ start_time: '2026-08-01T10:00:00Z', end_time: '2026-08-01T11:00:00Z', capacity: 1 }]);
 
@@ -6591,7 +6592,7 @@ describe('Opportunities API', () => {
     it('surfaces 503 on DELETE /:id/sessions rather than 500', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).delete('/api/opportunities/some-id/sessions');
+      const response = await request(listening(app)).delete('/api/opportunities/some-id/sessions');
 
       expect(response.status).toBe(503);
       expect(response.body.code).toBe('DB_CONNECTION_FAILED');
@@ -6600,7 +6601,7 @@ describe('Opportunities API', () => {
     it('leaks no driver detail in the outage body', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get('/api/opportunities');
+      const response = await request(listening(app)).get('/api/opportunities');
 
       expect(JSON.stringify(response.body)).not.toMatch(/password|postgres|ECONNREFUSED/i);
     });

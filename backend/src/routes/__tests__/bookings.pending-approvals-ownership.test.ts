@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 jest.mock('../../config', () => ({
@@ -78,7 +79,7 @@ describe('GET /api/bookings/pending-approvals ownership', () => {
   it('asks the database only for the caller\'s own opportunities', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'researcher_admin' }] } as never);
 
-    await request(appAs('researcher_admin', 'admin-1'))
+    await request(listening(appAs('researcher_admin', 'admin-1')))
       .get('/api/bookings/pending-approvals')
       .expect(200);
 
@@ -92,7 +93,7 @@ describe('GET /api/bookings/pending-approvals ownership', () => {
   it('does not filter for a superadmin, who approves any session anyway', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'superadmin' }] } as never);
 
-    await request(appAs('superadmin', 'super-1'))
+    await request(listening(appAs('superadmin', 'super-1')))
       .get('/api/bookings/pending-approvals')
       .expect(200);
 
@@ -102,7 +103,7 @@ describe('GET /api/bookings/pending-approvals ownership', () => {
   it('still refuses a non-admin outright', async () => {
     mockQuery.mockResolvedValueOnce({ rows: [{ role: 'employee' }] } as never);
 
-    const response = await request(appAs('employee', 'user-1'))
+    const response = await request(listening(appAs('employee', 'user-1')))
       .get('/api/bookings/pending-approvals')
       .expect(403);
 
@@ -122,7 +123,7 @@ describe('GET /api/bookings/pending-approvals ownership', () => {
       ],
     } as never);
 
-    const response = await request(appAs('researcher_admin', 'admin-1'))
+    const response = await request(listening(appAs('researcher_admin', 'admin-1')))
       .get('/api/bookings/pending-approvals')
       .expect(200);
 

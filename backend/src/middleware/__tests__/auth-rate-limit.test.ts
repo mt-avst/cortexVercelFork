@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express, { type Express, Router } from 'express';
 import { createAuthLimiter, shouldSkipAuthRateLimit, DEMO_AUTH_ROUTE_PATHS } from '../auth-rate-limit';
 
@@ -37,7 +38,7 @@ describe('auth rate limiter', () => {
           const app = buildApp(2);
           const statuses: number[] = [];
           for (let i = 0; i < 6; i++) {
-            statuses.push((await request(app).get(`${mount}${route}`)).status);
+            statuses.push((await request(listening(app)).get(`${mount}${route}`)).status);
           }
           expect(statuses).toEqual([200, 200, 200, 200, 200, 200]);
         });
@@ -47,7 +48,7 @@ describe('auth rate limiter', () => {
         const app = buildApp(2);
         const statuses: number[] = [];
         for (let i = 0; i < 4; i++) {
-          statuses.push((await request(app).get(`${mount}/login`)).status);
+          statuses.push((await request(listening(app)).get(`${mount}/login`)).status);
         }
         // Exempting the demo routes must not disarm the limiter itself.
         expect(statuses.slice(0, 2)).toEqual([200, 200]);
@@ -62,7 +63,7 @@ describe('auth rate limiter', () => {
       const app = buildApp(2);
       const statuses: number[] = [];
       for (let i = 0; i < 4; i++) {
-        statuses.push((await request(app).get('/api/auth/demo-login')).status);
+        statuses.push((await request(listening(app)).get('/api/auth/demo-login')).status);
       }
       expect(statuses.slice(2)).toEqual([429, 429]);
     });
