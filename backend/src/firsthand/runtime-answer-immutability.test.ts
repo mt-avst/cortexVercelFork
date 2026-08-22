@@ -102,7 +102,7 @@ describe("answers cannot be rewritten after the session finishes", () => {
       query: vi.fn(async (sql: string, params?: unknown[]) => {
         statements.push(sql.trim());
 
-        if (sql === "SET search_path TO firsthand") return { rowCount: null, rows: [] };
+        if (sql.startsWith("SET search_path TO firsthand")) return { rowCount: null, rows: [] };
         if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") {
           return { rowCount: null, rows: [] };
         }

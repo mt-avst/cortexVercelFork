@@ -1,7 +1,9 @@
 import {
   isPostgresRuntimeConfigured,
-  withRuntimeDatabaseClient
+  withRuntimeDatabaseClient,
+  RESULTS_STATEMENT_TIMEOUT_MS
 } from "./runtime-database";
+import { RuntimeDatabaseBusyError } from "./runtime-pool-admission";
 import type { StoredResponse } from "./survey-results";
 import { logger } from "../utils/logger";
 import { AppError } from "../../../shared/types";
@@ -60,9 +62,10 @@ async function listResponsesWhere(
     return [];
   }
 
-  return withRuntimeDatabaseClient(async (client) => {
-    const result = await client.query<ResponseRow>(
-      `
+  return withRuntimeDatabaseClient(
+    async (client) => {
+      const result = await client.query<ResponseRow>(
+        `
         SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
                r.response_payload, r.saved_at
         FROM participant_responses AS r
@@ -71,35 +74,42 @@ async function listResponsesWhere(
         ORDER BY r.saved_at ASC, r.id ASC
         LIMIT ${MAX_RESPONSE_ROWS + 1}
       `,
-      params
-    );
-
-    /**
-     * REFUSED, NOT TRUNCATED - and that is the whole point of the +1 above.
-     *
-     * A capped read that quietly returned the first 200,000 rows would hand a
-     * researcher a mean, an NPS and a CSV computed over part of their data,
-     * with nothing on the page saying so. A wrong finding presented as a
-     * finding is worse than no finding: the limit exists to protect the
-     * database, and it must not buy that at the cost of the answer.
-     */
-    if (result.rows.length > MAX_RESPONSE_ROWS) {
-      throw new AppError(
-        "This study has collected more responses than can be read in one request. Ask for a database export.",
-        413,
-        "RESPONSE_SET_TOO_LARGE"
+        params
       );
-    }
 
-    return result.rows.map((row) => ({
-      session_id: row.session_id,
-      step_id: row.step_id,
-      step_prompt: row.step_prompt,
-      step_type: row.step_type,
-      response_payload: row.response_payload ?? {},
-      saved_at: new Date(row.saved_at).toISOString()
-    }));
-  });
+      /**
+       * REFUSED, NOT TRUNCATED - and that is the whole point of the +1 above.
+       *
+       * A capped read that quietly returned the first 200,000 rows would hand a
+       * researcher a mean, an NPS and a CSV computed over part of their data,
+       * with nothing on the page saying so. A wrong finding presented as a
+       * finding is worse than no finding: the limit exists to protect the
+       * database, and it must not buy that at the cost of the answer.
+       */
+      if (result.rows.length > MAX_RESPONSE_ROWS) {
+        throw new AppError(
+          "This study has collected more responses than can be read in one request. Ask for a database export.",
+          413,
+          "RESPONSE_SET_TOO_LARGE"
+        );
+      }
+
+      return result.rows.map((row) => ({
+        session_id: row.session_id,
+        step_id: row.step_id,
+        step_prompt: row.step_prompt,
+        step_type: row.step_type,
+        response_payload: row.response_payload ?? {},
+        saved_at: new Date(row.saved_at).toISOString()
+      }));
+    },
+    // The one read here that is expected to be slow, and the one the default
+    // per-statement bound would refuse. `LIMIT 200001` bounds this in ROWS and
+    // nothing bounded it in TIME - so before this, a single results read could
+    // hold one of five connections past the point where several participants
+    // had already failed to save.
+    { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+  );
 }
 
 /**
@@ -281,28 +291,55 @@ export async function answerCountsByStep(
   }
 
   try {
-    return await withRuntimeDatabaseClient(async (client) => {
-      const result = await client.query<{ step_id: string; answers: string }>(
-        `
+    return await withRuntimeDatabaseClient(
+      async (client) => {
+        const result = await client.query<{ step_id: string; answers: string }>(
+          `
           SELECT r.step_id, COUNT(*) AS answers
           FROM participant_responses AS r
           WHERE r.study_id = $1 AND r.step_id IS NOT NULL
           GROUP BY r.step_id
         `,
-        [studyId]
-      );
+          [studyId]
+        );
 
+        /**
+         * `Number`, because node-pg hands back COUNT(*) as a STRING - a bigint
+         * does not fit a JS number safely, so the driver refuses to guess.
+         * Passed through it survives JSON and reaches the form as `"0"`, which
+         * is truthy: every question with no answers would warn.
+         */
+        return Object.fromEntries(
+          result.rows.map((row) => [row.step_id, Number(row.answers)])
+        );
+      },
       /**
-       * `Number`, because node-pg hands back COUNT(*) as a STRING - a bigint
-       * does not fit a JS number safely, so the driver refuses to guess. Passed
-       * through it survives JSON and reaches the form as `"0"`, which is
-       * truthy: every question with no answers would warn.
+       * SKIPPED RATHER THAN QUEUED when the admin admission cap is full, which
+       * is the one place in this file where that is right.
+       *
+       * This warning is advisory - it already answers `null` for "could not be
+       * established" and the form already renders that as "could not be
+       * checked". Waiting out the admission budget for it would spend an
+       * author's form load on a value the form is prepared to do without, and
+       * would hold a slot another admin needs for work that has no fallback.
+       *
+       * Every other read here waits, because every other read has to produce
+       * an answer or refuse. Nothing else in this file may copy this.
        */
-      return Object.fromEntries(
-        result.rows.map((row) => [row.step_id, Number(row.answers)])
-      );
-    });
+      { whenBusy: "skip" }
+    );
   } catch (error) {
+    if (error instanceof RuntimeDatabaseBusyError) {
+      // Logged apart from a failed query on purpose. "The pool was busy so the
+      // count was skipped" is a capacity fact an operator should be able to
+      // count; folded into the line below it would read as the query itself
+      // going wrong, and send somebody looking at the SQL.
+      logger.info("Skipped counting answers per question: runtime pool busy", {
+        studyId
+      });
+      return null;
+    }
+
     logger.warn("Could not count answers per question", {
       studyId,
       error: error instanceof Error ? error.message : "Unknown error"

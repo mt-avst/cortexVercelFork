@@ -505,3 +505,54 @@ describe("a question reworded after people answered it", () => {
     expect(removed_questions?.[0].asked_as).toBeUndefined();
   });
 });
+
+/**
+ * The cost of grouping, which no assertion about the RESULT can see.
+ *
+ * `aggregateSurveyResults` groups every answer by its question, and the
+ * obvious immutable spelling - rebuilding the group array around each new row
+ * - copies the whole accumulated array on every row. Grouping k answers to one
+ * question costs k^2 array writes, and the reader above it is bounded at
+ * 200,000 rows.
+ *
+ * This is a mutation the output cannot detect: both spellings return exactly
+ * the same aggregate, so it is caught on TIME instead.
+ *
+ * MAX_RESPONSE_ROWS answers to one question, which is the bound the reader
+ * actually enforces rather than a number picked to make a point. Measured on
+ * this machine: 43 SECONDS the quadratic way and 4 MILLISECONDS the other, so
+ * the budget below has three orders of magnitude of headroom on the passing
+ * side and still fires on the failing one. Fifty thousand was tried first and
+ * was not enough - 2.5s, comfortably inside any sane budget, which is how a
+ * timing test comes to prove nothing.
+ */
+/** What survey-results-repository caps a single read at. */
+const MAX_RESPONSE_ROWS = 200_000;
+
+describe("grouping every answer the reader will return, all to one question", () => {
+  it("stays linear", () => {
+    const step: StudyStep = {
+      step_id: "step_1",
+      order: 1,
+      type: "open_text",
+      prompt: "What did you think?"
+    };
+
+    const responses: StoredResponse[] = Array.from(
+      { length: MAX_RESPONSE_ROWS },
+      (_unused, index) => ({
+        session_id: `session_${index % 500}`,
+        step_id: "step_1",
+        step_prompt: "What did you think?",
+        step_type: "open_text",
+        response_payload: { text: "fine" },
+        saved_at: "2026-08-21T00:00:00.000Z"
+      })
+    );
+
+    const results = aggregateSurveyResults([step], responses);
+
+    expect(results.respondents).toBe(500);
+    expect(results.questions[0].answered).toBe(MAX_RESPONSE_ROWS);
+  }, 15_000);
+});

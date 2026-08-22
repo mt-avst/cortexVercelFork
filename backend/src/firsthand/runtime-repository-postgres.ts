@@ -813,10 +813,30 @@ async function completeClaimedTranscriptSessionPostgres(
   }
 }
 
+/**
+ * The stale-upload reaper, in two phases, and the split is load-bearing.
+ *
+ * The database work claims and deletes the rows; the S3 deletes happen AFTER
+ * the connection has gone back. They used to run inside the checkout, so this
+ * job held a runtime connection across up to ten S3 round trips with its
+ * transaction already committed - pure network latency, on a five-connection
+ * pool shared with live participants.
+ *
+ * That was merely wasteful before the admission cap and is not any more. This
+ * runs unclassified, therefore admin, therefore capped at two - and
+ * `runFirstHandMaintenance` starts both its jobs under `Promise.all`, so at
+ * 03:00 the whole admin budget could sit idle on S3 while an author waited out
+ * their admission timeout and got a 503.
+ *
+ * The rows are deleted before the objects, which is the safe order: an S3
+ * delete that fails leaves an orphaned object and no row, and an orphaned
+ * object costs storage. The other order risks deleting a live participant's
+ * recording and keeping the row that says it exists.
+ */
 export async function processPendingRecordingUploadCleanupPostgres(limit: number) {
   const safeLimit = normalizeTranscriptProcessingLimit(limit);
 
-  return withRuntimeDatabaseClient(async (client) => {
+  const pendingUploads = await withRuntimeDatabaseClient(async (client) => {
     await client.query("BEGIN");
 
     try {
@@ -839,16 +859,11 @@ export async function processPendingRecordingUploadCleanupPostgres(limit: number
         [safeLimit]
       );
 
-      const pendingUploads = staleCandidates.rows.map(mapPendingRecordingUploadRow);
+      const claimed = staleCandidates.rows.map(mapPendingRecordingUploadRow);
 
-      if (pendingUploads.length === 0) {
+      if (claimed.length === 0) {
         await client.query("COMMIT");
-        return {
-          idle: true,
-          processedCount: 0,
-          deletedCount: 0,
-          deletedPaths: [] as string[]
-        };
+        return claimed;
       }
 
       await client.query(
@@ -856,36 +871,49 @@ export async function processPendingRecordingUploadCleanupPostgres(limit: number
           DELETE FROM pending_recording_uploads
           WHERE id = ANY($1::text[])
         `,
-        [pendingUploads.map((pendingUpload) => pendingUpload.id)]
+        [claimed.map((pendingUpload) => pendingUpload.id)]
       );
 
       await client.query("COMMIT");
 
-      const deletedPaths: string[] = [];
-
-      for (const pendingUpload of pendingUploads) {
-        try {
-          await deleteStoredObject({
-            relativePath: pendingUpload.relativePath,
-            storageProvider: pendingUpload.storageProvider
-          });
-          deletedPaths.push(pendingUpload.relativePath);
-        } catch {
-          continue;
-        }
-      }
-
-      return {
-        idle: false,
-        processedCount: pendingUploads.length,
-        deletedCount: deletedPaths.length,
-        deletedPaths
-      };
+      return claimed;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
     }
   });
+
+  if (pendingUploads.length === 0) {
+    return {
+      idle: true,
+      processedCount: 0,
+      deletedCount: 0,
+      deletedPaths: [] as string[]
+    };
+  }
+
+  // Outside the checkout. Each of these is an S3 round trip and none of them
+  // needs the database.
+  const deletedPaths: string[] = [];
+
+  for (const pendingUpload of pendingUploads) {
+    try {
+      await deleteStoredObject({
+        relativePath: pendingUpload.relativePath,
+        storageProvider: pendingUpload.storageProvider
+      });
+      deletedPaths.push(pendingUpload.relativePath);
+    } catch {
+      continue;
+    }
+  }
+
+  return {
+    idle: false,
+    processedCount: pendingUploads.length,
+    deletedCount: deletedPaths.length,
+    deletedPaths
+  };
 }
 
 async function ensureRuntimeSessionRow(client: PoolClient, payload: SessionPayload) {

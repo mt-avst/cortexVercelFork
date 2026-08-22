@@ -56,6 +56,10 @@ import {
   listResponsesForStudy,
 } from '../../firsthand/survey-results-repository';
 import { isDatabaseAvailable } from '../../utils/database';
+import {
+  RuntimeDatabaseAdmissionTimeoutError,
+  RuntimeDatabaseBusyError,
+} from '../../firsthand/runtime-pool-admission';
 import { logger } from '../../utils/logger';
 
 const mockIsStudiesPersistenceConfigured = (isStudiesPersistenceConfigured as jest.MockedFunction<typeof isStudiesPersistenceConfigured>);
@@ -1406,4 +1410,67 @@ describe('FirstHand Express router', () => {
     });
   });
 
+});
+
+/**
+ * A pool refusal is not a bad request.
+ *
+ * The create and update handlers answer their own errors as 400 with the raw
+ * repository message, deliberately - a duplicate step id is a mistake the
+ * author can fix. The admission cap in firsthand/runtime-pool-admission.ts
+ * throws through those same handlers, and flattened into a 400 it tells an
+ * author their study was rejected and invites them to change something. The
+ * only correct action is to send the same request again in a moment.
+ */
+describe('a refusal from the runtime admission cap', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockIsStudiesPersistenceConfigured.mockReturnValue(true);
+    mockIsDatabaseAvailable.mockResolvedValue(true);
+  });
+
+  it('keeps its 503 through the create handler', async () => {
+    mockCreateStudy.mockRejectedValue(new RuntimeDatabaseAdmissionTimeoutError(10_000));
+
+    const response = await request(app)
+      .post('/api/firsthand/studies')
+      .send(validStudyBody);
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).not.toBe('create_failed');
+    expect(response.body.message ?? response.body.error).toMatch(
+      /busy with other work/i
+    );
+  });
+
+  it('keeps its 503 through the update handler', async () => {
+    mockUpdateStudy.mockRejectedValue(new RuntimeDatabaseBusyError());
+
+    const response = await request(app)
+      .put('/api/firsthand/studies/study_1')
+      .send(validStudyBody);
+
+    expect(response.status).toBe(503);
+    expect(response.body.error).not.toBe('update_failed');
+    expect(response.body.message ?? response.body.error).toMatch(
+      /busy with other work/i
+    );
+  });
+
+  it('still answers 400 for a mistake the author can actually fix', async () => {
+    // The other direction. Rethrowing everything would lose the repository
+    // message the authoring form surfaces, which is the reason that catch
+    // block exists at all.
+    mockUpdateStudy.mockRejectedValue(new Error('duplicate step id: step_001'));
+
+    const response = await request(app)
+      .put('/api/firsthand/studies/study_1')
+      .send(validStudyBody);
+
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({
+      error: 'update_failed',
+      message: 'duplicate step id: step_001'
+    });
+  });
 });

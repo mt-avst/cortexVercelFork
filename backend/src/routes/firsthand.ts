@@ -23,6 +23,8 @@ import {
   answerCountsByStep,
   listResponsesForStudy
 } from '../firsthand/survey-results-repository';
+import { isRuntimePoolRefusal } from '../firsthand/runtime-pool-admission';
+import { boundResultsRead } from '../middleware/results-read-concurrency';
 import { stepKeyOf } from '../../../shared/firsthand/step-identity';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
 import { toCsvContentDisposition, toResponsesCsv } from '../firsthand/survey-csv';
@@ -284,6 +286,12 @@ router.post('/studies', requireAdmin, studyWriteLimiter, asyncHandler(async (req
     const stored = await createStudy({ ...parsed.data, owner_user_id: req.user!.id });
     return res.status(201).json({ study: stored.study, steps: stored.steps });
   } catch (error) {
+    // A busy runtime pool is not an invalid payload. Rethrown so errorHandler
+    // answers the 503 the error already carries: 400 tells the author their
+    // study was rejected and invites them to change it, when the only correct
+    // action is to send the same request again in a moment.
+    if (isRuntimePoolRefusal(error)) throw error;
+
     return res.status(400).json({
       error: 'create_failed',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -485,6 +493,10 @@ router.put('/studies/:studyId', requireAdmin, studyWriteLimiter, asyncHandler(as
 
     return res.json({ study: updated.study, steps: updated.steps });
   } catch (error) {
+    // See the create route: a refusal from the admission cap keeps its own
+    // 503 rather than being flattened into "your edit was rejected".
+    if (isRuntimePoolRefusal(error)) throw error;
+
     // Answered as 400 to preserve the raw repository message the authoring UI
     // relies on (a duplicate step id is a user-fixable mistake), but the cause
     // can equally be a dropped connection or a broken invariant - 500-class
@@ -521,7 +533,7 @@ router.delete('/studies/:studyId', requireAdmin, studyWriteLimiter, asyncHandler
 // without an admin session.
 
 // GET /api/firsthand/studies/:studyId/results - aggregated answers
-router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const stored = await getStudyById(req.params.studyId);
@@ -542,7 +554,7 @@ router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, async
 }));
 
 // GET /api/firsthand/studies/:studyId/results.csv - raw answers for export
-router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
   const stored = await getStudyById(req.params.studyId);

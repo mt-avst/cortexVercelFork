@@ -27,6 +27,17 @@ async function effectiveSsl(poolConfig: unknown) {
   return (new actualPg.Client(poolConfig as any) as any).connectionParameters.ssl;
 }
 
+/**
+ * What every checkout of the runtime pool starts with.
+ *
+ * Written out in full rather than composed from the module's own constant: a
+ * test that rebuilt the string from `DEFAULT_STATEMENT_TIMEOUT_MS` would go on
+ * passing if that value were changed to something that disables the timeout,
+ * which is the one change here that must not pass silently.
+ */
+const RUNTIME_SESSION_PREPARATION =
+  "SET search_path TO firsthand; SET statement_timeout TO 15000";
+
 describe("runtime database verification", () => {
   afterEach(() => {
     delete process.env.DATABASE_URL;
@@ -63,10 +74,10 @@ describe("runtime database verification", () => {
     expect(result).toBe("ok");
     expect(poolConstructorMock).toHaveBeenCalledTimes(1);
     expect(verificationClient.query).toHaveBeenCalledWith(
-      "SET search_path TO firsthand"
+      RUNTIME_SESSION_PREPARATION
     );
     expect(operationClient.query).toHaveBeenCalledWith(
-      "SET search_path TO firsthand"
+      RUNTIME_SESSION_PREPARATION
     );
     expect(verificationClient.release).toHaveBeenCalledOnce();
     expect(operationClient.release).toHaveBeenCalledOnce();
@@ -247,7 +258,13 @@ describe("Kubera database environment", () => {
 
 function createMockClient(input: { missingRelations: string[] }) {
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
-    if (sql === "SET search_path TO firsthand") {
+    // Matched as a WHOLE STRING, not by `includes`, and that is the assertion
+    // rather than a convenience. The search path and the per-statement bound
+    // are issued together in one round trip, so a version that dropped the
+    // bound - or emitted `SET LOCAL`, which outside a transaction sets nothing
+    // at all - would still contain "SET search_path TO firsthand" and pass a
+    // substring check.
+    if (sql === RUNTIME_SESSION_PREPARATION) {
       return {
         rowCount: null,
         rows: []

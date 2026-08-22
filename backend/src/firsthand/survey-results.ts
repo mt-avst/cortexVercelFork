@@ -392,14 +392,28 @@ export function aggregateSurveyResults(
 
   const byStep = new Map<string, StoredResponse[]>();
   const detached: StoredResponse[] = [];
+  const respondents = new Set<string>();
 
   for (const row of responses) {
+    respondents.add(row.session_id);
+
     if (row.step_id === null) {
       detached.push(row);
       continue;
     }
 
-    byStep.set(row.step_id, [...(byStep.get(row.step_id) ?? []), row]);
+    // PUSHED into the group, not rebuilt around it. The spread this replaces
+    // copied the whole accumulated array on every row, so grouping k answers
+    // to one question cost k^2 array writes - two thousand respondents to a
+    // hundred-question survey is four hundred million, on the pod that also
+    // serves live participants. The array is local to this function and never
+    // escapes it, so nothing outside can observe the mutation.
+    const group = byStep.get(row.step_id);
+    if (group) {
+      group.push(row);
+    } else {
+      byStep.set(row.step_id, [row]);
+    }
   }
 
   const removed = removedQuestionsFrom(
@@ -412,8 +426,9 @@ export function aggregateSurveyResults(
     // Distinct participants, so someone answering six questions is one
     // respondent rather than six. Detached answers COUNT: the person answered,
     // and excluding them would make the denominator move because a researcher
-    // edited the form.
-    respondents: new Set(responses.map((row) => row.session_id)).size,
+    // edited the form. Collected in the loop above rather than by mapping the
+    // whole set again, which allocated a second array of every row.
+    respondents: respondents.size,
     questions: questions.map((step) => tally(step, byStep.get(step.step_id) ?? [])),
     ...(removed.length > 0 ? { removed_questions: removed } : {})
   };

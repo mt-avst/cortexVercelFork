@@ -197,11 +197,38 @@ const OpportunityAnalyticsPage: React.FC = () => {
       // yet" and "you are not allowed to see the answers" are different
       // findings, and rendering the first for the second is a lie a researcher
       // would act on.
-      const status = (err as { response?: { status?: number } }).response?.status;
+      const response = (
+        err as { response?: { status?: number; data?: { code?: string } } }
+      ).response;
+
+      /**
+       * BRANCHED ON THE CODE, NOT THE STATUS, and that is a correction.
+       *
+       * The first version matched `status === 503` and told the reader to wait
+       * a few seconds. This route answers 503 for at least three different
+       * things, and only two of them clear:
+       *
+       *  - RESULTS_READ_QUEUE_FULL and RUNTIME_POOL_ADMISSION_TIMEOUT are
+       *    congestion, and clear in seconds
+       *  - `surveyResultsAreReadable()` false is a deployment with no runtime
+       *    persistence configured, which will still be false tomorrow
+       *  - DB_CONNECTION_FAILED is somewhere in between and not ours to
+       *    promise about
+       *
+       * So a researcher on a misconfigured backend was told to retry, forever.
+       * The two transient ones carry a code precisely so they can be told
+       * apart; the durable one carries none.
+       */
+      const busy =
+        response?.data?.code === 'RESULTS_READ_QUEUE_FULL' ||
+        response?.data?.code === 'RUNTIME_POOL_ADMISSION_TIMEOUT';
+
       setSurveyResultsError(
-        status === 403
+        response?.status === 403
           ? 'Only the opportunity owner can view these responses'
-          : 'Could not load the responses'
+          : busy
+            ? 'The responses are busy being read right now. Wait a few seconds and try again.'
+            : 'Could not load the responses'
       );
       setSurveyResults(null);
     } finally {

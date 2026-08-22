@@ -51,6 +51,26 @@ export const mapDatabaseError = (error: any): AppError => {
     case DB_ERROR_CODES.CONNECTION_FAILURE:
       return new AppError('Database connection failed', 503, 'DB_CONNECTION_FAILED');
 
+    // 503 rather than the 500 this used to fall through to, because a
+    // cancelled statement is TRANSIENT and the caller should try again. It
+    // reached the default arm as "Database operation failed", which tells a
+    // participant mid-survey that the server is broken and gives them no
+    // reason to retry - on the one path where not retrying loses the answers
+    // they have already given.
+    //
+    // Newly reachable: the FirstHand runtime pool sets a statement timeout per
+    // checkout, and lock waiting counts toward it, so a participant saving
+    // from two tabs can now be cancelled where before they would have waited.
+    // Whether that timeout should be paired with a shorter `lock_timeout`, so
+    // contention fails fast and distinctly rather than at the statement bound,
+    // is a separate question that wants measurement before it is answered.
+    case DB_ERROR_CODES.QUERY_CANCELED:
+      return new AppError(
+        'The database took too long and cancelled the request. Try again.',
+        503,
+        'DB_STATEMENT_TIMEOUT'
+      );
+
     // A path segment that is not a uuid reaching a `uuid` column raised 22P02
     // and fell through to the 500 below, so every route keyed on an id told a
     // caller the server had broken when the caller had sent nonsense.

@@ -270,9 +270,37 @@ describe('reading the answers', () => {
     expect(screen.queryByText(/participants/)).toBeNull();
   });
 
-  it('says so when the read fails for any other reason', async () => {
+  /**
+   * THE STATUS IS NOT ENOUGH, and the first version of these tests proved it by
+   * mocking `{ response: { status: 503 } }` with no body - asserting exactly
+   * the field that cannot tell these cases apart.
+   *
+   * This route answers 503 for congestion, which clears in seconds, and for a
+   * backend with no runtime persistence configured, which does not clear at
+   * all. Only the first two carry a code.
+   */
+  it.each([
+    ['RESULTS_READ_QUEUE_FULL'],
+    ['RUNTIME_POOL_ADMISSION_TIMEOUT'],
+  ])('tells the reader to try again when refused with %s', async (code) => {
     vi.mocked(getOpportunitySurveyResults).mockRejectedValue({
-      response: { status: 503 },
+      response: { status: 503, data: { code } },
+    } as never);
+
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    expect(await screen.findByText(/busy being read right now/i)).toBeTruthy();
+    expect(screen.queryByText(/Could not load the responses/i)).toBeNull();
+  });
+
+  it('does not promise a retry for a 503 that will never clear', async () => {
+    // `surveyResultsAreReadable()` false - no runtime persistence configured,
+    // a condition this codebase has had last for a week. Same status, no code.
+    // "Wait a few seconds and try again" would be advice that never comes true.
+    vi.mocked(getOpportunitySurveyResults).mockRejectedValue({
+      response: { status: 503, data: { error: 'Survey results are not available' } },
     } as never);
 
     renderPage();
@@ -280,5 +308,30 @@ describe('reading the answers', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
 
     expect(await screen.findByText(/Could not load the responses/i)).toBeTruthy();
+    expect(screen.queryByText(/busy being read right now/i)).toBeNull();
+  });
+
+  it('says so when the read fails for any other reason', async () => {
+    vi.mocked(getOpportunitySurveyResults).mockRejectedValue({
+      response: { status: 500 },
+    } as never);
+
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    expect(await screen.findByText(/Could not load the responses/i)).toBeTruthy();
+  });
+
+  it('opens the CSV export in its own tab, so a refusal cannot take the page', async () => {
+    // The export route is gated too, and a refusal is a JSON body. Followed in
+    // this tab it would replace the results the researcher is reading.
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    const link = await screen.findByRole('link', { name: 'Download CSV' });
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 });

@@ -46,6 +46,11 @@ import { isPublishableExternalLink } from '../../../shared/firsthand/url-safety'
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { perUserLimiter } from '../middleware/per-user-rate-limit';
+import {
+  participantRuntimeWork,
+  publicRuntimeWork
+} from '../middleware/runtime-work-class';
+import { boundResultsRead } from '../middleware/results-read-concurrency';
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
 
@@ -2106,7 +2111,7 @@ const recordedStudyBriefLimiter = rateLimit({
 // the no-database branch, where GET /:id serves mock fixtures and this 404s: mock data
 // has no linked studies, and a brief without counts is a better failure than a brief
 // with invented ones.
-router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, publicRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
 
@@ -2250,7 +2255,7 @@ function mintParticipant(
 // POST /api/opportunities/:id/recorded-study-session - Create a recorded-study session for this opportunity.
 // The legacy path /:id/firsthand-handoff is kept as a deprecated-for-removal alias so a cached SPA can
 // still POST it after the backend rolls; remove the alias once no client references the old path.
-router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAuth, participantSessionMintLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAuth, participantSessionMintLimiter, participantRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -2371,7 +2376,7 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
 // is `type === 'unmoderated'`. A survey records nothing, so the two have
 // different preconditions and answer different failures; sharing a route would
 // mean one handler whose every branch asks which of two products it is in.
-router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, participantRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -2655,7 +2660,7 @@ async function loadOpportunityResultsContext(
 }
 
 // GET /api/opportunities/:id/survey-results - aggregated answers
-router.get('/:id/survey-results', requireAdmin, surveyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/survey-results', requireAdmin, surveyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!(await surveyResultsAreReadable())) {
     // Not an empty result set: zero respondents is a finding, and one this
     // route would have no evidence for.
@@ -2676,7 +2681,7 @@ router.get('/:id/survey-results', requireAdmin, surveyResultsLimiter, asyncHandl
 }));
 
 // GET /api/opportunities/:id/survey-results.csv - raw answers for export
-router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, asyncHandler(async (req: Request, res: Response) => {
+router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!(await surveyResultsAreReadable())) {
     return res.status(503).json({ error: 'Survey results are not available' });
   }
