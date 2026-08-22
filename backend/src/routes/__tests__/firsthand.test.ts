@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // ─── Mocks (factories use only inline jest.fn() to avoid TDZ) ────────────────
@@ -157,20 +158,20 @@ describe('FirstHand Express router', () => {
     it('returns the in-process study list', async () => {
       const studies = [{ id: 's-1', title: 'Usability Study', status: 'launched' }];
       (mockListStudies as any).mockResolvedValue(studies);
-      const res = await request(app).get('/api/firsthand/studies').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies').expect(200);
       expect(res.body).toEqual({ studies });
       expect(mockListStudies).toHaveBeenCalledTimes(1);
     });
 
     it('returns an empty list when persistence is unconfigured (repo soft-empty)', async () => {
       (mockListStudies as any).mockResolvedValue([]);
-      const res = await request(app).get('/api/firsthand/studies').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies').expect(200);
       expect(res.body).toEqual({ studies: [] });
     });
 
     it('propagates repository errors as 500', async () => {
       (mockListStudies as any).mockRejectedValue(new Error('db down'));
-      await request(app).get('/api/firsthand/studies').expect(500);
+      await request(listening(app)).get('/api/firsthand/studies').expect(500);
     });
   });
 
@@ -192,7 +193,7 @@ describe('FirstHand Express router', () => {
     ];
 
     function fire(app: express.Express, method: string, path: string) {
-      const req = (request(app) as any)[method](path);
+      const req = (request(listening(app)) as any)[method](path);
       return method === 'post' || method === 'put'
         ? req.type('json').send(JSON.stringify(validStudyBody))
         : req;
@@ -224,7 +225,7 @@ describe('FirstHand Express router', () => {
 
   describe('POST /api/firsthand/studies', () => {
     it('rejects invalid payloads with 400 invalid_payload', async () => {
-      const res = await request(app)
+      const res = await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify({ title: 'Missing fields' }))
@@ -235,7 +236,7 @@ describe('FirstHand Express router', () => {
 
     it('creates a study when the payload is valid → 201', async () => {
       (mockCreateStudy as any).mockResolvedValue(storedStudy);
-      const res = await request(app)
+      const res = await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify(validStudyBody))
@@ -247,7 +248,7 @@ describe('FirstHand Express router', () => {
 
     it('stamps the session user as the owner', async () => {
       (mockCreateStudy as any).mockResolvedValue(storedStudy);
-      await request(app)
+      await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify(validStudyBody))
@@ -261,7 +262,7 @@ describe('FirstHand Express router', () => {
     // else's name - and then be locked out of the study they just wrote.
     it('ignores an owner_user_id sent in the body', async () => {
       (mockCreateStudy as any).mockResolvedValue(storedStudy);
-      await request(app)
+      await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify({ ...validStudyBody, owner_user_id: 'someone-else' }))
@@ -273,7 +274,7 @@ describe('FirstHand Express router', () => {
 
     it('returns 503 when persistence is not configured', async () => {
       mockIsStudiesPersistenceConfigured.mockReturnValue(false);
-      const res = await request(app)
+      const res = await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify(validStudyBody))
@@ -284,7 +285,7 @@ describe('FirstHand Express router', () => {
 
     it('maps a repository create failure to 400 create_failed', async () => {
       (mockCreateStudy as any).mockRejectedValue(new Error('duplicate step order'));
-      const res = await request(app)
+      const res = await request(listening(app))
         .post('/api/firsthand/studies')
         .type('json')
         .send(JSON.stringify(validStudyBody))
@@ -296,14 +297,14 @@ describe('FirstHand Express router', () => {
   describe('GET /api/firsthand/studies/:studyId', () => {
     it('returns the study with steps', async () => {
       (mockGetStudyById as any).mockResolvedValue(storedStudy);
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
       expect(res.body.study.id).toBe('study_abc');
       expect(mockGetStudyById).toHaveBeenCalledWith('study_abc');
     });
 
     it('returns 404 for an unknown study', async () => {
       (mockGetStudyById as any).mockResolvedValue(null);
-      const res = await request(app).get('/api/firsthand/studies/missing').expect(404);
+      const res = await request(listening(app)).get('/api/firsthand/studies/missing').expect(404);
       expect(res.body).toMatchObject({ error: 'not_found' });
     });
 
@@ -329,9 +330,7 @@ describe('FirstHand Express router', () => {
           study: { ...storedStudy.study, owner_user_id: ownerUserId },
         } as Awaited<ReturnType<typeof getStudyById>>);
 
-        const res = await request(
-          buildApp({ id: userId, name: 'A', email: 'a@test.com', role })
-        )
+        const res = await request(listening(buildApp({ id: userId, name: 'A', email: 'a@test.com', role })))
           .get('/api/firsthand/studies/study_abc')
           .expect(200);
 
@@ -375,7 +374,7 @@ describe('FirstHand Express router', () => {
         study_abc_step_001: 47,
       });
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       expect(res.body.answer_counts).toEqual({ step_001: 47 });
       expect(mockAnswerCountsByStep).toHaveBeenCalledWith('study_abc');
@@ -391,7 +390,7 @@ describe('FirstHand Express router', () => {
         study_other_step_001: 9000,
       });
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       expect(res.body.answer_counts).toEqual({ step_001: 47 });
     });
@@ -400,7 +399,7 @@ describe('FirstHand Express router', () => {
       mockGetStudyById.mockResolvedValue(ownedSurvey);
       mockAnswerCountsByStep.mockResolvedValue(null);
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       // Flattened to `{}` this would read as "no question has any answers" and
       // silence the warning at exactly the moment the runtime database is under
@@ -428,7 +427,7 @@ describe('FirstHand Express router', () => {
       } as Awaited<ReturnType<typeof getStudyById>>);
       mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       expect(res.body.can_edit).toBe(false);
       // ABSENT, not null. Null is reserved for a count that was attempted and
@@ -461,7 +460,7 @@ describe('FirstHand Express router', () => {
       } as Awaited<ReturnType<typeof getStudyById>>);
       mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       // Editable, and still not entitled to the counts. The two answers differ
       // on purpose, which is the whole finding.
@@ -484,7 +483,7 @@ describe('FirstHand Express router', () => {
       } as Awaited<ReturnType<typeof getStudyById>>);
       mockAnswerCountsByStep.mockResolvedValue({ study_abc_step_001: 47 });
 
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       expect(res.body).not.toHaveProperty('answer_counts');
       expect(mockAnswerCountsByStep).not.toHaveBeenCalled();
@@ -496,7 +495,7 @@ describe('FirstHand Express router', () => {
 
       // The opportunity form cannot render at all until this route answers, so
       // an advisory count must never be able to take the form down with it.
-      const res = await request(app).get('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).get('/api/firsthand/studies/study_abc').expect(200);
 
       expect(res.body.study.id).toBe('study_abc');
       expect(res.body.steps).toHaveLength(2);
@@ -506,7 +505,7 @@ describe('FirstHand Express router', () => {
   describe('PUT /api/firsthand/studies/:studyId', () => {
     it('updates a study → 200', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -534,7 +533,7 @@ describe('FirstHand Express router', () => {
         ...storedStudy
       } as never);
 
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -560,7 +559,7 @@ describe('FirstHand Express router', () => {
         current_updated_at: '2026-08-21T09:15:30.123Z'
       } as never);
 
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -596,7 +595,7 @@ describe('FirstHand Express router', () => {
         ...storedStudy
       } as never);
 
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -618,7 +617,7 @@ describe('FirstHand Express router', () => {
         ...storedStudy
       } as never);
 
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -641,7 +640,7 @@ describe('FirstHand Express router', () => {
       // operator is looking for signal.
       mockUpdateStudy.mockResolvedValue({ ok: false, reason: 'not_found' } as never);
 
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/missing')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -662,7 +661,7 @@ describe('FirstHand Express router', () => {
         current_updated_at: '2026-08-21T09:15:30.123Z'
       } as never);
 
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -693,7 +692,7 @@ describe('FirstHand Express router', () => {
         current_updated_at: '2026-08-21T09:15:30.123Z'
       } as never);
 
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -719,7 +718,7 @@ describe('FirstHand Express router', () => {
         current_updated_at: '2026-08-21T09:15:30.123Z'
       } as never);
 
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -747,7 +746,7 @@ describe('FirstHand Express router', () => {
         ...storedStudy
       } as never);
 
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -775,7 +774,7 @@ describe('FirstHand Express router', () => {
         claimed: false,
         ...storedStudy
       } as never);
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -795,7 +794,7 @@ describe('FirstHand Express router', () => {
         claimed: false,
         ...storedStudy
       } as never);
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(
@@ -824,7 +823,7 @@ describe('FirstHand Express router', () => {
         id: 'super-1', name: 'Super', email: 'super@test.com', role: 'superadmin',
       });
       (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
-      await request(superadminApp)
+      await request(listening(superadminApp))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -839,7 +838,7 @@ describe('FirstHand Express router', () => {
 
     it('returns 404 for an unknown study', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/missing')
         .type('json')
         .send(JSON.stringify({ title: 'New' }))
@@ -851,7 +850,7 @@ describe('FirstHand Express router', () => {
     // another owner's consent copy and task target_url on a launched study.
     it('returns 403 when the repository refuses a non-owner edit', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ consent_text: 'Rewritten by someone else' }))
@@ -867,7 +866,7 @@ describe('FirstHand Express router', () => {
     // opportunities equivalent. Without this the attempt is silent.
     it('logs a refused cross-owner write', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ consent_text: 'Rewritten by someone else' }))
@@ -881,7 +880,7 @@ describe('FirstHand Express router', () => {
 
     it('does not log a refusal when the study simply does not exist', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/missing')
         .type('json')
         .send(JSON.stringify({ title: 'New' }))
@@ -892,7 +891,7 @@ describe('FirstHand Express router', () => {
 
     it('logs an ownership claim, which has no UI and no undo below superadmin', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: true, ...storedStudy });
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Tidied up' }))
@@ -906,7 +905,7 @@ describe('FirstHand Express router', () => {
 
     it('does not log a claim on an ordinary edit', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -920,7 +919,7 @@ describe('FirstHand Express router', () => {
     // log is the only thing that tells them apart.
     it('logs the cause when the repository throws', async () => {
       (mockUpdateStudy as any).mockRejectedValue(new Error('connection terminated'));
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ title: 'Renamed' }))
@@ -936,7 +935,7 @@ describe('FirstHand Express router', () => {
     // pass the field through rather than stripping it.
     it('passes an owner reassignment through to the repository', async () => {
       (mockUpdateStudy as any).mockResolvedValue({ ok: true, claimed: false, ...storedStudy });
-      await request(app)
+      await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ owner_user_id: 'user-rightful' }))
@@ -951,7 +950,7 @@ describe('FirstHand Express router', () => {
     });
 
     it('rejects invalid update payloads with 400 invalid_payload', async () => {
-      const res = await request(app)
+      const res = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .type('json')
         .send(JSON.stringify({ estimated_duration_minutes: -5 }))
@@ -964,7 +963,7 @@ describe('FirstHand Express router', () => {
   describe('DELETE /api/firsthand/studies/:studyId', () => {
     it('deletes a study → 200 { ok: true }', async () => {
       (mockDeleteStudy as any).mockResolvedValue({ ok: true });
-      const res = await request(app).delete('/api/firsthand/studies/study_abc').expect(200);
+      const res = await request(listening(app)).delete('/api/firsthand/studies/study_abc').expect(200);
       expect(res.body).toEqual({ ok: true });
       expect(mockDeleteStudy).toHaveBeenCalledWith('study_abc', {
         userId: 'admin-1',
@@ -974,7 +973,7 @@ describe('FirstHand Express router', () => {
 
     it('returns 404 when the study does not exist', async () => {
       (mockDeleteStudy as any).mockResolvedValue({ ok: false, reason: 'not_found' });
-      const res = await request(app).delete('/api/firsthand/studies/missing').expect(404);
+      const res = await request(listening(app)).delete('/api/firsthand/studies/missing').expect(404);
       expect(res.body).toMatchObject({ error: 'not_found' });
     });
 
@@ -982,7 +981,7 @@ describe('FirstHand Express router', () => {
     // the published opportunity that points at it.
     it('returns 403 when the repository refuses a non-owner delete', async () => {
       (mockDeleteStudy as any).mockResolvedValue({ ok: false, reason: 'forbidden' });
-      const res = await request(app)
+      const res = await request(listening(app))
         .delete('/api/firsthand/studies/study_abc')
         .expect(403);
       expect(res.body).toMatchObject({
@@ -1024,7 +1023,7 @@ describe('FirstHand Express router', () => {
 
     it('lets a superadmin read the aggregate', async () => {
       studyOwnedBy('other-admin-9');
-      const res = await request(superadminApp)
+      const res = await request(listening(superadminApp))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(200);
       expect(res.body).toMatchObject({ title: storedStudy.study.title });
@@ -1036,7 +1035,7 @@ describe('FirstHand Express router', () => {
 
     it('lets a superadmin export the CSV', async () => {
       studyOwnedBy('other-admin-9');
-      const res = await request(superadminApp)
+      const res = await request(listening(superadminApp))
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(200);
       expect(res.headers['content-type']).toContain('text/csv');
@@ -1053,7 +1052,7 @@ describe('FirstHand Express router', () => {
     // rather than by loosening this one.
     it('refuses even the study owner, because results span other researchers opportunities', async () => {
       studyOwnedBy('admin-1');
-      const res = await request(app)
+      const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
       expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
@@ -1062,7 +1061,7 @@ describe('FirstHand Express router', () => {
 
     it('refuses the study owner the CSV as well, and serves no CSV body', async () => {
       studyOwnedBy('admin-1');
-      const res = await request(app)
+      const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(403);
       expect(res.headers['content-type']).not.toContain('text/csv');
@@ -1074,7 +1073,7 @@ describe('FirstHand Express router', () => {
     // participant answers.
     it('refuses a non-owner admin the aggregate, without reading any responses', async () => {
       studyOwnedBy('other-admin-9');
-      const res = await request(app)
+      const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
       expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity', code: 'FORBIDDEN' });
@@ -1084,7 +1083,7 @@ describe('FirstHand Express router', () => {
 
     it('refuses a non-owner admin the CSV, and serves no CSV body', async () => {
       studyOwnedBy('other-admin-9');
-      const res = await request(app)
+      const res = await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results.csv')
         .expect(403);
       expect(res.body).toMatchObject({ error: 'Only a superadmin can view survey responses across every opportunity' });
@@ -1100,7 +1099,7 @@ describe('FirstHand Express router', () => {
     // the case where nobody can be held accountable for the data at all.
     it('refuses an unowned study, which the write path would have let through', async () => {
       studyOwnedBy(null);
-      await request(app)
+      await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
       expect(mockListResponsesForStudy).not.toHaveBeenCalled();
@@ -1108,14 +1107,14 @@ describe('FirstHand Express router', () => {
 
     it('still lets a superadmin read an unowned study', async () => {
       studyOwnedBy(null);
-      await request(superadminApp)
+      await request(listening(superadminApp))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(200);
     });
 
     it('logs the refusal, so an attempt on participant answers is not silent', async () => {
       studyOwnedBy('other-admin-9');
-      await request(app)
+      await request(listening(app))
         .get('/api/firsthand/studies/study_abc/results')
         .expect(403);
       expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -1126,7 +1125,7 @@ describe('FirstHand Express router', () => {
 
     it('answers 404 for a missing study before any access decision', async () => {
       mockGetStudyById.mockResolvedValue(null);
-      const res = await request(app)
+      const res = await request(listening(app))
         .get('/api/firsthand/studies/missing/results')
         .expect(404);
       expect(res.body).toMatchObject({ error: 'Survey not found', code: 'NOT_FOUND' });
@@ -1164,7 +1163,7 @@ describe('FirstHand Express router', () => {
 
     it('refuses a 61st read in a minute, and not the 60th', async () => {
       const codes = await hammer(61, () =>
-        request(app).get('/api/firsthand/studies/study_abc')
+        request(listening(app)).get('/api/firsthand/studies/study_abc')
       );
 
       // Both halves. Asserting only the 429 would pass against a ceiling of
@@ -1175,7 +1174,7 @@ describe('FirstHand Express router', () => {
 
     it('refuses a 31st write in a minute, and not the 30th', async () => {
       const codes = await hammer(31, () =>
-        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+        request(listening(app)).put('/api/firsthand/studies/study_abc').send(validStudyBody)
       );
 
       expect(codes.slice(0, 30).every((code) => code !== 429)).toBe(true);
@@ -1195,10 +1194,10 @@ describe('FirstHand Express router', () => {
      */
     it('refuses in the envelope the frontend reads, not just with a status', async () => {
       await hammer(30, () =>
-        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+        request(listening(app)).put('/api/firsthand/studies/study_abc').send(validStudyBody)
       );
 
-      const refused = await request(app)
+      const refused = await request(listening(app))
         .put('/api/firsthand/studies/study_abc')
         .send(validStudyBody);
 
@@ -1210,25 +1209,23 @@ describe('FirstHand Express router', () => {
 
     it('keeps reads and writes on separate buckets', async () => {
       await hammer(30, () =>
-        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+        request(listening(app)).put('/api/firsthand/studies/study_abc').send(validStudyBody)
       );
 
       // The write budget is spent. Reading is a different surface with a
       // different cost, and an author who has just saved thirty times must
       // still be able to see what they saved.
-      const read = await request(app).get('/api/firsthand/studies/study_abc');
+      const read = await request(listening(app)).get('/api/firsthand/studies/study_abc');
       expect(read.status).not.toBe(429);
     });
 
     it('keys the bucket on the user, not the ingress', async () => {
-      await hammer(61, () => request(app).get('/api/firsthand/studies/study_abc'));
+      await hammer(61, () => request(listening(app)).get('/api/firsthand/studies/study_abc'));
 
       // Behind two proxy hops `trust proxy: 1` resolves req.ip to the INGRESS,
       // so an IP-keyed bucket would be shared by every admin in the estate and
       // one runaway loop would refuse all of them.
-      const other = await request(
-        buildApp({ id: 'other-admin', name: 'B', email: 'b@test.com', role: 'researcher_admin' })
-      ).get('/api/firsthand/studies/study_abc');
+      const other = await request(listening(buildApp({ id: 'other-admin', name: 'B', email: 'b@test.com', role: 'researcher_admin' }))).get('/api/firsthand/studies/study_abc');
 
       expect(other.status).not.toBe(429);
     });
@@ -1246,12 +1243,12 @@ describe('FirstHand Express router', () => {
       const anonymous = buildApp(null);
 
       const refused = await hammer(70, () =>
-        request(anonymous).get('/api/firsthand/studies/study_abc')
+        request(listening(anonymous)).get('/api/firsthand/studies/study_abc')
       );
       expect(refused.every((code) => code === 401)).toBe(true);
 
       // Seventy unauthenticated attempts later, an admin is unaffected.
-      const admin = await request(app).get('/api/firsthand/studies/study_abc');
+      const admin = await request(listening(app)).get('/api/firsthand/studies/study_abc');
       expect(admin.status).toBe(200);
     });
 
@@ -1357,17 +1354,17 @@ describe('FirstHand Express router', () => {
     });
 
     it('puts the study list on the same read bucket as a single study', async () => {
-      await hammer(60, () => request(app).get('/api/firsthand/studies/study_abc'));
+      await hammer(60, () => request(listening(app)).get('/api/firsthand/studies/study_abc'));
 
-      expect((await request(app).get('/api/firsthand/studies')).status).toBe(429);
+      expect((await request(listening(app)).get('/api/firsthand/studies')).status).toBe(429);
     });
 
     it.each([
-      ['create', () => request(app).post('/api/firsthand/studies').send(validStudyBody)],
-      ['delete', () => request(app).delete('/api/firsthand/studies/study_abc')]
+      ['create', () => request(listening(app)).post('/api/firsthand/studies').send(validStudyBody)],
+      ['delete', () => request(listening(app)).delete('/api/firsthand/studies/study_abc')]
     ])('puts %s on the same write bucket as an update', async (_label, call) => {
       await hammer(30, () =>
-        request(app).put('/api/firsthand/studies/study_abc').send(validStudyBody)
+        request(listening(app)).put('/api/firsthand/studies/study_abc').send(validStudyBody)
       );
 
       expect((await call()).status).toBe(429);
@@ -1381,11 +1378,11 @@ describe('FirstHand Express router', () => {
       resetFirsthandStudyLimits('super-2');
 
       await hammer(10, () =>
-        request(superApp).get('/api/firsthand/studies/study_abc/results')
+        request(listening(superApp)).get('/api/firsthand/studies/study_abc/results')
       );
 
       expect(
-        (await request(superApp).get('/api/firsthand/studies/study_abc/results.csv')).status
+        (await request(listening(superApp)).get('/api/firsthand/studies/study_abc/results.csv')).status
       ).toBe(429);
     });
 
@@ -1397,7 +1394,7 @@ describe('FirstHand Express router', () => {
       resetFirsthandStudyLimits('super-1');
 
       const codes = await hammer(11, () =>
-        request(superApp).get('/api/firsthand/studies/study_abc/results')
+        request(listening(superApp)).get('/api/firsthand/studies/study_abc/results')
       );
 
       // 10, not the 60 `surveyResultsLimiter` uses. This read spans every
@@ -1432,7 +1429,7 @@ describe('a refusal from the runtime admission cap', () => {
   it('keeps its 503 through the create handler', async () => {
     mockCreateStudy.mockRejectedValue(new RuntimeDatabaseAdmissionTimeoutError(10_000));
 
-    const response = await request(app)
+    const response = await request(listening(app))
       .post('/api/firsthand/studies')
       .send(validStudyBody);
 
@@ -1446,7 +1443,7 @@ describe('a refusal from the runtime admission cap', () => {
   it('keeps its 503 through the update handler', async () => {
     mockUpdateStudy.mockRejectedValue(new RuntimeDatabaseBusyError());
 
-    const response = await request(app)
+    const response = await request(listening(app))
       .put('/api/firsthand/studies/study_1')
       .send(validStudyBody);
 
@@ -1463,7 +1460,7 @@ describe('a refusal from the runtime admission cap', () => {
     // block exists at all.
     mockUpdateStudy.mockRejectedValue(new Error('duplicate step id: step_001'));
 
-    const response = await request(app)
+    const response = await request(listening(app))
       .put('/api/firsthand/studies/study_1')
       .send(validStudyBody);
 

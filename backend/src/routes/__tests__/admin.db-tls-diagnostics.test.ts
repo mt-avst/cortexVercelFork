@@ -1,5 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 jest.mock('../../config', () => ({
@@ -33,28 +34,22 @@ const PATH = '/api/admin/diagnostics/db-tls';
 
 describe('GET /api/admin/diagnostics/db-tls', () => {
   it('answers a superadmin', async () => {
-    const res = await request(
-      appAs({ id: 'root', name: 'R', email: 'r@x.com', role: 'superadmin' })
-    ).get(PATH).expect(200);
+    const res = await request(listening(appAs({ id: 'root', name: 'R', email: 'r@x.com', role: 'superadmin' }))).get(PATH).expect(200);
 
     expect(res.body).toHaveProperty('pools');
     expect(res.body).toHaveProperty('allVerified');
   });
 
   it('refuses a researcher_admin, who can already read plenty else here', async () => {
-    await request(
-      appAs({ id: 'a1', name: 'A', email: 'a@x.com', role: 'researcher_admin' })
-    ).get(PATH).expect(403);
+    await request(listening(appAs({ id: 'a1', name: 'A', email: 'a@x.com', role: 'researcher_admin' }))).get(PATH).expect(403);
   });
 
   it('refuses an unauthenticated caller', async () => {
-    await request(appAs(null)).get(PATH).expect(401);
+    await request(listening(appAs(null))).get(PATH).expect(401);
   });
 
   it('reports no host and no filesystem path', async () => {
-    const res = await request(
-      appAs({ id: 'root', name: 'R', email: 'r@x.com', role: 'superadmin' })
-    ).get(PATH).expect(200);
+    const res = await request(listening(appAs({ id: 'root', name: 'R', email: 'r@x.com', role: 'superadmin' }))).get(PATH).expect(200);
 
     // The underlying description names the database host and the CA bundle
     // path. Only the mode is meant to travel.

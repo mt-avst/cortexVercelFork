@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 import session from 'express-session';
 import { generateMockUser, createMockQueryResult } from '../../../../shared/test-utils';
@@ -65,7 +66,7 @@ function mockOidc(overrides: Record<string, any> = {}) {
 // Logs in via the real /auth/login flow to obtain a valid, registered state token —
 // the app's CSRF state store only recognizes states actually issued via /login.
 async function loginAndGetState(app: express.Application): Promise<string> {
-  const res = await request(app).get('/auth/login').expect(302);
+  const res = await request(listening(app)).get('/auth/login').expect(302);
   const url = new URL(res.headers.location);
   return url.searchParams.get('state')!;
 }
@@ -99,7 +100,7 @@ describe('Auth Routes Integration Tests', () => {
     it('should redirect to OIDC provider', async () => {
       mockOidc();
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/login')
         .expect(302);
 
@@ -110,7 +111,7 @@ describe('Auth Routes Integration Tests', () => {
     it('should handle OIDC client initialization error', async () => {
       require('openid-client').Issuer.discover.mockRejectedValue(new Error('Discovery failed'));
 
-      await request(app)
+      await request(listening(app))
         .get('/auth/login')
         .expect(500);
     });
@@ -140,7 +141,7 @@ describe('Auth Routes Integration Tests', () => {
       // Mock notification preferences creation
       mockClientQuery.mockResolvedValueOnce(createMockQueryResult([]));
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/callback')
         .query({ code: 'auth-code', state })
         .expect(302);
@@ -153,7 +154,7 @@ describe('Auth Routes Integration Tests', () => {
     });
 
     it('should handle missing state parameter', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/callback')
         .query({ code: 'auth-code' })
         .expect(400);
@@ -163,7 +164,7 @@ describe('Auth Routes Integration Tests', () => {
 
     it('should handle invalid state parameter', async () => {
       // A state that was never issued via /login is rejected regardless of code.
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/callback')
         .query({ code: 'auth-code', state: 'never-issued-state' })
         .expect(400);
@@ -177,7 +178,7 @@ describe('Auth Routes Integration Tests', () => {
       });
       const state = await loginAndGetState(app);
 
-      await request(app)
+      await request(listening(app))
         .get('/auth/callback')
         .query({ code: 'auth-code', state })
         .expect(500);
@@ -186,7 +187,7 @@ describe('Auth Routes Integration Tests', () => {
 
   describe('POST /auth/logout', () => {
     it('should destroy the session and return success', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/auth/logout')
         .expect(200);
 
@@ -232,7 +233,7 @@ describe('Auth Routes Integration Tests', () => {
     it('should log the demo user in and redirect home', async () => {
       const demoApp = buildDemoApp();
 
-      const response = await request(demoApp)
+      const response = await request(listening(demoApp))
         .get('/auth/demo-login')
         .expect(302);
 
@@ -242,7 +243,7 @@ describe('Auth Routes Integration Tests', () => {
     it('should log the demo admin in and redirect to /admin', async () => {
       const demoApp = buildDemoApp();
 
-      const response = await request(demoApp)
+      const response = await request(listening(demoApp))
         .get('/auth/admin-login')
         .expect(302);
 

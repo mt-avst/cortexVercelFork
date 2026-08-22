@@ -1,5 +1,6 @@
 import { describe, it, expect, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express, { Request, Response } from 'express';
 
 import {
@@ -60,7 +61,7 @@ describe('participantRuntimeWork', () => {
   };
 
   it('classifies the request as participant work, and keeps it across every await', async () => {
-    const response = await request(buildApp([participantRuntimeWork])).get('/probe');
+    const response = await request(listening(buildApp([participantRuntimeWork]))).get('/probe');
 
     expect(response.body).toEqual({
       beforeAwait: 'participant',
@@ -73,7 +74,7 @@ describe('participantRuntimeWork', () => {
     // The negative half. Without it, a middleware that classified EVERYTHING as
     // participant would pass the assertion above and exempt the whole
     // application from the cap.
-    const response = await request(buildApp([])).get('/probe');
+    const response = await request(listening(buildApp([]))).get('/probe');
 
     expect(response.body).toEqual({
       beforeAwait: 'admin',
@@ -93,9 +94,9 @@ describe('participantRuntimeWork', () => {
       res.json({ workClass: currentRuntimeWorkClass() });
     });
 
-    expect((await request(app).get('/marked')).body.workClass).toBe('participant');
-    expect((await request(app).get('/unmarked')).body.workClass).toBe('admin');
-    expect((await request(app).get('/marked')).body.workClass).toBe('participant');
+    expect((await request(listening(app)).get('/marked')).body.workClass).toBe('participant');
+    expect((await request(listening(app)).get('/unmarked')).body.workClass).toBe('admin');
+    expect((await request(listening(app)).get('/marked')).body.workClass).toBe('participant');
   });
 
   it('classifies the public lane as public, not as participant', async () => {
@@ -105,7 +106,7 @@ describe('participantRuntimeWork', () => {
     // anonymous, pre-consent brief route back in the UNCAPPED lane with every
     // route-table assertion still green - reopening the finding both gates
     // raised. Only executing it can see that.
-    const response = await request(buildApp([publicRuntimeWork])).get('/probe');
+    const response = await request(listening(buildApp([publicRuntimeWork]))).get('/probe');
 
     expect(response.body).toEqual({
       beforeAwait: 'public',
@@ -115,8 +116,8 @@ describe('participantRuntimeWork', () => {
   });
 
   it('keeps the two lanes distinct, so neither can be spelled as the other', async () => {
-    const participant = await request(buildApp([participantRuntimeWork])).get('/probe');
-    const publicLane = await request(buildApp([publicRuntimeWork])).get('/probe');
+    const participant = await request(listening(buildApp([participantRuntimeWork]))).get('/probe');
+    const publicLane = await request(listening(buildApp([publicRuntimeWork]))).get('/probe');
 
     expect(participant.body.deep).not.toBe(publicLane.body.deep);
   });

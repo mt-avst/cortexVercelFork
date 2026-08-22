@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // Factories use only inline jest.fn() to avoid TDZ, matching opportunities.test.ts.
@@ -80,7 +81,7 @@ describe('Bookings API', () => {
       });
 
       try {
-        const response = await request(app).get('/api/bookings/my/bookings');
+        const response = await request(listening(app)).get('/api/bookings/my/bookings');
 
         expect(response.status).toBe(200);
         expect(mockQuery).toHaveBeenCalled();
@@ -99,7 +100,7 @@ describe('Bookings API', () => {
     it('answers 503 during a database outage instead of an empty list', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get('/api/bookings/my/bookings');
+      const response = await request(listening(app)).get('/api/bookings/my/bookings');
 
       expect(response.status).toBe(503);
       expect(response.body.code).toBe('DB_CONNECTION_FAILED');
@@ -110,7 +111,7 @@ describe('Bookings API', () => {
     it('answers 503 during a database outage', async () => {
       mockIsDatabaseAvailable.mockRejectedValue(outage());
 
-      const response = await request(app).get(
+      const response = await request(listening(app)).get(
         '/api/bookings/opportunities/opp-1/bookings'
       );
 
@@ -131,7 +132,7 @@ describe('Bookings API', () => {
         .mockResolvedValueOnce({ rows: [{ owner_user_id: 'test-user-id' }] })
         .mockResolvedValueOnce({ rows: [] });
 
-      await request(app).get('/api/bookings/opportunities/opp-1/bookings');
+      await request(listening(app)).get('/api/bookings/opportunities/opp-1/bookings');
 
       const bookingsSql = mockQuery.mock.calls
         .map((call: unknown[]) => String(call[0]))
@@ -164,7 +165,7 @@ describe('Bookings API', () => {
           ],
         });
 
-      const response = await request(app).get(
+      const response = await request(listening(app)).get(
         '/api/bookings/opportunities/opp-1/bookings'
       );
 

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -128,24 +129,24 @@ beforeEach(() => {
 
 // The five route files, as request thunks against the owner app.
 const endpoints: Array<{ name: string; call: () => request.Test }> = [
-  { name: 'GET /:token', call: () => request(ownerApp).get(`/api/firsthand/session/${TOKEN}`) },
-  { name: 'GET /:token/runtime', call: () => request(ownerApp).get(`/api/firsthand/session/${TOKEN}/runtime`) },
-  { name: 'POST /:token/runtime', call: () => request(ownerApp).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' }) },
-  { name: 'POST /:token/recording', call: () => request(ownerApp).post(`/api/firsthand/session/${TOKEN}/recording`).set('Content-Type', 'video/webm').send(Buffer.from('x')) },
-  { name: 'POST /:token/recording/client-upload', call: () => request(ownerApp).post(`/api/firsthand/session/${TOKEN}/recording/client-upload`).send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 }) },
-  { name: 'POST /:token/recording/finalize', call: () => request(ownerApp).post(`/api/firsthand/session/${TOKEN}/recording/finalize`).send({ durationSeconds: 1, objectKey: 'recordings/session_1/a.webm' }) }
+  { name: 'GET /:token', call: () => request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`) },
+  { name: 'GET /:token/runtime', call: () => request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}/runtime`) },
+  { name: 'POST /:token/runtime', call: () => request(listening(ownerApp)).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' }) },
+  { name: 'POST /:token/recording', call: () => request(listening(ownerApp)).post(`/api/firsthand/session/${TOKEN}/recording`).set('Content-Type', 'video/webm').send(Buffer.from('x')) },
+  { name: 'POST /:token/recording/client-upload', call: () => request(listening(ownerApp)).post(`/api/firsthand/session/${TOKEN}/recording/client-upload`).send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 }) },
+  { name: 'POST /:token/recording/finalize', call: () => request(listening(ownerApp)).post(`/api/firsthand/session/${TOKEN}/recording/finalize`).send({ durationSeconds: 1, objectKey: 'recordings/session_1/a.webm' }) }
 ];
 
 describe('B4 participant runtime — auth gate (requireAuth)', () => {
   it('every mutating + read endpoint is 401 without a session', async () => {
     const anonApp = buildApp(null);
     const calls = [
-      () => request(anonApp).get(`/api/firsthand/session/${TOKEN}`),
-      () => request(anonApp).get(`/api/firsthand/session/${TOKEN}/runtime`),
-      () => request(anonApp).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' }),
-      () => request(anonApp).post(`/api/firsthand/session/${TOKEN}/recording`).set('Content-Type', 'video/webm').send(Buffer.from('x')),
-      () => request(anonApp).post(`/api/firsthand/session/${TOKEN}/recording/client-upload`).send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 }),
-      () => request(anonApp).post(`/api/firsthand/session/${TOKEN}/recording/finalize`).send({ durationSeconds: 1, objectKey: 'k' })
+      () => request(listening(anonApp)).get(`/api/firsthand/session/${TOKEN}`),
+      () => request(listening(anonApp)).get(`/api/firsthand/session/${TOKEN}/runtime`),
+      () => request(listening(anonApp)).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' }),
+      () => request(listening(anonApp)).post(`/api/firsthand/session/${TOKEN}/recording`).set('Content-Type', 'video/webm').send(Buffer.from('x')),
+      () => request(listening(anonApp)).post(`/api/firsthand/session/${TOKEN}/recording/client-upload`).send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 }),
+      () => request(listening(anonApp)).post(`/api/firsthand/session/${TOKEN}/recording/finalize`).send({ durationSeconds: 1, objectKey: 'k' })
     ];
     for (const c of calls) {
       const res = await c();
@@ -165,7 +166,7 @@ describe('B4 participant runtime — token->user binding (H3)', () => {
 
   it('does not touch the runtime/storage layer on a wrong-user request', async () => {
     okSession('user_someone_else');
-    await request(ownerApp).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' });
+    await request(listening(ownerApp)).post(`/api/firsthand/session/${TOKEN}/runtime`).send({ type: 'event', eventType: 'session_started' });
     expect(mockApply).not.toHaveBeenCalled();
     expect(mockRecordEvent).not.toHaveBeenCalled();
   });
@@ -174,23 +175,23 @@ describe('B4 participant runtime — token->user binding (H3)', () => {
 describe('B4 participant runtime — session-load failure mapping', () => {
   it('maps expired -> 410', async () => {
     mockLoad.mockResolvedValue({ kind: 'expired', message: 'gone' });
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.status).toBe(410);
     expect(res.body.error).toBe('expired');
   });
   it('maps invalid_contract -> 422', async () => {
     mockLoad.mockResolvedValue({ kind: 'invalid_contract', message: 'bad' });
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.status).toBe(422);
   });
   it('maps not_found -> 404', async () => {
     mockLoad.mockResolvedValue({ kind: 'not_found', message: 'nope' });
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.status).toBe(404);
   });
   it('sets Referrer-Policy: no-referrer for token-in-URL hygiene', async () => {
     okSession();
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.headers['referrer-policy']).toBe('no-referrer');
   });
 });
@@ -198,14 +199,14 @@ describe('B4 participant runtime — session-load failure mapping', () => {
 describe('B4 GET /:token + GET /:token/runtime', () => {
   it('returns the bound session payload', async () => {
     okSession();
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.status).toBe(200);
     expect(res.body.session.session_id).toBe('session_1');
   });
   it('seeds and returns the runtime snapshot', async () => {
     okSession();
     mockSeed.mockResolvedValue({ sessionId: 'session_1', attemptNumber: 1, sessionStatus: 'in_progress' });
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}/runtime`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}/runtime`);
     expect(res.status).toBe(200);
     expect(mockSeed).toHaveBeenCalled();
     expect(res.body.sessionId).toBe('session_1');
@@ -213,7 +214,7 @@ describe('B4 GET /:token + GET /:token/runtime', () => {
   it('selects a specific attempt when ?attempt= is supplied', async () => {
     okSession();
     mockGetRuntime.mockResolvedValue({ sessionId: 'session_1', attemptNumber: 3 });
-    const res = await request(ownerApp).get(`/api/firsthand/session/${TOKEN}/runtime?attempt=3`);
+    const res = await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}/runtime?attempt=3`);
     expect(res.status).toBe(200);
     expect(mockGetRuntime).toHaveBeenCalledWith('session_1', { attemptNumber: 3 });
     expect(res.body.attemptNumber).toBe(3);
@@ -224,7 +225,7 @@ describe('B4 POST /:token/runtime', () => {
   it('applies a valid mutation and records the lifecycle event in-process', async () => {
     okSession();
     mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'completed', logicalSessionId: 'session_1' });
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'event', eventType: 'upload_completed' });
     expect(res.status).toBe(200);
@@ -234,7 +235,7 @@ describe('B4 POST /:token/runtime', () => {
 
   it('rejects an empty body with 422 rather than 500 (abandoned session)', async () => {
     okSession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .set('Content-Type', 'application/json')
       .send('');
@@ -245,7 +246,7 @@ describe('B4 POST /:token/runtime', () => {
 
   it('turns a truncated JSON body into a clean 400, never a 500', async () => {
     okSession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .set('Content-Type', 'application/json')
       .send('{"type":"eve');
@@ -276,7 +277,7 @@ describe('B4 POST /:token/runtime — a response must answer a question the sess
   }
 
   const submit = (body: Record<string, unknown>) =>
-    request(ownerApp)
+    request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'response', ...body });
 
@@ -357,7 +358,7 @@ describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
   it('presigns a server-derived S3 key and returns it', async () => {
     okSession();
     mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ durationSeconds: 42.5, fileName: 'session.webm', mimeType: 'video/webm;codecs=vp9,opus', fileSizeBytes: 1024 });
     expect(res.status).toBe(200);
@@ -376,7 +377,7 @@ describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
 
   it('rejects an invalid upload request with 422', async () => {
     okSession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ fileName: '', mimeType: 'video/webm' });
     expect(res.status).toBe(422);
@@ -386,7 +387,7 @@ describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
   it('rejects an over-cap declared size with 413', async () => {
     okSession();
     mockMaxBytes.mockReturnValue(2048);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 4096 });
     expect(res.status).toBe(413);
@@ -397,7 +398,7 @@ describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
   it('forwards the requested attempt number', async () => {
     okSession();
     mockPresign.mockResolvedValue('https://s3/put');
-    await request(ownerApp)
+    await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload?attempt=3`)
       .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
     expect(mockRegisterPending).toHaveBeenCalledWith(
@@ -422,7 +423,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
     mockResolvePending.mockResolvedValue(goodPending);
     mockHead.mockResolvedValue(2048);
     mockSaveAsset.mockResolvedValue({ id: 'asset_1', sessionId: 'session_1', relativePath: goodPending.relativePath, fileSizeBytes: 2048, mimeType: 'video/webm' });
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 42.5, objectKey: goodPending.relativePath });
     expect(res.status).toBe(200);
@@ -437,7 +438,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
     mockHead.mockResolvedValue(2048);
     mockSaveAsset.mockResolvedValue({ id: 'asset_1', sessionId: 'session_1', relativePath: goodPending.relativePath, fileSizeBytes: 2048, mimeType: 'video/webm' });
     mockTranscript.mockRejectedValue(new Error('transcript boom'));
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: goodPending.relativePath });
     expect(res.status).toBe(200);
@@ -447,7 +448,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
   it('rejects an unregistered key with 403', async () => {
     okSession();
     mockResolvePending.mockResolvedValue(null);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: 'recordings/session_1/never.webm' });
     expect(res.status).toBe(403);
@@ -457,7 +458,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
   it("rejects a pending upload registered under another session's token with 403", async () => {
     okSession();
     mockResolvePending.mockResolvedValue({ ...goodPending, token: 'fh_other_token' });
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: goodPending.relativePath });
     expect(res.status).toBe(403);
@@ -466,7 +467,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
   it('rejects an expired pending upload with 410', async () => {
     okSession();
     mockResolvePending.mockResolvedValue({ ...goodPending, validUntil: new Date(Date.now() - 1000).toISOString() });
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: goodPending.relativePath });
     expect(res.status).toBe(410);
@@ -476,7 +477,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
     okSession();
     mockResolvePending.mockResolvedValue(goodPending);
     mockHead.mockResolvedValue(null);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: goodPending.relativePath });
     expect(res.status).toBe(422);
@@ -488,7 +489,7 @@ describe('B4 POST /:token/recording/finalize (S3-only)', () => {
     mockMaxBytes.mockReturnValue(2048);
     mockResolvePending.mockResolvedValue(goodPending);
     mockHead.mockResolvedValue(4096);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: goodPending.relativePath });
     expect(res.status).toBe(413);
@@ -501,7 +502,7 @@ describe('B4 POST /:token/recording (server-proxied stream)', () => {
     mockSeed.mockResolvedValue({ sessionId: 'session_1' });
     mockStore.mockResolvedValue({ fileName: 'a.webm', fileSizeBytes: 3, mimeType: 'video/webm', objectUrl: undefined, relativePath: 'recordings/session_1/a.webm', storageProvider: 's3' });
     mockSaveAsset.mockResolvedValue({ id: 'asset_1', sessionId: 'session_1', relativePath: 'recordings/session_1/a.webm', fileSizeBytes: 3, mimeType: 'video/webm' });
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording`)
       .set('Content-Type', 'video/webm')
       .set('x-firsthand-file-name', encodeURIComponent('a.webm'))
@@ -514,7 +515,7 @@ describe('B4 POST /:token/recording (server-proxied stream)', () => {
   it('rejects an honest over-cap content-length upfront with 413', async () => {
     okSession();
     mockMaxBytes.mockReturnValue(1024);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording`)
       .set('Content-Type', 'video/webm')
       .set('Content-Length', '4096')
@@ -531,7 +532,7 @@ describe('B4 POST /:token/recording (server-proxied stream)', () => {
     mockSeed.mockResolvedValue({ sessionId: 'session_1' });
     mockStore.mockResolvedValue({ fileName: 'a.webm', fileSizeBytes: 4096, mimeType: 'video/webm', objectUrl: undefined, relativePath: 'recordings/session_1/a.webm', storageProvider: 's3' });
     mockDeleteStored.mockResolvedValue(undefined);
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording`)
       .set('Content-Type', 'video/webm')
       .send(Buffer.from('a'));
@@ -574,7 +575,7 @@ describe('B4 CSRF seam — header-based, GET exempt', () => {
 
   it('rejects a mutating POST with no CSRF token (403)', async () => {
     okSession();
-    const res = await request(buildCsrfApp())
+    const res = await request(listening(buildCsrfApp()))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'event', eventType: 'session_started' });
     expect(res.status).toBe(403);
@@ -582,7 +583,7 @@ describe('B4 CSRF seam — header-based, GET exempt', () => {
 
   it('allows a GET with no CSRF token (auto-exempt)', async () => {
     okSession();
-    const res = await request(buildCsrfApp()).get(`/api/firsthand/session/${TOKEN}`);
+    const res = await request(listening(buildCsrfApp())).get(`/api/firsthand/session/${TOKEN}`);
     expect(res.status).toBe(200);
   });
 
@@ -590,7 +591,7 @@ describe('B4 CSRF seam — header-based, GET exempt', () => {
     okSession();
     mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
     const app = buildCsrfApp();
-    const agent = request.agent(app);
+    const agent = request.agent(listening(app));
     const tokenRes = await agent.get('/api/csrf-token');
     const csrf = tokenRes.body.csrfToken;
     const res = await agent
@@ -625,7 +626,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
 
   it('refuses the direct recording upload', async () => {
     surveySession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording`)
       .set('Content-Type', 'video/webm')
       .send(Buffer.from('x'));
@@ -638,7 +639,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
 
   it('refuses to presign an S3 upload, so no write capability is issued', async () => {
     surveySession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
 
@@ -649,7 +650,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
 
   it('refuses to finalize, so no asset row and no transcript job', async () => {
     surveySession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/finalize`)
       .send({ durationSeconds: 1, objectKey: 'recordings/session_1/a.webm' });
 
@@ -660,7 +661,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
 
   it('refuses a recording-state mutation, so the row cannot claim a recording', async () => {
     surveySession();
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'recording_state', recordingStatus: 'active', uploadStatus: 'complete' });
 
@@ -674,7 +675,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
     surveySession();
     mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
 
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'event', eventType: 'session_started' });
 
@@ -692,7 +693,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
     });
     mockApply.mockResolvedValue({ sessionId: 'session_1', sessionStatus: 'in_progress' });
 
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'response', stepId: 's1', stepType: 'open_text', responsePayload: { text: 'Because' } });
 
@@ -707,7 +708,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
     okSession();
     mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
 
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
 
@@ -725,7 +726,7 @@ describe('B4 a survey token cannot drive the recording machinery', () => {
     });
     mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
 
-    const res = await request(ownerApp)
+    const res = await request(listening(ownerApp))
       .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
       .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
 
@@ -753,7 +754,7 @@ describe('B4 the mutating runtime routes are rate limited per participant', () =
     const codes: number[] = [];
     for (let i = 0; i < 121; i += 1) {
       codes.push(
-        (await request(ownerApp)
+        (await request(listening(ownerApp))
           .post(`/api/firsthand/session/${TOKEN}/runtime`)
           .send({ type: 'event', eventType: 'session_started' })).status
       );
@@ -765,16 +766,16 @@ describe('B4 the mutating runtime routes are rate limited per participant', () =
     // Reads are not on this bucket. The participant surface fetches its payload
     // on load, and a 429 there would strand someone whose only offence was
     // answering a lot of questions.
-    expect((await request(ownerApp).get(`/api/firsthand/session/${TOKEN}`)).status).not.toBe(429);
+    expect((await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}`)).status).not.toBe(429);
     expect(
-      (await request(ownerApp).get(`/api/firsthand/session/${TOKEN}/runtime`)).status
+      (await request(listening(ownerApp)).get(`/api/firsthand/session/${TOKEN}/runtime`)).status
     ).not.toBe(429);
 
     // And the key is the user, not the ingress - so one participant answering
     // fast cannot refuse another.
     okSession('other_participant');
     const otherApp = buildApp({ id: 'other_participant', name: 'O', email: 'o2@x.com', role: 'employee' });
-    const other = await request(otherApp)
+    const other = await request(listening(otherApp))
       .post(`/api/firsthand/session/${TOKEN}/runtime`)
       .send({ type: 'event', eventType: 'session_started' });
     expect(other.status).not.toBe(429);

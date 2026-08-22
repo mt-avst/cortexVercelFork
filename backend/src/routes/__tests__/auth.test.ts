@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, jest } from '@jest/globals';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 import session from 'express-session';
 
@@ -60,7 +61,7 @@ function mockOidc(overrides: Record<string, any> = {}) {
 // exactly as a real client would — the app's CSRF state store only recognizes states
 // that were actually issued via /login.
 async function loginAndGetState(app: express.Application): Promise<string> {
-  const res = await request(app).get('/auth/login').expect(302);
+  const res = await request(listening(app)).get('/auth/login').expect(302);
   const url = new URL(res.headers.location);
   return url.searchParams.get('state')!;
 }
@@ -110,7 +111,7 @@ describe('Authentication Routes', () => {
     it('should redirect to OIDC provider', async () => {
       mockOidc();
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/login')
         .expect(302);
 
@@ -123,7 +124,7 @@ describe('Authentication Routes', () => {
       const { Issuer } = require('openid-client');
       Issuer.discover.mockRejectedValue(new Error('OIDC discovery failed'));
 
-      await request(app)
+      await request(listening(app))
         .get('/auth/login')
         .expect(500);
     });
@@ -164,7 +165,7 @@ describe('Authentication Routes', () => {
       // Mock notification preferences creation
       mockClientQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(app)
+      const response = await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(302);
 
@@ -177,13 +178,13 @@ describe('Authentication Routes', () => {
 
     it('should handle invalid state parameter', async () => {
       // A state that was never issued via /login is rejected regardless of code.
-      await request(app)
+      await request(listening(app))
         .get('/auth/callback?state=never-issued-state&code=test-code')
         .expect(400);
     });
 
     it('should handle missing state parameter', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .get('/auth/callback?code=test-code')
         .expect(400);
 
@@ -196,7 +197,7 @@ describe('Authentication Routes', () => {
       });
       const state = await loginAndGetState(app);
 
-      await request(app)
+      await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(500);
     });
@@ -205,7 +206,7 @@ describe('Authentication Routes', () => {
       const state = await loginAndGetState(app);
       mockClientQuery.mockRejectedValueOnce(new Error('Database error'));
 
-      await request(app)
+      await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(500);
     });
@@ -213,7 +214,7 @@ describe('Authentication Routes', () => {
 
   describe('POST /auth/logout', () => {
     it('should destroy session and clear cookie', async () => {
-      const response = await request(app)
+      const response = await request(listening(app))
         .post('/auth/logout')
         .expect(200);
 
@@ -236,7 +237,7 @@ describe('Authentication Routes', () => {
       });
       appWithMockSession.use('/auth', require('../auth').default);
 
-      await request(appWithMockSession)
+      await request(listening(appWithMockSession))
         .post('/auth/logout')
         .expect(500);
     });
@@ -277,7 +278,7 @@ describe('Authentication Routes', () => {
         cookie: { secure: false },
       }));
 
-      const response = await request(demoApp)
+      const response = await request(listening(demoApp))
         .get('/auth/demo-login')
         .expect(302);
 
@@ -292,7 +293,7 @@ describe('Authentication Routes', () => {
         cookie: { secure: false },
       }));
 
-      const response = await request(demoApp)
+      const response = await request(listening(demoApp))
         .get('/auth/admin-login')
         .expect(302);
 
@@ -312,7 +313,7 @@ describe('Authentication Routes', () => {
         next();
       });
 
-      await request(appWithMockSession)
+      await request(listening(appWithMockSession))
         .get('/auth/demo-login')
         .expect(500);
     });
@@ -336,7 +337,7 @@ describe('Authentication Routes', () => {
       }));
       freshApp.use('/auth', require('../auth').default);
 
-      await request(freshApp)
+      await request(listening(freshApp))
         .get('/auth/login')
         .expect(500);
     });

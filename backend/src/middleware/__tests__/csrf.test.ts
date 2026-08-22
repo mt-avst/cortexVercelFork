@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import session from 'express-session';
 import request from 'supertest';
+import { listening } from '../../__tests__/helpers/listening';
 
 import { buildCsrfProtection, CSRF_ERROR_CODE } from '../csrf';
 
@@ -50,20 +51,20 @@ function buildApp() {
 describe('CSRF protection', () => {
   it('lets GET requests through without a token', async () => {
     const app = buildApp();
-    const response = await request(app).get('/api/thing');
+    const response = await request(listening(app)).get('/api/thing');
     expect(response.status).toBe(200);
   });
 
   it('rejects a mutating request without a token', async () => {
     const app = buildApp();
-    const response = await request(app).post('/api/thing').send({});
+    const response = await request(listening(app)).post('/api/thing').send({});
     expect(response.status).toBe(403);
     expect(response.body.code).toBe(CSRF_ERROR_CODE);
   });
 
   it('accepts a mutating request carrying the issued token and cookie', async () => {
     const app = buildApp();
-    const agent = request.agent(app);
+    const agent = request.agent(listening(app));
 
     const tokenResponse = await agent.get('/api/csrf-token');
     expect(tokenResponse.status).toBe(200);
@@ -79,11 +80,11 @@ describe('CSRF protection', () => {
 
   it('rejects a token presented without its pairing cookie', async () => {
     const app = buildApp();
-    const tokenResponse = await request(app).get('/api/csrf-token');
+    const tokenResponse = await request(listening(app)).get('/api/csrf-token');
     const csrfToken = tokenResponse.body.csrfToken;
 
     // Fresh client: no CSRF cookie, no session cookie
-    const response = await request(app)
+    const response = await request(listening(app))
       .post('/api/thing')
       .set('x-csrf-token', csrfToken)
       .send({});
@@ -92,28 +93,28 @@ describe('CSRF protection', () => {
 
   it('no longer exempts the deleted webhook path (exemption stays gone)', async () => {
     const app = buildApp();
-    const response = await request(app).post('/api/firsthand/callbacks').send({});
+    const response = await request(listening(app)).post('/api/firsthand/callbacks').send({});
     expect(response.status).toBe(403);
     expect(response.body.code).toBe(CSRF_ERROR_CODE);
   });
 
   it('protects live /api/firsthand/* routes like any other mutating route', async () => {
     const app = buildApp();
-    const response = await request(app).post('/api/firsthand/studies').send({});
+    const response = await request(listening(app)).post('/api/firsthand/studies').send({});
     expect(response.status).toBe(403);
     expect(response.body.code).toBe(CSRF_ERROR_CODE);
   });
 
   it('exempts the cron trigger routes', async () => {
     const app = buildApp();
-    const response = await request(app).post('/api/cron/send-reminders').send({});
+    const response = await request(listening(app)).post('/api/cron/send-reminders').send({});
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe('cron');
   });
 
   it('exempts logout so the SPA silent cleanup works without a token', async () => {
     const app = buildApp();
-    const response = await request(app).post('/api/auth/logout').send({});
+    const response = await request(listening(app)).post('/api/auth/logout').send({});
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe('logout');
   });
