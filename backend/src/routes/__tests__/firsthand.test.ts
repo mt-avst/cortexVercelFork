@@ -1206,13 +1206,144 @@ describe('FirstHand Express router', () => {
       );
     });
 
-    it('answers 404 for a missing study before any access decision', async () => {
+    it('still answers 404 for a missing study when the caller may read one', async () => {
+      // The superadmin arm. Somebody entitled to the answer still gets the
+      // accurate one - closing the oracle must not turn every miss into a
+      // refusal for the person allowed to know.
       mockGetStudyById.mockResolvedValue(null);
-      const res = await request(listening(app))
+      const res = await request(listening(superadminApp))
         .get('/api/firsthand/studies/missing/results')
         .expect(404);
       expect(res.body).toMatchObject({ error: 'Survey not found', code: 'NOT_FOUND' });
-      expect(mockLogger.warn).not.toHaveBeenCalled();
+
+      // Carried over from the test this replaces, which asserted it and would
+      // otherwise have taken it away: a legitimate miss by somebody entitled
+      // to read is not a refusal and must not be logged as one.
+      expect(mockLogger.warn).not.toHaveBeenCalledWith(
+        'Refused a study results read below superadmin',
+        expect.anything()
+      );
+      // The control. The absence above passes just as well against a logger
+      // that never fires at all, so prove this one still does.
+      studyOwnedBy('other-admin-9');
+      await request(listening(app))
+        .get('/api/firsthand/studies/study_abc/results')
+        .expect(403);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Refused a study results read below superadmin',
+        expect.anything()
+      );
+    });
+
+    /**
+     * THE EXISTENCE ORACLE (cto/AdaptaLabs#7).
+     *
+     * Both routes used to load the study and throw `NotFoundError` BEFORE the
+     * authorisation check ran, so a researcher_admin could tell "this study
+     * does not exist" (404) apart from "this study exists but is not yours"
+     * (403) - an oracle over study ids, to a caller entitled to neither
+     * answer.
+     *
+     * Asserted as INDISTINGUISHABILITY rather than as "returns 403". A test
+     * that only checks the refused case cannot see the 404 come back, which is
+     * the whole reason the issue asked for it this way.
+     */
+    describe('tells a caller who may not read nothing about which ids exist', () => {
+      const asNonSuperadmin = (path: string) =>
+        request(listening(app)).get(path);
+
+      /**
+       * EVERYTHING A CALLER CAN OBSERVE, minus what varies for reasons that
+       * carry no information about the study.
+       *
+       * An earlier version picked two headers by name, and a review gate broke
+       * the twin of this in one line: setting an extra header on the refused
+       * branch passed every test in the file. An allow-list of headers cannot
+       * see an oracle carried by a header nobody thought of, which is the only
+       * kind anybody would add.
+       *
+       * The volatile ones are NAMED rather than pattern-guessed - each was
+       * observed to differ between two identical refusals - so anything else
+       * that starts differing fails this instead of being waved through.
+       */
+      const VOLATILE_HEADERS = /^(date|etag|x-request-id|ratelimit-)/;
+
+      /**
+       * The raw body too, with the clock normalised OUT BY NAME rather than
+       * dropped. `body` is parsed, so it cannot see key order or a body that
+       * is not JSON at all; the raw text can. Replacing the timestamp value
+       * in place keeps the length identical, so `content-length` stays a live
+       * part of the comparison.
+       */
+      const withoutClock = (text: string) =>
+        text.replace(/"timestamp":"[^"]*"/, '"timestamp":"<clock>"');
+
+      const shapeOf = (res: request.Response) => {
+        const { timestamp: _stamped, ...body } = res.body ?? {};
+        return {
+          status: res.status,
+          body,
+          text: withoutClock(res.text ?? ''),
+          headers: Object.fromEntries(
+            Object.entries(res.headers).filter(
+              ([name]) => !VOLATILE_HEADERS.test(name)
+            )
+          )
+        };
+      };
+
+      it.each([
+        { what: 'the aggregate', suffix: '/results' },
+        { what: 'the CSV export', suffix: '/results.csv' }
+      ])('answers $what identically whether or not the study exists', async ({ suffix }) => {
+        mockGetStudyById.mockResolvedValue(null);
+        const missing = shapeOf(
+          await asNonSuperadmin(`/api/firsthand/studies/no_such_study${suffix}`)
+        );
+
+        studyOwnedBy('other-admin-9');
+        const existing = shapeOf(
+          await asNonSuperadmin(`/api/firsthand/studies/study_abc${suffix}`)
+        );
+
+        // The two refusals must be the same object, not merely the same
+        // status. A different sentence behind the same code is still an
+        // oracle, and one nobody would think to look for.
+        expect(missing).toEqual(existing);
+        expect(missing.status).toBe(403);
+
+        // The control. `toEqual` between two responses is exactly the
+        // assertion that passes vacuously when the probe cannot see a
+        // difference - so prove it can, against a caller who IS entitled and
+        // gets a different answer for the very same id.
+        studyOwnedBy('other-admin-9');
+        const entitled = shapeOf(
+          await request(listening(superadminApp)).get(
+            `/api/firsthand/studies/study_abc${suffix}`
+          )
+        );
+        expect(entitled).not.toEqual(existing);
+        expect(entitled.status).toBe(200);
+      });
+
+      it('does not read the study at all before refusing', async () => {
+        // The mechanism, not just its effect. Reordering the two lines back
+        // would restore the oracle, and a route that still loaded the study
+        // and then discarded the difference would leave the read - and its
+        // pool checkout - on a path an unentitled caller can drive.
+        mockGetStudyById.mockClear();
+        studyOwnedBy('other-admin-9');
+
+        await asNonSuperadmin('/api/firsthand/studies/study_abc/results').expect(403);
+
+        expect(mockGetStudyById).not.toHaveBeenCalled();
+
+        // The control: it is called on the path that is allowed to load it.
+        await request(listening(superadminApp))
+          .get('/api/firsthand/studies/study_abc/results')
+          .expect(200);
+        expect(mockGetStudyById).toHaveBeenCalled();
+      });
     });
   });
 

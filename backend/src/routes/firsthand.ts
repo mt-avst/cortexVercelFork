@@ -237,6 +237,12 @@ function sendStudyWriteFailure(
  * them. A read cannot adopt the row the way a write does, and an unowned study
  * is precisely the case where nobody can be held accountable for the data.
  */
+/**
+ * MUST BE CALLED BEFORE THE STUDY IS LOADED, and it reads nothing but the
+ * role so that it can be. Called after, the 404 for a study that does not
+ * exist is distinguishable from the 403 for one that does, which tells a
+ * researcher_admin whether a study id they may not read exists.
+ */
 function requireSuperadminForStudyResults(req: Request): void {
   if (studyRequester(req).isSuperadmin) {
     return;
@@ -538,12 +544,24 @@ router.delete('/studies/:studyId', requireAdmin, studyWriteLimiter, asyncHandler
 router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
+  // AUTHORISATION BEFORE EXISTENCE, and the order is the whole point. Loading
+  // first meant a non-superadmin got 404 for a study id that does not exist
+  // and 403 for one that does - an existence oracle over study ids, handed to
+  // a caller entitled to neither answer.
+  //
+  // Free here, because this gate reads nothing but the caller's role: it does
+  // not need the study to decide. That is not true of the opportunity results
+  // routes, where ownership cannot be known without the row, so there is no
+  // order that answers before it knows. They close the same oracle by
+  // COLLAPSING instead - answering the same 403 to any non-superadmin, found
+  // or not - which lands on the same status as this side by design rather
+  // than by coincidence.
+  requireSuperadminForStudyResults(req);
+
   const stored = await getStudyById(req.params.studyId);
   if (!stored) {
     throw new NotFoundError('Survey');
   }
-
-  requireSuperadminForStudyResults(req);
 
   const responses = await listResponsesForStudy(req.params.studyId);
 
@@ -559,14 +577,20 @@ router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, bound
 router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, boundResultsRead, asyncHandler(async (req: Request, res: Response) => {
   if (!ensureStudiesPersistence(res)) return;
 
+  // BEFORE THE LOAD, not just before the headers. Two separate properties,
+  // both of them load-bearing:
+  //
+  //  - before the download headers are set, or a refusal that had already set
+  //    Content-Disposition would still offer a file;
+  //  - before the study is READ, or the 404 for a study that does not exist
+  //    and the 403 for one that does tell a caller entitled to neither which
+  //    it was.
+  requireSuperadminForStudyResults(req);
+
   const stored = await getStudyById(req.params.studyId);
   if (!stored) {
     throw new NotFoundError('Survey');
   }
-
-  // Gated before the download headers are set, not just before the send: a
-  // refusal that had already set Content-Disposition would still offer a file.
-  requireSuperadminForStudyResults(req);
 
   // STREAMED, a participant at a time. Building the whole export first put up
   // to 200,001 rows in the heap, then an object graph from them, then the body

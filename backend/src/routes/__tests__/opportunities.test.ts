@@ -5606,6 +5606,229 @@ describe('Opportunities API', () => {
       expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
     });
 
+    /**
+     * THE EXISTENCE ORACLE (cto/AdaptaLabs#7).
+     *
+     * `loadOpportunityResultsContext` threw `NotFoundError` for a missing row
+     * and `ForbiddenError` for one this caller does not own, so a
+     * researcher_admin could tell the two apart - an oracle over opportunity
+     * ids, to a caller entitled to neither answer.
+     *
+     * Unlike the study results routes there is no reordering available here:
+     * ownership cannot be evaluated without the row. So the refusal is
+     * collapsed onto the 404 instead, message included.
+     *
+     * Asserted as INDISTINGUISHABILITY, not as "returns 404". A test that only
+     * checked the refused case could not see the 403 come back.
+     */
+    describe('tells a caller who may not read nothing about which ids exist', () => {
+      /**
+       * EVERYTHING A CALLER CAN OBSERVE, minus what varies for reasons that
+       * carry no information about the resource.
+       *
+       * An earlier version picked two headers by name - content-type and
+       * content-disposition - and a review gate broke it in one line: adding
+       * `res.setHeader('X-Refusal-Reason', 'not-the-owner')` on the non-owner
+       * branch passed all 295 tests in this file. An allow-list of headers
+       * cannot see an oracle carried by a header nobody thought of, which is
+       * the only kind anybody would add.
+       *
+       * So the whole bag is compared and the volatile ones are named. Named,
+       * not pattern-matched: every one of these was OBSERVED to differ between
+       * two identical refusals, and anything else that starts differing should
+       * fail this rather than be waved through.
+       *
+       *  - `date`, `etag`: `errorHandler` stamps the body with the wall clock,
+       *    so two refusals a millisecond apart differ in both.
+       *  - `ratelimit-*`: a monotone per-user counter, so the SECOND request in
+       *    any pair differs from the first whatever it asked for.
+       *  - `x-request-id`: per-request by construction.
+       */
+      const VOLATILE_HEADERS = /^(date|etag|x-request-id|ratelimit-)/;
+
+      /**
+       * The raw body too, with the clock normalised OUT BY NAME rather than
+       * dropped. `body` is parsed, so it cannot see key order or a body that
+       * is not JSON at all; the raw text can. Replacing the timestamp value
+       * in place keeps the length identical, so `content-length` stays a live
+       * part of the comparison.
+       */
+      const withoutClock = (text: string) =>
+        text.replace(/"timestamp":"[^"]*"/, '"timestamp":"<clock>"');
+
+      const shapeOf = (res: request.Response) => {
+        const { timestamp: _stamped, ...body } = res.body ?? {};
+        return {
+          status: res.status,
+          body,
+          text: withoutClock(res.text ?? ''),
+          headers: Object.fromEntries(
+            Object.entries(res.headers).filter(
+              ([name]) => !VOLATILE_HEADERS.test(name)
+            )
+          )
+        };
+      };
+
+      it.each([
+        { what: 'the aggregate', suffix: 'survey-results' },
+        { what: 'the CSV export', suffix: 'survey-results.csv' }
+      ])('answers $what identically whether or not the opportunity exists', async ({ suffix }) => {
+        // No row at all.
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+        const missing = shapeOf(
+          await request(listening(app)).get(
+            `/api/opportunities/${PATH_SEGMENT}/${suffix}`
+          )
+        );
+
+        // A row belonging to somebody else.
+        queueOpportunity('a-different-researcher');
+        const existing = shapeOf(
+          await request(listening(app)).get(
+            `/api/opportunities/${PATH_SEGMENT}/${suffix}`
+          )
+        );
+
+        expect(missing).toEqual(existing);
+        expect(missing.status).toBe(403);
+        // A refusal that had already set the download header would hand over a
+        // file whichever way this went.
+        expect(missing.headers['content-disposition']).toBeUndefined();
+
+        // THE CONTROL. Two responses compared with `toEqual` is precisely the
+        // assertion that passes when the probe cannot see a difference. This
+        // proves it can: the owner asks for the SAME id and gets something
+        // else entirely.
+        queueOpportunity('test-user-id');
+        mockGetStudyById.mockResolvedValueOnce(storedStudy);
+        const entitled = shapeOf(
+          await request(listening(app)).get(
+            `/api/opportunities/${PATH_SEGMENT}/${suffix}`
+          )
+        );
+        expect(entitled.status).toBe(200);
+        expect(entitled).not.toEqual(existing);
+      });
+
+      it('refuses an opportunity nobody owns, rather than letting it fail open', async () => {
+        // `owner_user_id` NULL is the case a permissive comparison waves
+        // through: `canWriteStudy` fails OPEN for an unowned study because a
+        // write can adopt the row, and a read can adopt nothing. Nothing here
+        // pinned it, so widening the check to
+        // `owner_user_id != null && owner_user_id !== req.user.id` passed all
+        // 293 tests in this file while handing every admin the answers of any
+        // opportunity whose owner had been removed.
+        queueOpportunity(null as unknown as string);
+
+        await request(listening(app))
+          .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+          .expect(403);
+
+        expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
+      });
+
+      it('lets a superadmin read an opportunity nobody owns', async () => {
+        // The control for the test above: an assertion that everything is
+        // refused would pass just as well against a route that refused
+        // everybody.
+        const superadminApp = express();
+        superadminApp.use(express.json());
+        // Cast rather than `any`: this file's no-explicit-any allowance is
+        // held per file in eslint-suppressions.json, so one more `any` turns
+        // every existing one in the file into an error.
+        superadminApp.use((req, _res, next) => {
+          (req as unknown as { session: unknown }).session = {
+            user: {
+              id: 'superadmin-id',
+              name: 'Super Admin',
+              email: 'super@example.com',
+              role: 'superadmin'
+            }
+          };
+          next();
+        });
+        superadminApp.use('/api/opportunities', opportunitiesRouter);
+        superadminApp.use(errorHandler);
+
+        queueOpportunity(null as unknown as string);
+        mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+        await request(listening(superadminApp))
+          .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+          .expect(200);
+      });
+
+      it('still tells a superadmin the truth about an id that is not there', async () => {
+        // THE POINT OF COLLAPSING ONLY FOR THE UNENTITLED. Without this,
+        // answering 403 to everybody - superadmin included - passed all 295
+        // tests, and the accurate answer would have been lost for the one
+        // caller who is allowed to have it.
+        const superadminApp = express();
+        superadminApp.use(express.json());
+        superadminApp.use((req, _res, next) => {
+          (req as unknown as { session: unknown }).session = {
+            user: {
+              id: 'superadmin-id',
+              name: 'Super Admin',
+              email: 'super@example.com',
+              role: 'superadmin'
+            }
+          };
+          next();
+        });
+        superadminApp.use('/api/opportunities', opportunitiesRouter);
+        superadminApp.use(errorHandler);
+
+        mockQuery.mockResolvedValueOnce({ rows: [] });
+
+        const response = await request(listening(superadminApp))
+          .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+          .expect(404);
+
+        expect(response.body.error).toBe('Opportunity not found');
+      });
+
+      it('still logs the refusal, so the operator keeps the answer the caller lost', async () => {
+        // The whole cost of collapsing the two is that the caller is told
+        // something less true. That is only acceptable while the accurate
+        // reason survives somewhere, and this is where.
+        const warn = jest.spyOn(logger, 'warn').mockImplementation(() => logger);
+
+        try {
+          queueOpportunity('a-different-researcher');
+
+          await request(listening(app))
+            .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+            .expect(403);
+
+          expect(warn).toHaveBeenCalledWith(
+            'Refused a survey results read below the opportunity owner',
+            expect.objectContaining({ userId: 'test-user-id', found: true })
+          );
+
+          // `found` IS THE DISCRIMINATOR, and without it this log would be
+          // worthless: the two cases now return the same refusal, so a line
+          // that fired identically for a probe at a real id and one that never
+          // existed would tell the operator exactly what the caller is told.
+          // The control below is what proves the field moves.
+          warn.mockClear();
+          mockQuery.mockResolvedValueOnce({ rows: [] });
+
+          await request(listening(app))
+            .get(`/api/opportunities/${PATH_SEGMENT}/survey-results`)
+            .expect(403);
+
+          expect(warn).toHaveBeenCalledWith(
+            'Refused a survey results read below the opportunity owner',
+            expect.objectContaining({ userId: 'test-user-id', found: false })
+          );
+        } finally {
+          warn.mockRestore();
+        }
+      });
+    });
+
     it('reads the answers of the id Postgres parsed, not the path segment', async () => {
       queueOpportunity('test-user-id');
       mockGetStudyById.mockResolvedValueOnce(storedStudy);
@@ -5686,10 +5909,14 @@ describe('Opportunities API', () => {
         expect(response.headers['content-type']).not.toMatch(/text\/csv/);
       };
 
-      it('answers 404 for an opportunity that does not exist', async () => {
+      it('answers 403 for an opportunity that does not exist', async () => {
+        // 403, NOT 404, and this test asserting 404 is what the oracle looked
+        // like from the inside: the status a non-superadmin gets here used to
+        // depend on whether the row was real. See the indistinguishability
+        // block above for why both cases now answer the same refusal.
         mockQuery.mockResolvedValueOnce({ rows: [] });
 
-        expectNoDownload(await get().expect(404));
+        expectNoDownload(await get().expect(403));
         expect(mockListResponsesForOpportunity).not.toHaveBeenCalled();
       });
 

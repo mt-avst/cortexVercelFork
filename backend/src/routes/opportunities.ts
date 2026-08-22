@@ -2598,6 +2598,34 @@ async function surveyResultsAreReadable(): Promise<boolean> {
   return (await isDatabaseAvailable()) && isStudiesPersistenceConfigured();
 }
 
+/**
+ * The three columns the results gate reads, named as a type.
+ *
+ * `pool.query` without a generic hands back `any`, so before this the row's
+ * shape was whatever the reader assumed - including `owner_user_id`, which is
+ * NULLABLE and is the whole subject of the guard below.
+ *
+ * AND IT DOES NOT MAKE THE MISSING-ROW GUARD A COMPILE ERROR, which is what a
+ * review gate suggested it would and what the obvious reading of `row:
+ * OpportunityOwnerRow | undefined` promises. Measured: with
+ * `if (!row) throw` deleted, `tsc -p tsconfig.test.json --noEmit` still exits
+ * 0. Control-flow analysis narrows `row` through the `!isSuperadmin && (!row
+ * || ...)` guard above and does not put the `undefined` back for the
+ * superadmin branch.
+ *
+ * So the guard is held by a TEST, not by the compiler - `still tells a
+ * superadmin the truth about an id that is not there` - and deleting it gives
+ * a superadmin a 500 on a missing id, which is a worse oracle than the one
+ * this file closes. Written down because a comment claiming a check the build
+ * does not have is how the next reader deletes the wrong line.
+ */
+type OpportunityOwnerRow = {
+  id: string;
+  /** NULL for a row whose owner has been removed. Refused, never adopted. */
+  owner_user_id: string | null;
+  firsthand_study_id: string | null;
+};
+
 type OpportunityResultsContext = {
   /** The id Postgres parsed, which is what runtime_sessions stores. */
   canonicalOpportunityId: string;
@@ -2618,25 +2646,86 @@ async function loadOpportunityResultsContext(
 ): Promise<OpportunityResultsContext> {
   const { id } = req.params;
 
-  const opportunityResult = await pool.query(
+  const opportunityResult = await pool.query<OpportunityOwnerRow>(
     'SELECT id, owner_user_id, firsthand_study_id FROM opportunities WHERE id = $1',
     [id]
   );
 
-  if (opportunityResult.rows.length === 0) {
-    throw new NotFoundError('Opportunity');
-  }
+  const row: OpportunityOwnerRow | undefined = opportunityResult.rows[0];
 
-  const row = opportunityResult.rows[0];
-
-  // Owner or superadmin, and refused before anything is read - not after.
+  // ONE REFUSAL FOR BOTH CASES, and it is deliberately the 403 rather than the
+  // 404. Split - `NotFoundError` for a missing row and `ForbiddenError` for
+  // somebody else's - the two told a researcher_admin whether an opportunity
+  // id they may not read is real. An existence oracle over opportunity ids,
+  // differing only in which refusal came back.
+  //
+  // Collapsed rather than reordered because ownership cannot be evaluated
+  // without the row: there is no order that answers before it knows. The study
+  // results routes in routes/firsthand.ts close the same oracle the other way,
+  // by moving a role-only gate in front of the load - which they can, and this
+  // cannot.
+  //
+  // COLLAPSED ONTO THE 403, NOT THE 404, and the direction is the whole
+  // decision. Both close the oracle equally. The 403 also:
+  //
+  //  - keeps the sentence that is true in the common case. A researcher who
+  //    opens a colleague's opportunity is told it is not theirs, rather than
+  //    that a thing they can see in the admin table does not exist;
+  //  - matches the nine sibling routes over this same id space ON THE CASE
+  //    THAT MATTERS. /analytics, /session-events and the write paths all
+  //    answer 403 to a non-owner, so the refusal a researcher actually meets
+  //    is the same one everywhere. Be precise about the other half, which an
+  //    earlier version of this comment was not: for an id that is genuinely
+  //    MISSING these two routes now answer 403 where the siblings still
+  //    answer 404. That difference IS the collapse doing its job, and it is
+  //    also the remaining inconsistency - the siblings still carry the oracle
+  //    this closes, tracked as cto/AdaptaLabs#10;
+  //  - keeps OpportunityAnalytics.tsx's `status === 403` branch honest. The
+  //    404 direction made that branch dead code promising a status the server
+  //    could no longer send, on the same page that reads these routes.
+  //
+  // What it costs: a non-superadmin asking for an id that genuinely is not
+  // there is told it is not theirs. A white lie, in the rarer case, and the
+  // same direction the firsthand half already takes.
+  //
+  // A superadmin is unaffected and still gets the accurate 404 below.
+  //
+  // NEITHER SIDE OF THE COMPARISON MAY BE ABSENT, and `!==` alone does not say
+  // so: `undefined !== undefined` is false, so a row carrying no
+  // `owner_user_id` key and a session user carrying no `id` would have passed
+  // this guard together. Not reachable through Postgres - the column is named
+  // in the select list, so an ownerless row arrives as `null` and
+  // `null !== undefined` refuses - but `requireAdmin` checks only the role and
+  // never the id, so the database's shape is the only thing standing between
+  // that pair and a fail-open. Named rather than left to it.
+  //
+  // REVERTING IT TO THE BARE `!==` SURVIVES THE WHOLE SUITE, and that is
+  // correct rather than a coverage gap: no test can produce a row without the
+  // key while `pool.query` names it, and no session reaches `requireAdmin`
+  // without an id. Recorded as what it is - defence in depth against a shape
+  // neither side can currently produce - so nobody later reads the mutant's
+  // survival as permission to delete it, or the guard as something tested.
   const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && row.owner_user_id !== req.user!.id) {
+  const callerId = req.user?.id;
+  if (
+    !isSuperadmin &&
+    (!row || !row.owner_user_id || !callerId || row.owner_user_id !== callerId)
+  ) {
+    // `found` is the answer the CALLER no longer gets, kept for the operator.
+    // Without it this line would fire identically for a probe at a real id and
+    // at one that never existed, and the refusal would stop being evidence of
+    // anything.
     logger.warn('Refused a survey results read below the opportunity owner', {
       opportunityId: id,
-      userId: req.user!.id
+      userId: req.user!.id,
+      found: Boolean(row)
     });
+
     throw new ForbiddenError('Only the opportunity owner can view survey responses');
+  }
+
+  if (!row) {
+    throw new NotFoundError('Opportunity');
   }
 
   if (!row.firsthand_study_id) {
