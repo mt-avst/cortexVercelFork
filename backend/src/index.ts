@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import cron from 'node-cron';
 import { config, pool } from './config';
 import { logger } from './utils/logger';
+import { applyServerTimeouts } from './server-timeouts';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
 import { getBuildRevision } from './utils/buildInfo';
@@ -269,14 +270,19 @@ if (
 // imported by tests and driven with supertest without binding a port - which
 // is what lets a test pin the real middleware order rather than a copy of it.
 if (process.env.NODE_ENV !== 'test') {
-  app.listen(config.PORT, () => {
+  // The socket bounds are applied to the server `listen` returns, not left at
+  // Node's defaults. `server.timeout` defaults to 0 - no bound at all on a
+  // socket that goes quiet mid-request - which is how one admin reading
+  // nothing could hold the single results-read permit indefinitely. See
+  // server-timeouts.ts for why each number is what it is.
+  applyServerTimeouts(app.listen(config.PORT, () => {
     logger.info('Server started', {
       port: config.PORT,
       environment: config.NODE_ENV,
       corsOrigin: config.CORS_ORIGIN,
       csrfEnabled,
     });
-  });
+  }));
 }
 
 export default app;

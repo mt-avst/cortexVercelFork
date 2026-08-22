@@ -2802,7 +2802,9 @@ router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, boundR
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
 
-  return writeSurveyCsv(res, context.steps, csvExport.removedQuestions, csvExport.participants(), {
+  // The FACTORY, uncalled - see routes/firsthand.ts. `writeSurveyCsv` calls it
+  // with the signal carrying the export's wall-clock deadline.
+  return writeSurveyCsv(res, context.steps, csvExport.removedQuestions, csvExport.participants, {
     studyId: context.studyId
   });
 }));

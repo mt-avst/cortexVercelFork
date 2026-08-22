@@ -91,10 +91,10 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output.",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
-    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n          [...params, batch]",
-    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n          [...params]",
+    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
+    "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "asks each batch for ITS OWN hundred ids, and never for everything"
@@ -149,5 +149,65 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.test.ts",
     "test": "refuses an opportunity nobody owns, rather than letting it fail open"
+  },
+  {
+    "id": "export-drain-bound-is-pinned-as-a-literal",
+    "why": "The per-write drain bound decides how long one admin who reads nothing can refuse every other admin. Derived from the constant rather than written down, a test cannot see the constant change.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "export const SURVEY_CSV_DRAIN_TIMEOUT_MS = 30_000;",
+    "mutation": "export const SURVEY_CSV_DRAIN_TIMEOUT_MS = 60_000;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "pins both bounds as literals"
+  },
+  {
+    "id": "export-deadline-is-pinned-as-a-literal",
+    "why": "The whole-export wall clock is the ceiling on how long a single request can hold the only results-read permit. Before it existed there was no bound in time at all.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "export const SURVEY_CSV_EXPORT_DEADLINE_MS = 300_000;",
+    "mutation": "export const SURVEY_CSV_EXPORT_DEADLINE_MS = 600_000;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "pins both bounds as literals"
+  },
+  {
+    "id": "csv-batch-retry-budget-is-bounded",
+    "why": "Retries spend the export's deadline. Widened or unbounded, a busy pool turns a bounded export into one that never gives the permit back - the defect the deadline exists to close, reintroduced through the fix for a different one.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "const CSV_BATCH_RETRY_ATTEMPTS = 3;",
+    "mutation": "const CSV_BATCH_RETRY_ATTEMPTS = 6;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "gives up after exactly three retries rather than forever"
+  },
+  {
+    "id": "retry-backoff-abandons-an-already-aborted-signal",
+    "why": "`addEventListener('abort')` on a signal that has ALREADY aborted never fires, and the deadline firing during the refused query is exactly how this is reached - so without the check the backoff slept through the deadline in the common case. Same shape as `close` firing once on a response destroyed before the first write.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "    if (signal.aborted) {\n      reject(signal.reason);\n      return;\n    }\n\n",
+    "mutation": "    ",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-export.test.ts",
+    "test": "abandons its backoff the moment the export deadline fires"
+  },
+  {
+    "id": "server-socket-timeout-is-actually-set",
+    "why": "Node's `server.timeout` defaults to 0 - no bound at all on a socket that goes quiet mid-request. It is the backstop for every response that has no deadline of its own, and the assertion that catches its absence was itself reading a Node default until sentinels were added.",
+    "file": "backend/src/server-timeouts.ts",
+    "anchor": "  server.timeout = SERVER_SOCKET_TIMEOUT_MS;",
+    "mutation": "  void SERVER_SOCKET_TIMEOUT_MS;",
+    "runner": "jest",
+    "spec": "src/__tests__/server-timeouts.test.ts",
+    "test": "applies all three to the server it is given"
+  },
+  {
+    "id": "export-signal-reaches-the-batch-reads",
+    "why": "`writeSurveyCsv` aborts its controller on every exit, and that is what lets a route test hold the signal its stand-in was handed and assert it ends up aborted. Without it the route can be given a substitute signal with the whole suite green, and the database half of the deadline silently stops being bounded.",
+    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "anchor": "    expired.abort(new SurveyCsvExportEnded());",
+    "mutation": "    void expired;",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-response.test.ts",
+    "test": "aborts the signal it handed out once the export has ended"
   }
 ]

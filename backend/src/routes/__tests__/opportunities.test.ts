@@ -36,6 +36,8 @@ jest.mock('../../firsthand/runtime-repository', () => ({
 jest.mock('../../firsthand/survey-results-repository', () => {
   const listed = jest.fn(async () => [] as import('../../firsthand/survey-results').StoredResponse[]);
   const scopeSpy = jest.fn();
+  /** Records the AbortSignal the ROUTE passed into the export. */
+  const signalSpy = jest.fn();
   return {
     listResponsesForOpportunity: listed,
     /**
@@ -53,6 +55,7 @@ jest.mock('../../firsthand/survey-results-repository', () => {
     // study they merely share. The repository tests cannot see this: they
     // exercise the clause, not the caller's choice of it.
     __scopeSpy: scopeSpy,
+    __signalSpy: signalSpy,
     openSurveyCsvExport: async (...args: unknown[]) => {
       scopeSpy(args[0]);
       const rows = (await listed(...(args as []))) ?? [];
@@ -73,7 +76,15 @@ jest.mock('../../firsthand/survey-results-repository', () => {
 
       return {
         removedQuestions: removedQuestionColumns(rows),
-        participants: async function* () {
+        // TAKES THE SIGNAL AND RECORDS IT, which is the only way the route's
+        // side of the deadline plumbing can be seen from here. The route hands
+        // `csvExport.participants` over uncalled; a mutation handing over
+        // `() => csvExport.participants(new AbortController().signal)` instead
+        // type-checks and passes the whole suite, and silently unbounds the
+        // database half of the export's deadline. A required parameter stops a
+        // caller passing NOTHING; it cannot stop them passing something ELSE.
+        participants: async function* (signal: AbortSignal) {
+          signalSpy(signal);
           for (const [sessionId, answers] of byParticipant) {
             yield { sessionId, answers };
           }
@@ -6009,6 +6020,55 @@ describe('Opportunities API', () => {
         studyId: STUDY_ID,
         opportunityId: CANONICAL_ID
       });
+    });
+
+    /**
+     * THE ROUTE'S HALF OF THE DEADLINE (cto/AdaptaLabs#5).
+     *
+     * `writeSurveyCsv` owns the export's wall-clock deadline and hands its
+     * AbortSignal to the generator factory, so the bound reaches the batch
+     * reads and not only the writes to the socket. This route's whole job is
+     * to hand `csvExport.participants` over UNCALLED.
+     *
+     * A review gate broke exactly that with the suite green: substituting
+     * `() => csvExport.participants(new AbortController().signal)` type-checks
+     * and passes everything, leaving the database half unbounded. Nothing here
+     * could see it, because the stand-in generator took no parameter.
+     */
+    it('hands the export the deadline signal the writer will abort', async () => {
+      queueOpportunity('test-user-id');
+      mockGetStudyById.mockResolvedValueOnce(storedStudy);
+
+      const { __signalSpy } = jest.requireMock<{ __signalSpy: jest.Mock }>(
+        '../../firsthand/survey-results-repository'
+      );
+      __signalSpy.mockClear();
+
+      // THE CONTROL: a signal that arrived already aborted would satisfy the
+      // assertion below while bounding nothing.
+      //
+      // RECORDED here, ASSERTED in the test body. An `expect` thrown inside a
+      // jest mock implementation is swallowed by `writeSurveyCsv`'s catch and
+      // reported as a socket error with no assertion failure recorded - a gate
+      // proved a deliberately false version of this control passing. See the
+      // twin in firsthand.test.ts.
+      let abortedAtFirstPull: boolean | undefined;
+      __signalSpy.mockImplementationOnce((...args: unknown[]) => {
+        abortedAtFirstPull = (args[0] as AbortSignal).aborted;
+      });
+
+      await request(listening(app))
+        .get(`/api/opportunities/${PATH_SEGMENT}/survey-results.csv`)
+        .expect(200);
+
+      expect(__signalSpy).toHaveBeenCalledTimes(1);
+      expect(abortedAtFirstPull).toBe(false);
+      const signal = __signalSpy.mock.calls[0][0] as AbortSignal;
+
+      // The writer aborts on every exit, so its own signal ends up aborted and
+      // a substituted one does not. That is the discriminator.
+      expect(signal).toBeInstanceOf(AbortSignal);
+      expect(signal.aborted).toBe(true);
     });
 
     it('destroys the download rather than finishing it short, if a row throws mid-stream', async () => {

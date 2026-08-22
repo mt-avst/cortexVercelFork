@@ -3,7 +3,10 @@ import {
   withRuntimeDatabaseClient,
   RESULTS_STATEMENT_TIMEOUT_MS
 } from "./runtime-database";
-import { RuntimeDatabaseBusyError } from "./runtime-pool-admission";
+import {
+  RuntimeDatabaseBusyError,
+  isRuntimePoolRefusal
+} from "./runtime-pool-admission";
 import { UNKNOWN_REMOVED_PROMPT, type StoredResponse } from "./survey-results";
 import { QUESTION_TYPES, type RemovedQuestion } from "./survey-csv";
 import { logger } from "../utils/logger";
@@ -393,6 +396,73 @@ function filterFor(scope: ResponseScope): {
 const CSV_PARTICIPANT_BATCH = 100;
 
 /**
+ * How many EXTRA attempts one batch read gets when the runtime pool refuses.
+ *
+ * Batching bought the occupancy fix at the cost of attempt count: the export
+ * makes `2 + ceil(N/100)` admission attempts where the unbatched reader made
+ * one, so a two-thousand-participant export has twenty-two separate chances to
+ * meet a busy pool. Before batching, a refusal arrived as a clean retryable
+ * 503 before any byte was sent. After it, a refusal on batch seventeen cannot
+ * be a 503 - the status is already 200 - so it is correctly a destroyed
+ * socket, which the researcher experiences as a download that broke after
+ * several minutes with no explanation.
+ *
+ * ON THE BATCH READ ONLY. The preflight is deliberately excluded and must stay
+ * excluded: its refusal happens before the first byte, so it IS the honest,
+ * immediate, retryable 503, and putting a retry in front of it would make an
+ * admin wait half a minute to be told to try again.
+ *
+ * Three, not more. The bound that matters is the export's wall-clock deadline
+ * (SURVEY_CSV_EXPORT_DEADLINE_MS); retries spend that budget, and a refusal
+ * that survives three attempts across roughly half a minute is a pool that is
+ * saturated rather than momentarily busy.
+ */
+const CSV_BATCH_RETRY_ATTEMPTS = 3;
+
+/**
+ * The first backoff, doubled per attempt: 250ms, 500ms, 1000ms.
+ *
+ * Small on purpose, because the wait that dominates is not this one. Admin
+ * work queues for ADMIN_ADMISSION_TIMEOUT_MS before it is refused at all, so
+ * an attempt has already spent ten seconds by the time this delay is added.
+ * Its job is only to avoid re-queueing in the same instant as the last
+ * refusal.
+ */
+const CSV_BATCH_RETRY_BASE_DELAY_MS = 250;
+
+/**
+ * A sleep that gives up the moment the export's deadline fires.
+ *
+ * THE ALREADY-ABORTED CHECK IS NOT DEFENCE IN DEPTH, it is the common case and
+ * it was missing first time round. `addEventListener('abort')` on a signal
+ * that has ALREADY aborted never fires - and the deadline firing during the
+ * refused query is exactly how this is reached, so without the check the
+ * backoff slept through the deadline and the retry loop ran on. The same shape
+ * as `close` firing once on a response destroyed before the first write; found
+ * here by a test written to assert the abandonment, not by reading.
+ */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason);
+    };
+
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+/**
  * The most participants one export will stream.
  *
  * Still a refusal, and still decided BEFORE a byte of the body is written -
@@ -523,6 +593,59 @@ async function surveyCsvParticipantIds(
 }
 
 /**
+ * One batch of answers, retried while the pool is busy rather than giving up.
+ *
+ * Only pool REFUSALS are retried. A statement timeout, a syntax error or a
+ * dropped connection are not capacity conditions and repeating them wastes the
+ * export's deadline before failing anyway - so `isRuntimePoolRefusal` decides,
+ * and it names both refusals the admission gate can produce: the immediate
+ * `RuntimeDatabaseBusyError` and the `RuntimeDatabaseAdmissionTimeoutError`
+ * that arrives after ADMIN_ADMISSION_TIMEOUT_MS of queueing, which is the one
+ * this path actually meets - the batch read queues rather than skipping.
+ */
+async function readBatch(
+  filter: ResponseFilter,
+  params: unknown[],
+  batch: string[],
+  signal: AbortSignal
+): Promise<StoredResponse[]> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await withRuntimeDatabaseClient(
+        async (client) => {
+          const result = await client.query<ResponseRow>(
+            `
+        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
+               r.response_payload, r.saved_at
+        FROM participant_responses AS r
+        JOIN runtime_sessions AS s ON s.session_id = r.session_id
+        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])
+        ORDER BY r.saved_at ASC, r.id ASC
+      `,
+            [...params, batch]
+          );
+
+          return result.rows.map(toStoredResponse);
+        },
+        { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
+      );
+    } catch (error) {
+      if (attempt >= CSV_BATCH_RETRY_ATTEMPTS || !isRuntimePoolRefusal(error)) {
+        throw error;
+      }
+
+      logger.warn("Retrying a survey CSV batch read after a pool refusal", {
+        attempt: attempt + 1,
+        of: CSV_BATCH_RETRY_ATTEMPTS,
+        participants: batch.length
+      });
+
+      await pause(CSV_BATCH_RETRY_BASE_DELAY_MS * 2 ** attempt, signal);
+    }
+  }
+}
+
+/**
  * The export, a participant at a time.
  *
  * ONE CHECKOUT PER BATCH, NOT ONE FOR THE WHOLE EXPORT, and that is the whole
@@ -543,7 +666,8 @@ async function surveyCsvParticipantIds(
  */
 async function* streamParticipants(
   scope: ResponseScope,
-  participantIds: string[]
+  participantIds: string[],
+  signal: AbortSignal
 ): AsyncGenerator<{ sessionId: string; answers: StoredResponse[] }> {
   const { filter, params } = filterFor(scope);
 
@@ -552,6 +676,12 @@ async function* streamParticipants(
     index < participantIds.length;
     index += CSV_PARTICIPANT_BATCH
   ) {
+    // THROWS RATHER THAN RETURNING, checked before paying for the next batch.
+    // Returning would end the consumer's `for await` normally, and its normal
+    // ending calls `res.end()` - a short CSV that parses, which is the exact
+    // outcome the refusal design exists to prevent.
+    signal.throwIfAborted();
+
     const batch = participantIds.slice(index, index + CSV_PARTICIPANT_BATCH);
 
     // `${filter}` in the statement below is DEFENCE IN DEPTH AND CANNOT BE
@@ -566,24 +696,7 @@ async function* streamParticipants(
     // The BATCH clause is a different matter and IS pinned: deleting it with
     // its bind parameter is caught in survey-csv-export.test.ts, on the
     // parameters, by `asks each batch for ITS OWN hundred ids`.
-    const rows = await withRuntimeDatabaseClient(
-      async (client) => {
-        const result = await client.query<ResponseRow>(
-          `
-        SELECT r.session_id, r.step_id, r.step_prompt, r.step_type,
-               r.response_payload, r.saved_at
-        FROM participant_responses AS r
-        JOIN runtime_sessions AS s ON s.session_id = r.session_id
-        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])
-        ORDER BY r.saved_at ASC, r.id ASC
-      `,
-          [...params, batch]
-        );
-
-        return result.rows.map(toStoredResponse);
-      },
-      { statementTimeoutMs: RESULTS_STATEMENT_TIMEOUT_MS }
-    );
+    const rows = await readBatch(filter, params, batch, signal);
 
     const byParticipant = new Map<string, StoredResponse[]>();
     for (const row of rows) {
@@ -621,7 +734,7 @@ async function* streamParticipants(
  */
 export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
   removedQuestions: RemovedQuestion[];
-  participants: () => AsyncGenerator<{
+  participants: (signal: AbortSignal) => AsyncGenerator<{
     sessionId: string;
     answers: StoredResponse[];
   }>;
@@ -630,7 +743,7 @@ export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
     return {
       removedQuestions: [],
       // eslint-disable-next-line require-yield
-      participants: async function* () {
+      participants: async function* (_signal: AbortSignal) {
         return;
       }
     };
@@ -651,6 +764,10 @@ export async function openSurveyCsvExport(scope: ResponseScope): Promise<{
 
   return {
     removedQuestions,
-    participants: () => streamParticipants(scope, participantIds)
+    // REQUIRED, not optional. An optional signal is a deadline a caller can
+    // drop by accident, and the drop is silent - the export simply goes back
+    // to being unbounded on the database side.
+    participants: (signal: AbortSignal) =>
+      streamParticipants(scope, participantIds, signal)
   };
 }

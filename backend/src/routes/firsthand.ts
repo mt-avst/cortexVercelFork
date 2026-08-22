@@ -611,7 +611,10 @@ router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, b
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
 
-  return writeSurveyCsv(res, stored.steps, csvExport.removedQuestions, csvExport.participants(), {
+  // The FACTORY, uncalled. `writeSurveyCsv` owns the export's wall-clock
+  // deadline and calls this with the signal that carries it, so the bound
+  // reaches the batch reads and not only the writes to the socket.
+  return writeSurveyCsv(res, stored.steps, csvExport.removedQuestions, csvExport.participants, {
     studyId: req.params.studyId
   });
 }));

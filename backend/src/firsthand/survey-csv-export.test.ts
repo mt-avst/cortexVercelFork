@@ -27,6 +27,16 @@ let participantRows: Array<{ session_id: string }> = [];
 let answerRows: Array<Record<string, unknown>> = [];
 let removedRows: Array<{ step_type: string; step_prompt: string | null }> = [];
 
+/**
+ * A hook the tests use to make a read FAIL, by SQL.
+ *
+ * Thrown from `query` rather than from admission, which is where a real
+ * refusal comes from. The retry wraps the whole `withRuntimeDatabaseClient`
+ * call, so the two are indistinguishable to it - and throwing from `query` is
+ * the only place this fake can tell a batch read from a preflight.
+ */
+let onQuery: (sql: string) => void = () => {};
+
 vi.mock("./runtime-database", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./runtime-database")>()),
   isPostgresRuntimeConfigured: () => true,
@@ -50,6 +60,7 @@ vi.mock("./runtime-database", async (importOriginal) => ({
         query: async (sql: string, params: unknown[] = []) => {
           entry.sql.push(sql);
           entry.params.push(params);
+          onQuery(sql);
           if (sql.includes("GROUP BY r.step_type")) return { rows: removedRows };
           if (sql.includes("GROUP BY r.session_id")) return { rows: participantRows };
           return { rows: answerRows };
@@ -67,13 +78,21 @@ vi.mock("../utils/logger", () => ({
 
 import { openSurveyCsvExport } from "./survey-results-repository";
 import { RESULTS_STATEMENT_TIMEOUT_MS } from "./runtime-database";
+import {
+  RuntimeDatabaseAdmissionTimeoutError,
+  RuntimeDatabaseBusyError
+} from "./runtime-pool-admission";
+
+const IS_BATCH = (sql: string) => sql.includes("r.session_id = ANY");
+const IS_PARTICIPANT_PREFLIGHT = (sql: string) =>
+  sql.includes("GROUP BY r.session_id");
 
 const scope = { kind: "study" as const, studyId: "study_abc" };
 
 async function drain() {
   const csvExport = await openSurveyCsvExport(scope);
   const seen: string[] = [];
-  for await (const participant of csvExport.participants()) {
+  for await (const participant of csvExport.participants(new AbortController().signal)) {
     seen.push(participant.sessionId);
   }
   return { csvExport, seen };
@@ -83,6 +102,7 @@ describe("opening and draining a CSV export", () => {
   beforeEach(() => {
     checkouts.length = 0;
     open = 0;
+    onQuery = () => {};
     removedRows = [];
     answerRows = [];
     participantRows = Array.from({ length: 250 }, (_u, i) => ({
@@ -136,7 +156,7 @@ describe("opening and draining a CSV export", () => {
     const csvExport = await openSurveyCsvExport(scope);
     const checkoutsAfterOpen = checkouts.length;
 
-    const iterator = csvExport.participants();
+    const iterator = csvExport.participants(new AbortController().signal);
     await iterator.next();
 
     // A slow client is the case that matters: between yields there must be
@@ -160,7 +180,7 @@ describe("opening and draining a CSV export", () => {
     const csvExport = await openSurveyCsvExport(scope);
     const before = checkouts.length;
 
-    const iterator = csvExport.participants();
+    const iterator = csvExport.participants(new AbortController().signal);
     await iterator.next();
     await iterator.return(undefined);
 
@@ -241,5 +261,189 @@ describe("opening and draining a CSV export", () => {
     await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({
       statusCode: 413
     });
+  });
+});
+
+/**
+ * ONE BUSY-POOL REFUSAL MUST NOT DESTROY A MINUTES-OLD DOWNLOAD
+ * (cto/AdaptaLabs#6).
+ *
+ * Batching bought the occupancy fix at the cost of attempt count: `2 +
+ * ceil(N/100)` admission attempts where the unbatched reader made one. Before
+ * the first byte a refusal is a clean 503 the caller can retry; after it the
+ * status is already 200, so the only honest failure left is a destroyed
+ * socket - a researcher watching a download of several minutes break with no
+ * explanation.
+ *
+ * So the BATCH read retries and the PREFLIGHT does not, and both halves of
+ * that are asserted. A test that only proved the retry works would not notice
+ * a retry quietly added in front of the honest, immediate 503.
+ */
+describe("retrying a batch read the runtime pool refused", () => {
+  beforeEach(() => {
+    checkouts.length = 0;
+    open = 0;
+    onQuery = () => {};
+    removedRows = [];
+    answerRows = [];
+    participantRows = Array.from({ length: 250 }, (_u, i) => ({
+      session_id: `s${i}`
+    }));
+  });
+
+  it("survives a refusal mid-export and still returns every participant", async () => {
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_BATCH(sql)) return;
+      attempts += 1;
+      // The SECOND batch is refused once. Mid-export on purpose: a refusal on
+      // the first batch is nearly the pre-streaming case, and the download
+      // that hurts to lose is the one already minutes old.
+      if (attempts === 2) {
+        throw new RuntimeDatabaseAdmissionTimeoutError(10_000);
+      }
+    };
+
+    const { seen } = await drain();
+
+    expect(seen).toHaveLength(250);
+    // Three batches plus the one retry. Asserted rather than inferred from
+    // `seen`, because a retry that silently re-read the WHOLE study would also
+    // produce 250 participants.
+    expect(attempts).toBe(4);
+    expect(new Set(seen).size).toBe(250);
+  });
+
+  it("gives up after exactly three retries rather than forever", async () => {
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_BATCH(sql)) return;
+      attempts += 1;
+      throw new RuntimeDatabaseAdmissionTimeoutError(10_000);
+    };
+
+    const startedAt = Date.now();
+    await expect(drain()).rejects.toMatchObject({ statusCode: 503 });
+    const elapsed = Date.now() - startedAt;
+
+    // THE BACKOFF GROWS, and this is what says so. 250 + 500 + 1000 is 1750ms;
+    // a flat 250ms backoff spends 750 and nothing else here can tell the two
+    // apart. A LOWER bound only - `setTimeout` never fires early, so this
+    // cannot flake upward on a loaded machine.
+    expect(elapsed).toBeGreaterThanOrEqual(1_700);
+
+    // FOUR, AS A LITERAL: the first attempt plus CSV_BATCH_RETRY_ATTEMPTS.
+    // Derived from the constant this could not report that the constant moved,
+    // and an unbounded retry here is an export that never gives the permit
+    // back - the defect cto/AdaptaLabs#5 is about, reintroduced through the
+    // fix for this one.
+    expect(attempts).toBe(4);
+  });
+
+  it("does not retry the preflight, whose refusal is the honest 503", async () => {
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_PARTICIPANT_PREFLIGHT(sql)) return;
+      attempts += 1;
+      throw new RuntimeDatabaseBusyError();
+    };
+
+    await expect(openSurveyCsvExport(scope)).rejects.toMatchObject({
+      statusCode: 503
+    });
+
+    // ONE. The preflight runs before a byte is written, so its refusal reaches
+    // the caller as a 503 they can act on immediately. A retry in front of it
+    // makes an admin wait half a minute to be told to try again.
+    expect(attempts).toBe(1);
+  });
+
+  it("does not retry a failure that is not a capacity refusal", async () => {
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_BATCH(sql)) return;
+      attempts += 1;
+      throw new Error('relation "participant_responses" does not exist');
+    };
+
+    await expect(drain()).rejects.toThrow("does not exist");
+
+    // A schema error, a syntax error or a dropped connection are not going to
+    // fix themselves. Retrying them spends the export's deadline and then
+    // fails anyway.
+    expect(attempts).toBe(1);
+  });
+
+  it("abandons its backoff the moment the export deadline fires", async () => {
+    const deadline = new AbortController();
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_BATCH(sql)) return;
+      attempts += 1;
+      deadline.abort(new Error("export deadline"));
+      throw new RuntimeDatabaseAdmissionTimeoutError(10_000);
+    };
+
+    const csvExport = await openSurveyCsvExport(scope);
+    const iterator = csvExport.participants(deadline.signal);
+
+    await expect(iterator.next()).rejects.toThrow("export deadline");
+    // Not four. A backoff that slept through the deadline would hold the only
+    // results-read permit past the bound that exists to release it.
+    expect(attempts).toBe(1);
+  });
+
+  it("abandons a backoff already under way when the deadline fires", async () => {
+    // The other half of the abandonment. Above, the deadline had already
+    // fired before the sleep began; here it fires DURING it, which is the path
+    // through the abort listener rather than the already-aborted check. With
+    // only one of the two covered, removing either is invisible.
+    const deadline = new AbortController();
+    let attempts = 0;
+    onQuery = (sql) => {
+      if (!IS_BATCH(sql)) return;
+      attempts += 1;
+      setTimeout(() => deadline.abort(new Error("export deadline")), 50);
+      throw new RuntimeDatabaseAdmissionTimeoutError(10_000);
+    };
+
+    const csvExport = await openSurveyCsvExport(scope);
+    const iterator = csvExport.participants(deadline.signal);
+
+    await expect(iterator.next()).rejects.toThrow("export deadline");
+    expect(attempts).toBe(1);
+  });
+
+  it("throws rather than ending quietly when the deadline fires between batches", async () => {
+    const deadline = new AbortController();
+    const csvExport = await openSurveyCsvExport(scope);
+    const iterator = csvExport.participants(deadline.signal);
+
+    const seen: string[] = [];
+    let threw: unknown;
+
+    await iterator.next();
+    seen.push("first");
+    deadline.abort(new Error("export deadline"));
+
+    try {
+      // The rest of batch one is already in hand, so this runs on to the batch
+      // boundary, which is where the check lives.
+      for (let i = 0; i < 250; i += 1) {
+        const next = await iterator.next();
+        if (next.done) break;
+        seen.push(next.value.sessionId);
+      }
+    } catch (error) {
+      threw = error;
+    }
+
+    // A RETURN HERE WOULD BE SILENT DATA LOSS. The consumer's `for await` ends
+    // normally on a return, and its normal ending calls `res.end()` - handing
+    // the researcher a CSV that parses and holds the first hundred
+    // participants of two hundred and fifty.
+    expect(threw).toBeInstanceOf(Error);
+    expect((threw as Error).message).toBe("export deadline");
+    expect(seen.length).toBeLessThan(250);
   });
 });
