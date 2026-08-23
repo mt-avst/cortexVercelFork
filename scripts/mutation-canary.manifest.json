@@ -562,5 +562,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
     "test": "writes nothing at all for a non-owning admin on POST /api/sessions"
+  },
+  {
+    "id": "session-patch-column-allowlist-holds",
+    "why": "PATCH /api/sessions/:id built its SET clause from request-body KEYS - `updateFields.push(`${key} = $${paramCount}`)` interpolated the key and parameterised only the value. Nothing upstream refused an unexpected key: the `const data: UpdateSessionRequest = req.body` annotation erases at runtime, and validateSessionData is positive-only. A key carrying `= (SELECT email FROM users LIMIT 1), capacity` produced valid Postgres and RETURNING * handed the result to the caller, so any researcher_admin with one session they owned could read users and bookings. The same hole allowed `opportunity_id` to be reassigned, moving a session and its bookings under an opportunity the caller did not own. This entry mutates the allow-list to accept everything, which is the exact pre-fix behaviour.",
+    "file": "backend/src/routes/sessions.ts",
+    "anchor": "  const unknownFields = Object.keys(data ?? {}).filter(\n    (key) => !UPDATABLE_SESSION_COLUMNS.has(key)\n  );",
+    "mutation": "  const unknownFields = Object.keys(data ?? {}).filter(() => false);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.patch-column-allowlist.test.ts",
+    "test": "refuses a body key carrying a subquery, and builds no SQL for it"
   }
 ]

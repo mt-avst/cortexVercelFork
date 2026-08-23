@@ -12,6 +12,26 @@ import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 const router: Router = Router();
 
+/**
+ * The only columns PATCH /api/sessions/:id may write.
+ *
+ * These are exactly the four fields of `UpdateSessionRequest` in
+ * shared/types. Kept as a runtime Set rather than derived from the type,
+ * because the type is what erased and let the injection through in the first
+ * place - a compile-time contract cannot refuse a request.
+ *
+ * Adding a column here widens what a request body can reach into the SET
+ * clause. Do not add one without checking it is safe for an admin to set
+ * directly: `booked_count` and `opportunity_id` are both columns on this table
+ * and neither belongs to a caller.
+ */
+const UPDATABLE_SESSION_COLUMNS: ReadonlySet<string> = new Set([
+  'start_time',
+  'end_time',
+  'capacity',
+  'location_or_meet_link_optional',
+]);
+
 // Helper function to check session ownership (superadmin can access any)
 const checkSessionOwnership = async (sessionId: string, userId: string, userRole: string): Promise<boolean> => {
   // Superadmins can access any session
@@ -191,7 +211,75 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
 router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id: sessionId } = req.params;
   const data: UpdateSessionRequest = req.body;
-  
+
+  // THE ALLOW-LIST IS THE INJECTION FIX. Read this before touching the update
+  // builder below.
+  //
+  // That builder interpolates the request body's KEYS into the SET clause -
+  // `updateFields.push(`${key} = $${paramCount}`)` - and parameterises only the
+  // values. So a key was SQL, and nothing upstream stopped it being anything:
+  //
+  //   `const data: UpdateSessionRequest = req.body`
+  //
+  // is a TYPE ANNOTATION. It erases at runtime and strips nothing, which is
+  // precisely why this was invisible - the line reads exactly like validation.
+  // `validateSessionData` did not close it either: it is POSITIVE-ONLY, checking
+  // the three fields it knows about and never rejecting a fourth.
+  //
+  // A body key of
+  //
+  //   "location_or_meet_link_optional = (SELECT email FROM users LIMIT 1), capacity"
+  //
+  // produced valid Postgres with the parameter numbering intact, and
+  // `RETURNING *` handed the result back in the response. Any researcher_admin
+  // with one session they owned could read `users` and `bookings` - the
+  // participant data the trust model in routes/firsthand.ts says never leaves
+  // the researcher who recruited them. The same hole allowed mass assignment:
+  // `{"opportunity_id": "..."}` moved a session and its bookings under an
+  // opportunity the caller did not own, walking around the ownership gate at
+  // :124 rather than defeating it.
+  //
+  // WHY AN ALLOW-LIST RATHER THAN ESCAPING THE KEY. There is no legitimate case
+  // for a caller-chosen column name here. The set is the four fields of
+  // `UpdateSessionRequest`, and anything else is a bug or an attack.
+  //
+  // WHY IT REFUSES RATHER THAN DROPS. Silently ignoring an unknown field tells
+  // the caller their update succeeded when part of it did not happen.
+  //
+  // The message names the PERMITTED fields and never echoes what was sent: the
+  // offending key is attacker-chosen text, and reflecting it into a response
+  // body puts it one careless render away from being a second vulnerability.
+  //
+  // ONLY THE FIRST ARGUMENT REACHES THE CALLER. errorHandler serialises an
+  // AppError as `{ error: error.message, code, timestamp, requestId }` and
+  // drops the details array entirely. So the second argument below reaches
+  // NEITHER the wire NOR the log - errorHandler logs only name, message and
+  // stack. It is inert, and an earlier draft of this comment claimed it was
+  // "for the log", which was wrong.
+  //
+  // That is why the offending keys go in the `logger.warn` explicitly. An
+  // operator watching an injection attempt needs to see what was attempted,
+  // and the log is safe to put them in precisely because it is not the
+  // response. Bounded, because the body can carry thousands of keys.
+  //
+  // It also changes what a mutation means here: putting the key in the
+  // DETAILS survives the regression test and is genuinely not a leak, while
+  // putting it in the MESSAGE fails that test by name. Both measured.
+  const unknownFields = Object.keys(data ?? {}).filter(
+    (key) => !UPDATABLE_SESSION_COLUMNS.has(key)
+  );
+  if (unknownFields.length > 0) {
+    logger.warn('Refused a session update naming a column outside the allow-list', {
+      sessionId,
+      userId: req.user?.id,
+      count: unknownFields.length,
+      fields: unknownFields.slice(0, 10)
+    });
+    throw new ValidationError('Validation failed', [
+      `Only ${[...UPDATABLE_SESSION_COLUMNS].join(', ')} may be updated`
+    ]);
+  }
+
   // Validate data
   const errors = validateSessionData(data);
   if (errors.length > 0) {
