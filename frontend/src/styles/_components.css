@@ -370,33 +370,15 @@
   grid-column: span 1;
 }
 
-.bento-grid-item-wide {
-  grid-column: span 2;
-}
-
-.bento-grid-item-wide-right {
-  grid-column: 2 / 4;
-}
-
 @media (max-width: 992px) {
   .bento-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .bento-grid-item-wide,
-  .bento-grid-item-wide-right {
-    grid-column: span 2;
   }
 }
 
 @media (max-width: 768px) {
   .bento-grid {
     grid-template-columns: 1fr;
-  }
-  
-  .bento-grid-item-wide,
-  .bento-grid-item-wide-right {
-    grid-column: span 1;
   }
 }
 

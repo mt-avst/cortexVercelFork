@@ -94,7 +94,6 @@ export interface Opportunity {
   meeting_location_optional?: string;
   participant_type_required?: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details?: string;
-  display_width?: 'single' | 'double'; // Pod display width on user front page (superadmin only)
   start_date?: string; // Study start date for external link types
   end_date?: string; // Study end date for countdown display
   created_at: string;

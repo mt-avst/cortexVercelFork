@@ -2776,10 +2776,6 @@ body.theme-dark .opportunity-form .section-icon {
   color: var(--brand-orange-500);
 }
 
-body.theme-dark .opportunity-form .display-settings-section {
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-}
-
 body.theme-dark .opportunity-form .form-text {
   color: rgba(224, 224, 224, 0.7);
 }
@@ -2974,10 +2970,6 @@ body.theme-light .opportunity-form .section-title {
 
 body.theme-light .opportunity-form .section-icon {
   color: var(--brand-orange-600);
-}
-
-body.theme-light .opportunity-form .display-settings-section {
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 body.theme-light .opportunity-form .form-text {

@@ -466,7 +466,17 @@ export async function runMigrations() {
       console.log('ℹ️  Could not add participant_type_specific_details column (may already exist):', error.message);
     }
 
-    // Add display_width column for controlling pod size on user front page (superadmin only)
+    // Adds `display_width`, which is RETIRED: nothing writes it and NO SURFACE
+    // CONSUMES it. The column is still selected and still goes out on the wire,
+    // because the read paths use `SELECT *` and `RETURNING *` - so every
+    // opportunity response still carries `display_width: 'single'` with no type
+    // declaring it. The double-width home page layout it drove was removed on
+    // 2026-08-17 by 844bae8, when the grid moved to closing-soonest ordering,
+    // and the superadmin control that set it was removed with the rest of the
+    // feature. The migration stays because existing rows carry values and
+    // dropping the column buys nothing. Do not write to it again without
+    // restoring a consumer first - a stored setting no surface reads is what
+    // made this look like a working feature for nine months.
     try {
       const columnCheck = await client.query(`
         SELECT 1 FROM information_schema.columns 
