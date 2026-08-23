@@ -365,9 +365,31 @@ function requireSuperadminForStudyResults(req: Request): void {
 // closing the remaining 404-vs-403 inconsistency across the opportunity
 // siblings as churn rather than as a leak.
 //
-// TWO SITTING ON THE LINE, both measured, neither decided: `clicks_total` on
-// /api/opportunities (#19), and GET /api/feedback and /export, which are
-// requireAdmin only while DELETE on the same resource is superadmin (#15).
+// TWO THAT SAT ON THE LINE, NOW DECIDED AND BOTH OPEN. Recorded here with the
+// reason, because "nobody decided that" was true when it was written and is
+// the kind of sentence that becomes an invitation to change something.
+//
+//   `clicks_total` on /api/opportunities (#19) - OPEN to every admin, not
+//     owner-scoped. THE LINE IS: engagement on a recruitment link is METADATA;
+//     answer volume is RESEARCH OUTPUT. A click count says how many people
+//     followed a link posted to a channel and names nobody, and the admin
+//     table it renders into is already a deliberate all-admins metadata
+//     surface. `answer_counts` is the other side of that line and stays
+//     owner-scoped. Scoping the clicks would also have reintroduced the
+//     withheld-versus-zero ambiguity this repository already got right once:
+//     the field is OMITTED for a caller who may not see it, because a
+//     colleague's row showing `0` reads as "nobody clicked", not "not yours".
+//   GET /api/feedback and /export (#15) - OPEN to every admin, and the
+//     asymmetry with DELETE is deliberate rather than an oversight. Reading
+//     feedback is not destructive; deleting it is irreversible. Admin.tsx
+//     states the intent at the tab itself, so tightening the reads to
+//     superadmin would have removed a tab researcher_admins are meant to see.
+//     A stale `superadmin only` comment in the API client pointed the other
+//     way and is fixed; the other five such comments in that file were checked
+//     against their routes and are accurate.
+//
+// Both now have named tests, in both directions, so opening DELETE or closing
+// the reads turns something red rather than reading as tidying up.
 //
 // A WARNING ABOUT admin.ts, because a draft of this block got it wrong and the
 // wrong version would have caused the leak. It said the dashboard's owner
