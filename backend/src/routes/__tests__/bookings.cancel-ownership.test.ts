@@ -44,9 +44,17 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  *
  * What that admits is a researcher_admin cancelling a colleague's participant
  * out of a session they have nothing to do with: the participant loses their
- * slot, `booked_count` is decremented, and both they and the real owner are
- * emailed a cancellation naming the caller as the person who did it. There is
+ * slot, `booked_count` is decremented, the participant is emailed a
+ * cancellation naming the caller as the person who did it, and the real owner
+ * is emailed a participant-cancelled notice naming the participant. There is
  * no undo and no audit row.
+ *
+ * That sentence used to say both of them were emailed "a cancellation naming
+ * the caller", and it was wrong in a different way before and after the fix
+ * that put the participant in scope. The two mails are different templates:
+ * `getBookingCancellationTemplate` has a `cancelledBy` parameter and
+ * `getAdminNotificationTemplate` does not, so the owner is never told who
+ * cancelled. Two gates caught the wording independently.
  *
  * OUT OF SCOPE OF cto/AdaptaLabs#21, which pinned the participant-data READ
  * gates. This one was unpinned before that work and stayed unpinned; nothing
@@ -107,12 +115,20 @@ const bookingLoads = (participantId: string, ownerUserId: string | null) => {
             session_id: 's1',
             status: 'booked',
             gcal_event_id: null,
+            start_time: FUTURE,
             end_time: FUTURE,
             opportunity_id: 'opp-1',
             owner_user_id: ownerUserId,
             opportunity_title: 'A study',
             owner_name: 'Owner',
             owner_email: 'owner@example.com',
+            // The handler now joins `b.user_id` as well, so the participant is
+            // in scope and receives the cancellation. Carried here to keep this
+            // fixture the shape the statement actually returns; what those
+            // recipients are is asserted in
+            // bookings.cancel-notifies-participant.test.ts, not here.
+            participant_name: 'Participant',
+            participant_email: 'participant@example.com',
           },
         ],
       };
