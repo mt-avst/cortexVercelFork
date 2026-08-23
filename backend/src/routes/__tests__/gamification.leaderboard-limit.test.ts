@@ -25,7 +25,7 @@ const mockGetMonthlyLeaderboard = getMonthlyLeaderboard as unknown as jest.Mock;
  * and serialised every participant's name and points to anyone on the network.
  *
  * TWO ROUTES, and the cap is asserted on BOTH from one table. The pair is
- * fourteen lines apart and near-identical, which is the shape where a fix
+ * thirteen lines apart and near-identical, which is the shape where a fix
  * applied to one reads as a fix applied to both - the same trap the approve
  * and reject handlers set in bookings.ts.
  */

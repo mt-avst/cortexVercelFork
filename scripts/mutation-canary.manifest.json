@@ -504,6 +504,36 @@
     "test": "caps the monthly limit at the number that was decided"
   },
   {
+    "id": "points-history-limit-ceiling-is-a-hundred",
+    "why": "The ceiling on a page of the caller's own points history, and a policy number rather than a derived one. The test asserts the LITERAL 100 rather than reading MAX_POINTS_HISTORY_LIMIT - three mutations survived a review in this repository by deriving their expectation from the constant they were meant to be guarding, including one that widened a concurrency cap.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "export const MAX_POINTS_HISTORY_LIMIT = 100;",
+    "mutation": "export const MAX_POINTS_HISTORY_LIMIT = 500;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
+    "test": "holds the ceiling at the number that was decided"
+  },
+  {
+    "id": "points-history-route-is-capped-too",
+    "why": "THE THIRD ROUTE, and the reason this entry exists rather than a general one. cto/AdaptaLabs#17 capped the two leaderboard routes and left this one on a bare `parseInt(req.query.limit as string) || 20` feeding SQL `LIMIT $2` - the finding named an INSTANCE and the class was the file. It is not the leaderboard leak: the value is bound and rows are scoped to the caller's own user_id. What remained is an unbounded read at `?limit=999999999`, and a 500 at `?limit=-5`, because parseInt('-5') is truthy so the fallback never fired and Postgres raises SQLSTATE 2201W, verified against a real Postgres 17. This entry restores exactly the pre-fix line.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);",
+    "mutation": "    const limit = parseInt(req.query.limit as string) || 20;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
+    "test": "caps the points-history limit at the number that was decided"
+  },
+  {
+    "id": "points-history-keeps-its-own-default",
+    "why": "THE TEMPTING ONE-WORD FIX, which is why it is pinned separately from the two entries above. `leaderboardLimit` sits in the same file and clamps to the same ceiling of 100, so borrowing it here caps the route, refuses the negative, and satisfies every assertion about the ceiling - while silently halving the page, because the leaderboard default is 10 and this route's is 20. The parser is shared deliberately; the policy numbers are not, and only a test naming the default can tell the two apart.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);",
+    "mutation": "    const limit = leaderboardLimit(req.query.limit);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
+    "test": "falls back to the points-history default, which is not the leaderboard default"
+  },
+  {
     "id": "clicks-total-is-withheld-not-zeroed",
     "why": "A DECISION ABOUT WIRE SHAPE, not about a gate. `clicks_total` is OMITTED for a caller who may not see it, because a colleague's row showing `0` reads as `nobody clicked` rather than `not yours` - the withheld-versus-unknown distinction this repository already got right once on `answer_counts` and got wrong before that. Zeroing it instead is a one-word edit that leaks no data and silently publishes a falsehood, which no gate reading for authorisation would flag.",
     "file": "backend/src/routes/opportunities.ts",
