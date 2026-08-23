@@ -133,7 +133,7 @@ Map current PostgreSQL schema to Forge storage. Prefer **Forge Custom Entities**
 
 **Opportunities**
 
-- id (UUID), type, title, purpose_one_liner, description_optional, product_optional, default_duration_minutes, status (draft | published | closed), owner_user_id (accountId), external_link_optional, meeting_location_optional, participant_type_required, participant_type_specific_details, start_date, end_date, display_width (optional), created_at, updated_at.
+- id (UUID), type, title, purpose_one_liner, description_optional, product_optional, default_duration_minutes, status (draft | published | closed), owner_user_id (accountId), external_link_optional, meeting_location_optional, participant_type_required, participant_type_specific_details, start_date, end_date, created_at, updated_at.
 - Same fields as current `Opportunity` type in `frontend/src/shared/types.ts` (and backend migrate.ts).
 
 **Sessions**

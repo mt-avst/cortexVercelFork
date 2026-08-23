@@ -115,7 +115,7 @@ import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';
-import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LayoutGrid, LogOut } from 'lucide-react';
+import { TrendingUp, UserCircle, AlertTriangle, CheckCircle, LogOut } from 'lucide-react';
 
 /**
  * Unmoderated studies run with logged-in Cortex users, so an external
@@ -605,7 +605,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
     status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published',
-    display_width: 'single' as 'single' | 'double',
     start_date: '' as string | undefined,
     end_date: '' as string | undefined,
     firsthand_study_id: '' as string | undefined,
@@ -1514,7 +1513,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         participant_type_required: opportunity.participant_type_required || 'any',
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
-        display_width: opportunity.display_width || 'single',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
         // Read from the linked study rather than defaulted. See authoredFields.
@@ -1548,7 +1546,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         participant_type_required: opportunity.participant_type_required || 'any' as const,
         participant_type_specific_details: opportunity.participant_type_specific_details || '',
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
-        display_width: opportunity.display_width || 'single' as 'single' | 'double',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
         // Seeded from the SERVER's state, not from the defaults. Seeding the
@@ -2572,7 +2569,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       formData.participant_type_required !== originalFormData.participant_type_required ||
       formData.participant_type_specific_details.trim() !== originalFormData.participant_type_specific_details.trim() ||
       formData.status !== originalFormData.status ||
-      formData.display_width !== originalFormData.display_width ||
       // The seven fields this comparison omitted, plus the two reuse flags.
       //
       // Changing only one of them left hasChanges false, which hides the Save
@@ -2802,7 +2798,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         deliveryMode,
         authoringInlineStudy,
         authoringInlineSurvey,
-        isSuperadmin: user?.role === 'superadmin',
         allowUserSubmission,
         linkedStudyUpdatedAt,
         staleStudyUpdatedAt
@@ -2815,7 +2810,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       deliveryMode,
       authoringInlineStudy,
       authoringInlineSurvey,
-      user?.role,
       allowUserSubmission,
       linkedStudyUpdatedAt,
       staleStudyUpdatedAt
@@ -3794,7 +3788,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         deliveryMode,
         authoringInlineStudy,
         authoringInlineSurvey,
-        isSuperadmin: user?.role === 'superadmin',
         allowUserSubmission,
         linkedStudyUpdatedAt,
         staleStudyUpdatedAt
@@ -4769,50 +4762,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         handleBlur={handleBlur}
                         allowUserSubmission={allowUserSubmission}
                       />
-
-                      {/* Display Width Setting - Superadmin Only */}
-                      {user?.role === 'superadmin' && (
-                        <div className="form-section mb-4 display-settings-section" style={{
-                          paddingTop: '1.5rem',
-                          marginTop: '1rem'
-                        }}>
-                          <div className="d-flex align-items-center mb-3">
-                            <div>
-                              <h3 className="h5 mb-1 section-title" style={{ fontSize: '1.2rem', fontWeight: '600' }}>
-                                <LayoutGrid size={18} className="me-2 section-icon" />
-                                Display Settings
-                              </h3>
-                              <p className="mb-0 section-description" style={{ fontSize: '0.875rem' }}>
-                                Control how this study appears on the user home page (Superadmin only)
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="row g-3">
-                            <div className="col-md-6">
-                              <div className="form-group">
-                                <label htmlFor="display_width" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600' }}>
-                                  Pod Display Width
-                                </label>
-                                <div id="display_width-help" className="form-text mb-2" style={{ fontSize: '0.875rem' }}>
-                                  Double-width pods are more prominent on the user home page
-                                </div>
-                                <select
-                                  id="display_width"
-                                  className="form-select"
-                                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', maxWidth: '300px' }}
-                                  value={formData.display_width}
-                                  onChange={(e) => handleInputChange('display_width', e.target.value)}
-                                  aria-describedby="display_width-help"
-                                >
-                                  <option value="single">📦 Single Width - Standard display</option>
-                                  <option value="double">📦📦 Double Width - Featured display</option>
-                                </select>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
                       {continueControl && (
                       <StepActions

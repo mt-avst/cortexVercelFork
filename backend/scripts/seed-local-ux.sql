@@ -22,7 +22,7 @@
 --   8 further users across six business units, one a second researcher_admin
 --     so ownership gating has something to gate
 --   11 opportunities spanning all six types, with draft, published and closed
---     statuses, one double-width card, one participant-type-specific study,
+--     statuses, one participant-type-specific study,
 --     long and short descriptions so the card has to survive both
 --   15 session slots: past and future, some full, some empty
 --   17 bookings for the demo user and others: upcoming, completed, approved,
@@ -80,7 +80,7 @@ INSERT INTO opportunities
   (id, type, title, purpose_one_liner, description_optional, product_optional,
    default_duration_minutes, status, owner_user_id, external_link_optional,
    meeting_location_optional, participant_type_required, participant_type_specific_details,
-   start_date, end_date, display_width, created_at)
+   start_date, end_date, created_at)
 VALUES
   -- tests (bookable)
   ('0aa00001-0000-4000-8000-000000000001', 'test',
@@ -89,7 +89,7 @@ VALUES
    E'We have rebuilt the script editor with inline validation, a new console and keyboard-first navigation.\n\nYou will be asked to write a short listener script, break it deliberately, and use the console to work out why. No preparation needed and you do not need to know Groovy well.',
    'ScriptRunner', 45, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    NULL, 'Google Meet (link sent on booking)', 'internal', NULL,
-   now() - interval '9 days', now() + interval '21 days', 'single', now() - interval '11 days'),
+   now() - interval '9 days', now() + interval '21 days', now() - interval '11 days'),
 
   ('0aa00001-0000-4000-8000-000000000002', 'test',
    'Kolekti first-run experience',
@@ -97,7 +97,7 @@ VALUES
    E'We will give you a fresh workspace and no instructions, and watch what you do.\n\nHonest confusion is the point - if you get stuck, that is the finding.',
    'Kolekti', 60, 'published', 'aa000001-0000-4000-8000-000000000001',
    NULL, 'Google Meet (link sent on booking)', 'any', NULL,
-   now() - interval '4 days', now() + interval '26 days', 'double', now() - interval '5 days'),
+   now() - interval '4 days', now() + interval '26 days', now() - interval '5 days'),
 
   ('0aa00001-0000-4000-8000-000000000003', 'test',
    'Bitbucket pipeline templates',
@@ -105,7 +105,7 @@ VALUES
    'Closed - we have the sessions we need. Results are being written up.',
    'Bitbucket', 45, 'closed', '633608bc-4b0e-4d60-a498-e680ee97c252',
    NULL, 'Google Meet', 'internal', NULL,
-   now() - interval '40 days', now() - interval '10 days', 'single', now() - interval '42 days'),
+   now() - interval '40 days', now() - interval '10 days', now() - interval '42 days'),
 
   -- interviews (bookable)
   ('0aa00001-0000-4000-8000-000000000004', 'interview',
@@ -114,7 +114,7 @@ VALUES
    'Thirty minutes, camera optional. No product to test - we just want to hear how you work.',
    'Confluence', 30, 'published', 'aa000001-0000-4000-8000-000000000001',
    NULL, 'Google Meet (link sent on booking)', 'any', NULL,
-   now() - interval '6 days', now() + interval '24 days', 'single', now() - interval '7 days'),
+   now() - interval '6 days', now() + interval '24 days', now() - interval '7 days'),
 
   ('0aa00001-0000-4000-8000-000000000005', 'interview',
    'Server to Cloud migration: what actually hurt',
@@ -122,7 +122,7 @@ VALUES
    E'We are building migration tooling and want the real story rather than the retro summary.\n\nIf you have notes, tickets or a runbook to hand, bring them.',
    NULL, 60, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    NULL, 'Google Meet (link sent on booking)', 'specific', 'Anyone who has run or supported a server-to-cloud migration in the last 18 months',
-   now() - interval '2 days', now() + interval '30 days', 'single', now() - interval '3 days'),
+   now() - interval '2 days', now() + interval '30 days', now() - interval '3 days'),
 
   ('0aa00001-0000-4000-8000-000000000006', 'interview',
    'Support escalation workflows',
@@ -130,7 +130,7 @@ VALUES
    'Draft - do not book yet. Slots go live once the discussion guide is signed off.',
    'Jira Service Management', 45, 'draft', '633608bc-4b0e-4d60-a498-e680ee97c252',
    NULL, 'Google Meet', 'internal', NULL,
-   NULL, NULL, 'single', now() - interval '1 day'),
+   NULL, NULL, now() - interval '1 day'),
 
   -- polls
   ('0aa00001-0000-4000-8000-000000000007', 'poll',
@@ -138,14 +138,14 @@ VALUES
    'One question, one click. Helps us decide which editor integrations to build next.',
    NULL, 'ScriptRunner', 5, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    'https://forms.gle/example-groovy-editor-poll', NULL, 'any', NULL,
-   now() - interval '14 days', now() + interval '16 days', 'single', now() - interval '15 days'),
+   now() - interval '14 days', now() + interval '16 days', now() - interval '15 days'),
 
   ('0aa00001-0000-4000-8000-000000000008', 'poll',
    'How often should we ship to the Marketplace?',
    'Weekly, fortnightly or monthly - tell us what you would actually want to consume.',
    NULL, NULL, 5, 'published', 'aa000001-0000-4000-8000-000000000001',
    'https://forms.gle/example-release-cadence-poll', NULL, 'internal', NULL,
-   now() - interval '20 days', now() + interval '10 days', 'single', now() - interval '21 days'),
+   now() - interval '20 days', now() + interval '10 days', now() - interval '21 days'),
 
   -- surveys
   --
@@ -159,14 +159,14 @@ VALUES
    E'Results go to the platform team and are shared back in the engineering all-hands.\n\nWe run this every quarter, so trends matter more than any single answer.',
    NULL, 10, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    'https://forms.gle/example-devex-pulse-q3', NULL, 'internal', NULL,
-   now() - interval '12 days', now() + interval '8 days', 'single', now() - interval '13 days'),
+   now() - interval '12 days', now() + interval '8 days', now() - interval '13 days'),
 
   ('0aa00001-0000-4000-8000-00000000000a', 'survey',
    'Are our docs answering your questions?',
    'Five minutes on where you look first, what you find, and what you give up on.',
    NULL, 'Confluence', 5, 'published', 'aa000001-0000-4000-8000-000000000001',
    'https://forms.gle/example-docs-survey', NULL, 'any', NULL,
-   now() - interval '25 days', now() + interval '5 days', 'single', now() - interval '26 days'),
+   now() - interval '25 days', now() + interval '5 days', now() - interval '26 days'),
 
   -- question
   ('0aa00001-0000-4000-8000-00000000000b', 'question',
@@ -174,7 +174,7 @@ VALUES
    'One open question. Answer in a sentence or a page, whichever you have time for.',
    NULL, 'Jira', 5, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252',
    'https://forms.gle/example-ai-automation-question', NULL, 'any', NULL,
-   now() - interval '8 days', now() + interval '22 days', 'single', now() - interval '9 days')
+   now() - interval '8 days', now() + interval '22 days', now() - interval '9 days')
 ON CONFLICT (id) DO NOTHING;
 
 -- ------------------------------------------------------------- sessions
@@ -321,14 +321,14 @@ ON CONFLICT (study_id, id) DO NOTHING;
 INSERT INTO opportunities
   (id, type, title, purpose_one_liner, description_optional, product_optional,
    default_duration_minutes, status, owner_user_id, participant_type_required,
-   start_date, end_date, display_width, firsthand_study_id, created_at)
+   start_date, end_date, firsthand_study_id, created_at)
 VALUES
   ('0aa00001-0000-4000-8000-00000000000c', 'unmoderated',
    'Triage a failing Bitbucket pipeline',
    'Twenty minutes on your own, recorded, finding out why a pipeline failed.',
    E'This one is self-guided - no meeting, no moderator. You work through four short tasks in your own time while Cortex records your screen and your voice.\n\nYou will need Chrome. Nothing is captured from your camera.',
    'Bitbucket', 20, 'published', '633608bc-4b0e-4d60-a498-e680ee97c252', 'internal',
-   now() - interval '6 days', now() + interval '24 days', 'single',
+   now() - interval '6 days', now() + interval '24 days',
    'study_seed0001-pipeline-triage', now() - interval '6 days')
 ON CONFLICT (id) DO NOTHING;
 

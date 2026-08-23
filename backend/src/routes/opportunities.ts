@@ -1222,17 +1222,13 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     ]
   );
 
-  // Only superadmins can set display_width - default to 'single' otherwise
-  const isSuperadmin = req.user!.role === 'superadmin';
-  const finalDisplayWidth = isSuperadmin && (data as any).display_width ? (data as any).display_width : 'single';
-
   const query = `
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
       product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
-      participant_type_specific_details, start_date, end_date, display_width, delivery_mode
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      participant_type_specific_details, start_date, end_date, delivery_mode
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     RETURNING *
   `;
 
@@ -1360,7 +1356,6 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     data.participant_type_specific_details?.trim() || null,
     data.start_date || null,
     data.end_date || null,
-    finalDisplayWidth,
     // Stored for every type, not only poll and survey. The column is NOT NULL
     // and the other types ignore it, so writing the resolved value keeps the
     // row honest rather than relying on the DDL default for some paths and the

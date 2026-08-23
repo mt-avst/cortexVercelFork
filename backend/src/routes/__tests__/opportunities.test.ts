@@ -706,6 +706,103 @@ describe('Opportunities API', () => {
       expect((insert![1] as unknown[])[index]).toBe('native');
     });
 
+    /**
+     * EVERY COLUMN OF THE CREATE INSERT, PINNED TO ITS VALUE BY NAME.
+     *
+     * The statement binds a fixed column list to a positional array, so the two
+     * are coupled by ORDER ALONE and nothing above this test was checking that.
+     * A security gate demonstrated the cost on this exact statement: swapping
+     * `req.user!.id` with `external_link_optional` - so `owner_user_id` takes a
+     * caller-supplied string - passed 297 tests, and so did swapping
+     * `start_date` with `end_date`.
+     *
+     * That matters more than a normal ordering bug. `owner_user_id` drives
+     * every ownership gate in this router through `isOpportunityOwner`, and the
+     * date swap is the silent one: both columns are the same type, so Postgres
+     * accepts it and the study simply opens and closes on the wrong days.
+     *
+     * Written as a TABLE keyed by column NAME, resolved through the statement's
+     * own column list, so it survives a deliberate reordering and fails only on
+     * a value reaching the wrong column. The delivery_mode test above uses the
+     * same idiom for one slot; this is that idiom for all of them.
+     */
+    it('binds every column of the insert to the value that belongs in it', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{
+          id: '11', type: 'interview',
+          created_at: new Date(), updated_at: new Date(),
+          start_date: new Date('2026-03-01T09:00:00.000Z'),
+          end_date: new Date('2026-04-01T09:00:00.000Z')
+        }]
+      });
+
+      await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'interview',
+          title: 'A distinct interview title',
+          purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+          description_optional: 'A distinct description',
+          product_optional: 'A distinct product',
+          meeting_location_optional: 'A distinct meeting location',
+          default_duration_minutes: 45,
+          external_link_optional: 'https://example.com/a-distinct-link',
+          participant_type_required: 'specific',
+          participant_type_specific_details: 'A distinct participant detail',
+          status: 'draft',
+          delivery_mode: 'external',
+          start_date: '2026-03-01T09:00:00.000Z',
+          end_date: '2026-04-01T09:00:00.000Z'
+        })
+        .expect(201);
+
+      const insert = mockQuery.mock.calls.find((call: unknown[]) =>
+        String(call[0]).includes('INSERT INTO opportunities')
+      );
+      const sql = String(insert![0]);
+      const columns = sql
+        .slice(sql.indexOf('('), sql.indexOf(') VALUES'))
+        .split(',')
+        .map((column: string) => column.replace(/[()\s]/g, ''));
+      const values = insert![1] as unknown[];
+      const bound = (column: string) => {
+        const index = columns.indexOf(column);
+        // A missing column would make every lookup below return values[-1],
+        // i.e. undefined, and a table of undefined-vs-undefined would pass.
+        expect(index).toBeGreaterThan(-1);
+        return values[index];
+      };
+
+      const expected: Record<string, unknown> = {
+        type: 'interview',
+        title: 'A distinct interview title',
+        purpose_one_liner: 'A purpose long enough to satisfy the minimum length rule',
+        description_optional: 'A distinct description',
+        product_optional: 'A distinct product',
+        meeting_location_optional: 'A distinct meeting location',
+        default_duration_minutes: 45,
+        status: 'draft',
+        owner_user_id: 'test-user-id',
+        external_link_optional: 'https://example.com/a-distinct-link',
+        firsthand_study_id: null,
+        participant_type_required: 'specific',
+        participant_type_specific_details: 'A distinct participant detail',
+        start_date: '2026-03-01T09:00:00.000Z',
+        end_date: '2026-04-01T09:00:00.000Z',
+        delivery_mode: 'external'
+      };
+
+      for (const [column, value] of Object.entries(expected)) {
+        expect({ [column]: bound(column) }).toEqual({ [column]: value });
+      }
+
+      // The table must cover the statement, or a column added later is bound by
+      // nothing and this test still passes.
+      expect(columns.slice().sort()).toEqual(Object.keys(expected).sort());
+      expect(values).toHaveLength(columns.length);
+    });
+
     it('stores external when the request says nothing, rather than leaving it to chance', async () => {
       mockQuery.mockResolvedValueOnce({ rows: [] });
       mockQuery.mockResolvedValueOnce({

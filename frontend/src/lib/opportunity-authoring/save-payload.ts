@@ -58,7 +58,6 @@ export interface SavePayloadFormState {
   participant_type_required: 'any' | 'internal' | 'external' | 'specific';
   participant_type_specific_details: string;
   status: 'draft' | 'published';
-  display_width: 'single' | 'double';
   start_date: string | undefined;
   end_date: string | undefined;
   firsthand_study_id: string | undefined;
@@ -93,14 +92,12 @@ export interface SavePayloadInput {
   deliveryMode: 'native' | 'external';
   authoringInlineStudy: boolean;
   authoringInlineSurvey: boolean;
-  isSuperadmin: boolean;
   allowUserSubmission: boolean;
   linkedStudyUpdatedAt: string | null;
   staleStudyUpdatedAt: string | null;
 }
 
 export type SavePayload = Partial<CreateOpportunityRequest & {
-  display_width?: 'single' | 'double';
   inline_study?: InlineStudyPayload;
   inline_survey?: InlineSurveyPayload;
   delivery_mode?: 'native' | 'external';
@@ -135,13 +132,11 @@ export const buildSavePayload = ({
   deliveryMode,
   authoringInlineStudy,
   authoringInlineSurvey,
-  isSuperadmin,
   allowUserSubmission,
   linkedStudyUpdatedAt,
   staleStudyUpdatedAt
 }: SavePayloadInput): SavePayload => {
   const data: Partial<CreateOpportunityRequest & {
-    display_width?: 'single' | 'double';
     inline_study?: InlineStudyPayload;
     // Same reason as inline_study: the survey contract cannot be imported
     // into the flattened shared types, so it is added at the call site.
@@ -334,11 +329,6 @@ export const buildSavePayload = ({
     // handoff cannot carry authored questions. A defensive assignment here
     // was dead code, and the mutation proved it - the test asserting their
     // absence passes without it, because the absence is structural.
-  }
-
-  // Only superadmins can set display_width
-  if (isSuperadmin) {
-    data.display_width = formData.display_width;
   }
 
   // The optimistic-concurrency precondition, and the only thing this

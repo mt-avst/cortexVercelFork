@@ -642,5 +642,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.reschedule-names-the-researcher.test.ts",
     "test": "puts the researcher on the confirmation, not undefined"
+  },
+  {
+    "id": "display-width-declared-on-a-schema-again",
+    "why": "`display_width` is retired: no surface consumes it, because the double-width home page layout was removed by 844bae8 while the schemas had never declared the key at all. The tempting half-fix is to declare it so the save persists. Measured against the real router: that makes PATCH answer 400 and emit no UPDATE, because the key now reaches the allow-list and UPDATABLE_OPPORTUNITY_COLUMNS does not name it, while POST drops it in silence because the create INSERT no longer mentions the column. So the half-fix breaks every save the authoring form makes rather than reviving anything, and it must fail by name.",
+    "file": "backend/src/validation/schemas.ts",
+    "anchor": "export const UpdateOpportunitySchema = z.object({\n  type: OpportunityTypeSchema.optional(),",
+    "mutation": "export const UpdateOpportunitySchema = z.object({\n  display_width: z.enum(['single', 'double']).optional(),\n  type: OpportunityTypeSchema.optional(),",
+    "runner": "jest",
+    "spec": "src/validation/__tests__/display-width-retired.test.ts",
+    "test": "UpdateOpportunitySchema drops display_width"
   }
 ]
