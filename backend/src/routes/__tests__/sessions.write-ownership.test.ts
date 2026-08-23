@@ -22,7 +22,7 @@ const mockConnect = pool.connect as unknown as jest.Mock;
 const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
 
 /**
- * THE THREE SESSION-WRITE OWNERSHIP GATES, PINNED FROM ONE TABLE.
+ * THE FIVE SESSION-WRITE OWNERSHIP GATES, PINNED FROM ONE TABLE.
  *
  * Each of these neutered to `const isOwner = true;` passed 919 of 919 jest
  * tests on 6504612 - measured one gate at a time, tree clean before and after:
@@ -30,6 +30,17 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  *   POST   /api/opportunities/:id/sessions   opportunities.ts:3209
  *   DELETE /api/opportunities/:id/sessions   opportunities.ts:3347
  *   POST   /api/sessions                     sessions.ts:124
+ *
+ * The last two were added later and were unpinned by the same measurement.
+ * Both route through `checkSessionOwnership` (sessions.ts:36), and neutering
+ * THAT helper to `return true;` passed 1036 of 1036 on d3aa9c6 - as did making
+ * its predicate `return true;` one line lower:
+ *
+ *   PATCH  /api/sessions/:id                 sessions.ts:321
+ *   DELETE /api/sessions/:id                 sessions.ts:456
+ *
+ * "Three gates" was five. The finding that produced this file named the
+ * INSTANCES it had found; the class was every write in the session family.
  *
  * What they admit is one researcher_admin editing another's recruitment
  * schedule: adding slots to a study they have nothing to do with, or deleting
@@ -94,6 +105,10 @@ const INSERTED_ROW = {
   updated_at: START,
 };
 
+/** The row PATCH reads back before it decides anything. `booked_count` is 0 so
+ * the capacity guard does not fire and the arms stay about ownership. */
+const CURRENT_SESSION_ROW = { ...INSERTED_ROW, booked_count: 0 };
+
 /**
  * One dispatcher rather than a queue of `mockResolvedValueOnce`.
  *
@@ -112,6 +127,33 @@ const answering = (ownerUserId: string | null, opportunityExists = true): void =
     if (q.includes('INSERT INTO sessions')) return { rows: [INSERTED_ROW] };
     // The DELETE route's "does anything still have a live booking?" probe.
     if (q.includes('FROM sessions s') && q.includes('EXISTS')) return { rows: [] };
+    // ------------------------------------------------------------------
+    // `checkSessionOwnership`, for PATCH and DELETE /api/sessions/:id.
+    //
+    // THIS ARM IS LOAD-BEARING AND ITS ABSENCE IS WHY THOSE TWO GATES WENT
+    // UNPINNED. The predicate reaches the owner through a JOIN from the
+    // session - `SELECT o.owner_user_id FROM sessions s JOIN opportunities o`
+    // - which does NOT match the `SELECT owner_user_id FROM opportunities`
+    // arm above. Without a row of its own it fell to the catch-all `{ rows:
+    // [] }`, `isOpportunityOwner(undefined, ...)` returned false, and every
+    // refusal assertion passed WITHOUT THE GATE BEING CONSULTED AT ALL. A
+    // fixture that answers nothing makes a deny-by-default handler look
+    // correct no matter what its predicate says.
+    // ------------------------------------------------------------------
+    if (q.includes('FROM sessions s') && q.includes('JOIN opportunities o')) {
+      return opportunityExists ? { rows: [{ owner_user_id: ownerUserId }] } : { rows: [] };
+    }
+    // The superadmin half of the same predicate: existence, not ownership.
+    if (/SELECT id\s+FROM sessions WHERE id = \$1/.test(q)) {
+      return opportunityExists ? { rows: [{ id: 'sess-1' }] } : { rows: [] };
+    }
+    // PATCH's current-row read, then DELETE's booking-count read.
+    if (q.includes('SELECT * FROM sessions WHERE id = $1')) {
+      return opportunityExists ? { rows: [CURRENT_SESSION_ROW] } : { rows: [] };
+    }
+    if (q.includes('SELECT booked_count FROM sessions WHERE id = $1')) {
+      return opportunityExists ? { rows: [{ booked_count: 0 }] } : { rows: [] };
+    }
     if (q.trimStart().startsWith('DELETE')) return { rows: [], rowCount: 2 };
     // autoCloseOpportunityIfNeeded, and anything else.
     return { rows: [] };
@@ -147,6 +189,8 @@ const ROUTES = [
     refusal: 'Only the owner can add sessions to this opportunity',
     write: /INSERT INTO sessions/,
     writeCount: 1,
+    ownershipProbe: /SELECT owner_user_id FROM opportunities/,
+    missingStatus: 404,
   },
   {
     name: 'DELETE /api/opportunities/:id/sessions',
@@ -162,6 +206,8 @@ const ROUTES = [
     // that makes an unauthorised call unrecoverable.
     write: /^\s*DELETE FROM (bookings|sessions)/,
     writeCount: 2,
+    ownershipProbe: /SELECT owner_user_id FROM opportunities/,
+    missingStatus: 404,
   },
   {
     name: 'POST /api/sessions',
@@ -174,6 +220,51 @@ const ROUTES = [
     refusal: 'Only the owner can add sessions to this opportunity',
     write: /INSERT INTO sessions/,
     writeCount: 1,
+    ownershipProbe: /SELECT owner_user_id FROM opportunities/,
+    missingStatus: 404,
+  },
+  // --------------------------------------------------------------------
+  // THE TWO THAT GO THROUGH `checkSessionOwnership`, added because both were
+  // unpinned. Neutering that helper to `return true;` passed 1036 of 1036 on
+  // d3aa9c6 - measured, tree clean before and after - and so did making its
+  // predicate `return true;` one line lower. What that admits is a
+  // researcher_admin editing or deleting a session under a study they have
+  // nothing to do with.
+  //
+  // They answer 403 rather than 404 for a session that does not exist,
+  // because the predicate cannot distinguish "no such session" from "not
+  // yours" and refuses both. That is the right disposition - the opposite
+  // leaks which session ids exist, which is the oracle !215 closed on the
+  // results routes - so `missingStatus` records it deliberately rather than
+  // letting one table assume every route 404s.
+  // --------------------------------------------------------------------
+  {
+    name: 'PATCH /api/sessions/:id',
+    mount: '/api/sessions',
+    router: sessionsRouter,
+    method: 'patch' as const,
+    path: '/api/sessions/sess-1',
+    body: { capacity: 2 },
+    okStatus: 200,
+    refusal: 'Only the owner can edit this session',
+    write: /UPDATE sessions/,
+    writeCount: 1,
+    ownershipProbe: /FROM sessions s[\s\S]*JOIN opportunities o/,
+    missingStatus: 403,
+  },
+  {
+    name: 'DELETE /api/sessions/:id',
+    mount: '/api/sessions',
+    router: sessionsRouter,
+    method: 'delete' as const,
+    path: '/api/sessions/sess-1',
+    body: undefined,
+    okStatus: 204,
+    refusal: 'Only the owner can delete this session',
+    write: /^\s*DELETE FROM sessions/,
+    writeCount: 1,
+    ownershipProbe: /FROM sessions s[\s\S]*JOIN opportunities o/,
+    missingStatus: 403,
   },
 ] as const;
 
@@ -187,13 +278,18 @@ const ROUTES = [
  */
 describe.each(ROUTES)(
   '$name ownership',
-  ({ name, mount, router, method, path, body, okStatus, refusal, write, writeCount }) => {
+  ({ name, mount, router, method, path, body, okStatus, refusal, write, writeCount, ownershipProbe, missingStatus }) => {
     beforeEach(() => {
       jest.resetAllMocks();
       mockIsDatabaseAvailable.mockResolvedValue(true as never);
       clientQuery = jest.fn(async (sql: unknown) => {
         const q = String(sql);
         if (q.includes('INSERT INTO sessions')) return { rows: [INSERTED_ROW] };
+        // PATCH updates inside a transaction, and reads the returned row back
+        // through `.toISOString()` - so an empty result is a TypeError, not a
+        // failed assertion.
+        if (q.includes('UPDATE sessions')) return { rows: [INSERTED_ROW] };
+        if (q.includes('overlap_count')) return { rows: [{ overlap_count: '0' }] };
         return { rows: [] };
       });
       mockConnect.mockResolvedValue({ query: clientQuery, release: jest.fn() } as never);
@@ -217,6 +313,12 @@ describe.each(ROUTES)(
       await call('researcher_admin', 'admin-1').expect(okStatus);
 
       expect(matching(write)).toHaveLength(writeCount);
+      // THE PRESENCE ARM FOR THE PROBE ABSENCE-ASSERTION FURTHER DOWN. That one
+      // requires the ownership query NOT to be issued for a non-admin; without
+      // this, it would pass just as well against a route that never issues the
+      // query at all - which is exactly what happened when the pattern named a
+      // statement the session routes do not emit.
+      expect(matching(ownershipProbe).length).toBeGreaterThan(0);
     });
 
     it(`refuses a researcher_admin who does not own the opportunity, on ${name}`, async () => {
@@ -263,13 +365,45 @@ describe.each(ROUTES)(
       const res = await call('employee', 'user-1').expect(403);
 
       expect(res.body.error).toBe('Admin access required');
-      expect(matching(/SELECT owner_user_id FROM opportunities/)).toHaveLength(0);
+      expect(matching(ownershipProbe)).toHaveLength(0);
     });
 
-    it(`404s an opportunity that does not exist, and writes nothing, on ${name}`, async () => {
+    it(`refuses a target that does not exist, and writes nothing, on ${name}`, async () => {
       answering('admin-1', false);
 
-      await call('researcher_admin', 'admin-1').expect(404);
+      await call('researcher_admin', 'admin-1').expect(missingStatus);
+
+      expect(matching(write)).toHaveLength(0);
+    });
+
+    // The superadmin half of the arm above, and NOT redundant with it. Every
+    // other refusal case here runs as a researcher_admin, so the superadmin
+    // branch of `checkSessionOwnership` - a separate query that checks only
+    // that the row EXISTS - was reachable with nothing asserting it. Replacing
+    // that branch with `return true;` survived all 36 tests until this arm was
+    // added.
+    //
+    // THIS PINS CURRENT BEHAVIOUR AS DELIBERATE, NOT AS CORRECT, and the
+    // distinction matters because an earlier draft of this comment got it
+    // backwards. It claimed the 403 here "closes the existence oracle !215
+    // closed". It does not: !215 (abea2c6) collapsed the RESULTS routes onto
+    // 403 for a caller who may not read, and deliberately KEPT the
+    // superadmin's accurate 404, pinned by `still tells a superadmin the truth
+    // about an id that is not there`. Its own message records why - answering
+    // 403 to everybody "also closes the oracle and passed all 295 tests while
+    // losing the truth for the one caller entitled to it".
+    //
+    // A superadmin can enumerate every session anyway, so there is no oracle
+    // to close against them, and by !215's precedent these two routes arguably
+    // SHOULD answer 404 here. They do not, because `checkSessionOwnership`
+    // returns one boolean and the handler cannot tell the two cases apart.
+    // Pinned so the status cannot drift unnoticed; raised as a ticket rather
+    // than settled here, because changing it is a behaviour change and this is
+    // a test-only MR.
+    it(`refuses a target that does not exist even for a superadmin, on ${name}`, async () => {
+      answering('admin-1', false);
+
+      await call('superadmin', 'root-1').expect(missingStatus);
 
       expect(matching(write)).toHaveLength(0);
     });
@@ -285,9 +419,11 @@ describe.each(ROUTES)(
  * count, which nobody reads.
  */
 describe('the session-write ownership table', () => {
-  it('covers all three session-write gates and not a subset', () => {
+  it('covers all five session-write gates and not a subset', () => {
     expect(ROUTES.map((r) => r.name).sort()).toEqual([
       'DELETE /api/opportunities/:id/sessions',
+      'DELETE /api/sessions/:id',
+      'PATCH /api/sessions/:id',
       'POST /api/opportunities/:id/sessions',
       'POST /api/sessions',
     ]);
