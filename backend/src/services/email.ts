@@ -198,6 +198,32 @@ export class EmailService {
       .replace(/\n/g, '\\n');
   }
 
+  /**
+   * HTML-escapes a value for interpolation into an email body.
+   *
+   * EVERY `${}` IN AN `html` TEMPLATE BELOW MUST GO THROUGH THIS. None of them
+   * did. `opportunityTitle` and `sessionLocation` are authored by a
+   * researcher_admin and land in a PARTICIPANT's inbox; `feedback`, `userAgent`
+   * and `url` come from any authenticated user and land in an admin's. A title
+   * of `</h3><a href="https://evil.example">Reschedule here</a>` was rendered
+   * as markup in a message that carries the platform's own From address, which
+   * is a better phishing surface than a page on the site would be.
+   *
+   * The `text` half of each template is deliberately NOT escaped - it is sent
+   * as text/plain, where `&amp;` would be shown to the reader literally.
+   *
+   * This is the sibling of `escapeICS` above. That one existed from the start;
+   * the HTML case was simply never done.
+   */
+  private static e(value: unknown): string {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   static getFeedbackTemplate(
     category: string,
     feedback: string,
@@ -211,14 +237,14 @@ export class EmailService {
     const html = `
       <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
         <h2>New Feedback Received</h2>
-        <p><strong>Category:</strong> ${category}</p>
-        <p><strong>User:</strong> ${userName} (${userEmail})</p>
+        <p><strong>Category:</strong> ${this.e(category)}</p>
+        <p><strong>User:</strong> ${this.e(userName)} (${this.e(userEmail)})</p>
         <hr />
         <h3>Feedback:</h3>
-        <p style="white-space: pre-wrap;">${feedback}</p>
+        <p style="white-space: pre-wrap;">${this.e(feedback)}</p>
         <hr />
-        <p><small><strong>Browser:</strong> ${userAgent}</small></p>
-        <p><small><strong>URL:</strong> ${url}</small></p>
+        <p><small><strong>Browser:</strong> ${this.e(userAgent)}</small></p>
+        <p><small><strong>URL:</strong> ${this.e(url)}</small></p>
         <p><small><strong>Timestamp:</strong> ${new Date().toISOString()}</small></p>
       </div>
     `;
@@ -284,25 +310,25 @@ Timestamp: ${new Date().toISOString()}
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #2c3e50;">Booking Confirmed</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${this.e(participantName)},</p>
         
         <p>Your booking has been confirmed for the following research session:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
+          <h3 style="margin-top: 0; color: #495057;">${this.e(opportunityTitle)}</h3>
+          <p><strong>Date & Time:</strong> ${this.e(startTime)} - ${this.e(endTime)}</p>
           <p><strong>Duration:</strong> ${duration} minutes</p>
-          ${sessionLocation ? `<p><strong>Location:</strong> ${sessionLocation}</p>` : ''}
-          ${ownerName ? `<p><strong>Researcher:</strong> ${ownerName}${ownerEmail ? ` (${ownerEmail})` : ''}</p>` : ''}
+          ${sessionLocation ? `<p><strong>Location:</strong> ${this.e(sessionLocation)}</p>` : ''}
+          ${ownerName ? `<p><strong>Researcher:</strong> ${this.e(ownerName)}${ownerEmail ? ` (${this.e(ownerEmail)})` : ''}</p>` : ''}
         </div>
         
         <div style="text-align: center; margin: 25px 0;">
-          <a href="${googleCalendarLink}" 
+          <a href="${this.e(googleCalendarLink)}" 
              target="_blank"
              style="background-color: #4285f4; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; margin: 5px;">
             📅 Add to Google Calendar
           </a>
-          <a href="${icsDataUri}" 
+          <a href="${this.e(icsDataUri)}" 
              download="booking.ics"
              style="background-color: #6c757d; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; margin: 5px;">
             📥 Download Calendar File
@@ -372,14 +398,14 @@ This is an automated message from the Adaptalabs Impact Lab.
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #dc3545;">Booking Cancelled</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${this.e(participantName)},</p>
         
         <p>Your booking for the following research session has been cancelled:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
-          <p><strong>Cancelled by:</strong> ${cancelledBy}</p>
+          <h3 style="margin-top: 0; color: #495057;">${this.e(opportunityTitle)}</h3>
+          <p><strong>Date & Time:</strong> ${this.e(startTime)} - ${this.e(endTime)}</p>
+          <p><strong>Cancelled by:</strong> ${this.e(cancelledBy)}</p>
         </div>
         
         <p>If you have any questions about this cancellation, please contact the researcher directly.</p>
@@ -434,16 +460,16 @@ This is an automated message from the Adaptalabs Impact Lab.
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #ffc107;">Session Reminder</h2>
         
-        <p>Hello ${participantName},</p>
+        <p>Hello ${this.e(participantName)},</p>
         
         <p>This is a reminder that you have a research session coming up:</p>
         
         <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
-          <h3 style="margin-top: 0; color: #856404;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
+          <h3 style="margin-top: 0; color: #856404;">${this.e(opportunityTitle)}</h3>
+          <p><strong>Date & Time:</strong> ${this.e(startTime)} - ${this.e(endTime)}</p>
           <p><strong>Starting in:</strong> ${hoursUntil} hours</p>
-          ${sessionLocation ? `<p><strong>Location:</strong> ${sessionLocation}</p>` : ''}
-          ${ownerName ? `<p><strong>Researcher:</strong> ${ownerName}</p>` : ''}
+          ${sessionLocation ? `<p><strong>Location:</strong> ${this.e(sessionLocation)}</p>` : ''}
+          ${ownerName ? `<p><strong>Researcher:</strong> ${this.e(ownerName)}</p>` : ''}
         </div>
         
         <p>Please make sure you're prepared and ready for the session.</p>
@@ -499,12 +525,12 @@ This is an automated reminder from the Adaptalabs Impact Lab.
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: ${action === 'booked' ? '#28a745' : '#dc3545'};">Participant ${action === 'booked' ? 'Booked' : 'Cancelled'}</h2>
         
-        <p>A participant has ${action} your research session:</p>
+        <p>A participant has ${this.e(action)} your research session:</p>
         
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3 style="margin-top: 0; color: #495057;">${opportunityTitle}</h3>
-          <p><strong>Date & Time:</strong> ${startTime} - ${endTime}</p>
-          <p><strong>Participant:</strong> ${participantName} (${participantEmail})</p>
+          <h3 style="margin-top: 0; color: #495057;">${this.e(opportunityTitle)}</h3>
+          <p><strong>Date & Time:</strong> ${this.e(startTime)} - ${this.e(endTime)}</p>
+          <p><strong>Participant:</strong> ${this.e(participantName)} (${this.e(participantEmail)})</p>
           <p><strong>Action:</strong> ${action === 'booked' ? 'Booked' : 'Cancelled'}</p>
         </div>
         
