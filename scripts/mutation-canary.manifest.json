@@ -91,7 +91,7 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match.",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. PARTLY PINNED, AND SAY SO: this kills the blunt mutation - predicate and parameter deleted together - but NOT `AND (r.session_id = ANY(...) OR TRUE)`, which keeps the parameter bound and the substring present while reading everything. That survives all 67 tests across the four files covering this path, the real-Postgres one included. Closing it needs a behavioural test on a real database rather than a tighter string match, which would be prefix-fragile in the way `clock_timestamp()` just proved to be. cto/AdaptaLabs#20.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
     "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
     "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
@@ -172,10 +172,10 @@
   },
   {
     "id": "csv-batch-retry-budget-is-bounded",
-    "why": "Retries spend the export's deadline. Widened or unbounded, a busy pool turns a bounded export into one that never gives the permit back - the defect the deadline exists to close, reintroduced through the fix for a different one.",
+    "why": "Retries spend the export's deadline. Widened or unbounded, a busy pool turns a bounded export into one that never gives the permit back - the defect the deadline exists to close, reintroduced through the fix for a different one. FOUR, NOT SIX, AND THAT IS NOT ARBITRARY. At six the backoff totals about 15.75s against vitest's 5s budget, so the named test died on a runner timeout BEFORE reaching the assertion - the entry reported KILLED while its pinned literal was never executed, and any change merely making this path slower would have killed it equally. A second false kill of the same family as the attachment one, found by the same gate. At four the test fails on the literal: `expected 5 to be 4`.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
     "anchor": "const CSV_BATCH_RETRY_ATTEMPTS = 3;",
-    "mutation": "const CSV_BATCH_RETRY_ATTEMPTS = 6;",
+    "mutation": "const CSV_BATCH_RETRY_ATTEMPTS = 4;",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "gives up after exactly three retries rather than forever"
@@ -209,5 +209,218 @@
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-response.test.ts",
     "test": "aborts the signal it handed out once the export has ended"
+  },
+  {
+    "id": "f1-precondition-compares-instants-not-strings",
+    "why": "`ownerRow.updated_at` arrives from node-pg as a JS Date - measured, and the reason is that nothing in this repository calls `setTypeParser`, so `timestamptz` takes pg's built-in parser. `String(date)` is therefore a LOCALE string (`Fri Aug 21 2026 10:15:30 GMT+0100 (British Summer Time)`), which can never equal the ISO value the caller was served: a raw string comparison does not refuse the occasional save, it refuses EVERY save, for ever, on every study. An earlier version of this entry blamed microsecond precision - TIMESTAMPTZ is microsecond in Postgres, the caller is served a millisecond ISO string - which is plausible and is NOT what happens, because the extra digits are gone before JavaScript sees them. The named test builds a string row value by hand for exactly that reason; it is defensive against a type parser being registered later, not a shape production produces.",
+    "file": "backend/src/firsthand/studies-repository.ts",
+    "anchor": "        const storedUpdatedAt = new Date(ownerRow.updated_at).getTime();\n        const claimedUpdatedAt = new Date(expectedUpdatedAt).getTime();",
+    "mutation": "        const storedUpdatedAt = String(ownerRow.updated_at);\n        const claimedUpdatedAt = String(expectedUpdatedAt);",
+    "runner": "vitest",
+    "spec": "src/firsthand/studies-repository.test.ts",
+    "test": "matches a row whose stored value carries microseconds"
+  },
+  {
+    "id": "f1-precondition-fails-closed-on-an-unreadable-claim",
+    "why": "The fail-closed direction has NO code of its own: `new Date('nonsense').getTime()` is NaN, NaN equals nothing, so `!==` already refuses. That makes it exactly the property a well-meaning refactor deletes - adding the `Number.isNaN` guard that looks like it is handling the case turns an unreadable assertion into no assertion, and writing over a colleague on the strength of one is the worst available answer. The source comment warns against that guard; this is what stops somebody adding it anyway.",
+    "file": "backend/src/firsthand/studies-repository.ts",
+    "anchor": "        if (claimedUpdatedAt !== storedUpdatedAt) {",
+    "mutation": "        if (!Number.isNaN(claimedUpdatedAt) && claimedUpdatedAt !== storedUpdatedAt) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/studies-repository.test.ts",
+    "test": "refuses a precondition it cannot parse rather than ignoring it"
+  },
+  {
+    "id": "f1-updated-at-is-stamped-at-statement-time",
+    "why": "`NOW()` is `transaction_timestamp()` - the time the BEGIN ran, not the time the UPDATE ran. Two writers who both begin, then queue on the same `FOR UPDATE`, stamp times in the order they STARTED rather than the order they committed, so the second save can move `updated_at` BACKWARDS. A precondition compared against a value that can go backwards is a precondition that lets a stale save win. `clock_timestamp()` is read when the statement runs, so it cannot.",
+    "file": "backend/src/firsthand/studies-repository.ts",
+    "anchor": "        updates.push(\"updated_at = clock_timestamp()\");",
+    "mutation": "        updates.push(\"updated_at = NOW()\");",
+    "runner": "vitest",
+    "spec": "src/firsthand/studies-repository.test.ts",
+    "test": "stamps the time when the statement runs, not when the transaction began"
+  },
+  {
+    "id": "f1-precondition-is-read-inside-the-row-lock",
+    "why": "The value the precondition is checked against rides along on the statement that TAKES the lock. Read in a round trip of its own, before or after, the row can be written between that read and the write - which is the exact race the precondition exists to close, so the whole mechanism becomes decorative while every test that only checks the 409 keeps passing.",
+    "file": "backend/src/firsthand/studies-repository.ts",
+    "anchor": "`SELECT owner_user_id, kind, updated_at FROM studies WHERE id = $1 FOR UPDATE`",
+    "mutation": "`SELECT owner_user_id, kind FROM studies WHERE id = $1 FOR UPDATE`",
+    "runner": "vitest",
+    "spec": "src/firsthand/studies-repository.test.ts",
+    "test": "reads the precondition off the statement that takes the row lock"
+  },
+  {
+    "id": "results-read-close-listener-is-registered-before-the-wait",
+    "why": "The shipped defect, and the worst one this middleware has had. Registered inside the `.then`, the listener only ever existed for requests already ADMITTED - a caller who closed the tab while QUEUED had had `close` emitted before it attached, so the abort never reached `Semaphore.acquire`, the dead waiter kept its place in the FIFO queue, and the permit was gone for the life of the process. MAX_CONCURRENT_RESULTS_READS of those shuts all four results routes: 503 forever on a single-replica pod, for every admin including the superadmin, reachable by a tab close. The test that was supposed to cover it aborted a request that had already been admitted, which is the case that always worked.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "  res.on('close', onClose);\n\n  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      release = releaseOnce(gate);",
+    "mutation": "  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      res.on('close', onClose);\n      release = releaseOnce(gate);",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "leaves the queue when it hangs up while still waiting"
+  },
+  {
+    "id": "results-read-consults-the-close-that-raced-the-grant",
+    "why": "`res.destroyed` and `res.writableEnded` are not yet true for a response whose `close` has fired but whose teardown has not finished, so the `closed` flag is the only one of the three that sees a close landing between the grant and the handler. Without it the permit is handed to a handler nobody is reading and comes back only when that handler finishes - on these four routes, up to a 120-second query later.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "      if (closed || res.destroyed || res.writableEnded) {",
+    "mutation": "      if (res.destroyed || res.writableEnded) {",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "gives the permit back when the close lands between the grant and the handler"
+  },
+  {
+    "id": "results-read-queue-timeout-is-pinned-as-a-literal",
+    "why": "Matched deliberately to the runtime pool's own admission budget so the two ceilings a results read passes through are the same size. Every other test in the file derives its waiting from the constant, so a widened queue timeout - one long enough that a refused caller waits past every ingress bound - passes all of them.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "export const RESULTS_READ_QUEUE_TIMEOUT_MS = 10_000;",
+    "mutation": "export const RESULTS_READ_QUEUE_TIMEOUT_MS = 60_000;",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "holds the queue timeout at the number that was decided"
+  },
+  {
+    "id": "participant-reservation-is-pinned-as-a-literal",
+    "why": "The participant guarantee IS this number: how many of the pool's five connections admin work may never occupy. ADMIN_CONCURRENCY_LIMIT is derived from it, so lowering it silently WIDENS the admin cap and eats the reservation - and every other test in the file sizes its loops from the constant, so they all keep passing at a reservation of one, or of none.",
+    "file": "backend/src/firsthand/runtime-pool-admission.ts",
+    "anchor": "export const PARTICIPANT_RESERVED_CONNECTIONS = 3;",
+    "mutation": "export const PARTICIPANT_RESERVED_CONNECTIONS = 1;",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-pool-admission.test.ts",
+    "test": "holds the connection split to the numbers that were decided"
+  },
+  {
+    "id": "runtime-session-settings-are-not-transaction-local",
+    "why": "`SET LOCAL` applies to the surrounding transaction, and these queries mostly run with no explicit transaction at all. Outside one, Postgres ACCEPTS it, emits `WARNING: SET LOCAL can only be used in transaction blocks`, and applies nothing - so every checkout would carry whatever timeout the last borrower left behind, while looking exactly like a working bound. The guarding assertion is an ABSENCE (`no statement matches /SET\\s+LOCAL/i`), which passes just as well when the statement list is empty; this entry is its control.",
+    "file": "backend/src/firsthand/runtime-database.ts",
+    "anchor": "      `SET statement_timeout TO ${statementTimeoutOf(statementTimeoutMs)}`",
+    "mutation": "      `SET LOCAL statement_timeout TO ${statementTimeoutOf(statementTimeoutMs)}`",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-pool-starvation.test.ts",
+    "test": "never emits SET LOCAL, which outside a transaction sets nothing at all"
+  },
+  {
+    "id": "statement-timeout-floor-refuses-to-disable-itself",
+    "why": "`SET statement_timeout TO 0` DISABLES the timeout - the one value that turns the bound into no bound - and a fractional or negative one is a syntax error that fails every checkout. The floor of 1 is what stops a caller-supplied number reaching Postgres as either. Nothing else in the module re-checks it.",
+    "file": "backend/src/firsthand/runtime-database.ts",
+    "anchor": "  return Math.max(1, Math.round(statementTimeoutMs));",
+    "mutation": "  return Math.round(statementTimeoutMs);",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-pool-starvation.test.ts",
+    "test": "refuses to disable the timeout, whatever it is handed"
+  },
+  {
+    "id": "results-statement-bound-is-pinned-as-a-literal",
+    "why": "120 seconds is how long one results read may hold both the only results-read permit AND one of the two admin permits. Every other assertion in the file reads the constant back, so dropping it to 1s survived the entire suite once already - and in production would have cancelled every real export as a 500.",
+    "file": "backend/src/firsthand/runtime-database.ts",
+    "anchor": "export const RESULTS_STATEMENT_TIMEOUT_MS = 120_000;",
+    "mutation": "export const RESULTS_STATEMENT_TIMEOUT_MS = 240_000;",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-pool-starvation.test.ts",
+    "test": "holds both statement bounds at the values that were decided"
+  },
+  {
+    "id": "detached-answer-takes-both-columns-from-one-row",
+    "why": "THE SHIPPED DEFECT, and it needs a real database to see at all. Migration 0015 carries `CHECK ((study_id IS NULL) = (step_id IS NULL))`, so binding the session's own study_id straight through while letting step_id fall out of a subquery that resolves to NULL produces a half-detached row Postgres refuses - aborting the transaction around the WHOLE session write, so a participant answering a question the researcher removed a moment ago loses every answer they have given. No concurrency required. Every string assertion in the mocked sibling file passed throughout, because a mocked pg cannot raise a constraint.",
+    "file": "backend/src/firsthand/runtime-repository-postgres.ts",
+    "anchor": "          (SELECT study_id FROM attached_step),",
+    "mutation": "          $3,",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-response-attachment-postgres.test.ts",
+    "test": "keeps a participant's save working when they answer a question the researcher has just removed",
+    "needsDatabase": true
+  },
+  {
+    "id": "a-save-does-not-delete-detached-answers",
+    "why": "A save DELETEs the session's responses and re-INSERTs them. Without `step_id IS NOT NULL` on that delete, answering any later question destroys every answer whose question has since been removed - silently and permanently, when ON DELETE SET NULL kept them precisely so they could still be reported. The paired filter on the load side is one decision with this one and the two have to agree.",
+    "file": "backend/src/firsthand/runtime-repository-postgres.ts",
+    "anchor": "    \"DELETE FROM participant_responses WHERE session_id = $1 AND step_id IS NOT NULL\",",
+    "mutation": "    \"DELETE FROM participant_responses WHERE session_id = $1\",",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-response-attachment-postgres.test.ts",
+    "test": "does not erase a detached answer on the next ordinary save",
+    "needsDatabase": true
+  },
+  {
+    "id": "the-attachment-lookup-is-scoped-to-this-study",
+    "why": "`study_steps` is keyed on the PAIR (study_id, id), so the same step id can legitimately exist in two studies and this CTE is what decides which one an answer is filed against. Scoped to `ss.id` alone it resolves the OTHER study's row, and the composite foreign key raises nothing because the pair it was handed is real - one participant's answer simply appears in a different researcher's results, correctly attached, under their question. Nothing evaluated this predicate until the test named here was written for it: every existing case used a step id that exists in exactly one study, where scoped and unscoped agree. THE `$3::text IS NOT NULL` IS NOT DECORATION AND MUST NOT BE TIDIED AWAY. `$3` is referenced ONLY in this predicate, so dropping it outright orphans the bind parameter and Postgres answers `42P18 could not determine data type of parameter $3` at RUNTIME - which fails the named test without ever evaluating the scope, and the harness reports that as KILLED because the suite loaded fine. That is a false kill, it was the shipped state of this entry, and a review gate caught it. Keeping `$3` referenced makes the mutation type-valid so the query actually runs and the test fails on the row it gets back: `study_id: study_other, step_id: study_survey_beta` where both should be null.",
+    "file": "backend/src/firsthand/runtime-repository-postgres.ts",
+    "anchor": "           WHERE ss.study_id = $3 AND ss.id = $4",
+    "mutation": "           WHERE ss.id = $4 AND $3::text IS NOT NULL",
+    "runner": "vitest",
+    "spec": "src/firsthand/runtime-response-attachment-postgres.test.ts",
+    "test": "files an answer as detached rather than adopting a same-named step from another study",
+    "needsDatabase": true
+  },
+  {
+    "id": "results-route-is-on-the-tight-bucket-not-the-read-one",
+    "why": "A route can carry a limiter and still carry the WRONG one. Mounting the study-wide results read on the 60-a-minute read bucket is structurally correct and only semantically wrong, so before the table existed a 200,001-row route on the cheap bucket passed all 82 tests. Sixty of these in flight together is an OOM of a single-replica 2Gi pod, which drops every live participant session and not just the caller's.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, boundResultsRead,",
+    "mutation": "router.get('/studies/:studyId/results', requireAdmin, studyReadLimiter, boundResultsRead,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "mounts the RIGHT limiter on every route, after the auth gate"
+  },
+  {
+    "id": "a-limiter-sits-after-the-auth-gate-not-before-it",
+    "why": "Mounted ahead of `requireAdmin` a limiter spends a bucket on requests that never reach a handler, and every one of them keys to the same `'unauthenticated'` fallback - one shared bucket that any anonymous caller could exhaust to refuse every admin in the estate. The ordering is the control; a test that only asks whether a limiter is present cannot see it reversed.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "router.get('/studies', requireAdmin, studyReadLimiter,",
+    "mutation": "router.get('/studies', studyReadLimiter, requireAdmin,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "mounts the RIGHT limiter on every route, after the auth gate"
+  },
+  {
+    "id": "the-study-read-ceiling-is-sixty-a-minute",
+    "why": "Widened, the limiter stops limiting while every test that asserts only a 429 keeps passing - and the failure mode is not a red test, it is participants queueing on a five-connection pool behind a burst of admin reads. The guarding test asserts BOTH halves, the 61st refused AND the 60th not, so it can see the ceiling move in either direction.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "export const studyReadLimiter = perUserLimiter(\n  60,",
+    "mutation": "export const studyReadLimiter = perUserLimiter(\n  600,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "refuses a 61st read in a minute, and not the 60th"
+  },
+  {
+    "id": "the-study-results-ceiling-is-ten-not-sixty",
+    "why": "Ten, and deliberately NOT the 60 its per-opportunity twin uses: `listResponsesForStudy` reads every opportunity that ever used the study, a strict superset multiplied by the reuse the study picker actively encourages, and the same number would price two different orders of magnitude alike. Sixty was the first instinct and it is the exact mistake this pins against.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "export const studyResultsLimiter = perUserLimiter(\n  10,",
+    "mutation": "export const studyResultsLimiter = perUserLimiter(\n  60,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "limits the study-wide results read far tighter than its per-opportunity twin"
+  },
+  {
+    "id": "the-429-arrives-in-the-envelope-the-frontend-reads",
+    "why": "Every other 429 assertion in this repository checks `.status` and none reads `.body`. Hand express-rate-limit a bare string instead of `{ error: message }` and it replies `text/html`, `data.error` is undefined, and the frontend's `extractSaveError` falls through to \"Request failed with status code 429\" - so the three carefully worded sentences these limiters send would be the one thing with no test, and the author would see a stack-trace string instead.",
+    "file": "backend/src/middleware/per-user-rate-limit.ts",
+    "anchor": "    message: { error: message }",
+    "mutation": "    message: message",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "refuses in the envelope the frontend reads, not just with a status"
+  },
+  {
+    "id": "the-limiter-bucket-is-keyed-on-the-user-not-the-ingress",
+    "why": "Behind two proxy hops `trust proxy: 1` resolves `req.ip` to the INGRESS, so an IP-keyed bucket is shared by every admin in the estate and one author reloading a form would 429 everybody else. That is precisely why the anonymous limiters here sit at 600, and why an authenticated route can afford a tight ceiling at all - the whole justification for these numbers rests on this one line.",
+    "file": "backend/src/middleware/per-user-rate-limit.ts",
+    "anchor": "    keyGenerator: (req: Request) => req.user?.id ?? 'unauthenticated',",
+    "mutation": "    keyGenerator: (req: Request) => req.ip ?? 'unauthenticated',",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand.test.ts",
+    "test": "keys the bucket on the user, not the ingress"
+  },
+  {
+    "id": "f1-precondition-keeps-millisecond-precision",
+    "why": "Putting both sides through the same truncation is NECESSARY AND NOT SUFFICIENT, and the entry above only pins the first half. Flooring both to the second is equally symmetric, satisfies every other assertion in the file, and makes two saves landing in the same wall-clock second both match their precondition - so the second silently overwrites the first, which is the lost update the whole mechanism exists to prevent. An autosave is well capable of two writes inside one second. A review gate measured this exact mutation passing 81 of 81 tests before the named test was written for it.",
+    "file": "backend/src/firsthand/studies-repository.ts",
+    "anchor": "        const storedUpdatedAt = new Date(ownerRow.updated_at).getTime();\n        const claimedUpdatedAt = new Date(expectedUpdatedAt).getTime();",
+    "mutation": "        const storedUpdatedAt = Math.floor(new Date(ownerRow.updated_at).getTime() / 1000);\n        const claimedUpdatedAt = Math.floor(new Date(expectedUpdatedAt).getTime() / 1000);",
+    "runner": "vitest",
+    "spec": "src/firsthand/studies-repository.test.ts",
+    "test": "refuses a claim that differs from the stored value by less than a second"
   }
 ]

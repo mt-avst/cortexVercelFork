@@ -600,15 +600,22 @@ describe("studies repository ownership", () => {
       });
 
       it("matches a row whose stored value carries microseconds", async () => {
-        // The failure this whole comparison is shaped to avoid, exercised
-        // rather than asserted in a comment.
+        // DEFENSIVE, AND SAY SO. This row shape is not one production produces:
+        // node-pg parses `timestamptz` with its built-in parser - nothing in
+        // this repository calls `setTypeParser` - so the extra digits are gone
+        // before JavaScript sees the value, and `ownerRow.updated_at` is a JS
+        // Date at millisecond precision. That is why this test has to hand-build
+        // a STRING row value; a string is the only shape that can carry the
+        // digits at all, and the field is typed `Date | string` for that reason.
         //
-        // Postgres stores TIMESTAMPTZ to MICROsecond precision. What the client
-        // was served is `toIsoString(row.updated_at)` - `new Date(x)
-        // .toISOString()`, so millisecond. Compare the two as strings, or as
-        // anything that does not put both sides through the same truncation,
-        // and the extra three digits mean no save on a microsecond-bearing row
-        // could ever match its own precondition again.
+        // Kept because the guarantee is cheap and the cost of losing it is
+        // total: register a type parser, or reach this code by some other route
+        // that leaves the value a string, and any comparison that does not put
+        // both sides through the same truncation stops matching for ever.
+        //
+        // An earlier version of this comment presented the microsecond case as
+        // the observed cause of the original defect. It was not - see
+        // updateStudy, where the same correction is recorded.
         const client = arrangeOwnedStudy("user-owner", {
           updated_at: "2026-08-21T09:15:30.123456+00:00"
         });
@@ -625,6 +632,42 @@ describe("studies repository ownership", () => {
 
         expect(result.ok).toBe(true);
         expect(updateStatements(client)).toHaveLength(1);
+      });
+
+      it("refuses a claim that differs from the stored value by less than a second", async () => {
+        // THE PRECISION, not merely the comparison, and the two are different
+        // properties with different mutations.
+        //
+        // Putting both sides through the same truncation is necessary and NOT
+        // sufficient. `Math.floor(getTime() / 1000)` on both sides is just as
+        // symmetric, satisfies every other assertion in this file, and makes
+        // two saves landing in the same wall-clock second both match their
+        // precondition - so the second silently overwrites the first, which is
+        // the lost update the whole mechanism exists to prevent.
+        //
+        // A review gate measured exactly that mutation passing 81 of 81 tests
+        // here before this test existed. An autosave is well capable of putting
+        // two writes inside one second.
+        const client = arrangeOwnedStudy("user-owner", { updated_at: storedAt });
+        const studiesRepository = await import("./studies-repository");
+
+        const result = await studiesRepository.updateStudy(
+          "study_abc",
+          { title: "Mine" },
+          owner,
+          // ONE MILLISECOND behind what is stored, which is what makes the
+          // title literally true. At 120ms behind, any granularity finer than
+          // 120ms survives - a gate measured `Math.floor(ms / 100)` passing all
+          // 82 tests here. A boundary test has to sit ON the boundary.
+          "2026-08-21T09:15:30.122Z"
+        );
+
+        expect(result).toEqual({
+          ok: false,
+          reason: "stale",
+          current_updated_at: "2026-08-21T09:15:30.123Z"
+        });
+        expect(updateStatements(client)).toHaveLength(0);
       });
 
       it("proceeds when no precondition is asserted", async () => {
@@ -734,8 +777,29 @@ describe("studies repository ownership", () => {
 
         const [sql, values] = updateStatements(client)[0];
         expect(String(sql)).toContain("updated_by_user_id");
-        expect(String(sql)).toContain("updated_at = clock_timestamp()");
         expect(values as unknown[]).toContain("user-owner");
+      });
+
+      /**
+       * ITS OWN TEST, for the reason the queue-timeout split was made: a test
+       * must be able to fail BY NAME, or a red run sends the reader to the
+       * wrong file. This assertion used to be the third line of the editor
+       * stamping test above, so a change to editor stamping turned the canary
+       * entry red for a cause its rationale never mentions.
+       *
+       * MATCHED TO ITS BOUNDARY, not by prefix. `toContain` alone passes
+       * against `clock_timestamp() - interval '1 hour'`, which a gate measured
+       * surviving all 81 tests here - the line was pinned to its first thirty
+       * characters and no further.
+       */
+      it("stamps the time when the statement runs, not when the transaction began", async () => {
+        const client = arrangeOwnedStudy("user-owner");
+        const studiesRepository = await import("./studies-repository");
+
+        await studiesRepository.updateStudy("study_abc", { title: "Renamed" }, owner);
+
+        const [sql] = updateStatements(client)[0];
+        expect(String(sql)).toMatch(/updated_at = clock_timestamp\(\)(?=,|\s+WHERE)/);
       });
 
       it("stamps the requester on a steps-only edit, not just on a column edit", async () => {
@@ -755,7 +819,9 @@ describe("studies repository ownership", () => {
 
         const statements = updateStatements(client);
         expect(statements).toHaveLength(1);
-        expect(String(statements[0][0])).toContain("updated_at = clock_timestamp()");
+        expect(String(statements[0][0])).toMatch(
+          /updated_at = clock_timestamp\(\)(?=,|\s+WHERE)/
+        );
         expect(String(statements[0][0])).toContain("updated_by_user_id");
         expect(statements[0][1] as unknown[]).toContain("user-owner");
       });

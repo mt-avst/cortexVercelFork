@@ -225,7 +225,7 @@ test-backend:
     # NULL together, and the survey export's tenant-isolation predicate.
     #
     # Skipped HERE because this job has no database. They are NOT skipped in
-    # the pipeline: test-backend-db below runs all sixteen of them against a
+    # the pipeline: test-backend-db below runs every one of them against a
     # Postgres service. That job is the reason this comment no longer ends
     # with a list of things nothing checks.
     FIRSTHAND_SKIP_DB_TESTS: "1"
@@ -394,17 +394,20 @@ test-scripts:
 # one most easily skipped when tired or busy.
 #
 # Not Stryker. Stryker over this codebase is hours, and hours is a job nobody
-# blocks a merge on. Fourteen entries measured at 32 seconds locally; the
-# fifteenth migrates and seeds a database, so read a real job log for the
-# total rather than trusting an estimate here.
+# blocks a merge on. It is a few minutes and grows with the manifest, so read
+# a real job log for the total rather than trusting a number written down here
+# - every count this comment has carried has gone stale within a fortnight.
 #
-# THE DATABASE SERVICE IS NOT OPTIONAL HERE. One entry - the per-opportunity
-# scope predicate - is evaluated in exactly one place, and that place needs a
-# real Postgres. Collapsing that scope to a study-wide one hands one researcher
-# every participant another recruited, and it passed 588 tests under the
-# pipeline's old configuration. The runner REFUSES TO START rather than skip a
-# database entry without FIRSTHAND_TEST_DATABASE_URL, because a skipped entry
-# and a passing entry read identically in a green job.
+# THE DATABASE SERVICE IS NOT OPTIONAL HERE. Several manifest entries are
+# evaluated in exactly one place, and that place needs a real Postgres - the
+# per-opportunity scope predicate, and the participant session-save attachment
+# rules, where a mocked pg cannot raise a constraint at all. Collapsing that
+# scope to a study-wide one hands one researcher every participant another
+# recruited, and it passed 588 tests under the pipeline's old configuration.
+# The runner REFUSES TO START rather than skip a database entry without
+# FIRSTHAND_TEST_DATABASE_URL, because a skipped entry and a passing entry read
+# identically in a green job. Grep the manifest for `needsDatabase` for the
+# current set rather than trusting a count written down here.
 #
 # A GitLab `services:` container is not Docker-in-Docker: the executor provides
 # it, so the `no-docker` runner tag does not forbid it. Same arrangement as
