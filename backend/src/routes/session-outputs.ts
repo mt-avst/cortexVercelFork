@@ -21,6 +21,7 @@ import {
   sessionOutputsSchema
 } from '../firsthand/session-outputs';
 import { createRecordingAssetResponse } from '../firsthand/object-storage';
+import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 const router: Router = Router();
 
@@ -41,7 +42,7 @@ async function assertOpportunityOwnership(opportunityId: string, user: SessionUs
     throw new NotFoundError('Opportunity');
   }
 
-  const isOwner = result.rows[0].owner_user_id === user.id;
+  const isOwner = isOpportunityOwner(result.rows[0], user);
   const isSuperadmin = user.role === 'superadmin';
 
   if (!isOwner && !isSuperadmin) {

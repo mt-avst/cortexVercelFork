@@ -58,6 +58,7 @@ import {
 import { boundResultsRead } from '../middleware/results-read-concurrency';
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
+import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
 
@@ -1345,7 +1346,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     
     // Check ownership (superadmins can edit any)
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!isSuperadmin && existingOpportunity.owner_user_id !== req.user!.id) {
+    if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
       throw new ForbiddenError('Only the owner can edit this opportunity');
     }
     
@@ -1390,7 +1391,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   }
   
   // Check ownership (superadmins can edit any)
-  const isOwner = ownershipCheck.rows[0].owner_user_id === req.user!.id;
+  const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
     throw new ForbiddenError('Only the owner can edit this opportunity');
@@ -2544,7 +2545,7 @@ router.get('/:id/session-events', requireAdmin, asyncHandler(async (req: Request
   }
 
   const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && opportunityResult.rows[0].owner_user_id !== req.user!.id) {
+  if (!isSuperadmin && !isOpportunityOwner(opportunityResult.rows[0], req.user)) {
     throw new ForbiddenError('Only the opportunity owner can view session events');
   }
 
@@ -2715,18 +2716,23 @@ async function loadOpportunityResultsContext(
   // never the id, so the database's shape is the only thing standing between
   // that pair and a fail-open. Named rather than left to it.
   //
+  // THIS WAS THE ONLY GUARDED SITE OF TWENTY-FIVE. It is now the shared
+  // `isOpportunityOwner`, which is that guard and nothing else - the absent
+  // checks it used to spell out inline moved into the helper unchanged, and
+  // are unit-tested there against the exact pairs a bare `===` admits. See
+  // utils/opportunityOwnership.ts, which also records why the superadmin
+  // bypass stayed OUT of it and remains the line above.
+  //
   // REVERTING IT TO THE BARE `!==` SURVIVES THE WHOLE SUITE, and that is
   // correct rather than a coverage gap: no test can produce a row without the
   // key while `pool.query` names it, and no session reaches `requireAdmin`
   // without an id. Recorded as what it is - defence in depth against a shape
   // neither side can currently produce - so nobody later reads the mutant's
   // survival as permission to delete it, or the guard as something tested.
+  // What IS tested, by name and with a control, is that this route consults
+  // ownership at all.
   const isSuperadmin = req.user!.role === 'superadmin';
-  const callerId = req.user?.id;
-  if (
-    !isSuperadmin &&
-    (!row || !row.owner_user_id || !callerId || row.owner_user_id !== callerId)
-  ) {
+  if (!isSuperadmin && !isOpportunityOwner(row, req.user)) {
     // `found` is the answer the CALLER no longer gets, kept for the operator.
     // Without it this line would fire identically for a probe at a real id and
     // at one that never existed, and the refusal would stop being evidence of
@@ -2841,7 +2847,7 @@ router.delete('/:id', requireAdmin, opportunityWriteLimiter, asyncHandler(async 
     
     // Check ownership (superadmins can delete any)
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!isSuperadmin && existingOpportunity.owner_user_id !== req.user!.id) {
+    if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
       throw new ForbiddenError('Only the owner can delete this opportunity');
     }
     
@@ -2867,7 +2873,7 @@ router.delete('/:id', requireAdmin, opportunityWriteLimiter, asyncHandler(async 
   }
   
   // Check ownership (superadmins can delete any)
-  const isOwner = ownershipCheck.rows[0].owner_user_id === req.user!.id;
+  const isOwner = isOpportunityOwner(ownershipCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
     throw new ForbiddenError('Only the owner can delete this opportunity');
@@ -2894,7 +2900,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
     // Check ownership (superadmins can duplicate any)
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!isSuperadmin && existingOpportunity.owner_user_id !== req.user!.id) {
+    if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
       throw new ForbiddenError('Only the owner can duplicate this opportunity');
     }
 
@@ -2938,7 +2944,7 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
 
   // Check ownership (superadmins can duplicate any)
   const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && ownershipCheck.rows[0].owner_user_id !== req.user!.id) {
+  if (!isSuperadmin && !isOpportunityOwner(ownershipCheck.rows[0], req.user)) {
     throw new ForbiddenError('Only the owner can duplicate this opportunity');
   }
 
@@ -3007,7 +3013,7 @@ router.post('/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request
   }
 
   // Check ownership (superadmins can close any)
-  const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+  const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
     throw new ForbiddenError('Only the owner can close this opportunity');
@@ -3168,7 +3174,7 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       
       // Check ownership (superadmins can add sessions to any)
       const isSuperadmin = req.user!.role === 'superadmin';
-      if (!isSuperadmin && opportunity.owner_user_id !== req.user!.id) {
+      if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
         return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
       }
       
@@ -3200,7 +3206,7 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
     }
     
     // Check ownership (superadmins can add sessions to any)
-    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOwner) {
       return res.status(403).json({ error: 'Only the owner can add sessions to this opportunity' });
@@ -3304,7 +3310,7 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
       
       // Check ownership (superadmins can delete sessions from any)
       const isSuperadmin = req.user!.role === 'superadmin';
-      if (!isSuperadmin && opportunity.owner_user_id !== req.user!.id) {
+      if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
         return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
       }
       
@@ -3338,7 +3344,7 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
     }
     
     // Check ownership (superadmins can delete sessions from any)
-    const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     const isSuperadmin = req.user!.role === 'superadmin';
     if (!isSuperadmin && !isOwner) {
       return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
@@ -3458,7 +3464,6 @@ const VALID_ANALYTICS_PERIODS = [7, 14, 30];
 // GET /api/opportunities/:id/analytics - Get click analytics for admin
 router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id: opportunityId } = req.params;
-  const userId = req.user!.id;
 
   const requestedPeriod = parseInt(req.query.period as string, 10);
   const period = VALID_ANALYTICS_PERIODS.includes(requestedPeriod) ? requestedPeriod : 30;
@@ -3512,7 +3517,7 @@ router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res
 
   // Only owner or superadmin can view analytics
   const isSuperadmin = req.user!.role === 'superadmin';
-  if (!isSuperadmin && opportunity.owner_user_id !== userId) {
+  if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
     throw new ForbiddenError('Only the opportunity owner can view analytics');
   }
 

@@ -8,6 +8,7 @@ import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
 import { validateSessionData } from '../validation/schemas';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
+import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 const router: Router = Router();
 
@@ -26,7 +27,7 @@ const checkSessionOwnership = async (sessionId: string, userId: string, userRole
     WHERE s.id = $1
   `, [sessionId]);
   
-  return result.rows.length > 0 && result.rows[0].owner_user_id === userId;
+  return isOpportunityOwner(result.rows[0], { id: userId });
 };
 
 // Helper function to check for overlapping sessions
@@ -88,7 +89,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
     
     // Check ownership (superadmins can add sessions to any)
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!isSuperadmin && opportunity.owner_user_id !== req.user!.id) {
+    if (!isSuperadmin && !isOpportunityOwner(opportunity, req.user)) {
       throw new ForbiddenError('Only the owner can add sessions to this opportunity');
     }
     
@@ -120,7 +121,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
   }
   
   // Check ownership (superadmins can add sessions to any)
-  const isOwner = opportunityCheck.rows[0].owner_user_id === req.user!.id;
+  const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
   const isSuperadmin = req.user!.role === 'superadmin';
   if (!isSuperadmin && !isOwner) {
     throw new ForbiddenError('Only the owner can add sessions to this opportunity');
@@ -211,7 +212,7 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     // Check ownership through opportunity (superadmins can edit any)
     const opportunity = getMockOpportunity(session.opportunity_id);
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!opportunity || (!isSuperadmin && opportunity.owner_user_id !== req.user!.id)) {
+    if (!opportunity || (!isSuperadmin && !isOpportunityOwner(opportunity, req.user))) {
       throw new ForbiddenError('Only the owner can edit this session');
     }
     
@@ -327,7 +328,7 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // Check ownership through opportunity (superadmins can delete any)
     const opportunity = getMockOpportunity(session.opportunity_id);
     const isSuperadmin = req.user!.role === 'superadmin';
-    if (!opportunity || (!isSuperadmin && opportunity.owner_user_id !== req.user!.id)) {
+    if (!opportunity || (!isSuperadmin && !isOpportunityOwner(opportunity, req.user))) {
       throw new ForbiddenError('Only the owner can delete this session');
     }
     
