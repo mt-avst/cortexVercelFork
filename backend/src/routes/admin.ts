@@ -52,8 +52,22 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
   }
 
   const userId = user.id;
-  // Superadmin sees global stats; researcher_admin sees only their opportunities
-  const filterOwnerId = user.role === 'superadmin' ? null : userId;
+
+  // TWO SCOPES, NOT ONE, AND THEY ARE DELIBERATELY NOT THE SAME CONSTANT.
+  //
+  // Superadmin sees global stats; researcher_admin sees only their own
+  // opportunities. Both start from that same rule - and one `filterOwnerId`
+  // governing all five queries here is how widening it becomes a one-word
+  // edit. The first four return COUNTS, which read as presentational; the
+  // fifth returns participant NAMES and EMAILS. A reviewer persuaded that the
+  // counts could be global has, with the same edit, published every other
+  // researcher's participants.
+  //
+  // Split so that edit cannot be made once. Each is pinned by its own named
+  // test, and the participant one by a test that fails if the predicate stops
+  // reaching the SQL at all. cto/AdaptaLabs#21, #16.
+  const countsOwnerId = user.role === 'superadmin' ? null : userId;
+  const participantIdentityOwnerId = user.role === 'superadmin' ? null : userId;
 
   // Get opportunity counts (filter by owner unless superadmin)
   const oppCounts = await pool.query(`
@@ -64,7 +78,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
       COUNT(*) FILTER (WHERE status = 'closed') as closed
     FROM opportunities
     WHERE ($1::uuid IS NULL OR owner_user_id = $1)
-  `, [filterOwnerId]);
+  `, [countsOwnerId]);
 
   // Get booking counts
   const now = new Date();
@@ -77,7 +91,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($2::uuid IS NULL OR o.owner_user_id = $2)
-  `, [now, filterOwnerId]);
+  `, [now, countsOwnerId]);
 
   // Get unique participants count
   const participantsCount = await pool.query(`
@@ -86,7 +100,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1) AND b.status = 'booked'
-  `, [filterOwnerId]);
+  `, [countsOwnerId]);
 
   // Get session and slot statistics
   const sessionStats = await pool.query(`
@@ -98,7 +112,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     FROM sessions s
     JOIN opportunities o ON s.opportunity_id = o.id
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-  `, [filterOwnerId, now]);
+  `, [countsOwnerId, now]);
 
   // M7: Recent bookings list (with session times) — bookings table uses created_at, not booked_at
   const recentBookingsResult = await pool.query(`
@@ -112,7 +126,7 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
     ORDER BY b.created_at DESC
     LIMIT 15
-  `, [filterOwnerId]);
+  `, [participantIdentityOwnerId]);
 
   const oppRow = oppCounts.rows[0] || {};
   const bookingRow = bookingCounts.rows[0] || {};
@@ -159,7 +173,13 @@ router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Res
 // GET /api/admin/export/bookings - Export bookings as CSV (admin only; researcher_admin sees own only)
 router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
-  const filterOwnerId = user.role === 'superadmin' ? null : user.id;
+
+  // The SECOND of the two declarations in this file, in a separate handler,
+  // and it is named for what it protects rather than for what it filters:
+  // every row of this CSV carries a participant's name and email. Fixing "the"
+  // owner filter in admin.ts audits half of it - which is why neither is
+  // called `filterOwnerId` any more.
+  const participantIdentityOwnerId = user.role === 'superadmin' ? null : user.id;
 
   const result = await pool.query(
     `SELECT
@@ -177,7 +197,7 @@ router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, r
      JOIN users u ON b.user_id = u.id
      WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
      ORDER BY s.start_time DESC, b.created_at DESC`,
-    [filterOwnerId]
+    [participantIdentityOwnerId]
   );
 
   const headers = [

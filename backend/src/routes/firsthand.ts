@@ -294,30 +294,53 @@ function requireSuperadminForStudyResults(req: Request): void {
 // WHO MAY REACH PARTICIPANT DATA. Read the headings precisely; they differ.
 //
 //   † THE GATE IS HELD BY NO TEST. Deleting it passes the whole suite on both
-//     runners with `tsc` clean - measured, not assumed, one row at a time. The
-//     row is still true of the code today. It is true of nothing tomorrow. #21.
+//     runners with `tsc` clean - measured, not assumed, one row at a time.
+//     NO ROW CARRIES ONE TODAY. The last four rows carrying it held FIVE gates
+//     - approve and reject are one row and two handlers - and #21 closed all
+//     five, each with a control arm proving the test can fail. All five are in
+//     the mutation canary too, so coming unpinned again fails a named job
+//     rather than going quiet. The marker stays defined because the next row
+//     added here will need it before its test exists.
 //   ‡ Compares owner to caller with a bare `===` or `!==`, which admits a
-//     null-owner/null-caller pair. Unreachable through the schema today. #12.
+//     null-owner/null-caller pair. NO ROW CARRIES ONE TODAY: #12 replaced all
+//     twenty-five comparisons IN THE ROUTE LAYER with `isOpportunityOwner`,
+//     which refuses that pair and is unit-tested against it, and a source
+//     scanner with its own control now fails by name if one comes back -
+//     routes/__tests__/owner-comparisons-go-through-the-helper.test.ts.
+//     THE SCANNER READS routes/*.ts AND NOTHING ELSE, which matters for one
+//     row above: `answer_counts` reaches `canWriteStudy` in
+//     firsthand/studies-repository.ts, and that still compares owner to
+//     requester with a bare `===`. Deliberately - it FAILS OPEN on a null
+//     owner so legacy studies stay editable, the opposite disposition, and
+//     `mayReadCounts` re-adds the null check on the read side where a row
+//     cannot be adopted. That separate term IS pinned by name.
+//
+//   WHAT AN UNMARKED ROW NOW MEANS, said precisely because every row is one:
+//   a named test fails if that route stops CONSULTING ownership. It does not
+//   mean the gate's every property is pinned, and it does not mean the row is
+//   the right policy. It means the gate cannot be deleted in silence.
 //
 //   the OPPORTUNITY owner, or a superadmin
 //     GET  /:id/survey-results and .csv     loadOpportunityResultsContext
-//     GET  /:id/session-events           ‡  inline, opportunities.ts
-//     GET  /:id/analytics                ‡  inline, opportunities.ts
+//     GET  /:id/session-events              inline, opportunities.ts
+//     GET  /:id/analytics                   inline, opportunities.ts
 //     GET  /:id/sessions/:sid/outputs
-//     GET    .../assets/:aid/media          assertOpportunityOwnership ‡,
+//     GET    .../assets/:aid/media          assertOpportunityOwnership,
 //                                             routes/session-outputs.ts
-//                                           - the ‡ is on the GATE, which both
-//                                             of these routes share
+//                                           - one GATE, which both of these
+//                                             routes share
 //     GET  /api/bookings/pending-approvals  owner-scoped in SQL, bookings.ts
-//     POST /api/bookings/:bookingId/approve|reject †‡ a WRITE, listed here
+//     POST /api/bookings/:bookingId/approve|reject  a WRITE, listed here
 //                                             because it authors admin_notes
 //                                             about a named participant
-//     GET  /api/admin/dashboard          †  recent_bookings, admin.ts
-//     GET  /api/admin/export/bookings    †  admin.ts
+//     GET  /api/admin/dashboard             recent_bookings, admin.ts
+//     GET  /api/admin/export/bookings       admin.ts
 //   the OPPORTUNITY owner AND NOBODY ELSE, not even a superadmin
-//     GET  /api/bookings/opportunities/:id/bookings  †‡  bookings.ts:919
+//     GET  /api/bookings/opportunities/:id/bookings   bookings.ts
 //     The odd one out, and not obviously intended. Named so a reader trained
-//     on the headings above is not surprised by a 403.
+//     on the headings above is not surprised by a 403 - and now pinned in
+//     both directions, so resolving it either way is a decision somebody
+//     makes on purpose rather than a line that quietly goes missing.
 //   the STUDY owner, or a superadmin, and only for a COUNT
 //     GET  /studies/:studyId -> answer_counts       `mayReadCounts`, below
 //   a SUPERADMIN AND NOBODY ELSE, not even the study's own owner
@@ -348,13 +371,20 @@ function requireSuperadminForStudyResults(req: Request): void {
 //
 // A WARNING ABOUT admin.ts, because a draft of this block got it wrong and the
 // wrong version would have caused the leak. It said the dashboard's owner
-// scoping was "for relevance, not secrecy". ONE `filterOwnerId` there governs
+// scoping was "for relevance, not secrecy". ONE `filterOwnerId` there governed
 // FIVE queries and the fifth returns participant names and emails, so widening
-// it because the COUNTS look presentational passes the whole suite on both
-// runners and discloses another owner's participants. AND THERE ARE TWO OF
-// THEM - the dashboard's at :56 and export/bookings' at :162, separate
-// declarations in separate handlers, each unpinned, each carrying names and
-// emails. Fixing "the" one audits half the file. #16.
+// it because the COUNTS look presentational passed the whole suite on both
+// runners and disclosed another owner's participants. AND THERE WERE TWO OF
+// THEM - one per handler, separate declarations, each unpinned, each carrying
+// names and emails, so fixing "the" one audited half the file. #16.
+//
+// BOTH ARE FIXED, and the fix is a shape rather than a test: the dashboard now
+// declares `countsOwnerId` and `participantIdentityOwnerId` separately, so the
+// argument that persuaded a reader about the counts cannot reach the identity
+// read in the same edit. All three constants are pinned by name, and two are
+// in the mutation canary. THE UNDERLYING HAZARD IS NOT CLOSED - it is that
+// counts and identities can share a scope at all - so read this before adding
+// a sixth query to that handler.
 //
 // REOPEN IT IF ANY OF THESE BECOMES TRUE. The first two are the environment
 // changing; the third is one an ordinary afternoon's work can trip:

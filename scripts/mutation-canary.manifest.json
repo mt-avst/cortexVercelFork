@@ -142,10 +142,10 @@
   },
   {
     "id": "opportunity-ownership-fails-closed",
-    "why": "`canWriteStudy` fails OPEN for an unowned study, because a write can adopt the row and a read can adopt nothing. The same shape here hands every admin the answers of any opportunity whose owner has been removed, and it passed all 293 tests in its own file.",
+    "why": "`canWriteStudy` fails OPEN for an unowned study, because a write can adopt the row and a read can adopt nothing. The same shape here hands every admin the answers of any opportunity whose owner has been removed, and it passed all 293 tests in its own file. The anchor moved when the inline guard became the shared `isOpportunityOwner`; the mutation still spells out the fail-open form the helper replaced, so this entry pins the ROUTE's disposition independently of the helper's - see opportunity-ownership-helper-fails-closed for the helper's own.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "    (!row || !row.owner_user_id || !callerId || row.owner_user_id !== callerId)",
-    "mutation": "    (!row || (row.owner_user_id != null && row.owner_user_id !== callerId))",
+    "anchor": "  if (!isSuperadmin && !isOpportunityOwner(row, req.user)) {",
+    "mutation": "  if (!isSuperadmin && row && row.owner_user_id != null && row.owner_user_id !== req.user?.id) {",
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.test.ts",
     "test": "refuses an opportunity nobody owns, rather than letting it fail open"
@@ -422,5 +422,65 @@
     "runner": "vitest",
     "spec": "src/firsthand/studies-repository.test.ts",
     "test": "refuses a claim that differs from the stored value by less than a second"
+  },
+  {
+    "id": "opportunity-bookings-consults-ownership",
+    "why": "GET /api/bookings/opportunities/:id/bookings returns every participant's NAME, EMAIL, BUSINESS UNIT and ROLE TITLE. Neutering its owner check to `true` passed 844 of 844 jest tests on e717537 - measured, one gate at a time. The route is also the trust model's odd one out, admitting the owner and NOT a superadmin, so there is no sibling whose failure would stand in for this one.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);",
+    "mutation": "    const isOwner = true;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.opportunity-bookings-ownership.test.ts",
+    "test": "never runs the identity query for a non-owner"
+  },
+  {
+    "id": "approve-consults-opportunity-ownership",
+    "why": "Approving writes `admin_notes` - a researcher's written judgement of a named colleague - and awards that colleague points. Short-circuiting the owner check to false passed 844 of 844. The named test carries BOTH a status assertion and a no-UPDATE assertion; the status one is what fires first under this mutation, and the no-UPDATE arm is what makes the test worth naming here rather than the status alone - a 403 raised for some other reason would satisfy the status by itself.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own opportunities');",
+    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only approve sessions for your own opportunities');",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.approve-reject-ownership.test.ts",
+    "test": "writes nothing when a non-owner tries to approve, and rolls back"
+  },
+  {
+    "id": "reject-consults-opportunity-ownership",
+    "why": "The SECOND of two near-identical handlers 80 lines apart, and that is the whole reason it gets its own entry: a fix applied to approve reads as a fix applied to both, and a canary entry naming only one would carry that same blind spot into the thing meant to detect it. Neutering it passed 844 of 844 independently of approve.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own opportunities');",
+    "mutation": "    if (false && !isSuperadmin && !isOpportunityOwner(booking, req.user)) {\n      await client.query('ROLLBACK');\n      throw new ForbiddenError('You can only reject sessions for your own opportunities');",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.approve-reject-ownership.test.ts",
+    "test": "writes nothing when a non-owner tries to reject, and rolls back"
+  },
+  {
+    "id": "admin-dashboard-scopes-participant-identities",
+    "why": "One `filterOwnerId` used to govern five queries in this handler and the fifth returns participant names and emails. Setting it to the superadmin value published every other researcher's participants past 844 of 844 tests. The constant is now split in two so the counts cannot carry the identity read with them; this entry pins the identity half.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  const participantIdentityOwnerId = user.role === 'superadmin' ? null : userId;",
+    "mutation": "  const participantIdentityOwnerId = null;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.participant-identity-scope.test.ts",
+    "test": "binds the caller to the participant-identity read"
+  },
+  {
+    "id": "admin-bookings-export-scopes-participant-identities",
+    "why": "The SECOND owner filter in admin.ts, in a separate handler, and every row of the CSV it guards carries a participant's name and email. Fixing the dashboard's audits half the file, so both are pinned. Widening this one passed 844 of 844.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  const participantIdentityOwnerId = user.role === 'superadmin' ? null : user.id;",
+    "mutation": "  const participantIdentityOwnerId = null;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.participant-identity-scope.test.ts",
+    "test": "binds the caller to the export query"
+  },
+  {
+    "id": "opportunity-ownership-helper-fails-closed",
+    "why": "THE SINGLE POINT WHERE ONE EDIT FAILS OPEN AT TWENTY-FIVE GATES AT ONCE. Every owner-vs-caller comparison in the routes now runs through this predicate, so making it treat an ABSENT owner as a match hands every admin the participant data of any opportunity whose owner has been removed - on all twenty-five sites, in one line, with no route file touched. The route-level entry beside this one cannot see it: that anchor pins how ONE handler composes the answer, not what the answer means.",
+    "file": "backend/src/utils/opportunityOwnership.ts",
+    "anchor": "  return Boolean(ownerId && ownerId === callerId);",
+    "mutation": "  return ownerId == null || ownerId === callerId;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/opportunityOwnership.test.ts",
+    "test": "refuses an ownerless row and an id-less caller, which a bare === pairs"
   }
 ]

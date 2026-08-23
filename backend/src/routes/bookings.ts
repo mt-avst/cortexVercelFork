@@ -10,20 +10,9 @@ import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
+import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 const router: Router = Router();
-
-// Helper function to check session ownership for admin operations
-const checkSessionOwnership = async (sessionId: string, userId: string): Promise<boolean> => {
-  const result = await pool.query(`
-    SELECT o.owner_user_id 
-    FROM sessions s 
-    JOIN opportunities o ON s.opportunity_id = o.id 
-    WHERE s.id = $1
-  `, [sessionId]);
-  
-  return result.rows.length > 0 && result.rows[0].owner_user_id === userId;
-};
 
 // POST /api/bookings/sessions/:id/book - Book a session
 router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -354,7 +343,7 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
 
   // Authorization check
   const canCancel = booking.user_id === userId || 
-                   (isAdmin && booking.owner_user_id === userId);
+                   (isAdmin && isOpportunityOwner(booking, req.user));
   
   if (!canCancel) {
     throw new ForbiddenError('Not authorized to cancel this booking');
@@ -899,7 +888,6 @@ router.get('/opportunities/:id/bookings', requireAuth, asyncHandler(async (req: 
     }
 
     const { id: opportunityId } = req.params;
-    const userId = req.user!.id;
     const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
 
     if (!isAdmin) {
@@ -916,7 +904,7 @@ router.get('/opportunities/:id/bookings', requireAuth, asyncHandler(async (req: 
       return res.status(404).json({ error: 'Opportunity not found' });
     }
 
-    const isOwner = opportunityCheck.rows[0].owner_user_id === userId;
+    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
     if (!isOwner) {
       return res.status(403).json({ error: 'Only the owner can view bookings for this opportunity' });
     }
@@ -1135,7 +1123,7 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
 
     // Check if admin owns the opportunity or is a superadmin (superadmins can approve any session)
     const isSuperadmin = userResult.rows[0].role === 'superadmin';
-    if (!isSuperadmin && booking.owner_user_id !== adminId) {
+    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {
       await client.query('ROLLBACK');
       throw new ForbiddenError('You can only approve sessions for your own opportunities');
     }
@@ -1217,7 +1205,7 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
 
     // Check if admin owns the opportunity or is a superadmin (superadmins can reject any session)
     const isSuperadmin = userResult.rows[0].role === 'superadmin';
-    if (!isSuperadmin && booking.owner_user_id !== adminId) {
+    if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {
       await client.query('ROLLBACK');
       throw new ForbiddenError('You can only reject sessions for your own opportunities');
     }
