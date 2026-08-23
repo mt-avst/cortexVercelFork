@@ -262,16 +262,125 @@ function requireSuperadminForStudyResults(req: Request): void {
 
 // GET /api/firsthand/studies - list studies for the Cortex study picker
 //
-// Reads stay open to every admin, deliberately. The opportunity form's study
-// picker (FirstHandStudyTab) lists every LAUNCHED study so an opportunity can
-// reuse one it did not author - that is a designed feature, and filtering the
-// list by owner would break it. Study copy is authoring metadata, not
-// participant data; the boundary this MR draws is over WRITES.
+// Unfiltered by owner, deliberately, and this is an instance of the model set
+// out below rather than a decision of its own.
 //
-// B3's copy-on-select reads from exactly this list - it is what the picker
-// already showed - and copying grants no new read capability: the picker
-// could always see (and select) any launched study, it just used to link to
-// it rather than copy it.
+// THE TRUST MODEL THIS ROUTE IS AN INSTANCE OF (cto/AdaptaLabs#10, closed
+// won't-fix). Recorded here because this is where a reader lands, and because
+// review gates rediscovered it from several directions and wrote it up as a
+// finding each time. It is a decision, not an oversight.
+//
+// THREE DISPOSITIONS, because two produced a false positive on the first public
+// route a gate applied them to.
+//
+//   PUBLISHED - open to everyone by product decision. GET /api/stats/platform
+//     (three integers, no identities) and the gamification leaderboards, which
+//     do publish a participant's NAME and participation volume. Whether the
+//     collection consent covers that is #17 and is NOT established from this
+//     repository, so do not read this row as sign-off.
+//     The public opportunity reads are NOT blanket-blessed: what is published
+//     is the payload AFTER `toPublicOpportunity` / `toPublicSession` strips
+//     owner identity and the joining link. THE STRIPPING IS THE BOUNDARY - and
+//     the meet link is closer to a credential than to a detail. BOTH names
+//     matter: /:id/sessions goes through the SECOND one, and that is the route
+//     which leaked for the whole life of the first version of the fix. See
+//     utils/publicOpportunity.ts.
+//   METADATA - open to every admin on the authoring read routes. Study copy,
+//     step content, titles, owners, launch state, the existence of an id.
+//   PARTICIPANT DATA - answers, per-question answer COUNTS, transcripts,
+//     recordings, session events, participant names and emails in a BOOKING
+//     context, and a researcher's `admin_notes` about a named colleague.
+//
+// WHO MAY REACH PARTICIPANT DATA. Read the headings precisely; they differ.
+//
+//   † THE GATE IS HELD BY NO TEST. Deleting it passes the whole suite on both
+//     runners with `tsc` clean - measured, not assumed, one row at a time. The
+//     row is still true of the code today. It is true of nothing tomorrow. #21.
+//   ‡ Compares owner to caller with a bare `===` or `!==`, which admits a
+//     null-owner/null-caller pair. Unreachable through the schema today. #12.
+//
+//   the OPPORTUNITY owner, or a superadmin
+//     GET  /:id/survey-results and .csv     loadOpportunityResultsContext
+//     GET  /:id/session-events           ‡  inline, opportunities.ts
+//     GET  /:id/analytics                ‡  inline, opportunities.ts
+//     GET  /:id/sessions/:sid/outputs
+//     GET    .../assets/:aid/media          assertOpportunityOwnership ‡,
+//                                             routes/session-outputs.ts
+//                                           - the ‡ is on the GATE, which both
+//                                             of these routes share
+//     GET  /api/bookings/pending-approvals  owner-scoped in SQL, bookings.ts
+//     POST /api/bookings/:bookingId/approve|reject †‡ a WRITE, listed here
+//                                             because it authors admin_notes
+//                                             about a named participant
+//     GET  /api/admin/dashboard          †  recent_bookings, admin.ts
+//     GET  /api/admin/export/bookings    †  admin.ts
+//   the OPPORTUNITY owner AND NOBODY ELSE, not even a superadmin
+//     GET  /api/bookings/opportunities/:id/bookings  †‡  bookings.ts:919
+//     The odd one out, and not obviously intended. Named so a reader trained
+//     on the headings above is not surprised by a 403.
+//   the STUDY owner, or a superadmin, and only for a COUNT
+//     GET  /studies/:studyId -> answer_counts       `mayReadCounts`, below
+//   a SUPERADMIN AND NOBODY ELSE, not even the study's own owner
+//     GET  /studies/:studyId/results and .csv  requireSuperadminForStudyResults
+//   the PARTICIPANT, bound to their own session token
+//     every route on the firsthand-session router   bindParticipantSession
+//     Structurally enforced: an unguarded route added there fails by name.
+//
+//   STILL NOT AN INVENTORY, in BOTH directions - see the third reopen trigger.
+//   A row's absence means nobody tabulated it, never that it is safe; a row's
+//   presence means the gate exists today, and only an unmarked row means
+//   anything checks that it still does.
+//
+// WHY METADATA IS OPEN: `researcher_admin` is held by the handful of people who
+// run the research, and the opportunity form's picker (FirstHandStudyTab)
+// exists to show them each other's work - it lists every study, since
+// `listStudies()` carries no WHERE clause and the launched-only presentation is
+// the CLIENT's, so an opportunity can reuse a study it did not author.
+// Filtering by owner would break a designed feature. B3's copy-on-select reads
+// this same list and grants no new read capability; the picker could always see
+// and select any study, it just used to link rather than copy. Hence also #10
+// closing the remaining 404-vs-403 inconsistency across the opportunity
+// siblings as churn rather than as a leak.
+//
+// TWO SITTING ON THE LINE, both measured, neither decided: `clicks_total` on
+// /api/opportunities (#19), and GET /api/feedback and /export, which are
+// requireAdmin only while DELETE on the same resource is superadmin (#15).
+//
+// A WARNING ABOUT admin.ts, because a draft of this block got it wrong and the
+// wrong version would have caused the leak. It said the dashboard's owner
+// scoping was "for relevance, not secrecy". ONE `filterOwnerId` there governs
+// FIVE queries and the fifth returns participant names and emails, so widening
+// it because the COUNTS look presentational passes the whole suite on both
+// runners and discloses another owner's participants. AND THERE ARE TWO OF
+// THEM - the dashboard's at :56 and export/bookings' at :162, separate
+// declarations in separate handlers, each unpinned, each carrying names and
+// emails. Fixing "the" one audits half the file. #16.
+//
+// REOPEN IT IF ANY OF THESE BECOMES TRUE. The first two are the environment
+// changing; the third is one an ordinary afternoon's work can trip:
+//
+//  - `researcher_admin` becomes a broadly granted role rather than one held by
+//    the research team. The model rests entirely on that population being small
+//    and mutually accountable;
+//  - Cortex serves more than one organisation. Metadata open within one research
+//    team is a cross-tenant leak the moment there are two, and every read above
+//    would need a tenant predicate rather than a role check;
+//  - A ROUTE OR A HANDLER BEGINS RETURNING PARTICIPANT DATA FROM OUTSIDE THE
+//    ENUMERATED SET. Not "a route is added" - GET /api/calendar/events already
+//    exists and is one stubbed service away from it (#18). There is no
+//    exhaustive authorisation inventory: the router-walking tables cover only
+//    the opportunities, firsthand and firsthand-session routers, so
+//    session-outputs.ts, admin.ts, bookings.ts, calendar.ts, feedback.ts and
+//    api.ts are in none. An ungated route returning a session's answers, added
+//    to session-outputs.ts, fails NOTHING; added to THIS file it fails two
+//    named tests. Measured both ways - #13.
+//
+// TRIAGING A FUTURE FINDING. "An admin can see another admin's study, or that
+// an opportunity id exists" is describing this decision; do not spend a gate
+// round on it. "An admin can see another admin's PARTICIPANT DATA" is a defect
+// unless the table above accounts for it. Where it is not obvious, the question
+// is not "is this metadata?" but "could a participant have expected this to
+// stay with the researcher who recruited them?".
 router.get('/studies', requireAdmin, studyReadLimiter, asyncHandler(async (_req: Request, res: Response) => {
   // listStudies() returns [] when persistence is unconfigured, matching the
   // FirstHand list endpoint's soft-empty behaviour.

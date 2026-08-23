@@ -2621,7 +2621,19 @@ async function surveyResultsAreReadable(): Promise<boolean> {
  */
 type OpportunityOwnerRow = {
   id: string;
-  /** NULL for a row whose owner has been removed. Refused, never adopted. */
+  /**
+   * A SHAPE THE SCHEMA CURRENTLY FORBIDS, guarded anyway.
+   *
+   * This used to say "NULL for a row whose owner has been removed", and that
+   * state cannot arise: `owner_user_id` is `UUID REFERENCES users(id) ON
+   * DELETE CASCADE NOT NULL`, so removing the owner deletes the opportunity,
+   * and `DELETE /api/admin/admins` demotes to `employee` rather than deleting
+   * the user at all. A guard whose stated reason is fictional is a guard the
+   * next reader deletes. The real reason is that a future nullable-owner
+   * migration must not silently open this read - see the guard below, which
+   * refuses unless BOTH sides are present. cto/AdaptaLabs#12 tracks the three
+   * sibling routes that do not.
+   */
   owner_user_id: string | null;
   firsthand_study_id: string | null;
 };
@@ -2679,7 +2691,11 @@ async function loadOpportunityResultsContext(
   //    MISSING these two routes now answer 403 where the siblings still
   //    answer 404. That difference IS the collapse doing its job, and it is
   //    also the remaining inconsistency - the siblings still carry the oracle
-  //    this closes, tracked as cto/AdaptaLabs#10;
+  //    this closes. cto/AdaptaLabs#10 CLOSED THAT AS WON'T-FIX: the existence
+  //    of an opportunity id is metadata, and metadata is not a secret from a
+  //    researcher_admin. The trust model that decision rests on, and the two
+  //    things that would reopen it, are written down above `GET /studies` in
+  //    routes/firsthand.ts. Do not re-argue it from here;
   //  - keeps OpportunityAnalytics.tsx's `status === 403` branch honest. The
   //    404 direction made that branch dead code promising a status the server
   //    could no longer send, on the same page that reads these routes.
