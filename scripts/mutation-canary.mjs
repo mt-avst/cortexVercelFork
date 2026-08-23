@@ -28,7 +28,7 @@
  * canary is another green check that proves nothing: the same failure it
  * exists to catch.
  *
- * Four guards, and every one FAILS THE BUILD rather than skipping an entry:
+ * Five guards, and every one FAILS THE BUILD rather than skipping an entry:
  *
  *  1. THE ANCHOR MUST MATCH EXACTLY ONCE. Not "at least once" - a refactor
  *     duplicating the line would otherwise mutate an arbitrary one of them,
@@ -53,6 +53,10 @@
  *  4. THE TREE MUST BE CLEAN BEFORE AND AFTER. A harness that dies mid-run
  *     leaves a mutation applied, and the next reader inherits a defect wearing
  *     this file's name.
+ *  5. A MUTATION THAT BROKE THE STATEMENT IS NOT A KILL. Added last, and added
+ *     because this harness reported one: a mutation that orphaned a bind
+ *     parameter turned the named test red at RUNTIME without ever evaluating
+ *     the property, and every guard above was satisfied. See MALFORMED_MUTATION.
  *
  * RUN IT IN A DEDICATED WORKTREE. Two harnesses backing up and restoring one
  * checkout clobber each other silently.
@@ -77,6 +81,7 @@ export const TEST_MISSING = 'TEST_MISSING';
 export const TEST_AMBIGUOUS = 'TEST_AMBIGUOUS';
 export const BASELINE_RED = 'BASELINE_RED';
 export const MUTATION_DID_NOT_BUILD = 'MUTATION_DID_NOT_BUILD';
+export const MUTATION_IS_MALFORMED = 'MUTATION_IS_MALFORMED';
 
 const RUNNERS = new Set(['jest', 'vitest']);
 
@@ -237,6 +242,73 @@ export function anchorVerdict(count) {
 }
 
 /**
+ * A MUTATION THE TEST NEVER GOT TO JUDGE, as distinct from one it caught.
+ *
+ * The false kill this closes was shipped in this repository's own manifest and
+ * found by a review gate. An entry dropped `ss.study_id = $3` from a CTE to
+ * prove the scope predicate was load-bearing - but `$3` was referenced ONLY
+ * there, so the mutated query orphaned its bind parameter and Postgres answered
+ * `42P18 could not determine data type of parameter $3` at RUNTIME. The named
+ * test went red, the suite had loaded fine, and the harness reported KILLED.
+ *
+ * The entry proved nothing: any edit dropping `$3` kills that test, including
+ * edits that leave the scope perfectly intact. A green canary asserting a
+ * property it never evaluated is precisely this harness's own subject.
+ *
+ * MUTATION_DID_NOT_BUILD cannot see it - that fires when the suite fails to
+ * LOAD, and this suite loaded. So the mutated run's failure text is checked for
+ * the signatures that mean "this statement is not a statement" rather than "the
+ * assertion disagreed".
+ *
+ * NOT THE WHOLE CLASS, and saying so because this docblock would otherwise
+ * read as though it were. A mutation that breaks a FIXTURE is the same family
+ * and is not caught: a `beforeEach` that throws surfaces as an ordinary error
+ * on both runners, so the named test goes red without the property ever being
+ * evaluated and the verdict is KILLED. Probed on both runners; no entry in the
+ * manifest exhibits it today, and catching it needs more than a text signature.
+ * What is closed is the two shapes that had actually shipped here.
+ *
+ * DELIBERATELY LOUD RATHER THAN CLEVER. If this ever fires on a mutation that
+ * was genuinely caught - a test asserting on one of these strings, say - the
+ * job goes red naming the entry, and somebody rewrites the mutation to be
+ * type-valid. That is a visible, fixable, five-minute annoyance. A silent false
+ * kill is a canary entry that lies for as long as it exists.
+ */
+const MALFORMED_MUTATION = new RegExp(
+  [
+    // Postgres could not type a bind parameter the mutation orphaned.
+    'could not determine data type of parameter',
+    // The mutation left the statement unparseable.
+    'syntax error at or near',
+    // The mutation changed the placeholder count without changing the values.
+    'bind message supplies \\d+ parameters',
+    // THE RUNNER GAVE UP, which is the same category: the property was never
+    // evaluated. A second false kill of exactly this shape was shipped in this
+    // manifest - widening a retry budget from 3 to 6 pushed the backoff past
+    // vitest's 5s test budget, so the named test died before reaching the
+    // literal it was pinning, and any change merely making that path slower
+    // killed the entry equally.
+    'Exceeded timeout of \\d+\\s*ms for a test',
+    'Test timed out in \\d+\\s*ms',
+    // VITEST DISCARDS ITS OWN TIMEOUT WORDING. `failureMessages` carries
+    // `Error: STACK_TRACE_ERROR` - a stack carrier @vitest/runner constructs -
+    // and the human-readable "Test timed out in 5000ms" is substituted only at
+    // print time, so neither wording above matches a real vitest report. A gate
+    // tested this signature against all forty-two mutated reports: it matched
+    // the one entry that was genuinely timing out and nothing else. It also
+    // does NOT match a test's own poll expiring, such as
+    // `Timed out waiting for: the abandoned waiter to leave the queue`, which
+    // is a real detection and must stay a kill.
+    'STACK_TRACE_ERROR'
+  ].join('|'),
+  'i'
+);
+
+export function mutationIsMalformed(failure) {
+  return MALFORMED_MUTATION.test(String(failure ?? ''));
+}
+
+/**
  * The verdict, from the two runs.
  *
  * Pure, so its own unit tests can reach every branch without starting a test
@@ -293,7 +365,10 @@ export function verdictFor({ baselineAssertions, mutatedAssertions, testName }) 
   // sized from the mutated constant.
   if (mutated.matched.length > 1) return TEST_AMBIGUOUS;
 
-  return mutated.matched[0].status === 'failed' ? KILLED : SURVIVED;
+  if (mutated.matched[0].status !== 'failed') return SURVIVED;
+
+  // Red for the WRONG REASON is not a kill. See MALFORMED_MUTATION above.
+  return mutationIsMalformed(mutated.matched[0].failure) ? MUTATION_IS_MALFORMED : KILLED;
 }
 
 export function exitCodeFor(results) {
@@ -341,7 +416,14 @@ export function readAssertions(parsed) {
     for (const a of Array.isArray(suite?.assertionResults) ? suite.assertionResults : []) {
       const status = String(a?.status ?? '');
       if (status === 'pending' || status === 'skipped' || status === 'todo') continue;
-      assertions.push({ fullName: String(a?.fullName ?? ''), status });
+      // `failureMessages` comes through so a verdict can tell a mutation the
+      // test CAUGHT from one that broke the statement out from under it. Both
+      // runners emit it; an absent or empty array flattens to ''.
+      assertions.push({
+        fullName: String(a?.fullName ?? ''),
+        status,
+        failure: (Array.isArray(a?.failureMessages) ? a.failureMessages : []).join('\n')
+      });
     }
   }
 
@@ -436,10 +518,10 @@ export function mostTellingLine(text) {
  * The cause, from the report, for the runner that writes no stderr at all.
  *
  * VITEST WRITES NOTHING TO STDERR on a suite that fails to load - measured at
- * 0 bytes against jest's 690 - and eleven of the fifteen manifest entries are
- * vitest ones. So the detail line this file added for MUTATION_DID_NOT_BUILD
- * existed for four entries and was blank for the other eleven, which is a
- * diagnosis that reads as "no information" rather than as "not collected".
+ * 0 bytes against jest's 690 - and most of the manifest is vitest entries. So
+ * the detail line this file added for MUTATION_DID_NOT_BUILD existed for the
+ * jest ones and was blank for all the rest, which is a diagnosis that reads as
+ * "no information" rather than as "not collected".
  *
  * Both runners do carry it, in the JSON the harness already parses:
  * `testResults[].message`.
@@ -509,7 +591,7 @@ async function main() {
   // subject is comments that misattribute. The handlers existed before and
   // were inert: every test run is a blocking `spawnSync` and the loop had no
   // `await`, so libuv never got a turn and a queued SIGINT was delivered
-  // nowhere. Ctrl-C ran all fourteen entries and exited 0. Measured, and
+  // nowhere. Ctrl-C ran the entire manifest and exited 0. Measured, and
   // measured again after: deleting the yield reproduces it exactly.
   //
   // Reproduce with:

@@ -227,6 +227,59 @@ describe.skipIf(skipDbTests)("attaching an answer, against a real Postgres", () 
     ]);
   });
 
+  it("files an answer as detached rather than adopting a same-named step from another study", async () => {
+    // THE SCOPE ON THE ATTACHMENT LOOKUP, which nothing else here evaluates.
+    //
+    // `study_steps` is keyed on the PAIR (study_id, id), so the same step id
+    // can legitimately exist in two studies - and the CTE that reads the step
+    // back is what decides which of them an answer is filed against. Scoped to
+    // `ss.id` alone it would resolve the OTHER study's row, and the composite
+    // foreign key would raise nothing, because the pair it was handed is a
+    // real one. One participant's answer would simply appear in a different
+    // researcher's results, correctly attached, under their question.
+    //
+    // Provoked by removing this study's copy first, so exactly one row in the
+    // table carries the id and the unscoped lookup has somewhere wrong to go.
+    const OTHER_STUDY_ID = "study_other";
+    await pool.query(
+      `INSERT INTO firsthand.studies (id, title, intro_text, consent_text, kind)
+       VALUES ($1, 'Somebody else', 'Intro', 'Consent', 'survey')`,
+      [OTHER_STUDY_ID]
+    );
+    await pool.query(
+      `INSERT INTO firsthand.study_steps (study_id, id, step_order, type, prompt)
+       VALUES ($1, $2, 1, 'rating', 'Their question, not ours')`,
+      [OTHER_STUDY_ID, DOOMED_STEP_ID]
+    );
+
+    await removeDoomedStep();
+
+    const repository = await importRepository();
+    await repository.applyRuntimeMutationPostgres(payload(), answerTo(DOOMED_STEP_ID, 3));
+
+    // Detached, and detached means BOTH columns null - the only shape 0015's
+    // CHECK permits, and the only one that keeps this answer out of the other
+    // study's results.
+    expect(await storedResponses()).toEqual([
+      expect.objectContaining({
+        study_id: null,
+        step_id: null,
+        step_prompt: DOOMED_PROMPT_AS_SHOWN,
+        response_payload: { rating: 3 }
+      })
+    ]);
+
+    // THE CONTROL. Asserting the row is not attached to OTHER_STUDY_ID proves
+    // nothing on its own - a save that stored no row at all would satisfy it
+    // just as well. This is what says the other study's step really is
+    // reachable, so the assertion above had something to detect.
+    const reachable = await pool.query(
+      "SELECT id FROM firsthand.study_steps WHERE id = $1",
+      [DOOMED_STEP_ID]
+    );
+    expect(reachable.rows).toHaveLength(1);
+  });
+
   it("does not erase a detached answer on the next ordinary save", async () => {
     // A save DELETEs and re-INSERTs the session's responses. Without the
     // `step_id IS NOT NULL` filter on that delete, an unrelated answer to a

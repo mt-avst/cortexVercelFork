@@ -513,16 +513,36 @@ export async function updateStudy(
         const storedUpdatedAt = new Date(ownerRow.updated_at).getTime();
         const claimedUpdatedAt = new Date(expectedUpdatedAt).getTime();
 
-        // Compared as epoch milliseconds, not as strings, and this is the
+        // Compared as epoch MILLISECONDS, not as strings, and this is the
         // difference between a working precondition and one that refuses every
-        // save.
+        // save. Both halves of that sentence are load-bearing and each has its
+        // own test; a canary entry pins each mutation.
         //
-        // The column is TIMESTAMPTZ, which Postgres stores to MICROsecond
-        // precision. What the caller was served is `toIsoString(row.updated_at)`
-        // - a JS Date, so millisecond precision - and a millisecond-truncated
-        // value can never equal a microsecond one. Both sides here go through
-        // `new Date(...)`, which is the same truncation the caller's copy
-        // already went through, so the two are symmetric by construction.
+        // NOT AS STRINGS. `ownerRow.updated_at` arrives from node-pg as a JS
+        // `Date` - measured, and the reason is that nothing in this repository
+        // calls `setTypeParser`, so `timestamptz` takes pg's built-in parser.
+        // `String(date)` is therefore a LOCALE string, `Fri Aug 21 2026
+        // 10:15:30 GMT+0100 (British Summer Time)`, which can never equal the
+        // ISO value the caller was served. A raw string comparison here does
+        // not refuse the occasional save; it refuses EVERY save, for ever.
+        //
+        // An earlier version of this comment blamed microsecond precision -
+        // TIMESTAMPTZ is microsecond in Postgres, the caller is served a
+        // millisecond ISO string, so the two could never match. Plausible, and
+        // not what happens: the extra digits are gone before JavaScript sees
+        // them. The microsecond case only arises if a type parser is ever
+        // registered, or if this value reaches here as a string by some other
+        // route - which is why the type is `Date | string` and why the test
+        // for it has to build the row shape by hand. Defensive, not observed.
+        //
+        // AND MILLISECONDS, not some coarser unit. Both sides going through the
+        // same truncation is necessary and NOT sufficient: flooring both to the
+        // second is equally symmetric, and makes two saves landing in the same
+        // wall-clock second both match their precondition, so the second
+        // silently overwrites the first - the lost update this whole mechanism
+        // exists to prevent. A review gate measured that mutation passing all
+        // 81 tests in the sibling spec before the sub-second test was added.
+        //
         // Epoch numbers rather than the ISO strings also means a client that
         // round-tripped the value through its own Date, or serialised `+00:00`
         // where we sent `Z`, still matches.

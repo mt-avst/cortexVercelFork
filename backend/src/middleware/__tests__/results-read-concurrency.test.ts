@@ -69,13 +69,34 @@ describe('bounding concurrent results reads', () => {
    *
    * Every other test here derives its expectations from the constant, so they
    * all keep passing at any ceiling - including one high enough to be no
-   * ceiling at all. Two is a memory budget: two worst-case result sets is a
-   * few hundred megabytes on a single-replica 2Gi pod. Raising it is a
-   * decision about how close to an OOM kill this pod is allowed to run, and
+   * ceiling at all. ONE is a memory budget: a single worst-case result set is
+   * already a few hundred megabytes on a single-replica 2Gi pod. Raising it is
+   * a decision about how close to an OOM kill this pod is allowed to run, and
    * an OOM kill here drops every live participant session.
+   *
+   * This docblock said "Two is a memory budget" until it was corrected - it
+   * had been written when the ceiling was two, and survived the change to one
+   * because nothing reads a comment. That is the failure mode the canary entry
+   * beside this test exists for.
+   *
+   * ONE CONSTANT PER TEST, and that is not tidiness. Both numbers were pinned
+   * on this single assertion, so a red run said only that one of them had
+   * moved - and a test must be able to fail BY NAME or the reader starts their
+   * diagnosis in the wrong place. Split after a review gate pointed out the
+   * canary had two entries answering to one test title.
    */
   it('holds the ceiling at the number that was decided', () => {
     expect(MAX_CONCURRENT_RESULTS_READS).toBe(1);
+  });
+
+  /**
+   * PINNED SEPARATELY, for the reason above.
+   *
+   * Every wait in this file is sized from the constant, so a widened queue
+   * timeout - one long enough that a refused caller waits past every ingress
+   * bound - passes all of them.
+   */
+  it('holds the queue timeout at the number that was decided', () => {
     expect(RESULTS_READ_QUEUE_TIMEOUT_MS).toBe(10_000);
   });
 

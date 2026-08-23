@@ -91,7 +91,7 @@ test('an anchor must match exactly once', async () => {
 });
 
 /** One assertion result, as both runners report it. */
-const ran = (fullName, status) => ({ fullName, status });
+const ran = (fullName, status, failure = '') => ({ fullName, status, failure });
 const NAMED = 'holds the ceiling at the number that was decided';
 const FULL = `results read concurrency ${NAMED}`;
 
@@ -190,7 +190,7 @@ test('an unreadable or empty runner report reads as nothing having run', async (
         { assertionResults: [{ fullName: 'a', status: 'pending' }, { fullName: 'b', status: 'passed' }] }
       ]
     }),
-    [{ fullName: 'b', status: 'passed' }]
+    [{ fullName: 'b', status: 'passed', failure: '' }]
   );
 
   assert.equal(
@@ -324,7 +324,12 @@ test('a filtered-out test is dropped whichever word the runner uses for it', asy
     ]
   };
 
-  assert.deepEqual(readAssertions(report), [{ fullName: 'the one that ran', status: 'passed' }]);
+  // `failure: ''` rather than absent: a passing assertion carries no failure
+  // text, and the malformed-mutation check must see an empty string rather
+  // than `undefined` so it cannot accidentally match on a missing key.
+  assert.deepEqual(readAssertions(report), [
+    { fullName: 'the one that ran', status: 'passed', failure: '' }
+  ]);
 });
 
 test('two tests answering to the name under mutation cannot be graded either', async () => {
@@ -352,13 +357,158 @@ test('two tests answering to the name under mutation cannot be graded either', a
   assert.equal(verdict([ran(FULL, 'passed')], [ran(FULL, 'failed')]), KILLED);
 });
 
+/**
+ * THE FALSE KILL THIS HARNESS SHIPPED, and the control that proves the fix is
+ * not simply refusing everything.
+ *
+ * An entry in this repository's own manifest dropped `ss.study_id = $3` from a
+ * CTE. `$3` was referenced only there, so the mutated query orphaned its bind
+ * parameter and Postgres answered 42P18 at RUNTIME. The suite loaded, the named
+ * test went red, and the harness said KILLED - for an entry that never
+ * evaluated the property it named. Found by a review gate, not by this file.
+ */
+test('a mutation that broke the statement is not counted as a kill', async () => {
+  const { verdictFor, MUTATION_IS_MALFORMED } = await load();
+
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [ran(FULL, 'passed')],
+      mutatedAssertions: [
+        ran(FULL, 'failed', 'error: could not determine data type of parameter $3')
+      ],
+      testName: NAMED
+    }),
+    MUTATION_IS_MALFORMED
+  );
+});
+
+test('an ordinary assertion failure is still a kill', async () => {
+  const { verdictFor, KILLED } = await load();
+
+  // THE CONTROL. Without it the test above passes just as well against a
+  // predicate that returns true for everything, which would report every entry
+  // in the manifest as malformed and turn the whole canary off.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [ran(FULL, 'passed')],
+      mutatedAssertions: [
+        ran(FULL, 'failed', 'AssertionError: expected null to equal "study_other"')
+      ],
+      testName: NAMED
+    }),
+    KILLED
+  );
+});
+
+test('a mutated run with no failure text at all is still a kill', async () => {
+  const { verdictFor, KILLED } = await load();
+
+  // The runners are not required to give us `failureMessages`, and an absent
+  // one must not be read as evidence of anything. Fails OPEN to KILLED, which
+  // is the pre-existing behaviour: this check only ever DEMOTES a verdict on
+  // positive evidence.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [ran(FULL, 'passed')],
+      mutatedAssertions: [{ fullName: FULL, status: 'failed' }],
+      testName: NAMED
+    }),
+    KILLED
+  );
+});
+
+test('the malformed-mutation signatures are matched, and ordinary ones are not', async () => {
+  const { mutationIsMalformed } = await load();
+
+  for (const failure of [
+    'error: could not determine data type of parameter $3',
+    'syntax error at or near ")"',
+    'bind message supplies 4 parameters, but prepared statement requires 5',
+    'ERROR: COULD NOT DETERMINE DATA TYPE OF PARAMETER $1'
+  ]) {
+    assert.equal(mutationIsMalformed(failure), true, failure);
+  }
+
+  for (const failure of [
+    'AssertionError: expected 2 to equal 1',
+    'expected "study_other" to be null',
+    // A TEST'S OWN POLL EXPIRING IS A REAL DETECTION and must stay a kill.
+    // This is the message `results-read-close-listener-is-registered-before-
+    // the-wait` fails with, and demoting it would switch off the entry that
+    // pins the worst defect this middleware has had.
+    'Timed out waiting for: the abandoned waiter to leave the queue',
+    '',
+    undefined
+  ]) {
+    assert.equal(mutationIsMalformed(failure), false, String(failure));
+  }
+});
+
+/**
+ * THE RUNNER GIVING UP IS THE SAME CATEGORY as a broken statement: the property
+ * was never evaluated. A second false kill of this shape shipped in the
+ * manifest - widening a retry budget pushed the backoff past vitest's test
+ * budget, so the named test died before reaching the literal it pinned.
+ *
+ * VITEST DISCARDS ITS OWN WORDING, which is the part that is easy to get wrong.
+ * `failureMessages` carries `Error: STACK_TRACE_ERROR`, a stack carrier
+ * @vitest/runner constructs; the readable "Test timed out in 5000ms" is
+ * substituted at print time and never appears in the JSON. Matching only the
+ * readable wordings would have left this entire class invisible on the runner
+ * that most of the manifest uses.
+ */
+test('a runner timeout is not counted as a kill, but a test-owned poll still is', async () => {
+  const { mutationIsMalformed } = await load();
+
+  for (const failure of [
+    'Error: STACK_TRACE_ERROR\n    at task (@vitest/runner/dist/chunk-hooks.js:638)',
+    'Error: thrown: "Exceeded timeout of 300 ms for a test.',
+    'Test timed out in 5000ms'
+  ]) {
+    assert.equal(mutationIsMalformed(failure), true, failure);
+  }
+
+  // THE CONTROL, and it is the whole reason this signature is narrow. A test
+  // that polls and reports its own expiry by name HAS detected the mutation.
+  // Widening the pattern to `/timed out/i` would swallow it and silently
+  // disarm a real entry.
+  assert.equal(
+    mutationIsMalformed('Timed out waiting for: the abandoned waiter to leave the queue'),
+    false
+  );
+});
+
+test('the failure text survives readAssertions, or the check above sees nothing', async () => {
+  const { readAssertions } = await load();
+
+  // The predicate is only as good as the text reaching it. Threading
+  // `failureMessages` through is the half of this feature that is easy to drop
+  // in a refactor, and dropping it fails OPEN - every verdict silently reverts
+  // to KILLED and nothing goes red.
+  const [assertion] = readAssertions({
+    testResults: [
+      {
+        assertionResults: [
+          {
+            fullName: FULL,
+            status: 'failed',
+            failureMessages: ['error: could not determine data type of parameter $3', 'at foo()']
+          }
+        ]
+      }
+    ]
+  });
+
+  assert.match(assertion.failure, /could not determine data type/);
+});
+
 test('the cause is reported for the runner that writes no stderr', async () => {
   const { firstSuiteMessage, mostTellingLine } = await load();
 
   // VITEST WRITES NOTHING TO STDERR on a suite that fails to load - measured at
-  // 0 bytes against jest's 690 - and eleven of the fifteen entries are vitest
-  // ones. So the detail line existed for four entries and was blank for the
-  // other eleven, which reads as "no information" rather than "not collected".
+  // 0 bytes against jest's 690 - and most of the manifest is vitest entries. So
+  // the detail line existed for the jest ones and was blank for all the rest,
+  // which reads as "no information" rather than as "not collected".
   const vitestReport = {
     testResults: [
       {
