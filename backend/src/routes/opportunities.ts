@@ -65,6 +65,80 @@ import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Sessio
 const router: Router = Router();
 
 /**
+ * The only columns `PATCH /api/opportunities/:id` may write.
+ *
+ * THIS IS THE SAME DEFECT `PATCH /api/sessions/:id` HAD, one route over. The
+ * update builder below interpolates the request body's KEYS into the SET
+ * clause - `updateFields.push(`${key} = $${paramCount}`)` - and parameterises
+ * only the values. So a key is SQL.
+ *
+ * It never became exploitable here for exactly one reason: `validateRequest`
+ * does `req.body = schema.parse(req.body)` and `UpdateOpportunitySchema` is a
+ * bare `z.object`, which STRIPS unknown keys. That is a side effect of zod's
+ * default mode, not a control anyone chose. A security gate measured what it
+ * is worth: changing that one schema to `.passthrough()` passed 958 of 958
+ * tests AND reopened the injection, driving the real handler and capturing
+ *
+ *   UPDATE opportunities
+ *   SET title = (SELECT email FROM users ORDER BY created_at LIMIT 1), ...
+ *
+ * back out through the handler's own `RETURNING *`.
+ *
+ * Relying on a parser's default mode is the same shape of mistake as relying
+ * on the `const data: UpdateSessionRequest = req.body` TYPE ANNOTATION that
+ * hid the sessions hole - both read exactly like validation and neither
+ * refuses anything.
+ * `validation/__tests__/update-opportunity-schema-strips.test.ts` makes the word
+ * `.passthrough()` fail by name; this set is what makes the failure survivable.
+ *
+ * Adding a column here widens what a request body can reach into the SET
+ * clause. `owner_user_id`, `id` and `created_at` are all columns on this table
+ * and none of them belongs to a caller.
+ *
+ * EXPORTED as a test seam, and only that. Nothing else imports it. It is
+ * exported because a test that restates the policy cannot detect the policy
+ * changing: an earlier draft of the pin below listed the fifteen names in the
+ * test file itself and a mutation that widened this set passed all 22 of them.
+ */
+export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
+  'type',
+  'title',
+  'purpose_one_liner',
+  'description_optional',
+  'product_optional',
+  'meeting_location_optional',
+  'default_duration_minutes',
+  'external_link_optional',
+  'delivery_mode',
+  'firsthand_study_id',
+  'participant_type_required',
+  'participant_type_specific_details',
+  'status',
+  'start_date',
+  'end_date',
+]);
+
+/**
+ * Keys `UpdateOpportunitySchema` declares that are NOT columns on
+ * `opportunities`.
+ *
+ * The handler consumes all three and destructures them out of `data` before
+ * the field loop (see the PATCH handler), so they must be permitted by the
+ * allow-list without joining it - putting `expected_study_updated_at` in
+ * `UPDATABLE_OPPORTUNITY_COLUMNS` would be declaring a column that does not
+ * exist, and the loop only avoids emitting it because of that destructure.
+ *
+ * Two sets rather than one because they fail differently: a name in the first
+ * set that is not a column answers 500 on every save that sends it, and a name
+ * missing from either set answers 400 on a body the editor legitimately sends.
+ */
+export const NON_COLUMN_OPPORTUNITY_BODY_KEYS: ReadonlySet<string> = new Set([
+  'inline_study',
+  'inline_survey',
+  'expected_study_updated_at',
+]);
+
+/**
  * Minting is idempotent per participant per opportunity as of 4d - an
  * unfinished session resumes and a finished one is refused - so the ceiling is
  * not what stops vote stuffing. It stops the cost: 60 sessions were minted in
@@ -1330,6 +1404,48 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
 
 // PATCH /api/opportunities/:id - Update opportunity
 router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(UpdateOpportunitySchema), asyncHandler(async (req: Request, res: Response) => {
+  // THE ALLOW-LIST IS THE INJECTION FIX. See UPDATABLE_OPPORTUNITY_COLUMNS for
+  // why the builder further down is unsafe on its own.
+  //
+  // WHY IT IS HERE AND NOT BESIDE THE BUILDER. Both branches need it. The
+  // security gate on the sessions fix proved that by making that allow-list
+  // database-only, which survived all 958 tests - the `!dbAvailable` branch
+  // spreads the body into the stored object, so an unknown key there is
+  // unrestricted mass assignment with no SQL involved.
+  //
+  // WHY IT READS `req.body` RATHER THAN `data`. `data` does not exist yet on
+  // either branch, and the destructure that produces it on the database path
+  // is ~600 lines below. Reading the parsed body here is the same key set.
+  //
+  // WHY IT REFUSES RATHER THAN DROPS. Silently ignoring a field tells the
+  // caller their save succeeded when part of it did not happen.
+  //
+  // The message names the PERMITTED fields and never echoes what was sent: the
+  // offending key is attacker-chosen text, and reflecting it into a response
+  // body puts it one careless render away from being a second vulnerability.
+  // Only the first argument to ValidationError reaches the wire - errorHandler
+  // serialises `{ error: error.message, ... }` and drops the details array - so
+  // the keys go in the `logger.warn` explicitly, bounded, where an operator
+  // watching an attempt can see what was tried.
+  const unknownFields = Object.keys(req.body ?? {}).filter(
+    (key) => !UPDATABLE_OPPORTUNITY_COLUMNS.has(key) && !NON_COLUMN_OPPORTUNITY_BODY_KEYS.has(key)
+  );
+  if (unknownFields.length > 0) {
+    logger.warn('Refused an opportunity update naming a column outside the allow-list', {
+      opportunityId: req.params.id,
+      userId: req.user?.id,
+      count: unknownFields.length,
+      // Bounded on BOTH axes. The count cap was here from the start; the
+      // length cap was not, and `express.json()` is mounted with no `limit`,
+      // so one key can be 100kb of attacker-chosen text. A log line is the
+      // right place for these - it is not the response - but not at any size.
+      fields: unknownFields.slice(0, 10).map((field) => field.slice(0, 64))
+    });
+    throw new ValidationError('Validation failed', [
+      `Only ${[...UPDATABLE_OPPORTUNITY_COLUMNS].join(', ')} may be updated`
+    ]);
+  }
+
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -1976,6 +2092,44 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
 
   Object.entries(data).forEach(([key, value]) => {
     if (value !== undefined) {
+      // THE SECOND HALF OF THE ALLOW-LIST, AND IT IS NOT BELT-AND-BRACES.
+      //
+      // The check at the top of this handler vets the REQUEST BODY. This one
+      // vets what actually reaches the SET clause, ~660 lines later, and the
+      // two are not the same set: this handler MUTATES `data` in between -
+      // `data.firsthand_study_id = createdStudyId` at three sites above. Those
+      // three are allow-listed, so the entry check was sound today, but only
+      // today, and held by nothing except the distance between the two points.
+      //
+      // A security gate measured that. Adding one line above this loop that
+      // writes an injected key into `data` for an ORDINARY body - no hostile
+      // input anywhere in the request - survived all 987 tests and rebuilt the
+      // entire original vulnerability:
+      //
+      //   UPDATE opportunities SET title = $1,
+      //     purpose_one_liner = (SELECT email FROM users LIMIT 1), ... RETURNING *
+      //
+      // answering 200 with the address in the response body. A guard at the
+      // boundary cannot protect a statement built six hundred lines inside it.
+      //
+      // The review gate found the same gap from the other side: with only the
+      // entry check, narrowing it to `unknownFields.length === Object.keys(body).length`
+      // - the shape a well-meaning "do not 400 a mostly-valid save" refactor
+      // produces - also survived 987 tests and let a MIXED body through.
+      //
+      // `data` has the three non-column keys destructured out by this point, so
+      // this set is the whole rule here. Raised as the same ValidationError as
+      // the entry check so the two cannot answer differently for one cause.
+      if (!UPDATABLE_OPPORTUNITY_COLUMNS.has(key)) {
+        logger.error('Refused a column outside the allow-list at the update builder', {
+          opportunityId: id,
+          userId: req.user?.id,
+          field: key.slice(0, 64)
+        });
+        throw new ValidationError('Validation failed', [
+          `Only ${[...UPDATABLE_OPPORTUNITY_COLUMNS].join(', ')} may be updated`
+        ]);
+      }
       paramCount++;
       updateFields.push(`${key} = $${paramCount}`);
       values.push(typeof value === 'string' ? value.trim() : value);

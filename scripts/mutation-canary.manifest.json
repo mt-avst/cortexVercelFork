@@ -572,5 +572,35 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.patch-column-allowlist.test.ts",
     "test": "refuses a body key carrying a subquery, and builds no SQL for it"
+  },
+  {
+    "id": "opportunity-patch-column-allowlist-holds",
+    "why": "PATCH /api/opportunities/:id has the same raw-key interpolation PATCH /api/sessions/:id had - `updateFields.push(`${key} = $${paramCount}`)` puts the request body's KEY into the SET clause and binds only the value. It was never exploitable for one reason: validateRequest does `req.body = schema.parse(req.body)` and UpdateOpportunitySchema is a bare z.object, which strips unknown keys. A security gate measured what that is worth - changing that one word to `.passthrough()` passed 958 of 958 tests AND reopened the injection, driving the real handler and capturing `UPDATE opportunities SET title = (SELECT email FROM users ORDER BY created_at LIMIT 1), ...` back through RETURNING *. Relying on a parser's default mode is the same mistake as relying on the type annotation that hid the sessions hole. This entry mutates the allow-list to accept everything, which is the pre-fix behaviour; the spec drives the real handler with the stripping neutralised, which is the state the fix exists to survive.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "  const unknownFields = Object.keys(req.body ?? {}).filter(\n    (key) => !UPDATABLE_OPPORTUNITY_COLUMNS.has(key) && !NON_COLUMN_OPPORTUNITY_BODY_KEYS.has(key)\n  );",
+    "mutation": "  const unknownFields = Object.keys(req.body ?? {}).filter(() => false);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.patch-column-allowlist.test.ts",
+    "test": "refuses a body key carrying a subquery, and builds no SQL for it"
+  },
+  {
+    "id": "opportunity-patch-allowlist-refuses-a-mixed-body",
+    "why": "A boundary allow-list that fires only when EVERY key is unknown is the shape a well-meaning \"do not 400 a mostly-valid save\" refactor produces, and it reopens the injection for the body the exploit actually has: one permitted key alongside one that is not. A review gate measured it - every refusal arm in both specs sent a body of EXACTLY ONE key, so this narrowing survived all 987 tests on BOTH routes and let `SET title = $1, purpose_one_liner = (SELECT email FROM users ...)` through at 200. Checking only the first key survived too. The mixed-body arm is what kills it. Paired with `opportunity-patch-column-allowlist-holds`, which mutates the filter rather than the condition - the two fail apart.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "  if (unknownFields.length > 0) {",
+    "mutation": "  if (unknownFields.length > 0 && unknownFields.length === Object.keys(req.body ?? {}).length) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.patch-column-allowlist.test.ts",
+    "test": "refuses a mixed body, and builds no SQL for the permitted key either"
+  },
+  {
+    "id": "session-patch-allowlist-refuses-a-mixed-body",
+    "why": "A boundary allow-list that fires only when EVERY key is unknown is the shape a well-meaning \"do not 400 a mostly-valid save\" refactor produces, and it reopens the injection for the body the exploit actually has: one permitted key alongside one that is not. A review gate measured it - every refusal arm in both specs sent a body of EXACTLY ONE key, so this narrowing survived all 987 tests on BOTH routes and let `SET title = $1, purpose_one_liner = (SELECT email FROM users ...)` through at 200. Checking only the first key survived too. The mixed-body arm is what kills it. Same entry on the sibling route, because the gap was measured on both and a fix to one is not a fix to the other.",
+    "file": "backend/src/routes/sessions.ts",
+    "anchor": "  if (unknownFields.length > 0) {",
+    "mutation": "  if (unknownFields.length > 0 && unknownFields.length === Object.keys(data ?? {}).length) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.patch-column-allowlist.test.ts",
+    "test": "refuses a mixed body, and builds no SQL for the permitted key either"
   }
 ]

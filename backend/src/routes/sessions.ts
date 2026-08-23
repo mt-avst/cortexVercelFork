@@ -273,7 +273,11 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
       sessionId,
       userId: req.user?.id,
       count: unknownFields.length,
-      fields: unknownFields.slice(0, 10)
+      // Bounded on BOTH axes. The count cap was here from the start; the
+      // length cap was not, and `express.json()` is mounted with no `limit`,
+      // so one key can be 100kb of attacker-chosen text. A log line is the
+      // right place for these - it is not the response - but not at any size.
+      fields: unknownFields.slice(0, 10).map((field) => field.slice(0, 64))
     });
     throw new ValidationError('Validation failed', [
       `Only ${[...UPDATABLE_SESSION_COLUMNS].join(', ')} may be updated`
@@ -356,6 +360,25 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     
     Object.entries(data).forEach(([key, value]) => {
       if (value !== undefined) {
+        // THE SECOND HALF OF THE ALLOW-LIST. The check at :243 vets the request
+        // BODY; this one vets what reaches the SET clause. Two gates on the
+        // sibling fix in routes/opportunities.ts proved a boundary-only
+        // allow-list is not enough: narrowing it to fire only when EVERY key is
+        // unknown survived all 987 tests and let a mixed body through, and a
+        // single line writing an injected key into `data` between the check and
+        // this loop rebuilt the whole original vulnerability past a green suite.
+        // The same two mutations survived here. A guard at the boundary cannot
+        // protect a statement built further in.
+        if (!UPDATABLE_SESSION_COLUMNS.has(key)) {
+          logger.error('Refused a column outside the allow-list at the update builder', {
+            sessionId,
+            userId: req.user?.id,
+            field: key.slice(0, 64)
+          });
+          throw new ValidationError('Validation failed', [
+            `Only ${[...UPDATABLE_SESSION_COLUMNS].join(', ')} may be updated`
+          ]);
+        }
         paramCount++;
         updateFields.push(`${key} = $${paramCount}`);
         values.push(value);

@@ -25,11 +25,18 @@ import { UpdateOpportunitySchema } from '../schemas';
  * `.catchall()`, or a migration away from zod all break these tests instead of
  * silently reopening a SQL injection on a live route.
  *
- * WHAT THIS IS NOT. It is not the fix. The fix is the runtime allow-list that
- * sessions.ts now has, applied to opportunities.ts as well - a schema is a
- * parser, and relying on a parser's default mode to be a security control is
- * the same shape of mistake as relying on a TYPE annotation, which is what
- * made the sessions hole invisible. This is a tripwire until that lands.
+ * WHAT THIS IS NOT. It is not the fix. The fix is the runtime allow-list -
+ * `UPDATABLE_OPPORTUNITY_COLUMNS` in routes/opportunities.ts, landed after this
+ * file and pinned by `opportunities.patch-column-allowlist.test.ts`. A schema
+ * is a parser, and relying on a parser's default mode to be a security control
+ * is the same shape of mistake as relying on a TYPE annotation, which is what
+ * made the sessions hole invisible.
+ *
+ * So this file is now the SECOND layer, not the only one, and it is still worth
+ * having: the two fail for different reasons. Flip the schema to
+ * `.passthrough()` and these tests fail; delete the allow-list and they do not,
+ * which is exactly why the allow-list needed its own tests rather than this
+ * one being counted as coverage of it.
  */
 describe('UpdateOpportunitySchema strips unknown keys', () => {
   // THE CONTROL. If the schema stopped parsing altogether, or these tests were

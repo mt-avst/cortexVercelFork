@@ -137,6 +137,54 @@ describe('PATCH /api/sessions/:id column allow-list', () => {
     expect(mockQuery).not.toHaveBeenCalled();
   });
 
+  // THE MIXED BODY - one permitted key alongside one that is not, which is the
+  // shape the exploit above actually has. Every other refusal arm here sends a
+  // body of EXACTLY ONE key, and the gates on the sibling fix in
+  // routes/opportunities.ts proved what that costs: narrowing the check to fire
+  // only when every key is unknown survived all 987 tests on both routes and
+  // let a mixed body through to the SET clause.
+  it('refuses a mixed body, and builds no SQL for the permitted key either', async () => {
+    await request(listening(appAs('researcher_admin')))
+      .patch(PATH)
+      .send({
+        capacity: 5,
+        'location_or_meet_link_optional = (SELECT email FROM users ORDER BY created_at LIMIT 1), capacity': 5,
+      })
+      .expect(400);
+
+    expect(updateStatements(client)).toHaveLength(0);
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  // THE ASSERTION ABOUT THE STATEMENT ITSELF rather than about the body that
+  // produced it. A security gate showed the two are different questions: a
+  // single line writing an injected key into `data` between the boundary check
+  // and this builder rebuilt the whole original vulnerability past a green
+  // suite, because no arm anywhere asked what the SET clause named.
+  it('emits a SET clause naming only allow-listed columns', async () => {
+    await request(listening(appAs('researcher_admin')))
+      .patch(PATH)
+      .send({ capacity: 7, location_or_meet_link_optional: 'https://meet.example.com/x' })
+      .expect(200);
+
+    const sql = updateStatements(client)[0];
+    const setClause = sql.slice(sql.indexOf('SET ') + 4, sql.indexOf('WHERE'));
+    const named = setClause.split(',').map((f) => f.trim().split(/\s*=/)[0]);
+
+    // THE CONTROL. An empty or unparsed SET clause makes the loop below
+    // vacuous, and a test that iterates nothing passes forever.
+    expect(named).toHaveLength(2);
+    named.forEach((column) => {
+      expect([
+        'start_time',
+        'end_time',
+        'capacity',
+        'location_or_meet_link_optional',
+      ]).toContain(column);
+    });
+  });
+
   it('refuses mass assignment of columns the caller does not own', async () => {
     // The weaker half of the same hole: both are real columns on `sessions`,
     // so no injection is needed - just naming them was enough. `opportunity_id`
