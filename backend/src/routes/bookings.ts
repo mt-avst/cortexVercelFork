@@ -324,14 +324,41 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
   const userId = req.user!.id;
   const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
 
-  // Load booking with session and opportunity details
+  // Load booking with session and opportunity details.
+  //
+  // TWO JOINS ONTO `users`, AND THE SECOND ONE IS THE FIX. This query joined
+  // only `o.owner_user_id` - the OWNER, aliased owner_name/owner_email - and
+  // never `b.user_id`. So the participant's identity was never in scope, and
+  // `req.user` was the only identity the email block below could reach: the
+  // cancellation notice went to whoever pressed the button. When the
+  // participant cancelled their own booking that looked right and hid the
+  // defect; when a researcher cancelled somebody out of a session, the
+  // participant was never told, and the owner's copy named the researcher as
+  // the person who had booked.
+  //
+  // Three documents described behaviour this query could not perform, which is
+  // what a missing join costs: a test docblock and a canary `why` both said the
+  // handler emails the participant, and neither was wrong about the intent.
+  //
+  // INNER JOIN, deliberately. `bookings.user_id` is NOT NULL and cascades on
+  // user delete, so it cannot drop a row that would otherwise have been found -
+  // a LEFT JOIN here would only add a null branch that cannot occur, and would
+  // make the 404 below unreachable-looking for the wrong reason.
+  //
+  // `s.start_time` is selected for a second defect in the same block: both
+  // template arguments were `booking.end_time`, so the notice read
+  // "Date & Time: 15:00 - 15:00". Nobody had noticed because nobody who did not
+  // already know the time was receiving it.
   const bookingResult = await pool.query(`
-    SELECT b.*, s.end_time, s.opportunity_id, o.owner_user_id, o.title as opportunity_title,
-           u.name as owner_name, u.email as owner_email
+    SELECT b.*, s.start_time, s.end_time, s.opportunity_id, o.owner_user_id,
+           o.title as opportunity_title,
+           u.name as owner_name, u.email as owner_email,
+           pu.name as participant_name, pu.email as participant_email
     FROM bookings b
     JOIN sessions s ON b.session_id = s.id
     JOIN opportunities o ON s.opportunity_id = o.id
     JOIN users u ON o.owner_user_id = u.id
+    JOIN users pu ON b.user_id = pu.id
     WHERE b.id = $1
   `, [bookingId]);
 
@@ -406,19 +433,46 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
 
     // Email notifications (after transaction commit)
     try {
-      // Send cancellation email to participant
+      // Send cancellation email to participant.
+      //
+      // THE PARTICIPANT, not the caller. `getBookingCancellationTemplate` has
+      // always taken `participantName` and `cancelledBy` as SEPARATE
+      // parameters - the shape was designed for a third-party cancellation and
+      // both arguments were `req.user!.name`, which made the two collapse into
+      // one and the "// cancelled by self" comment true only on the
+      // participant's own path. The template needed no change; the caller did.
       const cancellationTemplate = EmailService.getBookingCancellationTemplate(
         booking.opportunity_title,
-        req.user!.name,
+        booking.participant_name,
+        new Date(booking.start_time),
         new Date(booking.end_time),
-        new Date(booking.end_time),
-        req.user!.name // cancelled by self
+        req.user!.name
       );
 
-      await emailService.sendEmail(
-        { email: req.user!.email, name: req.user!.name },
+      // The RESULT is read, which it was not before. `sendEmail` catches
+      // internally and returns `{ success: false, error }` rather than
+      // throwing, so the surrounding try/catch never fires on a delivery
+      // failure and the handler logged nothing at all - it answered
+      // "Booking cancelled successfully" either way. The `book` handler two
+      // hundred lines above already does this correctly.
+      //
+      // That default was survivable while the mail went to the person who
+      // pressed the button, since they could see it had not arrived. It is not
+      // survivable now: the whole point of this change is that somebody who is
+      // NOT in the room has to be told, and a silent failure is exactly the
+      // outcome it exists to prevent.
+      const cancellationResult = await emailService.sendEmail(
+        { email: booking.participant_email, name: booking.participant_name },
         cancellationTemplate
       );
+
+      if (!cancellationResult.success) {
+        logger.error('Participant cancellation email failed', {
+          bookingId,
+          participantUserId: booking.user_id,
+          error: cancellationResult.error
+        });
+      }
 
       // Send notification to researcher (if enabled in preferences)
       try {
@@ -430,11 +484,15 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
         const shouldNotify = prefsResult.rows.length === 0 || prefsResult.rows[0].on_cancel_email === true;
         
         if (shouldNotify) {
+          // The owner's copy names the PARTICIPANT, which is the whole
+          // content of a "participant cancelled" notice. It named
+          // `req.user` too, so an owner cancelling on somebody's behalf was
+          // told that they themselves had booked and cancelled.
           const adminTemplate = EmailService.getAdminNotificationTemplate(
             booking.opportunity_title,
-            req.user!.name,
-            req.user!.email,
-            new Date(booking.end_time),
+            booking.participant_name,
+            booking.participant_email,
+            new Date(booking.start_time),
             new Date(booking.end_time),
             'cancelled'
           );
@@ -448,11 +506,12 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
         logger.error('Error checking notification preferences', { error: prefError });
         // Default to sending notification if preference check fails
         try {
+          // Same arguments as the preferred path above, for the same reason.
           const adminTemplate = EmailService.getAdminNotificationTemplate(
             booking.opportunity_title,
-            req.user!.name,
-            req.user!.email,
-            new Date(booking.end_time),
+            booking.participant_name,
+            booking.participant_email,
+            new Date(booking.start_time),
             new Date(booking.end_time),
             'cancelled'
           );
@@ -681,14 +740,32 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
     // Email notifications (after transaction commit)
     try {
       // Send updated confirmation email to participant
+      // `targetOwnerName` / `targetOwnerEmail`, not `targetSession.owner_*`.
+      //
+      // THE SAME DEFECT CLASS THIS COMMIT EXISTS TO CLOSE, one handler down,
+      // and a review gate found it by reading beside the diff. `targetSession`
+      // comes from a SELECT over `sessions` joined to `opportunities`, and
+      // `sessions` has no `owner_name` or `owner_email` column - the string
+      // appears nowhere in db/migrate.ts. Both arguments were `undefined` at
+      // runtime, and this handler had ALREADY resolved the right values forty
+      // lines above, passing them to the calendar attendee list and never to
+      // the email.
+      //
+      // It degraded silently rather than rendering "undefined", which is why
+      // nobody saw it: the template guards with `${ownerName ? ... : ''}` and
+      // generateICSFile guards `organizerEmail`, so a participant who
+      // rescheduled simply got a confirmation with no researcher on it and a
+      // calendar file with no organiser. Proved inert by mutation - replacing
+      // both arguments with a literal `undefined` changed nothing across all
+      // 973 tests.
       const confirmationTemplate = EmailService.getBookingConfirmationTemplate(
         targetSession.opportunity_title,
         req.user!.name,
         new Date(targetSession.start_time),
         new Date(targetSession.end_time),
         targetSession.location_or_meet_link_optional,
-        targetSession.owner_name,
-        targetSession.owner_email
+        targetOwnerName,
+        targetOwnerEmail
       );
 
       await emailService.sendEmail(

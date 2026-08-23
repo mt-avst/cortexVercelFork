@@ -525,7 +525,7 @@
   },
   {
     "id": "cancel-consults-opportunity-ownership",
-    "why": "POST /api/bookings/:id/cancel is a WRITE, and its owner term was held by no test: `(isAdmin && isOpportunityOwner(booking, req.user))` neutered to `(isAdmin && true)` passed 919 of 919 jest tests on 6504612. What that admits is any researcher_admin cancelling a colleague's participant out of a session they have nothing to do with - the slot is lost, `booked_count` is decremented, and both the participant and the real owner are emailed a cancellation naming the caller. No undo, no audit row. The named test carries BOTH the 403 and a no-write assertion, because a 403 raised for some other reason satisfies the status on its own; its control arm in the same file proves the same fixture DOES produce one `UPDATE bookings` for an entitled caller.",
+    "why": "POST /api/bookings/:id/cancel is a WRITE, and its owner term was held by no test: `(isAdmin && isOpportunityOwner(booking, req.user))` neutered to `(isAdmin && true)` passed 919 of 919 jest tests on 6504612. What that admits is any researcher_admin cancelling a colleague's participant out of a session they have nothing to do with - the slot is lost, `booked_count` is decremented, the participant is emailed a cancellation naming the caller, and the real owner is emailed a participant-cancelled notice naming the participant. (This sentence used to say both were emailed a cancellation naming the caller. They are different templates: only `getBookingCancellationTemplate` has a `cancelledBy` parameter, so the owner is never told who cancelled.) No undo, no audit row. The named test carries BOTH the 403 and a no-write assertion, because a 403 raised for some other reason satisfies the status on its own; its control arm in the same file proves the same fixture DOES produce one `UPDATE bookings` for an entitled caller.",
     "file": "backend/src/routes/bookings.ts",
     "anchor": "                   (isAdmin && isOpportunityOwner(booking, req.user));",
     "mutation": "                   (isAdmin && true);",
@@ -602,5 +602,45 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.patch-column-allowlist.test.ts",
     "test": "refuses a mixed body, and builds no SQL for the permitted key either"
+  },
+  {
+    "id": "cancel-emails-the-participant-not-the-caller",
+    "why": "POST /api/bookings/:id/cancel loaded its booking with ONE join onto users, on o.owner_user_id. It never joined b.user_id, so the participant's identity was not in scope and req.user was the only identity the email block could reach: the cancellation notice went to whoever pressed the button. A participant cancelling their own booking looked correct and hid it. A researcher cancelling somebody out of a session meant the participant heard NOTHING - slot gone, calendar event deleted, first they knew of it was turning up - while the researcher received the participant's copy addressed to themselves. Three separate records described the behaviour the query could not perform. This entry sends the cancellation back to req.user, which is the pre-fix behaviour.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      const cancellationResult = await emailService.sendEmail(\n        { email: booking.participant_email, name: booking.participant_name },\n        cancellationTemplate\n      );",
+    "mutation": "      const cancellationResult = await emailService.sendEmail(\n        { email: req.user!.email, name: req.user!.name },\n        cancellationTemplate\n      );",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cancel-notifies-participant.test.ts",
+    "test": "sends the cancellation to the participant and not to the caller"
+  },
+  {
+    "id": "cancel-joins-the-participant-into-scope",
+    "why": "The root cause of the cancellation notice going to the caller was a MISSING JOIN, not a wrong variable - so the join is pinned separately from the recipient. Deleting `JOIN users pu ON b.user_id = pu.id` puts participant_name and participant_email out of scope again and every message the handler sends is addressed to or names undefined. The named spec models the database's contract rather than hard-coding a fixture: its booking row returns those columns ONLY IF the statement actually asked for them, which is what lets a mocked pool see a missing join at all.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    JOIN users u ON o.owner_user_id = u.id\n    JOIN users pu ON b.user_id = pu.id",
+    "mutation": "    JOIN users u ON o.owner_user_id = u.id",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cancel-notifies-participant.test.ts",
+    "test": "joins the participant and selects the columns the email block reads"
+  },
+  {
+    "id": "cancel-owner-notice-goes-to-the-owner",
+    "why": "The owner's copy of a cancellation was UNPINNED, and the test file said the opposite. Every arm asserting the admin-notice recipient ran as the OWNER, and the fixture's owner_name/owner_email were the caller's own values, so the assertion was an identity on its own fixture: redirecting the owner's copy to `req.user` at both call sites survived all 973 tests. That is the same req.user-versus-loaded-row confusion the participant fix exists to close, left alive on the sibling call. The named test is the only arm where the caller is NOT the owner - the participant cancelling their own booking - which is what makes it the only arm that can see the owner's recipient at all. Anchored on the PREFERRED path; the `catch (prefError)` fallback carries an identical send, so the anchor deliberately includes the surrounding comment to stay unique.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "          await emailService.sendEmail(\n            { email: booking.owner_email, name: booking.owner_name },\n            adminTemplate\n          );\n        }\n      } catch (prefError) {",
+    "mutation": "          await emailService.sendEmail(\n            { email: req.user!.email, name: req.user!.name },\n            adminTemplate\n          );\n        }\n      } catch (prefError) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cancel-notifies-participant.test.ts",
+    "test": "sends the owner's copy to the owner, who here is not the caller"
+  },
+  {
+    "id": "reschedule-names-the-researcher",
+    "why": "POST /api/bookings/:id/reschedule passed `targetSession.owner_name` and `targetSession.owner_email` into getBookingConfirmationTemplate. NEITHER COLUMN EXISTS - targetSession is a SELECT over sessions joined to opportunities, and `owner_name` appears nowhere in db/migrate.ts - so both arguments were undefined at runtime, while the handler had already resolved the right values forty lines above and passed them only to the calendar attendee list. It degraded silently rather than rendering \"undefined\", because the template guards with `${ownerName ? ... : ''}` and generateICSFile guards organizerEmail: a participant who rescheduled got a confirmation with no researcher and a calendar file with no organiser. Found by a review gate reading the handlers BESIDE the cancellation fix; the same defect class, one handler down. Replacing both arguments with a literal `undefined` changed nothing across 973 tests before the spec existed.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "        targetOwnerName,\n        targetOwnerEmail\n      );",
+    "mutation": "        targetSession.owner_name,\n        targetSession.owner_email\n      );",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-names-the-researcher.test.ts",
+    "test": "puts the researcher on the confirmation, not undefined"
   }
 ]
