@@ -482,5 +482,45 @@
     "runner": "jest",
     "spec": "src/utils/__tests__/opportunityOwnership.test.ts",
     "test": "refuses an ownerless row and an id-less caller, which a bare === pairs"
+  },
+  {
+    "id": "leaderboard-limit-ceiling-is-a-hundred",
+    "why": "Both leaderboard routes are UNAUTHENTICATED and fed `limit` straight into a SQL `LIMIT $1`, so `?limit=1000000` was one request from anyone on the network for every participant's name and participation volume. The ceiling is a policy number and the test asserts the literal rather than deriving it from the constant - three mutations survived a review in this repository by deriving exactly that way, including one that widened a concurrency cap.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "export const MAX_LEADERBOARD_LIMIT = 100;",
+    "mutation": "export const MAX_LEADERBOARD_LIMIT = 500;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.leaderboard-limit.test.ts",
+    "test": "holds the ceiling at the number that was decided"
+  },
+  {
+    "id": "leaderboard-monthly-route-is-capped-too",
+    "why": "TWO ROUTES FOURTEEN LINES APART, near-identical, which is the shape where a fix applied to one reads as a fix applied to both - the same trap approve and reject set in bookings.ts. This entry reverts ONLY the monthly route to the old uncapped `parseInt(...) || 10`, so an entry naming the pair generally cannot stand in for it.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "    const limit = leaderboardLimit(req.query.limit);\n    const leaderboard = await getMonthlyLeaderboard(limit);",
+    "mutation": "    const limit = parseInt(req.query.limit as string) || 10;\n    const leaderboard = await getMonthlyLeaderboard(limit);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.leaderboard-limit.test.ts",
+    "test": "caps the monthly limit at the number that was decided"
+  },
+  {
+    "id": "clicks-total-is-withheld-not-zeroed",
+    "why": "A DECISION ABOUT WIRE SHAPE, not about a gate. `clicks_total` is OMITTED for a caller who may not see it, because a colleague's row showing `0` reads as `nobody clicked` rather than `not yours` - the withheld-versus-unknown distinction this repository already got right once on `answer_counts` and got wrong before that. Zeroing it instead is a one-word edit that leaks no data and silently publishes a falsehood, which no gate reading for authorisation would flag.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "        : undefined;\n\n      return {",
+    "mutation": "        : 0;\n\n      return {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.clicks-total-scope.test.ts",
+    "test": "withholds the key entirely from a non-admin, rather than sending a zero"
+  },
+  {
+    "id": "feedback-reads-stay-open-to-every-admin",
+    "why": "The DECISION on #15, pinned in the direction nobody expects: this route LOOKS like it should be tightened, because DELETE beside it is superadmin and the API client comment said `superadmin only`. Both misleading - Admin.tsx renders the Feedback tab for researcher_admins on purpose, so tightening removes a tab they are meant to see. A canary entry rather than only a test because the tightening edit is what a future reader will reach for.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "router.get('/', requireAdmin, asyncHandler",
+    "mutation": "router.get('/', requireSuperadmin, asyncHandler",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/feedback.open-to-all-admins.test.ts",
+    "test": "lets a researcher_admin list feedback"
   }
 ]

@@ -768,7 +768,15 @@ export interface FeedbackItem {
 }
 
 /**
- * Get all feedback (superadmin only)
+ * Get all feedback. EVERY ADMIN, not just a superadmin.
+ *
+ * This comment said "superadmin only" and was wrong - the route is
+ * `requireAdmin`, and Admin.tsx renders the Feedback tab for researcher_admins
+ * on purpose. It read as a specification and it was a mistake, which is the
+ * expensive kind: the next reader tightening the route to match would have
+ * removed a tab those admins are meant to see. cto/AdaptaLabs#15.
+ *
+ * `deleteFeedback` below IS superadmin-only, and that asymmetry is deliberate.
  */
 export const getFeedback = async (): Promise<FeedbackItem[]> => {
   const response = await api.get('/feedback');
