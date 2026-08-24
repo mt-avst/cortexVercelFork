@@ -14,9 +14,9 @@ import {
   RATING_SCALE_BOUNDS,
   type StepConfig,
   type StudyStep
-} from '../shared/firsthand/contract';
-import { CUSTOM_CONSENT_TEMPLATE_ID } from '../shared/firsthand/consent-templates';
-import { authorableSurveyStepTypes } from '../shared/firsthand/survey-authoring';
+} from '@shared/firsthand/contract';
+import { CUSTOM_CONSENT_TEMPLATE_ID } from '@shared/firsthand/consent-templates';
+import { authorableSurveyStepTypes } from '@shared/firsthand/survey-authoring';
 
 /** What a researcher calls each survey question type, keyed on the vocabulary. */
 const SURVEY_TYPE_LABELS: Record<
@@ -33,7 +33,7 @@ const SURVEY_TYPE_LABELS: Record<
 import {
   createStudyRequestSchema,
   updateStudyRequestSchema,
-} from '../shared/firsthand/study-input';
+} from '@shared/firsthand/study-input';
 
 type StepType = StudyStep['type'];
 type StudyStatus = 'draft' | 'launched' | 'archived';

@@ -1,15 +1,15 @@
-import type { StudyStep } from "../../shared/firsthand/contract";
+import type { StudyStep } from "@shared/firsthand/contract";
 import type {
   AnswerCompletenessProblem,
   AnswerValidityProblem,
   SurveyAnswer
-} from "../../shared/firsthand/survey-answers";
+} from "@shared/firsthand/survey-answers";
 import {
   findAnswerCompletenessProblem,
   findAnswerValidityProblem,
   isAnswerable,
   isAnswered
-} from "../../shared/firsthand/survey-answers";
+} from "@shared/firsthand/survey-answers";
 
 /**
  * The rules themselves live in shared/firsthand/survey-answers.ts, because the

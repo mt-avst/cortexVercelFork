@@ -8,7 +8,7 @@ import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrat
 import {
   authorableStepTypes,
   type InlineStudyStep
-} from '../../shared/firsthand/inline-study';
+} from '@shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
 import DurationEstimate from './DurationEstimate';
 import QuestionList from './QuestionList';

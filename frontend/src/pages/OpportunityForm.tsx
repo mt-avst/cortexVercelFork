@@ -59,11 +59,11 @@ import {
 import {
   PUBLISH_PROBLEM_MESSAGES,
   findPublishProblem
-} from '../shared/firsthand/publish-readiness';
+} from '@shared/firsthand/publish-readiness';
 import {
   EXTERNAL_LINK_PROTOCOL_MESSAGE,
   isPublishableExternalLink
-} from '../shared/firsthand/url-safety';
+} from '@shared/firsthand/url-safety';
 import {
   authoredStepsOf,
   copiedRecordedFields,
@@ -92,26 +92,26 @@ import AdminSessionManager from '../components/AdminSessionManager';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { RATING_SCALE_BOUNDS } from '../shared/firsthand/contract';
+import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE,
   resolveConsentTemplate
-} from '../shared/firsthand/consent-templates';
+} from '@shared/firsthand/consent-templates';
 import {
   DEFAULT_SURVEY_CONSENT_TEXT,
   inlineSurveySchema,
   type SurveyQuestion
-} from '../shared/firsthand/survey-authoring';
+} from '@shared/firsthand/survey-authoring';
 import {
   DEFAULT_CONSENT_TEXT,
   INLINE_STUDY_LIMITS,
   UNSAFE_TARGET_URL_MESSAGE,
   inlineStudySchema,
   type InlineStudyStep
-} from '../shared/firsthand/inline-study';
-import { isSafeTargetUrl } from '../shared/firsthand/url-safety';
+} from '@shared/firsthand/inline-study';
+import { isSafeTargetUrl } from '@shared/firsthand/url-safety';
 import { normaliseTargetUrl } from '../utils/targetUrl';
 
 import { CreateOpportunityRequest, UpdateOpportunityRequest, Opportunity, Session } from '../api/types';

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { normaliseTargetUrl } from '../targetUrl';
-import { isSafeTargetUrl } from '../../shared/firsthand/url-safety';
+import { isSafeTargetUrl } from '@shared/firsthand/url-safety';
 
 describe('normaliseTargetUrl', () => {
   it('adds https:// to a scheme-less host, which is the whole point', () => {

@@ -3,9 +3,9 @@ import {
   estimateSurveyMinutes
 } from './estimate-duration';
 import { toInlineStudyPayloadStep, toSurveyPayloadStep } from './hydrate-study';
-import { CUSTOM_CONSENT_TEMPLATE_ID } from '../../shared/firsthand/consent-templates';
-import type { InlineSurvey as InlineSurveyPayload, SurveyQuestion } from '../../shared/firsthand/survey-authoring';
-import type { InlineStudy as InlineStudyPayload, InlineStudyStep } from '../../shared/firsthand/inline-study';
+import { CUSTOM_CONSENT_TEMPLATE_ID } from '@shared/firsthand/consent-templates';
+import type { InlineSurvey as InlineSurveyPayload, SurveyQuestion } from '@shared/firsthand/survey-authoring';
+import type { InlineStudy as InlineStudyPayload, InlineStudyStep } from '@shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
 import type { CreateOpportunityRequest } from '../../api/types';
 import type { WithClientId } from './client-ids';

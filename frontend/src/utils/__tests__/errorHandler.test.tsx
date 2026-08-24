@@ -17,13 +17,13 @@ import {
   ConflictError,
   TimeoutError,
   NetworkError 
-} from '../../shared/types';
-import { API_CONFIG } from '../../shared/constants';
+} from '@shared/types';
+import { API_CONFIG } from '@shared/constants';
 import { 
   createMockApiResponse, 
   createMockApiError,
   mockConsole 
-} from '../../shared/test-utils';
+} from '@shared/test-utils';
 
 // Mock axios
 vi.mock('axios');

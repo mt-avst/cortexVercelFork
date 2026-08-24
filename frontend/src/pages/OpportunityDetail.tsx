@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getOpportunity, bookSession, trackOpportunityClick, getMyCalendarEvents, getRecordedStudyBrief, startRecordedStudySession, startSurveySession } from '../api/client';
-import type { RecordedStudyBrief } from '../shared/types';
+import type { RecordedStudyBrief } from '@shared/types';
 import { formatStudyDate, formatTimeRange, formatTimeZoneLabel, formatDateTime } from '../utils/datetime';
 import { Opportunity, CalendarEvent, Session } from '../api/types';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,7 +14,7 @@ import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
-import { isPublishableExternalLink } from '../shared/firsthand/url-safety';
+import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
 // Helper function to render poll description with checkbox indicators

@@ -1,4 +1,4 @@
-import type { StudyStep } from "../../shared/firsthand/contract";
+import type { StudyStep } from "@shared/firsthand/contract";
 import { isAnswerable, type SurveyAnswer } from "../../lib/survey/answers";
 import { ChoiceField } from "./fields/ChoiceField";
 import { ScaleField } from "./fields/ScaleField";

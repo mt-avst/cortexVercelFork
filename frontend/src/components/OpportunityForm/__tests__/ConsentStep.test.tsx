@@ -7,7 +7,7 @@ import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE
-} from '../../../shared/firsthand/consent-templates';
+} from '@shared/firsthand/consent-templates';
 
 /**
  * The consent step, which is C1's whole point: the approved wording is the

@@ -1,5 +1,5 @@
 import React from 'react';
-import { SESSION_DURATION } from '../../shared/constants';
+import { SESSION_DURATION } from '@shared/constants';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
 

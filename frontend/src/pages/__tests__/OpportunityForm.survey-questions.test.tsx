@@ -5,7 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm, { getTabsForType } from '../OpportunityForm';
-import { SURVEY_CONSENT_TEMPLATE } from '../../shared/firsthand/consent-templates';
+import { SURVEY_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 import { createOpportunity, getFirstHandStudies, getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';

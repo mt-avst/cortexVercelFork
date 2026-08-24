@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-import type { SessionPayload } from "../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 import type { DirectRecordingUploadMode } from "../../lib/recording/runtime-client";
 import { ParticipantSessionFlow } from "./ParticipantSessionFlow";
 

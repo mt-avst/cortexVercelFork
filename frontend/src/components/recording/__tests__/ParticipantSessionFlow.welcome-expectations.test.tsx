@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 beforeEach(() => {
   window.localStorage.clear();

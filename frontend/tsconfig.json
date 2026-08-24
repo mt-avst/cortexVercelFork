@@ -20,10 +20,11 @@
     "types": ["vite/client"],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/*": ["../shared/*"]
     }
   },
   "include": ["src", "../shared"],
-  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/*", "src/shared/test-utils.ts", "../shared/test-utils/**/*"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/*", "../shared/test-utils/**/*"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

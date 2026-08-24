@@ -4,7 +4,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import Admin from '../Admin';
-import { OPPORTUNITY_TYPES } from '../../shared/constants';
+import { OPPORTUNITY_TYPES } from '@shared/constants';
 import { getParticipantFacingType } from '../../utils/opportunityUtils';
 
 // One name per type, everywhere. A `test` was "User Test" in the authoring

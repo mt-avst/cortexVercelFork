@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
-import type { SessionPayload } from "../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 import {
   assessDeviceSupport,
   collectDeviceSnapshot,

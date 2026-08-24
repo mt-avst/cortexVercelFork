@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
-import { RECORDED_CONSENT_TEMPLATE } from '../../shared/firsthand/consent-templates';
+import { RECORDED_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 import {
   authoredStepsOf,
   studyRoundTripsCleanly,
@@ -15,12 +15,12 @@ import {
   withStoredIdentity
 } from '../../lib/opportunity-authoring/hydrate-study';
 import { withClientId } from '../../lib/opportunity-authoring/client-ids';
-import { toStudySteps } from '../../shared/firsthand/inline-study';
-import { toSurveySteps } from '../../shared/firsthand/survey-authoring';
+import { toStudySteps } from '@shared/firsthand/inline-study';
+import { toSurveySteps } from '@shared/firsthand/survey-authoring';
 import { getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
 import { logger } from '../../utils/logger';
-import type { StudyStep } from '../../shared/firsthand/contract';
+import type { StudyStep } from '@shared/firsthand/contract';
 import { inlineErrorText, summarisedErrorKeys } from './helpers/error-summary';
 
 /**

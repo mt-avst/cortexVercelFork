@@ -9,7 +9,7 @@ import {
   resolveConsentTemplate,
   type ConsentKind,
   type ConsentTemplateVersion
-} from '../../shared/firsthand/consent-templates';
+} from '@shared/firsthand/consent-templates';
 import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrate-study';
 import {
   describeConsentDiff,

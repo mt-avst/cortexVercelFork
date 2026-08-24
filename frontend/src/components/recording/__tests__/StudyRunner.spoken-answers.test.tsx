@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StudyRunner } from "../StudyRunner";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 // Sessions record screen and voice, so participants answer OUT LOUD. A typed
 // response box invited them to stop talking and type - the opposite of

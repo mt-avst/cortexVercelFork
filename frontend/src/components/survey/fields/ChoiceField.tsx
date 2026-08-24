@@ -1,4 +1,4 @@
-import type { StudyStep } from "../../../shared/firsthand/contract";
+import type { StudyStep } from "@shared/firsthand/contract";
 import type { SurveyAnswer } from "../../../lib/survey/answers";
 
 /**

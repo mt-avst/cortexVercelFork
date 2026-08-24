@@ -134,7 +134,7 @@ Map current PostgreSQL schema to Forge storage. Prefer **Forge Custom Entities**
 **Opportunities**
 
 - id (UUID), type, title, purpose_one_liner, description_optional, product_optional, default_duration_minutes, status (draft | published | closed), owner_user_id (accountId), external_link_optional, meeting_location_optional, participant_type_required, participant_type_specific_details, start_date, end_date, created_at, updated_at.
-- Same fields as current `Opportunity` type in `frontend/src/shared/types.ts` (and backend migrate.ts).
+- Same fields as current `Opportunity` type in `shared/types/index.ts` (and backend migrate.ts).
 
 **Sessions**
 
@@ -424,7 +424,7 @@ Execute in this order so dependencies are available.
 
 | Current | Use for |
 |--------|---------|
-| `frontend/src/shared/types.ts` | Copy type definitions into `src/types/index.ts` (drop Express-specific). |
+| `shared/types/index.ts` | Copy type definitions into `src/types/index.ts` (drop Express-specific). |
 | `frontend/src/api/client.ts` | List of “API” calls → resolver names and payloads (§4). |
 | `frontend/src/api/types.ts` + `api/gamification.ts` | Gamification + analytics types. |
 | `backend/src/db/migrate.ts` | Schema reference for entities (§3.1). |

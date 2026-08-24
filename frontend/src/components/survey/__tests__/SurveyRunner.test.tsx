@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SessionPayload, StudyStep } from "../../../shared/firsthand/contract";
+import type { SessionPayload, StudyStep } from "@shared/firsthand/contract";
 import { SurveyRunner } from "../SurveyRunner";
 
 const saveParticipantResponse = vi.fn();

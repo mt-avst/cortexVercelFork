@@ -1,5 +1,5 @@
-import { getFrontendConfig, FrontendEnvironment } from '../shared/config/environment';
-import { API_CONFIG as SHARED_API_CONFIG } from '../shared/constants';
+import { getFrontendConfig, FrontendEnvironment } from '@shared/config/environment';
+import { API_CONFIG as SHARED_API_CONFIG } from '@shared/constants';
 import { logger } from '../utils/logger';
 
 // Validate environment variables

@@ -10,7 +10,7 @@ import {
 } from "../../../lib/recording/session-local-state";
 import type { SetupAssessment } from "../../../lib/recording/setup-checks";
 import type { RecorderState } from "../../../lib/recording/session-recorder";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 /**
  * A setup check that fails has to say what to DO about it, and it has to say

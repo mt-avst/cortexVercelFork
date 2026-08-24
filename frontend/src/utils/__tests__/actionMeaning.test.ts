@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 
 import { getActionMeaning, getParticipantActionLabel } from '../opportunityUtils';
-import { OPPORTUNITY_TYPES } from '../../shared/constants';
+import { OPPORTUNITY_TYPES } from '@shared/constants';
 
 // The analytics card counting "actions" described them as "Clicked link /
 // Booked" for every study. A recorded study has no link to click and nothing to

@@ -19,7 +19,7 @@ import ConfirmationModal from '../components/ConfirmationModal';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { Button, Card, CardHeader, CardBody, CardFooter, CardTitle, Alert, Spinner } from '../components/ui';
 import { ArrowLeft, RefreshCw, ExternalLink, CalendarX, Monitor } from 'lucide-react';
-import { isPublishableExternalLink } from '../shared/firsthand/url-safety';
+import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 
 const MyBookings: React.FC = () => {
   const navigate = useNavigate();

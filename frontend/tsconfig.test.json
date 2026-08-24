@@ -23,7 +23,6 @@
     // backlog below. The real fix is making shared/test-utils runner-agnostic -
     // adding "jest" to the types here instead would collide with vitest's own
     // describe/it/expect declarations.
-    "src/shared/test-utils.ts",
     "../shared/test-utils/**/*",
 
     // BACKLOG - 54 errors. Shrinks only. See the MRs for the classification.
@@ -38,7 +37,6 @@
 
     // Blocked on the shared/test-utils jest coupling above, not on their own
     // types.
-    "src/contexts/__tests__/AuthContext.test.tsx",
-    "src/shared/__tests__/shared-copies-are-current.test.ts"
+    "src/contexts/__tests__/AuthContext.test.tsx"
   ]
 }

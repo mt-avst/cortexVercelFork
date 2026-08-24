@@ -34,9 +34,6 @@ export default tseslint.config(
       '**/build/**',
       '**/coverage/**',
       '**/.next/**',
-      'archive/**',
-      // A build-time copy of shared/, which is linted at its real home.
-      'frontend/src/shared/**',
     ],
   },
 

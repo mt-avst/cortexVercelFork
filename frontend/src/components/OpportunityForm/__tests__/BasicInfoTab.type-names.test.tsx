@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 import BasicInfoTab from '../BasicInfoTab';
-import { OPPORTUNITY_TYPES } from '../../../shared/constants';
+import { OPPORTUNITY_TYPES } from '@shared/constants';
 import { getParticipantFacingType } from '../../../utils/opportunityUtils';
 import type { OpportunityFormData } from '../../../api/types';
 

@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 // Once control moves to the floating pane this page stops being a workspace
 // and becomes a status board. It carried two progress systems - six stacked
