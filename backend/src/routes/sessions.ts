@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config';
-import { requireAdmin, optionalAuth } from '../middleware/authenticate';
+import { requireAdmin, requireSuperadmin, optionalAuth } from '../middleware/authenticate';
 import { asyncHandler, ValidationError, NotFoundError, ForbiddenError, ConflictError } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
@@ -490,38 +490,66 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
   res.status(204).send();
 }));
 
-// POST /api/sessions/sync-booked-counts - Sync booked_count with actual bookings (admin only)
-router.post('/sync-booked-counts', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
+// POST /api/sessions/sync-booked-counts - repair booked_count drift across
+// EVERY session in the database. cto/AdaptaLabs#26.
+//
+// SUPERADMIN ONLY. The value written is derived from the actual bookings, not
+// supplied by the caller, so this is not an arbitrary-value write - but it
+// rewrites every researcher's sessions, not just the caller's, so it is an
+// operator repair tool rather than a per-researcher action. Under the old
+// requireAdmin any researcher_admin could trigger writes to every other
+// researcher's sessions; every other write in this family is owner-gated.
+router.post('/sync-booked-counts', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
   logger.info('Starting booked_count sync');
-  
-  // Get all sessions
-  const sessionsResult = await pool.query('SELECT id FROM sessions');
-  
-  let syncedCount = 0;
-  
-  for (const session of sessionsResult.rows) {
-    // Count actual active bookings for this session
-    const bookingsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM bookings WHERE session_id = $1 AND status = $2',
-      [session.id, 'booked']
-    );
-    
-    const actualCount = parseInt(bookingsResult.rows[0].count);
-    
-    // Update booked_count to match actual bookings
-    await pool.query(
-      'UPDATE sessions SET booked_count = $1 WHERE id = $2',
-      [actualCount, session.id]
-    );
-    
-    syncedCount++;
+
+  // One transaction that LOCKS every session row before rewriting it, so the
+  // recount cannot clobber a booking committed while it runs. Because every
+  // writer that changes booked_count takes the session row lock first, the
+  // count taken while the sweep holds the locks cannot be stale:
+  //   - book and reschedule take FOR UPDATE NOWAIT on the session row, so while
+  //     the sweep holds the locks a concurrent booking fails fast (a retryable
+  //     409) rather than committing against a row about to be recounted;
+  //   - cancel's UPDATE on the session row blocks until the sweep commits, then
+  //     applies its -1 relative to the freshly synced value.
+  // The old code counted and updated on separate pooled connections with no
+  // lock, so a booking committed between the two overwrote the increment - it
+  // could CAUSE the drift it exists to fix. The set-based UPDATE also replaces
+  // the per-session N+1 (a SELECT COUNT plus an UPDATE for every row).
+  //
+  // ponytail: holds a lock on every session row for the length of the sweep, so
+  // new bookings are briefly rejected (retryable) table-wide while it runs - it
+  // is superadmin-only and rare. It can also deadlock (40P01) against reschedule
+  // and delete-sessions, which lock several session rows in a different order;
+  // tracked in cto/AdaptaLabs#34. Per-opportunity batching is the upgrade path
+  // if either matters.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const locked = await client.query('SELECT id FROM sessions ORDER BY id FOR UPDATE');
+
+    await client.query(`
+      UPDATE sessions s
+      SET booked_count = (
+        SELECT COUNT(*) FROM bookings b
+        WHERE b.session_id = s.id AND b.status = 'booked'
+      )
+    `);
+
+    await client.query('COMMIT');
+
+    const syncedCount = locked.rows.length;
+    logger.info(`Sync complete: ${syncedCount} sessions updated`);
+    res.json({
+      message: `Successfully synced booked_count for ${syncedCount} sessions`,
+      synced_count: syncedCount
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-  
-  logger.info(`Sync complete: ${syncedCount} sessions updated`);
-  res.json({ 
-    message: `Successfully synced booked_count for ${syncedCount} sessions`,
-    synced_count: syncedCount
-  });
 }));
 
 export default router;
