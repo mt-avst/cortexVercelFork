@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StudyRunner } from "../StudyRunner";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 // The pane itself is owned by ParticipantSessionFlow, which opens it as
 // recording starts (see ParticipantSessionFlow.pip-auto-open.test.tsx). What

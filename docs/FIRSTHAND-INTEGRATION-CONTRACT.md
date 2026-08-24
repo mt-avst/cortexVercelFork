@@ -293,7 +293,7 @@ the opportunity owner or a superadmin, and verifies the session id appears in
 `opportunity_session_events` for that opportunity before proxying.
 
 **Cortex types:** `FirstHandSessionOutputs` and friends in `shared/types/index.ts`
-(mirrored in `frontend/src/shared/types.ts`).
+(the frontend imports the same file via `@shared/types`).
 
 ---
 

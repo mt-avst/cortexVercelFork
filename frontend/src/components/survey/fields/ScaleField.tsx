@@ -1,7 +1,7 @@
 import {
   NPS_SCALE_MAX,
   type StudyStep
-} from "../../../shared/firsthand/contract";
+} from "@shared/firsthand/contract";
 import type { SurveyAnswer } from "../../../lib/survey/answers";
 
 /**

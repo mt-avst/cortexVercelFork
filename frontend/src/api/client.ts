@@ -260,7 +260,7 @@ export const duplicateOpportunity = async (id: string): Promise<Opportunity> => 
   return response.data;
 };
 
-export const getRecordedStudyBrief = async (opportunityId: string): Promise<import('../shared/types').RecordedStudyBrief> => {
+export const getRecordedStudyBrief = async (opportunityId: string): Promise<import('@shared/types').RecordedStudyBrief> => {
   const response = await api.get(`/opportunities/${opportunityId}/recorded-study-brief`);
   return response.data;
 };

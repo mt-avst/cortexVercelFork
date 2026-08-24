@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import OpportunityForm from '../OpportunityForm';
 import { createOpportunity, createSessions, getOpportunity, updateOpportunity } from '../../api/client';
-import { PUBLISH_PROBLEM_MESSAGES } from '../../shared/firsthand/publish-readiness';
-import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '../../shared/firsthand/url-safety';
+import { PUBLISH_PROBLEM_MESSAGES } from '@shared/firsthand/publish-readiness';
+import { EXTERNAL_LINK_PROTOCOL_MESSAGE } from '@shared/firsthand/url-safety';
 import {
   errorSummary,
   inlineErrorText,

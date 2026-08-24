@@ -1,7 +1,7 @@
 import React from 'react';
 import { Mic, Clock, ListChecks, Chrome, ShieldCheck, StopCircle } from 'lucide-react';
 
-import type { RecordedStudyBrief } from '../shared/types';
+import type { RecordedStudyBrief } from '@shared/types';
 
 type RecordedStudyExpectationsProps = {
   /**

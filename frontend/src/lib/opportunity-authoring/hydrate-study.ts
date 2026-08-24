@@ -1,19 +1,19 @@
 import { mintClientId, withClientIds, type WithClientId } from './client-ids';
-import { stepKeyOf } from '../../shared/firsthand/step-identity';
+import { stepKeyOf } from '@shared/firsthand/step-identity';
 import { getPrimaryTargetUrl } from '../recording/task-target';
-import type { StudyStep } from '../../shared/firsthand/contract';
-import { CUSTOM_CONSENT_TEMPLATE_ID } from '../../shared/firsthand/consent-templates';
-import type { FirstHandStudy } from '../../shared/types';
+import type { StudyStep } from '@shared/firsthand/contract';
+import { CUSTOM_CONSENT_TEMPLATE_ID } from '@shared/firsthand/consent-templates';
+import type { FirstHandStudy } from '@shared/types';
 import {
   authorableStepTypes,
   toStudySteps,
   type InlineStudyStep
-} from '../../shared/firsthand/inline-study';
+} from '@shared/firsthand/inline-study';
 import {
   authorableSurveyStepTypes,
   toSurveySteps,
   type SurveyQuestion
-} from '../../shared/firsthand/survey-authoring';
+} from '@shared/firsthand/survey-authoring';
 
 /**
  * Reading a stored study into the opportunity form, and writing it back out.

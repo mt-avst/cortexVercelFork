@@ -9,11 +9,12 @@
  * copy that can start disagreeing, and the one it disagrees with is the one
  * that decides.
  *
- * In `shared/firsthand/` rather than a directory of its own because that is the
- * tree `frontend/copy-shared-types.js` copies wholesale and
- * `shared-copies-are-current.test.ts` checks by construction. A new file
- * anywhere else needs two hand-written lists updated, and a shared module whose
- * frontend copy is unchecked is the defect C1 shipped and then fixed.
+ * In `shared/firsthand/` because both sides import this tree directly, the
+ * backend by relative path and the frontend through the `@shared/*` alias.
+ * There is one copy of this function and both callers get that copy, so it
+ * cannot start disagreeing with itself. It previously lived here because this
+ * was the tree a copy script duplicated into the frontend wholesale; that
+ * duplication, and the unchecked-copy defect it caused, is gone.
  *
  * Reported as a code rather than a string, per the pattern
  * `findStepVocabularyProblem` sets in `study-input.ts`: the server throws the

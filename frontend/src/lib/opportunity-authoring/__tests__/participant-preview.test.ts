@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { sessionPayloadSchema } from '../../../shared/firsthand/contract';
-import { DEFAULT_SURVEY_CONSENT_TEXT } from '../../../shared/firsthand/survey-authoring';
-import { DEFAULT_CONSENT_TEXT } from '../../../shared/firsthand/inline-study';
+import { sessionPayloadSchema } from '@shared/firsthand/contract';
+import { DEFAULT_SURVEY_CONSENT_TEXT } from '@shared/firsthand/survey-authoring';
+import { DEFAULT_CONSENT_TEXT } from '@shared/firsthand/inline-study';
 import {
   buildRecordedPreview,
   buildStoredStudyPreview,

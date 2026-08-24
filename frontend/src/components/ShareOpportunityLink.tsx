@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 
 import { Button } from './ui';
-import type { Opportunity, User } from '../shared/types';
+import type { Opportunity, User } from '@shared/types';
 
 type CopyState = 'idle' | 'copied' | 'failed';
 

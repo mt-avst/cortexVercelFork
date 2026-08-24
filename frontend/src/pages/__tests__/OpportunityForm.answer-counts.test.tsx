@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import OpportunityForm from '../OpportunityForm';
 import { getOpportunity, updateOpportunity } from '../../api/client';
 import { getFirstHandStudy } from '../../api/firsthand-studies';
-import type { StudyStep } from '../../shared/firsthand/contract';
+import type { StudyStep } from '@shared/firsthand/contract';
 
 /**
  * What an author is told before a save moves somebody's answers.

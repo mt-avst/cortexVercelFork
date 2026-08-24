@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ParticipantSessionFlow } from "../ParticipantSessionFlow";
 import { getFlowStorageKey, type FlowPhase } from "../../../lib/recording/session-local-state";
 import type { RecorderState } from "../../../lib/recording/session-recorder";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 /**
  * The one-click exit, and why removing it is the whole protection.

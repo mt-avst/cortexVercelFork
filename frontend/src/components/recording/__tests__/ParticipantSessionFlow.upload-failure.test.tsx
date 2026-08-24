@@ -9,7 +9,7 @@ import {
   type FlowPhase
 } from "../../../lib/recording/session-local-state";
 import type { RecorderState } from "../../../lib/recording/session-recorder";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 /**
  * The end of a recorded session, where the recording exists only in memory.

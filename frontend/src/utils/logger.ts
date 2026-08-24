@@ -1,4 +1,4 @@
-import { LogContext } from '../shared/types';
+import { LogContext } from '@shared/types';
 
 /**
  * Logger class for structured logging with different levels and contexts

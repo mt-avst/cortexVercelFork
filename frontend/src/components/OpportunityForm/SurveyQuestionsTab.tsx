@@ -8,11 +8,11 @@ import type { StudyReadOnlyReason } from '../../lib/opportunity-authoring/hydrat
 import {
   NPS_SCALE_MAX,
   RATING_SCALE_BOUNDS
-} from '../../shared/firsthand/contract';
+} from '@shared/firsthand/contract';
 import {
   authorableSurveyStepTypes,
   type SurveyQuestion
-} from '../../shared/firsthand/survey-authoring';
+} from '@shared/firsthand/survey-authoring';
 import DurationEstimate from './DurationEstimate';
 import QuestionList from './QuestionList';
 import ReadOnlyStudyContent from './ReadOnlyStudyContent';

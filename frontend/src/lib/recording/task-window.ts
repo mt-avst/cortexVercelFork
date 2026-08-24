@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { isSafeTargetUrl } from "../../shared/firsthand/url-safety";
+import { isSafeTargetUrl } from "@shared/firsthand/url-safety";
 import { isTaskPipSupported } from "./task-pip";
 
 export type TaskWindowStatus = "idle" | "open" | "blocked";

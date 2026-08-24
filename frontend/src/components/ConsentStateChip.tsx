@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { isCustomConsentTemplate } from '../shared/firsthand/consent-templates';
+import { isCustomConsentTemplate } from '@shared/firsthand/consent-templates';
 
 interface ConsentStateChipProps {
   /** The study's stored classification. Null or absent means never established. */

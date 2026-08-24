@@ -1,4 +1,4 @@
-import { INLINE_STUDY_LIMITS } from '../../shared/firsthand/inline-study';
+import { INLINE_STUDY_LIMITS } from '@shared/firsthand/inline-study';
 
 /**
  * How long the thing the author has written is likely to take.

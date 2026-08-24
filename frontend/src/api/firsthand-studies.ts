@@ -1,7 +1,7 @@
 import api from './client';
 import type { FirstHandStudy } from './types';
-import type { StudyStep } from '../shared/firsthand/contract';
-import type { CreateStudyRequest, UpdateStudyRequest } from '../shared/firsthand/study-input';
+import type { StudyStep } from '@shared/firsthand/contract';
+import type { CreateStudyRequest, UpdateStudyRequest } from '@shared/firsthand/study-input';
 
 /**
  * Study ids are client-supplied on create (`createStudyRequestSchema` accepts an

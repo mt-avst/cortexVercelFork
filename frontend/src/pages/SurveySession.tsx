@@ -3,7 +3,7 @@ import { Navigate, useParams } from "react-router-dom";
 
 import { useAuth } from "../contexts/AuthContext";
 import { getApiBaseUrl } from "../config/api";
-import type { SessionPayload } from "../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 import { SurveyRunner } from "../components/survey/SurveyRunner";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { buildParticipantReturnUrl } from "../lib/recording/participant-return";

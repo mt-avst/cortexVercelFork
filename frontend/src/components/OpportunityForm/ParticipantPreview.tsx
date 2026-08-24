@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Eye, X } from 'lucide-react';
 
 import { SurveyRunner } from '../survey/SurveyRunner';
-import type { SessionPayload } from '../../shared/firsthand/contract';
+import type { SessionPayload } from '@shared/firsthand/contract';
 import {
   NO_OP_PREVIEW_TRANSPORT,
   type ParticipantPreview as ParticipantPreviewModel,

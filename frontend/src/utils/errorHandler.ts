@@ -12,7 +12,7 @@ import {
   NetworkError,
   ErrorResponse 
 } from '../api/types';
-import { API_CONFIG } from '../shared/constants';
+import { API_CONFIG } from '@shared/constants';
 
 // Re-export error types for convenience
 export { 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { StudyStep } from "../../shared/firsthand/contract";
+import type { StudyStep } from "@shared/firsthand/contract";
 import { describeTarget, getPrimaryTargetUrl } from "./task-target";
 
 function step(overrides: Partial<StudyStep>): StudyStep {

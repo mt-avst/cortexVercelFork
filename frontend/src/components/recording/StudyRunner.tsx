@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
-import type { SessionPayload, StudyStep } from "../../shared/firsthand/contract";
+import type { SessionPayload, StudyStep } from "@shared/firsthand/contract";
 import { describeTarget } from "../../lib/recording/task-target";
 import {
   clearParticipantSessionStorage,

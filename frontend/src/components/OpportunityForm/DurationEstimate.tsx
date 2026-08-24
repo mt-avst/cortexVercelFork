@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { INLINE_STUDY_LIMITS } from '../../shared/firsthand/inline-study';
+import { INLINE_STUDY_LIMITS } from '@shared/firsthand/inline-study';
 import FieldError from './FieldError';
 
 interface DurationEstimateProps {

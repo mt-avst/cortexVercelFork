@@ -413,10 +413,11 @@ The dashboard's STUDY TYPE filter also had **no `unmoderated` option at all**, s
 
 ### Traps that cost real time
 
-- 🔥 **`frontend/src/shared/**` is a COMMITTED COPY of `shared/**` and NOTHING regenerates it.**
+- 🔥 **RESOLVED 2026-08-24. `frontend/src/shared/**` WAS a COMMITTED COPY of `shared/**` that nothing regenerated.**
   Not `npm run build`, not CI - while the banner stamped into every one of those files claimed it was copied "during the build process".
   A corrected `shared/` constant passed all 177 backend specs and left the frontend still shipping the old one, with a green suite either side.
-  The banner now says what actually happens, its generation timestamp is gone so a regeneration is a no-op unless content changed, and `shared-copies-are-current.test.ts` fails the moment a source and its copy disagree.
+  The copies, `copy-shared-types.js` and the `shared-copies-are-current.test.ts` guard are all gone. The frontend imports `shared/` directly through a `@shared/*` alias in `vite.config.ts`, `vitest.config.ts` and `tsconfig.json`, so there is one copy of every shared module and it is the one both sides run.
+  The script's stated reason for existing - "the bundler cannot import from outside frontend/src/" - was never true, and was disproved by building a runtime import from `../shared/` and finding its values in the output bundle.
 - 🔥 **`cmd | grep && echo OK` reports success on a failing command**, because the exit status is grep's.
   A failing test suite and 15 lint errors both passed a gate this way.
   Redirect to a file and echo `$?`.
@@ -467,7 +468,7 @@ All five had been finished and verified green independently. Landing them was st
   For prose conflicts, byte-compare each kept section against its source with `git show <ref>:<file>`.
 - **Generated files: regenerate, never pick a side.**
   `frontend/src/shared/firsthand/{contract,inline-study}.ts` conflicted while their `shared/` sources merged cleanly, which is the tell that the clash is churn rather than disagreement.
-  Clear the markers, then run `node copy-shared-types.js` from `frontend/` so the result is derived. `shared-copies-are-current.test.ts` passing is the proof.
+  Superseded on 2026-08-24: the frontend copies and `copy-shared-types.js` are gone, the frontend imports `shared/` directly through the `@shared/*` alias, and this class of conflict cannot recur. The principle still holds wherever a generated file remains.
 - **Re-run the whole matrix on every merge.** Each branch was green alone and no two had ever been tested together, and CI ran lint only *at the time* (it now runs lint, typecheck and three test jobs - see the 2026-08-19 entry). The counts climbed as the stack landed: backend jest 470, 504, 517; frontend 388, 548, 631.
 - **The matrix itself grew mid-stack.** `fix/superadmin-script-tls` added `npm run test:scripts` (111 tests) and widened root lint to cover `backend/scripts`. Read the merged `package.json` rather than trusting a list written before the merge.
 - Resolve in a throwaway worktree (`git worktree add`) so no other checkout is disturbed. A fresh worktree needs its own `npm ci` at the root as well as in `backend/` and `frontend/`, root first, because `shared/` resolves zod from there.

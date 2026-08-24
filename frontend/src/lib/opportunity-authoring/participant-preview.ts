@@ -2,16 +2,16 @@ import {
   sessionPayloadSchema,
   type SessionPayload,
   type StudyStep
-} from '../../shared/firsthand/contract';
+} from '@shared/firsthand/contract';
 import type { SurveyTransport } from '../../components/survey/SurveyRunner';
 import {
   toStudySteps,
   type InlineStudyStep
-} from '../../shared/firsthand/inline-study';
+} from '@shared/firsthand/inline-study';
 import {
   toSurveySteps,
   type SurveyQuestion
-} from '../../shared/firsthand/survey-authoring';
+} from '@shared/firsthand/survey-authoring';
 import type { WithClientId } from './client-ids';
 import {
   toInlineStudyPayloadStep,

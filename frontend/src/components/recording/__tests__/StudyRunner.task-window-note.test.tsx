@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { StudyRunner } from "../StudyRunner";
-import type { SessionPayload } from "../../../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 
 vi.mock("../../../lib/recording/runtime-client", () => ({
   saveParticipantResponse: vi.fn().mockResolvedValue(undefined),

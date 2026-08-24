@@ -1,4 +1,4 @@
-import type { StudyStep } from "../../shared/firsthand/contract";
+import type { StudyStep } from "@shared/firsthand/contract";
 
 /**
  * The study's primary task page: the first runnable task step that carries a

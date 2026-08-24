@@ -4,7 +4,7 @@ import { Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import useDocumentTitle from "../hooks/useDocumentTitle";
 import { getApiBaseUrl } from "../config/api";
-import type { SessionPayload } from "../shared/firsthand/contract";
+import type { SessionPayload } from "@shared/firsthand/contract";
 import {
   SessionShell,
   type SessionShellResult

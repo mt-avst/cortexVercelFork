@@ -2,8 +2,8 @@ import { getApiBaseUrl } from "../../config/api";
 import { CSRF_HEADER, CSRF_ERROR_CODE, ensureCsrfToken } from "../../api/csrf";
 import { normalizeRecordingMimeType } from "./recording-mime";
 import type { RuntimeEventType } from "./runtime-events";
-import type { StudyStep } from "../../shared/firsthand/contract";
-import type { SurveyAnswer } from "../../shared/firsthand/survey-answers";
+import type { StudyStep } from "@shared/firsthand/contract";
+import type { SurveyAnswer } from "@shared/firsthand/survey-answers";
 
 // Ported from FirstHand `src/lib/runtime-client.ts` (B6). Two deliberate
 // changes from the original:

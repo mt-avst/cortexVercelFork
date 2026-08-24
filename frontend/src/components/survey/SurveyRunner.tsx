@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import type { SessionPayload, StudyStep } from "../../shared/firsthand/contract";
+import type { SessionPayload, StudyStep } from "@shared/firsthand/contract";
 import {
   isAnswerable,
   isAnswered,

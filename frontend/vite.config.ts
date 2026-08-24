@@ -6,9 +6,10 @@ export default defineConfig(() => ({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@shared': path.resolve(__dirname, '../shared'),
     },
   },
-  // src/shared/config/environment.ts calls frontendEnvSchema.parse(process.env)
+  // shared/config/environment.ts calls frontendEnvSchema.parse(process.env)
   // in validateFrontendEnvironment, and api.ts calls it at module scope. The
   // production build removes every process.env reference - grep all 34 built
   // chunks and there are none - so only the dev server leaves the bare reference

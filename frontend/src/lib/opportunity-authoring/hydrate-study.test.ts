@@ -10,8 +10,8 @@ import {
   CUSTOM_CONSENT_TEMPLATE_ID,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE
-} from '../../shared/firsthand/consent-templates';
-import type { StudyStep } from '../../shared/firsthand/contract';
+} from '@shared/firsthand/consent-templates';
+import type { StudyStep } from '@shared/firsthand/contract';
 
 const steps: StudyStep[] = [
   { step_id: 's_1', order: 1, type: 'open_text', prompt: 'What did you expect?' },

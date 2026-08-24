@@ -1,4 +1,4 @@
-import type { PublishProblemCode } from '../../shared/firsthand/publish-readiness';
+import type { PublishProblemCode } from '@shared/firsthand/publish-readiness';
 
 /**
  * The check-answers screen, built by walking the same step list the stepper
