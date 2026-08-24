@@ -22,8 +22,8 @@ import { logger } from './logger';
 // anyone who could name a published opportunity id - no login at all - and a
 // Zoom or Meet link is usually the whole of what you need to walk into the
 // call. Nothing was reading it: the only frontend consumers are
-// AdminSessionManager, SessionEditor and OpportunityForm, all admin-side, and
-// all of them receive the unstripped admin payload. Someone who has actually
+// AdminSessionManager and OpportunityForm, both admin-side, and both of
+// them receive the unstripped admin payload. Someone who has actually
 // BOOKED still gets it, from GET /api/bookings/my/bookings (requireAuth, scoped
 // to b.user_id) and from the calendar invite the booking sends.
 //

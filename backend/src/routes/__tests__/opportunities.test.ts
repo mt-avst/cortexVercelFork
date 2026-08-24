@@ -6935,7 +6935,7 @@ describe('Opportunities API', () => {
         .get('/api/opportunities/1')
         .expect(200);
 
-      // Admins author it, and AdminSessionManager / SessionEditor render it.
+      // Admins author it, and AdminSessionManager renders it.
       expect(response.body.sessions[0].location_or_meet_link_optional).toBe(
         'https://meet.google.com/abc-defg-hij'
       );
