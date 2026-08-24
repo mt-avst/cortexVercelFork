@@ -255,6 +255,25 @@ describe('POST /api/bookings/:id/reschedule writes only the rows it should', () 
     expectScopedBy(oldLock[0].sql, oldLock[0].params, 'id', OLD_SESSION);
   });
 
+  it('locks the booking row FOR UPDATE OF b, serialising against a racing cancel - cto/AdaptaLabs#36', async () => {
+    // The booking load is otherwise an unlocked SELECT: it reads status='booked',
+    // and the move UPDATE below carries no status guard, so a cancel committing
+    // in the window moves an ALREADY-CANCELLED booking and leaves a phantom slot
+    // on the target. FOR UPDATE OF b locks the booking row so reschedule blocks
+    // on a concurrent cancel and re-reads the committed status. `OF b` is
+    // load-bearing: a bare FOR UPDATE would also lock the joined session rows,
+    // reintroducing the blocking session wait #34 removed.
+    await reschedule(appAs('employee', PARTICIPANT)).expect(200);
+
+    const load = clientCalls(client, 'FROM bookings b');
+    // THE CONTROL: exactly one booking load, or the assertion below is vacuous.
+    expect(load).toHaveLength(1);
+    const sql = executableSql(load[0].sql).toUpperCase();
+    expect(sql).toContain('FOR UPDATE OF B');
+    // Not a bare FOR UPDATE that would lock the joined session rows too.
+    expect(sql).not.toMatch(/FOR UPDATE(?!\s+OF\s+B)/);
+  });
+
   it('writes nothing when the booking is not the caller\'s to reschedule', async () => {
     // The handler scopes the load by `b.user_id = $2`, so someone else's booking
     // comes back empty. It must then write nothing and roll back, not fall

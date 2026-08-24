@@ -601,13 +601,31 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
   try {
     await client.query('BEGIN');
 
-    // Load booking with current session details
+    // Load booking with current session details, TAKING THE BOOKING ROW LOCK.
+    //
+    // FOR UPDATE OF b, not a bare FOR UPDATE. `OF b` locks only the bookings row;
+    // the joined sessions/opportunities rows are read but not locked, so this
+    // does NOT reintroduce the blocking session-row wait that #34 removed - the
+    // old and target sessions are still locked further down with FOR UPDATE
+    // NOWAIT, and this statement holds nothing but the booking row while it runs.
+    //
+    // Without the lock this SELECT is unlocked, so a cancel committing in the
+    // window after it read status='booked' would flip the row to 'cancelled'
+    // while the guardless `UPDATE bookings SET session_id ... WHERE id` below
+    // still moved it - moving a CANCELLED booking, decrementing the old session
+    // twice and leaving the target with a phantom slot (cto/AdaptaLabs#36). It
+    // also made the old-session decrement read a stale session_id when two
+    // reschedules of one booking raced. Locking the booking row here serialises
+    // reschedule against cancel and against other reschedules on that booking:
+    // the loser blocks, then re-reads the committed row, and if status is no
+    // longer 'booked' the WHERE matches zero rows and the 404 below fires.
     const bookingResult = await client.query(`
       SELECT b.*, s.opportunity_id as current_opportunity_id, o.title as opportunity_title
       FROM bookings b
       JOIN sessions s ON b.session_id = s.id
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE b.id = $1 AND b.user_id = $2 AND b.status = 'booked'
+      FOR UPDATE OF b
     `, [bookingId, userId]);
 
     if (bookingResult.rows.length === 0) {
