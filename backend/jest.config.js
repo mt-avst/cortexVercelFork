@@ -5,7 +5,17 @@ module.exports = {
   testMatch: ['**/__tests__/**/*.test.ts'],
   // Vitest owns src/firsthand/** (see vitest.config.ts). Keep jest out of it so
   // the FirstHand-derived specs are never double-run by both runners.
-  testPathIgnorePatterns: ['/node_modules/', '/__tests__/\\.', '/src/firsthand/'],
+  //
+  // Vitest ALSO owns `*-postgres.test.ts` under __tests__ (#32): real-Postgres
+  // concurrency tests for core routes, which cannot run here because the pool
+  // is mocked. Ignoring the suffix keeps the two runners' globs DISJOINT - the
+  // include in vitest.config.ts matches exactly what this pattern excludes.
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/__tests__/\\.',
+    '/src/firsthand/',
+    '-postgres\\.test\\.ts$',
+  ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
