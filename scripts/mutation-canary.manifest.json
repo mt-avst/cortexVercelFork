@@ -812,5 +812,45 @@
     "runner": "jest",
     "spec": "src/services/__tests__/email-recipient-injection.test.ts",
     "test": "a display name cannot smuggle a second recipient into the envelope"
+  },
+  {
+    "id": "reschedule-moves-one-booking-not-every-booking",
+    "why": "The reschedule move UPDATE bookings SET session_id=$1 WHERE id=$2 is keyed on the booking id. Swapping to WHERE session_id=$2 moves EVERY booking on the old session, not the one being rescheduled. Byte-different from cancel's UPDATE bookings (which sets status), so this anchor is unique on its own.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "SET session_id = $1\n      WHERE id = $2",
+    "mutation": "SET session_id = $1\n      WHERE session_id = $2",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "test": "moves the booking by its own id, not by any other key"
+  },
+  {
+    "id": "reschedule-decrements-the-old-session-only",
+    "why": "The decrement is keyed on the old booking.session_id. WHERE id=$1 -> WHERE opportunity_id=$1 decrements every session of the opportunity, freeing phantom capacity on all of them. The decrement line is byte-identical to cancel's, so the anchor carries reschedule's own preceding comment to avoid matching both sites.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "// Update booked counts atomically (with safeguards)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE id = $1",
+    "mutation": "// Update booked counts atomically (with safeguards)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE opportunity_id = $1",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "test": "decrements the OLD session, not every session of the opportunity"
+  },
+  {
+    "id": "reschedule-decrement-keeps-its-floor",
+    "why": "GREATEST(booked_count - 1, 0) -> booked_count - 1 loses the floor, so a race drives booked_count negative and the participant-facing 'N places left' is computed from it. Same anchor as the scope entry, carrying reschedule's own comment to distinguish it from cancel's identical line.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "// Update booked counts atomically (with safeguards)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE id = $1",
+    "mutation": "// Update booked counts atomically (with safeguards)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = booked_count - 1\n      WHERE id = $1",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "test": "keeps the floor on the decrement, so a count cannot go negative"
+  },
+  {
+    "id": "reschedule-increments-the-target-session-only",
+    "why": "The increment is keyed on the target session id. WHERE id=$1 -> WHERE opportunity_id=$1 over-increments every session of the opportunity. The +1 line is not unique (the booking-create flow has one too), so the anchor includes the [target_session_id] bind line that only the reschedule increment carries.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "SET booked_count = booked_count + 1\n      WHERE id = $1\n    `, [target_session_id]);",
+    "mutation": "SET booked_count = booked_count + 1\n      WHERE opportunity_id = $1\n    `, [target_session_id]);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "test": "increments the TARGET session by its own id"
   }
 ]
