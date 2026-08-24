@@ -187,6 +187,10 @@ describe('DELETE /api/opportunities/:id/sessions is scoped to the opportunity', 
     // The sessions are locked before the guard reads them, closing the window
     // in which a concurrent booking could slip past the "has bookings?" check.
     expect(callsMatching('FOR UPDATE')).toHaveLength(1);
+    // Locked in ascending id order, so this and the sync-booked-counts sweep -
+    // which also locks ORDER BY id - acquire shared rows in the same order and
+    // cannot deadlock. cto/AdaptaLabs#34.
+    expect(callsMatching('ORDER BY id')).toHaveLength(1);
     expect(mockRelease).toHaveBeenCalledTimes(1);
   });
 
