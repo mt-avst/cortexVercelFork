@@ -88,3 +88,11 @@ cookies.txt
 # Playwright artefacts
 playwright-report/
 test-results/
+
+# Compiled output of demo/mock-data.ts. The backend builds it into dist/ via
+# tsc; a committed copy only goes stale (it once exported 6 of the source's 11
+# symbols, missing exactly what the sessions route imports).
+demo/*.js
+demo/*.js.map
+demo/*.d.ts
+demo/*.d.ts.map

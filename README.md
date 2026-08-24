@@ -192,11 +192,13 @@ attach to whatever is listening and report failures that look like product bugs.
 BASE_URL=http://localhost:3100 PLAYWRIGHT_NO_WEBSERVER=1 npm run test:e2e
 ```
 
-`e2e/critical-flows.test.ts` is quarantined by `testIgnore` in every config with
-a bare `testDir`. It is not a Playwright Test spec - it drives the raw
-`playwright` package with jest globals - and loading it aborts collection for
-the *whole* suite. Any new config needs the same `testIgnore` until it is
-rewritten or deleted.
+`e2e/critical-flows.test.ts` was deleted on 2026-08-24. It was never a
+Playwright Test spec - it drove the raw `playwright` package with jest globals -
+so loading it aborted collection for the *whole* suite, and every config carried
+a `testIgnore` for it. Measured before removal: zero of the five configs
+collected a single test from it. A new config no longer needs the `testIgnore`.
+If critical-flow coverage is wanted, write it fresh against `@playwright/test`;
+the old file is in git history at `9c1a262~`.
 
 Three specs (`superadmin-create-study`, `m6-poll-click-tracking`,
 `test-draft-warnings`) **create studies in whatever they are pointed at**, and

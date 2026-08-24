@@ -6990,8 +6990,10 @@ describe('Opportunities API', () => {
       // With the database unavailable both GET routes serve the in-memory demo
       // store, which carries the same owner fields - the strip must apply there
       // as well or demo deployments leak identities the same way. Seeded
-      // explicitly because under jest the tracked stale demo/mock-data.js
-      // shadows mock-data.ts and its store starts empty.
+      // explicitly rather than relying on whatever the store happens to hold,
+      // which keeps this test independent of the demo fixtures. It originally
+      // had to be seeded because a tracked stale demo/mock-data.js shadowed
+      // mock-data.ts under jest; that file is deleted and gitignored now.
       mockIsDatabaseAvailable.mockResolvedValue(false);
       addMockOpportunity({
         id: 'mock-owner-strip',
