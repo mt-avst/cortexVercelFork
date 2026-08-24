@@ -24,7 +24,20 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 ```
 /backend          - Express.js API server
 /frontend         - React TypeScript frontend
+/shared           - Types, constants, config and the FirstHand contract,
+                    imported by BOTH sides: the backend by relative path,
+                    the frontend through the `@shared/*` alias
+/demo             - In-memory fixture store used when no database is
+                    configured. mock-data.ts is live code, imported by the
+                    opportunities and sessions routes
+/e2e              - Playwright specs
+/scripts          - Operational and CI scripts
+/docs             - Design notes, integration contracts, runbooks
 ```
+
+There is deliberately **no copy** of `shared/` inside `frontend/src`. See
+[CONTRIBUTING.md](CONTRIBUTING.md#importing-types) for how the alias works and
+why.
 
 ## Prerequisites
 

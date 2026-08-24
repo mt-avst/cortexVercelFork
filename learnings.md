@@ -298,7 +298,7 @@ Shipped on `feat/participant-welcome-expectations`.
 - **Use the dev server for the inner loop; `vite preview` is for checking the built output.**
   `npx vite --port <port> --strictPort` from `frontend/` gives hot reload and no build step at all.
   It proxies `/api` and `/auth` to `localhost:3001`, so it is same-origin and CORS never enters it.
-  This did not work until 7.48.2: `src/shared/config/environment.ts` calls `frontendEnvSchema.parse(process.env)` and `api.ts` calls it at module scope, so the dev server threw `process is not defined` before the app rendered, which is why local work ran through `vite preview` and paid a full rebuild per change.
+  This did not work until 7.48.2: `shared/config/environment.ts` (then copied to `frontend/src/shared/config/environment.ts`) calls `frontendEnvSchema.parse(process.env)` and `api.ts` calls it at module scope, so the dev server threw `process is not defined` before the app rendered, which is why local work ran through `vite preview` and paid a full rebuild per change.
 - **When you do use `vite preview`, it serves `dist/`, and neither vitest nor a commit rebuilds it.**
   Two changes were reported as not working when the browser was simply showing the previous build.
   Always `npm run build` after committing, then confirm a new marker string in the served chunk.
