@@ -390,21 +390,50 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
   try {
     await client.query('BEGIN');
 
-    // Update booking status
-    await client.query(`
-      UPDATE bookings 
+    // Cancel and decrement ATOMICALLY, and only on the real booked->cancelled
+    // transition. The pre-transaction status read above is a fast path, not a
+    // guard: two concurrent cancels of the same booking both saw 'booked'
+    // there and both reached this block, and the decrement below was
+    // unconditional, so a single cancellation subtracted TWO from booked_count.
+    // The GREATEST(...,0) floor kept the number non-negative, not correct - a
+    // session at 2 booked dropped to 0, discarding a second participant's slot
+    // and letting the session be booked past capacity.
+    //
+    // The conditional UPDATE is itself the lock. It takes a row-level write
+    // lock on the booking; under READ COMMITTED the loser of the race blocks,
+    // then re-evaluates its WHERE against the winner's committed row where
+    // status is no longer 'booked', so it matches zero rows. rowCount then
+    // gates the decrement to exactly the transaction that performed the
+    // transition. `status` is an enum of only ('booked','cancelled'), so
+    // `= 'booked'` is the whole of "not already cancelled".
+    const cancelUpdate = await client.query(`
+      UPDATE bookings
       SET status = 'cancelled', cancelled_at = NOW()
-      WHERE id = $1
+      WHERE id = $1 AND status = 'booked'
     `, [bookingId]);
 
-    // Decrement session booked_count (with safeguard to prevent negative values)
-    await client.query(`
-      UPDATE sessions 
-      SET booked_count = GREATEST(booked_count - 1, 0)
-      WHERE id = $1
-    `, [booking.session_id]);
+    const didCancel = cancelUpdate.rowCount === 1;
+
+    if (didCancel) {
+      // Decrement session booked_count. GREATEST(...,0) is retained defensively;
+      // the booked_count >= 0 CHECK constraint would otherwise abort the
+      // transaction on an underflow.
+      await client.query(`
+        UPDATE sessions
+        SET booked_count = GREATEST(booked_count - 1, 0)
+        WHERE id = $1
+      `, [booking.session_id]);
+    }
 
     await client.query('COMMIT');
+
+    // Lost the race: another request cancelled this booking first. It has
+    // already decremented the count and sent the notices, so return the same
+    // idempotent success the pre-transaction check returns, without sending a
+    // second set of emails.
+    if (!didCancel) {
+      return res.status(200).json({ message: 'Booking already cancelled' });
+    }
 
     // Calendar cancellation (after transaction commit)
     if (booking.gcal_event_id) {

@@ -698,20 +698,20 @@
     "file": "backend/src/routes/bookings.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.cancel-writes-are-row-scoped.test.ts",
-    "anchor": "// Decrement session booked_count (with safeguard to prevent negative values)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE id = $1",
-    "mutation": "// Decrement session booked_count (with safeguard to prevent negative values)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE opportunity_id = $1",
+    "anchor": "      await client.query(`\n        UPDATE sessions\n        SET booked_count = GREATEST(booked_count - 1, 0)\n        WHERE id = $1",
+    "mutation": "      await client.query(`\n        UPDATE sessions\n        SET booked_count = GREATEST(booked_count - 1, 0)\n        WHERE opportunity_id = $1",
     "test": "decrements the booked session, not every session of the opportunity",
-    "why": "The capacity decrement is `UPDATE sessions SET booked_count = GREATEST(booked_count - 1, 0) WHERE id = $1`. Repointing that WHERE at `opportunity_id` decrements EVERY session of the opportunity for one cancellation, silently overselling nothing and underselling everything - each remaining session then reports more free capacity than it has. It survived the whole suite because the existing assertions checked that a decrement statement was issued, never which row it hit. Note the anchor carries the preceding comment deliberately: the reschedule handler contains a byte-identical decrement, so a shorter anchor matches twice and the entry would be ambiguous."
+    "why": "The capacity decrement is `UPDATE sessions SET booked_count = GREATEST(booked_count - 1, 0) WHERE id = $1`, bound to booking.session_id. Repointing it to `WHERE opportunity_id = $1` decrements EVERY session under the opportunity, freeing phantom capacity on every other session in the study when one person cancels a slot. booked_count is what the participant-facing places-left is computed from."
   },
   {
     "id": "cancel-decrement-keeps-its-floor",
     "file": "backend/src/routes/bookings.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.cancel-writes-are-row-scoped.test.ts",
-    "anchor": "// Decrement session booked_count (with safeguard to prevent negative values)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = GREATEST(booked_count - 1, 0)\n      WHERE id = $1",
-    "mutation": "// Decrement session booked_count (with safeguard to prevent negative values)\n    await client.query(`\n      UPDATE sessions \n      SET booked_count = booked_count - 1\n      WHERE id = $1",
+    "anchor": "      await client.query(`\n        UPDATE sessions\n        SET booked_count = GREATEST(booked_count - 1, 0)\n        WHERE id = $1",
+    "mutation": "      await client.query(`\n        UPDATE sessions\n        SET booked_count = booked_count - 1\n        WHERE id = $1",
     "test": "keeps the floor on the decrement, so a count cannot go negative",
-    "why": "`GREATEST(booked_count - 1, 0)` is the only thing stopping a double-cancel driving `booked_count` below zero. There is no `FOR UPDATE` and no `AND status = 'booked'` guard on this path, so two concurrent cancels of the same booking both decrement - the floor is what keeps a negative out of the table. A negative count reads as free capacity forever after, because every availability check compares `booked_count` against `capacity`. Dropping the GREATEST passed the whole suite: the test that existed asserted the statement was issued, not what arithmetic it performed."
+    "why": "GREATEST(booked_count - 1, 0) is the defensive floor on the decrement. The double-cancel race that once made it load-bearing is now closed by the `WHERE id = $1 AND status = 'booked'` guard plus rowCount gate a few lines above, but the floor is retained: booked_count has a CHECK (booked_count >= 0) constraint, so an underflow from any future path would abort the transaction rather than silently corrupt. Dropping GREATEST passed the whole suite because the test asserted the statement was issued, not what arithmetic it performed."
   },
   {
     "id": "delete-sessions-deletes-only-this-opportunitys-bookings",
@@ -852,5 +852,25 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
     "test": "increments the TARGET session by its own id"
+  },
+  {
+    "id": "cancel-decrements-only-the-booked-to-cancelled-transition",
+    "why": "Two concurrent cancels of one booking both passed the pre-transaction status read and both reached an unconditional decrement, so a single cancellation subtracted TWO from booked_count. Proven on a real Postgres: a session at 2 booked dropped to 0, discarding a second participants slot and freeing phantom capacity to overbook past capacity. GREATEST(...,0) floors the number, it does not make it correct.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      WHERE id = $1 AND status = 'booked'",
+    "mutation": "      WHERE id = $1",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cancel-writes-are-row-scoped.test.ts",
+    "test": "pins the transition guard on the cancel UPDATE"
+  },
+  {
+    "id": "delete-sessions-locks-rows-so-the-booking-guard-is-not-a-toctou",
+    "why": "DELETE /opportunities/:id/sessions checked has-bookings? then deleted, on separate pooled connections with no transaction. A booking created in the window between the check and the DELETE was silently deleted, defeating the guard that exists to protect it. Locking the sessions FOR UPDATE inside the transaction closes the race; removing it reopens it while every mocked assertion still passes.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',",
+    "mutation": "        'SELECT id FROM sessions WHERE opportunity_id = $1',",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.delete-sessions-is-scoped.test.ts",
+    "test": "wraps the deletes in a single committed transaction"
   }
 ]

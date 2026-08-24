@@ -3499,34 +3499,66 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
       return res.status(403).json({ error: 'Only the owner can delete sessions from this opportunity' });
     }
     
-    // Check if any sessions have bookings
-    const sessionsCheck = await pool.query(
-      'SELECT s.id FROM sessions s WHERE s.opportunity_id = $1 AND EXISTS (SELECT 1 FROM bookings b WHERE b.session_id = s.id AND b.status = \'booked\')',
-      [opportunityId]
-    );
-    
-    if (sessionsCheck.rows.length > 0) {
-      return res.status(400).json({ 
-        error: `Cannot delete sessions with existing bookings. ${sessionsCheck.rows.length} session(s) have bookings.` 
+    // Delete the sessions and their bookings ATOMICALLY, under a row lock.
+    //
+    // This was three separate pool.query calls on arbitrary pooled connections,
+    // with two defects. First, the "any session still booked?" guard and the
+    // DELETE were a check-then-act TOCTOU: a booking created in the window
+    // between them was silently deleted, defeating the very guard that exists to
+    // protect it. Second, a failure between the two DELETEs left the bookings
+    // gone but the sessions intact, with no transaction to roll back.
+    //
+    // Locking the opportunity's sessions FOR UPDATE closes the race: the book
+    // handler locks the same session row with FOR UPDATE NOWAIT, so a booking
+    // attempt that arrives mid-delete is refused rather than stranded, and a
+    // booking already in flight makes this SELECT wait, after which its row
+    // appears in the guard below and the delete is refused.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      await client.query(
+        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',
+        [opportunityId]
+      );
+
+      // Check if any sessions have bookings
+      const sessionsCheck = await client.query(
+        'SELECT s.id FROM sessions s WHERE s.opportunity_id = $1 AND EXISTS (SELECT 1 FROM bookings b WHERE b.session_id = s.id AND b.status = \'booked\')',
+        [opportunityId]
+      );
+
+      if (sessionsCheck.rows.length > 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          error: `Cannot delete sessions with existing bookings. ${sessionsCheck.rows.length} session(s) have bookings.`
+        });
+      }
+
+      // Delete all bookings first (ON DELETE CASCADE should handle this, but explicit is safer)
+      await client.query(
+        'DELETE FROM bookings WHERE session_id IN (SELECT id FROM sessions WHERE opportunity_id = $1)',
+        [opportunityId]
+      );
+
+      // Delete all sessions for this opportunity
+      const deleteResult = await client.query(
+        'DELETE FROM sessions WHERE opportunity_id = $1',
+        [opportunityId]
+      );
+
+      await client.query('COMMIT');
+
+      res.json({
+        message: 'All sessions deleted successfully',
+        deleted_count: deleteResult.rowCount
       });
+    } catch (txError) {
+      await client.query('ROLLBACK');
+      throw txError;
+    } finally {
+      client.release();
     }
-    
-    // Delete all bookings first (ON DELETE CASCADE should handle this, but explicit is safer)
-    await pool.query(
-      'DELETE FROM bookings WHERE session_id IN (SELECT id FROM sessions WHERE opportunity_id = $1)',
-      [opportunityId]
-    );
-    
-    // Delete all sessions for this opportunity
-    const deleteResult = await pool.query(
-      'DELETE FROM sessions WHERE opportunity_id = $1',
-      [opportunityId]
-    );
-    
-    res.json({ 
-      message: 'All sessions deleted successfully', 
-      deleted_count: deleteResult.rowCount 
-    });
   } catch (error) {
     if (error instanceof AppError) {
       throw error;

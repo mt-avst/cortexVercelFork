@@ -18,7 +18,12 @@ import { isDatabaseAvailable } from '../../utils/database';
 import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as unknown as jest.Mock;
+const mockConnect = pool.connect as unknown as jest.Mock;
 const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
+
+/** The pooled client the handler checks out for its transaction. */
+const mockClientQuery = jest.fn();
+const mockRelease = jest.fn();
 
 /**
  * `DELETE /api/opportunities/:id/sessions` ISSUES TWO GLOBAL-SHAPED DELETES AND
@@ -46,6 +51,13 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  *
  * The assertions below therefore tie the column, the `$n` placeholder and the
  * bound VALUE together. See `__tests__/helpers/sql-scope.ts`.
+ *
+ * THE DELETES NOW RUN IN A TRANSACTION on a checked-out client, so this suite
+ * asserts on the client's queries rather than `pool.query`. The move is a fix
+ * in its own right: the guard and the deletes were previously three separate
+ * pool.query calls with a check-then-act race between them (see the handler
+ * comment), and are now BEGIN / FOR UPDATE / guard / delete / delete / COMMIT
+ * on one client.
  */
 type Role = 'employee' | 'researcher_admin' | 'superadmin';
 
@@ -69,13 +81,17 @@ const appAs = (role: Role, id = OWNER) => {
 
 /** The caller owns the opportunity and no session has a live booking. */
 const arrangeDeletable = () => {
+  // The ownership check runs on the pool before the transaction opens.
   mockQuery.mockImplementation(async (sql: unknown) => {
-    const text = String(sql);
-    if (text.includes('SELECT owner_user_id FROM opportunities')) {
+    if (String(sql).includes('SELECT owner_user_id FROM opportunities')) {
       return { rows: [{ owner_user_id: OWNER }], rowCount: 1 };
     }
+    return { rows: [], rowCount: 0 };
+  });
+  // Everything else runs inside the transaction, on the client.
+  mockClientQuery.mockImplementation(async (sql: unknown) => {
     // The "any session still booked?" guard. Empty means deletion proceeds.
-    if (text.includes('EXISTS (SELECT 1 FROM bookings')) {
+    if (String(sql).includes('EXISTS (SELECT 1 FROM bookings')) {
       return { rows: [], rowCount: 0 };
     }
     return { rows: [], rowCount: 2 };
@@ -84,8 +100,9 @@ const arrangeDeletable = () => {
 
 type Call = { sql: string; params: readonly unknown[] };
 
+/** Statements the transaction ran on its client. */
 const callsMatching = (fragment: string): Call[] =>
-  mockQuery.mock.calls
+  mockClientQuery.mock.calls
     .map((call: unknown[]) => ({ sql: String(call[0]), params: (call[1] ?? []) as unknown[] }))
     .filter((c: Call) => executableSql(c.sql).toUpperCase().includes(fragment.toUpperCase()));
 
@@ -93,6 +110,7 @@ describe('DELETE /api/opportunities/:id/sessions is scoped to the opportunity', 
   beforeEach(() => {
     jest.resetAllMocks();
     mockIsDatabaseAvailable.mockResolvedValue(true as never);
+    mockConnect.mockResolvedValue({ query: mockClientQuery, release: mockRelease } as never);
     arrangeDeletable();
   });
 
@@ -156,6 +174,22 @@ describe('DELETE /api/opportunities/:id/sessions is scoped to the opportunity', 
     }
   });
 
+  // The two DELETEs and their guard must run inside one transaction, or the
+  // check-then-act race the handler comment describes returns. Pin the atomic
+  // wrapper as a literal so removing BEGIN/COMMIT is a red test.
+  it('wraps the deletes in a single committed transaction', async () => {
+    await request(listening(appAs('researcher_admin'))).delete(PATH).expect(200);
+
+    const clientSql = mockClientQuery.mock.calls.map((c: unknown[]) => String(c[0]).trim());
+    expect(clientSql[0]).toBe('BEGIN');
+    expect(clientSql[clientSql.length - 1]).toBe('COMMIT');
+    expect(clientSql).not.toContain('ROLLBACK');
+    // The sessions are locked before the guard reads them, closing the window
+    // in which a concurrent booking could slip past the "has bookings?" check.
+    expect(callsMatching('FOR UPDATE')).toHaveLength(1);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+
   // ------------------------------------------------------------------
   // The refusals, so the arms above cannot pass on a route that deleted
   // nothing for an unrelated reason.
@@ -171,16 +205,14 @@ describe('DELETE /api/opportunities/:id/sessions is scoped to the opportunity', 
 
     await request(listening(appAs('researcher_admin'))).delete(PATH).expect(403);
 
+    // Refused before the transaction opened: no client checked out at all.
+    expect(mockConnect).not.toHaveBeenCalled();
     expect(callsMatching('DELETE FROM')).toHaveLength(0);
   });
 
   it('refuses when a session still has a live booking, and deletes nothing', async () => {
-    mockQuery.mockImplementation(async (sql: unknown) => {
-      const text = String(sql);
-      if (text.includes('SELECT owner_user_id FROM opportunities')) {
-        return { rows: [{ owner_user_id: OWNER }], rowCount: 1 };
-      }
-      if (text.includes('EXISTS (SELECT 1 FROM bookings')) {
+    mockClientQuery.mockImplementation(async (sql: unknown) => {
+      if (String(sql).includes('EXISTS (SELECT 1 FROM bookings')) {
         return { rows: [{ id: 's1' }], rowCount: 1 };
       }
       return { rows: [], rowCount: 0 };
@@ -189,5 +221,9 @@ describe('DELETE /api/opportunities/:id/sessions is scoped to the opportunity', 
     await request(listening(appAs('researcher_admin'))).delete(PATH).expect(400);
 
     expect(callsMatching('DELETE FROM')).toHaveLength(0);
+    // The transaction it opened to check must be rolled back, not left dangling.
+    const clientSql = mockClientQuery.mock.calls.map((c: unknown[]) => String(c[0]).trim());
+    expect(clientSql).toContain('ROLLBACK');
+    expect(mockRelease).toHaveBeenCalledTimes(1);
   });
 });

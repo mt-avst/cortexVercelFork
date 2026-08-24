@@ -140,7 +140,11 @@ const bookingLoads = (participantId: string, ownerUserId: string | null) => {
 
 /** The transaction client `pool.connect()` hands back. */
 const makeClient = () => {
-  const query = jest.fn(async () => ({ rows: [] }));
+  // rowCount 1 = the cancel UPDATE transitioned exactly one booked row, which
+  // is what gates the decrement (see the handler's `AND status = 'booked'`
+  // guard). A racing double-cancel would see rowCount 0 here; that path is
+  // pinned in bookings.cancel-writes-are-row-scoped.test.ts.
+  const query = jest.fn(async () => ({ rows: [], rowCount: 1 }));
   return { query, release: jest.fn() };
 };
 

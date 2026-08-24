@@ -210,6 +210,39 @@ describe('POST /api/bookings/:id/cancel writes only the rows it should', () => {
     expectScopedBy(update.sql, update.params, 'id', 'b-other');
   });
 
+  it('pins the transition guard on the cancel UPDATE', async () => {
+    // Removing `AND status = 'booked'` restores the double-decrement race: two
+    // concurrent cancels of one booking both match the row and both decrement,
+    // so a single cancellation subtracts two from booked_count.
+    await request(listening(appAs('researcher_admin', OWNER))).post(PATH).expect(200);
+
+    const [update] = clientCalls(client, 'UPDATE bookings');
+    expect(whereClauseOf(update.sql) ?? `<no WHERE: ${update.sql}>`).toMatch(/status\s*=\s*'booked'/i);
+  });
+
+  it('gates the decrement on the real transition: a racing double-cancel neither decrements nor re-notifies', async () => {
+    // The pre-transaction status read is a fast path, not the guard. When a
+    // concurrent request has already flipped the row, the conditional UPDATE
+    // matches zero rows (rowCount 0); the handler must then skip the decrement
+    // and the emails rather than firing a second set.
+    (client.query as unknown as jest.Mock).mockImplementation(async (sql: unknown) => {
+      if (String(sql).toUpperCase().includes('UPDATE BOOKINGS')) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await request(listening(appAs('researcher_admin', OWNER))).post(PATH).expect(200);
+
+    // Nothing transitioned, so nothing is decremented.
+    expect(clientCalls(client, 'booked_count')).toHaveLength(0);
+    // The transaction the handler opened is still committed, not left dangling.
+    const sql = client.query.mock.calls.map((c: unknown[]) => String(c[0]).trim());
+    expect(sql).toContain('COMMIT');
+    // The request that won the race sent the notices; the loser sends none.
+    expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
   it('refuses an admin who owns nothing, and writes nothing', async () => {
     mockQuery.mockImplementation(async (sql: unknown) => {
       if (String(sql).includes('FROM bookings b')) {
