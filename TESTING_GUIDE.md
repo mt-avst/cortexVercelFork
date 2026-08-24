@@ -48,12 +48,17 @@ Slack entry point. Do not point those at Kubera.
 ### Option 1: Automated Tests (Recommended First)
 
 ```bash
-# Make script executable
-chmod +x run-alpha-tests.sh
+# Smoke tests against the deployed playground
+npm run test:smoke
 
-# Run tests against production
-PRODUCTION_URL=https://adaptalabs.kubera-playground.adaptavist.net ./run-alpha-tests.sh
+# The full e2e suite against production
+npm run test:e2e:prod
 ```
+
+`run-alpha-tests.sh` was deleted on 2026-08-24. Its only job was running
+`e2e/critical-flows.test.ts`, which no Playwright config could collect, so the
+script could not do anything useful. The two commands above are what actually
+run against a deployed environment.
 
 ### Option 2: Manual Testing (Most Comprehensive)
 

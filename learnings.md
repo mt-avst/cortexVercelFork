@@ -519,6 +519,8 @@ skipped, flaky, or hung.
   `e2e/critical-flows.test.ts` throws while Playwright transforms it, which
   aborts collection for every spec in `testDir`. Four npm scripts were dead, not
   one. Filtering to a single spec hides it, which is why nobody saw it.
+  Closed out 2026-08-24: the spec and its `testIgnore` are deleted, so the trap
+  cannot be re-armed by a new config forgetting the ignore.
 - **Two click-tracking tests passed with the button click deleted.** They matched
   any POST to `/click`, and the detail page fires a `view` track on mount - so
   the assertion was satisfied before the button was ever pressed. Proven by
