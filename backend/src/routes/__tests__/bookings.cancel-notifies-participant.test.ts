@@ -193,7 +193,9 @@ const arrange = ({ preferencesFail = false } = {}) => {
   });
 };
 
-const makeClient = () => ({ query: jest.fn(async () => ({ rows: [] })), release: jest.fn() });
+// rowCount 1 = the cancel UPDATE transitioned one booked row, which gates the
+// decrement and the notifications (see the handler's `AND status = 'booked'`).
+const makeClient = () => ({ query: jest.fn(async () => ({ rows: [], rowCount: 1 })), release: jest.fn() });
 
 /**
  * Who received the message built from a given template.
