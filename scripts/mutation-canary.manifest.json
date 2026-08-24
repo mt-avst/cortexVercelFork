@@ -872,5 +872,25 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.delete-sessions-is-scoped.test.ts",
     "test": "wraps the deletes in a single committed transaction"
+  },
+  {
+    "id": "sync-booked-counts-is-superadmin-only",
+    "file": "backend/src/routes/sessions.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.sync-booked-counts.test.ts",
+    "anchor": "router.post('/sync-booked-counts', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.post('/sync-booked-counts', requireAdmin, asyncHandler(async (req: Request, res: Response) => {",
+    "test": "refuses a researcher_admin, and connects to nothing",
+    "why": "POST /api/sessions/sync-booked-counts rewrites booked_count on EVERY session in the database. Under requireAdmin any researcher_admin could trigger writes to every other researcher's sessions - the one session write that was not owner-gated. cto/AdaptaLabs#26 made it superadmin-only, because the value is derived (an operator repair tool) rather than a per-researcher action. Reverting the gate to requireAdmin lets a researcher_admin through, which this test catches by asserting the 403 and that the pool is never borrowed."
+  },
+  {
+    "id": "sync-booked-counts-locks-rows-against-a-racing-booking",
+    "file": "backend/src/routes/sessions.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.sync-booked-counts.test.ts",
+    "anchor": "    const locked = await client.query('SELECT id FROM sessions ORDER BY id FOR UPDATE');",
+    "mutation": "    const locked = await client.query('SELECT id FROM sessions ORDER BY id');",
+    "test": "locks the rows and rewrites them inside one committed transaction",
+    "why": "The repair rewrites booked_count from a count of bookings; without locking the session rows first, a booking committed between the count and the write is clobbered - the sweep overwrites a correct increment with a stale count and CAUSES the drift it exists to fix (cto/AdaptaLabs#26). POST /api/bookings and cancel take FOR UPDATE on the same row, so locking here serialises against them. A mocked pool cannot race, so this pins the LOCK by shape: dropping FOR UPDATE is caught by the assertion that the locking SELECT was issued. The real guarantee is proven against a real Postgres."
   }
 ]
