@@ -61,6 +61,8 @@ Below is the schema derived from **`backend/src/db/migrate.ts`**. This is the ca
 - `participant_type_specific_details` TEXT  
 - `start_date` TIMESTAMPTZ, `end_date` TIMESTAMPTZ  
 - `display_width` TEXT DEFAULT 'single' CHECK (display_width IN ('single', 'double'))  
+  - RETIRED: the column stays for existing rows but no surface reads or writes it.
+    Do not rebuild the double-width setting without restoring a consumer first - see the retirement comment in `backend/src/db/migrate.ts` (cto/AdaptaLabs#25).  
 - `created_at`, `updated_at` TIMESTAMPTZ  
 
 **sessions**  
