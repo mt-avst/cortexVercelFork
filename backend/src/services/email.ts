@@ -75,8 +75,13 @@ export class EmailService {
         const results = await Promise.all(
           recipients.map(async (recipient) => {
             const info = await transporter.sendMail({
-              from: `"${this.config.fromName}" <${this.config.fromEmail}>`,
-              to: `${recipient.name} <${recipient.email}>`,
+              from: { name: this.config.fromName ?? '', address: this.config.fromEmail ?? '' },
+              // Address-object form, NOT `${name} <${email}>`. `recipient.name`
+              // is user-controlled, and interpolated into the header string a
+              // name of `Ada <attacker@evil.example>, Bob` splits into a second
+              // envelope recipient. Here `address` is the sole recipient and the
+              // name is an encoded display phrase, never parsed for addresses.
+              to: { name: recipient.name, address: recipient.email },
               subject: template.subject,
               text: template.text,
               html: template.html,

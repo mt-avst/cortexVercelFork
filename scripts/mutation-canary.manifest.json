@@ -802,5 +802,15 @@
     "mutation": "<p style=\"white-space: pre-wrap;\">${feedback}</p>",
     "test": "escapes every interpolation in an html body, or proves it safe",
     "why": "A correct escape helper that a template forgets to call is the same defect as no helper. This pins the SOURCE SCAN rather than one field: the named test reads the shipped file and requires every interpolation inside an `html` literal to be escaped or to match a small allow-list of provably-safe expressions (a number, an ISO timestamp, operator-set env config, a ternary over a literal union). A per-field assertion cannot fail for a field nobody wrote an assertion for, and these templates gain fields. THE FIRST VERSION OF THAT SCAN DID NOT DO THIS, and an earlier version of this sentence claimed it did. It judged each `${...}` whole, so a fragment containing one `this.e(` was read as fully escaped and one containing none was read as structural - which made `${notes ? `<p>Notes: ${notes}</p>` : ''}` invisible. That is the idiom email.ts already uses four times for `sessionLocation`, `ownerName` and `ownerEmail`, so it is the shape the next optional field gets copied from; a field added that way rendered a live `<a href>` into a participant's inbox and passed the whole backend suite, 1060 of 1060. The scan now DESCENDS into fragments and the bypass fails by name. Found by an independent security gate that was briefed to break the guard rather than read it."
+  },
+  {
+    "id": "email-to-header-is-an-address-object-not-a-string",
+    "why": "recipient.name is user-controlled and was interpolated into the to: header string, so a name of `Ada <attacker@evil.example>, Bob` split into a second SMTP envelope recipient and delivered booking details - carrying the platform's own From address - to an attacker-chosen address. The address-object form makes address the sole recipient and the name a display phrase that is never parsed for addresses. Reverting to the string form is the exact vulnerability.",
+    "file": "backend/src/services/email.ts",
+    "anchor": "to: { name: recipient.name, address: recipient.email },",
+    "mutation": "to: `${recipient.name} <${recipient.email}>`,",
+    "runner": "jest",
+    "spec": "src/services/__tests__/email-recipient-injection.test.ts",
+    "test": "a display name cannot smuggle a second recipient into the envelope"
   }
 ]
