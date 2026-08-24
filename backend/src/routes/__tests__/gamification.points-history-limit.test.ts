@@ -93,13 +93,30 @@ describe('GET /api/gamification/points-history limit', () => {
     expect(requestedLimit()).toBe(25);
   });
 
-  it('caps the points-history limit at the number that was decided', async () => {
-    await request(listening(app)).get(`${PATH}?limit=999999999`).expect(200);
+  // cto/AdaptaLabs#24: above the ceiling is now a VISIBLE wall, not a silent
+  // clamp. The rows are the caller's own transactions with no cursor, so a
+  // clamped short page is indistinguishable from the end of history - refusing
+  // is the only answer that does not lie by omission.
+  it('refuses a limit above the ceiling instead of silently capping it', async () => {
+    await request(listening(app)).get(`${PATH}?limit=999999999`).expect(400);
+
+    // Nothing is fetched, so there is no short page to mistake for the end.
+    expect(mockGetPointsHistory).not.toHaveBeenCalled();
+  });
+
+  it('allows exactly the ceiling and passes it through', async () => {
+    await request(listening(app)).get(`${PATH}?limit=100`).expect(200);
 
     // THE LITERAL, not `MAX_POINTS_HISTORY_LIMIT`. A test that derives its
     // expectation from the constant cannot see the constant change, which is
     // how three mutations survived a review in this repository before.
     expect(requestedLimit()).toBe(100);
+  });
+
+  it('refuses one above the ceiling and passes one at it', async () => {
+    await request(listening(app)).get(`${PATH}?limit=101`).expect(400);
+
+    expect(mockGetPointsHistory).not.toHaveBeenCalled();
   });
 
   // The half that 500s, and the reason this is a bug rather than a policy
@@ -149,12 +166,17 @@ describe('pointsHistoryLimit', () => {
     expect(MAX_POINTS_HISTORY_LIMIT).toBe(100);
   });
 
-  it('clamps at the boundary rather than one either side of it', () => {
+  it('refuses above the boundary, and holds it at and below', () => {
     expect(pointsHistoryLimit(99)).toBe(99);
     expect(pointsHistoryLimit(100)).toBe(100);
-    expect(pointsHistoryLimit(101)).toBe(100);
+    // Above the ceiling is REFUSED (null -> the route answers 400), not
+    // clamped to 100, so a short page is never mistaken for the end of history
+    // (cto/AdaptaLabs#24).
+    expect(pointsHistoryLimit(101)).toBeNull();
     expect(pointsHistoryLimit(1)).toBe(1);
-    // Zero is not a page of results, it is an empty one asked for by mistake.
+    // Zero is not a page of results, it is an empty one asked for by mistake -
+    // a malformed request, so it falls back to the default rather than being
+    // refused. Only an over-large limit hits the wall.
     expect(pointsHistoryLimit(0)).toBe(20);
   });
 
@@ -337,7 +359,7 @@ describe('every limit in routes/gamification.ts is bounded', () => {
   });
 
   /**
-   * ONE `parseInt` IN THE FILE, and it is the one inside `boundedLimit`.
+   * ONE `parseInt` IN THE FILE, and it is the one inside `parseLimit`.
    *
    * The most direct statement of the property, and the one a new route trips
    * over first: the second gate's mutant added a bare `parseInt` and every

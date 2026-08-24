@@ -58,54 +58,51 @@ const DEFAULT_LEADERBOARD_LIMIT = 10;
  * last of them - kept its own bare `parseInt` through a fix whose docblock
  * called the defect closed.
  *
- * Clamps rather than refuses: a silly `limit` is far more likely to be a
- * careless client than an attack, and a 400 on a page that renders fine at
- * the ceiling helps nobody.
+ * `parseLimit` READS and nothing else - it returns a usable positive integer
+ * or `null`. The ceiling POLICY lives in each caller, because the two families
+ * answer an over-large `limit` differently, and the REFUSE rather than TRUNCATE
+ * rule this repo applies elsewhere is about withholding DATA a caller asked for
+ * and IS ENTITLED TO:
  *
- * THAT REASONING IS CLEAN FOR THE LEADERBOARDS AND NOT CLEAN FOR
- * `/points-history`, and the difference is worth stating rather than
- * smoothing over. The REFUSE rather than TRUNCATE rule this repo applies
- * elsewhere is about withholding DATA a caller asked for and IS ENTITLED TO.
- * On the leaderboards the caller is asking for more rows than the route
- * publishes, so the ceiling is genuinely the answer. On `/points-history`
- * the rows are the caller's OWN transactions - they are entitled to all of
- * them, the route has NO offset, cursor or `has_more`, and before this
- * change `?limit=999999999` returned the lot. So for a user with more than
- * 100 transactions the ceiling is a silent wall, not a page boundary, and a
- * short response is indistinguishable from the end of history.
- *
- * Shipped as a clamp anyway, for reasons that are about blast radius rather
- * than principle: an unbounded read and a 500 on a routine request are live
- * defects today, pagination is a wire-contract change, and no client is
- * affected today (see the note on `MAX_POINTS_HISTORY_LIMIT`). THE PROPER
- * FIX IS A CURSOR, or a 400 above the ceiling so the wall is at least
- * visible. Recorded as an open decision rather than settled here - a
- * docblock asserting this was fine would be the circular argument a review
- * gate correctly called out in its first draft.
+ *   - The LEADERBOARDS clamp. The caller is asking for more rows than the route
+ *     publishes, so the ceiling is genuinely the answer, and a 400 on a page
+ *     that renders fine at the ceiling helps nobody.
+ *   - `/points-history` REFUSES above the ceiling with a 400. The rows are the
+ *     caller's OWN transactions - they are entitled to all of them, the route
+ *     has NO offset, cursor or `has_more`, so a clamped short response is
+ *     indistinguishable from the end of history. Refusing makes the wall
+ *     visible. See `pointsHistoryLimit` and cto/AdaptaLabs#24. (A cursor is the
+ *     fuller fix, deferred until a paginated points-history view exists - none
+ *     does today; see the note on `MAX_POINTS_HISTORY_LIMIT`.)
  */
-function boundedLimit(raw: unknown, fallback: number, ceiling: number): number {
+function parseLimit(raw: unknown): number | null {
   // A REPEATED QUERY PARAMETER IS AN ARRAY, and `String(['5', '9999'])` is
   // `'5,9999'`, which `parseInt` happily reads as 5. So `?limit=5&limit=9999`
   // silently answered with the first value by a coincidence of comma-joining
-  // rather than by any rule. Not a leak - the result is still clamped - but a
+  // rather than by any rule. Not a leak - the result is still bounded - but a
   // behaviour nobody chose, so it is refused rather than documented. Found by
   // this function's own test, not by reading it.
   if (typeof raw !== 'string' && typeof raw !== 'number') {
-    return fallback;
+    return null;
   }
 
   const parsed = parseInt(String(raw), 10);
 
   if (!Number.isFinite(parsed) || parsed < 1) {
-    return fallback;
+    return null;
   }
 
-  return Math.min(parsed, ceiling);
+  return parsed;
 }
 
-/** The public leaderboard pair. Both UNAUTHENTICATED - see the note above. */
+/**
+ * The public leaderboard pair. Both UNAUTHENTICATED - see the note above.
+ * CLAMPS to the ceiling; an absent or unusable `limit` falls back to the
+ * default rather than being refused.
+ */
 export function leaderboardLimit(raw: unknown): number {
-  return boundedLimit(raw, DEFAULT_LEADERBOARD_LIMIT, MAX_LEADERBOARD_LIMIT);
+  const parsed = parseLimit(raw);
+  return parsed === null ? DEFAULT_LEADERBOARD_LIMIT : Math.min(parsed, MAX_LEADERBOARD_LIMIT);
 }
 
 /**
@@ -147,8 +144,16 @@ export function leaderboardLimit(raw: unknown): number {
 export const MAX_POINTS_HISTORY_LIMIT = 100;
 const DEFAULT_POINTS_HISTORY_LIMIT = 20;
 
-export function pointsHistoryLimit(raw: unknown): number {
-  return boundedLimit(raw, DEFAULT_POINTS_HISTORY_LIMIT, MAX_POINTS_HISTORY_LIMIT);
+// Returns the bounded limit, or `null` when the caller EXPLICITLY asked for
+// more than the ceiling - which the route turns into a 400 so the wall is
+// visible instead of a silent clamp (cto/AdaptaLabs#24). An absent, negative or
+// unparseable `limit` still falls back to the default: that is a malformed
+// request, not a truncated page, and #17 already settled it must not 500.
+export function pointsHistoryLimit(raw: unknown): number | null {
+  const parsed = parseLimit(raw);
+  if (parsed === null) return DEFAULT_POINTS_HISTORY_LIMIT;
+  if (parsed > MAX_POINTS_HISTORY_LIMIT) return null;
+  return parsed;
 }
 
 // GET /api/gamification/profile - Get user's AdaptaBits profile
@@ -212,8 +217,14 @@ router.get('/points-history', requireAuth, async (req: Request, res: Response) =
   try {
     const userId = req.user!.id;
     const limit = pointsHistoryLimit(req.query.limit);
+    // null means the caller asked for more than the ceiling. Refuse visibly
+    // rather than clamp, so a short page is never mistaken for the end of
+    // history (cto/AdaptaLabs#24).
+    if (limit === null) {
+      return res.status(400).json({ error: `limit must not exceed ${MAX_POINTS_HISTORY_LIMIT}` });
+    }
     const history = await getPointsHistory(userId, limit);
-    
+
     res.json(history);
   } catch (error) {
     logger.error('Error fetching points history', { error });

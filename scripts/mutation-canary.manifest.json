@@ -515,19 +515,19 @@
   },
   {
     "id": "points-history-route-is-capped-too",
-    "why": "THE THIRD ROUTE, and the reason this entry exists rather than a general one. cto/AdaptaLabs#17 capped the two leaderboard routes and left this one on a bare `parseInt(req.query.limit as string) || 20` feeding SQL `LIMIT $2` - the finding named an INSTANCE and the class was the file. It is not the leaderboard leak: the value is bound and rows are scoped to the caller's own user_id. What remained is an unbounded read at `?limit=999999999`, and a 500 at `?limit=-5`, because parseInt('-5') is truthy so the fallback never fired and Postgres raises SQLSTATE 2201W, verified against a real Postgres 17. This entry restores exactly the pre-fix line.",
+    "why": "THE THIRD ROUTE, and the reason this entry exists rather than a general one. cto/AdaptaLabs#17 capped the two leaderboard routes and left this one on a bare `parseInt(req.query.limit as string) || 20` feeding SQL `LIMIT $2` - the finding named an INSTANCE and the class was the file. It is not the leaderboard leak: the value is bound and rows are scoped to the caller's own user_id. What remained is an unbounded read at `?limit=999999999`, and a 500 at `?limit=-5`, because parseInt('-5') is truthy so the fallback never fired and Postgres raises SQLSTATE 2201W, verified against a real Postgres 17. cto/AdaptaLabs#24 then made the ceiling a VISIBLE wall: an over-large limit is refused with a 400 rather than silently clamped. The mutation restores the pre-fix bare `parseInt` AND drops the refuse-guard (so it also type-checks against the new `number | null` return); the route then serves 999999999 rows at 200 instead of a 400, which the named test catches.",
     "file": "backend/src/routes/gamification.ts",
-    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);",
+    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);\n    // null means the caller asked for more than the ceiling. Refuse visibly\n    // rather than clamp, so a short page is never mistaken for the end of\n    // history (cto/AdaptaLabs#24).\n    if (limit === null) {\n      return res.status(400).json({ error: `limit must not exceed ${MAX_POINTS_HISTORY_LIMIT}` });\n    }",
     "mutation": "    const limit = parseInt(req.query.limit as string) || 20;",
     "runner": "jest",
     "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
-    "test": "caps the points-history limit at the number that was decided"
+    "test": "refuses a limit above the ceiling instead of silently capping it"
   },
   {
     "id": "points-history-keeps-its-own-default",
-    "why": "THE TEMPTING ONE-WORD FIX, which is why it is pinned separately from the two entries above. `leaderboardLimit` sits in the same file and clamps to the same ceiling of 100, so borrowing it here caps the route, refuses the negative, and satisfies every assertion about the ceiling - while silently halving the page, because the leaderboard default is 10 and this route's is 20. The parser is shared deliberately; the policy numbers are not, and only a test naming the default can tell the two apart.",
+    "why": "THE TEMPTING ONE-WORD FIX, which is why it is pinned separately from the two entries above. `leaderboardLimit` sits in the same file and clamps to the same ceiling of 100, so borrowing it here caps the route, refuses the negative, and satisfies every assertion about the ceiling - while silently halving the page, because the leaderboard default is 10 and this route's is 20. The parser is shared deliberately; the policy numbers are not, and only a test naming the default can tell the two apart. The mutation swaps in `leaderboardLimit` and drops the #24 refuse-guard (which would not type-check against `leaderboardLimit`'s `number` return, and is dead there anyway since it never returns null); a no-param request then fetches 10 rows instead of 20, which the named test catches.",
     "file": "backend/src/routes/gamification.ts",
-    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);",
+    "anchor": "    const limit = pointsHistoryLimit(req.query.limit);\n    // null means the caller asked for more than the ceiling. Refuse visibly\n    // rather than clamp, so a short page is never mistaken for the end of\n    // history (cto/AdaptaLabs#24).\n    if (limit === null) {\n      return res.status(400).json({ error: `limit must not exceed ${MAX_POINTS_HISTORY_LIMIT}` });\n    }",
     "mutation": "    const limit = leaderboardLimit(req.query.limit);",
     "runner": "jest",
     "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
