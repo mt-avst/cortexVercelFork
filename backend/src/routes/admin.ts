@@ -434,7 +434,16 @@ router.delete('/admins', requireSuperadmin, asyncHandler(async (req: Request, re
   
   const targetUser = userResult.rows[0];
   
-  // Prevent revoking superadmin access
+  // Prevent revoking superadmin access.
+  //
+  // DELIBERATE, RECORDED DECISION (#14): superadmin revocation is kept
+  // out-of-band. A superadmin can revoke another superadmin here only via a
+  // direct DB change, which forces a second, audited channel for the highest
+  // privilege and removes the "revoke the last superadmin, or yourself, over
+  // the API" foot-gun entirely. The in-API path stays restricted to
+  // researcher_admin. If a guarded in-API superadmin revocation is ever wanted
+  // (cannot-be-last, cannot-be-self), it belongs behind those explicit guards -
+  // not by loosening this refusal.
   if (targetUser.role === 'superadmin') {
     return res.status(403).json({ error: 'Cannot revoke superadmin access' });
   }
@@ -460,6 +469,9 @@ router.delete('/admins', requireSuperadmin, asyncHandler(async (req: Request, re
     revokedBy: superadminId 
   });
   
+  // Now truthful (#14): the DB role is the source of truth and requireAdmin
+  // re-reads it per request, so the revoked admin is locked out on their very
+  // next call rather than after up to SESSION_MAX_AGE_MS.
   return res.status(200).json({
     success: true,
     message: 'Admin access revoked successfully'

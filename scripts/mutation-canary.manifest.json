@@ -932,5 +932,15 @@
     "mutation": "      WHERE b.id = $1 AND b.user_id = $2 AND b.status = 'booked'",
     "test": "locks the booking row FOR UPDATE OF b, serialising against a racing cancel - cto/AdaptaLabs#36",
     "why": "reschedule loads the booking with an unlocked SELECT (status='booked' filter) and its move UPDATE (UPDATE bookings SET session_id ... WHERE id) carries no status guard, so a cancel committing in the window after the read flips the row to cancelled while reschedule still moves it - moving a CANCELLED booking, decrementing the old session twice and leaving the target a phantom slot until sync-booked-counts runs (cto/AdaptaLabs#36). It also let the old-session decrement read a stale session_id when two reschedules of one booking raced. FOR UPDATE OF b locks the booking row (OF b, so the joined session/opportunity rows are NOT locked and the old-session FOR UPDATE NOWAIT from #34 still governs deadlock-freedom) - the loser of a race blocks, re-reads the committed row, and if status is no longer 'booked' the WHERE matches zero rows and the handler 404s. Dropping the clause restores the unlocked read; it still type-checks (it is inside a template literal), so the canary reports KILLED only because the named jest test asserts the booking load SQL contains FOR UPDATE OF b."
+  },
+  {
+    "id": "admin-gate-rereads-live-role-from-db",
+    "file": "backend/src/middleware/authenticate.ts",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/authenticate.test.ts",
+    "anchor": "    return result.rows[0].role as AdminRole;",
+    "mutation": "    return req.session!.user!.role as AdminRole;",
+    "test": "rejects a revoked admin whose database role was downgraded after login",
+    "why": "requireAdmin and requireSuperadmin trusted req.session.user.role, stamped at login and never refreshed, so DELETE /api/admin/admins answered 'revoked successfully' while the revoked admin's cookie kept working for up to SESSION_MAX_AGE_MS = 24h (cto/AdaptaLabs#14). The fix re-reads the live role from the users table on every admin-gated request and rejects when it no longer qualifies - the message is true because the DB is the source of truth. Returning the session role instead of the queried row restores the stale-read; it still type-checks (both are the same union), so the canary reports KILLED only because the named jest test downgrades the DB role after login and asserts a 403."
   }
 ]

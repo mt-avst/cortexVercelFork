@@ -4,6 +4,9 @@ import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // Mock the database pool for testing (factory uses only inline jest.fn() to avoid TDZ)
+// #14: route suites use the session-trusting auth double (see middleware/__mocks__/authenticate.ts);
+// the real gate now re-reads the DB role, which their positional pool mock cannot satisfy.
+jest.mock('../../middleware/authenticate');
 jest.mock('../../config', () => ({
   pool: {
     query: jest.fn(),

@@ -7,6 +7,9 @@ import express from 'express';
 // gone, so this is the only path: the firsthand runtime/storage layer is mocked
 // and the real buildSessionOutputs + sessionOutputsSchema assemble the response.
 
+// #14: route suites use the session-trusting auth double (see middleware/__mocks__/authenticate.ts);
+// the real gate now re-reads the DB role, which their positional pool mock cannot satisfy.
+jest.mock('../../middleware/authenticate');
 jest.mock('../../config', () => ({
   pool: { query: jest.fn() }
 }));
