@@ -315,11 +315,18 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     // Use mock data for development
     const sessions = getAllMockSessions(); // Get all sessions
     const session = sessions.find(s => s.id === sessionId);
-    
+
+    // Only a superadmin learns a session genuinely does not exist; everyone
+    // else gets 403 for both "no such session" and "not yours", matching the
+    // database path so this dev-only path is not an existence oracle either
+    // (cto/AdaptaLabs#33 / !215).
     if (!session) {
-      throw new NotFoundError('Session');
+      if (req.user!.role === 'superadmin') {
+        throw new NotFoundError('Session');
+      }
+      throw new ForbiddenError('Only the owner can edit this session');
     }
-    
+
     // Check ownership through opportunity (superadmins can edit any)
     const opportunity = getMockOpportunity(session.opportunity_id);
     const isSuperadmin = req.user!.role === 'superadmin';
@@ -449,11 +456,18 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     // Use mock data for development
     const sessions = getAllMockSessions(); // Get all sessions
     const session = sessions.find(s => s.id === sessionId);
-    
+
+    // Only a superadmin learns a session genuinely does not exist; everyone
+    // else gets 403 for both "no such session" and "not yours", matching the
+    // database path so this dev-only path is not an existence oracle either
+    // (cto/AdaptaLabs#33 / !215).
     if (!session) {
-      throw new NotFoundError('Session');
+      if (req.user!.role === 'superadmin') {
+        throw new NotFoundError('Session');
+      }
+      throw new ForbiddenError('Only the owner can delete this session');
     }
-    
+
     // Check ownership through opportunity (superadmins can delete any)
     const opportunity = getMockOpportunity(session.opportunity_id);
     const isSuperadmin = req.user!.role === 'superadmin';
