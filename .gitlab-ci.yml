@@ -365,13 +365,22 @@ test-a11y:
 
 test-scripts:
   extends: .test-base
+  variables:
+    # mutation-canary.integrity.test.js compares the working manifest against the
+    # merge-base with origin/main (cto/AdaptaLabs#29). A shallow clone has no
+    # common ancestor, so the merge-base cannot resolve and the live gate would
+    # SKIP - which in CI it treats as a failure, by design. GIT_DEPTH:0 gives it
+    # the history; the fetch below gives it the origin/main ref to merge-base
+    # against. Same reason check-release-will-deploy sets GIT_DEPTH:0.
+    GIT_DEPTH: 0
   before_script:
-    # check-release-will-deploy.test.js drives the real detector against real
-    # throwaway git repositories, and the node alpine image has no git. The
-    # check-release-will-deploy job installs it for the same reason. Without
-    # this the six detector tests fail with `spawnSync git ENOENT`, which reads
-    # as a broken test rather than a missing binary.
+    # check-release-will-deploy.test.js and mutation-canary.integrity.test.js
+    # both drive real git against throwaway repositories, and the node alpine
+    # image has no git. Without this they fail with `spawnSync git ENOENT`,
+    # which reads as broken tests rather than a missing binary.
     - apk add --no-cache git
+    # The manifest-loss gate needs origin/main present to merge-base against.
+    - git fetch --quiet origin main
   script:
     - npm ci
     # set-superadmin.test.js and role-scripts-tls.test.js spawn the real script

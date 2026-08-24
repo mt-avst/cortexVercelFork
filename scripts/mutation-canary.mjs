@@ -222,6 +222,120 @@ export function validateManifest(entries) {
   return problems;
 }
 
+// The removal ledger sits beside the manifest. cto/AdaptaLabs#29.
+export const REMOVED_LEDGER = path.join(HERE, 'mutation-canary.removed.json');
+const MANIFEST_REL = 'scripts/mutation-canary.manifest.json';
+const LEDGER_REL = 'scripts/mutation-canary.removed.json';
+
+/** The ids of a parsed manifest or ledger, in order, skipping malformed rows. */
+export function idsOf(entries) {
+  return (Array.isArray(entries) ? entries : [])
+    .map((entry) => entry?.id)
+    .filter((id) => typeof id === 'string');
+}
+
+/**
+ * The ids a change DROPPED WITHOUT SAYING SO: present in the base manifest, gone
+ * from the current one, and not listed in the removal ledger. cto/AdaptaLabs#29.
+ *
+ * `scripts/mutation-canary.manifest.json` is a JSON array every branch appends
+ * to, so two branches in flight conflict on it routinely. The conflict is not
+ * the danger - a SILENT RESOLUTION is. A merge that takes one side of the append
+ * loses entries, and nothing notices: `validateManifest` checks shape and
+ * duplicate ids, NOT counts, so the canary then reports e.g. `70/70 killed`,
+ * exit 0, over a manifest that quietly lost seven. A green canary over a
+ * shrunken manifest is worse than a red one - it reads as "everything is still
+ * pinned".
+ *
+ * This is the DURABLE form, not the merge-time form. "Zero deletions vs the
+ * base" would red-gate a legitimate removal - an entry whose anchor genuinely
+ * went away - and the first time a gate blocks something legitimate, somebody
+ * disables it, and a gate that gets disabled protects nothing. Here a deliberate
+ * removal is STATED in the ledger and passes; only an unstated loss fails.
+ */
+export function unstatedRemovals(baseEntries, currentEntries, removedLedger) {
+  const current = new Set(idsOf(currentEntries));
+  const stated = new Set(idsOf(removedLedger));
+  return idsOf(baseEntries).filter((id) => !current.has(id) && !stated.has(id));
+}
+
+/**
+ * The ledger's own integrity. It must be a JSON array of `{id, reason}`, with no
+ * duplicate ids and - the load-bearing one - NO id that is back in the manifest.
+ * A stale ledger entry for a since-restored id would silently excuse a future
+ * real loss of it, which is the exact failure this whole check exists to catch.
+ */
+export function validateRemovedLedger(ledger, currentEntries) {
+  if (!Array.isArray(ledger)) {
+    return ['the removed-entries ledger must be a JSON array'];
+  }
+
+  const problems = [];
+  const current = new Set(idsOf(currentEntries));
+  const seen = new Set();
+
+  ledger.forEach((entry, index) => {
+    const where = `removed entry ${index}${entry?.id ? ` (${entry.id})` : ''}`;
+
+    for (const field of ['id', 'reason']) {
+      if (typeof entry?.[field] !== 'string' || entry[field].length === 0) {
+        problems.push(`${where}: ${field} is missing or not a non-empty string`);
+      }
+    }
+
+    if (seen.has(entry?.id)) problems.push(`${where}: duplicate id`);
+    seen.add(entry?.id);
+
+    if (current.has(entry?.id)) {
+      problems.push(
+        `${where}: this id is present in the manifest again, so it must be removed from the ledger`
+      );
+    }
+  });
+
+  return problems;
+}
+
+/**
+ * Run git, failing CLOSED. A check that cannot read the base must refuse, not
+ * pass - the same disposition as `porcelainFrom`. Returns stdout on success.
+ */
+function runGit(args, cwd) {
+  const run = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  if (run.error || run.status !== 0) {
+    const detail = (run.stderr || run.error?.message || `exit ${run.status}`).trim();
+    throw new Refusal(`git ${args.join(' ')} failed: ${detail}`);
+  }
+  return run.stdout;
+}
+
+/** The merge-base of HEAD and the base branch. Refusal if it cannot resolve. */
+export function baseRefFor(baseBranch, cwd = REPO_ROOT) {
+  return runGit(['merge-base', 'HEAD', baseBranch], cwd).trim();
+}
+
+/**
+ * The unstated removals of the current working manifest against the manifest as
+ * committed at `baseRef`. Reads the base manifest through `git show`, so it needs
+ * that commit present - a shallow clone without the merge-base refuses here
+ * rather than passing. cto/AdaptaLabs#29.
+ */
+export function unstatedRemovalsAgainst(
+  baseRef,
+  { cwd = REPO_ROOT, manifestRel = MANIFEST_REL, ledgerRel = LEDGER_REL } = {}
+) {
+  const base = JSON.parse(runGit(['show', `${baseRef}:${manifestRel}`], cwd));
+  // Fail CLOSED on a base that is not a non-empty array. `idsOf` would return
+  // `[]` for `null`/`{}`/a number, and an empty base reports zero losses - a
+  // fail-open in the one place this whole check exists to prevent.
+  if (!Array.isArray(base) || base.length === 0) {
+    throw new Refusal(`the manifest at ${baseRef} is not a non-empty array, so the base cannot be trusted`);
+  }
+  const current = JSON.parse(readFileSync(path.join(cwd, manifestRel), 'utf8'));
+  const ledger = JSON.parse(readFileSync(path.join(cwd, ledgerRel), 'utf8'));
+  return unstatedRemovals(base, current, ledger);
+}
+
 /**
  * The anchor's occurrence count, over the WHOLE file.
  */
