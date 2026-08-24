@@ -231,12 +231,14 @@ const ROUTES = [
   // researcher_admin editing or deleting a session under a study they have
   // nothing to do with.
   //
-  // They answer 403 rather than 404 for a session that does not exist,
-  // because the predicate cannot distinguish "no such session" from "not
-  // yours" and refuses both. That is the right disposition - the opposite
-  // leaks which session ids exist, which is the oracle !215 closed on the
-  // results routes - so `missingStatus` records it deliberately rather than
-  // letting one table assume every route 404s.
+  // They answer 403 rather than 404 to a researcher_admin for a session that
+  // does not exist: the opposite leaks which session ids exist, which is the
+  // oracle !215 closed on the results routes, so `missingStatus` records the
+  // 403 deliberately rather than letting one table assume every route 404s.
+  // A superadmin, entitled to the truth and able to enumerate every session
+  // anyway, now gets the honest 404 instead - the !215 disposition, applied to
+  // these two routes by cto/AdaptaLabs#28. That is pinned by the superadmin arm
+  // below, which asserts 404 for the whole family.
   // --------------------------------------------------------------------
   {
     name: 'PATCH /api/sessions/:id',
@@ -383,27 +385,28 @@ describe.each(ROUTES)(
     // that branch with `return true;` survived all 36 tests until this arm was
     // added.
     //
-    // THIS PINS CURRENT BEHAVIOUR AS DELIBERATE, NOT AS CORRECT, and the
-    // distinction matters because an earlier draft of this comment got it
-    // backwards. It claimed the 403 here "closes the existence oracle !215
-    // closed". It does not: !215 (abea2c6) collapsed the RESULTS routes onto
-    // 403 for a caller who may not read, and deliberately KEPT the
-    // superadmin's accurate 404, pinned by `still tells a superadmin the truth
-    // about an id that is not there`. Its own message records why - answering
-    // 403 to everybody "also closes the oracle and passed all 295 tests while
-    // losing the truth for the one caller entitled to it".
+    // A superadmin is told the truth: 404 for a session that genuinely does not
+    // exist, across the whole family. That is !215's disposition (abea2c6),
+    // which collapsed the RESULTS routes onto 403 for a caller who may not read
+    // and deliberately KEPT the superadmin's accurate 404, pinned there by
+    // `still tells a superadmin the truth about an id that is not there`. Its
+    // message records why answering 403 to everybody was wrong: it "also closes
+    // the oracle and passed all 295 tests while losing the truth for the one
+    // caller entitled to it". A superadmin can enumerate every session anyway,
+    // so there is no oracle to close against them.
     //
-    // A superadmin can enumerate every session anyway, so there is no oracle
-    // to close against them, and by !215's precedent these two routes arguably
-    // SHOULD answer 404 here. They do not, because `checkSessionOwnership`
-    // returns one boolean and the handler cannot tell the two cases apart.
-    // Pinned so the status cannot drift unnoticed; raised as a ticket rather
-    // than settled here, because changing it is a behaviour change and this is
-    // a test-only MR.
-    it(`refuses a target that does not exist even for a superadmin, on ${name}`, async () => {
+    // For the two /api/sessions/:id routes this used to be 403 - the predicate
+    // returned one boolean and the handler could not tell "no such session"
+    // from "not yours" - and was pinned as deliberate pending a decision.
+    // cto/AdaptaLabs#28 took that decision (option B): `checkSessionOwnership`
+    // now returns three-way and the superadmin arm answers 404 like the rest of
+    // the family. So this arm asserts 404 directly rather than through
+    // `missingStatus` (which still carries the researcher_admin 403 for the
+    // session routes).
+    it(`answers 404 to a superadmin for a target that does not exist, on ${name}`, async () => {
       answering('admin-1', false);
 
-      await call('superadmin', 'root-1').expect(missingStatus);
+      await call('superadmin', 'root-1').expect(404);
 
       expect(matching(write)).toHaveLength(0);
     });

@@ -738,40 +738,40 @@
     "file": "backend/src/routes/sessions.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
-    "anchor": "  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  if (!hasAccess) {\n    throw new ForbiddenError('Only the owner can edit this session');\n  }",
-    "mutation": "  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  if (false) {\n    throw new ForbiddenError('Only the owner can edit this session');\n  }",
+    "anchor": "  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  enforceSessionOwnership(access, req.user!.role, 'Only the owner can edit this session');",
+    "mutation": "  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  void access;",
     "test": "writes nothing at all for a non-owning admin on PATCH /api/sessions/:id",
-    "why": "PATCH /api/sessions/:id is a WRITE and its ownership gate was held by no test: neutering `checkSessionOwnership` to `return true;` passed 1036 of 1036 on d3aa9c6. What it admits is one researcher_admin editing a session under a study they have nothing to do with - moving the time a participant already booked, or cutting capacity. The gate was invisible to the suite because the fixture answered nothing for its query shape: the predicate reaches the owner via `SELECT o.owner_user_id FROM sessions s JOIN opportunities o`, which does not match the `SELECT owner_user_id FROM opportunities` arm the older routes use, so it fell to a catch-all empty result and the handler denied by default. A fixture that answers nothing makes a deny-by-default gate look correct no matter what its predicate says. The anchor carries the ForbiddenError message because the call line is byte-identical to the DELETE handler's."
+    "why": "PATCH /api/sessions/:id is a WRITE and its ownership gate was held by no test: neutering `checkSessionOwnership` to `return true;` passed 1036 of 1036 on d3aa9c6. What it admits is one researcher_admin editing a session under a study they have nothing to do with - moving the time a participant already booked, or cutting capacity. The gate was invisible to the suite because the fixture answered nothing for its query shape: the predicate reaches the owner via `SELECT o.owner_user_id FROM sessions s JOIN opportunities o`, which does not match the `SELECT owner_user_id FROM opportunities` arm the older routes use, so it fell to a catch-all empty result and the handler denied by default. A fixture that answers nothing makes a deny-by-default gate look correct no matter what its predicate says. cto/AdaptaLabs#28 made the gate three-way (missing/forbidden/ok) routed through `enforceSessionOwnership`; the mutation drops the enforcement call (`void access;`) so the handler proceeds and writes for a non-owning admin. The anchor carries the refusal message because the call line is byte-identical to the DELETE handler's."
   },
   {
     "id": "sessions-delete-consults-ownership",
     "file": "backend/src/routes/sessions.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
-    "anchor": "  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  if (!hasAccess) {\n    throw new ForbiddenError('Only the owner can delete this session');\n  }",
-    "mutation": "  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  if (false) {\n    throw new ForbiddenError('Only the owner can delete this session');\n  }",
+    "anchor": "  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  enforceSessionOwnership(access, req.user!.role, 'Only the owner can delete this session');",
+    "mutation": "  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);\n  void access;",
     "test": "writes nothing at all for a non-owning admin on DELETE /api/sessions/:id",
-    "why": "The companion to the PATCH gate on the same helper, and the worse of the two: an unauthorised DELETE removes the session outright. Its only rail is a `booked_count > 0` check, so a session whose bookings are all cancelled or pending goes silently. Same measurement - neutering the helper passed the whole suite. Same anchor caveat: the call line is identical to PATCH's, so the message disambiguates."
+    "why": "The companion to the PATCH gate on the same helper, and the worse of the two: an unauthorised DELETE removes the session outright. Its only rail is a `booked_count > 0` check, so a session whose bookings are all cancelled or pending goes silently. Same measurement - neutering the helper passed the whole suite. Since cto/AdaptaLabs#28 the gate is enforced through `enforceSessionOwnership`; the mutation drops that call (`void access;`) so the DELETE proceeds for a non-owning admin. Same anchor caveat: the call line is identical to PATCH's, so the refusal message disambiguates."
   },
   {
     "id": "session-ownership-predicate-is-consulted",
     "file": "backend/src/routes/sessions.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
-    "anchor": "  return isOpportunityOwner(result.rows[0], { id: userId });",
-    "mutation": "  return true;",
+    "anchor": "  return isOpportunityOwner(result.rows[0], { id: userId }) ? 'ok' : 'forbidden';",
+    "mutation": "  return 'ok';",
     "test": "writes nothing at all for a non-owning admin on PATCH /api/sessions/:id",
-    "why": "The shared predicate inside `checkSessionOwnership`, one line below the query that feeds it. Pinning the two call sites is not enough on its own: a gate that is consulted and always answers yes is indistinguishable from no gate, and this is the single line both PATCH and DELETE depend on. Replacing it with `return true;` failed 8 tests across both routes once the table covered them, and 0 before."
+    "why": "The shared predicate inside `checkSessionOwnership`, one line below the query that feeds it. Pinning the two call sites is not enough on its own: a gate that is consulted and always answers yes is indistinguishable from no gate, and this is the single line both PATCH and DELETE depend on. Since cto/AdaptaLabs#28 it returns a three-way result; mutating it to a bare `return 'ok';` grants every researcher_admin and reopens the same hole `return true;` did before the type changed. Killed by the non-owning-admin arms across both routes."
   },
   {
     "id": "session-superadmin-branch-checks-existence",
     "file": "backend/src/routes/sessions.ts",
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.write-ownership.test.ts",
-    "anchor": "    const result = await pool.query('SELECT id FROM sessions WHERE id = $1', [sessionId]);\n    return result.rows.length > 0;",
-    "mutation": "    return true;",
-    "test": "refuses a target that does not exist even for a superadmin, on PATCH /api/sessions/:id",
-    "why": "The superadmin branch of `checkSessionOwnership` checks only that the row EXISTS, and every other refusal case in this family runs as a researcher_admin - so this branch was reachable with nothing asserting it. It SURVIVED all 36 tests of the first draft of the extended table and was only killed once a superadmin arm was added, which is why that arm exists. THIS ENTRY PINS CURRENT BEHAVIOUR AS DELIBERATE, NOT AS CORRECT. An earlier version of this text claimed the 403 closes the existence oracle !215 closed, which is backwards: !215 (abea2c6) collapsed the RESULTS routes onto 403 for a caller who may not read and deliberately KEPT the superadmin's accurate 404, pinned by `still tells a superadmin the truth about an id that is not there` - its message records that answering 403 to everybody \"also closes the oracle and passed all 295 tests while losing the truth for the one caller entitled to it\". A superadmin can enumerate every session anyway, so by that precedent these two routes arguably SHOULD answer 404 here; they cannot today because the predicate returns one boolean and the handler cannot tell 'no such session' from 'not yours'. Tracked as a ticket rather than changed in a test-only MR. What this entry protects is that the status cannot drift unnoticed in either direction."
+    "anchor": "    const result = await pool.query('SELECT id FROM sessions WHERE id = $1', [sessionId]);\n    return result.rows.length > 0 ? 'ok' : 'missing';",
+    "mutation": "    const result = await pool.query('SELECT id FROM sessions WHERE id = $1', [sessionId]);\n    return result.rows.length > 0 ? 'ok' : 'forbidden';",
+    "test": "answers 404 to a superadmin for a target that does not exist, on PATCH /api/sessions/:id",
+    "why": "The superadmin branch of `checkSessionOwnership` distinguishes a session that EXISTS from one that does not, so `enforceSessionOwnership` can give a superadmin the honest 404 rather than a 403. Every other refusal case in this family runs as a researcher_admin, so this branch is reachable only through the superadmin arm. cto/AdaptaLabs#28 took this from 403 to 404 (option B), following !215 (abea2c6): !215 collapsed the RESULTS routes onto 403 for a caller who may not read and deliberately KEPT the superadmin's accurate 404, pinned by `still tells a superadmin the truth about an id that is not there` - its message records that answering 403 to everybody \"also closes the oracle and passed all 295 tests while losing the truth for the one caller entitled to it\". A superadmin can enumerate every session anyway, so there is no oracle to close against them. The mutation returns 'forbidden' for an absent session, which makes `enforceSessionOwnership` answer 403 instead of 404; the superadmin arm expects 404 and fails. Note a bare `return 'ok';` would NOT be caught here - the downstream existence guards still 404 a missing session - which is why the mutation flips the branch to 'forbidden' rather than neutering it."
   },
   {
     "id": "email-html-escapes-the-angle-brackets",

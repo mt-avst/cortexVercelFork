@@ -33,21 +33,40 @@ const UPDATABLE_SESSION_COLUMNS: ReadonlySet<string> = new Set([
 ]);
 
 // Helper function to check session ownership (superadmin can access any)
-const checkSessionOwnership = async (sessionId: string, userId: string, userRole: string): Promise<boolean> => {
-  // Superadmins can access any session
+// Three-way rather than one boolean so the two callers can follow !215's
+// disposition (abea2c6): a superadmin is entitled to the truth and can
+// enumerate every session anyway, so 'missing' becomes an honest 404 for them,
+// while a researcher_admin gets 403 for both 'missing' and 'forbidden' and
+// cannot use the status as an existence oracle. See enforceSessionOwnership.
+type SessionOwnership = 'ok' | 'forbidden' | 'missing';
+
+const checkSessionOwnership = async (sessionId: string, userId: string, userRole: string): Promise<SessionOwnership> => {
+  // Superadmins can access any session that exists.
   if (userRole === 'superadmin') {
     const result = await pool.query('SELECT id FROM sessions WHERE id = $1', [sessionId]);
-    return result.rows.length > 0;
+    return result.rows.length > 0 ? 'ok' : 'missing';
   }
-  
+
   const result = await pool.query(`
-    SELECT o.owner_user_id 
-    FROM sessions s 
-    JOIN opportunities o ON s.opportunity_id = o.id 
+    SELECT o.owner_user_id
+    FROM sessions s
+    JOIN opportunities o ON s.opportunity_id = o.id
     WHERE s.id = $1
   `, [sessionId]);
-  
-  return isOpportunityOwner(result.rows[0], { id: userId });
+
+  if (result.rows.length === 0) return 'missing';
+  return isOpportunityOwner(result.rows[0], { id: userId }) ? 'ok' : 'forbidden';
+};
+
+// The single policy point for the 404/403 split. Only a superadmin learns that a
+// session genuinely does not exist; everyone else gets 403 for both "not yours"
+// and "no such session", so the status leaks nothing about which ids exist.
+const enforceSessionOwnership = (access: SessionOwnership, userRole: string, refusal: string): void => {
+  if (access === 'ok') return;
+  if (access === 'missing' && userRole === 'superadmin') {
+    throw new NotFoundError('Session');
+  }
+  throw new ForbiddenError(refusal);
 };
 
 // Helper function to check for overlapping sessions
@@ -317,11 +336,10 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
     return res.json(updatedSession);
   }
   
-  // Check session ownership (superadmins can edit any)
-  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
-  if (!hasAccess) {
-    throw new ForbiddenError('Only the owner can edit this session');
-  }
+  // Check session ownership (superadmins can edit any; a superadmin gets an
+  // honest 404 for a session that does not exist - see enforceSessionOwnership)
+  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
+  enforceSessionOwnership(access, req.user!.role, 'Only the owner can edit this session');
   
   // Get current session data
   const currentSession = await pool.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
@@ -452,11 +470,10 @@ router.delete('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respo
     return res.status(204).send();
   }
   
-  // Check session ownership (superadmins can delete any)
-  const hasAccess = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
-  if (!hasAccess) {
-    throw new ForbiddenError('Only the owner can delete this session');
-  }
+  // Check session ownership (superadmins can delete any; a superadmin gets an
+  // honest 404 for a session that does not exist - see enforceSessionOwnership)
+  const access = await checkSessionOwnership(sessionId, req.user!.id, req.user!.role);
+  enforceSessionOwnership(access, req.user!.role, 'Only the owner can delete this session');
   
   // Check if session has bookings
   const sessionCheck = await pool.query('SELECT booked_count FROM sessions WHERE id = $1', [sessionId]);
