@@ -144,7 +144,15 @@ const makeClient = () => {
   // is what gates the decrement (see the handler's `AND status = 'booked'`
   // guard). A racing double-cancel would see rowCount 0 here; that path is
   // pinned in bookings.cancel-writes-are-row-scoped.test.ts.
-  const query = jest.fn(async () => ({ rows: [], rowCount: 1 }));
+  //
+  // The cancel UPDATE now RETURNs session_id (cto/AdaptaLabs#31) and the handler
+  // reads rows[0].session_id to decrement the current session, so the row must
+  // be non-empty. The value is irrelevant here; decrement scope is asserted in
+  // bookings.cancel-writes-are-row-scoped.test.ts.
+  const query = jest.fn(async (sql: unknown) =>
+    String(sql).toUpperCase().includes('UPDATE BOOKINGS')
+      ? { rows: [{ session_id: 's-any' }], rowCount: 1 }
+      : { rows: [], rowCount: 1 });
   return { query, release: jest.fn() };
 };
 
