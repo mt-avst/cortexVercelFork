@@ -195,7 +195,15 @@ const arrange = ({ preferencesFail = false } = {}) => {
 
 // rowCount 1 = the cancel UPDATE transitioned one booked row, which gates the
 // decrement and the notifications (see the handler's `AND status = 'booked'`).
-const makeClient = () => ({ query: jest.fn(async () => ({ rows: [], rowCount: 1 })), release: jest.fn() });
+// It also RETURNs session_id (cto/AdaptaLabs#31), read as rows[0].session_id to
+// decrement the current session, so the UPDATE bookings row must be non-empty.
+const makeClient = () => ({
+  query: jest.fn(async (sql: unknown) =>
+    String(sql).toUpperCase().includes('UPDATE BOOKINGS')
+      ? { rows: [{ session_id: 's-any' }], rowCount: 1 }
+      : { rows: [], rowCount: 1 }),
+  release: jest.fn(),
+});
 
 /**
  * Who received the message built from a given template.

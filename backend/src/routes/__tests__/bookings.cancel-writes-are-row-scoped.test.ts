@@ -89,7 +89,17 @@ const appAs = (role: Role, user: { id: string; name: string; email: string }) =>
  * The transaction client. Deliberately a fresh object per test so the recorded
  * calls belong to one request only.
  */
-const makeClient = () => ({ query: jest.fn(async () => ({ rows: [], rowCount: 1 })), release: jest.fn() });
+const makeClient = () => ({
+  query: jest.fn(async (sql: unknown) => {
+    // The cancel UPDATE reads the current session_id back via RETURNING and
+    // decrements THAT session (cto/AdaptaLabs#31), so the mock has to yield it.
+    if (String(sql).toUpperCase().includes('UPDATE BOOKINGS')) {
+      return { rows: [{ session_id: SESSION }], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 1 };
+  }),
+  release: jest.fn(),
+});
 
 /**
  * `SESSION` is deliberately NOT equal to `BOOKING`. If the two ids were the
@@ -241,6 +251,47 @@ describe('POST /api/bookings/:id/cancel writes only the rows it should', () => {
     expect(sql).toContain('COMMIT');
     // The request that won the race sent the notices; the loser sends none.
     expect(mockSendEmail).not.toHaveBeenCalled();
+  });
+
+  it('decrements the session read back from the locked cancel UPDATE, not the pre-transaction read - cto/AdaptaLabs#31', async () => {
+    // The stale-session race: the pre-transaction read sees the booking on
+    // S_OLD, but a reschedule commits in the window before the transaction, so
+    // the conditional UPDATE - which holds the booking's row lock - re-reads a
+    // row now on S_NEW. The decrement must land on S_NEW (RETURNING), not on the
+    // S_OLD captured before any lock was held. Binding it to booking.session_id
+    // double-counts S_OLD and leaves S_NEW with a phantom slot.
+    const S_OLD = 's-old';
+    const S_NEW = 's-new';
+
+    mockQuery.mockImplementation(async (sql: unknown) => {
+      if (String(sql).includes('FROM bookings b')) {
+        return {
+          rows: [{
+            id: BOOKING, user_id: PARTICIPANT.id, session_id: S_OLD, status: 'booked',
+            gcal_event_id: null, opportunity_id: 'opp-1', owner_user_id: OWNER.id,
+            opportunity_title: 'A study', owner_name: OWNER.name, owner_email: OWNER.email,
+            participant_name: PARTICIPANT.name, participant_email: PARTICIPANT.email,
+            start_time: FUTURE_START, end_time: FUTURE_END,
+          }],
+          rowCount: 1,
+        };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    (client.query as unknown as jest.Mock).mockImplementation(async (sql: unknown) => {
+      if (String(sql).toUpperCase().includes('UPDATE BOOKINGS')) {
+        return { rows: [{ session_id: S_NEW }], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 1 };
+    });
+
+    await request(listening(appAs('researcher_admin', OWNER))).post(PATH).expect(200);
+
+    const [decrement] = clientCalls(client, 'booked_count');
+    // Bound to the RETURNING value (S_NEW), never the pre-transaction S_OLD.
+    expectScopedBy(decrement.sql, decrement.params, 'id', S_NEW);
+    expect(decrement.params).not.toContain(S_OLD);
   });
 
   it('refuses an admin who owns nothing, and writes nothing', async () => {

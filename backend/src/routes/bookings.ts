@@ -410,19 +410,32 @@ router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: R
       UPDATE bookings
       SET status = 'cancelled', cancelled_at = NOW()
       WHERE id = $1 AND status = 'booked'
+      RETURNING session_id
     `, [bookingId]);
 
     const didCancel = cancelUpdate.rowCount === 1;
 
     if (didCancel) {
-      // Decrement session booked_count. GREATEST(...,0) is retained defensively;
-      // the booked_count >= 0 CHECK constraint would otherwise abort the
-      // transaction on an underflow.
+      // Decrement the session the booking is CURRENTLY on, read back from the
+      // locked UPDATE above via RETURNING - NOT booking.session_id from the
+      // unlocked pre-transaction read at the top of the handler. A reschedule
+      // committing in the window between that read and this transaction moves
+      // the booking S_old -> S_new while leaving status 'booked', so the stale
+      // id decremented S_old (double-counting it) and left S_new with a phantom
+      // slot until sync-booked-counts ran (cto/AdaptaLabs#31). The conditional
+      // UPDATE takes the booking's row-level write lock: a racing reschedule's
+      // UPDATE of the same row blocks it, and once that reschedule commits this
+      // statement re-reads the committed row, so RETURNING yields the session
+      // the booking actually holds now.
+      //
+      // GREATEST(...,0) is retained defensively; the booked_count >= 0 CHECK
+      // constraint would otherwise abort the transaction on an underflow.
+      const currentSessionId = cancelUpdate.rows[0].session_id;
       await client.query(`
         UPDATE sessions
         SET booked_count = GREATEST(booked_count - 1, 0)
         WHERE id = $1
-      `, [booking.session_id]);
+      `, [currentSessionId]);
     }
 
     await client.query('COMMIT');

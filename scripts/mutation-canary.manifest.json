@@ -912,5 +912,15 @@
     "mutation": "      SELECT * FROM sessions WHERE id = $1 FOR UPDATE",
     "test": "locks the old session NOWAIT, so a reschedule never waits on a session lock",
     "why": "reschedule locks two session rows (target then current); the target is already FOR UPDATE NOWAIT. Making the current lock NOWAIT too means a reschedule never holds one session lock while WAITING on another, so it cannot be a party in a deadlock cycle with the multi-row lockers (sync-booked-counts, delete-sessions). cto/AdaptaLabs#34. Dropping NOWAIT reintroduces a blocking wait; the test asserts the current-session lock is FOR UPDATE NOWAIT and fails without it. A contended old session then fails fast as a retryable 409 via the existing 55P03 handler."
+  },
+  {
+    "id": "cancel-decrements-the-current-session-not-the-stale-read",
+    "file": "backend/src/routes/bookings.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cancel-writes-are-row-scoped.test.ts",
+    "anchor": "        WHERE id = $1\n      `, [currentSessionId]);",
+    "mutation": "        WHERE id = $1\n      `, [booking.session_id]);",
+    "test": "decrements the session read back from the locked cancel UPDATE, not the pre-transaction read - cto/AdaptaLabs#31",
+    "why": "Cancel decrements booked_count for the session the booking holds. It bound that decrement to booking.session_id from an UNLOCKED pre-transaction read (~line 353), so a reschedule committing in the window before the transaction moved the booking S_old -> S_new (status stays booked, so the conditional UPDATE still matches rowCount 1) while cancel decremented the stale S_old: S_old under-counted, S_new left a phantom slot until sync-booked-counts ran (cto/AdaptaLabs#31). The fix reads session_id back from the conditional UPDATE via RETURNING - that statement holds the booking row lock, so a racing reschedule blocks and the re-read yields the current session. Reverting the decrement param to booking.session_id restores the stale-read bug; it still type-checks (booking.session_id is a string), so the canary reports KILLED only because the named jest test drives distinct pre-read (S_old) and RETURNING (S_new) session ids and asserts the decrement is bound to S_new."
   }
 ]
