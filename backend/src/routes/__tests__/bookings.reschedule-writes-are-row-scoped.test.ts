@@ -240,6 +240,21 @@ describe('POST /api/bookings/:id/reschedule writes only the rows it should', () 
     expect(update.params[0]).toBe(TARGET_SESSION);
   });
 
+  it('locks the old session NOWAIT, so a reschedule never waits on a session lock', async () => {
+    // The target lock above is already NOWAIT; making the old-session lock NOWAIT
+    // too means a reschedule never holds one session lock while WAITING on
+    // another, which keeps it out of a deadlock cycle with the multi-row lockers
+    // (the sync-booked-counts sweep and delete-sessions). cto/AdaptaLabs#34.
+    await reschedule(appAs('employee', PARTICIPANT)).expect(200);
+
+    // The plain current-session lock, told apart from the target lock (which
+    // reads `FROM sessions s` with a join) by its bare `FROM sessions WHERE id`.
+    const oldLock = clientCalls(client, 'FROM sessions WHERE id');
+    expect(oldLock).toHaveLength(1);
+    expect(executableSql(oldLock[0].sql).toUpperCase()).toContain('FOR UPDATE NOWAIT');
+    expectScopedBy(oldLock[0].sql, oldLock[0].params, 'id', OLD_SESSION);
+  });
+
   it('writes nothing when the booking is not the caller\'s to reschedule', async () => {
     // The handler scopes the load by `b.user_id = $2`, so someone else's booking
     // comes back empty. It must then write nothing and roll back, not fall

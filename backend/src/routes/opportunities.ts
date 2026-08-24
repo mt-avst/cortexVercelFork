@@ -3517,8 +3517,11 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
     try {
       await client.query('BEGIN');
 
+      // ORDER BY id so this and the sync-booked-counts sweep (which locks every
+      // session ORDER BY id) acquire shared rows in the same order and cannot
+      // deadlock. cto/AdaptaLabs#34.
       await client.query(
-        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',
+        'SELECT id FROM sessions WHERE opportunity_id = $1 ORDER BY id FOR UPDATE',
         [opportunityId]
       );
 

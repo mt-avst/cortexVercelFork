@@ -867,7 +867,7 @@
     "id": "delete-sessions-locks-rows-so-the-booking-guard-is-not-a-toctou",
     "why": "DELETE /opportunities/:id/sessions checked has-bookings? then deleted, on separate pooled connections with no transaction. A booking created in the window between the check and the DELETE was silently deleted, defeating the guard that exists to protect it. Locking the sessions FOR UPDATE inside the transaction closes the race; removing it reopens it while every mocked assertion still passes.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',",
+    "anchor": "        'SELECT id FROM sessions WHERE opportunity_id = $1 ORDER BY id FOR UPDATE',",
     "mutation": "        'SELECT id FROM sessions WHERE opportunity_id = $1',",
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.delete-sessions-is-scoped.test.ts",
@@ -892,5 +892,25 @@
     "mutation": "    const locked = await client.query('SELECT id FROM sessions ORDER BY id');",
     "test": "locks the rows and rewrites them inside one committed transaction",
     "why": "The repair rewrites booked_count from a count of bookings; without locking the session rows first, a booking committed between the count and the write is clobbered - the sweep overwrites a correct increment with a stale count and CAUSES the drift it exists to fix (cto/AdaptaLabs#26). POST /api/bookings and cancel take FOR UPDATE on the same row, so locking here serialises against them. A mocked pool cannot race, so this pins the LOCK by shape: dropping FOR UPDATE is caught by the assertion that the locking SELECT was issued. The real guarantee is proven against a real Postgres."
+  },
+  {
+    "id": "delete-sessions-locks-rows-in-id-order-against-deadlock",
+    "file": "backend/src/routes/opportunities.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.delete-sessions-is-scoped.test.ts",
+    "anchor": "        'SELECT id FROM sessions WHERE opportunity_id = $1 ORDER BY id FOR UPDATE',",
+    "mutation": "        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',",
+    "test": "wraps the deletes in a single committed transaction",
+    "why": "delete-sessions and the sync-booked-counts sweep both lock many session rows; if they acquire shared rows in a different order they can deadlock (40P01). ORDER BY id makes both ascending so no cycle can form (cto/AdaptaLabs#34). This mutation drops only the ORDER BY (leaving FOR UPDATE), which the separate lock-existence entry cannot catch; the transaction test asserts the lock carries ORDER BY id and fails when it does not."
+  },
+  {
+    "id": "reschedule-locks-the-old-session-nowait-against-deadlock",
+    "file": "backend/src/routes/bookings.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.reschedule-writes-are-row-scoped.test.ts",
+    "anchor": "      SELECT * FROM sessions WHERE id = $1 FOR UPDATE NOWAIT",
+    "mutation": "      SELECT * FROM sessions WHERE id = $1 FOR UPDATE",
+    "test": "locks the old session NOWAIT, so a reschedule never waits on a session lock",
+    "why": "reschedule locks two session rows (target then current); the target is already FOR UPDATE NOWAIT. Making the current lock NOWAIT too means a reschedule never holds one session lock while WAITING on another, so it cannot be a party in a deadlock cycle with the multi-row lockers (sync-booked-counts, delete-sessions). cto/AdaptaLabs#34. Dropping NOWAIT reintroduces a blocking wait; the test asserts the current-session lock is FOR UPDATE NOWAIT and fails without it. A contended old session then fails fast as a retryable 409 via the existing 55P03 handler."
   }
 ]

@@ -643,9 +643,14 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
       throw new ConflictError('Target session is full');
     }
 
-    // Lock current session for update
+    // Lock the current (old) session too. NOWAIT, like the target lock above,
+    // so a reschedule never holds one session lock while WAITING on another -
+    // that is what keeps it out of a deadlock cycle with the sync-booked-counts
+    // sweep and delete-sessions, both of which lock many session rows at once
+    // (cto/AdaptaLabs#34). A contended old session fails fast as a retryable 409
+    // via the 55P03 handler below, rather than blocking.
     await client.query(`
-      SELECT * FROM sessions WHERE id = $1 FOR UPDATE
+      SELECT * FROM sessions WHERE id = $1 FOR UPDATE NOWAIT
     `, [booking.session_id]);
 
     // Move booking to target session
