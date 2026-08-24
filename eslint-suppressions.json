@@ -216,19 +216,9 @@
       "count": 10
     }
   },
-  "frontend/src/components/KpiStats.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 1
-    }
-  },
   "frontend/src/components/LoadingSpinner.tsx": {
     "@typescript-eslint/no-unused-vars": {
       "count": 1
-    }
-  },
-  "frontend/src/components/SessionEditor.tsx": {
-    "@typescript-eslint/no-unused-vars": {
-      "count": 6
     }
   },
   "frontend/src/contexts/AuthContext.tsx": {

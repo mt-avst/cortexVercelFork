@@ -126,7 +126,6 @@ describe.skipIf(skipS3Tests)("runtime object storage: s3 (MinIO)", () => {
     delete process.env.FIRSTHAND_S3_REGION;
     delete process.env.FIRSTHAND_S3_ENDPOINT;
     delete process.env.FIRSTHAND_S3_FORCE_PATH_STYLE;
-    delete process.env.BLOB_READ_WRITE_TOKEN;
   });
 
   beforeEach(() => {
@@ -134,8 +133,6 @@ describe.skipIf(skipS3Tests)("runtime object storage: s3 (MinIO)", () => {
     process.env.FIRSTHAND_S3_REGION = "us-east-1";
     process.env.FIRSTHAND_S3_ENDPOINT = minioEndpoint;
     process.env.FIRSTHAND_S3_FORCE_PATH_STYLE = "1";
-    delete process.env.BLOB_READ_WRITE_TOKEN;
-    delete process.env.FIRSTHAND_STORAGE_MODE;
   });
 
   it("round-trips a recording: streaming put, streaming get, loud delete", async () => {
