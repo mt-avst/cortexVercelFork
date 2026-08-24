@@ -10,7 +10,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Released version is the git tag, not `package.json`.** semantic-release cuts the tag on merge to `main` and does not write the version back, so `package.json` (7.4.0) lags the released version badly. Check `git tag --sort=-creatordate | head -1`, currently **7.36.0**.
 - **Purpose**: Internal recruitment app — researchers post opportunities (studies/sessions), employees browse and book sessions. Includes polls/surveys, dashboard, feedback, notifications.
 - **Production**: Kubera playground — https://adaptalabs.kubera-playground.adaptavist.net (the old Vercel deployment at adapta-labs-p62q.vercel.app is retired)  
-- **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working; E2E results in `archive/test-results/`.
+- **Status**: Ready for alpha. Core flows (book, cancel, create/edit/duplicate opportunity, dashboard, settings, poll tracking) working.
 
 ---
 
@@ -60,7 +60,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 - **Smoke**: `npm run test:smoke` (Playwright against production; config: `playwright.prod.config.ts`). Expect some tests skipped when no demo data (e.g. opportunity detail, demo login).
 - **Browsers**: E2E runs on Chromium, Firefox, WebKit, Mobile Chrome, Mobile Safari, and Microsoft Edge. To run Edge tests, install Microsoft Edge or run `npx playwright install msedge`.
 - **Accessibility**: Axe tests in `e2e/accessibility.test.ts` cover Home, Opportunity detail, Admin, Create opportunity, My Bookings, Feedback, Settings. Run with dev server up: `npx playwright test e2e/accessibility.test.ts --config=playwright.accessibility.config.ts`.
-- **E2E checklist**: `archive/test-results/END_TO_END_TESTING_CHECKLIST.md` — full flow list; results in `archive/test-results/`.
+- **E2E checklist**: `docs/END_TO_END_TESTING_CHECKLIST.md` — full flow list.
 - **M6 E2E**: `e2e/m6-poll-click-tracking.test.ts` — publish poll → click "Open Poll" → verify click tracked and analytics shows action. Run with ports 3000/3001 free.
 - **API health**: `GET /api/health` returns `{"status":"ok","database":"up","databaseLatencyMs":N,"timestamp":...}`. Reach it on the **app origin** (`https://adaptalabs.kubera-playground.adaptavist.net/api/health`); the backend host is cluster-internal and refuses connections from outside. Note it is **not** a deploy check - Kubernetes keeps the old pod serving during a failed roll, so health stays green while the new pod crashloops.
 - **Feedback footer (Playwright MCP, 2026-02-02)**: Slim footer strip on every page — single row: prompt "Tell us how to improve Cortex for you!", half-width textarea (4 lines), "Send feedback" button; distinct top border and background; dark-mode overrides so prompt + textarea + button visible. Verified: (1) footer (contentinfo) with all three elements on `/` and `/feedback` in light and dark mode; (2) textarea accepts input, button enables when text present; (3) submit calls `POST /api/feedback`; (4) on API 500, UI shows "Failed to send. Please try again." and keeps textarea content. Success path not verified in run because backend returned 500.
@@ -80,9 +80,7 @@ Project context and decisions for AdaptaLabs. Reference this in new chats to get
 | `KNOWN_ISSUES.md` | Known limitations, workarounds |
 | `USER_GUIDE.md` / `ADMIN_GUIDE.md` | User and admin docs |
 | `plan.md` | Product scope, data model, booking rules |
-| `archive/deployment-and-status/` | Vercel env vars, deployment status, alpha readiness |
-| `archive/test-results/` | E2E checklists, test run results |
-| `archive/summaries-and-fixes/` | Runbooks (e.g. SET_SUPERADMIN), M6 README, continuation prompts |
+| `docs/END_TO_END_TESTING_CHECKLIST.md` | Manual full-flow E2E checklist |
 
 ---
 

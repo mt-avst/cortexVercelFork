@@ -17,7 +17,7 @@ An internal recruitment application for Adaptalabs that allows researchers to po
 - **Analytics API** (admin/owner only):
   - `GET /api/opportunities/[id]/analytics?period=7|14|30` — Returns views/actions counts and time-series for the given period (default 30 days).
   - `POST /api/opportunities/[id]/click` — Body: `{ "click_type": "view" | "action" }`. Optional auth; used by frontend when user views or clicks the action button.
-- **E2E**: `e2e/m6-poll-click-tracking.test.ts` — full flow and optional analytics check. See **TESTING_GUIDE.md** and `archive/summaries-and-fixes/README_M6.md` for env, error handling, and verification steps.
+- **E2E**: `e2e/m6-poll-click-tracking.test.ts` — full flow and optional analytics check. See **TESTING_GUIDE.md** for env, error handling, and verification steps.
 
 ## Project Structure
 
@@ -314,7 +314,6 @@ Ensure these are set in production:
 
 ### For Users
 - **[User Guide](USER_GUIDE.md)** - Complete guide for end users
-- **[Alpha Tester Quick Start](archive/deployment-and-status/ALPHA_TESTER_QUICK_START.md)** - Quick start for alpha testers
 
 ### For Admins
 - **[Admin Guide](ADMIN_GUIDE.md)** - Complete guide for researcher admins
@@ -325,8 +324,7 @@ Ensure these are set in production:
 ### Testing & status
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - How to run tests (E2E, smoke, accessibility)
 - **[Known Issues](KNOWN_ISSUES.md)** - Known limitations and workarounds
-- **archive/test-results/** - E2E checklists and test run results
-- **archive/deployment-and-status/** - Alpha readiness, deployment status
+- **[End-to-end testing checklist](docs/END_TO_END_TESTING_CHECKLIST.md)** - Manual full-flow checklist
 
 ## Current Status
 
@@ -425,7 +423,6 @@ Backend logs are written to console. In production, consider using a proper logg
 AdaptaLabs is currently in **alpha testing phase**. 
 
 ### For Alpha Testers
-- Start with the **[Alpha Tester Quick Start](ALPHA_TESTER_QUICK_START.md)**
 - Read the **[User Guide](USER_GUIDE.md)** for detailed instructions
 - Check **[Known Issues](KNOWN_ISSUES.md)** for limitations and workarounds
 - Use the **"Send Feedback"** link in the app to report issues
