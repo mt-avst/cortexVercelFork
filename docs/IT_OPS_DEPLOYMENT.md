@@ -77,5 +77,4 @@ A green pipeline is not evidence a deploy happened, and neither is a green `sema
 
 ## See also
 
-- [VERCEL_ENV_VARS_NEEDED.md](../archive/deployment-and-status/VERCEL_ENV_VARS_NEEDED.md) – Same env list in Vercel context.
 - [PRODUCTION_HARDENING.md](PRODUCTION_HARDENING.md) – Pre-production verification and post-deploy checks.

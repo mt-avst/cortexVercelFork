@@ -57,7 +57,7 @@ PRODUCTION_URL=https://adaptalabs.kubera-playground.adaptavist.net ./run-alpha-t
 
 ### Option 2: Manual Testing (Most Comprehensive)
 
-Follow the **`archive/test-results/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
+Follow the **`docs/END_TO_END_TESTING_CHECKLIST.md`** step-by-step.
 
 ---
 
