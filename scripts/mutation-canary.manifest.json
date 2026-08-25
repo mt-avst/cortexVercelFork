@@ -952,5 +952,15 @@
     "mutation": "    return true;",
     "test": "refuses an admin naming a calendar_id they do not own and never reaches the service",
     "why": "Neutering the ownership check to `return true` accepts any calendar_id from the query string under requireAdmin alone. calendarService.getCalendarEvents is a stub today but the same class makes real Google calls (events.insert); once the read stub is filled this hands any researcher_admin the attendee names+emails, titles and locations of any calendar id they name. The guard must exist before the stub - #18."
+  },
+  {
+    "id": "cancel-admin-branch-reads-live-role",
+    "why": "POST /api/bookings/:id/cancel admits the participant cancelling their own booking OR an admin who owns the opportunity, so it cannot sit on requireAdmin and #14 never reached it. Its inline isAdmin came from req.user.role, which requireAuth copies off the session stamped at login, so a revoked admin kept the admin-cancel branch - cancelling another participant out of a session, decrementing capacity and emailing them - for up to SESSION_MAX_AGE_MS = 24h (cto/AdaptaLabs#37). withLiveRole re-reads the role before the handler computes isAdmin. Reading the session role instead still type-checks - it is the same union, annotated to keep the null comparison legal - and restores exactly the stale read, so the canary reports KILLED only because the named jest test downgrades the DB role after login and asserts a 403.",
+    "file": "backend/src/middleware/authenticate.ts",
+    "anchor": "  const liveRole = await currentDbRole(req, res);",
+    "mutation": "  const liveRole: AdminRole | null = req.session.user.role;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.inline-admin-gates-read-live-role.test.ts",
+    "test": "refuses the admin cancel branch to a downgraded admin"
   }
 ]

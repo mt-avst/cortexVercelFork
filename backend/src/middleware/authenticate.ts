@@ -91,6 +91,36 @@ export const requireSuperadmin = async (req: Request, res: Response, next: NextF
   next();
 };
 
+/**
+ * Attach the LIVE role to `req.user` without gating on it - the #37 companion
+ * to the #14 gates above.
+ *
+ * `requireAdmin` cannot cover a route that admits non-admins as well. Two
+ * bookings routes made their own admin decision inline, from the role
+ * `requireAuth` copies straight off the session, so #14's re-read never reached
+ * them and a revoked admin kept the admin branch for up to SESSION_MAX_AGE_MS
+ * (24h). Chain this after `requireAuth` and the handler's existing
+ * `req.user!.role` read is live, with no other change to the handler.
+ *
+ * FAILS CLOSED, like the gates: on a DB error or a deleted user `currentDbRole`
+ * has already answered and this returns without calling next().
+ */
+export const withLiveRole = async (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session?.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+
+  // `liveRole`, not `role`, so the canary has a one-match anchor here that the
+  // two identically-shaped gates above cannot answer for.
+  const liveRole = await currentDbRole(req, res);
+  if (liveRole === null) {
+    return; // response already sent, failing closed
+  }
+
+  req.user = { ...req.session.user, role: liveRole };
+  next();
+};
+
 // Optional authentication - attaches user if session exists
 export const optionalAuth = (req: Request, res: Response, next: NextFunction) => {
   if (req.session?.user) {

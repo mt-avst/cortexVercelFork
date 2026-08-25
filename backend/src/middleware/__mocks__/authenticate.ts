@@ -48,6 +48,21 @@ export const requireSuperadmin = (req: Request, res: Response, next: NextFunctio
   next();
 };
 
+/**
+ * `withLiveRole` (#37) re-reads the role but gates on nothing, so the double is
+ * `requireAuth` with the session role left where the handler expects it - the
+ * same pre-#14 shape as the gates above, with no database call. Liveness for
+ * this one is covered by `bookings.inline-admin-gates-read-live-role.test.ts`
+ * and the `cancel-admin-branch-reads-live-role` mutation canary.
+ */
+export const withLiveRole = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.session?.user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  req.user = req.session.user;
+  next();
+};
+
 export const optionalAuth = (req: Request, _res: Response, next: NextFunction) => {
   if (req.session?.user) {
     req.user = req.session.user;

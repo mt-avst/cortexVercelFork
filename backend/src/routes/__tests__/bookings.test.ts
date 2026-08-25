@@ -4,6 +4,10 @@ import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
 // Factories use only inline jest.fn() to avoid TDZ, matching opportunities.test.ts.
+// #14/#37: route suites use the session-trusting auth double (see middleware/__mocks__/authenticate.ts);
+// the real gates now re-read the DB role, which their positional pool mock cannot satisfy.
+// Liveness for these two routes is pinned in bookings.inline-admin-gates-read-live-role.test.ts.
+jest.mock('../../middleware/authenticate');
 jest.mock('../../config', () => ({
   pool: {
     query: jest.fn(),
@@ -108,16 +112,13 @@ describe('Bookings API', () => {
   });
 
   describe('GET /opportunities/:id/bookings', () => {
-    it('answers 503 during a database outage', async () => {
-      mockIsDatabaseAvailable.mockRejectedValue(outage());
-
-      const response = await request(listening(app)).get(
-        '/api/bookings/opportunities/opp-1/bookings'
-      );
-
-      expect(response.status).toBe(503);
-      expect(response.body.code).toBe('DB_CONNECTION_FAILED');
-    });
+    // The outage arm for this route lives in
+    // `bookings.inline-admin-gates-read-live-role.test.ts`, not here. This
+    // suite mocks the auth middleware, so it cannot see that #37 put a live
+    // role read in front of the handler: the gate's read fails first and
+    // answers `503 Authorization check failed`, not the handler's
+    // `DB_CONNECTION_FAILED`. Asserting the old body here would pass forever
+    // on the strength of the mock alone.
 
     // The listing selected `s.start_time` unaliased then read
     // `booking.session_start_time`, so it threw a TypeError and 500'd for any
