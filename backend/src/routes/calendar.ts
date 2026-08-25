@@ -1,9 +1,55 @@
 import { Router, Request, Response } from 'express';
 import { requireAdmin } from '../middleware/authenticate';
 import calendarService from '../services/calendar';
+import { pool } from '../config';
 import { logger } from '../utils/logger';
 
 const router: Router = Router();
+
+/**
+ * Ownership guard for a caller-supplied `calendar_id` (#18).
+ *
+ * These admin routes pass `calendar_id` straight from the request into
+ * `calendarService`, which is a STUB today (`getCalendarEvents` returns
+ * `{ events: [] }`) but makes real Google calls elsewhere in the same class
+ * (`events.insert`). The moment the read stub is filled, an unguarded
+ * `calendar_id` hands any researcher_admin the attendee names + emails, titles
+ * and locations of ANY calendar id they name. The guard has to exist BEFORE the
+ * stub is implemented - that ordering is the whole point of the ticket.
+ *
+ * The ownership model: the only place a calendar id is tied to a user is
+ * `user_calendar_tokens` (per-user, UNIQUE on user_id, `calendar_id` column).
+ * `userCalendar.ts` already treats "your calendar" as your own token row and
+ * never trusts the query string. This mirrors that: a caller may only name a
+ * `calendar_id` that equals their OWN stored calendar id.
+ *
+ * FAILS CLOSED. A supplied id with no matching token row - or any DB error - is
+ * refused, never allowed. A request that supplies NO `calendar_id` is allowed:
+ * the service then uses its configured default calendar, which is the service
+ * principal's own, not another user's, so there is no cross-calendar access to
+ * gate. That is also the only shape any current caller sends (no frontend
+ * caller passes `calendar_id`).
+ *
+ * ponytail: the strictest guard the stubbed model can defend. When the Google
+ * integration actually lands, revisit this predicate against the real model -
+ * e.g. calendars owned via an opportunity/session the caller owns - rather than
+ * assuming "your own token row" stays sufficient.
+ */
+async function callerOwnsCalendar(userId: string, calendarId: string): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      'SELECT calendar_id FROM user_calendar_tokens WHERE user_id = $1',
+      [userId]
+    );
+    if (result.rows.length === 0) {
+      return false;
+    }
+    return result.rows[0].calendar_id === calendarId;
+  } catch (error) {
+    logger.error('Failed to verify calendar ownership', { userId, error });
+    return false;
+  }
+}
 
 // GET /api/calendar/events - Get calendar events for admin
 router.get('/events', requireAdmin, async (req: Request, res: Response) => {
@@ -26,14 +72,19 @@ router.get('/events', requireAdmin, async (req: Request, res: Response) => {
     }
     
     if (startTime >= endTime) {
-      return res.status(400).json({ 
-        error: 'start_time must be before end_time' 
+      return res.status(400).json({
+        error: 'start_time must be before end_time'
       });
     }
-    
+
+    // #18: a caller-supplied calendar_id must be one the caller owns.
+    if (calendar_id && !(await callerOwnsCalendar(req.session!.user!.id, calendar_id as string))) {
+      return res.status(403).json({ error: 'Not authorized for the requested calendar' });
+    }
+
     const result = await calendarService.getCalendarEvents(
-      startTime, 
-      endTime, 
+      startTime,
+      endTime,
       calendar_id as string
     );
     
@@ -92,11 +143,17 @@ router.get('/availability', requireAdmin, async (req: Request, res: Response) =>
     }
     
     if (durationMinutes < 15 || durationMinutes > 480) {
-      return res.status(400).json({ 
-        error: 'duration_minutes must be between 15 and 480 (8 hours)' 
+      return res.status(400).json({
+        error: 'duration_minutes must be between 15 and 480 (8 hours)'
       });
     }
-    
+
+    // #18: same ownership guard - availability reads the calendar through the
+    // same service and must not accept an arbitrary calendar_id either.
+    if (calendar_id && !(await callerOwnsCalendar(req.session!.user!.id, calendar_id as string))) {
+      return res.status(403).json({ error: 'Not authorized for the requested calendar' });
+    }
+
     const result = await calendarService.checkTimeSlotAvailability(
       startTime,
       endTime,
@@ -152,14 +209,20 @@ router.post('/check-conflicts', requireAdmin, async (req: Request, res: Response
       
       const startTime = new Date(slot.start_time);
       const endTime = new Date(slot.end_time);
-      
+
       if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
-        return res.status(400).json({ 
-          error: 'Invalid date format in time slots' 
+        return res.status(400).json({
+          error: 'Invalid date format in time slots'
         });
       }
     }
-    
+
+    // #18: check-conflicts fetches events through the same service; a
+    // caller-supplied calendar_id (here in the body) must be one they own.
+    if (calendar_id && !(await callerOwnsCalendar(req.session!.user!.id, calendar_id))) {
+      return res.status(403).json({ error: 'Not authorized for the requested calendar' });
+    }
+
     // Get the overall time range
     const allStartTimes = time_slots.map(slot => new Date(slot.start_time));
     const allEndTimes = time_slots.map(slot => new Date(slot.end_time));
