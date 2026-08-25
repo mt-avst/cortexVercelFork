@@ -188,7 +188,7 @@ Define in `src/types/index.ts` (and reuse in frontend):
 - **Session, CreateSessionRequest, UpdateSessionRequest**
 - **Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest**
 - **AdminRequest, NotificationPreference, FeedbackItem**
-- **UserProfile, Achievement, UserAchievement, LeaderboardEntry, PointsTransaction** (gamification)
+- **UserProfile, Achievement, UserAchievement, LeaderboardEntry, PointsTransaction, PointsHistoryPage** (gamification)
 - **OpportunityAnalytics, DashboardStats, PlatformStats**
 - **MacroConfig** (from useConfig(): title, defaultTab, etc.)
 
@@ -261,9 +261,9 @@ Every current REST endpoint becomes a resolver function. Frontend calls `invoke(
 |----------|---------|--------|--------|
 | `getGamificationProfile` | — | `UserProfile` | requireAuth; create profile if missing. |
 | `getAchievements` | — | `UserAchievement[]` | requireAuth. |
-| `getLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. |
-| `getMonthlyLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. |
-| `getPointsHistory` | `{ limit?: number }` | `PointsTransaction[]` | requireAuth. |
+| `getLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. No `user_id` in the payload (cto/AdaptaLabs#17). |
+| `getMonthlyLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. No `user_id` in the payload (cto/AdaptaLabs#17). |
+| `getPointsHistory` | `{ limit?: number }` | `PointsHistoryPage` | requireAuth. `{ transactions, has_more }`, not a bare array (cto/AdaptaLabs#23). |
 
 ### 4.6 Feedback
 
@@ -477,7 +477,7 @@ Frontend calls: `invoke('resolverName', payload)`. Payload must be a plain objec
 | getAchievements | — | UserAchievement[] |
 | getLeaderboard | limit? | LeaderboardEntry[] |
 | getMonthlyLeaderboard | limit? | LeaderboardEntry[] |
-| getPointsHistory | limit? | PointsTransaction[] |
+| getPointsHistory | limit? | PointsHistoryPage |
 | submitFeedback | category, feedback, userAgent, url | { success } |
 | getFeedback | — | FeedbackItem[] |
 | deleteFeedback | id | { success } |

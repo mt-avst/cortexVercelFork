@@ -275,9 +275,16 @@ function requireSuperadminForStudyResults(req: Request): void {
 //
 //   PUBLISHED - open to everyone by product decision. GET /api/stats/platform
 //     (three integers, no identities) and the gamification leaderboards, which
-//     do publish a participant's NAME and participation volume. Whether the
-//     collection consent covers that is #17 and is NOT established from this
-//     repository, so do not read this row as sign-off.
+//     do publish a participant's NAME and participation volume. #17 IS NOW
+//     DECIDED and this row is sign-off for exactly what it lists: the product
+//     owner ruled the leaderboards an intentionally public, consented feature,
+//     so they stay unauthenticated. `user_id` is NOT part of what is published -
+//     it was the join key that let an anonymous caller line a row up against
+//     anything else they held, and it is gone from both SELECT lists in
+//     shared/services/gamification.ts. THE SELECT LIST IS THE BOUNDARY here, in
+//     the same way `toPublicOpportunity` is below: a field added to it is
+//     published to anyone on the network. Kept in step with the block above
+//     `MAX_LEADERBOARD_LIMIT` in routes/gamification.ts; change both or neither.
 //     The public opportunity reads are NOT blanket-blessed: what is published
 //     is the payload AFTER `toPublicOpportunity` / `toPublicSession` strips
 //     owner identity and the joining link. THE STRIPPING IS THE BOUNDARY - and

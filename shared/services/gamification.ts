@@ -62,13 +62,51 @@ export interface PointsTransaction {
   created_at: string;
 }
 
+/**
+ * A ROW OF THE PUBLIC LEADERBOARD, and it carries NO `user_id` on purpose.
+ *
+ * cto/AdaptaLabs#17. Both leaderboard routes are unauthenticated by product
+ * decision - the PUBLISHED disposition in routes/firsthand.ts - so every field
+ * here is published to anyone on the network. Name and points ARE the display.
+ * The id was not: it is the join key that lets an anonymous caller line a row
+ * up against anything else they already hold, and nothing in the product ever
+ * read it except a React key in components/Leaderboard.tsx, which now keys on
+ * `rank`.
+ *
+ * REMOVED FROM THE SELECT LISTS AND NOT JUST FROM THIS TYPE. `getLeaderboard`
+ * returns `result.rows` - plain objects straight from `pg` - so dropping the
+ * field here and leaving `up.user_id` in the SQL would still have serialised it
+ * onto the wire while `tsc` reported the payload clean. The type is a claim
+ * about the query; only the query is the payload.
+ */
 export interface LeaderboardEntry {
-  user_id: string;
   name: string;
   total_points: number;
   monthly_points: number;
   level: number;
   rank: number;
+}
+
+/**
+ * A PAGE of the caller's own points history, and `has_more` is why it is a page
+ * rather than an array.
+ *
+ * cto/AdaptaLabs#23. `getPointsHistory` had no offset, no cursor and no
+ * `has_more`, so a caller with more transactions than their `limit` got a short
+ * array that was INDISTINGUISHABLE from the end of their history. These are
+ * their own rows - data they own and are entitled to - which is the case the
+ * repo's refuse-rather-than-truncate rule exists for.
+ *
+ * `has_more` does not make the older rows REACHABLE; it makes their existence
+ * visible. Reaching them needs a cursor, which is the follow-up.
+ *
+ * ponytail: a boolean, not a cursor
+ *   -> upgrade to a keyset cursor on (created_at, id) when a paginated
+ *      points-history view exists; none does today
+ */
+export interface PointsHistoryPage {
+  transactions: PointsTransaction[];
+  has_more: boolean;
 }
 
 // AdaptaBits configuration
@@ -366,13 +404,15 @@ export async function getUserAchievements(pool: Pool, userId: string): Promise<U
 
 /**
  * Get leaderboard (top users by total AdaptaBits)
+ *
+ * NO `up.user_id` IN THE SELECT LIST, and that is the payload boundary rather
+ * than a tidy-up - see `LeaderboardEntry`. cto/AdaptaLabs#17.
  */
 export async function getLeaderboard(pool: Pool, limit: number = 10): Promise<LeaderboardEntry[]> {
   const client = await pool.connect();
   try {
     const result = await client.query(`
       SELECT
-        up.user_id,
         u.name,
         up.total_points,
         up.monthly_points,
@@ -392,13 +432,17 @@ export async function getLeaderboard(pool: Pool, limit: number = 10): Promise<Le
 
 /**
  * Get monthly leaderboard (top users by monthly AdaptaBits)
+ *
+ * NO `up.user_id` IN THE SELECT LIST. The pair is twenty-six lines apart and
+ * near-identical, which is the shape where a fix applied to one reads as a fix
+ * applied to both - #17 capped the limit on both and this file's own history
+ * shows the trap. cto/AdaptaLabs#17.
  */
 export async function getMonthlyLeaderboard(pool: Pool, limit: number = 10): Promise<LeaderboardEntry[]> {
   const client = await pool.connect();
   try {
     const result = await client.query(`
       SELECT
-        up.user_id,
         u.name,
         up.total_points,
         up.monthly_points,
@@ -431,9 +475,22 @@ export async function resetMonthlyPoints(pool: Pool): Promise<void> {
 }
 
 /**
- * Get AdaptaBits transaction history for user
+ * Get AdaptaBits transaction history for user, as a PAGE.
+ *
+ * cto/AdaptaLabs#23. `limit` still means "at most this many rows returned";
+ * `has_more` says whether the caller's history continues past them.
+ *
+ * ASKS FOR ONE MORE ROW THAN IT RETURNS, on the same line
+ * `MAX_CSV_PARTICIPANTS + 1` is drawn on. Without the `+ 1` a full page and the
+ * exact end of history are the same response, so `has_more` could only ever be
+ * derived from `rows.length === limit` - which is WRONG for the caller whose
+ * history is exactly `limit` long, and wrong in the direction that invents rows
+ * that do not exist. The probe row is sliced off and never reaches the caller.
+ *
+ * A COUNT(*) WOULD ALSO WORK and is a second query over the same index for a
+ * boolean. One row is cheaper and cannot disagree with the page it describes.
  */
-export async function getPointsHistory(pool: Pool, userId: string, limit: number = 20): Promise<PointsTransaction[]> {
+export async function getPointsHistory(pool: Pool, userId: string, limit: number = 20): Promise<PointsHistoryPage> {
   const client = await pool.connect();
   try {
     const result = await client.query(`
@@ -441,9 +498,12 @@ export async function getPointsHistory(pool: Pool, userId: string, limit: number
       WHERE user_id = $1
       ORDER BY created_at DESC
       LIMIT $2
-    `, [userId, limit]);
+    `, [userId, limit + 1]);
 
-    return result.rows;
+    return {
+      transactions: result.rows.slice(0, limit),
+      has_more: result.rows.length > limit
+    };
   } finally {
     client.release();
   }

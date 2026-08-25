@@ -34,8 +34,10 @@ export interface UserAchievement {
   achievement: Achievement;
 }
 
+// NO `user_id`: the leaderboards are unauthenticated and publish a name and a
+// points total to anyone, so the join key is not part of the payload
+// (cto/AdaptaLabs#17). Rows are keyed on `rank`, which is unique per board.
 export interface LeaderboardEntry {
-  user_id: string;
   name: string;
   total_points: number;
   monthly_points: number;
@@ -51,6 +53,14 @@ export interface PointsTransaction {
   opportunity_id: string | null;
   session_id: string | null;
   created_at: string;
+}
+
+// One page of the caller's own transactions. `has_more` reports that older rows
+// exist; reaching them needs a cursor this route does not have yet
+// (cto/AdaptaLabs#23).
+export interface PointsHistoryPage {
+  transactions: PointsTransaction[];
+  has_more: boolean;
 }
 
 export interface SessionCompletionResult {
@@ -87,8 +97,13 @@ export const gamificationApi = {
     return response.data;
   },
 
-  // Get user's AdaptaBits history
-  getPointsHistory: async (limit: number = 20): Promise<PointsTransaction[]> => {
+  // Get user's AdaptaBits history.
+  //
+  // Returns the PAGE, not the array. `has_more` is the only thing that
+  // distinguishes a full page from the end of the caller's history, since this
+  // route has no cursor - dropping it here to keep the old signature would put
+  // the silent truncation straight back (cto/AdaptaLabs#23).
+  getPointsHistory: async (limit: number = 20): Promise<PointsHistoryPage> => {
     const response = await api.get(`/gamification/points-history?limit=${limit}`);
     return response.data;
   }

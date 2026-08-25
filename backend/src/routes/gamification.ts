@@ -1,16 +1,19 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/authenticate';
 import { logger } from '../utils/logger';
-import { 
-  getUserProfile, 
-  getUserAchievements, 
-  getLeaderboard, 
-  getMonthlyLeaderboard, 
-  getPointsHistory,
-  UserProfile,
-  UserAchievement,
-  LeaderboardEntry,
-  PointsTransaction
+// The four TYPES this file used to import - UserProfile, UserAchievement,
+// LeaderboardEntry and PointsTransaction - were unused, and held four
+// `@typescript-eslint/no-unused-vars` bulk suppressions between them. Removed
+// with the suppressions rather than left, since re-adding `PointsHistoryPage`
+// beside them was the tempting thing to do while touching this file and would
+// have made the list longer without making it true. The handlers infer their
+// response types from the service.
+import {
+  getUserProfile,
+  getUserAchievements,
+  getLeaderboard,
+  getMonthlyLeaderboard,
+  getPointsHistory
 } from '../services/gamification';
 
 const router: Router = Router();
@@ -34,12 +37,30 @@ const router: Router = Router();
  * than derived from this constant. A test that reads `MAX_LEADERBOARD_LIMIT`
  * to build its expectation cannot see `MAX_LEADERBOARD_LIMIT` change.
  *
- * WHAT THIS DOES NOT DECIDE: whether participant-facing consent or T&Cs cover
- * publishing a participant's name and points at all. That question is #17's
- * other half, it is NOT answerable from this repository - nothing in
- * default-consent-text.ts, consent-templates.ts or shared/firsthand/ mentions
- * the leaderboard, a participant's name, or points - and a sentence here
- * asserting either answer would be an invention. Open for Nick.
+ * 100 IS KEPT DELIBERATELY rather than tightened alongside the id removal. The
+ * largest page the product asks for is 20 (`components/Leaderboard.tsx`), so
+ * anything from 20 upwards is the same product; 100 already matches
+ * `MAX_POINTS_HISTORY_LIMIT`, and a second, different number here would be two
+ * policies to keep in step for no reduction in what is published now that the
+ * join key is gone.
+ *
+ * THE OTHER HALF OF #17 IS NOW DECIDED, and this is the record of it. The
+ * question was whether publishing a participant's NAME and participation volume
+ * to anonymous callers is consented at all - unanswerable from this repository,
+ * since nothing in default-consent-text.ts, consent-templates.ts or
+ * shared/firsthand/ mentions the leaderboard, a name or points. It was answered
+ * OUTSIDE the repository, by the product owner:
+ *
+ *   The leaderboard is an INTENTIONALLY PUBLIC, consented feature. No auth.
+ *   `user_id` is NOT part of it. Name and points are the display; the id is the
+ *   join key that lets an anonymous caller line a row up against anything else
+ *   they hold, and it bought the product nothing but a React key. Stripped in
+ *   the SELECT lists of `getLeaderboard` and `getMonthlyLeaderboard`, because
+ *   the type is a claim about the query and only the query is the payload.
+ *
+ * Kept in step with the PUBLISHED row of the trust model above `GET /studies`
+ * in routes/firsthand.ts, which is where a reader arriving at the dispositions
+ * lands. If one of the two changes, change both.
  *
  * AND IT LEFT THE THIRD ROUTE IN THIS FILE UNCAPPED. This block said "both
  * leaderboard routes" and read as saying "this file", while the very next
@@ -66,14 +87,25 @@ const DEFAULT_LEADERBOARD_LIMIT = 10;
  *
  *   - The LEADERBOARDS clamp. The caller is asking for more rows than the route
  *     publishes, so the ceiling is genuinely the answer, and a 400 on a page
- *     that renders fine at the ceiling helps nobody.
- *   - `/points-history` REFUSES above the ceiling with a 400. The rows are the
- *     caller's OWN transactions - they are entitled to all of them, the route
- *     has NO offset, cursor or `has_more`, so a clamped short response is
- *     indistinguishable from the end of history. Refusing makes the wall
- *     visible. See `pointsHistoryLimit` and cto/AdaptaLabs#24. (A cursor is the
- *     fuller fix, deferred until a paginated points-history view exists - none
- *     does today; see the note on `MAX_POINTS_HISTORY_LIMIT`.)
+ *     that renders fine at the ceiling helps nobody. A leaderboard has no
+ *     "rest" to reach: rank 101 is not withheld, it is not on the board.
+ *   - `/points-history` REFUSES above the ceiling with a 400, AND reports
+ *     `has_more` at or below it. The rows are the caller's OWN transactions -
+ *     they are entitled to all of them - and the route has no offset or cursor,
+ *     so a clamped short response would be indistinguishable from the end of
+ *     history. The 400 makes the ceiling visible; `has_more` makes the truncation
+ *     visible for every page under it, including the default 20. See
+ *     `pointsHistoryLimit`, cto/AdaptaLabs#24 and #23. (A cursor is the fuller
+ *     fix, deferred until a paginated points-history view exists - none does
+ *     today; see the note on `MAX_POINTS_HISTORY_LIMIT`.)
+ *
+ * THE THIRD DISPOSITION IS NOT IN THIS FILE, and the set only makes sense read
+ * together: `GET /api/opportunities` answers 413 above its ceiling and offers
+ * no smaller request to retry with, because nobody asks it for a number at all
+ * - the question is "every published opportunity" (`MAX_OPPORTUNITIES_RETURNED`,
+ * routes/opportunities.ts, cto/AdaptaLabs#22). Clamp where the ceiling IS the
+ * answer; refuse where a short page would lie; report `has_more` where the
+ * caller owns the rows and a page is legitimate.
  */
 function parseLimit(raw: unknown): number | null {
   // A REPEATED QUERY PARAMETER IS AN ARRAY, and `String(['5', '9999'])` is
@@ -96,7 +128,8 @@ function parseLimit(raw: unknown): number | null {
 }
 
 /**
- * The public leaderboard pair. Both UNAUTHENTICATED - see the note above.
+ * The public leaderboard pair. Both UNAUTHENTICATED and PUBLISHED by product
+ * decision - see the note above, and the trust model in routes/firsthand.ts.
  * CLAMPS to the ceiling; an absent or unusable `limit` falls back to the
  * default rather than being refused.
  */
@@ -187,6 +220,14 @@ router.get('/achievements', requireAuth, async (req: Request, res: Response) => 
 });
 
 // GET /api/gamification/leaderboard - Get global leaderboard
+//
+// PUBLISHED (cto/AdaptaLabs#17). Deliberately unauthenticated: this is a
+// consented, intentionally public feature, decided by the product owner and
+// recorded above `MAX_LEADERBOARD_LIMIT` and in the trust model in
+// routes/firsthand.ts. What is published is a NAME, points, a level and a rank
+// - NOT `user_id`, which `getLeaderboard` no longer selects. Adding a field to
+// that SELECT list publishes it to anonymous callers; that is the decision this
+// route embodies, not an oversight in it.
 router.get('/leaderboard', async (req: Request, res: Response) => {
   try {
     const limit = leaderboardLimit(req.query.limit);
@@ -200,6 +241,11 @@ router.get('/leaderboard', async (req: Request, res: Response) => {
 });
 
 // GET /api/gamification/leaderboard/monthly - Get monthly leaderboard
+//
+// PUBLISHED, exactly as the route above and for the same reasons - and said
+// again here rather than by reference, because this pair being near-identical
+// and thirteen lines apart is how #17's cap reached one and not the other.
+// `monthly_points` narrows the published figure to the current month.
 router.get('/leaderboard/monthly', async (req: Request, res: Response) => {
   try {
     const limit = leaderboardLimit(req.query.limit);
@@ -213,6 +259,18 @@ router.get('/leaderboard/monthly', async (req: Request, res: Response) => {
 });
 
 // GET /api/gamification/points-history - Get user's AdaptaBits history
+//
+// PAGED, and the ONLY route in this file that answers with an envelope rather
+// than a bare array (cto/AdaptaLabs#23). `{ transactions, has_more }` is a
+// BREAKING wire change and was taken knowingly: the ceiling refusal below only
+// covers a caller who ASKS for too much, while a caller on the default 20 with
+// 50 transactions got a short array and no way to tell it was short. Measured
+// blast radius at the time of the change: `frontend/src/api/gamification.ts`
+// was the only consumer in the tree and its `getPointsHistory` had no callers
+// at all, so the honest shape cost nothing to adopt.
+//
+// `has_more` says the rows exist; it does not make them REACHABLE. That needs a
+// cursor - see the ponytail note on `PointsHistoryPage`.
 router.get('/points-history', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;

@@ -97,7 +97,9 @@ const Leaderboard: React.FC<LeaderboardProps> = ({ limit = 20 }) => {
     const showPtsLabel = isTopThree && points > 0;
     
     return (
-      <div key={entry.user_id} className={getRowClass(entry.rank)}>
+      // `rank` and not `user_id`: the id is no longer published, and
+      // ROW_NUMBER() makes rank unique within a board (cto/AdaptaLabs#17).
+      <div key={entry.rank} className={getRowClass(entry.rank)}>
         {/* Rank */}
         <div className="leaderboard-row-rank">
           {medal ? (

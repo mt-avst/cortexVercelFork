@@ -1043,5 +1043,48 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.list-bound.test.ts",
     "test": "refuses a repeated from rather than sending an array to Postgres"
+  },
+  {
+    "id": "leaderboard-publishes-no-user-id",
+    "why": "THE SELECT LIST IS THE PAYLOAD, and that is the whole reason this is pinned in SQL rather than in a type. The leaderboards are unauthenticated by product decision (cto/AdaptaLabs#17, PUBLISHED in the trust model in routes/firsthand.ts), and the route hands `result.rows` from `pg` straight to `res.json`. So `user_id` was published to anyone on the network - the join key that lets an anonymous caller line a name and a participation volume up against anything else they hold. Removing it from `LeaderboardEntry` alone would leave it on the wire with `tsc` clean and every route test green, because a type is a claim about a query and only the query is the payload. The mutation puts `up.user_id` back into the SELECT list; nothing but a real query can see it, which is why the spec is a real-Postgres one.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "      SELECT\n        u.name,\n        up.total_points,\n        up.monthly_points,\n        up.level,\n        ROW_NUMBER() OVER (ORDER BY up.total_points DESC) as rank",
+    "mutation": "      SELECT\n        up.user_id,\n        u.name,\n        up.total_points,\n        up.monthly_points,\n        up.level,\n        ROW_NUMBER() OVER (ORDER BY up.total_points DESC) as rank",
+    "runner": "vitest",
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "publishes no user_id on the all-time board",
+    "needsDatabase": true
+  },
+  {
+    "id": "leaderboard-monthly-publishes-no-user-id",
+    "why": "THE NEAR-IDENTICAL SIBLING, pinned separately for the reason this file keeps relearning: `getLeaderboard` and `getMonthlyLeaderboard` are twenty-six lines apart and differ in one ORDER BY, and cto/AdaptaLabs#17's own limit cap reached one route and not the other. A single entry on the all-time board would report the class closed while the monthly board still published the id, and `monthly_points` narrows a participant's participation volume to the current month, so it is the sharper of the two. The mutation puts `up.user_id` back into the monthly SELECT list only.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "      SELECT\n        u.name,\n        up.total_points,\n        up.monthly_points,\n        up.level,\n        ROW_NUMBER() OVER (ORDER BY up.monthly_points DESC) as rank",
+    "mutation": "      SELECT\n        up.user_id,\n        u.name,\n        up.total_points,\n        up.monthly_points,\n        up.level,\n        ROW_NUMBER() OVER (ORDER BY up.monthly_points DESC) as rank",
+    "runner": "vitest",
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "publishes no user_id on the monthly board",
+    "needsDatabase": true
+  },
+  {
+    "id": "points-history-asks-for-one-row-more-than-it-returns",
+    "why": "WITHOUT THE +1, `has_more` IS UNSATISFIABLE and silently always false - the exact defect cto/AdaptaLabs#23 was opened for, wearing the fix's clothes. `getPointsHistory` has no offset and no cursor, so a full page and the end of a caller's own transaction history are the same response unless one extra row is fetched to tell them apart. The mutation binds `limit` instead of `limit + 1`: `rows.length > limit` can then never be true, every page reports the history as finished, and the caller with fifty transactions on the default twenty is told those twenty are all there is. Same shape as `MAX_CSV_PARTICIPANTS + 1`, and it survived a review there once already. Only a real query can see it - the route-level spec mocks the service and would return whatever the mock was told to.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "    `, [userId, limit + 1]);",
+    "mutation": "    `, [userId, limit]);",
+    "runner": "vitest",
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "reports has_more when older rows exist beyond the page",
+    "needsDatabase": true
+  },
+  {
+    "id": "points-history-page-reaches-the-wire",
+    "why": "A DECISION ABOUT WIRE SHAPE, not about a gate, and the last place `has_more` can be lost. `GET /api/gamification/points-history` answers with `{ transactions, has_more }` rather than a bare array (cto/AdaptaLabs#23), which is a breaking change taken deliberately because the old array could not distinguish a truncated page from the end of history. `res.json(history.transactions)` is a one-word edit that type-checks, restores the old shape byte for byte, and leaves every limit, ceiling, default and authentication assertion in the spec passing - the silent truncation back on the wire with the service still computing the boolean nobody sends. Pinned at the route because the service-level entries above cannot see what the handler chooses to serialise.",
+    "file": "backend/src/routes/gamification.ts",
+    "anchor": "    res.json(history);",
+    "mutation": "    res.json(history.transactions);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
+    "test": "answers with the page and carries a true has_more onto the wire"
   }
 ]

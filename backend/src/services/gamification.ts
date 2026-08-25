@@ -18,6 +18,7 @@ export type {
   Achievement,
   UserAchievement,
   PointsTransaction,
+  PointsHistoryPage,
   LeaderboardEntry,
 } from '../../../shared/services/gamification';
 
