@@ -3,6 +3,10 @@ import request from 'supertest';
 import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 
+// #14/#37: route suites use the session-trusting auth double (see middleware/__mocks__/authenticate.ts);
+// the real gates now re-read the DB role, which their positional pool mock cannot satisfy.
+// Liveness for these two routes is pinned in bookings.inline-admin-gates-read-live-role.test.ts.
+jest.mock('../../middleware/authenticate');
 jest.mock('../../config', () => ({
   pool: {
     query: jest.fn(),

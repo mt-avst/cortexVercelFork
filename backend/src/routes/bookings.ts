@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config';
-import { requireAuth, optionalAuth } from '../middleware/authenticate';
+import { requireAuth, requireAdmin, optionalAuth, withLiveRole } from '../middleware/authenticate';
 import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types';
 import calendarService from '../services/calendar';
 import { userCalendarService } from '../services/userCalendar';
@@ -313,7 +313,11 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
 }));
 
 // POST /api/bookings/:id/cancel - Cancel a booking
-router.post('/:id/cancel', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+// `withLiveRole` because `isAdmin` below decides whether the caller may cancel
+// somebody ELSE out of a session, and `requireAuth` alone would compute it from
+// the role stamped into the session at login (#37). The route cannot move to
+// `requireAdmin`: it also serves the participant cancelling their own booking.
+router.post('/:id/cancel', requireAuth, withLiveRole, asyncHandler(async (req: Request, res: Response) => {
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -1021,20 +1025,20 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
 }));
 
 // GET /api/opportunities/:id/bookings - Get bookings for an opportunity (admin only)
-router.get('/opportunities/:id/bookings', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+// `requireAdmin`, not `requireAuth` plus an inline `isAdmin` (#37). The inline
+// version computed the role from the session stamped at login, so #14's
+// live-role re-read never reached this route and a revoked admin kept the
+// listing for up to SESSION_MAX_AGE_MS. The gate is a straight swap: the
+// middleware's 403 body is the same `Admin access required` the handler sent,
+// and it still runs before the ownership check below.
+router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   try {
-    // Check if database is available
-    const dbAvailable = await isDatabaseAvailable();
-    if (!dbAvailable) {
-      return res.json([]);
-    }
-
+    // No `isDatabaseAvailable()` fast-path here. It used to return `200 []` in
+    // developer mock-data mode, but `requireAdmin` now runs a role query first
+    // and that query fails in exactly the mode the fast-path existed for, so
+    // the branch became unreachable: mock-data mode answers 503 from the gate.
+    // Kept out rather than left in as code that cannot run.
     const { id: opportunityId } = req.params;
-    const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
-
-    if (!isAdmin) {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
 
     // Check opportunity ownership
     const opportunityCheck = await pool.query(
