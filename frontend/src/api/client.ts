@@ -390,11 +390,6 @@ export const getMyBookings = async (): Promise<UserBookings> => {
   return response.data;
 };
 
-export const cleanupCancelledBookings = async (): Promise<any> => {
-  const response = await api.post('/bookings/cleanup-cancelled');
-  return response.data;
-};
-
 // Session completion API functions
 export const completeSession = async (sessionId: string): Promise<{ message: string; status: string; awaitingApproval: boolean }> => {
   const response = await api.post(`/bookings/sessions/${sessionId}/complete`);

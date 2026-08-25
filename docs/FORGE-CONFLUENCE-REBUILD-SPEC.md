@@ -241,7 +241,6 @@ Every current REST endpoint becomes a resolver function. Frontend calls `invoke(
 | `getPendingApprovals` | — | `BookingWithDetails[]` or similar | requireAdmin; bookings needing approve/reject. |
 | `approveBooking` | `{ bookingId: string, adminNotes?: string }` | `{ message, pointsAwarded, newLevel, levelUp, totalPoints }` | requireAdmin; award AdaptaBits. |
 | `rejectBooking` | `{ bookingId: string, adminNotes?: string }` | `{ message, status }` | requireAdmin. |
-| `cleanupCancelledBookings` | — | — | requireAuth; optional. |
 
 ### 4.4 Admin
 
