@@ -11720,8 +11720,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 .sales-pitch-card,
 .sales-step-card,
 .sales-role-card,
-.sales-feature-tile,
-.sales-quote {
+.sales-feature-tile {
   /* Unified surface system */
   background: var(--surface-card-current);
   border: 1px solid var(--border-subtle-current);
@@ -11735,8 +11734,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 .sales-pitch-card:hover,
 .sales-step-card:hover,
 .sales-role-card:hover,
-.sales-feature-tile:hover,
-.sales-quote:hover {
+.sales-feature-tile:hover {
   transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
@@ -11802,53 +11800,9 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   margin: 0;
 }
 
-/* ============================================================
-   SOCIAL PROOF SECTION
-   ============================================================ */
-
-.sales-proof-metrics {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.sales-metrics-list {
-  list-style: none;
-  padding: 0;
-  margin: var(--spacing-6) 0 0 0;
-}
-
-.sales-metric-item {
-  display: flex;
-  align-items: baseline;
-  gap: var(--spacing-3);
-  margin-bottom: var(--spacing-4);
-}
-
-.sales-proof-metric-number {
-  font-size: clamp(2rem, 5vw, 3rem);
-  font-weight: var(--font-weight-bold);
-  color: var(--brand-primary);
-  line-height: 1;
-}
-
-.sales-proof-metric-label {
-  font-size: var(--font-size-body);
-  color: var(--text-secondary);
-}
-
-/* Quote cards (admin padding: 24px) */
-.sales-quote {
-  padding: var(--card-padding);
-}
-
-.sales-quote-text {
-  font-size: var(--font-size-body);
-  font-style: italic;
-  color: var(--text-secondary);
-  line-height: var(--line-height-body);
-  margin: 0;
-}
+/* The social proof section and its rules are gone - see the note in
+   SalesSections.tsx. Its metrics and quotes were invented, and rules for a
+   section that does not render are how the next author concludes it should. */
 
 /* ============================================================
    FAQ SECTION

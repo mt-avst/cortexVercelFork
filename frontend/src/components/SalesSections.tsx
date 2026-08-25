@@ -9,7 +9,14 @@ import { Badge } from './ui/Badge';
  * Structured as internal components for maintainability.
  * 
  * All headings are h2 or below (h1 is in the hero).
- * Each section includes data-section for analytics.
+ * Each section carries a data-section attribute, which is how the unit test
+ * addresses it. Nothing reads these for analytics, so do not say that they do.
+ *
+ * Every claim below is meant to be checkable against the product. The copy sat
+ * unchanged from 7.1.2 to 7.55.x and drifted into three fabrications - invented
+ * usage metrics, unattributed testimonials, and a participant-matching engine
+ * that has never existed. SalesSections.test.tsx pins those by literal so they
+ * cannot come back quietly.
  */
 
 interface SalesSectionsProps {
@@ -24,112 +31,109 @@ interface SalesSectionsProps {
 const PITCH_CARDS = [
   {
     badge: 'Studies',
-    title: 'Run better studies',
-    description: 'Book interviews, surveys, and tests with guided templates and clear workflows.',
+    title: 'Run every kind of study',
+    description: 'Interviews, tests, polls, surveys and self-guided recorded studies, authored in one place.',
   },
   {
     badge: 'Participation',
-    title: 'Reach the right people',
-    description: 'Cortex matches your requests to relevant people and handles invites and reminders.',
+    title: 'Reach people across Adaptavist',
+    description: 'Publish a study and anyone at Adaptavist can find it, book a time, or start it there and then.',
   },
   {
     badge: 'Rewards',
     title: 'Recognise contribution',
-    description: 'AdaptaBits and monthly prizes turn participation into visible recognition.',
+    description: 'AdaptaBits, levels and achievements, with a monthly prize for the top contributor.',
   },
 ];
 
 const STEPS = [
   {
     index: 1,
-    title: 'Ask the question',
-    description: 'Create a study, poll, or test in Cortex and define who you want to hear from.',
+    title: 'Author the study',
+    description: 'Pick a type, write the task list or the questions, and set the consent wording. The form checks each step as you go.',
   },
   {
     index: 2,
-    title: 'Cortex finds the people',
-    description: 'Cortex matches your request to available participants and handles bookings.',
+    title: 'People take part',
+    description: 'Participants book a slot, answer inside Cortex, or run a recorded study in their own browser.',
   },
   {
     index: 3,
-    title: 'Turn insight into action',
-    description: 'Results, recordings, and feedback are captured in one place so teams can decide and act.',
+    title: 'Read the results',
+    description: 'Recordings, transcripts, answers and analytics all land on the study\'s own page, with CSV export.',
   },
 ];
 
 const ROLE_CARDS = [
   {
     title: 'Product and engineering',
-    description: 'Ship features backed by real input, not assumptions. Validate ideas and releases with real users and internal experts.',
+    description: 'Ship features backed by real input, not assumptions. Validate ideas and releases with colleagues who use the tools every day.',
   },
   {
     title: 'UX and research',
-    description: 'Scale research without drowning in logistics. Manage studies, bookings, and incentives in one place.',
+    description: 'Moderated interviews, native surveys and self-guided recorded studies, with bookings, consent and incentives handled in one place.',
   },
   {
-    title: 'Leaders',
-    description: 'See participation and learning across the organisation. Track studies and connect insight to outcomes.',
+    title: 'Study owners',
+    description: 'Track your own studies from the admin dashboard. Per-study analytics, responses and recordings stay with the researcher who ran them.',
   },
   {
     title: 'Everyone',
-    description: 'Contribute your experience, join studies that match your skills, and see the impact of your insight.',
+    description: 'Contribute your experience, join studies that match your skills, and earn AdaptaBits for taking part.',
   },
 ];
 
 const FEATURES = [
   {
-    title: 'Unified research hub',
-    description: 'All interviews, surveys, polls, and tests in one place.',
+    title: 'Every study type in one place',
+    description: 'Interviews, tests, polls, surveys, questions and recorded studies.',
   },
   {
-    title: 'Smart booking engine',
-    description: 'Handles availability, time zones, and conflicts automatically.',
+    title: 'Recorded studies in the browser',
+    description: 'Self-guided task lists with screen and voice captured, then playback and a transcript for the research team.',
   },
   {
-    title: 'AdaptaBits rewards',
-    description: 'Built-in incentives for contributors and teams.',
+    title: 'Polls and surveys inside Cortex',
+    description: 'Ask your questions natively, or hand off to the survey tool your team already licences.',
   },
   {
-    title: 'Governed access',
-    description: 'Role-based permissions for PMs, researchers, and admins.',
+    title: 'Booking that shows the time zone',
+    description: 'Capacity, automatic closing and calendar conflicts, with every time shown against its offset.',
   },
   {
-    title: 'Insight trails',
-    description: 'Link studies to decisions and track what changed as a result.',
+    title: 'Governed consent',
+    description: 'Versioned consent templates, and any wording a researcher changes is recorded as custom.',
   },
   {
-    title: 'Built for our stack',
-    description: 'Designed to sit alongside Jira, Confluence, and the Adaptavist toolchain.',
+    title: 'Participant data stays owner-gated',
+    description: 'Recordings, transcripts and answers reach the study owner or a superadmin, not every admin.',
   },
-];
-
-const METRICS = [
-  { number: '200+', label: 'completed studies' },
-  { number: '3×', label: 'faster from question to decision' },
-  { number: '1,000+', label: 'contributors across teams' },
-];
-
-const QUOTES = [
-  'Cortex has become our default way to ask questions of the organisation. If you need input, you start here.',
-  'The biggest shift is speed. We get from idea to evidence in days and it is all traceable.',
 ];
 
 const FAQS = [
   {
     question: 'Who can use Cortex?',
-    answer: 'Anyone at Adaptavist can take part in studies. PMs, researchers, and other teams can request studies through the platform.',
+    answer: 'Anyone at Adaptavist. You can browse published studies without signing in, and sign in with your company account to take part.',
   },
   {
-    question: 'How do I ask a question or run a study?',
-    answer: 'Anyone can ask a question but you\'ll need to be an admin to run a study. Anyone can request admin status from the menu.',
+    question: 'What kinds of study can I run?',
+    answer: 'Three shapes: bookable sessions for interviews and tests, polls and surveys that people answer, and self-guided studies that Cortex records in the browser.',
+  },
+  {
+    question: 'How do I run a study?',
+    answer: 'You need admin access, which anyone can request from the account menu for a superadmin to approve. If you would rather someone else ran the research, use Submit Research Request.',
+  },
+  {
+    question: 'Do studies record me?',
+    answer: 'Only recorded studies do. They capture your screen and your voice while you work through the tasks, you see the consent wording and choose what to share before anything starts, and nothing else on Cortex records you.',
   },
   {
     question: 'How are rewards handled?',
-    answer: 'Participation is rewarded with AdaptaBits, which roll into monthly prize draws and recognition.',
+    answer: 'Taking part earns AdaptaBits, which build levels and achievements and place you on the leaderboard. The top contributor each month wins the monthly prize.',
   },
   {
     question: 'Is my data secure?',
-    answer: 'Cortex is an internal Adaptavist platform with controlled access, permissions, and governance.',
+    answer: 'Cortex is internal to Adaptavist and needs a company sign-in. Roles are checked on the server, click tracking hashes your IP, and your answers and recordings are visible only to the study owner or a superadmin.',
   },
 ];
 
@@ -147,8 +151,8 @@ const SalesPitchSection: React.FC = () => (
           people, and decisions so every contribution makes the organisation smarter.
         </p>
         <ul className="sales-bullets">
-          <li>Run interviews, surveys, polls, and tests from one place</li>
-          <li>Reach the right people fast across teams, products, and locations</li>
+          <li>Run interviews, tests, polls, surveys and recorded studies from one place</li>
+          <li>Publish once, and anyone at Adaptavist can find the study and take part</li>
           <li>Reward participation with AdaptaBits and build a culture of contribution</li>
         </ul>
       </div>
@@ -185,7 +189,7 @@ const HowItWorksSection: React.FC = () => (
           </Card>
         ))}
       </div>
-      <p className="sales-micro-copy">From question to decision in days, not weeks.</p>
+      <p className="sales-micro-copy">Every study type follows the same three steps.</p>
     </div>
   </section>
 );
@@ -226,35 +230,19 @@ const FeaturesSection: React.FC = () => (
   </section>
 );
 
-const SocialProofSection: React.FC = () => (
-  <section className="sales-section sales-section--dim" data-section="social-proof">
-    <div className="sales-section-inner sales-grid-2">
-      <div className="sales-proof-metrics">
-        <h2 className="sales-heading-l">Proven inside Adaptavist</h2>
-        <ul className="sales-metrics-list">
-          {METRICS.map((metric) => (
-            <li key={metric.label} className="sales-metric-item">
-              <span className="sales-proof-metric-number">{metric.number}</span>
-              <span className="sales-proof-metric-label">{metric.label}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-      <div className="sales-proof-quotes sales-stack-md">
-        {QUOTES.map((quote, index) => (
-          <Card key={index} className="sales-quote" variant="glass">
-            <CardBody>
-              <p className="sales-quote-text">&ldquo;{quote}&rdquo;</p>
-            </CardBody>
-          </Card>
-        ))}
-      </div>
-    </div>
-  </section>
-);
+/*
+ * There is deliberately no social proof section. It carried three invented
+ * metrics ("200+ completed studies", "3x faster", "1,000+ contributors") and
+ * two unattributed quotes, under the heading "Proven inside Adaptavist", while
+ * the product was in alpha and every study in the deployment was test data.
+ * Nothing in the repository sourced any of the five.
+ *
+ * To bring it back, bring evidence: quotes with a name and a role, and counts
+ * read from the dashboard aggregates rather than typed in here.
+ */
 
 const FaqSection: React.FC = () => (
-  <section className="sales-section" data-section="faq">
+  <section className="sales-section sales-section--dim" data-section="faq">
     <div className="sales-section-inner">
       <h2 className="sales-heading-l sales-heading-center">Frequently asked questions</h2>
       <div className="sales-faq-list">
@@ -320,7 +308,6 @@ const SalesSections: React.FC<SalesSectionsProps> = ({ onAccessCortex, isLoading
       <HowItWorksSection />
       <ValueByRoleSection />
       <FeaturesSection />
-      <SocialProofSection />
       <FaqSection />
       <FinalCtaSection onAccessCortex={onAccessCortex} isLoading={isLoading} />
     </div>
