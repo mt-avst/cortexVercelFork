@@ -91,6 +91,17 @@ describe('SalesSections', () => {
     expect(answer.textContent).toMatch(/consent wording/i);
   });
 
+  it('does not send a signed-out reader to a control that is behind the sign-in', () => {
+    // "Submit Research Request" and the account menu both render only for a
+    // signed-in user (Header.tsx), and this page is only ever shown signed out
+    // (Home.tsx renders <Landing /> when !user). Naming them without saying to
+    // sign in first describes a header the reader is not looking at.
+    renderSections();
+
+    const answer = screen.getByText(/Submit Research Request/i);
+    expect(answer.textContent).toMatch(/sign in first/i);
+  });
+
   it('says studies can be browsed without signing in', () => {
     renderSections();
 
