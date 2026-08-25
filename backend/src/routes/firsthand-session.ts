@@ -88,6 +88,39 @@ function headerString(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
+/**
+ * `x-firsthand-duration-seconds`, held to the SAME PREDICATE as the S3 path.
+ *
+ * cto/AdaptaLabs#22. The legacy streaming upload guarded this header with
+ * `Number.isFinite` alone, while `s3UploadRequestSchema` and `s3FinalizeSchema`
+ * fifteen lines up both say `z.number().nonnegative()`. So the two ways of
+ * uploading the same recording disagreed about what a duration is, and
+ * `-1e9` reached a DOUBLE PRECISION column through the older one.
+ *
+ * DROPS THE BAD VALUE RATHER THAN REFUSING THE UPLOAD, which is where it
+ * departs from the S3 path on purpose, and the difference is what is at stake
+ * on each. The S3 schemas validate a small JSON body sent BEFORE any bytes
+ * move: a 400 there costs a round trip. This header rides on the request that
+ * carries the recording itself, and by the time a participant's client sends it
+ * the session is over and the media is not reproducible. Refusing a whole
+ * recording over a metadata header is a data-loss trade nobody would choose.
+ *
+ * It is also what this path ALREADY did for the unparseable case - `'abc'` has
+ * always become `null` here rather than a refusal - so this widens an existing
+ * disposition to cover negatives instead of inventing a second one. `null` is a
+ * value the column and every reader already handle: duration is optional.
+ *
+ * NOT the "refuse rather than truncate" case. That rule is about withholding
+ * data a caller asked for on the way OUT; this is malformed metadata on the way
+ * in, and the recording it describes is kept in full.
+ */
+function durationSecondsFromHeader(raw: string | null): number | null {
+  if (raw === null || raw.length === 0) return null;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
 function parseUploadFileName(headerValue: string | null): string {
   if (!headerValue) {
     return `session-${Date.now()}.webm`;
@@ -306,11 +339,9 @@ router.post(
     const fileName = parseUploadFileName(
       headerString(req.headers['x-firsthand-file-name'])
     );
-    const durationRaw = headerString(req.headers['x-firsthand-duration-seconds']);
-    const durationSeconds =
-      typeof durationRaw === 'string' && durationRaw.length > 0
-        ? Number(durationRaw)
-        : null;
+    const durationSeconds = durationSecondsFromHeader(
+      headerString(req.headers['x-firsthand-duration-seconds'])
+    );
     const mimeType = normalizeRecordingMimeType(
       headerString(req.headers['x-firsthand-mime-type']) ??
         headerString(req.headers['content-type']) ??
@@ -356,10 +387,10 @@ router.post(
         fileName: storedObject.fileName,
         fileSizeBytes: storedObject.fileSizeBytes,
         mimeType: storedObject.mimeType,
-        durationSeconds:
-          durationSeconds !== null && Number.isFinite(durationSeconds)
-            ? durationSeconds
-            : null,
+        // `durationSecondsFromHeader` has already settled finite-and-nonnegative
+        // or `null`; a second `Number.isFinite` here would read as though it
+        // still had something to catch.
+        durationSeconds,
         objectUrl: storedObject.objectUrl,
         relativePath: storedObject.relativePath,
         storageProvider: storedObject.storageProvider

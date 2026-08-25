@@ -544,6 +544,82 @@ describe('B4 POST /:token/recording (server-proxied stream)', () => {
   });
 });
 
+/**
+ * `x-firsthand-duration-seconds` HELD TO THE SAME PREDICATE AS THE S3 PATH.
+ * cto/AdaptaLabs#22.
+ *
+ * `s3UploadRequestSchema` and `s3FinalizeSchema` both say
+ * `z.number().nonnegative()`. The legacy streaming upload fifteen lines below
+ * them guarded the same quantity with `Number.isFinite` alone, so the two ways
+ * of uploading one recording disagreed about what a duration is and a NEGATIVE
+ * reached a DOUBLE PRECISION column through the older one.
+ *
+ * IT DROPS THE VALUE RATHER THAN REFUSING THE UPLOAD, and that difference from
+ * the S3 path is the decision, not an oversight. The S3 schemas validate a
+ * small JSON body sent BEFORE any bytes move, so a 400 there costs a round
+ * trip. This header rides on the request carrying the recording itself, and by
+ * the time it arrives the session is over and the media is not reproducible.
+ * Refusing a participant's whole recording over a metadata header trades
+ * something irreplaceable for something optional.
+ *
+ * It is also what this path already did for `'abc'`, so it widens one
+ * disposition rather than inventing a second.
+ */
+describe('B4 the legacy duration header is nonnegative or nothing', () => {
+  const uploadWithDuration = async (duration: string) => {
+    okSession();
+    mockSeed.mockResolvedValue({ sessionId: 'session_1' });
+    mockStore.mockResolvedValue({ fileName: 'a.webm', fileSizeBytes: 3, mimeType: 'video/webm', objectUrl: undefined, relativePath: 'recordings/session_1/a.webm', storageProvider: 's3' });
+    mockSaveAsset.mockResolvedValue({ id: 'asset_1', sessionId: 'session_1', relativePath: 'recordings/session_1/a.webm', fileSizeBytes: 3, mimeType: 'video/webm' });
+    return request(listening(ownerApp))
+      .post(`/api/firsthand/session/${TOKEN}/recording`)
+      .set('Content-Type', 'video/webm')
+      .set('x-firsthand-duration-seconds', duration)
+      .send(Buffer.from('abc'));
+  };
+
+  /** The duration the route actually asked the repository to persist. */
+  const persistedDuration = () => mockSaveAsset.mock.calls[0]?.[0]?.durationSeconds;
+
+  // THE CONTROL. Every assertion below is about a value being replaced with
+  // null, which a route that always persisted null would satisfy perfectly.
+  it('persists an ordinary positive duration unchanged', async () => {
+    const res = await uploadWithDuration('42.5');
+
+    expect(res.status).toBe(200);
+    expect(persistedDuration()).toBe(42.5);
+  });
+
+  it('persists a zero-second duration rather than discarding it', async () => {
+    const res = await uploadWithDuration('0');
+
+    expect(res.status).toBe(200);
+    expect(persistedDuration()).toBe(0);
+  });
+
+  it('keeps the recording but drops a negative duration', async () => {
+    const res = await uploadWithDuration('-3600');
+
+    expect(res.status).toBe(200);
+    expect(mockSaveAsset).toHaveBeenCalled();
+    expect(persistedDuration()).toBeNull();
+  });
+
+  it('keeps the recording but drops an unparseable duration', async () => {
+    const res = await uploadWithDuration('not-a-number');
+
+    expect(res.status).toBe(200);
+    expect(persistedDuration()).toBeNull();
+  });
+
+  it('keeps the recording but drops an infinite duration', async () => {
+    const res = await uploadWithDuration('Infinity');
+
+    expect(res.status).toBe(200);
+    expect(persistedDuration()).toBeNull();
+  });
+});
+
 describe('B4 CSRF seam — header-based, GET exempt', () => {
   function buildCsrfApp() {
     const app = express();

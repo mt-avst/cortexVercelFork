@@ -962,5 +962,75 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.inline-admin-gates-read-live-role.test.ts",
     "test": "refuses the admin cancel branch to a downgraded admin"
+  },
+  {
+    "id": "opportunities-list-limit-probe-is-detectable",
+    "why": "Without the +1 the `>` comparison is unsatisfiable, so the 413 becomes unreachable and a catalogue of 1001 opportunities quietly returns the first 1000 as a JSON array that parses. Refusal turned into truncation, on an optionalAuth route with no cursor, no offset and no has_more - so the short list is indistinguishable from the end of the catalogue. cto/AdaptaLabs#22.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "LIMIT ${MAX_OPPORTUNITIES_RETURNED + 1}",
+    "mutation": "LIMIT ${MAX_OPPORTUNITIES_RETURNED}",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-bound.test.ts",
+    "test": "asks the database for one opportunity more than it will return"
+  },
+  {
+    "id": "cron-secret-compares-digests-not-raw-bytes",
+    "why": "timingSafeEqual THROWS on unequal-length buffers, so comparing the raw header against the raw expected value turns every wrong-length guess into a 500 while a right-length guess gets a 401 - a louder oracle than the timing side channel the fix removed. Hashing both sides to a fixed 32 bytes is what makes the comparison total; guarding it with a length check instead would leak the secret's length. cto/AdaptaLabs#22.",
+    "file": "backend/src/routes/cron.ts",
+    "anchor": "  return timingSafeEqual(digest(authHeader ?? ''), digest(`Bearer ${cronSecret}`));",
+    "mutation": "  return timingSafeEqual(Buffer.from(authHeader ?? ''), Buffer.from(`Bearer ${cronSecret}`));",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/cron.constant-time-secret.test.ts",
+    "test": "refuses a bearer token far shorter than the secret without throwing"
+  },
+  {
+    "id": "sessions-batch-ceiling-is-detectable",
+    "why": "Widening the batch ceiling makes the refusal unreachable and restores the state the ticket found: POST /api/sessions runs one overlap query AND one INSERT per element, sequentially and outside a transaction, bounded only by express's inherited 100 kB body default. A ceiling a test derives from its own constant cannot see the constant move, so this moves it. cto/AdaptaLabs#22.",
+    "file": "backend/src/routes/sessions.ts",
+    "anchor": "  if (sessions.length > MAX_TIME_SLOTS_PER_REQUEST) {",
+    "mutation": "  if (sessions.length > MAX_TIME_SLOTS_PER_REQUEST * 1000) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/time-slot-batch-bound.test.ts",
+    "test": "refuses a sessions array over the batch ceiling"
+  },
+  {
+    "id": "legacy-duration-header-rejects-negatives",
+    "why": "Number.isFinite alone admits a negative, which is what let -1e9 reach a DOUBLE PRECISION column through the streaming upload while the S3 path next to it said z.number().nonnegative on the same quantity. The two upload paths disagreeing about what a duration is is the whole defect, and this line is the only place the older one decides. cto/AdaptaLabs#22.",
+    "file": "backend/src/routes/firsthand-session.ts",
+    "anchor": "  if (!Number.isFinite(parsed) || parsed < 0) return null;",
+    "mutation": "  if (!Number.isFinite(parsed)) return null;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/firsthand-session.test.ts",
+    "test": "keeps the recording but drops a negative duration"
+  },
+  {
+    "id": "repeated-query-parameter-is-refused",
+    "why": "A repeated query parameter arrives as a string[], so restoring the `typeof === 'string'` shape skips the 200-character bound on ?q= entirely and comma-joins the array into a leading-wildcard ILIKE on an unauthenticated route. Measured before the fix: fifty 190-character values produced a 9551-character pattern and a 200. The mutation reads as a stricter guard, which is what makes it worth pinning. cto/AdaptaLabs#22, found by the refute gate on !253.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    (name) => req.query[name] !== undefined && typeof req.query[name] !== 'string'",
+    "mutation": "    (name) => req.query[name] !== undefined && typeof req.query[name] === 'object' && req.query[name] === null",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-bound.test.ts",
+    "test": "refuses a repeated q rather than letting it bypass the length bound"
+  },
+  {
+    "id": "cron-secret-does-no-length-short-circuit",
+    "why": "A length pre-check in front of the digests keeps both createHash and timingSafeEqual, type-checks, and passed the whole 1158-test jest suite when a refute gate tried it - while reintroducing exactly the oracle the guard's own docblock claims to have closed, because an early return on length tells a caller how long the secret is. It returns the same boolean as the real thing for every input, so only the count of sha256 digests can see it.",
+    "file": "backend/src/routes/cron.ts",
+    "anchor": "  return timingSafeEqual(digest(authHeader ?? ''), digest(`Bearer ${cronSecret}`));",
+    "mutation": "  const supplied = authHeader ?? '';\n  const expected = `Bearer ${cronSecret}`;\n  if (supplied.length !== expected.length) return false;\n  return timingSafeEqual(digest(supplied), digest(expected));",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/cron.constant-time-secret.test.ts",
+    "test": "still hashes both sides for a token far shorter than the secret"
+  },
+  {
+    "id": "session-listing-refuses-a-repeated-from",
+    "why": "GET /:id/sessions is optionalAuth and pushes ?from= straight into a pool.query parameter array against a timestamp column, so a repeat sent Postgres the array literal and answered an unauthenticated 500 - while the mock branch beside it built an Invalid Date and carried on. Two rounds of fixing the named parameters walked past this one; the class was the file.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "    if (refusedRepeatedParameters(req, res, SINGLE_VALUE_SESSION_FILTERS)) return;",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-bound.test.ts",
+    "test": "refuses a repeated from rather than sending an array to Postgres"
   }
 ]

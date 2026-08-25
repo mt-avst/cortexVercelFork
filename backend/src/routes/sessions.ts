@@ -5,7 +5,7 @@ import { asyncHandler, ValidationError, NotFoundError, ForbiddenError, ConflictE
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
-import { validateSessionData } from '../validation/schemas';
+import { MAX_TIME_SLOTS_PER_REQUEST, validateSessionData } from '../validation/schemas';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
@@ -116,7 +116,17 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
   if (!Array.isArray(sessions) || sessions.length === 0) {
     throw new ValidationError('sessions array is required and must not be empty');
   }
-  
+
+  // #22. Beside the emptiness check rather than further down, because every
+  // path below this - mock and database alike - is per-element work, and the
+  // database one is a query AND an INSERT each, sequentially, outside a
+  // transaction. See MAX_TIME_SLOTS_PER_REQUEST for the number and the refusal.
+  if (sessions.length > MAX_TIME_SLOTS_PER_REQUEST) {
+    throw new ValidationError(
+      `sessions array must not exceed ${MAX_TIME_SLOTS_PER_REQUEST} entries`
+    );
+  }
+
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
