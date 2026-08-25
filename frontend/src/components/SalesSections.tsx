@@ -123,7 +123,13 @@ const FAQS = [
     question: 'How do I run a study?',
     // Both routes named here are behind the sign-in, and this page is read
     // signed out - so say so, rather than naming controls the reader cannot see.
-    answer: 'Sign in first, then both routes are in the header. You need admin access to run a study yourself, which anyone can request from the account menu for a superadmin to approve. If you would rather someone else ran the research, Submit Research Request raises it with the research team.',
+    //
+    // The second route says where it actually GOES. There is no in-app request
+    // form: Header.tsx sends a non-admin out to the service desk portal in a
+    // new tab, and the in-app form that once implied otherwise was unrouted
+    // dead code, deleted in #46. "Raises it with the research team" was true
+    // but left the reader expecting to stay in Cortex.
+    answer: 'Sign in first, then both routes are in the header. You need admin access to run a study yourself, which anyone can request from the account menu for a superadmin to approve. If you would rather someone else ran the research, Submit Research Request opens the research team\'s service desk in a new tab.',
   },
   {
     question: 'Do studies record me?',

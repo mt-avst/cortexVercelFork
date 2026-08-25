@@ -11,7 +11,6 @@ interface BasicInfoTabProps {
   validationErrors: Record<string, string>;
   handleInputChange: (field: string, value: FormFieldValue) => void;
   handleBlur?: (field: string) => void;
-  allowUserSubmission?: boolean;
 }
 
 /**
@@ -51,8 +50,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
   formData,
   validationErrors,
   handleInputChange,
-  handleBlur,
-  allowUserSubmission = false
+  handleBlur
 }) => {
   const handleDateChange = (field: 'start_date' | 'end_date', value: string) => {
     handleInputChange(field, formatDateToISO(value));
@@ -187,10 +185,12 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
             </div>
           )}
           
-          {!allowUserSubmission && (
-            <div className="col-md-6">
-              <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
+          {/* Always rendered. This was behind `!allowUserSubmission`, the
+              non-admin mode removed in #46 - only an admin ever reaches this
+              form, and an admin always gets the Status control. */}
+          <div className="col-md-6">
+            <div className="form-group mb-3" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <label htmlFor="status" className="form-label mb-2" style={{ fontSize: '1rem', fontWeight: '600', minHeight: '1.5rem', lineHeight: '1.5' }}>Status</label>
               <div id="status-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
                 {formData.status === 'draft' ? (
                   <strong className="text-warning">⚠️ DRAFT - Not visible to users. Change to Published to make visible.</strong>
@@ -198,24 +198,23 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   'Published opportunities are visible to all users'
                 )}
               </div>
-                <select
-                  id="status"
-                  className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
-                  style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
-                  value={formData.status}
-                  onChange={(e) => handleInputChange('status', e.target.value)}
-                  aria-describedby={validationErrors.status ? 'status-error status-help' : 'status-help'}
-                  aria-invalid={validationErrors.status ? 'true' : 'false'}
-                >
-                  <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
-                  <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
-                </select>
-                {validationErrors.status && (
-                  <FieldError id="status-error">{validationErrors.status}</FieldError>
-                )}
-              </div>
+              <select
+                id="status"
+                className={`form-select ${validationErrors.status ? 'is-invalid' : ''}`}
+                style={{ fontSize: '1.04rem', padding: '0.64rem 0.8rem', height: 'auto', width: '100%' }}
+                value={formData.status}
+                onChange={(e) => handleInputChange('status', e.target.value)}
+                aria-describedby={validationErrors.status ? 'status-error status-help' : 'status-help'}
+                aria-invalid={validationErrors.status ? 'true' : 'false'}
+              >
+                <option value="draft" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📝 Draft - Not visible to users</option>
+                <option value="published" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🌐 Published - Visible to users</option>
+              </select>
+              {validationErrors.status && (
+                <FieldError id="status-error">{validationErrors.status}</FieldError>
+              )}
             </div>
-          )}
+          </div>
         </div>
 
         <div className="row g-3" style={{ alignItems: 'flex-start' }}>

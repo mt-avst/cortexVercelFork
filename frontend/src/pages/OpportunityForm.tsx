@@ -585,7 +585,17 @@ const resolveSourceTitle = async (studyId: string): Promise<string> => {
   }
 };
 
-const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUserSubmission = false }) => {
+/**
+ * The admin authoring form, and only the admin one.
+ *
+ * It used to take `allowUserSubmission`, a non-admin submission mode threaded
+ * through eleven branches here plus BasicInfoTab and save-payload. The only
+ * caller that ever passed it true was `ResearchRequestForm`, which nothing
+ * imported and no route reached, so every one of those branches was dead.
+ * Removed in #46: a non-admin raises research on the service desk instead,
+ * which is what Header has always linked to.
+ */
+const OpportunityForm: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
@@ -604,7 +614,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     external_link_optional: '',
     participant_type_required: 'any' as 'any' | 'internal' | 'external' | 'specific',
     participant_type_specific_details: '',
-    status: allowUserSubmission ? 'draft' as const : 'draft' as 'draft' | 'published',
+    status: 'draft' as 'draft' | 'published',
     start_date: '' as string | undefined,
     end_date: '' as string | undefined,
     firsthand_study_id: '' as string | undefined,
@@ -2671,7 +2681,7 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * load, so it has an answer on both paths.
    */
   const autosaveApplies =
-    !allowUserSubmission && (storedFormRef.current?.status ?? formData.status) === 'draft';
+    (storedFormRef.current?.status ?? formData.status) === 'draft';
 
   /**
    * Would leaving now lose something.
@@ -2798,7 +2808,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         deliveryMode,
         authoringInlineStudy,
         authoringInlineSurvey,
-        allowUserSubmission,
         linkedStudyUpdatedAt,
         staleStudyUpdatedAt
       }),
@@ -2810,7 +2819,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
       deliveryMode,
       authoringInlineStudy,
       authoringInlineSurvey,
-      allowUserSubmission,
       linkedStudyUpdatedAt,
       staleStudyUpdatedAt
     ]
@@ -3345,7 +3353,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
    * burst of keystrokes cannot arm a queue of saves.
    */
   useEffect(() => {
-    if (allowUserSubmission) return;
     if (!autosaveApplies) return;
 
     const decision = decideAutosave({
@@ -3389,7 +3396,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     lastChangeAt,
     autosaveState,
     autosaveTick,
-    allowUserSubmission,
     autosaveApplies,
     saving,
     runAutosave
@@ -3788,7 +3794,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
         deliveryMode,
         authoringInlineStudy,
         authoringInlineSurvey,
-        allowUserSubmission,
         linkedStudyUpdatedAt,
         staleStudyUpdatedAt
       });
@@ -3916,21 +3921,16 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
        * the same colour, on the page they have actually arrived at.
        */
       if (!skipNavigation && sessionsPersisted) {
-        if (allowUserSubmission) {
-          // For user submissions, navigate to home with success message
-          navigate('/', { state: { message: 'Research request submitted successfully! It will be reviewed by an admin.' } });
-        } else {
-          const isDraft = formData.status === 'draft';
-          navigate('/admin', {
-            state: {
-              refresh: true,
-              timestamp: Date.now(),
-              message: isDraft
-                ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
-                : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
-            }
-          });
-        }
+        const isDraft = formData.status === 'draft';
+        navigate('/admin', {
+          state: {
+            refresh: true,
+            timestamp: Date.now(),
+            message: isDraft
+              ? `⚠️ Study ${isEdit ? 'updated' : 'created'} as DRAFT - Not visible to users yet. Change status to Published to make it visible.`
+              : (isEdit ? 'Opportunity updated successfully!' : 'Opportunity created successfully!')
+          }
+        });
       }
 
       return savedOpportunity?.id;
@@ -4395,8 +4395,9 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
     return <Navigate to="/auth/login" replace />;
   }
 
-  // Redirect to home if not admin (unless allowUserSubmission is true)
-  if (!loading && user && user.role !== 'researcher_admin' && user.role !== 'superadmin' && !allowUserSubmission) {
+  // Redirect to home if not admin. This form is admin-only; a non-admin who
+  // wants research run goes to the service desk from the header (#46).
+  if (!loading && user && user.role !== 'researcher_admin' && user.role !== 'superadmin') {
     return <Navigate to="/" replace />;
   }
 
@@ -4455,10 +4456,10 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
             */}
             <button
               className="btn btn-outline-secondary mb-3"
-              onClick={() => requestExit(allowUserSubmission ? '/' : '/admin')}
+              onClick={() => requestExit('/admin')}
             >
               <LogOut size={16} className="me-1" />
-              {allowUserSubmission ? 'Exit to home' : 'Exit to dashboard'}
+              Exit to dashboard
             </button>
 
           <div className="card shadow-sm border-0">
@@ -4760,7 +4761,6 @@ const OpportunityForm: React.FC<{ allowUserSubmission?: boolean }> = ({ allowUse
                         validationErrors={validationErrors}
                         handleInputChange={handleInputChange}
                         handleBlur={handleBlur}
-                        allowUserSubmission={allowUserSubmission}
                       />
 
                       {continueControl && (

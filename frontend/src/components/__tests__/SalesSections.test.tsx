@@ -102,6 +102,19 @@ describe('SalesSections', () => {
     expect(answer.textContent).toMatch(/sign in first/i);
   });
 
+  it('says Submit Research Request leaves Cortex for the service desk', () => {
+    // There is no in-app request form. Header.tsx renders this control as an
+    // external anchor to the service desk portal with target="_blank"; the
+    // in-app form that implied otherwise was unrouted dead code, deleted in
+    // #46. Copy that says only "raises it with the research team" reads as an
+    // in-app path, so the destination is asserted rather than the intent.
+    renderSections();
+
+    const answer = screen.getByText(/Submit Research Request/i);
+    expect(answer.textContent).toMatch(/service desk/i);
+    expect(answer.textContent).toMatch(/new tab/i);
+  });
+
   it('says studies can be browsed without signing in', () => {
     renderSections();
 
