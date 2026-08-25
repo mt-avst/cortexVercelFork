@@ -3,7 +3,12 @@ import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 
 import { pool } from '../config';
-import { requireAdmin, requireAuth, optionalAuth } from '../middleware/authenticate';
+import {
+  requireAdmin,
+  requireAuth,
+  optionalAuth,
+  withLiveRoleIfPresent
+} from '../middleware/authenticate';
 import { getMockOpportunities, getMockOpportunity, addMockOpportunity, updateMockOpportunity, deleteMockOpportunity, addMockSessions, getMockSessions } from '../../../demo/mock-data';
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
@@ -967,7 +972,13 @@ const refusedRepeatedParameters = (
 };
 
 // GET /api/opportunities - List opportunities
-router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+//
+// `withLiveRoleIfPresent` (#45): `isAdmin` below decides drafts, unredacted
+// owner identity and `clicks_total`, and it read the role stamped into the
+// session at login. The chain re-reads it from `users` first - but only for a
+// session that already claims an admin role, so the anonymous and participant
+// loads of this catalogue issue exactly the queries they always did.
+router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {
   try {
     // FIRST, above every other read: the casts below are only true once this
     // has run, and the mock/database split is further down still. The bound is
@@ -1162,7 +1173,9 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
 }));
 
 // GET /api/opportunities/:id - Get opportunity detail
-router.get('/:id', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+// `withLiveRoleIfPresent` (#45): `isAdmin` below decides whether an UNPUBLISHED
+// opportunity is served at all, on the live role rather than the login one.
+router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
   
@@ -2431,7 +2444,10 @@ const recordedStudyBriefLimiter = rateLimit({
 // the no-database branch, where GET /:id serves mock fixtures and this 404s: mock data
 // has no linked studies, and a brief without counts is a better failure than a brief
 // with invented ones.
-router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, publicRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
+//
+// `withLiveRoleIfPresent` (#45): the `isAdmin` below is what lets an admin read
+// the brief of a DRAFT study, so it reads the live role like its siblings.
+router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, withLiveRoleIfPresent, publicRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
   const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
 
@@ -3344,7 +3360,10 @@ router.post('/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request
 }));
 
 // GET /api/opportunities/:id/sessions - Get sessions for an opportunity
-router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
+// `withLiveRoleIfPresent` (#45): the two `isAdmin` reads below decide whether a
+// draft opportunity's sessions are served, and whether the joining link is
+// stripped. Both now read the live role.
+router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: opportunityId } = req.params;
 
@@ -3755,6 +3774,13 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
 }));
 
 // POST /api/opportunities/:id/click - Track click for poll/survey
+//
+// DELIBERATELY NOT CHAINED with `withLiveRoleIfPresent`, unlike the other four
+// `optionalAuth` routes in this file (#45). #45's table lists this route with an
+// empty "what the inline branch decides" cell and that is accurate: the handler
+// reads `req.user?.id` and never `req.user.role`, so there is no admin branch
+// for a stale role to reach. Adding the chain would churn the authorisation
+// inventory and buy nothing. If a role branch is ever added here, chain it.
 router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   const { id: opportunityId } = req.params;
 

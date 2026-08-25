@@ -1326,5 +1326,55 @@
     "runner": "jest",
     "spec": "src/config/__tests__/environment.test.ts",
     "test": "names the offending value and lists the permitted ones"
+  },
+  {
+    "id": "opportunities-catalogue-branch-reads-live-role",
+    "why": "Four optionalAuth routes on opportunities.ts compute `isAdmin` inline from req.user?.role - the role stamped into the session at LOGIN - to decide whether the caller sees drafts, unredacted owner identity, clicks_total, an unpublished study, a draft's sessions and its joining link, and a draft study's pre-consent brief. #14 and #37 never reached them because withLiveRole 401s without a session and these routes are the participant catalogue, which must answer a signed-out browser. So a revoked researcher_admin kept the whole admin view for up to SESSION_MAX_AGE_MS = 24h (cto/AdaptaLabs#45). withLiveRoleIfPresent re-reads the role before the handlers run. Reading the session role instead still type-checks - the same union, annotated to keep the null comparison legal - and restores exactly the stale read, so the canary reports KILLED only because the named jest test downgrades the DB role after login and asserts the participant view.",
+    "file": "backend/src/middleware/authenticate.ts",
+    "anchor": "  const liveAdminRole = await currentDbRole(req, res);",
+    "mutation": "  const liveAdminRole: AdminRole | null = req.session!.user!.role;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
+    "test": "gives an admin whose database role was revoked after login the participant view"
+  },
+  {
+    "id": "catalogue-live-role-read-is-narrowed-to-admin-sessions",
+    "why": "THE PERFORMANCE HALF OF #45's DECISION, and it needs its own entry because the entry above cannot speak for it: re-reading MORE often keeps every liveness assertion green. GET /api/opportunities is the catalogue every signed-in user loads, and currentDbRole's own docblock used to justify its price on the grounds that it never touched a hot participant path. The narrowing is what keeps that true - a re-read can only take privilege AWAY, so a session whose stored role is not already an admin role has nothing to gain from the query and is handed straight on. The mutation is option 1 from the issue, re-reading for any session at all: it type-checks, it is a defensible design, and it silently puts one SELECT on every authenticated catalogue load. Only the query-count arms can see it, and they pin 0 and 1 as literals rather than deriving them from the code.",
+    "file": "backend/src/middleware/authenticate.ts",
+    "anchor": "  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {",
+    "mutation": "  if (storedRole === undefined) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
+    "test": "issues no role query for a signed-in participant, on any of the four routes"
+  },
+  {
+    "id": "catalogue-listing-carries-the-live-role-middleware",
+    "why": "The middleware being correct is not the same as it being MOUNTED, and #38 made that point expensively one layer down: authenticate.ts:70, the single carry the whole live-role family rests on, was unpinned, and dropping it passed 1227 tests. The two entries above pin what withLiveRoleIfPresent does; this one pins that GET /api/opportunities actually chains it. Removing it from the chain leaves the other three routes covered, type-checks cleanly, and re-opens the largest disclosure of the four - drafts, owner identity and clicks_total on the listing every signed-in user loads.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
+    "test": "gives an admin whose database role was revoked after login the participant view"
+  },
+  {
+    "id": "catalogue-live-role-read-covers-superadmin-sessions",
+    "why": "THE SUPERADMIN HALF OF THE NARROWING, and it needs its own entry because the researcher_admin half cannot speak for it - that is not a theory, it is what happened. The refute gate on !264 deleted `&& storedRole !== 'superadmin'` and measured 1301 passed / 1301 over two interleaved runs: every liveness arm drove a researcher_admin session, so the superadmin term had no enforcement at all and one character silently re-opened cto/AdaptaLabs#45 for every superadmin. The symmetric mutation, dropping researcher_admin and keeping superadmin, failed 25 tests - 0 against 25 is the finding. It is reachable in production: admin.ts deliberately refuses in-API superadmin revocation as a recorded #14 decision, so a superadmin is demoted by script or direct SQL, which is exactly the channel this family exists to honour. The named jest test drives a superadmin session whose users.role says employee and asserts the participant view.",
+    "file": "backend/src/middleware/authenticate.ts",
+    "anchor": "  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {",
+    "mutation": "  if (storedRole !== 'researcher_admin') {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
+    "test": "gives a superadmin whose database role was revoked the participant view"
+  },
+  {
+    "id": "catalogue-listing-chain-order-is-load-bearing",
+    "why": "MEMBERSHIP IS NOT ORDER, and the authorisation inventory only checks membership: verdictOf's `carries()` is `stack.some(...)`, so swapping the two middlewares leaves the route filed as `optional-session+live-role` while the route no longer is one. Express runs the chain in order, and optionalAuth running LAST overwrites req.user with the session copy - throwing away the live role withLiveRoleIfPresent just read, and restoring #45's defect in full. The refute gate on !264 measured the swap at 1 failed / 1300, caught by a single arm, which is why that arm needs an entry: it is the only thing in the repository that can see this. The table-wide version of the gap is filed as cto/AdaptaLabs#56.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.get('/', withLiveRoleIfPresent, optionalAuth, asyncHandler(async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
+    "test": "gives an admin whose database role was revoked after login the participant view"
   }
 ]
