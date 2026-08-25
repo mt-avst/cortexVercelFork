@@ -336,5 +336,73 @@ Thresholds: &lt;5% failed requests, p95 latency &lt;3s. See `load-test/api-smoke
 
 ---
 
+## Survey CSV interrupt probe (cto/AdaptaLabs#11)
+
+`backend/probe/csv-interrupt.ts` seeds a multi-batch survey export and then interrupts downloading it, to answer one question: does a broken export arrive as a broken download, or as a tidy short file a researcher would compute a mean over?
+
+**#11 is a launch gate and this does not close it.** The gate is a run of this against the deployed environment, before the first real study collects responses.
+What this removes is the reason it was unrunnable - there was no data to interrupt.
+
+Three commands, and `probe` needs no database:
+
+```bash
+# 1. Seed. 301 participants, sized from CSV_PARTICIPANT_BATCH so the export
+#    drains four batches. Idempotent: re-running tops up only what is missing.
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/adaptalabs_dev \
+  npx tsx backend/probe/csv-interrupt.ts seed
+
+# 2. Probe. Signs itself in via /api/auth/admin-login when the target is local.
+npx tsx backend/probe/csv-interrupt.ts probe --target http://localhost:5000
+
+# 3. Remove everything it created.
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/adaptalabs_dev \
+  npx tsx backend/probe/csv-interrupt.ts clean
+```
+
+Against playground, seeding needs a port-forward (the guard only ever writes to loopback) and the probe needs a real admin cookie for the account that owns the seeded opportunity:
+
+```bash
+npx tsx backend/probe/csv-interrupt.ts probe \
+  --target https://adaptalabs.kubera-playground.adaptavist.net \
+  --cookie "adaptalabs_session=<value from DevTools>"
+```
+
+The cookie is `adaptalabs_session`, not `connect.sid`: #11's description names the express-session default and `backend/src/index.ts` renames it.
+
+`probe` exits 0 only when all three arms pass, so it is usable as a gate rather than as output somebody has to interpret:
+
+| arm | what it does | pass |
+|---|---|---|
+| `control` | complete, unthrottled download | exit 0, 302 rows, and it supplies the byte count the other two are compared against |
+| `interrupt` | #11's own `--limit-rate` + `--max-time` cancellation | a non-zero curl exit over a short body |
+| `stall` | a raw socket that reads nothing until past `SURVEY_CSV_DRAIN_TIMEOUT_MS`, then looks at how the body ended | the **connection** ended with no terminating 0-chunk, i.e. the destroyed socket reached the client |
+
+`stall` distinguishes the connection ending from its own read deadline expiring.
+Only the first is evidence about the server: a host that sends headers and then goes silent is reported INCONCLUSIVE, not as a destruction nobody observed.
+
+Nothing downloaded is kept.
+Each body is counted and then unlinked, and the scratch directory holding the session cookie goes with it - what the export contains is every answer a study collected, and against playground those belong to real people.
+
+`stall` is the arm that can see a buffering ingress, which is the half of #11 no local test can reach: a tidy 0-chunk over a short body means something converted a destroyed socket into a complete-looking truncated file.
+The refusal design is then defeated in production, silently, and the fix is at the ingress rather than in the application.
+
+**A failing `control` invalidates the other two and the probe stops there.** "The transfer broke" passes just as well when the URL is wrong, the cookie has expired, the opportunity belongs to somebody else or the study collected nothing.
+
+Measured locally 2026-08-25, against a real Postgres and the real backend: control 3,633,701 bytes and 302 rows in 77ms; interrupt curl 28 over 131,113 bytes and 12 rows; stall 839,438 bytes with no 0-chunk after 40s, with `reason: drain_timeout` in the server log.
+Changing `writeSurveyCsv`'s closing `res.destroy()` to `res.end()` flips `stall` to FAIL and leaves the other two arms untouched, so the arm demonstrably fails by name.
+
+The two guards - which database may be written to, and which host may receive an admin session cookie - are unit-tested in `backend/probe/__tests__/csv-interrupt-guards.test.ts`, which jest runs.
+Both had a hole a hand-check would not find: `?host=` in a connection string overrides the address `pg` dials, and a substring test for the playground name admitted `kubera-playground.evil.example`.
+Each hole is pinned by the exact string that opened it, and each refusal has an acceptance beside it so a guard that refused everything would fail too.
+
+`?hostaddr=` is refused as well.
+It is latent rather than live - node-postgres parses it and does not currently dial it - but libpq does, so it is one release away from being the same bypass, and it is one word in an array.
+
+An IPv6 literal such as `postgres://…@[::1]:5432/db` is **refused**, deliberately.
+`pg-connection-string` keeps the brackets and neither `pg` nor `net.connect` will dial `"[::1]"` - both give `ENOTFOUND` - so admitting it produced a guard that said yes to a command that then died.
+Use `localhost`, which reaches IPv6 loopback wherever the resolver prefers it.
+
+---
+
 **Last Updated**: 2025-01-27
 

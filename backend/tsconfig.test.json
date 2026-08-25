@@ -7,7 +7,8 @@
   "compilerOptions": { "types": ["node", "jest"] },
   // `probe/` is here for the same reason tests are. A measurement harness that
   // nothing type-checks rots exactly like an unchecked fixture, and the failure
-  // is worse: it still runs, still prints a table, and the table is wrong.
+  // is worse: it still runs, still prints its table or its verdict, and the
+  // number in it is wrong.
   // Excluded from tsconfig.json's `include` so it never reaches the build.
   "include": ["src/**/*", "probe/**/*", "../shared/**/*"],
   "exclude": ["node_modules", "dist"]
