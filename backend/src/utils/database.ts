@@ -32,11 +32,16 @@ const VALID_TABLE_NAMES = new Set([
 /**
  * Mock-data mode is a developer-machine convenience only. Anything else —
  * production, test, or an unrecognised value — must NOT quietly serve demo
- * fixtures. Checked against the raw env var, not the parsed config:
- * shared/config/environment coerces any unrecognised NODE_ENV to
- * 'development' (`z.enum([...]).catch(...)`), and inheriting that coercion
- * here would treat a typo'd production environment as a developer laptop.
- * Unset counts as development because `npm run dev` sets nothing.
+ * fixtures. Unset counts as development because `npm run dev` sets nothing.
+ *
+ * Checked against the raw env var rather than the parsed config. The original
+ * reason was that shared/config/environment coerced any unrecognised NODE_ENV to
+ * 'development', so inheriting the coercion would have treated a typo'd production
+ * environment as a developer laptop. That coercion is gone (#4): the schema now
+ * throws on an unrecognised value, so no process reaches this line with one. The
+ * raw read stays because `config` is captured once at import and the tests below
+ * set process.env per case — and because a guard that does not depend on another
+ * module's parse being correct is one less thing to re-verify.
  */
 const isMockDataPermitted = (): boolean => {
   const nodeEnv = process.env.NODE_ENV;
