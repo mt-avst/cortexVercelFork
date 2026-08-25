@@ -91,13 +91,24 @@
   },
   {
     "id": "csv-batch-asks-for-its-own-ids",
-    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. PARTLY PINNED, AND SAY SO: this kills the blunt mutation - predicate and parameter deleted together - but NOT `AND (r.session_id = ANY(...) OR TRUE)`, which keeps the parameter bound and the substring present while reading everything. That survives all 67 tests across the four files covering this path, the real-Postgres one included. Closing it needs a behavioural test on a real database rather than a tighter string match, which would be prefix-fragile in the way `clock_timestamp()` just proved to be. cto/AdaptaLabs#20.",
+    "why": "The output is identical whether a batch fetched its hundred participants or all of them, so deleting the predicate AND its bind parameter together changes nothing anybody can see - while loading the study's whole answer set once per batch, which is the exact heap streaming exists to remove. It survived every test in four files, including the real-Postgres one, because they all compare output. ANCHOR UPDATED when !214 moved this query into `readBatch` and reindented its parameter list - the canary reported ANCHOR_MISSING rather than quietly dropping the entry, which is the whole point of requiring an exact single match. THE PARAMETER HALF, and only that half: it asserts what the statement BOUND. What it RETURNED is now pinned separately by csv-batch-read-takes-only-what-it-asked-for, which is what closes cto/AdaptaLabs#20 - this entry used to say that gap was open, and it no longer is.",
     "file": "backend/src/firsthand/survey-results-repository.ts",
     "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params, batch]",
     "mutation": "        WHERE ${filter}\n        ORDER BY r.saved_at ASC, r.id ASC\n      `,\n            [...params]",
     "runner": "vitest",
     "spec": "src/firsthand/survey-csv-export.test.ts",
     "test": "asks each batch for ITS OWN hundred ids, and never for everything"
+  },
+  {
+    "id": "csv-batch-read-takes-only-what-it-asked-for",
+    "why": "The other half of the batch predicate, and the half nothing could see. Widening the statement while leaving the bind parameter in place - `AND (r.session_id = ANY(...) OR TRUE)` - keeps every parameter assertion satisfied and the substring present while every batch reads the study's ENTIRE answer set: the heap defect streaming exists to remove, restored in full. Measured on this branch's base: 62 tests across the four files covering this path, the real-Postgres one included, exit 0. Nothing downstream can see it and nothing downstream is at fault - `streamParticipants` yields from the id list, so the surplus rows are grouped, ignored and dropped, and the CSV bytes are identical. So the new test asserts on the ROWS: what each batch bound, against what Postgres handed back. Not a tighter string match on the WHERE clause, which would be prefix-fragile in the way `clock_timestamp()` proved to be. cto/AdaptaLabs#20.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        WHERE ${filter} AND r.session_id = ANY($${params.length + 1}::text[])\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "mutation": "        WHERE ${filter} AND (r.session_id = ANY($${params.length + 1}::text[]) OR TRUE)\n        ORDER BY r.saved_at ASC, r.id ASC",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-csv-batch-scope-postgres.test.ts",
+    "test": "reads only the participants each batch asked for",
+    "needsDatabase": true
   },
   {
     "id": "opportunity-scope-is-not-study-wide",
