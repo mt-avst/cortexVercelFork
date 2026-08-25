@@ -15,7 +15,6 @@ import Home from './pages/Home';
 // Lazy load all other pages for better initial bundle size
 const OpportunityDetail = lazy(() => import('./pages/OpportunityDetail'));
 const OpportunityForm = lazy(() => import('./pages/OpportunityForm'));
-const UnderDevelopment = lazy(() => import('./pages/UnderDevelopment'));
 const MyBookings = lazy(() => import('./pages/MyBookings'));
 const Admin = lazy(() => import('./pages/Admin'));
 const Settings = lazy(() => import('./pages/Settings'));
@@ -89,7 +88,12 @@ function App() {
                       since v6.0.0, linked from nowhere, which an opportunity id
                       alone could never have made work. */}
                   <Route path="/survey/:token" element={<SurveySession />} />
-                  <Route path="/submit-research-request" element={<UnderDevelopment />} />
+                  {/* No `/submit-research-request` route. A non-admin who wants
+                      research run raises it on the service desk, which Header
+                      links out to - see #46. The route used to render the
+                      Under Development placeholder, which promised an in-app
+                      form that was never wired up. The catch-all below now
+                      sends any stale link home. */}
                   <Route path="/admin" element={<Admin />} />
                   <Route path="/admin/settings" element={<Settings />} />
                   <Route path="/admin/studies" element={<Studies />} />

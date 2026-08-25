@@ -74,7 +74,6 @@ const input = (formData: SavePayloadFormState): SavePayloadInput => ({
   deliveryMode: 'native',
   authoringInlineStudy: false,
   authoringInlineSurvey: false,
-  allowUserSubmission: false,
   linkedStudyUpdatedAt: null,
   staleStudyUpdatedAt: null
 });

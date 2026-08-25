@@ -92,7 +92,6 @@ export interface SavePayloadInput {
   deliveryMode: 'native' | 'external';
   authoringInlineStudy: boolean;
   authoringInlineSurvey: boolean;
-  allowUserSubmission: boolean;
   linkedStudyUpdatedAt: string | null;
   staleStudyUpdatedAt: string | null;
 }
@@ -132,7 +131,6 @@ export const buildSavePayload = ({
   deliveryMode,
   authoringInlineStudy,
   authoringInlineSurvey,
-  allowUserSubmission,
   linkedStudyUpdatedAt,
   staleStudyUpdatedAt
 }: SavePayloadInput): SavePayload => {
@@ -177,7 +175,13 @@ export const buildSavePayload = ({
       : {}),
     participant_type_required: formData.participant_type_required,
     participant_type_specific_details: formData.participant_type_specific_details.trim() || undefined,
-    status: allowUserSubmission ? 'draft' : formData.status
+    /*
+     * The author's own choice, always. This used to be forced to `draft` when
+     * `allowUserSubmission` was set - the non-admin submission mode removed in
+     * #46, whose only caller was a page nothing imported. An unreachable branch
+     * deciding an opportunity's status is the kind that goes wrong silently.
+     */
+    status: formData.status
   };
 
   // Only include default_duration_minutes for test and interview types

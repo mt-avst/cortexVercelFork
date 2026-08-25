@@ -918,25 +918,16 @@ describe('exiting the form', () => {
     expect(screen.queryByText('Admin dashboard')).not.toBeInTheDocument();
   });
 
-  it('goes home, and says so, on the participant-facing form', () => {
-    // `allowUserSubmission` renders the same page for a non-admin, where the
-    // way out is the home page rather than the admin dashboard. Neither the
-    // label nor the destination had any test.
-    render(
-      <MemoryRouter initialEntries={['/submit']}>
-        <Routes>
-          <Route path="/submit" element={<OpportunityForm allowUserSubmission />} />
-          <Route path="/" element={<div>Home page</div>} />
-          <Route path="/admin" element={<div>Admin dashboard</div>} />
-        </Routes>
-      </MemoryRouter>
-    );
-
-    expect(screen.queryByRole('button', { name: /Exit to dashboard/i })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: /Exit to home/i }));
-
-    expect(screen.getByText('Home page')).toBeInTheDocument();
-  });
+  /*
+   * Removed with #46: 'goes home, and says so, on the participant-facing form'.
+   *
+   * It was the only caller anywhere that passed `allowUserSubmission`, and it
+   * existed solely to cover that prop's "Exit to home" branch. The prop is
+   * gone - the page that set it was unrouted and unimported - so the test was
+   * covering a branch that no longer exists rather than any behaviour a user
+   * can reach. The admin destination it contrasted against is still pinned by
+   * 'lets a saved interview be left without a word', above.
+   */
 
   it('notices a change to authored content, not only to the fields on step 1', () => {
     renderForm();
