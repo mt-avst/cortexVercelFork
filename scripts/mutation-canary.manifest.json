@@ -942,5 +942,15 @@
     "mutation": "    return req.session!.user!.role as AdminRole;",
     "test": "rejects a revoked admin whose database role was downgraded after login",
     "why": "requireAdmin and requireSuperadmin trusted req.session.user.role, stamped at login and never refreshed, so DELETE /api/admin/admins answered 'revoked successfully' while the revoked admin's cookie kept working for up to SESSION_MAX_AGE_MS = 24h (cto/AdaptaLabs#14). The fix re-reads the live role from the users table on every admin-gated request and rejects when it no longer qualifies - the message is true because the DB is the source of truth. Returning the session role instead of the queried row restores the stale-read; it still type-checks (both are the same union), so the canary reports KILLED only because the named jest test downgrades the DB role after login and asserts a 403."
+  },
+  {
+    "id": "calendar-events-guards-calendar-id-ownership",
+    "file": "backend/src/routes/calendar.ts",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/calendar.events-ownership.test.ts",
+    "anchor": "    return result.rows[0].calendar_id === calendarId;",
+    "mutation": "    return true;",
+    "test": "refuses an admin naming a calendar_id they do not own and never reaches the service",
+    "why": "Neutering the ownership check to `return true` accepts any calendar_id from the query string under requireAdmin alone. calendarService.getCalendarEvents is a stub today but the same class makes real Google calls (events.insert); once the read stub is filled this hands any researcher_admin the attendee names+emails, titles and locations of any calendar id they name. The guard must exist before the stub - #18."
   }
 ]
