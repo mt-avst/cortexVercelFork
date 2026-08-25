@@ -295,6 +295,31 @@ describe('reading the answers', () => {
     expect(screen.queryByText(/Could not load the responses/i)).toBeNull();
   });
 
+  /**
+   * THE READER'S OWN OTHER READS - cto/AdaptaLabs#9.
+   *
+   * `RESULTS_READ_USER_BUSY` is a 429, and it means this reader is at their own
+   * in-flight limit: a CSV download still draining plus another read. Two wrong
+   * answers were available and both are asserted against here - the congestion
+   * sentence, which sends them to look at a server that is fine, and the flat
+   * "could not load", which says nothing they can act on.
+   */
+  it('names the reader own running reads when refused with RESULTS_READ_USER_BUSY', async () => {
+    vi.mocked(getOpportunitySurveyResults).mockRejectedValue({
+      response: { status: 429, data: { code: 'RESULTS_READ_USER_BUSY' } },
+    } as never);
+
+    renderPage();
+    await settled();
+    await userEvent.click(screen.getByRole('tab', { name: 'Responses' }));
+
+    expect(
+      await screen.findByText(/already have responses loading/i)
+    ).toBeTruthy();
+    expect(screen.queryByText(/busy being read right now/i)).toBeNull();
+    expect(screen.queryByText(/Could not load the responses/i)).toBeNull();
+  });
+
   it('does not promise a retry for a 503 that will never clear', async () => {
     // `surveyResultsAreReadable()` false - no runtime persistence configured,
     // a condition this codebase has had last for a week. Same status, no code.

@@ -133,9 +133,9 @@
   },
   {
     "id": "results-read-permit-comes-back-on-close",
-    "why": "The permit is released only on the response's close. Losing that release leaks a permit for the life of the process, and two of them shut all four results routes - 503 forever, for every admin including the superadmin, reachable by a tab close.",
+    "why": "The permit is released only on the response's close. Losing that release leaks a permit for the life of the process, and two of them shut all four results routes - 503 forever, for every admin including the superadmin, reachable by a tab close. ANCHOR RE-POINTED by the #9 branch, and not because it had gone stale on main: the `release` -> `releaseGate`/`releaseHeld` rename in that branch broke it, the harness reported ANCHOR_MISSING, and it was repaired in the same branch. Main's own copy always located to exactly 1, so there was never an unguarded window on main to go hunting for.",
     "file": "backend/src/middleware/results-read-concurrency.ts",
-    "anchor": "    abandoned.abort();\n    release?.();",
+    "anchor": "    abandoned.abort();\n    releaseHeld();",
     "mutation": "    abandoned.abort();",
     "runner": "jest",
     "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
@@ -263,10 +263,10 @@
   },
   {
     "id": "results-read-close-listener-is-registered-before-the-wait",
-    "why": "The shipped defect, and the worst one this middleware has had. Registered inside the `.then`, the listener only ever existed for requests already ADMITTED - a caller who closed the tab while QUEUED had had `close` emitted before it attached, so the abort never reached `Semaphore.acquire`, the dead waiter kept its place in the FIFO queue, and the permit was gone for the life of the process. MAX_CONCURRENT_RESULTS_READS of those shuts all four results routes: 503 forever on a single-replica pod, for every admin including the superadmin, reachable by a tab close. The test that was supposed to cover it aborted a request that had already been admitted, which is the case that always worked.",
+    "why": "The shipped defect, and the worst one this middleware has had. Registered inside the `.then`, the listener only ever existed for requests already ADMITTED - a caller who closed the tab while QUEUED had had `close` emitted before it attached, so the abort never reached `Semaphore.acquire`, the dead waiter kept its place in the FIFO queue, and the permit was gone for the life of the process. MAX_CONCURRENT_RESULTS_READS of those shuts all four results routes: 503 forever on a single-replica pod, for every admin including the superadmin, reachable by a tab close. The test that was supposed to cover it aborted a request that had already been admitted, which is the case that always worked. ANCHOR RE-POINTED by the #9 branch, and not because it had gone stale on main: the `release` -> `releaseGate`/`releaseHeld` rename in that branch broke it, the harness reported ANCHOR_MISSING, and it was repaired in the same branch. Main's own copy always located to exactly 1, so there was never an unguarded window on main to go hunting for.",
     "file": "backend/src/middleware/results-read-concurrency.ts",
-    "anchor": "  res.on('close', onClose);\n\n  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      release = releaseOnce(gate);",
-    "mutation": "  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      res.on('close', onClose);\n      release = releaseOnce(gate);",
+    "anchor": "  res.on('close', onClose);\n\n  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      releaseGate = releaseOnce(gate);",
+    "mutation": "  gate.acquire(RESULTS_READ_QUEUE_TIMEOUT_MS, tooManyResultsReads, abandoned.signal).then(\n    () => {\n      res.on('close', onClose);\n      releaseGate = releaseOnce(gate);",
     "runner": "jest",
     "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
     "test": "leaves the queue when it hangs up while still waiting"
@@ -1186,5 +1186,75 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
     "test": "mounts the same four routers when NODE_ENV is production"
+  },
+  {
+    "id": "results-read-per-caller-limit-is-detectable",
+    "why": "The number IS the policy. Every other test in the block derives its expectation from the constant, so all of them keep passing at a limit of fifty - which is no limit at all on a surface studyResultsLimiter allows ten requests a minute. cto/AdaptaLabs#9 measured what an unbounded caller does: another admin's results requests refused for as long as the attacker cares to, entirely inside the rate limits.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "export const MAX_IN_FLIGHT_RESULTS_READS_PER_USER = 2;",
+    "mutation": "export const MAX_IN_FLIGHT_RESULTS_READS_PER_USER = 50;",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "holds the per-caller limit at the number that was decided"
+  },
+  {
+    "id": "results-read-per-caller-limit-binds",
+    "why": "A per-caller counter that is incremented and never compared is decorative, and the symptom is invisible: the counts read correctly, the leak detector passes, and one admin can still put a minute's worth of rate limit into a FIFO queue ahead of the superadmin. Widened rather than deleted so it still type-checks and still counts, which is the shape of mutation that survives a suite.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "  if (alreadyInFlight >= MAX_IN_FLIGHT_RESULTS_READS_PER_USER) {",
+    "mutation": "  if (alreadyInFlight >= MAX_IN_FLIGHT_RESULTS_READS_PER_USER + 1000) {",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "refuses one caller a third read while two are in flight"
+  },
+  {
+    "id": "results-read-early-release-is-real",
+    "why": "The whole of #9's fix is one function call doing something. A no-op body type-checks, leaves every caller and every import in place, and puts the measured outage straight back - one admin holding the only results-read permit for the drain timeout, ten times a minute, refusing every other admin including the superadmin.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "  earlyRelease.get(res)?.();",
+    "mutation": "  void res;",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "admits the next caller while the first is still streaming"
+  },
+  {
+    "id": "results-read-early-release-keeps-the-caller-charged",
+    "why": "The early release must hand back the GLOBAL permit and NOT the per-caller slot. Releasing both type-checks - the two closures have the same signature - and trades the availability bound for a memory one: nothing would then bound how many CSV streams hold an id list of up to 200,000 session ids at once, on a single-replica 2Gi pod.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "      earlyRelease.set(res, releaseGate);",
+    "mutation": "      earlyRelease.set(res, releaseHeld);",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "keeps the caller charged for their still-streaming read"
+  },
+  {
+    "id": "results-read-slot-returns-on-a-queue-refusal",
+    "why": "The refusal arm removes the close listener before answering, so a slot not given back there is never given back at all - one 503 would lock that admin out of all four results routes for the life of the process. The same shape of leak this file's permit accounting shipped with once already, and it is silent: the 503 looks correct.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "      // routes for the life of the process by a single 503.\n      releaseHeld();",
+    "mutation": "      // routes for the life of the process by a single 503.",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "gives the caller their slot back when the queue refuses them"
+  },
+  {
+    "id": "results-read-csv-route-releases-at-the-boundary",
+    "why": "The middleware can offer an early release and the routes can simply not call it - every unit test would stay green and the routes would keep the measured outage. The source scan is the only thing that sees the call site, and this proves the scan is not decorative.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "  releaseResultsReadPermit(res);",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/runtime-pool-admission-routes.test.ts",
+    "test": "releases the permit early on the two CSV routes and neither aggregate route"
+  },
+  {
+    "id": "results-read-per-caller-limit-is-not-tighter-than-decided",
+    "why": "The limit has to be pinned in BOTH directions. Widening it is caught by the literal and by the third-read test; narrowing it back to one is caught by nothing else, and one is precisely the value that answers 429 to a researcher who downloads a CSV and then reloads their own results view - the ordinary workflow, and the reason two was measured and chosen.",
+    "file": "backend/src/middleware/results-read-concurrency.ts",
+    "anchor": "  if (alreadyInFlight >= MAX_IN_FLIGHT_RESULTS_READS_PER_USER) {",
+    "mutation": "  if (alreadyInFlight >= MAX_IN_FLIGHT_RESULTS_READS_PER_USER - 1) {",
+    "runner": "jest",
+    "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
+    "test": "lets one caller hold a second read at the same time"
   }
 ]

@@ -4,14 +4,18 @@ import { createServer, get as httpGet } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express, { Request, Response } from 'express';
 
-import { AppError } from '../../../../shared/types';
+import { AppError, type SessionUser } from '../../../../shared/types';
 import { ADMIN_CONCURRENCY_LIMIT } from '../../firsthand/runtime-pool-admission';
 import {
   MAX_CONCURRENT_RESULTS_READS,
+  MAX_IN_FLIGHT_RESULTS_READS_PER_USER,
   RESULTS_READ_QUEUE_TIMEOUT_MS,
   boundResultsRead,
+  releaseResultsReadPermit,
   resetResultsReadGateForTests,
-  resultsReadGateStats
+  resultsReadCallersInFlight,
+  resultsReadGateStats,
+  resultsReadsInFlightFor
 } from '../results-read-concurrency';
 
 /**
@@ -32,15 +36,42 @@ import {
 
 const settle = () => new Promise<void>((resolve) => setImmediate(resolve));
 
-type Held = { close: () => void; admitted: () => boolean; error: () => unknown };
+type Held = {
+  close: () => void;
+  releaseEarly: () => void;
+  admitted: () => boolean;
+  error: () => unknown;
+};
 
-/** Starts one gated request and leaves its response open. */
-function start(): Held {
+/**
+ * Starts one gated request, as a NAMED CALLER, and leaves its response open.
+ *
+ * The caller id is required rather than defaulted, and that is not ceremony.
+ * `boundResultsRead` now charges a per-caller slot as well as a permit, so a
+ * test that omitted the id would silently make every request in it the same
+ * admin - and the tests below about queueing would then be measuring the
+ * per-caller refusal instead of the queue. Every one of them describes several
+ * DIFFERENT admins contending, which is the situation the gate exists for, so
+ * every one of them has to say so.
+ */
+const adminNamed = (id: string): SessionUser => ({
+  id,
+  name: id,
+  email: `${id}@example.test`,
+  // `researcher_admin` rather than `superadmin` on purpose: the whole point of
+  // #9 is that `requireAdmin` is a ROLE gate and the lowest admin role can
+  // occupy these permits while being refused the data.
+  role: 'researcher_admin'
+});
+
+function start(userId: string): Held {
   const res = new EventEmitter() as unknown as Response;
   let admitted = false;
   let error: unknown;
 
-  boundResultsRead({} as Request, res, ((failure?: unknown) => {
+  boundResultsRead({ user: adminNamed(userId) } as Request, res, ((
+    failure?: unknown
+  ) => {
     if (failure) {
       error = failure;
     } else {
@@ -50,10 +81,17 @@ function start(): Held {
 
   return {
     close: () => (res as unknown as EventEmitter).emit('close'),
+    releaseEarly: () => releaseResultsReadPermit(res),
     admitted: () => admitted,
     error: () => error
   };
 }
+
+/** N distinct admins, one request each. */
+const startDistinct = (count: number, prefix = 'admin'): Held[] =>
+  Array.from({ length: count }, (_unused, index) =>
+    start(`${prefix}-${index}`)
+  );
 
 describe('bounding concurrent results reads', () => {
   beforeEach(() => {
@@ -111,13 +149,13 @@ describe('bounding concurrent results reads', () => {
   });
 
   it('lets MAX_CONCURRENT_RESULTS_READS through and queues the next one', async () => {
-    const held = Array.from({ length: MAX_CONCURRENT_RESULTS_READS }, start);
+    const held = startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
     await settle();
 
     expect(held.every((request_) => request_.admitted())).toBe(true);
     expect(resultsReadGateStats()).toEqual({ available: 0, waiting: 0 });
 
-    const queued = start();
+    const queued = start('another-admin');
     await settle();
 
     expect(queued.admitted()).toBe(false);
@@ -133,7 +171,7 @@ describe('bounding concurrent results reads', () => {
     // One event covers completion, failure and a caller hanging up. `finish`
     // alone would miss the last, and an abandoned slow export is exactly the
     // case worth bounding - its permit would never come back.
-    const held = start();
+    const held = start('one-admin');
     await settle();
     expect(resultsReadGateStats().available).toBe(
       MAX_CONCURRENT_RESULTS_READS - 1
@@ -147,10 +185,10 @@ describe('bounding concurrent results reads', () => {
   });
 
   it('does not hand one closed response two permits', async () => {
-    const held = Array.from({ length: MAX_CONCURRENT_RESULTS_READS }, start);
+    const held = startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
     await settle();
 
-    const queued = [start(), start()];
+    const queued = [start('waiter-a'), start('waiter-b')];
     await settle();
     expect(resultsReadGateStats().waiting).toBe(2);
 
@@ -185,11 +223,11 @@ describe('bounding concurrent results reads', () => {
    * inside the window, because the `.then` body is queued as a microtask.
    */
   it('gives the permit back when the close lands between the grant and the handler', async () => {
-    const held = Array.from({ length: MAX_CONCURRENT_RESULTS_READS }, start);
+    const held = startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
     await settle();
     expect(resultsReadGateStats().available).toBe(0);
 
-    const queued = start();
+    const queued = start('racing-admin');
     await settle();
     expect(resultsReadGateStats().waiting).toBe(1);
 
@@ -210,10 +248,10 @@ describe('bounding concurrent results reads', () => {
   it('refuses with a 503 rather than queueing forever', async () => {
     jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
 
-    Array.from({ length: MAX_CONCURRENT_RESULTS_READS }, start);
+    startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
     await settle();
 
-    const refused = start();
+    const refused = start('refused-admin');
     await jest.advanceTimersByTimeAsync(RESULTS_READ_QUEUE_TIMEOUT_MS);
     await settle();
 
@@ -269,6 +307,14 @@ describe('a caller who hangs up', () => {
 
   const startServer = async () => {
     const app = express();
+    // Stands in for `requireAdmin`, which establishes the caller and nothing
+    // else. Each `fire()` below is a DIFFERENT admin, because every test here
+    // is about the shared gate rather than the per-caller limit - without
+    // distinct ids they would all be one admin and would measure a 429.
+    app.use((req: Request, _res: Response, next: () => void) => {
+      req.user = adminNamed(req.headers['x-admin'] as string);
+      next();
+    });
     app.get('/slow', boundResultsRead, (_req: Request, _res: Response) => {
       // Never answers. The caller gives up instead.
     });
@@ -278,9 +324,13 @@ describe('a caller who hangs up', () => {
     const { port } = server.address() as AddressInfo;
 
     const requests: ReturnType<typeof httpGet>[] = [];
+    let fired = 0;
     return {
       fire: () => {
-        const pending = httpGet(`http://127.0.0.1:${port}/slow`);
+        fired += 1;
+        const pending = httpGet(`http://127.0.0.1:${port}/slow`, {
+          headers: { 'x-admin': `admin-${fired}` }
+        });
         pending.on('error', () => {});
         requests.push(pending);
         return pending;
@@ -391,5 +441,334 @@ describe('a caller who hangs up', () => {
     } finally {
       await close();
     }
+  });
+});
+
+/**
+ * The per-caller half, added for cto/AdaptaLabs#9.
+ *
+ * The gate above is fair between REQUESTS and says nothing about who sent
+ * them, which #9 measured: one authenticated `researcher_admin`, inside the
+ * !201 rate limits, refusing another admin's results-route requests for as long
+ * as they cared to. These tests are about the counter that bounds a caller, and
+ * every one has a control beside it - a limit that refused everybody would pass
+ * a starvation test perfectly.
+ */
+describe('bounding one caller', () => {
+  beforeEach(() => {
+    resetResultsReadGateForTests();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  /**
+   * PINNED AS A LITERAL, because the number is the policy and nothing else
+   * here can see it change.
+   *
+   * Every other test in this block derives its expectation from the constant,
+   * so all of them keep passing at a limit of fifty - which is no limit at all
+   * on a surface `studyResultsLimiter` allows ten requests a minute.
+   *
+   * TWO, and it was measured rather than picked. One is the tighter bound and
+   * costs the ordinary workflow - download a CSV, reload your own results view,
+   * get a 429 until the download drains. Two removes that and, measured
+   * interleaved over three rounds, costs nothing on the property #9 is about:
+   * attacker-caused 503s are zero at both one and two. See the constant's own
+   * docblock for the table.
+   */
+  it('holds the per-caller limit at the number that was decided', () => {
+    expect(MAX_IN_FLIGHT_RESULTS_READS_PER_USER).toBe(2);
+  });
+
+  /**
+   * PINNED FROM BELOW, which the assertion above cannot do.
+   *
+   * `toBe(2)` fails if the constant moves, but nothing proves the code HONOURS
+   * two rather than merely declaring it - a limit that refused the second read
+   * while the constant said two would pass every other test in this block, and
+   * would be exactly the 429 the second measurement was run to remove.
+   */
+  it('lets one caller hold a second read at the same time', async () => {
+    const first = start('busy-admin');
+    await settle();
+    expect(first.admitted()).toBe(true);
+
+    const second = start('busy-admin');
+    await settle();
+
+    expect(second.error()).toBeUndefined();
+    expect(resultsReadsInFlightFor('busy-admin')).toBe(2);
+
+    // Queued rather than refused - the GLOBAL gate is one, so the second read
+    // waits its turn. That is contention, not a per-caller refusal, and the
+    // difference is the whole point of this test.
+    expect(resultsReadGateStats().waiting).toBe(1);
+
+    first.close();
+    await settle();
+    expect(second.admitted()).toBe(true);
+  });
+
+  it('refuses one caller a third read while two are in flight', async () => {
+    const held = [start('busy-admin'), start('busy-admin')];
+    await settle();
+    expect(resultsReadsInFlightFor('busy-admin')).toBe(2);
+
+    const third = start('busy-admin');
+    await settle();
+
+    expect(third.admitted()).toBe(false);
+    const error = third.error();
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).statusCode).toBe(429);
+    expect((error as AppError).code).toBe('RESULTS_READ_USER_BUSY');
+    // Told apart from the gate's own refusal, because a caller reading one
+    // status has to know whether waiting will help. It will not, here.
+    expect((error as AppError).code).not.toBe('RESULTS_READ_QUEUE_FULL');
+
+    // REFUSED, NOT QUEUED. Queueing the third request would BE the starvation
+    // this limit exists to remove - it would sit in the FIFO queue ahead of the
+    // next admin to arrive. Only the two admitted reads are accounted for.
+    expect(resultsReadGateStats().waiting).toBe(1);
+    expect(resultsReadsInFlightFor('busy-admin')).toBe(2);
+
+    held.forEach((request_) => request_.close());
+  });
+
+  /**
+   * THE CONTROL for the test above, and it is the one that matters.
+   *
+   * "A second request is refused" passes just as well when the limit is a
+   * permanent lockout - which is the exact shape of defect this file's permit
+   * accounting has shipped with before.
+   */
+  it('lets the same caller read again once their first read has ended', async () => {
+    const first = start('serial-admin');
+    await settle();
+    first.close();
+    await settle();
+
+    const second = start('serial-admin');
+    await settle();
+
+    expect(second.admitted()).toBe(true);
+    expect(resultsReadsInFlightFor('serial-admin')).toBe(1);
+  });
+
+  /**
+   * THE OTHER CONTROL: the limit is per CALLER, not a second global gate.
+   *
+   * A limit that turned away every caller once any one of them was reading
+   * would pass every assertion above, and would be a worse outage than the one
+   * #9 reports.
+   */
+  it('lets a different caller in while one caller is at their limit', async () => {
+    // At their limit means MAX_IN_FLIGHT_RESULTS_READS_PER_USER in flight, so
+    // this is derived rather than written as two - the point of this test is
+    // the per-caller/global distinction, and the literal is pinned above.
+    const atTheirLimit = Array.from(
+      { length: MAX_IN_FLIGHT_RESULTS_READS_PER_USER },
+      () => start('admin-a')
+    );
+    await settle();
+    const refused = start('admin-a');
+    await settle();
+    expect(refused.admitted()).toBe(false);
+
+    const other = start('admin-b');
+    await settle();
+
+    // Queued rather than refused: the shared gate is full, which is the
+    // ordinary contention the semaphore is for. What matters is that it is IN
+    // the queue and not turned away by the per-caller counter. It sits behind
+    // admin-a's own queued reads, hence the arithmetic rather than a 1.
+    expect(other.error()).toBeUndefined();
+    expect(resultsReadGateStats().waiting).toBe(
+      MAX_IN_FLIGHT_RESULTS_READS_PER_USER
+    );
+
+    atTheirLimit.forEach((request_) => request_.close());
+    await settle();
+    expect(other.admitted()).toBe(true);
+  });
+
+  /**
+   * THE 503 PATH, which is the expensive one to get wrong.
+   *
+   * The refusal arm removes the `close` listener before answering, so a slot
+   * not given back there is never given back at all - and one queue timeout
+   * would lock that admin out of all four results routes for the life of the
+   * process.
+   */
+  it('gives the caller their slot back when the queue refuses them', async () => {
+    jest.useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] });
+
+    startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
+    await settle();
+
+    const refused = start('timed-out-admin');
+    await jest.advanceTimersByTimeAsync(RESULTS_READ_QUEUE_TIMEOUT_MS);
+    await settle();
+
+    expect((refused.error() as AppError).code).toBe('RESULTS_READ_QUEUE_FULL');
+    expect(resultsReadsInFlightFor('timed-out-admin')).toBe(0);
+  });
+
+  it('gives the caller their slot back when they hang up while queued', async () => {
+    startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
+    await settle();
+
+    const queued = start('departing-admin');
+    await settle();
+    expect(resultsReadGateStats().waiting).toBe(1);
+
+    queued.close();
+    await settle();
+
+    expect(resultsReadsInFlightFor('departing-admin')).toBe(0);
+    expect(resultsReadGateStats().waiting).toBe(0);
+  });
+
+  /**
+   * THE LEAK DETECTOR, and it needs its own control.
+   *
+   * A Map keyed by admin id that is never pruned is a slow leak on a process
+   * that runs for weeks, and it is invisible: the limit keeps working, the
+   * counts keep reading correctly, and only the heap grows. Asserting the map
+   * is EMPTY is an absence-assertion, so the first half proves it can be
+   * non-empty.
+   */
+  it('charges nobody once every request has ended', async () => {
+    const running = startDistinct(3, 'transient');
+    await settle();
+
+    // The control. An empty map at the end says nothing unless it was full.
+    expect(resultsReadCallersInFlight()).toBe(3);
+
+    running.forEach((request_) => request_.close());
+    await settle();
+
+    expect(resultsReadCallersInFlight()).toBe(0);
+  });
+});
+
+/**
+ * Handing the permit back before the response drains - cto/AdaptaLabs#9.
+ *
+ * The permit is released on `close`, and `close` waits for the CLIENT. So the
+ * length of the hold is the client's to choose, and #9 measured what that is
+ * worth to an attacker: a CSV requested and never read held the only permit for
+ * the whole drain timeout, ten times a minute, indefinitely. No deadline closes
+ * that - occupancy stays under 100% only while requests-per-minute times
+ * maximum-hold is under 60 seconds, and at ten a minute that needs a hold under
+ * six seconds.
+ *
+ * So the two CSV routes hand the permit back at the preflight-to-stream
+ * boundary. These tests are about that handover, and about the two things it
+ * must NOT do.
+ */
+describe('releasing the permit before the response closes', () => {
+  beforeEach(() => {
+    resetResultsReadGateForTests();
+  });
+
+  /**
+   * THE ONE THAT FAILS IF THE FIX IS REMOVED.
+   *
+   * Make `releaseResultsReadPermit` a no-op and this fails by name: the queued
+   * admin is still waiting, which is the measured outage.
+   */
+  it('admits the next caller while the first is still streaming', async () => {
+    const streaming = start('exporting-admin');
+    await settle();
+    expect(streaming.admitted()).toBe(true);
+
+    const queued = start('waiting-admin');
+    await settle();
+    expect(queued.admitted()).toBe(false);
+
+    // The boundary. The response is still open - nothing has closed, and
+    // nobody has drained the stream.
+    streaming.releaseEarly();
+    await settle();
+
+    expect(queued.admitted()).toBe(true);
+  });
+
+  /**
+   * THE CONTROL, and it is what stops this being a permit leak dressed up as a
+   * fix. The per-caller slot is NOT handed back at the boundary: it is what
+   * bounds how many streams hold an id list at once now that the gate does not.
+   */
+  it('keeps the caller charged for their still-streaming read', async () => {
+    const streaming = start('exporting-admin');
+    await settle();
+
+    streaming.releaseEarly();
+    await settle();
+
+    // STILL ONE, not zero. This is the assertion the whole test exists for: if
+    // the early release handed back the slot as well as the permit, nothing
+    // would bound how many CSV streams hold an id list at once.
+    expect(resultsReadsInFlightFor('exporting-admin')).toBe(1);
+
+    // And the limit still bites for the same admin, one read later than it
+    // used to - which is the point of raising it to two. The download draining
+    // no longer refuses their next read; a THIRD concurrent one does.
+    const alsoAllowed = start('exporting-admin');
+    await settle();
+    expect(alsoAllowed.error()).toBeUndefined();
+
+    const refused = start('exporting-admin');
+    await settle();
+    expect((refused.error() as AppError).code).toBe('RESULTS_READ_USER_BUSY');
+
+    // Still BOUNDED: the slots come back when the responses finally close.
+    streaming.close();
+    alsoAllowed.close();
+    await settle();
+    expect(resultsReadsInFlightFor('exporting-admin')).toBe(0);
+  });
+
+  /**
+   * RELEASED TWICE AND THEN CLOSED, which is what actually happens: the route
+   * releases at the boundary and the `close` listener fires later.
+   *
+   * A second release handed to a waiter would widen the ceiling silently for as
+   * long as that request ran, and `Semaphore`'s own clamp hides it whenever
+   * nobody is queued.
+   */
+  it('cannot invent a permit by releasing more than once', async () => {
+    const streaming = start('exporting-admin');
+    await settle();
+
+    streaming.releaseEarly();
+    streaming.releaseEarly();
+    streaming.close();
+    await settle();
+
+    expect(resultsReadGateStats()).toEqual({
+      available: MAX_CONCURRENT_RESULTS_READS,
+      waiting: 0
+    });
+  });
+
+  it('does nothing for a response that never held a permit', async () => {
+    startDistinct(MAX_CONCURRENT_RESULTS_READS, 'holder');
+    await settle();
+
+    const queued = start('queued-admin');
+    await settle();
+    expect(queued.admitted()).toBe(false);
+
+    // A handler that never ran cannot have reached the boundary, but a future
+    // caller might reach for this from an error path. It must not hand back a
+    // permit this request does not hold.
+    queued.releaseEarly();
+    await settle();
+
+    expect(resultsReadGateStats()).toEqual({ available: 0, waiting: 1 });
   });
 });
