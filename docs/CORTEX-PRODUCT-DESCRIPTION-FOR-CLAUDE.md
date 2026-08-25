@@ -230,7 +230,10 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 ### Platform / UX
 
 - **Theme:** Light/dark mode toggle; WCAG 2.2 AA–oriented.
-- **Landing:** Branded hero (“CORTEX”, “Collective Intelligence”), primary CTA “Access Cortex” (e.g. Google), “How it works,” value by role, features, social proof, FAQ, final CTA; demo access pills when enabled.
+- **Landing:** Branded hero (“CORTEX”, “Collective Intelligence”), primary CTA “Access Cortex” (e.g. Google), then six below-the-fold sections — pitch, “How Cortex works”, value by role, key features, FAQ, final CTA; demo access pills when enabled.
+  The landing renders only for a signed-out visitor (`Home.tsx`), directly above the browsable list of published studies.
+  **There is no social proof section.** It was deleted in the copy refresh: its three metrics and two testimonials were invented, nothing in the repository sourced them, and the product is in alpha with test data only. Bring it back only with attributed quotes and counts read from the dashboard aggregates.
+  The copy is guarded by `frontend/src/components/__tests__/SalesSections.test.tsx`, which pins the section list and holds a literal list of banned claims — including the participant-matching engine that has never existed — with a control arm proving the detector still fires.
 
 ---
 

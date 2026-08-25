@@ -3424,8 +3424,7 @@ body.theme-light .sales-section--dim {
 body.theme-light .card.sales-pitch-card,
 body.theme-light .card.sales-step-card,
 body.theme-light .card.sales-role-card,
-body.theme-light .card.sales-feature-tile,
-body.theme-light .card.sales-quote {
+body.theme-light .card.sales-feature-tile {
   background: var(--surface-card-current);
   border: 1px solid var(--border-subtle-current);
   border-radius: var(--radius-card);
@@ -3438,8 +3437,7 @@ body.theme-light .card.sales-quote {
 body.theme-light .card.sales-pitch-card:hover,
 body.theme-light .card.sales-step-card:hover,
 body.theme-light .card.sales-role-card:hover,
-body.theme-light .card.sales-feature-tile:hover,
-body.theme-light .card.sales-quote:hover {
+body.theme-light .card.sales-feature-tile:hover {
   transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
@@ -3508,8 +3506,7 @@ body.theme-dark .sales-section--dim {
 body.theme-dark .card.sales-pitch-card,
 body.theme-dark .card.sales-step-card,
 body.theme-dark .card.sales-role-card,
-body.theme-dark .card.sales-feature-tile,
-body.theme-dark .card.sales-quote {
+body.theme-dark .card.sales-feature-tile {
   background: var(--surface-card-current);
   border: 1px solid var(--border-subtle-current);
   border-radius: var(--radius-card);
@@ -3522,8 +3519,7 @@ body.theme-dark .card.sales-quote {
 body.theme-dark .card.sales-pitch-card:hover,
 body.theme-dark .card.sales-step-card:hover,
 body.theme-dark .card.sales-role-card:hover,
-body.theme-dark .card.sales-feature-tile:hover,
-body.theme-dark .card.sales-quote:hover {
+body.theme-dark .card.sales-feature-tile:hover {
   transform: translateY(-2px);
   border-color: var(--border-strong-current);
 }
@@ -3571,8 +3567,10 @@ body.theme-dark .sales-step-index {
    Deliberately not listed here, and still on 500:
      .cortex-brand-title, .landing-parent-brand  - logotype
      .adaptabits-page-title svg, .section-icon   - icons, not text
-     .cortex-stat-value, .sales-proof-metric-number - 40px and 32px, so
-       WCAG large-text applies and 3.14 already clears the 3:1 threshold
+     .cortex-stat-value                         - 40px, so WCAG large-text
+       applies and 3.14 already clears the 3:1 threshold
+       (.sales-proof-metric-number was the other one, deleted with the
+        social proof section)
    ============================================================ */
 
 body.theme-light .btn-outline-primary {
