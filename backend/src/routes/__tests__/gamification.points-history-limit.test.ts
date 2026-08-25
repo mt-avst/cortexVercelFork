@@ -81,7 +81,12 @@ const requestedLimit = () => mockGetPointsHistory.mock.calls[0]?.[1];
 describe('GET /api/gamification/points-history limit', () => {
   beforeEach(() => {
     jest.resetAllMocks();
-    mockGetPointsHistory.mockResolvedValue([] as never);
+    // The PAGE shape, not a bare array (cto/AdaptaLabs#23). The `has_more`
+    // arithmetic itself is unobservable here - the service is mocked - so it is
+    // proven against a real Postgres in
+    // services/__tests__/gamification-postgres.test.ts. This mock only has to
+    // be the shape the route now forwards.
+    mockGetPointsHistory.mockResolvedValue({ transactions: [], has_more: false } as never);
   });
 
   // THE CONTROL. Without an arm showing an ordinary limit passes THROUGH
@@ -148,6 +153,36 @@ describe('GET /api/gamification/points-history limit', () => {
     await request(listening(app)).get(`${PATH}?limit=all`).expect(200);
 
     expect(requestedLimit()).toBe(20);
+  });
+
+  // cto/AdaptaLabs#23. `res.json(history.transactions)` is a one-word mutation
+  // that puts the silent truncation straight back on the wire while every limit
+  // assertion above still passes. The route's job is to FORWARD the page.
+  it('answers with the page and carries a true has_more onto the wire', async () => {
+    mockGetPointsHistory.mockResolvedValue({
+      transactions: [{ id: 'txn-1' }],
+      has_more: true,
+    } as never);
+
+    const response = await request(listening(app)).get(`${PATH}?limit=1`).expect(200);
+
+    expect(response.body.has_more).toBe(true);
+    expect(response.body.transactions).toHaveLength(1);
+  });
+
+  // THE CONTROL for the arm above. Without it, a route that answered a
+  // hardcoded `has_more: true` would satisfy every assertion there - and
+  // `has_more` that is always true is as useless as one that is always absent.
+  it('carries a false has_more onto the wire too', async () => {
+    mockGetPointsHistory.mockResolvedValue({
+      transactions: [{ id: 'txn-1' }],
+      has_more: false,
+    } as never);
+
+    const response = await request(listening(app)).get(`${PATH}?limit=1`).expect(200);
+
+    expect(response.body.has_more).toBe(false);
+    expect(response.body.transactions).toHaveLength(1);
   });
 
   it('still requires authentication', async () => {
