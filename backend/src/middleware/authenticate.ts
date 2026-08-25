@@ -87,6 +87,18 @@ export const requireSuperadmin = async (req: Request, res: Response, next: NextF
     return res.status(403).json({ error: 'Superadmin access required' });
   }
 
+  // Carried for symmetry with `requireAdmin`, but NOT equivalent to it: this
+  // gate has already forced `role === 'superadmin'`, so the only caller it can
+  // correct is one PROMOTED since login, and no route behind this gate reads
+  // `req.user.role` today. Dropping `, role` here therefore passes the whole
+  // suite (measured, #38: 1242/1242) - an equivalent mutation, so it gets no
+  // mutation-canary entry rather than a false one. `requireAdmin`'s carry two
+  // functions up is the load-bearing one and IS pinned.
+  //
+  // ponytail: unobservable today, kept because the next superadmin-only route
+  // to read a role would silently get the stale one.
+  //   -> if one ever does, pin it the way admin-gate-carries-live-role-to-the
+  //      -handler pins requireAdmin's.
   req.user = { ...req.session.user, role };
   next();
 };

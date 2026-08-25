@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, requireAdmin, requireSuperadmin } from '../middleware/authenticate';
+import { requireAuth, requireAdmin, requireSuperadmin, withLiveRole } from '../middleware/authenticate';
 import { getAppliedDbTlsModes } from '../config/dbTls';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
@@ -42,11 +42,29 @@ interface DashboardStats {
   recent_bookings: RecentBookingItem[];
 }
 
-// GET /api/admin/dashboard - Get dashboard statistics (M7: recent_bookings, superadmin global stats)
-router.get('/dashboard', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+/**
+ * GET /api/admin/dashboard - dashboard statistics, scoped to what the caller
+ * may see (M7: recent_bookings, superadmin global stats).
+ *
+ * `withLiveRole`, NOT `requireAdmin`, and not bare `requireAuth` (#38).
+ *
+ * Not `requireAdmin`, because this is the "am I an admin" surface every
+ * signed-in user loads: the 403 below is part of the contract and the gate has
+ * to stay in the handler.
+ *
+ * Not bare `requireAuth`, because that hands the handler the role stamped into
+ * the session at LOGIN and this handler makes THREE decisions from it. The gate
+ * is the least of them. A superadmin demoted to researcher_admin is still an
+ * admin, so the gate admits them - correctly - and the two scope constants below
+ * then read a stale `superadmin` and resolve to `null`, which is no filter at
+ * all. They kept receiving global counts and every other researcher's
+ * participant names and emails for up to SESSION_MAX_AGE_MS (24h). No gate could
+ * catch that, which is why the fix is the role read rather than another gate.
+ */
+router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
 
-  // Check admin role
+  // Check admin role - live as of this request, courtesy of `withLiveRole`.
   if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Forbidden: Admin access required' });
   }
@@ -225,11 +243,19 @@ router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, r
 // ADMIN MANAGEMENT ROUTES (Superadmin only)
 // ============================================================================
 
-// POST /api/admin/request - Request admin access (any authenticated user)
-router.post('/request', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+/**
+ * POST /api/admin/request - Request admin access (any authenticated user).
+ *
+ * `withLiveRole` for the same reason as the dashboard (#38), in its milder
+ * form: read off the session, the check below told a REVOKED admin that they
+ * already had admin access and refused to let them ask for it back - for up to
+ * SESSION_MAX_AGE_MS. No escalation, but a user-visible dead end, and the same
+ * stale read.
+ */
+router.post('/request', requireAuth, withLiveRole, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
-  
-  // Check if user already has admin or superadmin role
+
+  // Check if user already has admin or superadmin role - live, not as of login.
   if (user.role === 'researcher_admin' || user.role === 'superadmin') {
     return res.status(400).json({ error: 'You already have admin access' });
   }

@@ -1256,5 +1256,55 @@
     "runner": "jest",
     "spec": "src/middleware/__tests__/results-read-concurrency.test.ts",
     "test": "lets one caller hold a second read at the same time"
+  },
+  {
+    "id": "admin-dashboard-identity-scope-reads-live-role",
+    "why": "GET /api/admin/dashboard sat on requireAuth and made THREE decisions from the role stamped into the session at login, of which the gate is the least (cto/AdaptaLabs#38). A superadmin demoted to researcher_admin is STILL an admin, so the gate admits them correctly and can never catch this - but participantIdentityOwnerId then read a stale 'superadmin' and resolved to null, which is no owner filter at all, so recent_bookings kept carrying every other researcher's participant names and emails for up to SESSION_MAX_AGE_MS = 24h. withLiveRole now attaches the live role before the handler runs. Reading req.session.user.role here restores exactly the stale scope read while LEAVING THE GATE LIVE, which is the point: the gate and the scope are two decisions and an entry pinning the gate cannot speak for the scope. It type-checks (same union), so the canary reports KILLED only because the named jest test demotes the DB role and asserts the other researcher's participant does not cross the wire.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  const participantIdentityOwnerId = user.role === 'superadmin' ? null : userId;",
+    "mutation": "  const participantIdentityOwnerId = req.session!.user!.role === 'superadmin' ? null : userId;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
+    "test": "scopes a demoted superadmin to their own participants"
+  },
+  {
+    "id": "admin-dashboard-counts-scope-reads-live-role",
+    "why": "The SECOND scope constant in the same handler, and it needs its own entry for the reason the handler's own docblock gives: countsOwnerId and participantIdentityOwnerId are deliberately separate declarations, so a mutation of one says nothing about the other. Same stale read as its sibling (cto/AdaptaLabs#38) - a demoted superadmin kept receiving GLOBAL counts across every researcher's opportunities, bookings, participants and sessions. Reading the session role here type-checks and restores the stale widening; the named jest test demotes the DB role and asserts every count query binds the caller's own id.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  const countsOwnerId = user.role === 'superadmin' ? null : userId;",
+    "mutation": "  const countsOwnerId = req.session!.user!.role === 'superadmin' ? null : userId;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
+    "test": "scopes a demoted superadmin counts to their own opportunities"
+  },
+  {
+    "id": "admin-dashboard-gate-reads-live-role",
+    "why": "The dashboard's in-handler admin gate, which stays in the handler because this is the 'am I an admin' surface every signed-in user loads and the 403 is part of its contract - requireAdmin cannot cover it. Pre-#38 it read the session role, so a FULLY revoked admin kept the whole dashboard for up to SESSION_MAX_AGE_MS = 24h. Distinct from the two scope entries above: this one pins the refusal, they pin what is withheld from a caller the refusal correctly admits. Reading the session role type-checks and restores the stale gate; the named jest test sets the DB role to employee and asserts a 403.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {",
+    "mutation": "  if (req.session!.user!.role !== 'researcher_admin' && req.session!.user!.role !== 'superadmin') {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
+    "test": "refuses an admin whose database role was revoked after login"
+  },
+  {
+    "id": "admin-request-reads-live-role",
+    "why": "POST /api/admin/request is how a non-admin ASKS to become one, so it admits non-admins and cannot sit on requireAdmin either. Read off the session it told a REVOKED admin 'You already have admin access' and refused the request, leaving them unable to ask for it back until their cookie expired (cto/AdaptaLabs#38). No escalation, but the same stale read and wrong in a user-visible way. Reading the session role type-checks and restores the dead end; the named jest test sets the DB role to employee and asserts the request is accepted.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "  if (user.role === 'researcher_admin' || user.role === 'superadmin') {",
+    "mutation": "  if (req.session!.user!.role === 'researcher_admin' || req.session!.user!.role === 'superadmin') {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
+    "test": "lets a revoked admin ask for access again"
+  },
+  {
+    "id": "admin-gate-carries-live-role-to-the-handler",
+    "why": "THE PREMISE THE WHOLE #14/#37/#38 FAMILY RESTS ON, and until #38 it was the one link with no guard. requireAdmin re-reads the live role and gates on it - that half was already pinned by admin-gate-rereads-live-role-from-db - but it must also CARRY that role onto req.user, because every in-handler 'is this caller a superadmin' branch behind the gate reads req.user.role: GET /api/admin/export/bookings, session-outputs.ts, firsthand.ts's requireSuperadminForStudyResults, and a dozen scope decisions in opportunities.ts. Dropping only the carry - the gate left completely intact - passed 1227 jest and 650 vitest tests and re-opened #38's exact defect on the export route: a demoted superadmin gets a global CSV of every participant's name and email. #38's own report excused that route as 'safe because it sits on requireAdmin', which is a claim about verification that nothing verified. It type-checks (the spread is still a SessionUser), so the canary reports KILLED only because the named jest test demotes the DB role and asserts the rival participant's row is absent from the CSV bytes. NOTE the sibling carry in requireSuperadmin is deliberately NOT pinned: that gate has already forced role === 'superadmin' and no route behind it reads req.user.role, so dropping it passes 1242/1242 - an equivalent mutation, measured, and an entry for it would be a false pin.",
+    "file": "backend/src/middleware/authenticate.ts",
+    "anchor": "  // sub-gates) see the live value, not the stale session one.\n  req.user = { ...req.session.user, role };",
+    "mutation": "  // sub-gates) see the live value, not the stale session one.\n  req.user = { ...req.session.user };",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
+    "test": "scopes the exported CSV for a demoted superadmin"
   }
 ]

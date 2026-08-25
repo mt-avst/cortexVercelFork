@@ -364,17 +364,25 @@ const ROUTES_DIR = path.join(__dirname, '..');
  *   smuggled in here as an `admin` verdict this chain does not deliver.
  *   `clicks_total` on the list route is the one branch already decided in the
  *   open, in `opportunities.clicks-total-scope.test.ts` (#19).
- * - `POST /api/bookings/:id/cancel` is the one `session+live-role` route: it
- *   admits participants AND admins, so `requireAdmin` cannot cover it and the
- *   inline admin branch reads the live role instead (#37).
+ * - THREE `session+live-role` ROUTES, all the same shape: the route admits
+ *   non-admins as well, so `requireAdmin` cannot cover it, and the handler's own
+ *   role branch reads the LIVE role rather than the one snapshotted at login.
+ *   `POST /api/bookings/:id/cancel` admits participants and admins (#37);
+ *   `GET /api/admin/dashboard` and `POST /api/admin/request` are the admin.ts
+ *   pair (#38), covered below.
  * - Everything else on `/api/bookings` is `session` with the ownership decision
  *   inside the handler, except `GET /api/bookings/opportunities/:id/bookings`
  *   which is admin-only outright.
- * - `GET /api/admin/dashboard` and `POST /api/admin/request` are `session`
+ * - `GET /api/admin/dashboard` and `POST /api/admin/request` carry no ADMIN gate
  *   despite the prefix: the dashboard is the "am I an admin" surface every
  *   signed-in user loads, and the request route is how a non-admin ASKS to
  *   become one. A prefix is not a gate, which is the sort of thing an inventory
- *   is for.
+ *   is for. They were `session` until #38, and the gap that verdict recorded was
+ *   real: the dashboard makes THREE decisions from the role, and a superadmin
+ *   demoted to researcher_admin passes its in-handler gate legitimately while
+ *   both scope constants still read `superadmin` and widen to no filter at all -
+ *   global counts and every other researcher's participant names and emails. The
+ *   in-handler gate is unchanged; what moved is that the role it reads is live.
  * - `/api/gamification/leaderboard` and `/leaderboard/monthly` are `public` by
  *   decision: a leaderboard nobody can see before signing in is not a
  *   leaderboard. `/api/stats/platform` likewise.
@@ -454,9 +462,9 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'GET /api/gamification/points-history': 'session',
 
   // admin.ts
-  'GET /api/admin/dashboard': 'session',
+  'GET /api/admin/dashboard': 'session+live-role',
   'GET /api/admin/export/bookings': 'admin',
-  'POST /api/admin/request': 'session',
+  'POST /api/admin/request': 'session+live-role',
   'GET /api/admin/requests': 'superadmin',
   'POST /api/admin/requests/:id/approve': 'superadmin',
   'POST /api/admin/requests/:id/deny': 'superadmin',
