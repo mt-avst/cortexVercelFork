@@ -89,6 +89,16 @@ const listingSql = (): string => {
 /** Answer the listing query with `count` rows; everything else with none. */
 const listReturns = (count: number) => {
   mockQuery.mockImplementation(async (sql: unknown) => {
+    // The #45 liveness lookup in front of the listing's inline admin branch.
+    // Dispatching on the SQL text rather than on call order is what lets this
+    // file absorb an extra leading query without every fixture shifting - the
+    // same reason the analytics block below already carries this arm. The role
+    // agrees with the session throughout: this file is about parameter bounds,
+    // and liveness is pinned by
+    // `opportunities.inline-admin-gates-read-live-role.test.ts`.
+    if (String(sql).includes('SELECT role FROM users')) {
+      return { rows: [{ role: 'researcher_admin' }] };
+    }
     if (String(sql).includes('FROM opportunities o')) {
       return { rows: Array.from({ length: count }, (_, i) => opportunityRow(i)) };
     }

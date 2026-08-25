@@ -14,9 +14,38 @@ type AdminRole = SessionUser['role'];
  * admin gate, and it was never refreshed. Revoking an admin
  * (`DELETE /api/admin/admins`) changed the DB row but left every existing
  * cookie working for up to SESSION_MAX_AGE_MS (24h), so the "revoked
- * successfully" message was untrue when sent. Admin routes are low-volume
- * (writes and admin-only reads - never hot participant paths), so one query per
- * admin request is an acceptable price for the role being live.
+ * successfully" message was untrue when sent.
+ *
+ * WHO PAYS FOR THE QUERY. FOUR CALLERS, and they differ - `grep -n
+ * "currentDbRole(" backend/src/middleware/authenticate.ts`. This is the third
+ * revision of this paragraph because the first two tried to describe all of
+ * them in one sentence, so it is a list now and each row is measurable.
+ *
+ * Revision one said the price was fine because admin routes are low-volume -
+ * "writes and admin-only reads, never hot participant paths". #45 made that
+ * stale by putting the read on `GET /api/opportunities`. Revision two said it
+ * "only ever runs for a caller whose session already claims an admin role",
+ * which was wrong on arrival: the two gates query FIRST and check the role
+ * after, by design, and fetch-then-decide is what makes them live at all.
+ *
+ *   requireAdmin / requireSuperadmin - EVERY session reaching an admin-gated
+ *     route, whatever its role. An `employee` session pays one query and then
+ *     gets a 403 (measured). Low-volume by route, so the original
+ *     justification still holds for these two.
+ *   withLiveRole (#37) - EVERY signed-in session on the three routes that
+ *     chain it, none of which is admin-only: `POST /api/bookings/:id/cancel`,
+ *     `GET /api/admin/dashboard`, `POST /api/admin/request`. So a participant
+ *     cancelling their OWN booking pays one query and gets a 200 (measured).
+ *     That is the caller a per-caller ledger most needs to name, and the two
+ *     earlier revisions of this block both omitted it.
+ *   withLiveRoleIfPresent (#45) - only a session whose stored role is ALREADY
+ *     an admin role. That narrowing is what keeps the participant catalogue at
+ *     the query count it had; see that function for why it costs no security.
+ *
+ * So: no signed-out caller ever pays, anywhere. A participant pays exactly
+ * where a route decides something from their role without being admin-only -
+ * one query for a 403 from a gate, or one query for a 200 on the three
+ * `withLiveRole` routes - and never on the `optionalAuth` catalogue.
  *
  * FAILS CLOSED. On a DB error or a user that no longer exists it writes a
  * response and returns null; the caller must return immediately without calling
@@ -130,6 +159,65 @@ export const withLiveRole = async (req: Request, res: Response, next: NextFuncti
   }
 
   req.user = { ...req.session.user, role: liveRole };
+  next();
+};
+
+/**
+ * The `optionalAuth` companion to `withLiveRole` - the #45 member of the family.
+ *
+ * Five `opportunities.ts` routes are the participant catalogue: they must answer
+ * a SIGNED-OUT browser, so they sit on `optionalAuth`, and four of them then
+ * branch inline on `req.user?.role` to decide whether the caller sees drafts,
+ * `clicks_total`, owner identity and joining links. That branch read the role
+ * snapshotted at login, so #14's re-read never reached it and a revoked
+ * researcher_admin kept the admin view for up to SESSION_MAX_AGE_MS (24h).
+ * `withLiveRole` cannot be chained there: it 401s without a session.
+ *
+ * NARROWED ON PURPOSE, and the narrowing is the decision #45 asked for. The
+ * defect being closed is REVOCATION, so a re-read can only ever take privilege
+ * AWAY. A session whose stored role is not already an admin role therefore has
+ * nothing to gain from the query, and skipping it keeps `GET /api/opportunities`
+ * - a hot participant path - at exactly the query count it had before.
+ *
+ * THE ACCEPTED TRADE, stated rather than discovered later: a PROMOTION does not
+ * take effect until the user's next login. Latency on gaining privilege is
+ * accepted; latency on losing it is not. Deliberate asymmetry, not an oversight.
+ *
+ * ponytail: a freshly-promoted admin gets the participant catalogue for up to
+ * SESSION_MAX_AGE_MS (24h), which `POST /api/admin/requests/:id/approve` can
+ * actually produce.
+ *   -> #55. Refresh the target's stored session role at the point of promotion,
+ *      which closes the window without putting a query on any read path.
+ *
+ * BOTH ADMIN ROLES, and the `superadmin` half is pinned separately. Every arm
+ * of the liveness suite drove this with a `researcher_admin` session, so
+ * deleting `&& storedRole !== 'superadmin'` passed 1301/1301 - measured by the
+ * refute gate on !264 - while re-opening #45 for every superadmin session.
+ * Superadmin demotion is real: `admin.ts` deliberately refuses in-API
+ * superadmin revocation (#14), so it happens by script or direct SQL, which is
+ * exactly the channel this family exists to honour. The suite now drives both
+ * roles and `catalogue-live-role-read-covers-superadmin-sessions` is the canary.
+ *
+ * FAILS CLOSED once it decides to read: on a DB error or a deleted user
+ * `currentDbRole` has already answered and this returns without calling next().
+ * Before that point it fails OPEN by design - no session, or a non-admin
+ * session, is handed straight on, because that is the participant catalogue
+ * working as intended.
+ */
+export const withLiveRoleIfPresent = async (req: Request, res: Response, next: NextFunction) => {
+  const storedRole = req.session?.user?.role;
+  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {
+    return next();
+  }
+
+  // `liveAdminRole`, not `liveRole`, so a canary anchor here matches this
+  // function only - `withLiveRole` above has the identical call.
+  const liveAdminRole = await currentDbRole(req, res);
+  if (liveAdminRole === null) {
+    return; // response already sent, failing closed
+  }
+
+  req.user = { ...req.session!.user!, role: liveAdminRole };
   next();
 };
 

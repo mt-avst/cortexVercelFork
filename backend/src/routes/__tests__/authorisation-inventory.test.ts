@@ -22,6 +22,7 @@ import {
   requireAdmin,
   requireSuperadmin,
   withLiveRole,
+  withLiveRoleIfPresent,
   optionalAuth
 } from '../../middleware/authenticate';
 import { bindParticipantSession } from '../../middleware/firsthand-session';
@@ -80,6 +81,13 @@ type Verdict =
   | 'in-handler-secret'
   /** `optionalAuth`: a session is read when present and never required. */
   | 'optional-session'
+  /**
+   * `optionalAuth` + `withLiveRoleIfPresent`: still never requires a session,
+   * but an ADMIN session's role is re-read from `users` before the handler's
+   * own inline branch sees it (#45). A signed-out or participant caller is
+   * handed straight on, with no extra query.
+   */
+  | 'optional-session+live-role'
   /** `requireAuth`: any signed-in user, role as SNAPSHOTTED at login. */
   | 'session'
   /** `requireAuth` + `withLiveRole`: handler decides, on the LIVE role (#37). */
@@ -153,6 +161,16 @@ function verdictOf(stack: HandlerLayer[]): Verdict {
       throw new Error('withLiveRole without requireAuth');
     }
     return 'session+live-role';
+  }
+  if (carries(withLiveRoleIfPresent)) {
+    // Its whole point is serving a signed-out caller, so it is only meaningful
+    // behind `optionalAuth`. Chained after `requireAuth` it would be a
+    // needlessly narrow `withLiveRole`, and the verdict below would understate
+    // the gate - loud instead.
+    if (!carries(optionalAuth)) {
+      throw new Error('withLiveRoleIfPresent without optionalAuth');
+    }
+    return 'optional-session+live-role';
   }
   if (carries(requireAuth)) return 'session';
   if (carries(optionalAuth)) return 'optional-session';
@@ -347,23 +365,31 @@ const ROUTES_DIR = path.join(__dirname, '..');
  *   `assertOpportunityOwnership` in the handler, so a colleague's session is a
  *   403 rather than a read. That in-handler half is pinned by
  *   `session-outputs-internal.test.ts`.
- * - FIVE `optional-session` ROUTES ARE THE PARTICIPANT CATALOGUE, and they are
- *   the group most worth reading twice. `GET /api/opportunities`, `GET
- *   /api/opportunities/:id`, `GET /api/opportunities/:id/sessions` and `POST
- *   /api/opportunities/:id/click` all serve a signed-out browser AND branch
- *   internally on `req.user?.role` to decide whether the caller sees drafts,
- *   unredacted rows and `clicks_total`. `GET
- *   /api/opportunities/:id/recorded-study-brief` is the pre-consent
- *   landing-page brief and branches the same way.
+ * - FIVE ROUTES ARE THE PARTICIPANT CATALOGUE, and they are the group most
+ *   worth reading twice. All five serve a signed-out browser. FOUR of them
+ *   additionally branch internally on `req.user?.role` to decide whether the
+ *   caller sees drafts, unredacted rows and `clicks_total`: `GET
+ *   /api/opportunities`, `GET /api/opportunities/:id`, `GET
+ *   /api/opportunities/:id/sessions` and `GET
+ *   /api/opportunities/:id/recorded-study-brief`, the last being the
+ *   pre-consent landing-page brief.
  *
- *   That inline branch reads the role SNAPSHOTTED AT LOGIN, which is the shape
- *   #14 and #37 closed elsewhere. `withLiveRole` cannot be dropped in here: it
- *   401s without a session, and these routes must answer without one. So the
- *   verdict written down is `optional-session` and it is deliberate as far as
- *   the MIDDLEWARE goes; the stale inline branch is #45 rather than something
- *   smuggled in here as an `admin` verdict this chain does not deliver.
- *   `clicks_total` on the list route is the one branch already decided in the
- *   open, in `opportunities.clicks-total-scope.test.ts` (#19).
+ *   That inline branch read the role SNAPSHOTTED AT LOGIN, which is the shape
+ *   #14 and #37 closed elsewhere, and #45 closed it here. `withLiveRole` could
+ *   not be dropped in: it 401s without a session, and these routes must answer
+ *   without one. `withLiveRoleIfPresent` re-reads instead, and ONLY when the
+ *   session's stored role is already an admin one - a re-read can only take
+ *   privilege away, so a participant has nothing to gain from it and the hot
+ *   catalogue load keeps its query count. The accepted trade is that a
+ *   PROMOTION waits for the next login. Hence `optional-session+live-role`:
+ *   still no session required, and no `admin` guarantee claimed that this chain
+ *   does not deliver.
+ *
+ *   THE FIFTH, `POST /api/opportunities/:id/click`, stays plain
+ *   `optional-session` and that is a decision rather than an omission: it reads
+ *   `req.user?.id` and never the role, so there is no branch for a stale role
+ *   to reach. `clicks_total` on the list route is the one branch already decided
+ *   in the open, in `opportunities.clicks-total-scope.test.ts` (#19).
  * - THREE `session+live-role` ROUTES, all the same shape: the route admits
  *   non-admins as well, so `requireAdmin` cannot cover it, and the handler's own
  *   role branch reads the LIVE role rather than the one snapshotted at login.
@@ -400,9 +426,9 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'GET /api/me/session-events': 'session',
 
   // opportunities.ts
-  'GET /api/opportunities': 'optional-session',
+  'GET /api/opportunities': 'optional-session+live-role',
   'POST /api/opportunities': 'admin',
-  'GET /api/opportunities/:id': 'optional-session',
+  'GET /api/opportunities/:id': 'optional-session+live-role',
   'PATCH /api/opportunities/:id': 'admin',
   'DELETE /api/opportunities/:id': 'admin',
   'GET /api/opportunities/:id/analytics': 'admin',
@@ -410,10 +436,10 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'POST /api/opportunities/:id/close-if-past': 'admin',
   'POST /api/opportunities/:id/duplicate': 'admin',
   'POST /api/opportunities/:id/firsthand-handoff': 'session',
-  'GET /api/opportunities/:id/recorded-study-brief': 'optional-session',
+  'GET /api/opportunities/:id/recorded-study-brief': 'optional-session+live-role',
   'POST /api/opportunities/:id/recorded-study-session': 'session',
   'GET /api/opportunities/:id/session-events': 'admin',
-  'GET /api/opportunities/:id/sessions': 'optional-session',
+  'GET /api/opportunities/:id/sessions': 'optional-session+live-role',
   'POST /api/opportunities/:id/sessions': 'admin',
   'DELETE /api/opportunities/:id/sessions': 'admin',
   'POST /api/opportunities/:id/survey-session': 'session',
@@ -874,6 +900,7 @@ describe('the authorisation inventory', () => {
 
     probe.get('/open', noop);
     probe.get('/optional', optionalAuth, noop);
+    probe.get('/optional-live', optionalAuth, withLiveRoleIfPresent, noop);
     probe.get('/signed-in', requireAuth, noop);
     probe.get('/live', requireAuth, withLiveRole, noop);
     probe.get('/bound', requireAuth, bindParticipantSession, noop);
@@ -883,6 +910,7 @@ describe('the authorisation inventory', () => {
     expect(inventory(probe, '/probe')).toEqual({
       'GET /probe/open': 'public',
       'GET /probe/optional': 'optional-session',
+      'GET /probe/optional-live': 'optional-session+live-role',
       'GET /probe/signed-in': 'session',
       'GET /probe/live': 'session+live-role',
       'GET /probe/bound': 'participant-token',

@@ -44,6 +44,28 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  */
 type Role = 'employee' | 'researcher_admin' | 'superadmin';
 
+/**
+ * The `users` table this fixture stands in for, keyed the way the real query is
+ * - by id. #45 chained `withLiveRoleIfPresent` onto this route, so an admin
+ * session now costs one `SELECT role FROM users` before the handler computes
+ * `isAdmin`, and it has to be answered.
+ *
+ * A FROZEN MAP rather than a variable `appAs` writes on the way past. Every arm
+ * here means "session and database agree", so the first version simply had
+ * `appAs` set a `let` - which works, and is shared mutable state between tests
+ * of exactly the kind #44 is open about. Keyed on the id, nothing is carried
+ * between arms at all.
+ *
+ * The case where session and database DISAGREE is the whole subject of
+ * `opportunities.inline-admin-gates-read-live-role.test.ts` and is deliberately
+ * not duplicated here.
+ */
+const USERS: Readonly<Record<string, Role>> = {
+  'not-the-owner': 'researcher_admin',
+  'root-1': 'superadmin',
+  'user-1': 'employee',
+};
+
 const appAs = (role: Role | null, id = 'u1') => {
   const app = express();
   app.use(express.json());
@@ -77,8 +99,15 @@ describe('clicks_total on GET /api/opportunities', () => {
   beforeEach(() => {
     jest.resetAllMocks();
     mockIsDatabaseAvailable.mockResolvedValue(true as never);
-    mockQuery.mockImplementation(async (sql: unknown) => {
+    mockQuery.mockImplementation(async (sql: unknown, params?: unknown) => {
       const text = String(sql);
+      if (text.includes('SELECT role FROM users')) {
+        const role = USERS[(params as string[])[0]];
+        // No row is a deleted account, which `currentDbRole` turns into a 401.
+        // Answering it honestly means a mistyped id fails loudly here rather
+        // than quietly granting whatever the last test happened to set.
+        return { rows: role ? [{ role }] : [] };
+      }
       if (text.includes('FROM opportunity_clicks')) {
         return { rows: [{ opportunity_id: 'opp-1', count: '8' }] };
       }

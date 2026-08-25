@@ -63,6 +63,25 @@ export const withLiveRole = (req: Request, res: Response, next: NextFunction) =>
   next();
 };
 
+/**
+ * `withLiveRoleIfPresent` (#45) re-reads the role only when the session already
+ * claims an admin one, and gates on nothing, so its double is `optionalAuth`
+ * with no database call. Liveness for this one is covered by
+ * `opportunities.inline-admin-gates-read-live-role.test.ts` and the
+ * `opportunities-catalogue-branch-reads-live-role` mutation canary.
+ *
+ * It MUST be exported even though it does nothing here: `opportunities.ts`
+ * names it in four middleware chains, and an undefined middleware makes Express
+ * throw at router construction - i.e. at import - in every suite that opts into
+ * this double.
+ */
+export const withLiveRoleIfPresent = (req: Request, _res: Response, next: NextFunction) => {
+  if (req.session?.user) {
+    req.user = req.session.user;
+  }
+  next();
+};
+
 export const optionalAuth = (req: Request, _res: Response, next: NextFunction) => {
   if (req.session?.user) {
     req.user = req.session.user;
