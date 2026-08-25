@@ -38,10 +38,15 @@ const rejectionOf = async (promise: Promise<unknown>): Promise<AppError> =>
   );
 
 /**
- * NODE_ENV has to be set on process.env rather than read from `config`, because
- * shared/config/environment coerces any unrecognised value to 'development'
- * (`z.enum([...]).catch(() => 'development')`). That coercion is fail-open: it
- * is exactly why these tests assert on the raw value.
+ * NODE_ENV is set on process.env rather than read from `config` because that is
+ * what isMockDataPermitted reads, and `config` is parsed once at import so a test
+ * cannot vary it.
+ *
+ * The stronger original reason no longer holds: shared/config/environment used to
+ * coerce any unrecognised value to 'development' (`z.enum([...]).catch(...)`), which
+ * was fail-open. It now throws (#4), pinned in config/__tests__/environment.test.ts.
+ * The unrecognised-value cases below are kept as defence in depth for this guard on
+ * its own, not as the only thing standing between a typo and demo fixtures.
  */
 const setNodeEnv = (value: string | undefined): void => {
   if (value === undefined) {

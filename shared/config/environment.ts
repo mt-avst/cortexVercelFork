@@ -8,11 +8,68 @@ import { z } from 'zod';
 // ============================================================================
 
 /**
+ * THE ENVIRONMENTS THIS APPLICATION HAS BEEN MODELLED FOR.
+ *
+ * Named rather than inlined so that adding a fourth is one visible edit, pinned as a
+ * literal in backend/src/config/__tests__/environment.test.ts. See NODE_ENV below for
+ * why anything outside this list stops the boot (#4).
+ */
+export const NODE_ENVS = ['development', 'production', 'test'] as const;
+
+/**
  * Backend environment variables schema
  */
 export const backendEnvSchema = z.object({
   // Application Configuration
-  NODE_ENV: z.enum(['development', 'production', 'test']).catch(() => 'development' as const),
+  //
+  // FAIL CLOSED on an unrecognised value (#4). This was `.catch(() => 'development')`,
+  // which meant `staging`, `prod`, `Production` or a typo silently resolved to
+  // 'development' - and every security control in backend/src/index.ts is keyed off
+  // `config.NODE_ENV === 'production'`. A deployment that believed it was production
+  // ran with helmet off, CSRF off, `secure: false` / `sameSite: 'lax'` /
+  // `domain: 'localhost'` session cookies, `trust proxy` false (which also breaks
+  // every rate limiter's keying) and raw error messages returned to clients. Verified
+  // by running the real entry point with NODE_ENV=prod: it started and logged
+  // `"environment":"development"`, `"csrfEnabled":false`, `Helmet disabled`.
+  //
+  // `.default` rather than `.catch`, so the three cases separate:
+  //   UNSET          -> 'development'. `npm run dev` sets nothing and must keep working.
+  //   RECOGNISED     -> itself.
+  //   ANYTHING ELSE  -> ZodError, thrown by validateBackendEnvironment below. That runs
+  //                     at module scope in backend/src/config/index.ts, so the process
+  //                     dies on import - before it binds a port, and before the
+  //                     migrate/seed initContainer touches the database. A pod that
+  //                     cannot boot is a visible CrashLoopBackOff; a pod that boots
+  //                     insecurely is not.
+  //
+  // The EMPTY STRING throws rather than being treated as unset. It is a variable
+  // something deliberately wrote - most plausibly an unresolved `${...}` in a chart or
+  // compose file - so it carries a failed intent, unlike a name that was never set.
+  //
+  // zod's own enum message already names the offending value and lists the permitted
+  // ones ("Invalid enum value. Expected 'development' | 'production' | 'test',
+  // received 'prod'"), which is the whole on-call value of this change. It is pinned as
+  // a literal in backend/src/config/__tests__/environment.test.ts so a zod upgrade that
+  // drops the received value fails a named test rather than degrading quietly.
+  NODE_ENV: z.enum(NODE_ENVS).default('development'),
+
+  // ponytail: NODE_ENV was made fail-closed on its own, and the other `.catch()`
+  //   fields in this schema were deliberately left alone. NODE_ENV was the only one
+  //   whose coercion DISABLED A SECURITY CONTROL; these two break the app visibly
+  //   instead, and bundling them would have made one deploy-risk decision
+  //   unreviewable. The two live ceilings:
+  //     PORT        - `.catch` never fires for a non-numeric value, because
+  //                   `transform(Number)` returns NaN rather than throwing. `PORT=abc`
+  //                   gives NaN, and app.listen(NaN) binds an ephemeral port, so the
+  //                   readiness probe on 3001 fails with nothing saying why.
+  //     CORS_ORIGIN - a malformed URL becomes http://localhost:3000 in silence, which
+  //                   presents in production as browser CORS errors, not as a config
+  //                   fault. It narrows access rather than widening it, so it is an
+  //                   availability ceiling and not a security one.
+  //   ENABLE_CSRF and FRONTEND_URL here have NO consumer at all - index.ts and every
+  //   route read those two straight off process.env - so their `.catch()` is inert.
+  //   -> #48. Upgrade path: `z.coerce.number().int().positive().default(3001)` for
+  //   PORT and `.default()` for CORS_ORIGIN, both of which keep unset working.
   PORT: z.string().transform(Number).catch(() => 3001),
 
   // Database Configuration

@@ -1316,5 +1316,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.cleanup-cancelled-is-gone.test.ts",
     "test": "answers 404 on POST api bookings cleanup-cancelled and runs no handler"
+  },
+  {
+    "id": "node-env-fails-closed-on-an-unrecognised-value",
+    "why": "Every security control in backend/src/index.ts is keyed off config.NODE_ENV === 'production' - helmet, CSRF, cookie.secure, cookie.sameSite, cookie.domain and trust proxy, which also keys every rate limiter. This field ended in .catch(() => 'development'), so 'prod', 'staging' or 'Production' resolved silently to development and turned all of it off in a deployment that believed it was production. Reproduced at the real entry point: NODE_ENV=prod started the server and logged \"environment\":\"development\", \"csrfEnabled\":false and Helmet disabled. The mutation restores that exact .catch(), so it type-checks and the parse succeeds where it must now throw.",
+    "file": "shared/config/environment.ts",
+    "anchor": "  NODE_ENV: z.enum(NODE_ENVS).default('development'),",
+    "mutation": "  NODE_ENV: z.enum(NODE_ENVS).catch(() => 'development' as const),",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "names the offending value and lists the permitted ones"
   }
 ]
