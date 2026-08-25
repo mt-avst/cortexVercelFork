@@ -1086,5 +1086,105 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/gamification.points-history-limit.test.ts",
     "test": "answers with the page and carries a true has_more onto the wire"
+  },
+  {
+    "id": "authorisation-inventory-sees-a-route-it-lists-disappear",
+    "why": "DIRECTION TWO of #13, and the half that stops the table rotting into a list nobody trusts. An inventory asserted one way only keeps a verdict for the largest answer surface in the product long after the route moved, and reads as coverage. Renaming the outputs path leaves the table holding a verdict with nothing behind it.",
+    "file": "backend/src/routes/session-outputs.ts",
+    "anchor": "  '/:id/sessions/:sessionId/outputs',",
+    "mutation": "  '/:id/sessions/:sessionId/outputs-moved',",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "has a written-down verdict for every route, and no verdict without a route"
+  },
+  {
+    "id": "authorisation-inventory-sees-a-router-leave-the-mount-graph",
+    "why": "The enumeration is mechanical or it is a hand-written import list with extra steps. Router files are read off disk and every one must be reachable from the three roots index.ts mounts, so unmounting a router is red here rather than a route silently leaving the inventory. This is the guard that makes the table exhaustive rather than merely long.",
+    "file": "backend/src/routes/api.ts",
+    "anchor": "router.use('/stats', statsRouter);",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "reaches every router file on disk from the app roots"
+  },
+  {
+    "id": "authorisation-inventory-sees-a-new-answer-route-with-no-verdict",
+    "why": "DIRECTION ONE of #13. A route added to a router no table imported shipped green: the answers-probe on session-outputs.ts passed 843 jest, 625 vitest and tsc on !217, while the identical route on firsthand.ts failed two suites. The mutation carries requireAdmin, so what it lacks is a WRITTEN-DOWN VERDICT rather than a gate - the point being that role-gated is not the same as decided, and an owner check lives in the handler on both real routes beside it.",
+    "file": "backend/src/routes/session-outputs.ts",
+    "anchor": "const attemptQuerySchema = z.coerce.number().int().positive().optional();",
+    "mutation": "const attemptQuerySchema = z.coerce.number().int().positive().optional();\n\nrouter.get(\n  '/:id/sessions/:sessionId/answers-probe',\n  requireAdmin,\n  asyncHandler(async (req: Request, res: Response) => {\n    return res.json(await getRuntimeSession(req.params.sessionId));\n  })\n);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "has a written-down verdict for every route, and no verdict without a route"
+  },
+  {
+    "id": "authorisation-inventory-sees-a-path-scoped-terminal-handler",
+    "why": "A refute gate served a live unauthenticated 200 through router.use('/path', handler) while this suite reported green. The layer has no .stack, so it is not a router, and the fallthrough filed it as router-level middleware: the endpoint vanished from the map AND its handler was credited as an inherited guard to every route registered after it. Two wrong answers from one missing branch, so the walk refuses instead.",
+    "file": "backend/src/routes/api.ts",
+    "anchor": "router.use('/opportunities', opportunitiesRouter);",
+    "mutation": "router.use('/opportunities', opportunitiesRouter);\nrouter.use('/answers-probe', (_req: Request, res: Response) => { res.json({ transcript: 'leak' }); });",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "has a written-down verdict for every route, and no verdict without a route"
+  },
+  {
+    "id": "authorisation-inventory-sees-one-route-shadow-another",
+    "why": "Express dispatches to the FIRST matching layer; assignment into a map keeps the LAST. So an ungated duplicate registered ahead of a gated one was recorded with the GATED verdict, the route count did not move, and the ungated handler was what served - proven twice by a gate, same-file and across two routers sharing a mount prefix, both live 200s with no session. A duplicate key is a bug or a shadow and never something to overwrite quietly.",
+    "file": "backend/src/routes/api.ts",
+    "anchor": "// GET /api/me - Get current user information",
+    "mutation": "router.get('/me', (_req, res) => { res.json({ leaked: true }); });\n\n// GET /api/me - Get current user information",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "has a written-down verdict for every route, and no verdict without a route"
+  },
+  {
+    "id": "dev-only-login-routes-stay-out-of-production",
+    "why": "auth.ts registers /demo-login, /admin-login, /superadmin-login and /demo-user-2-login behind a NODE_ENV check. All four take no credential and mint a session at the role their name says, superadmin included. setup.ts sets NODE_ENV to test before auth.ts is imported, so the inventory could never observe them and nothing anywhere pinned their absence - the exhaustiveness claim was overstated by exactly the four routes where being wrong costs most. Widening the guard must be red.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "// Demo routes for development\nif (process.env.NODE_ENV === 'development') {",
+    "mutation": "// Demo routes for development\nif (process.env.NODE_ENV !== 'nope-never-matches') {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "registers none of the four when NODE_ENV is production"
+  },
+  {
+    "id": "authorisation-inventory-reads-the-real-app-mount-table",
+    "why": "A gate got five live router mounts past a source regex over index.ts: double quotes, a template literal, a path held in a variable, app.use(router) with no path, and an ordinary INDENTED app.use inside an if block - index.ts already contains two indented app.use calls, so that last one is the realistic shape and had zero coverage. The check now reads app._router.stack instead of parsing text, which is why this mutation is red in whichever spelling it is written.",
+    "file": "backend/src/index.ts",
+    "anchor": "app.use('/api', apiRoutes);",
+    "mutation": "if (process.env.NODE_ENV !== 'nope') {\n  const probeRouter = express.Router();\n  probeRouter.get('/leak', (_req: express.Request, res: express.Response) => { res.json({ transcript: 'leak' }); });\n  app.use(\"/probe\", probeRouter);\n}\n\napp.use('/api', apiRoutes);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "mounts exactly the four routers ROOTS claims, at exactly those prefixes"
+  },
+  {
+    "id": "app-level-routes-outside-every-router-stay-inventoried",
+    "why": "/api/health and /health are registered with app.get and belong to no router file, so the router-walking table could not account for them at all - two live unauthenticated endpoints outside the inventory. They are deliberately public, a health check behind a session being useless to monitoring, but a THIRD app-level route must not be able to join them silently.",
+    "file": "backend/src/index.ts",
+    "anchor": "app.get('/health', (req, res) => {",
+    "mutation": "app.get('/leak', (_req: express.Request, res: express.Response) => { res.json({ transcript: 'leak' }); });\n\napp.get('/health', (req, res) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "serves exactly two endpoints straight off the app, both public"
+  },
+  {
+    "id": "authorisation-inventory-sees-an-app-level-path-scoped-handler",
+    "why": "The app-level twin of the path-scoped-handler defect. Both app checks enumerated a FILTERED SUBSET - isRouter(handle) for mounts, layer.route for routes - and nothing asserted over the remainder, so app.use('/answers-probe', handler) fell between them and served a live 200 with no session while the suite reported green. inventory()'s throw cannot be reused here because index.ts mounts authLimiter as exactly this shape, so the bucket is ENUMERATED instead: two entries, both the limiter, both directions.",
+    "file": "backend/src/index.ts",
+    "anchor": "app.use('/api', apiRoutes);",
+    "mutation": "app.use('/answers-probe', (_req: express.Request, res: express.Response) => { res.json({ transcript: 'leak' }); });\n\napp.use('/api', apiRoutes);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "scopes exactly two path-scoped handlers to a prefix, both the auth limiter"
+  },
+  {
+    "id": "authorisation-inventory-sees-a-mount-behind-an-env-branch",
+    "why": "Reading the real app bought a dependence on WHICH real app: it was imported once, under NODE_ENV=test, and index.ts already branches on process.env.NODE_ENV three times for app.listen and both cron schedules, so a mount inside such a branch was invisible. The production arm re-imports under an isolated registry with node-cron stubbed and the listen socket captured and closed, which is what makes this red. It also found a real conditional route nobody had written down, GET /api/csrf-token.",
+    "file": "backend/src/index.ts",
+    "anchor": "app.use('/api', apiRoutes);",
+    "mutation": "if (process.env.NODE_ENV !== 'test') {\n  const probeDirect = express.Router();\n  probeDirect.get('/leak', (_req: express.Request, res: express.Response) => { res.json({ transcript: 'leak' }); });\n  app.use('/probe', probeDirect);\n}\n\napp.use('/api', apiRoutes);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "mounts the same four routers when NODE_ENV is production"
   }
 ]
