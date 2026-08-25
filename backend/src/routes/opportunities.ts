@@ -56,7 +56,10 @@ import {
   participantRuntimeWork,
   publicRuntimeWork
 } from '../middleware/runtime-work-class';
-import { boundResultsRead } from '../middleware/results-read-concurrency';
+import {
+  boundResultsRead,
+  releaseResultsReadPermit
+} from '../middleware/results-read-concurrency';
 import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '../utils/analytics-dates';
 import { resolveStudyDuration } from '../firsthand/study-duration';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
@@ -3134,6 +3137,11 @@ router.get('/:id/survey-results.csv', requireAdmin, surveyResultsLimiter, boundR
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
+
+  // THE PREFLIGHT-TO-STREAM BOUNDARY - see routes/firsthand.ts and
+  // releaseResultsReadPermit for why the permit stops here rather than at
+  // `close`.
+  releaseResultsReadPermit(res);
 
   // The FACTORY, uncalled - see routes/firsthand.ts. `writeSurveyCsv` calls it
   // with the signal carrying the export's wall-clock deadline.

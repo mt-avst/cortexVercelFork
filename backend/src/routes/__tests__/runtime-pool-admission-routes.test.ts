@@ -7,6 +7,9 @@ jest.mock('../../config', () => ({
 }));
 jest.mock('../../utils/database', () => ({ isDatabaseAvailable: jest.fn() }));
 
+import fs from 'node:fs';
+import path from 'node:path';
+
 import type { Router } from 'express';
 
 import opportunitiesRouter from '../opportunities';
@@ -284,5 +287,70 @@ describe('the results-read gate', () => {
         expect(gate).toBeGreaterThan(admin);
       }
     }
+  });
+
+  /**
+   * WHICH OF THE FOUR HAND THE PERMIT BACK EARLY - cto/AdaptaLabs#9.
+   *
+   * A SOURCE SCAN, and it has to be: the call is inside a handler, and this
+   * file reads mounted middleware stacks, which cannot see in there. Running
+   * the four handlers instead would need Postgres, a session and a study with
+   * participants - and would still be four separate tests that a fifth route
+   * added later escapes.
+   *
+   * The split is a DECISION, not a coincidence, which is why it is written down
+   * as a whole map rather than as two assertions:
+   *
+   *   the .csv routes DO. Their permit is handed back at the preflight-to-
+   *   stream boundary, because everything after it waits on a socket the client
+   *   paces - and #9 measured one admin holding that permit for the whole drain
+   *   timeout, ten times a minute, refusing every other admin including the
+   *   superadmin.
+   *
+   *   the aggregate routes DO NOT. `res.json` buffers the body, and that body
+   *   carries every open-text answer verbatim, so the heap the permit exists
+   *   for genuinely is held until the client drains it. Releasing there would
+   *   hand back a permit while still holding what the permit is for - trading
+   *   an OOM kill, which drops every live participant session, for an
+   *   admin-versus-admin availability problem. They stay exposed, and #9
+   *   records it.
+   *
+   * So a route that starts releasing early, or a .csv route that stops, fails
+   * here - and either direction is a decision somebody should have to make on
+   * purpose.
+   */
+  it('releases the permit early on the two CSV routes and neither aggregate route', () => {
+    const releasesEarlyIn = (file: string): Record<string, boolean> => {
+      const source = fs.readFileSync(
+        path.resolve(__dirname, '..', file),
+        'utf8'
+      );
+
+      // Sliced between `router.get(` call sites, so a release belonging to one
+      // handler cannot be read as belonging to its neighbour.
+      const blocks = source.split(/router\.(?=get\(|post\(|put\(|patch\(|delete\()/);
+      const verdicts: Record<string, boolean> = {};
+
+      for (const block of blocks) {
+        const path_ = /^get\('([^']+)'/.exec(block);
+        if (!path_ || !block.includes('boundResultsRead')) continue;
+        verdicts[path_[1]] = block.includes('releaseResultsReadPermit(res)');
+      }
+
+      return verdicts;
+    };
+
+    // THE CONTROL for the two `false`s below. An absence-assertion passes just
+    // as well when the scan matched nothing at all - a renamed function, a
+    // reformatted call, a split that put every handler in one block. These two
+    // `true`s are the proof the scan can still see a release.
+    expect(releasesEarlyIn('firsthand.ts')).toEqual({
+      '/studies/:studyId/results': false,
+      '/studies/:studyId/results.csv': true
+    });
+    expect(releasesEarlyIn('opportunities.ts')).toEqual({
+      '/:id/survey-results': false,
+      '/:id/survey-results.csv': true
+    });
   });
 });

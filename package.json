@@ -16,7 +16,7 @@
     "test:canary": "node scripts/mutation-canary.mjs",
     "test:all": "npm run test:backend && npm run test:backend:vitest && npm run test:frontend && npm run test:scripts && npm run test:e2e",
     "test:coverage": "cd backend && npm run test -- --coverage && cd ../frontend && npm run test -- --coverage",
-    "lint": "eslint frontend/src backend/src backend/scripts shared scripts e2e",
+    "lint": "eslint frontend/src backend/src backend/probe backend/scripts shared scripts e2e",
     "lint:fix": "eslint frontend/src backend/src backend/scripts shared scripts e2e --fix",
     "lint:prune": "eslint frontend/src backend/src backend/scripts shared scripts e2e --prune-suppressions",
     "lint:suppress": "eslint frontend/src backend/src backend/scripts shared scripts e2e --suppress-all",

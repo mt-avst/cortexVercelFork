@@ -223,12 +223,33 @@ const OpportunityAnalyticsPage: React.FC = () => {
         response?.data?.code === 'RESULTS_READ_QUEUE_FULL' ||
         response?.data?.code === 'RUNTIME_POOL_ADMISSION_TIMEOUT';
 
+      /**
+       * THE READER'S OWN OTHER READS, which is a different sentence.
+       *
+       * `RESULTS_READ_USER_BUSY` (429) means this reader is already at their own
+       * in-flight limit - two results reads, so a CSV download still draining
+       * plus one more. Folding it into `busy` above would tell them the server
+       * is congested, which is false and sends them to look at the wrong thing;
+       * folding it into the fallback would say "could not load the responses",
+       * which says nothing at all. Naming the cause is the only version they can
+       * act on.
+       *
+       * Deliberately not naming the NUMBER. The limit is two today and the
+       * measurement that chose it could choose differently; a message quoting
+       * it would go stale silently, and this is the file least likely to be
+       * updated when it does.
+       */
+      const yourOwnReadsAreRunning =
+        response?.data?.code === 'RESULTS_READ_USER_BUSY';
+
       setSurveyResultsError(
         response?.status === 403
           ? 'Only the opportunity owner can view these responses'
-          : busy
-            ? 'The responses are busy being read right now. Wait a few seconds and try again.'
-            : 'Could not load the responses'
+          : yourOwnReadsAreRunning
+            ? 'You already have responses loading. Wait for those to finish, then try again.'
+            : busy
+              ? 'The responses are busy being read right now. Wait a few seconds and try again.'
+              : 'Could not load the responses'
       );
       setSurveyResults(null);
     } finally {

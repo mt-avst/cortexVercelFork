@@ -26,7 +26,10 @@ import {
 } from '../firsthand/survey-results-repository';
 import { writeSurveyCsv } from '../firsthand/survey-csv-response';
 import { isRuntimePoolRefusal } from '../firsthand/runtime-pool-admission';
-import { boundResultsRead } from '../middleware/results-read-concurrency';
+import {
+  boundResultsRead,
+  releaseResultsReadPermit
+} from '../middleware/results-read-concurrency';
 import { stepKeyOf } from '../../../shared/firsthand/step-identity';
 import { aggregateSurveyResults } from '../firsthand/survey-results';
 import { toCsvContentDisposition } from '../firsthand/survey-csv';
@@ -778,6 +781,16 @@ router.get('/studies/:studyId/results.csv', requireAdmin, studyResultsLimiter, b
 
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', disposition);
+
+  // THE PREFLIGHT-TO-STREAM BOUNDARY, and the permit stops here. Everything
+  // above is server-paced and is the heap the permit was written for;
+  // everything below waits on a socket the CALLER paces. See
+  // releaseResultsReadPermit - #9 measured one admin holding this permit for
+  // the drain timeout, ten times a minute, refusing every other admin.
+  //
+  // AFTER the last thing that can throw, so a refusal still runs inside the
+  // permit and cannot be raced by the caller who was queued behind it.
+  releaseResultsReadPermit(res);
 
   // The FACTORY, uncalled. `writeSurveyCsv` owns the export's wall-clock
   // deadline and calls this with the signal that carries it, so the bound
