@@ -862,40 +862,17 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
   }
 }));
 
-// POST /api/bookings/cleanup-cancelled - Clean up cancelled bookings for a user (debug endpoint)
-router.post('/cleanup-cancelled', requireAuth, async (req: Request, res: Response) => {
-  try {
-    const userId = req.user!.id;
-    
-    // Find all cancelled bookings for this user
-    const cancelledBookings = await pool.query(`
-      SELECT b.*, s.start_time, s.end_time, o.title as opportunity_title
-      FROM bookings b
-      JOIN sessions s ON b.session_id = s.id
-      JOIN opportunities o ON s.opportunity_id = o.id
-      WHERE b.user_id = $1 AND b.status = 'cancelled'
-    `, [userId]);
-    
-    logger.info('Found cancelled bookings', { count: cancelledBookings.rows.length, userId });
-    
-    // Optionally delete cancelled bookings (uncomment if needed)
-    // await pool.query('DELETE FROM bookings WHERE user_id = $1 AND status = $2', [userId, 'cancelled']);
-    
-    res.json({
-      message: `Found ${cancelledBookings.rows.length} cancelled bookings`,
-      cancelled_bookings: cancelledBookings.rows.map(booking => ({
-        id: booking.id,
-        session_id: booking.session_id,
-        opportunity_title: booking.opportunity_title,
-        cancelled_at: booking.cancelled_at?.toISOString(),
-        created_at: booking.created_at.toISOString()
-      }))
-    });
-  } catch (error) {
-    logger.error('Error cleaning up cancelled bookings', { error });
-    res.status(500).json({ error: 'Failed to clean up cancelled bookings' });
-  }
-});
+// `POST /cleanup-cancelled` USED TO SIT HERE, ON requireAuth, AND IS DELETED
+// DELIBERATELY (cto/AdaptaLabs#49). It cleaned nothing up: one owner-scoped
+// SELECT of the caller's own cancelled bookings, with a commented-out
+// `DELETE FROM bookings WHERE user_id = $1 AND status = $2` under "uncomment if
+// needed". Not the escalation it was raised as - `$1` was always `req.user!.id`
+// - but a route named for a bulk mutation, carrying that mutation ready to
+// uncomment, on the weakest gate we have, and with no caller anywhere in the
+// tree. The route below returns a superset of what it returned.
+//
+// Pinned in bookings.cleanup-cancelled-is-gone.test.ts, which fails BY NAME if
+// it comes back.
 
 // GET /api/my/bookings/debug - Debug endpoint to see all bookings (including cancelled)
 router.get('/my/bookings/debug', requireAuth, async (req: Request, res: Response) => {

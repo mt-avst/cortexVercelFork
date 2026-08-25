@@ -190,7 +190,7 @@
   },
   "frontend/src/api/client.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 6
+      "count": 5
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 3

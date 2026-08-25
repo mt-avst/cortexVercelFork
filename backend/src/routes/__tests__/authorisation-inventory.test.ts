@@ -435,7 +435,11 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'POST /api/bookings/sessions/:id/complete': 'session',
   'POST /api/bookings/:id/cancel': 'session+live-role',
   'POST /api/bookings/:id/reschedule': 'session',
-  'POST /api/bookings/cleanup-cancelled': 'session',
+  // `POST /api/bookings/cleanup-cancelled` was here, verdict `session`, and the
+  // verdict was accurate - one SELECT scoped by `WHERE b.user_id = $1`. The
+  // route is DELETED rather than re-gated (#49): it mutated nothing, nothing
+  // called it, and it carried a commented-out bulk DELETE. See
+  // bookings.cleanup-cancelled-is-gone.test.ts.
   'GET /api/bookings/my/bookings': 'session',
   'GET /api/bookings/my/bookings/debug': 'session',
   'GET /api/bookings/opportunities/:id/bookings': 'admin',
@@ -524,7 +528,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 90;
+const EXPECTED_ROUTE_COUNT = 89;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
@@ -980,7 +984,7 @@ describe('the answer surfaces specifically', () => {
 
   it('has not grown a route under the session-outputs prefix without a verdict', () => {
     // The narrow-inventory defect, stated as its own assertion so the failure
-    // NAMES the surface rather than showing a 90-key map diff.
+    // NAMES the surface rather than showing an 89-key map diff.
     const underSessionPrefix = Object.keys(discovered())
       .filter((route) => /\/api\/opportunities\/:id\/sessions\/:sessionId\b/.test(route))
       .sort();
@@ -1051,7 +1055,7 @@ describe('the development-only login routes', () => {
 
   it('registers none of the four when NODE_ENV is test, as this suite runs', () => {
     // The env the table above is actually built under, stated separately so the
-    // 90-route inventory is not quietly resting on an unexamined assumption.
+    // 89-route inventory is not quietly resting on an unexamined assumption.
     expect(process.env.NODE_ENV).toBe('test');
     expect(
       DEV_LOGIN_PATHS.filter((route) => authRoutesUnder('test').includes(route))

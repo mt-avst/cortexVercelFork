@@ -1306,5 +1306,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
     "test": "scopes the exported CSV for a demoted superadmin"
+  },
+  {
+    "id": "cleanup-cancelled-route-stays-deleted",
+    "why": "cto/AdaptaLabs#49 DELETED POST /api/bookings/cleanup-cancelled rather than re-gating it: one owner-scoped SELECT, no caller anywhere in the tree, and a commented-out bulk DELETE waiting to be uncommented on the weakest gate in the vocabulary. A deletion is only a decision if something notices it being undone, and a tombstone comment is not that something. This re-adds the route on requireAuth, in the shape it had, and the named arm must go red - that arm asserts 404 AND asserts no statement was issued, so a re-add fails on both. The mutation keeps the original try/catch on purpose: an unguarded async throw in an Express 4 handler never answers, and a hang is a job timeout with no named failing test.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "// Pinned in bookings.cleanup-cancelled-is-gone.test.ts, which fails BY NAME if",
+    "mutation": "router.post('/cleanup-cancelled', requireAuth, async (req: Request, res: Response) => {\n  try {\n    const found = await pool.query(\"SELECT b.id FROM bookings b WHERE b.user_id = $1 AND b.status = 'cancelled'\", [req.user!.id]);\n    res.json({ cancelled_bookings: found.rows });\n  } catch (error) {\n    logger.error('Error cleaning up cancelled bookings', { error });\n    res.status(500).json({ error: 'Failed to clean up cancelled bookings' });\n  }\n});\n\n// Pinned in bookings.cleanup-cancelled-is-gone.test.ts, which fails BY NAME if",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cleanup-cancelled-is-gone.test.ts",
+    "test": "answers 404 on POST api bookings cleanup-cancelled and runs no handler"
   }
 ]
