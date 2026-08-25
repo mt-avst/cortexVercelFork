@@ -21,6 +21,19 @@ import apiRoutes from './routes/api';
 import cronRoutes from './routes/cron';
 import { SECURITY_CONFIG } from '../../shared/constants';
 
+/**
+ * THE LARGEST PARSED REQUEST BODY, stated rather than inherited (#22).
+ *
+ * Identical to express's own default, on purpose - nothing about today's
+ * behaviour changes. Written down because several routes were relying on it as
+ * their only bound without anyone deciding that, and an inherited default is
+ * not a control: raising this for one route silently widens every other.
+ *
+ * Written as a STRING LITERAL here and asserted as the same literal in the test
+ * rather than derived from this constant.
+ */
+export const BODY_SIZE_LIMIT = '100kb';
+
 const app: express.Application = express();
 
 // Trust proxy configuration for accurate IP addresses
@@ -168,8 +181,20 @@ if (csrfEnabled) {
 
 // Body parsing middleware. The raw-body capture that fed the HMAC callback
 // signature check is gone with the callback route — nothing reads req.rawBody now.
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+//
+// THE LIMIT IS NAMED RATHER THAN INHERITED (#22). '100kb' is express's own
+// default, so this changes nothing that runs today - deliberately. What it
+// changes is the status of the number: several routes accepting unbounded
+// arrays were bounded ONLY by this default, which means they were bounded by an
+// accident of the framework that moves the moment somebody raises it here for
+// an unrelated reason. Those arrays now carry their own bounds
+// (MAX_TIME_SLOTS_PER_REQUEST), and this is a decision with a name on it rather
+// than a side effect.
+//
+// Recording uploads are unaffected: they arrive as video/* and stream past this
+// parser, with their own ceiling in getMaximumRecordingSizeBytes.
+app.use(express.json({ limit: BODY_SIZE_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: BODY_SIZE_LIMIT }));
 
 // Routes
 app.use('/auth', authLimiter, authRoutes);

@@ -281,6 +281,48 @@ export const SessionSchema = z.object({
 });
 
 /**
+ * THE MOST TIME WINDOWS ONE REQUEST MAY CARRY.
+ *
+ * cto/AdaptaLabs#22. Three routes accept an array of time windows and NONE of
+ * them bounded its length:
+ *
+ *   `POST /api/sessions`                        - `sessions`
+ *   `POST /api/opportunities/:id/sessions`      - the body, array or single
+ *   `POST /api/calendar/check-conflicts`        - `time_slots`
+ *
+ * The only thing stopping a million-element array was `express.json()`'s 100 kB
+ * default body limit, which nobody chose and which moves the moment somebody
+ * raises it for an unrelated reason. That is an accident, not a control - so
+ * `backend/src/index.ts` now names its limit explicitly and this names the one
+ * that actually belongs to the payload.
+ *
+ * ONE CONSTANT FOR ALL THREE because they are one batch of time windows at
+ * three stages - checked for conflicts, then created against an opportunity -
+ * authored by the same admin in the same UI. Three numbers would drift, and
+ * this file has already watched a per-route bound drift once.
+ *
+ * WHAT EACH COSTS PER ELEMENT, which is why the number is not larger:
+ * `POST /api/sessions` runs one overlap query AND one INSERT per element,
+ * sequentially and OUTSIDE a transaction; `/opportunities/:id/sessions` runs an
+ * O(N^2) in-memory overlap scan; `check-conflicts` spreads the array into
+ * `Math.min(...)`, which is an argument list and so has a real engine ceiling
+ * somewhere above this.
+ *
+ * 200. A study's slot batch is a working week or two of appointments - a month
+ * of half-hour slots over an eight-hour day is about 320, and nothing in the
+ * product authors that in one request today. All three routes are `requireAdmin`,
+ * so this bounds an authenticated colleague's mistake rather than an attack.
+ *
+ * REFUSES rather than taking the first 200: silently creating part of a batch
+ * would leave an admin's calendar half-populated with nothing saying which half.
+ * The caller's recourse is obvious - send fewer - so a 400 is actionable.
+ *
+ * Written as a NUMBER HERE and asserted as the same number in the tests rather
+ * than derived from this constant.
+ */
+export const MAX_TIME_SLOTS_PER_REQUEST = 200;
+
+/**
  * Validate session data without Zod (for legacy code paths)
  * Returns array of error messages, empty if valid
  */

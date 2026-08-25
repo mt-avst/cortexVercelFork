@@ -11,6 +11,7 @@ import {
   CreateOpportunitySchema, 
   UpdateOpportunitySchema, 
   CreateSessionsSchema,
+  MAX_TIME_SLOTS_PER_REQUEST,
   validateRequest,
   validateSessionData
 } from '../validation/schemas';
@@ -828,14 +829,160 @@ type UpdateOpportunityBody = UpdateOpportunityRequest & {
 // then showed there were none: the two publish guards were its only readers,
 // and both now ask the shared predicate directly.
 
+/**
+ * THE MOST OPPORTUNITIES ONE LISTING WILL RETURN, and it REFUSES above it.
+ *
+ * cto/AdaptaLabs#22. This route had no `LIMIT` clause of any kind. Not an
+ * unclamped caller-supplied number - there is no caller-supplied number here at
+ * all, which is exactly why the `LIMIT`-shaped sweep that closed !225 could not
+ * see it. The bound was MISSING rather than loose, and it grew with the table:
+ * `SELECT o.* ... ORDER BY o.created_at DESC` behind `optionalAuth`, then a
+ * fan-out that serialises every session of every row returned.
+ *
+ * REFUSES RATHER THAN TRUNCATES, and 413 rather than a short array, on the same
+ * line `MAX_CSV_PARTICIPANTS` and `pointsHistoryLimit` are drawn on. This route
+ * has NO offset, NO cursor and NO `has_more` - it answers with a bare JSON
+ * array - so a clamped response is indistinguishable from the end of the
+ * catalogue. A participant would simply never see the study that fell off the
+ * end, and nothing anywhere would say so.
+ *
+ * WHY THE LEADERBOARD'S CLAMP DOES NOT FIT. `leaderboardLimit` clamps because
+ * the caller explicitly asked for more rows than the route publishes, so the
+ * ceiling IS the answer to their question. Nobody asks this route for a number:
+ * the question is "every published opportunity", and the honest answers are all
+ * of them or none of them.
+ *
+ * THE ONE THING A 413 COSTS is that there is no smaller request to retry with -
+ * unlike `/points-history`, the caller has no recourse but to wait for
+ * pagination. That is the argument FOR it, not against: a board that has
+ * outgrown this route fails loudly and gets a cursor, where a silently short
+ * board is never noticed at all.
+ *
+ * 1000, and it is a policy number rather than a measurement. An opportunity is
+ * hand-authored by an admin, so a real catalogue is dozens; a deployment at
+ * four figures is already serialising megabytes of JSON with every session
+ * attached, and the answer there is pagination rather than a larger constant.
+ * Admins see every status including drafts and closed, so the admin view is the
+ * one that grows.
+ *
+ * Written as a NUMBER HERE and asserted as the same number in the test rather
+ * than derived from this constant. A test that reads `MAX_OPPORTUNITIES_RETURNED`
+ * to build its expectation cannot see `MAX_OPPORTUNITIES_RETURNED` change.
+ *
+ * ponytail: a flat ceiling, not pagination
+ *   -> cto/AdaptaLabs#22, upgrade to a keyset cursor on (created_at, id) when a
+ *      deployment genuinely holds more than 1000 opportunities
+ */
+export const MAX_OPPORTUNITIES_RETURNED = 1000;
+
+/**
+ * THE LONGEST `?q=` THIS ROUTE WILL SEARCH FOR, and it REFUSES above it.
+ *
+ * `q` is correctly parameterised - it has never been an injection - but it
+ * becomes `%q%`, a LEADING-wildcard `ILIKE` that no index can serve, evaluated
+ * twice per row against `title` and `purpose_one_liner`, on an unauthenticated
+ * route. An unbounded search term is unbounded work per request.
+ *
+ * REFUSES rather than truncating for a reason that is not the ceiling argument
+ * above: silently shortening a search term returns a SUPERSET of what was
+ * asked for and calls it the answer. And unlike the row ceiling, the caller has
+ * an obvious recourse - type a shorter query - so a 400 is actionable.
+ *
+ * 200 characters. The field behind it is a search box over a title and a
+ * one-line purpose; the longest of either is itself far below this.
+ */
+export const MAX_OPPORTUNITY_SEARCH_LENGTH = 200;
+
+/**
+ * THE FILTERS THIS LISTING READS, refused if any arrives more than once.
+ *
+ * A REPEATED QUERY PARAMETER IS AN ARRAY. `?q=a&q=b` reaches express as
+ * `['a', 'b']`, and the three reads below are all written `as string`, which is
+ * a lie the compiler cannot check. Found by the refute gate on !253, in this
+ * fix's OWN new code:
+ *
+ *   `q`      the length bound was guarded by `typeof q === 'string'`, so an
+ *            array SKIPPED it entirely and comma-joined itself into the ILIKE
+ *            pattern. Two 300-character values produced a 603-character
+ *            pattern; fifty 190-character values produced 9551. Against a
+ *            ceiling of 200, on an unauthenticated route, where the pattern is
+ *            a leading-wildcard ILIKE evaluated twice per row.
+ *   `type`,  not bounds, but pushed straight into a `pool.query` parameter
+ *   `status` array, so a repeat sent Postgres an array where it expected text
+ *            and answered an unauthenticated 500.
+ *
+ * REFUSED RATHER THAN COERCED, and this repository has already settled the same
+ * question once. `parseLimit` in routes/gamification.ts found `?limit=5&limit=9999`
+ * answering with 5 "by a coincidence of comma-joining rather than by any rule",
+ * and refused it rather than documenting it. The alternatives here are worse
+ * than untidy: taking the first value or joining them answers a question the
+ * caller did not ask, and treating the parameter as absent silently WIDENS the
+ * result set. A repeat is a malformed request with an obvious recourse.
+ *
+ * ONE GUARD RATHER THAN A CHECK PER PARAMETER because the defect is the shape,
+ * not the parameter. A per-parameter check cannot fail for the parameter nobody
+ * wrote one for, which is exactly how `q` was missed while its own bound was
+ * being written - and how `from` on `GET /:id/sessions` was still missed after
+ * that, until a sweep went looking for the shape rather than the instance.
+ *
+ * `opportunities.query-params-are-single-valued.test.ts` reads this file and
+ * fails if a `req.query.x as string` read appears that no list below covers, so
+ * a FOURTH one cannot repeat this a third time. That scan is the enforcement;
+ * this comment is not.
+ */
+const SINGLE_VALUE_FILTERS = ['type', 'q', 'status'] as const;
+
+/**
+ * The same guard for `GET /:id/sessions`. `from` is pushed straight into a
+ * `pool.query` parameter array against a `timestamp` column, so a repeat sent
+ * Postgres the array literal `{"a","b"}` and answered an unauthenticated 500 -
+ * while the mock branch beside it turned the same input into `Invalid Date` and
+ * carried on. Two backends, two different wrong answers, neither of them a
+ * refusal.
+ */
+const SINGLE_VALUE_SESSION_FILTERS = ['from', 'include_past'] as const;
+
+/**
+ * Refuses a repeated parameter, or reports that there was nothing to refuse.
+ *
+ * Returns a boolean rather than throwing because both callers sit inside a
+ * `try` that turns anything thrown into a 500 - which is the status this guard
+ * exists to stop the route producing.
+ */
+const refusedRepeatedParameters = (
+  req: Request,
+  res: Response,
+  names: readonly string[]
+): boolean => {
+  const repeated = names.filter(
+    (name) => req.query[name] !== undefined && typeof req.query[name] !== 'string'
+  );
+  if (repeated.length === 0) return false;
+
+  res.status(400).json({ error: `${repeated.join(', ')} must be given at most once` });
+  return true;
+};
+
 // GET /api/opportunities - List opportunities
 router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
+    // FIRST, above every other read: the casts below are only true once this
+    // has run, and the mock/database split is further down still. The bound is
+    // on what the caller sent, so it must not depend on which backend answers -
+    // an array used to reach the mock path as a 500.
+    if (refusedRepeatedParameters(req, res, SINGLE_VALUE_FILTERS)) return;
+
     const type = req.query.type as string | undefined;
     const q = req.query.q as string | undefined;
     const status = req.query.status as string | undefined;
     const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
-    
+
+    if (q !== undefined && q.length > MAX_OPPORTUNITY_SEARCH_LENGTH) {
+      return res.status(400).json({
+        error: `q must not exceed ${MAX_OPPORTUNITY_SEARCH_LENGTH} characters`
+      });
+    }
+
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
     
@@ -890,10 +1037,25 @@ router.get('/', optionalAuth, asyncHandler(async (req: Request, res: Response) =
       query += ` WHERE ${conditions.join(' AND ')}`;
     }
     
-    query += ` ORDER BY o.created_at DESC`;
-    
+    // ONE MORE THAN WILL EVER BE RETURNED, so "there are more" is a fact the
+    // row count states rather than something inferred from a full page. Without
+    // the `+ 1` the `>` below is unsatisfiable, the 413 becomes unreachable, and
+    // the refusal silently becomes the truncation it exists to prevent. Same
+    // shape, and the same reason, as `MAX_CSV_PARTICIPANTS + 1`.
+    query += ` ORDER BY o.created_at DESC LIMIT ${MAX_OPPORTUNITIES_RETURNED + 1}`;
+
     const result = await pool.query(query, params);
-    
+
+    // Decided BEFORE any of the fan-out below, which is the only place it can
+    // be decided cheaply: the batch session read that follows is `ANY($1::uuid[])`
+    // over every id returned.
+    if (result.rows.length > MAX_OPPORTUNITIES_RETURNED) {
+      return res.status(413).json({
+        error: `Too many opportunities to list; this route returns at most ${MAX_OPPORTUNITIES_RETURNED}`,
+        maximumOpportunities: MAX_OPPORTUNITIES_RETURNED
+      });
+    }
+
     // Performance optimization: Batch load all sessions and click counts in single queries
     // instead of N+1 queries per opportunity
     const opportunityIds = result.rows.map(opp => opp.id);
@@ -3177,9 +3339,13 @@ router.post('/:id/close-if-past', requireAdmin, asyncHandler(async (req: Request
 router.get('/:id/sessions', optionalAuth, asyncHandler(async (req: Request, res: Response) => {
   try {
     const { id: opportunityId } = req.params;
+
+    // Above the mock/database split for the same reason as the listing route.
+    if (refusedRepeatedParameters(req, res, SINGLE_VALUE_SESSION_FILTERS)) return;
+
     const from = req.query.from as string | undefined;
     const include_past = req.query.include_past as string | undefined;
-    
+
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
     if (!dbAvailable) {
@@ -3311,7 +3477,16 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
     if (sessions.length === 0) {
       return res.status(400).json({ error: 'At least one session is required' });
     }
-    
+
+    // #22. Before the O(N^2) overlap scan further down, which is the per-element
+    // cost that makes the missing bound matter here. See
+    // MAX_TIME_SLOTS_PER_REQUEST for the number and why it refuses.
+    if (sessions.length > MAX_TIME_SLOTS_PER_REQUEST) {
+      return res.status(400).json({
+        error: `At most ${MAX_TIME_SLOTS_PER_REQUEST} sessions may be created in one request`
+      });
+    }
+
     // Check if database is available
     const dbAvailable = await isDatabaseAvailable();
     if (!dbAvailable) {
@@ -3645,9 +3820,22 @@ router.post('/:id/click', optionalAuth, asyncHandler(async (req: Request, res: R
 const ANALYTICS_WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const VALID_ANALYTICS_PERIODS = [7, 14, 30];
 
+/**
+ * The third and last query read in this file. The `VALID_ANALYTICS_PERIODS`
+ * whitelist below already bounds it, so a repeat was never dangerous here -
+ * `parseInt('7,9999')` is 7, which is in the list. It is guarded anyway, and
+ * the reason is the same one `parseLimit` gives in routes/gamification.ts: 7 is
+ * the answer by a coincidence of comma-joining rather than by any rule, and
+ * exempting the one safe read would mean the scan needs an exemption list -
+ * more code than the guard, and one more thing to go stale.
+ */
+const SINGLE_VALUE_ANALYTICS_FILTERS = ['period'] as const;
+
 // GET /api/opportunities/:id/analytics - Get click analytics for admin
 router.get('/:id/analytics', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const { id: opportunityId } = req.params;
+
+  if (refusedRepeatedParameters(req, res, SINGLE_VALUE_ANALYTICS_FILTERS)) return;
 
   const requestedPeriod = parseInt(req.query.period as string, 10);
   const period = VALID_ANALYTICS_PERIODS.includes(requestedPeriod) ? requestedPeriod : 30;

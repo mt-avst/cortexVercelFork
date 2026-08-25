@@ -3,6 +3,7 @@ import { requireAdmin } from '../middleware/authenticate';
 import calendarService from '../services/calendar';
 import { pool } from '../config';
 import { logger } from '../utils/logger';
+import { MAX_TIME_SLOTS_PER_REQUEST } from '../validation/schemas';
 
 const router: Router = Router();
 
@@ -194,11 +195,20 @@ router.post('/check-conflicts', requireAdmin, async (req: Request, res: Response
     const { time_slots, calendar_id } = req.body;
     
     if (!time_slots || !Array.isArray(time_slots) || time_slots.length === 0) {
-      return res.status(400).json({ 
-        error: 'time_slots array is required' 
+      return res.status(400).json({
+        error: 'time_slots array is required'
       });
     }
-    
+
+    // #22. `time_slots` is spread into `Math.min(...)` below - an argument list,
+    // which has an engine ceiling rather than a heap one - and scanned against
+    // every busy event per slot. See MAX_TIME_SLOTS_PER_REQUEST.
+    if (time_slots.length > MAX_TIME_SLOTS_PER_REQUEST) {
+      return res.status(400).json({
+        error: `time_slots must not exceed ${MAX_TIME_SLOTS_PER_REQUEST} entries`
+      });
+    }
+
     // Validate time slots format
     for (const slot of time_slots) {
       if (!slot.start_time || !slot.end_time) {
