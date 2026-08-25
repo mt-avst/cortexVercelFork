@@ -392,8 +392,13 @@ function filterFor(scope: ResponseScope): {
  * is a round trip AND a pool checkout, and a batch of one would turn a
  * two-thousand-participant export into two thousand checkouts on the five
  * connections live participants share.
+ *
+ * EXPORTED FOR ONE READER ONLY: backend/probe/csv-interrupt.ts sizes its seed
+ * from this so the export it interrupts is genuinely multi-batch. A probe that
+ * duplicated the number would keep passing while silently testing a
+ * single-batch export the day this moves.
  */
-const CSV_PARTICIPANT_BATCH = 100;
+export const CSV_PARTICIPANT_BATCH = 100;
 
 /**
  * How many EXTRA attempts one batch read gets when the runtime pool refuses.

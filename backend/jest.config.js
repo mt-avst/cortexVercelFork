@@ -1,7 +1,11 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  // `probe` is here so the probe's GUARDS are tested on the gate that blocks a
+  // merge. They decide which database gets written to and which host receives
+  // an admin session cookie, and a guard whose only proof is somebody having
+  // tried a bad URL by hand once protects nothing tomorrow.
+  roots: ['<rootDir>/src', '<rootDir>/probe'],
   testMatch: ['**/__tests__/**/*.test.ts'],
   // Vitest owns src/firsthand/** (see vitest.config.ts). Keep jest out of it so
   // the FirstHand-derived specs are never double-run by both runners.
