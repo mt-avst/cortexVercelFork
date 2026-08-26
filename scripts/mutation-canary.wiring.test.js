@@ -148,7 +148,11 @@ fs.writeFileSync(
 process.exit(status === 'failed' ? 1 : 0);
 `;
 
-function makeFixture(entryExtra = {}) {
+// Sorts BEFORE `wiring-fixture`, so with two entries sharded two ways the
+// partition is knowable here: shard 1 owns this one, shard 2 owns ENTRY_ID.
+const SECOND_ENTRY_ID = 'another-wiring-fixture';
+
+function makeFixture(entryExtra = {}, { withSecondEntry = false } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'canary-wiring-'));
 
   fs.mkdirSync(path.join(root, 'scripts'));
@@ -161,22 +165,34 @@ function makeFixture(entryExtra = {}) {
   fs.mkdirSync(path.join(root, 'fakebin'));
 
   fs.copyFileSync(SCRIPT, path.join(root, 'scripts', 'mutation-canary.mjs'));
-  fs.writeFileSync(
-    path.join(root, 'scripts', 'mutation-canary.manifest.json'),
-    JSON.stringify([
-      {
-        id: ENTRY_ID,
-        why: 'a fixture entry, so this file can drive the real main()',
-        file: 'src/target.ts',
-        anchor: ANCHOR,
-        mutation: MUTATION,
-        runner: 'jest',
-        spec: 'src/target.test.ts',
-        test: TEST_NAME,
-        ...entryExtra
-      }
-    ])
-  );
+  const manifest = [
+    {
+      id: ENTRY_ID,
+      why: 'a fixture entry, so this file can drive the real main()',
+      file: 'src/target.ts',
+      anchor: ANCHOR,
+      mutation: MUTATION,
+      runner: 'jest',
+      spec: 'src/target.test.ts',
+      test: TEST_NAME,
+      ...entryExtra
+    }
+  ];
+  if (withSecondEntry) {
+    // Same target, same test: the fake npx answers for any entry, so the
+    // second one exists purely to give the partition two cells to separate.
+    manifest.push({
+      id: SECOND_ENTRY_ID,
+      why: 'a second fixture entry, so sharding has a partition to get wrong',
+      file: 'src/target.ts',
+      anchor: ANCHOR,
+      mutation: MUTATION,
+      runner: 'jest',
+      spec: 'src/target.test.ts',
+      test: TEST_NAME
+    });
+  }
+  fs.writeFileSync(path.join(root, 'scripts', 'mutation-canary.manifest.json'), JSON.stringify(manifest));
   fs.writeFileSync(path.join(root, 'scripts', 'mutation-canary.removed.json'), '[]');
 
   const target = path.join(root, 'src', 'target.ts');
@@ -222,8 +238,8 @@ function runHarness(fixture, modes, argv = ['--allow-dirty']) {
   };
 }
 
-const withFixture = (t, modes, assertions, argv, entryExtra) => {
-  const fixture = makeFixture(entryExtra);
+const withFixture = (t, modes, assertions, argv, entryExtra, fixtureOptions) => {
+  const fixture = makeFixture(entryExtra, fixtureOptions);
   t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
   const result = runHarness(fixture, modes, argv);
   assertions(result, fixture);
@@ -413,5 +429,97 @@ test('a baseline that simply does not contain the named test is still TEST_MISSI
     },
     undefined,
     { needsDatabase: true }
+  );
+});
+
+/**
+ * cto/AdaptaLabs#77: sharding, driven through the real `main()`.
+ *
+ * Sharding is a PARTITION, not the filter #53 refuses: the union of the shards
+ * is the whole manifest and CI's gate is all shards green. What these scenarios
+ * pin is the machinery that keeps it one - a shard that owns an entry runs it,
+ * a shard that owns nothing refuses rather than passing, and half a flag pair
+ * is an argument error before anything runs.
+ *
+ * THE CONTROL comes first: a full run over the two-entry fixture names both
+ * entries. Without it, "shard 1 ran only its entry" would pass just as well
+ * against a fixture whose second entry never loaded at all.
+ */
+test('the two-entry fixture really runs two entries unsharded', (t) => {
+  withFixture(
+    t,
+    { FAKE_BASELINE: 'pass', FAKE_MUTATED: 'fail' },
+    (result) => {
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /Running all 2 manifest entries/);
+      assert.match(result.output, new RegExp(`KILLED\\s+${ENTRY_ID}`));
+      assert.match(result.output, new RegExp(`KILLED\\s+${SECOND_ENTRY_ID}`));
+    },
+    undefined,
+    undefined,
+    { withSecondEntry: true }
+  );
+});
+
+test('a shard runs its own cell of the partition and nothing else', (t) => {
+  // Sorted by id, `another-wiring-fixture` < `wiring-fixture`, so shard 1 of 2
+  // owns the second entry and must NOT run the first.
+  withFixture(
+    t,
+    { FAKE_BASELINE: 'pass', FAKE_MUTATED: 'fail' },
+    (result) => {
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /Shard 1 of 2: running 1 of 2 manifest entries/);
+      assert.match(result.output, new RegExp(`KILLED\\s+${SECOND_ENTRY_ID}`));
+      assert.doesNotMatch(result.output, new RegExp(`KILLED\\s+${ENTRY_ID}\\b`));
+    },
+    ['--allow-dirty', '--shard-index=1', '--shard-total=2'],
+    undefined,
+    { withSecondEntry: true }
+  );
+});
+
+test('the other shard owns the other entry, so the union is the manifest', (t) => {
+  withFixture(
+    t,
+    { FAKE_BASELINE: 'pass', FAKE_MUTATED: 'fail' },
+    (result) => {
+      assert.equal(result.status, 0, result.output);
+      assert.match(result.output, /Shard 2 of 2: running 1 of 2 manifest entries/);
+      assert.match(result.output, new RegExp(`KILLED\\s+${ENTRY_ID}`));
+      assert.doesNotMatch(result.output, new RegExp(`KILLED\\s+${SECOND_ENTRY_ID}`));
+    },
+    ['--allow-dirty', '--shard-index=2', '--shard-total=2'],
+    undefined,
+    { withSecondEntry: true }
+  );
+});
+
+test('a shard that selects nothing refuses rather than passing green', (t) => {
+  // An oversized --shard-total quietly deletes coverage otherwise: the empty
+  // shard would exit 0 having verified nothing, indistinguishable from a pass.
+  withFixture(
+    t,
+    { FAKE_BASELINE: 'pass', FAKE_MUTATED: 'fail' },
+    (result) => {
+      assert.equal(result.status, 2, result.output);
+      assert.match(result.output, /shard 2 of 2 selects no entries/i);
+      assert.doesNotMatch(result.output, /KILLED/);
+      assert.doesNotMatch(result.output, /mutations killed/);
+    },
+    ['--allow-dirty', '--shard-index=2', '--shard-total=2']
+  );
+});
+
+test('half a shard pair is refused as an argument error, before anything runs', (t) => {
+  withFixture(
+    t,
+    { FAKE_BASELINE: 'pass', FAKE_MUTATED: 'fail' },
+    (result) => {
+      assert.equal(result.status, 2, result.output);
+      assert.match(result.output, /both or neither/);
+      assert.doesNotMatch(result.output, /KILLED/);
+    },
+    ['--shard-index=1']
   );
 });
