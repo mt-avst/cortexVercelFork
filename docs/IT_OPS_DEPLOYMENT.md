@@ -39,6 +39,11 @@ For **Kubernetes**:
 | `CORS_ORIGIN` | Allowed frontend origin (e.g. `https://your-app.example.com`). |
 | `FRONTEND_URL` | Base URL of the frontend (e.g. same as `CORS_ORIGIN`). |
 
+**`PORT` and `CORS_ORIGIN` fail closed.**
+An unusable value for either throws at boot rather than being quietly coerced, so the pod CrashLoops with the offending value named in the log instead of starting up misconfigured.
+`CORS_ORIGIN` must be an absolute `http://` or `https://` URL, and surrounding whitespace is trimmed; `PORT` must be an integer no greater than 65535.
+Leaving either unset is fine and gives the defaults (3001 and `http://localhost:3000`), but setting either to an empty string is refused.
+
 ### Required for real SSO (e.g. Okta)
 
 | Variable | Purpose |
@@ -59,6 +64,10 @@ For **Kubernetes**:
 ### After first deploy
 
 Migrations run automatically in the backend initContainer (`npm run migrate && npm run seed`) on every deploy.
+
+A migration that genuinely fails now aborts the initContainer, so the deploy stops rather than the pod coming up against a half-applied schema.
+Only "the schema is already in this shape" errors (SQLSTATE class 42) are tolerated.
+A cancelled statement, a lost connection or a constraint violation used to be logged as "may already exist" and skipped, which could report a successful deploy with a schema change silently absent.
 
 ### Confirming a deploy actually landed
 

@@ -1,7 +1,7 @@
 # AdaptaLabs Admin Guide
 
-**Version**: 7.3.23  
-**Last Updated**: 2025-01-27
+**Version**: 7.49.0  
+**Last Updated**: 2026-08-21
 
 ---
 
@@ -715,6 +715,6 @@ When reporting issues, include:
 
 ---
 
-**Last Updated**: 2025-01-27  
-**Version**: 7.3.23
+**Last Updated**: 2026-08-21  
+**Version**: 7.49.0
 

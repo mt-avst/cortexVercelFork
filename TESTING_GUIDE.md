@@ -1,7 +1,7 @@
 # End-to-End Testing Guide
 
-**Version**: 7.43.x  
-**Date**: 2026-08-19
+**Version**: 7.56.0  
+**Date**: 2026-08-25
 
 ---
 
@@ -404,5 +404,5 @@ Use `localhost`, which reaches IPv6 loopback wherever the resolver prefers it.
 
 ---
 
-**Last Updated**: 2025-01-27
+**Last Updated**: 2026-08-25
 

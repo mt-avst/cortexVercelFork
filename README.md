@@ -342,7 +342,7 @@ Ensure these are set in production:
 
 ## Current Status
 
-**Version**: 7.3.8  
+**Version**: 7.56.9  
 **Status**: ✅ Production Ready - Alpha Testing Phase  
 **Deployment**: Kubera (Adaptavist internal Kubernetes) — https://adaptalabs.kubera-playground.adaptavist.net
 
