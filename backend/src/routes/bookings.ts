@@ -10,6 +10,13 @@ import { AppError, ValidationError, NotFoundError, ForbiddenError, ConflictError
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
 import { awardPoints, awardPointsAfterApproval } from '../services/gamification';
+// The KEYSET CURSOR FORMAT, shared with `GET /api/gamification/points-history`
+// rather than re-implemented (cto/AdaptaLabs#66). Imported straight from
+// `shared/` like routes/gamification.ts does, because the parser lives beside
+// the `next_before` that produces it and `../services/gamification` re-exports
+// only the type.
+import { parsePointsHistoryCursor } from '../../../shared/services/gamification';
+import type { PointsHistoryCursor } from '../services/gamification';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
 const router: Router = Router();
@@ -877,6 +884,50 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 // it comes back.
 
 /**
+ * THE PAGE SIZE ON THE CALLER'S OWN BOOKING HISTORY, and it is a literal on
+ * purpose. cto/AdaptaLabs#66.
+ *
+ * 100 rather than points-history's default 20 because the two surfaces are
+ * asked different questions. Points history is a scrolling feed; this is the
+ * flat "everything I have ever booked" view, and a human books studies in the
+ * tens - so a page of 100 answers every realistic history in ONE request while
+ * still refusing to grow without limit. The bound is a guardrail on a route
+ * whose row count only ever increases, not a paging UX.
+ *
+ * It matches `MAX_POINTS_HISTORY_LIMIT` and the leaderboard ceiling, which is
+ * the number this repository has already chosen twice for "a page of rows, not
+ * an export".
+ *
+ * WRITTEN AS A NUMBER HERE AND ASSERTED AS THE SAME NUMBER IN THE TEST rather
+ * than derived from this constant. A test that reads the constant cannot see
+ * the constant change.
+ */
+export const ALL_BOOKINGS_PAGE_SIZE = 100;
+
+/**
+ * THE QUERY-STRING SHAPES OF A `?before=` CURSOR, exactly as
+ * `pointsHistoryCursor` in routes/gamification.ts does it: ABSENT is
+ * `undefined` and the first page, a REPEATED parameter arrives as an array and
+ * is refused rather than coerced, and anything unreadable is `null`, which the
+ * route turns into a 400.
+ *
+ * THE FORMAT IS NOT DECIDED HERE. `parsePointsHistoryCursor` owns it, beside
+ * the `next_before` that emits it in shared/services/gamification.ts, and this
+ * route emits a BYTE-IDENTICAL rendering - the same
+ * `to_char(... AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')` over the
+ * same `(TIMESTAMPTZ, UUID)` pair, because `bookings.id` and
+ * `bookings.created_at` have the same types as the points ledger's. So this is
+ * a second CONSUMER of one wire format rather than a second format, which is
+ * the whole reason not to write a parser here. If the two ever need to differ,
+ * bookings gets its own parser then - not now, on the guess that they might.
+ */
+function allBookingsCursor(raw: unknown): PointsHistoryCursor | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string') return null;
+  return parsePointsHistoryCursor(raw);
+}
+
+/**
  * GET /api/bookings/my/bookings/all - the caller's OWN bookings, cancelled ones
  * included, owner-scoped by `WHERE b.user_id = $1`.
  *
@@ -900,17 +951,53 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
  * deletion's correctness argument observes cancelled bookings through it, and
  * that is the entire justification.
  *
- * ponytail: an unbounded read - no LIMIT and no cursor, so the response grows
- * with the caller's whole booking history.
- *   -> #66. A bare LIMIT would silently truncate a route whose contract is
- *      "all of them", so the bound wants keyset pagination on the
- *      `(created_at, id)` this already orders by, or a decision that it is not
- *      worth having.
+ * PAGED SINCE cto/AdaptaLabs#66, and it answers with a PAGE OBJECT rather than
+ * an array for the same reason `GET /api/gamification/points-history` does.
+ * The three dispositions this repository has already settled are written out on
+ * `parseLimit` in routes/gamification.ts: CLAMP where the ceiling genuinely is
+ * the answer (the leaderboards), REFUSE with 413 where a short page would lie
+ * about a whole collection (`GET /api/opportunities`), and REPORT `has_more`
+ * where the rows are the CALLER'S OWN and a page is legitimate
+ * (points-history). These rows are the caller's own bookings, so this is the
+ * third case and points-history is the precedent followed here - same
+ * `has_more`/`next_before` naming, same keyset on `(created_at, id)`, same
+ * one-extra-row probe.
+ *
+ * A BARE `LIMIT` WOULD HAVE BEEN THE WRONG FIX, and this route is the clearest
+ * case of it in the tree: its whole contract is "all of them, cancelled ones
+ * included", so a clipped array is indistinguishable from a complete one and
+ * the caller has no way to ask for the rest. That is a correctness defect
+ * wearing a performance fix's clothes.
+ *
+ * ponytail: a fixed page size with no `?limit=`, so a caller who wants a
+ *   bigger page cannot ask for one.
+ *   -> comment-only by AGENTS.md's threshold, and deliberately carrying NO
+ *      issue number. Production cannot reach this ceiling in a way that costs
+ *      correctness, scale, security or data: nothing in the tree calls this
+ *      route at all, and 100 covers a realistic history in one request. A
+ *      limit parser would be a policy decision - clamp, or refuse above a
+ *      ceiling - taken for a caller that does not exist. Add
+ *      `pointsHistoryLimit`'s shape here if one ever does.
+ *
+ *      NOT `-> #66`, which an earlier draft of this comment said. #66 is the
+ *      UNBOUNDED READ, which this route no longer has and which closes with
+ *      this change - an arrow to a closed issue reads as a live alarm and
+ *      sends the next reader somewhere already finished.
  */
 router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
-    
+
+    // null means a cursor arrived that this route will not put into SQL.
+    // Refused here rather than at the database, where an unparseable timestamp
+    // or uuid is a 500 with the cause only in the log.
+    const before = allBookingsCursor(req.query.before);
+    if (before === null) {
+      return res.status(400).json({
+        error: 'before must be a cursor of the form <created_at>,<id> as returned in next_before'
+      });
+    }
+
     // Get ALL bookings for this user (including cancelled).
     //
     // NOT `b.*`, for the reason the sibling route below already carries in
@@ -936,21 +1023,70 @@ router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) 
       b.id, b.session_id, b.status, b.created_at, b.cancelled_at
     `;
 
+    // ASKS FOR ONE MORE ROW THAN IT RETURNS, on the same line `getPointsHistory`
+    // and `MAX_CSV_PARTICIPANTS + 1` are drawn on. Without the `+ 1` a full page
+    // and the exact end of history are the SAME response, so `has_more` could
+    // only be derived from `rows.length === PAGE_SIZE` - which is wrong for the
+    // caller with exactly a page of bookings, and wrong in the direction that
+    // invents rows that do not exist. The probe row is sliced off below and
+    // never reaches the caller.
+    //
+    // THE `WHERE` IS ONE QUERY, NOT TWO. `$3::timestamptz IS NULL OR ...` keeps
+    // the first page and every later page on the same statement, so a change to
+    // the ordering, the owner scope or the projection cannot reach one and miss
+    // the other. A row comparison against a NULL cursor evaluates to NULL and
+    // `TRUE OR NULL` is TRUE, so the first page is unaffected whatever Postgres
+    // decides about evaluation order.
+    //
+    // `ORDER BY b.created_at DESC, b.id DESC` MATCHES THE COMPARISON EXACTLY,
+    // and the `b.id` tiebreak is the whole point rather than a formality:
+    // `created_at` is not unique - two bookings made by the same request share
+    // it to the microsecond - so a page boundary landing between two equal
+    // timestamps drops one for ever under `created_at` alone, and nothing
+    // anywhere reports it. An order that disagrees with the keyset predicate is
+    // not pagination, it is a lottery.
+    //
+    // `AT TIME ZONE 'UTC'` IS NOT DECORATION - DO NOT DELETE IT. `to_char`
+    // renders a TIMESTAMPTZ in the SESSION's TimeZone, so without the
+    // conversion the cursor is a wall-clock reading in whatever zone the
+    // connection happens to carry, labelled `Z` regardless, fed back into a
+    // `$3::timestamptz` that reads an offsetless value as being in that same
+    // zone. The round trip then closes only by coincidence, when the session is
+    // UTC - which it is in CI and in every container this repo starts, so
+    // nothing would notice. See the same note on `getPointsHistory`.
     const allBookingsResult = await pool.query(`
       SELECT ${ownBookingColumns},
+             to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at,
              s.start_time as session_start_time, s.end_time as session_end_time,
              o.title as opportunity_title, o.type as opportunity_type
       FROM bookings b
       JOIN sessions s ON b.session_id = s.id
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE b.user_id = $1
-      ORDER BY b.created_at DESC
-    `, [userId]);
-    
+        AND ($3::timestamptz IS NULL OR (b.created_at, b.id) < ($3::timestamptz, $4::uuid))
+      ORDER BY b.created_at DESC, b.id DESC
+      LIMIT $2
+    `, [userId, ALL_BOOKINGS_PAGE_SIZE + 1, before?.created_at ?? null, before?.id ?? null]);
+
+    const page = allBookingsResult.rows.slice(0, ALL_BOOKINGS_PAGE_SIZE);
+    const hasMore = allBookingsResult.rows.length > ALL_BOOKINGS_PAGE_SIZE;
+    const last = page[page.length - 1];
+
+    // `total_bookings` IS GONE, DELIBERATELY. It was `rows.length`, which on a
+    // paged route is the length of THIS page - a field named "total" carrying a
+    // per-page count is the silent truncation this issue exists to avoid, just
+    // with a number attached. `bookings.length` is the same value and does not
+    // claim to be a total. Nothing in the tree read it: see the sweep recorded
+    // on the `?before=` cursor above and in the MR.
     res.json({
       user_id: userId,
-      total_bookings: allBookingsResult.rows.length,
-      bookings: allBookingsResult.rows.map(booking => ({
+      has_more: hasMore,
+      // Only when there IS a next page. A cursor handed out at the end of
+      // history invites a request that can only come back empty, and a client
+      // looping until `next_before` is null would never stop. So
+      // `has_more === false` and a non-null `next_before` cannot disagree.
+      next_before: hasMore && last ? `${last.cursor_at},${last.id}` : null,
+      bookings: page.map(booking => ({
         id: booking.id,
         session_id: booking.session_id,
         status: booking.status,
