@@ -318,7 +318,12 @@ describe('GET /api/admin/export/bookings carries the live role into the handler'
     expect(res.text).not.toContain(OTHER_PARTICIPANT);
     expect(res.text).not.toContain('Rival Participant');
 
-    expect(identityCall()![1]).toEqual(['admin-1']);
+    // Since cto/AdaptaLabs#65 the export is a keyset walk, so its parameter
+    // list is the owner scope, the three-part batch cursor - null on the first
+    // batch - and the batch size as a literal. Asserted in FULL rather than by
+    // index: the point of this arm is which owner id reaches `$1`, and a
+    // full-array assertion also fails if a parameter is added in front of it.
+    expect(identityCall()![1]).toEqual(['admin-1', null, null, null, 500]);
   });
 
   // THE CONTROL. A live superadmin is meant to export the whole platform, so
@@ -334,7 +339,12 @@ describe('GET /api/admin/export/bookings carries the live role into the handler'
 
     expect(res.text).toContain(OWN_PARTICIPANT);
     expect(res.text).toContain(OTHER_PARTICIPANT);
-    expect(identityCall()![1]).toEqual([null]);
+    // Since cto/AdaptaLabs#65 the export is a keyset walk, so its parameter
+    // list is the owner scope, the three-part batch cursor - null on the first
+    // batch - and the batch size as a literal. Asserted in FULL rather than by
+    // index: the point of this arm is which owner id reaches `$1`, and a
+    // full-array assertion also fails if a parameter is added in front of it.
+    expect(identityCall()![1]).toEqual([null, null, null, null, 500]);
   });
 });
 

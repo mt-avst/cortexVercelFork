@@ -4,13 +4,12 @@ import { getAppliedDbTlsModes } from '../config/dbTls';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
 import { logger } from '../utils/logger';
-
-function escapeCsvField(field: string | null | undefined): string {
-  if (field === null || field === undefined) return '';
-  const str = String(field);
-  if (str.includes(',') || str.includes('\n') || str.includes('"')) return `"${str.replace(/"/g, '""')}"`;
-  return str;
-}
+// cto/AdaptaLabs#65. The route-local `escapeCsvField` this replaces quoted but
+// did NOT neutralise spreadsheet formulas, while the survey export next door
+// already did - so the shared helper is imported rather than a third private
+// copy kept. See utils/csv-cell.ts for why that mattered here specifically.
+import { csvCell } from '../utils/csv-cell';
+import { streamCsvExport } from '../utils/csv-stream';
 
 const router: Router = Router();
 
@@ -188,7 +187,38 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
   });
 }));
 
-// GET /api/admin/export/bookings - Export bookings as CSV (admin only; researcher_admin sees own only)
+/**
+ * GET /api/admin/export/bookings - the bookings CSV, STREAMED. #65.
+ *
+ * Was an unbounded four-table join mapped into an array of strings, joined and
+ * `res.send` in one go - peak memory the whole pg result set plus the whole
+ * CSV, per concurrent caller. #65 measured the QUERY at 472ms over 200,000
+ * rows, so the statement timeout was never the ceiling; the materialisation
+ * was. Now it walks the same ordering in batches and writes each to the socket.
+ *
+ * THE CURSOR IS AN OBJECT, NOT A WIRE FORMAT - it lives for one response and
+ * nobody outside this handler ever sees it, so there is no parser to keep in
+ * step and no `?before=` contract. What that does NOT buy, and a first version
+ * of this comment wrongly claimed it did, is freedom from rendering: the
+ * timestamps are carried as Postgres's own `::text` rendering and bound back
+ * with `::timestamptz`, NOT as the JS Dates node-pg parses. A JS Date holds
+ * MILLISECONDS and a TIMESTAMPTZ holds MICROSECONDS, so round-tripping the
+ * parsed Date truncates the cursor below every µs-bearing row and the next
+ * batch's predicate matches nothing - the walk ends after one batch, which is
+ * the silent truncation this whole change exists to prevent. Caught by
+ * csv-exports-keyset-postgres.test.ts on its FIRST CI run (500 rows of a
+ * seeded 600), before any release carried it. `::text` keeps the full
+ * precision and the offset, so it casts back to the same instant regardless
+ * of session TimeZone. Same µs-vs-ms trap as the F1 optimistic-concurrency
+ * precondition.
+ *
+ * `b.id` IS IN THE KEY AND IS NOT A FORMALITY. The original ordering was
+ * `s.start_time DESC, b.created_at DESC`, and NEITHER is unique - two people
+ * booking the same session in the same request share both to the microsecond.
+ * A batch boundary landing between two such rows drops one for ever under that
+ * key alone, and nothing anywhere reports it. The uuid makes the key unique,
+ * so the comparison below addresses exactly one position.
+ */
 router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const user = req.user!;
 
@@ -199,44 +229,95 @@ router.get('/export/bookings', requireAdmin, asyncHandler(async (req: Request, r
   // called `filterOwnerId` any more.
   const participantIdentityOwnerId = user.role === 'superadmin' ? null : user.id;
 
-  const result = await pool.query(
-    `SELECT
-      o.title AS opportunity_title,
-      o.type AS opportunity_type,
-      s.start_time AS session_start,
-      s.end_time AS session_end,
-      u.name AS participant_name,
-      u.email AS participant_email,
-      b.status AS booking_status,
-      b.created_at AS booked_at
-     FROM bookings b
-     JOIN sessions s ON b.session_id = s.id
-     JOIN opportunities o ON s.opportunity_id = o.id
-     JOIN users u ON b.user_id = u.id
-     WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
-     ORDER BY s.start_time DESC, b.created_at DESC`,
-    [participantIdentityOwnerId]
-  );
-
   const headers = [
     'Opportunity', 'Type', 'Session start', 'Session end',
     'Participant name', 'Participant email', 'Status', 'Booked at',
   ];
-  const rows = (result.rows || []).map((row: Record<string, unknown>) => [
-    escapeCsvField(String(row.opportunity_title ?? '')),
-    escapeCsvField(String(row.opportunity_type ?? '')),
-    row.session_start ? new Date(row.session_start as Date).toISOString() : '',
-    row.session_end ? new Date(row.session_end as Date).toISOString() : '',
-    escapeCsvField(String(row.participant_name ?? '')),
-    escapeCsvField(String(row.participant_email ?? '')),
-    escapeCsvField(String(row.booking_status ?? '')),
-    row.booked_at ? new Date(row.booked_at as Date).toISOString() : '',
-  ]);
 
-  const csvContent = [headers.join(','), ...rows.map((r: string[]) => r.join(','))].join('\n');
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename="bookings-export-${new Date().toISOString().split('T')[0]}.csv"`);
-  res.send(csvContent);
+  // Strings, not Dates - see the µs-vs-ms note in the docblock above.
+  type BookingsCursor = { startTime: string; createdAt: string; id: string };
+
+  await streamCsvExport<BookingsCursor>({
+    res,
+    filename: `bookings-export-${new Date().toISOString().split('T')[0]}.csv`,
+    headerRow: headers.join(','),
+    context: { route: 'GET /api/admin/export/bookings', userId: user.id },
+    readBatch: async (cursor, limit) => {
+      // ONE STATEMENT FOR THE FIRST BATCH AND EVERY LATER ONE. The
+      // `$2::timestamptz IS NULL OR ...` keeps them on the same SQL, so a
+      // change to the ordering, the owner scope or the projection cannot reach
+      // one and miss the other. A row comparison against NULL is NULL and
+      // `TRUE OR NULL` is TRUE, so the first batch is unaffected whatever
+      // Postgres decides about evaluation order.
+      //
+      // The ORDER BY matches the comparison exactly, column for column and
+      // direction for direction. An order that disagrees with its keyset
+      // predicate is not pagination, it is a lottery.
+      const result = await pool.query(
+        `SELECT
+          o.title AS opportunity_title,
+          o.type AS opportunity_type,
+          s.start_time AS session_start,
+          s.end_time AS session_end,
+          u.name AS participant_name,
+          u.email AS participant_email,
+          b.status AS booking_status,
+          b.created_at AS booked_at,
+          b.id AS booking_id,
+          s.start_time::text AS cursor_start_time,
+          b.created_at::text AS cursor_created_at
+         FROM bookings b
+         JOIN sessions s ON b.session_id = s.id
+         JOIN opportunities o ON s.opportunity_id = o.id
+         JOIN users u ON b.user_id = u.id
+         WHERE ($1::uuid IS NULL OR o.owner_user_id = $1)
+           AND ($2::timestamptz IS NULL
+                OR (s.start_time, b.created_at, b.id) < ($2::timestamptz, $3::timestamptz, $4::uuid))
+         ORDER BY s.start_time DESC, b.created_at DESC, b.id DESC
+         LIMIT $5`,
+        [
+          participantIdentityOwnerId,
+          cursor?.startTime ?? null,
+          cursor?.createdAt ?? null,
+          cursor?.id ?? null,
+          limit
+        ]
+      );
+
+      const rows = (result.rows || []).map((row: Record<string, unknown>) => [
+        // `true` on the four cells a person wrote. An opportunity title is
+        // researcher-authored and a participant name comes from the identity
+        // provider; both reach a spreadsheet opened by an admin.
+        csvCell(String(row.opportunity_title ?? ''), true),
+        // The type is one of a fixed set we define, so it is left numeric-safe
+        // and unprefixed - as are the two timestamps and the status.
+        csvCell(String(row.opportunity_type ?? ''), false),
+        csvCell(row.session_start ? new Date(row.session_start as Date).toISOString() : '', false),
+        csvCell(row.session_end ? new Date(row.session_end as Date).toISOString() : '', false),
+        csvCell(String(row.participant_name ?? ''), true),
+        csvCell(String(row.participant_email ?? ''), true),
+        csvCell(String(row.booking_status ?? ''), false),
+        csvCell(row.booked_at ? new Date(row.booked_at as Date).toISOString() : '', false),
+      ].join(','));
+
+      const last = result.rows[result.rows.length - 1];
+
+      return {
+        rows,
+        // A SHORT BATCH IS THE END, and saying so here rather than letting the
+        // writer infer it means a batch landing exactly on the boundary costs
+        // one more query and not a wrong answer.
+        nextCursor:
+          result.rows.length === limit && last
+            ? {
+                startTime: String(last.cursor_start_time),
+                createdAt: String(last.cursor_created_at),
+                id: String(last.booking_id)
+              }
+            : undefined
+      };
+    }
+  });
 }));
 
 // ============================================================================
