@@ -89,7 +89,7 @@ Fill in the required fields:
   - 🧪 **Live session**: Usability test you moderate, at a booked time
   - 📊 **Quick poll**: Quick questions/voting
   - 📋 **Survey**: Detailed feedback collection
-  - 💬 **Interview**: One-on-one interviews
+  - 💼 **Interview**: One-on-one interviews
   - ❓ **One question**: Single question opportunities
   - 🖥️ **Recorded session**: Usability test the participant runs alone, recorded in their browser. See [Recorded Sessions](#recorded-sessions)
 
