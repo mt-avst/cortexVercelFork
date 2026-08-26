@@ -117,8 +117,22 @@ export class Logger {
   requestLogger() {
     return (req: Request, res: Response, next: Function) => {
       const startTime = Date.now();
-      const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
+      // The inbound x-request-id is REFLECTED into a response header, so it is
+      // held to a shape before it is trusted (#43): a bare string of 1-128
+      // characters from the charset below. Node's HTTP parser joins a repeated
+      // header into ONE comma-separated string (measured, not assumed - the
+      // array branch below is defence in depth for a hand-built req, not a
+      // shape the wire produces), a CR or LF in the value makes `setHeader`
+      // throw a 500 out of the logging middleware, and the length was
+      // unbounded. Anything off-shape gets a generated id rather than a
+      // refusal - a junk correlation id is not a reason to fail the request
+      // it was meant to correlate.
+      const rawRequestId = req.headers['x-request-id'];
+      const requestId =
+        typeof rawRequestId === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(rawRequestId)
+          ? rawRequestId
+          : `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
       // Add request ID to response headers
       res.setHeader('X-Request-ID', requestId);
 
