@@ -3575,7 +3575,47 @@ const OpportunityForm: React.FC = () => {
         error: sessionError instanceof Error ? sessionError : undefined,
         errorMessage: sessionError instanceof Error ? sessionError.message : String(sessionError)
       });
-      setError('The opportunity was saved but its time slots were not. Add them from the dashboard.');
+      /*
+       * A 409 says WHICH slots clash, and the advice changes with it.
+       *
+       * `POST /api/sessions` refuses a batch whose own slots overlap each other
+       * with `Session overlaps with existing sessions: <start> - <end>`, and the
+       * batch is atomic, so a refusal created nothing. This function's failure
+       * also blocks the navigation below, so the author is still on the form
+       * with those slots in state - they fix it by changing the times here.
+       * Telling them to "add them from the dashboard" sends them to re-add the
+       * same overlapping slots and hit the same 409, and the one fact that would
+       * break the loop was in the response body.
+       *
+       * ONLY on a 409, and the reason is what the 500 body carries: outside
+       * production `errorHandler` sends the raw `error.message`, so a constraint
+       * violation or a dropped connection would put an internal message in front
+       * of the author. Every other status keeps the generic sentence - which is
+       * also the fallback for a 409 that carried no message, so the sentence
+       * stays reachable rather than becoming dead copy.
+       *
+       * Rendered as a text child of the danger banner below, so React escapes it.
+       *
+       * Optional-chained from `axiosError` itself, not merely from `.response`.
+       * A rejection is not guaranteed to be an object - the `logger.error` call
+       * directly above already allows for that - and reading `.response` off a
+       * null would throw a TypeError from INSIDE this catch, skipping the
+       * `return false` below. That is precisely the silent half-success the
+       * comment there calls the worst possible version of this change: the
+       * author lands on the dashboard reading "created successfully" with no
+       * bookable slots. Pinned by the "not an object at all" arm.
+       */
+      const axiosError = sessionError as
+        | { response?: { status?: number; data?: { error?: string } } }
+        | null
+        | undefined;
+      const overlapMessage =
+        axiosError?.response?.status === 409 ? axiosError?.response?.data?.error : undefined;
+      setError(
+        overlapMessage
+          ? `${overlapMessage.replace(/\.$/, '')}. The opportunity was saved but its time slots were not - change the times on the Session Management step and save again.`
+          : 'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+      );
       /*
        * Reported to the CALLER, not only to `setError`.
        *
@@ -4501,10 +4541,17 @@ const OpportunityForm: React.FC = () => {
                 />
               )}
 
+              {/* d-flex, following ErrorState: the icon was an inline sibling of
+                  the text, so any message that wrapped put its second line
+                  UNDER the icon instead of aligned with the first. The overlap
+                  refusal above is two lines wide at this container, which turns
+                  that from an edge case into the normal one. align-items-start
+                  rather than -center because a multi-line message centred
+                  against a 18px icon floats the icon into the middle of it. */}
               {error && (
-                <div className="alert alert-danger mx-4 mt-4 mb-0" role="alert">
-                  <AlertTriangle size={18} className="me-2" />
-                  {error}
+                <div className="alert alert-danger mx-4 mt-4 mb-0 d-flex align-items-start" role="alert">
+                  <AlertTriangle size={18} className="me-2 flex-shrink-0" />
+                  <div>{error}</div>
                 </div>
               )}
 
