@@ -1721,5 +1721,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/admin.query-shapes-are-refused.test.ts",
     "test": "answers 401, not the validator 400, for an anonymous hostile-shaped GET /requests"
+  },
+  {
+    "id": "aggregate-results-body-is-bounded-by-open-text-chars",
+    "why": "cto/AdaptaLabs#9 option A. The two JSON aggregate results readers buffer every open-text answer verbatim, and surveyAnswerSchema.text has no write-time length cap, so MAX_RESPONSE_ROWS does not bound the body - a few multi-megabyte answers is a few-hundred-MB res.json that OOMs live sessions on the 2Gi pod and stalls the results permit. This entry weakens the character ceiling so an over-limit body is served; the named test asserts the 413, and it is the only thing standing between the reader and the unbounded body. Proven KILLED before entry.",
+    "file": "backend/src/firsthand/survey-results-repository.ts",
+    "anchor": "        if (totalTextChars > MAX_AGGREGATE_RESPONSE_CHARS) {",
+    "mutation": "        if (totalTextChars > MAX_AGGREGATE_RESPONSE_CHARS * 1000) {",
+    "runner": "vitest",
+    "spec": "src/firsthand/survey-results-repository.test.ts",
+    "test": "refuses rather than serving a body past the character ceiling"
   }
 ]
