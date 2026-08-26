@@ -2,6 +2,7 @@ import request from 'supertest';
 import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 import session from 'express-session';
+import cookieParser from 'cookie-parser';
 import { generateMockUser, createMockQueryResult } from '../../../../shared/test-utils';
 
 // Mock the database pool
@@ -63,12 +64,17 @@ function mockOidc(overrides: Record<string, any> = {}) {
   return mockClient;
 }
 
-// Logs in via the real /auth/login flow to obtain a valid, registered state token —
-// the app's CSRF state store only recognizes states actually issued via /login.
-async function loginAndGetState(app: express.Application): Promise<string> {
-  const res = await request(listening(app)).get('/auth/login').expect(302);
+// Logs in via the real /auth/login flow, as a browser would: the returned agent
+// holds the cookies /login set - the session and the browser-bound
+// `adaptalabs_oauth_state` cookie the callback now requires (cto/AdaptaLabs#82) -
+// so the SAME agent must drive the callback request.
+async function loginAgent(
+  app: express.Application
+): Promise<{ agent: ReturnType<typeof request.agent>; state: string }> {
+  const agent = request.agent(listening(app));
+  const res = await agent.get('/auth/login').expect(302);
   const url = new URL(res.headers.location);
-  return url.searchParams.get('state')!;
+  return { agent, state: url.searchParams.get('state')! };
 }
 
 describe('Auth Routes Integration Tests', () => {
@@ -84,6 +90,7 @@ describe('Auth Routes Integration Tests', () => {
 
     // Create a fresh app instance for each test
     app = express();
+    app.use(cookieParser());
     app.use(session({
       secret: 'test-secret',
       resave: false,
@@ -134,14 +141,14 @@ describe('Auth Routes Integration Tests', () => {
 
     it('should handle successful OIDC callback', async () => {
       const mockUser = generateMockUser();
-      const state = await loginAndGetState(app);
+      const { agent, state } = await loginAgent(app);
 
       // Mock user upsert query
       mockClientQuery.mockResolvedValueOnce(createMockQueryResult([mockUser]));
       // Mock notification preferences creation
       mockClientQuery.mockResolvedValueOnce(createMockQueryResult([]));
 
-      const response = await request(listening(app))
+      const response = await agent
         .get('/auth/callback')
         .query({ code: 'auth-code', state })
         .expect(302);
@@ -176,9 +183,9 @@ describe('Auth Routes Integration Tests', () => {
       mockOidc({
         callback: jest.fn().mockRejectedValue(new Error('OIDC callback failed')),
       });
-      const state = await loginAndGetState(app);
+      const { agent, state } = await loginAgent(app);
 
-      await request(listening(app))
+      await agent
         .get('/auth/callback')
         .query({ code: 'auth-code', state })
         .expect(500);

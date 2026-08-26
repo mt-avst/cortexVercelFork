@@ -46,6 +46,78 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000).unref();
 
+// The OAuth `state` is ALSO bound to a dedicated cookie on the browser that
+// started the login (cto/AdaptaLabs#82). The `stateStore` above is a
+// process-global map that any unauthenticated caller can populate by hitting
+// /login or /google-login, so "the state is in the store" does NOT prove the
+// callback belongs to the browser that began the flow: an attacker mints a
+// state, captures their own code, and lures the victim to the callback with
+// both (login CSRF / session fixation). Requiring the state to equal a nonce we
+// set on the initiating browser closes that - the victim, who never began a
+// login, carries no such cookie.
+//
+// This is a SEPARATE cookie because the app session cookie is SameSite=Strict
+// in production and would not ride the cross-site OAuth callback; SameSite=Lax
+// is sent on the provider's top-level GET redirect back to us. Path '/' because
+// the flow starts at /api/auth/* but the provider redirect lands at /auth/*.
+const OAUTH_STATE_COOKIE = 'adaptalabs_oauth_state';
+const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+
+const oauthStateCookieOptions = () => ({
+  httpOnly: true,
+  sameSite: 'lax' as const,
+  secure: process.env.NODE_ENV === 'production',
+  path: '/',
+});
+
+/**
+ * Mint a fresh single-use OAuth state, record it in the store for expiry and
+ * replay tracking, AND set it as a browser-bound cookie. Returns the state so
+ * the caller can put it in the provider authorization URL.
+ */
+function issueOAuthState(res: express.Response): string {
+  const state = crypto.randomBytes(32).toString('hex');
+  stateStore.set(state, { timestamp: Date.now(), used: false });
+  res.cookie(OAUTH_STATE_COOKIE, state, {
+    ...oauthStateCookieOptions(),
+    maxAge: OAUTH_STATE_TTL_MS,
+  });
+  return state;
+}
+
+type OAuthStateResult = { ok: true; state: string } | { ok: false; error: string };
+
+/**
+ * Validate the OAuth `state` on a callback: it must (1) equal the nonce set on
+ * THIS browser at login (CSRF binding), (2) be present in the store, and (3) be
+ * unused (replay). On success the state is consumed - marked used and its
+ * cookie cleared - so it cannot drive a second callback.
+ */
+function consumeOAuthState(
+  req: express.Request,
+  res: express.Response,
+  state: unknown
+): OAuthStateResult {
+  const cookies = req.cookies as Record<string, string> | undefined;
+  const bound = cookies?.[OAUTH_STATE_COOKIE];
+
+  // Browser binding first: no valid cookie means this callback did not begin on
+  // this browser, regardless of what the store holds.
+  if (typeof state !== 'string' || !bound || state !== bound) {
+    return { ok: false, error: 'Invalid state parameter' };
+  }
+  if (!stateStore.has(state)) {
+    return { ok: false, error: 'Invalid state parameter' };
+  }
+  const stateData = stateStore.get(state);
+  if (!stateData || stateData.used) {
+    return { ok: false, error: 'State parameter already used' };
+  }
+  stateData.used = true;
+  res.clearCookie(OAUTH_STATE_COOKIE, oauthStateCookieOptions());
+  return { ok: true, state };
+}
+
 // Initialize OIDC client
 async function initializeClient() {
   try {
@@ -149,11 +221,9 @@ router.get('/login', async (req, res) => {
       }
     }
 
-    // Generate cryptographically secure state parameter
-    const state = crypto.randomBytes(32).toString('hex');
-
-    // Store state with timestamp for validation
-    stateStore.set(state, { timestamp: Date.now(), used: false });
+    // Mint a browser-bound, single-use state (store + Lax cookie) - see
+    // issueOAuthState / cto/AdaptaLabs#82.
+    const state = issueOAuthState(res);
 
     const authUrl = oidcClient.authorizationUrl({
       scope: 'openid profile email',
@@ -193,25 +263,18 @@ router.get('/callback', async (req, res) => {
     }
 
     const params = oidcClient.callbackParams(req);
-    const state = params.state;
 
-    // Validate state parameter
-    if (!state || !stateStore.has(state)) {
-      logger.error('Invalid or missing state parameter');
-      return res.status(400).json({ error: 'Invalid state parameter' });
+    // Validate state: browser-bound (CSRF), issued, and single-use. The cookie
+    // binding is what stops login CSRF - the store alone is forgeable by any
+    // caller of /login (cto/AdaptaLabs#82).
+    const stateResult = consumeOAuthState(req, res, params.state);
+    if (!stateResult.ok) {
+      logger.error('OAuth state validation failed', { reason: stateResult.error });
+      return res.status(400).json({ error: stateResult.error });
     }
-
-    const stateData = stateStore.get(state);
-    if (!stateData || stateData.used) {
-      logger.error('State parameter already used or expired');
-      return res.status(400).json({ error: 'State parameter already used' });
-    }
-
-    // Mark state as used
-    stateData.used = true;
 
     const tokenSet = await oidcClient.callback(process.env.OIDC_REDIRECT_URL!, params, {
-      state: state,
+      state: stateResult.state,
     });
 
     // Get user info from token
@@ -342,7 +405,10 @@ router.get('/google-login', async (req, res) => {
       }
       // Demo mode: Simulate OAuth flow by redirecting to backend callback with demo code
       logger.debug('Google login: Demo mode - simulating OAuth flow');
-      const state = crypto.randomBytes(32).toString('hex');
+      // Mint a browser-bound, single-use state (store + Lax cookie) so the demo
+      // callback clears the same CSRF/state check as production (#82). The
+      // redirect is followed by the same browser, which carries the cookie.
+      const state = issueOAuthState(res);
       // Use relative URL since we're already on the backend server
       return res.redirect(`/auth/google-callback?code=demo-code&state=${state}`);
     }
@@ -361,8 +427,9 @@ router.get('/google-login', async (req, res) => {
       'https://www.googleapis.com/auth/calendar.readonly',
     ].join(' ');
 
-    const state = crypto.randomBytes(32).toString('hex');
-    stateStore.set(state, { timestamp: Date.now(), used: false });
+    // Mint a browser-bound, single-use state (store + Lax cookie) - see
+    // issueOAuthState / cto/AdaptaLabs#82.
+    const state = issueOAuthState(res);
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
                     `client_id=${encodeURIComponent(clientId)}&` +
@@ -403,6 +470,17 @@ router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (r
     if (isDemoLoginRequest && process.env.NODE_ENV !== 'development') {
       logger.error('Demo Google login attempted outside development mode');
       return res.status(500).json({ error: 'Authentication service unavailable' });
+    }
+
+    // Validate the OAuth state to prevent login CSRF / session fixation (#82):
+    // browser-bound (the cookie set at /google-login), issued, and single-use.
+    // Placed after the demo-outside-development guard so that path keeps its own
+    // 500, but before any token exchange, user upsert or session creation - so a
+    // forged callback (attacker's code, no matching cookie) never mints a session.
+    const stateResult = consumeOAuthState(req, res, state);
+    if (!stateResult.ok) {
+      logger.error('OAuth state validation failed', { reason: stateResult.error });
+      return res.status(400).json({ error: stateResult.error });
     }
 
     let userInfo: {

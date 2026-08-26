@@ -139,6 +139,12 @@ app.use(session({
   },
 }));
 
+// Cookie parsing, mounted unconditionally (not only under CSRF): the OAuth
+// login flow binds its `state` to a dedicated cookie on the initiating browser
+// (see routes/auth.ts, cto/AdaptaLabs#82), and the callback must be able to
+// read that cookie in every environment, CSRF on or off.
+app.use(cookieParser());
+
 // CSRF protection - double-submit cookie via csrf-csrf (csurf is deprecated
 // and was never wired to the SPA, which is why it broke in production).
 // Default ON in production; set ENABLE_CSRF=false to disable, or
@@ -147,8 +153,6 @@ const csrfEnabled =
   process.env.ENABLE_CSRF === 'true' ||
   (config.NODE_ENV === 'production' && process.env.ENABLE_CSRF !== 'false');
 if (csrfEnabled) {
-  app.use(cookieParser());
-
   const { doubleCsrfProtection, generateCsrfToken } = buildCsrfProtection({
     secret: config.SESSION_SECRET,
     secureCookies: config.NODE_ENV === 'production',
