@@ -600,7 +600,10 @@ test('a runner that never finished is not graded', async () => {
 
   // PINNED AS A LITERAL, not derived from the constant, because a test that
   // reads the constant cannot see the constant change. Five minutes is roughly
-  // forty times the slowest entry measured on a loaded developer machine.
+  // forty times the slowest entry measured on a loaded developer machine, and
+  // the run now prints that margin for whatever machine it is on -
+  // cto/AdaptaLabs#61. Moving this number is a deliberate act, which is the
+  // whole point of writing it out here.
   assert.equal(RUNNER_TIMEOUT_MS, 300000);
 });
 
@@ -677,4 +680,212 @@ test('only KILLED still exits zero once the new verdicts exist', async () => {
   // block: a verdict nobody has to act on is a verdict nobody reads.
   assert.equal(exitCodeFor([{ verdict: KILLED }, { verdict: RUNNER_DID_NOT_FINISH }]), 1);
   assert.equal(exitCodeFor([{ verdict: KILLED }, { verdict: MUTATION_WAS_LOST }]), 1);
+});
+
+test('an unrecognised argument is not silently ignored', async () => {
+  const { unrecognisedArgs, ACCEPTED_ARGS } = await load();
+
+  // THE ACCEPTED SET, PINNED AS A LITERAL. Deriving the expectation from
+  // ACCEPTED_ARGS would make this assertion true of any set at all, including
+  // an empty one - which would refuse every run - and of a set that had grown a
+  // filter flag, which cto/AdaptaLabs#53 says deliberately must not exist.
+  assert.deepEqual([...ACCEPTED_ARGS], ['--allow-dirty']);
+
+  // THE CONTROL. A parser that refused everything would satisfy every
+  // assertion below just as well as a correct one.
+  assert.deepEqual(unrecognisedArgs([]), []);
+  assert.deepEqual(unrecognisedArgs(['--allow-dirty']), []);
+
+  // The argument the gate on !263 actually typed, which ran all 119 entries and
+  // exited 0.
+  assert.deepEqual(unrecognisedArgs(['--id', 'some-entry']), ['--id', 'some-entry']);
+
+  // A typo in a real flag, which used to drop the permission silently and then
+  // fail on the dirty tree instead.
+  assert.deepEqual(unrecognisedArgs(['--allow-dirty=yes']), ['--allow-dirty=yes']);
+  assert.deepEqual(unrecognisedArgs(['--alow-dirty']), ['--alow-dirty']);
+
+  // Recognised and unrecognised together: only the unrecognised one is named,
+  // so the message points at the argument to fix.
+  assert.deepEqual(unrecognisedArgs(['--allow-dirty', '--only', 'x']), ['--only', 'x']);
+});
+
+test('the database going away under the test is not a kill', async () => {
+  const { verdictFor, environmentFailed, ENVIRONMENT_FAILED, KILLED, MUTATION_IS_MALFORMED } =
+    await load();
+
+  const passingBaseline = [{ fullName: 'x a test name', status: 'passed', failure: '' }];
+  const failedWith = (failure) => [{ fullName: 'x a test name', status: 'failed', failure }];
+
+  // The four shapes measured on cto/AdaptaLabs#58, every one of which
+  // `mutationIsMalformed` returns false for and the harness therefore graded
+  // KILLED, exit 0.
+  for (const failure of [
+    'Error: Connection terminated unexpectedly',
+    'error: too many clients already',
+    'error: terminating connection due to administrator command',
+    'Error: connect ECONNREFUSED 127.0.0.1:5432'
+  ]) {
+    assert.equal(environmentFailed(failure), true, failure);
+    assert.equal(
+      verdictFor({
+        baselineAssertions: passingBaseline,
+        mutatedAssertions: failedWith(failure),
+        testName: 'a test name',
+        needsDatabase: true
+      }),
+      ENVIRONMENT_FAILED,
+      failure
+    );
+  }
+
+  // THE CONTROL THAT MATTERS MOST. An ordinary assertion failure on the very
+  // same database entry is still a kill, so this is not a guard that has
+  // disarmed the harness.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: passingBaseline,
+      mutatedAssertions: failedWith('AssertionError: expected 1 to be 2'),
+      testName: 'a test name',
+      needsDatabase: true
+    }),
+    KILLED
+  );
+
+  // THE SECOND CONTROL, and the reason the check is gated on needsDatabase at
+  // all. Three suites in this repository inject a connection error ON PURPOSE
+  // and assert the response body does not leak it - admin.dashboard-and-request
+  // -read-live-role, health-endpoint and opportunities.test.ts. All three run
+  // against a MOCKED pool, so a mutation breaking that redaction produces a
+  // failure quoting the connection error, and ungated this check would grade
+  // that genuine kill as an environmental failure.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: passingBaseline,
+      mutatedAssertions: failedWith(
+        'expected body not to contain "connect ECONNREFUSED cortex-db.internal:5432"'
+      ),
+      testName: 'a test name',
+      needsDatabase: false
+    }),
+    KILLED
+  );
+
+  // A STATEMENT THE MUTATION BROKE is still MUTATION_IS_MALFORMED on a database
+  // entry, so the new check has not displaced the one before it.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: passingBaseline,
+      mutatedAssertions: failedWith('syntax error at or near "FROM"'),
+      testName: 'a test name',
+      needsDatabase: true
+    }),
+    MUTATION_IS_MALFORMED
+  );
+});
+
+test('a suite that failed before running a test is the environment, not a missing test', async () => {
+  const { verdictFor, suiteFailedWithoutRunningATest, ENVIRONMENT_FAILED, TEST_MISSING } =
+    await load();
+
+  // MEASURED ON VITEST 3.2.7 against gamification-postgres.test.ts, the two
+  // shapes minutes apart. There is no TEXT to tell them apart: stderr was 0
+  // bytes and `message` empty in both, so the discriminator has to be the
+  // suite's own status.
+  const noDatabase = {
+    testResults: [
+      {
+        status: 'failed',
+        message: '',
+        assertionResults: [
+          { fullName: 'x a test name', status: 'skipped', failureMessages: [] },
+          { fullName: 'x another test', status: 'skipped', failureMessages: [] }
+        ]
+      }
+    ]
+  };
+  const nameDoesNotMatch = {
+    testResults: [
+      {
+        status: 'passed',
+        message: '',
+        assertionResults: [
+          { fullName: 'x some other test', status: 'skipped', failureMessages: [] }
+        ]
+      }
+    ]
+  };
+
+  assert.equal(suiteFailedWithoutRunningATest(noDatabase), true);
+  // THE CONTROL. A filter that genuinely selects nothing looks identical in the
+  // assertion list, and must stay TEST_MISSING - a guard that fired on both
+  // would merely relabel the anti-rot check.
+  assert.equal(suiteFailedWithoutRunningATest(nameDoesNotMatch), false);
+
+  // A suite that failed while some OTHER test still ran is not this shape
+  // either: the named test is genuinely missing and the manifest is stale.
+  assert.equal(
+    suiteFailedWithoutRunningATest({
+      testResults: [
+        {
+          status: 'failed',
+          message: '',
+          assertionResults: [
+            { fullName: 'x another test', status: 'failed', failureMessages: ['boom'] }
+          ]
+        }
+      ]
+    }),
+    false
+  );
+
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [],
+      mutatedAssertions: [],
+      testName: 'a test name',
+      baselineRanNothingAndFailed: true
+    }),
+    ENVIRONMENT_FAILED
+  );
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [],
+      mutatedAssertions: [],
+      testName: 'a test name',
+      baselineRanNothingAndFailed: false
+    }),
+    TEST_MISSING
+  );
+});
+
+test('an environmental failure blocks the merge like every other non-kill', async () => {
+  const { exitCodeFor, KILLED, ENVIRONMENT_FAILED } = await load();
+  assert.equal(exitCodeFor([{ verdict: KILLED }, { verdict: ENVIRONMENT_FAILED }]), 1);
+});
+
+test('the run can say which single invocation came closest to the ceiling', async () => {
+  const { slowestRun } = await load();
+
+  // ONE INVOCATION, NOT ONE ENTRY. The ceiling is given to each `spawnSync`
+  // separately and an entry makes two of them, so summing the pair would
+  // overstate how close the ceiling came to firing - the wrong direction for
+  // this particular number. cto/AdaptaLabs#61.
+  assert.deepEqual(
+    slowestRun([
+      { id: 'a', phase: 'baseline', ms: 3_100 },
+      { id: 'a', phase: 'mutated', ms: 3_400 },
+      { id: 'b', phase: 'baseline', ms: 7_260 },
+      { id: 'b', phase: 'mutated', ms: 2_000 }
+    ]),
+    { id: 'b', phase: 'baseline', ms: 7_260 }
+  );
+
+  // A run that graded nothing has no slowest invocation, and must not divide by
+  // zero on the way to saying so.
+  assert.deepEqual(slowestRun([]), { id: 'nothing ran', phase: '-', ms: 0 });
+
+  // THE CONTROL. A reducer that always returned its seed would satisfy the
+  // empty case above just as well.
+  assert.equal(slowestRun([{ id: 'only', phase: 'mutated', ms: 1 }]).id, 'only');
 });

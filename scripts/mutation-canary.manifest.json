@@ -907,12 +907,13 @@
   {
     "id": "delete-sessions-locks-rows-in-id-order-against-deadlock",
     "file": "backend/src/routes/opportunities.ts",
-    "runner": "jest",
-    "spec": "src/routes/__tests__/opportunities.delete-sessions-is-scoped.test.ts",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.delete-sessions-lock-order-postgres.test.ts",
     "anchor": "        'SELECT id FROM sessions WHERE opportunity_id = $1 ORDER BY id FOR UPDATE',",
     "mutation": "        'SELECT id FROM sessions WHERE opportunity_id = $1 FOR UPDATE',",
-    "test": "wraps the deletes in a single committed transaction",
-    "why": "delete-sessions and the sync-booked-counts sweep both lock many session rows; if they acquire shared rows in a different order they can deadlock (40P01). ORDER BY id makes both ascending so no cycle can form (cto/AdaptaLabs#34). This mutation drops only the ORDER BY (leaving FOR UPDATE), which the separate lock-existence entry cannot catch; the transaction test asserts the lock carries ORDER BY id and fails when it does not."
+    "test": "locks the sessions in id order, so a transaction holding them in the other order cannot deadlock",
+    "needsDatabase": true,
+    "why": "delete-sessions and the sync-booked-counts sweep both lock many session rows; if they acquire shared rows in a different order they can deadlock (40P01). ORDER BY id makes both ascending so no cycle can form (cto/AdaptaLabs#34). This entry USED TO NAME the same jest test as delete-sessions-locks-rows-so-the-booking-guard-is-not-a-toctou, and that test cannot see the property: it asserts two independent substrings, one of them a dedicated ORDER BY id assertion, so ORDER BY id -> ORDER BY id DESC reintroduces the deadlock and STILL CONTAINS THE SUBSTRING. It passes the old jest test and fails the new Postgres test by name. That is the hole the new test closes (cto/AdaptaLabs#52). It now names a real-Postgres test that forces a lock cycle: measured interleaved, five rounds each, ordered 5/5 pass and this mutation 5/5 fail by name."
   },
   {
     "id": "reschedule-locks-the-old-session-nowait-against-deadlock",

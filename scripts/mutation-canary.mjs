@@ -74,6 +74,14 @@
  *     Measured, interleaved, three rounds each: the harness before this guard
  *     said SURVIVED 3/3, after it says MUTATION_WAS_LOST 3/3, and with the
  *     saboteur off both say KILLED 3/3.
+ *  8. THE ENVIRONMENT BREAKING UNDER THE TEST IS NOT A KILL EITHER, and it is
+ *     the direction that matters most because it produces a GREEN job over a
+ *     property nothing evaluated. A database that goes away mid-test turns the
+ *     named test red without the mutation ever being judged; a database that
+ *     was never there kills the whole suite before a test runs, and that used
+ *     to report TEST_MISSING - the manifest blamed for naming a test that is
+ *     sitting right there. cto/AdaptaLabs#58. See ENVIRONMENT_FAILURE and
+ *     suiteFailedWithoutRunningATest.
  *
  * RUN IT IN A DEDICATED WORKTREE. Two harnesses backing up and restoring one
  * checkout clobber each other silently.
@@ -101,6 +109,7 @@ export const MUTATION_DID_NOT_BUILD = 'MUTATION_DID_NOT_BUILD';
 export const MUTATION_IS_MALFORMED = 'MUTATION_IS_MALFORMED';
 export const RUNNER_DID_NOT_FINISH = 'RUNNER_DID_NOT_FINISH';
 export const MUTATION_WAS_LOST = 'MUTATION_WAS_LOST';
+export const ENVIRONMENT_FAILED = 'ENVIRONMENT_FAILED';
 
 const RUNNERS = new Set(['jest', 'vitest']);
 
@@ -442,6 +451,92 @@ export function mutationIsMalformed(failure) {
 }
 
 /**
+ * THE SAME FAMILY FROM THE KILLED SIDE. cto/AdaptaLabs#58.
+ *
+ * `MALFORMED_MUTATION` covers a mutation that broke the STATEMENT. It does not
+ * cover a test that went red because the DATABASE went away under it, and
+ * measured against `mutationIsMalformed` every one of these returns false:
+ *
+ *   Error: Connection terminated unexpectedly
+ *   error: too many clients already
+ *   error: terminating connection due to administrator command
+ *   Error: connect ECONNREFUSED 127.0.0.1:5432
+ *
+ * Each turns the named test red without the property under test ever being
+ * evaluated, and the harness graded all four KILLED, exit 0 - a green canary
+ * asserting a property it never evaluated, which is this harness's own subject.
+ *
+ * GATED ON `needsDatabase`, and the gate is the load-bearing half rather than
+ * the pattern. A text signature on the mutated side can swallow a REAL kill,
+ * and this repository already contains the counterexample: three suites inject
+ * `connect ECONNREFUSED cortex-db.internal:5432` on purpose and assert the
+ * response body does not leak it - `admin.dashboard-and-request-read-live-role`,
+ * `health-endpoint` and `opportunities.test.ts`. Break that redaction and the
+ * failure text quotes the received body, ECONNREFUSED and all. Every one of
+ * those runs against a MOCKED pool, so `needsDatabase` is absent on any entry
+ * that could name them, and the check cannot reach them. There is a control for
+ * exactly this in mutation-canary.test.js.
+ *
+ * WHAT IS MEASURED AND WHAT IS NOT, stated plainly because #58 was careful to.
+ * The predicate results above are measured. A real mid-test connection death
+ * producing a false KILLED end to end is NOT: the window is roughly 200ms and
+ * two attempts to kill a container inside it both landed after the assertion.
+ * So the inference is from the predicate and from the wiring test, not from a
+ * reproduction.
+ *
+ * NOT THE WHOLE CLASS. An environmental death that takes the whole suite down
+ * on the MUTATED side still reports MUTATION_DID_NOT_BUILD, because there the
+ * mutation is the one thing that changed and blaming it first is right.
+ */
+const ENVIRONMENT_FAILURE = new RegExp(
+  [
+    // The server closed the socket mid-query, or the pool client was destroyed.
+    'Connection terminated',
+    // The server is up and out of connection slots. Nothing about the property.
+    'too many clients already',
+    // `pg_terminate_backend`, a restart, a `docker stop` on the container.
+    'terminating connection due to',
+    // No server at the other end at all.
+    'ECONNREFUSED'
+  ].join('|'),
+  'i'
+);
+
+export function environmentFailed(failure) {
+  return ENVIRONMENT_FAILURE.test(String(failure ?? ''));
+}
+
+/**
+ * A SUITE THAT REPORTED FAILED HAVING EXECUTED NOTHING, which is what a
+ * `beforeAll` dying looks like in both runners' JSON.
+ *
+ * The second, smaller half of cto/AdaptaLabs#58, and the issue's own account of
+ * it does not reproduce. With `FIRSTHAND_TEST_DATABASE_URL` pointed at a dead
+ * port, the verdict from `main()` is TEST_MISSING, not MUTATION_DID_NOT_BUILD:
+ * `startTestPostgres` throws in `beforeAll` on the BASELINE run, so the empty
+ * matched list is read on the baseline side and never reaches the mutated one.
+ * TEST_MISSING is the worse of the two names - it sends the reader to the
+ * manifest to look for a test that is sitting right there.
+ *
+ * NO TEXT TO MATCH, measured: vitest 3.2.7 wrote 0 bytes to stderr, an empty
+ * `testResults[].message`, and all eleven assertions as `skipped`. So the
+ * signature above cannot see this case and the discriminator has to be
+ * structural. It is, and it separates cleanly:
+ *
+ *   genuinely missing test name, database up  ->  suite passed, 0 executed
+ *   no database at all                        ->  suite FAILED, 0 executed
+ *
+ * Both measured on the same spec, on vitest 3.2.7, minutes apart.
+ */
+export function suiteFailedWithoutRunningATest(parsed) {
+  const suites = Array.isArray(parsed?.testResults) ? parsed.testResults : [];
+  return (
+    suites.some((suite) => String(suite?.status ?? '') === 'failed') &&
+    readAssertions(parsed).length === 0
+  );
+}
+
+/**
  * The verdict, from the two runs.
  *
  * Pure, so its own unit tests can reach every branch without starting a test
@@ -461,7 +556,11 @@ export function verdictFor({
   // exactly as it did. Only the loop, which has the evidence, passes them.
   baselineFinished = true,
   mutatedFinished = true,
-  mutationHeld = true
+  mutationHeld = true,
+  // cto/AdaptaLabs#58. Both default to the shape that changes nothing, so the
+  // baseline-only call below keeps behaving exactly as it did.
+  baselineRanNothingAndFailed = false,
+  needsDatabase = false
 }) {
   // A RUN THAT NEVER FINISHED HAS NOTHING TO GRADE, and it used to be graded
   // anyway. Killed, timed out or never spawned, `spawnSync` wrote no report,
@@ -473,7 +572,13 @@ export function verdictFor({
   const baseline = selectNamedTest(baselineAssertions, testName);
 
   // THE ANTI-ROT GUARD: renamed or deleted, the build breaks.
-  if (baseline.matched.length === 0) return TEST_MISSING;
+  //
+  // Unless the suite never got to run a test at all, in which case blaming the
+  // manifest is the wrong trip entirely: the test is right there and the
+  // environment is what failed. See suiteFailedWithoutRunningATest.
+  if (baseline.matched.length === 0) {
+    return baselineRanNothingAndFailed ? ENVIRONMENT_FAILED : TEST_MISSING;
+  }
 
   // MORE THAN ONE TEST ANSWERS TO THE NAME, so a failure cannot be attributed
   // to it. Gated on the MATCH rather than on how many tests `-t` selected -
@@ -537,7 +642,11 @@ export function verdictFor({
 
   if (mutated.matched[0].status !== 'failed') return SURVIVED;
 
-  // Red for the WRONG REASON is not a kill. See MALFORMED_MUTATION above.
+  // Red for the WRONG REASON is not a kill. See MALFORMED_MUTATION above, and
+  // ENVIRONMENT_FAILURE for the same thing done to the test by the database
+  // rather than by the mutation - which only a database entry can suffer.
+  if (needsDatabase && environmentFailed(mutated.matched[0].failure)) return ENVIRONMENT_FAILED;
+
   return mutationIsMalformed(mutated.matched[0].failure) ? MUTATION_IS_MALFORMED : KILLED;
 }
 
@@ -644,15 +753,35 @@ export function selectNamedTest(assertions, testName) {
  * line naming the entry.
  *
  * ponytail: one flat ceiling for every entry, not a per-entry budget.
- *   -> cto/AdaptaLabs#61. Measured over a whole run: per-entry median 3.65s,
- *   p90 4.08s, slowest 7.26s, so the ceiling is 41x the worst observed run on
- *   this machine and cannot fire on an entry that is merely slow. The margin on
- *   a CI runner is an ESTIMATE, roughly 27x, and that is what #61 exists for:
- *   a genuinely slow entry would be killed at five minutes and reported as a
- *   harness failure. The upgrade path is a `timeoutMs` on the manifest entry,
- *   defaulted to this.
+ *   -> cto/AdaptaLabs#61. The upgrade path is a `timeoutMs` on the manifest
+ *   entry, defaulted to this, and it is not taken because the margin does not
+ *   need it. What #61 asked for first was a MEASUREMENT rather than a budget,
+ *   and the run now takes its own: every invocation is timed and the closing
+ *   summary names the slowest one against this ceiling, so a CI job log states
+ *   the margin instead of a developer extrapolating one. The number that
+ *   mattered had never been measured, only estimated at roughly 27x.
+ *
+ * Read the summary line of a real job log for the margin rather than trusting a
+ * number written down in this comment; every count this file has carried has
+ * gone stale within a fortnight.
  */
 export const RUNNER_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * The slowest single runner invocation of a run, for the closing summary.
+ *
+ * ONE INVOCATION, not one entry, because that is what the ceiling actually
+ * bounds: `spawnSync` is given RUNNER_TIMEOUT_MS per call and an entry makes two
+ * of them. Reporting a per-entry total would overstate the margin by about half
+ * - the wrong direction for a number whose job is to say how close the ceiling
+ * is to firing on innocent input.
+ */
+export function slowestRun(timings) {
+  return timings.reduce(
+    (slowest, timing) => (timing.ms > slowest.ms ? timing : slowest),
+    { id: 'nothing ran', phase: '-', ms: 0 }
+  );
+}
 
 /**
  * Whether the runner got to the end under its own steam.
@@ -679,6 +808,7 @@ function runNamedTest(entry, reportDir, suffix) {
       ? ['jest', entry.spec, '-t', entry.test, '--json', `--outputFile=${outputFile}`]
       : ['vitest', 'run', entry.spec, '-t', entry.test, '--reporter=json', `--outputFile=${outputFile}`];
 
+  const startedAt = Date.now();
   const run = spawnSync('npx', argv, {
     cwd,
     encoding: 'utf8',
@@ -719,6 +849,11 @@ function runNamedTest(entry, reportDir, suffix) {
   return {
     assertions: readAssertions(parsed),
     finished: runnerFinished(run),
+    // cto/AdaptaLabs#61: what the ceiling is actually measured against.
+    elapsedMs: Date.now() - startedAt,
+    // cto/AdaptaLabs#58: a `beforeAll` that died, as distinct from a `-t` that
+    // selected nothing. Both produce an empty assertion list.
+    ranNothingAndFailed: suiteFailedWithoutRunningATest(parsed),
     // stderr first because it is where jest puts the cause; the report's own
     // message second because vitest writes no stderr at all.
     detail: runnerFinished(run)
@@ -781,8 +916,56 @@ function gitPorcelain() {
   );
 }
 
+/**
+ * EVERY ARGUMENT THIS SCRIPT ACCEPTS. There is exactly one, and the shortness of
+ * this set is the point rather than an oversight - see `unrecognisedArgs`.
+ */
+export const ACCEPTED_ARGS = new Set(['--allow-dirty']);
+
+/**
+ * The arguments this script does not understand, so it can refuse them.
+ *
+ * IT USED TO IGNORE THEM. `process.argv.includes('--allow-dirty')` was the whole
+ * parser, so anything else fell through in silence and exit 0. cto/AdaptaLabs#53
+ * caught it the way these things are always caught: a review gate ran
+ * `node scripts/mutation-canary.mjs --id <one-entry>` meaning to check a single
+ * entry, got the whole manifest, and read the resulting `119/119 killed` as a
+ * verdict about its one entry. It happened to be right, so the habit survived.
+ *
+ * THERE IS NO FILTER FLAG, and that is deliberate rather than missing. A
+ * filtered run is structurally blind to a pre-existing entry the same diff
+ * broke: !267's author ran the canary against a manifest cut down to their own
+ * new entries and reddened main. So the answer to "which flag scopes this to one
+ * entry" is that none does, and an argument asking for one now says so instead
+ * of quietly running everything.
+ *
+ * Fails CLOSED, like every other guard in this file: an operator interface that
+ * accepts a typo without comment is how a scoped verification becomes no
+ * verification. A value-taking flag would need its VALUES checked too; there is
+ * no such flag today, so a mistyped `--allow-dirty=yes` is simply unrecognised.
+ */
+export function unrecognisedArgs(argv) {
+  return argv.filter((arg) => !ACCEPTED_ARGS.has(arg));
+}
+
 async function main() {
-  const allowDirty = process.argv.includes('--allow-dirty');
+  const args = process.argv.slice(2);
+
+  const unrecognised = unrecognisedArgs(args);
+  if (unrecognised.length > 0) {
+    console.error(
+      `Refusing to run: unrecognised argument${unrecognised.length > 1 ? 's' : ''} ` +
+        `${unrecognised.join(' ')}\n` +
+        `The only accepted argument is ${[...ACCEPTED_ARGS].join(' ')}.\n` +
+        'There is NO filter flag: this runner always runs the whole manifest, because a\n' +
+        'run scoped to the entries a diff added cannot see a pre-existing entry the same\n' +
+        'diff broke. Ignoring this argument would have run all of them anyway, silently,\n' +
+        'and reported a full run as though it were the scoped one you asked for.'
+    );
+    process.exit(2);
+  }
+
+  const allowDirty = args.includes('--allow-dirty');
 
   const dirtyBefore = gitPorcelain();
   if (dirtyBefore && !allowDirty) {
@@ -815,6 +998,12 @@ async function main() {
     );
     process.exit(2);
   }
+
+  // SAY HOW MANY ENTRIES ARE ABOUT TO RUN. The cheaper half of cto/AdaptaLabs#53:
+  // whatever the argument parser does, a run that states its own size makes both
+  // "I meant to scope this" and "the manifest lost entries" visible in line one
+  // rather than in a wall clock nobody was watching.
+  console.log(`Running all ${entries.length} manifest entries; there is no filter.`);
 
   const reportDir = mkdtempSync(path.join(tmpdir(), 'mutation-canary-'));
   const originals = new Map();
@@ -854,6 +1043,9 @@ async function main() {
   }
 
   const results = [];
+  // cto/AdaptaLabs#61: every runner invocation, so the run can state its own
+  // margin against RUNNER_TIMEOUT_MS rather than leaving it to be extrapolated.
+  const timings = [];
 
   try {
     for (const entry of entries) {
@@ -882,6 +1074,7 @@ async function main() {
       }
 
       const baseline = runNamedTest(entry, reportDir, 'baseline');
+      timings.push({ id: entry.id, phase: 'baseline', ms: baseline.elapsedMs });
 
       // The mutated run is only worth paying for once the baseline says the
       // named test exists, ran alone, and passed. Reaching
@@ -891,7 +1084,8 @@ async function main() {
         baselineAssertions: baseline.assertions,
         mutatedAssertions: [],
         testName: entry.test,
-        baselineFinished: baseline.finished
+        baselineFinished: baseline.finished,
+        baselineRanNothingAndFailed: baseline.ranNothingAndFailed
       });
 
       if (baselineVerdict !== MUTATION_DID_NOT_BUILD) {
@@ -903,7 +1097,12 @@ async function main() {
         const detail =
           baselineVerdict === TEST_AMBIGUOUS
             ? `${selectNamedTest(baseline.assertions, entry.test).matched.length} assertions end with this name`
-            : baseline.detail;
+            : baselineVerdict === ENVIRONMENT_FAILED
+              ? `${entry.spec} reported a FAILED suite having executed no test at all, with no ` +
+                'mutation applied. Nothing about this entry was measured. The likeliest cause is ' +
+                'a setup hook that died - for a needsDatabase entry, no reachable database.' +
+                (baseline.detail ? ` ${baseline.detail}` : ' The runner said nothing further.')
+              : baseline.detail;
         results.push({ id: entry.id, verdict: baselineVerdict, detail });
         console.log(
           `${baselineVerdict.padEnd(22)} ${entry.id} - "${entry.test}" in ${entry.spec}`
@@ -914,6 +1113,7 @@ async function main() {
       const mutatedSource = applyMutation(source, entry.anchor, entry.mutation);
       writeFileSync(file, mutatedSource);
       const mutated = runNamedTest(entry, reportDir, 'mutated');
+      timings.push({ id: entry.id, phase: 'mutated', ms: mutated.elapsedMs });
       // READ BACK BEFORE RESTORING, or the check is against this harness's own
       // restore and can never fail.
       let mutationHeld = false;
@@ -937,7 +1137,12 @@ async function main() {
         // (165 pass, 0 fail), while deleting the one above it fails
         // `main() hands verdictFor whether the BASELINE runner finished`.
         mutatedFinished: mutated.finished,
-        mutationHeld
+        mutationHeld,
+        // cto/AdaptaLabs#58. Only an entry that reaches a real database can go
+        // red because the database went away, and confining the check to those
+        // is what stops it swallowing the kills of the three suites that inject
+        // a connection error ON PURPOSE against a mocked pool.
+        needsDatabase: Boolean(entry.needsDatabase)
       });
       results.push({
         id: entry.id,
@@ -948,7 +1153,13 @@ async function main() {
               'this entry was measured. Something else wrote to the tree during the run.'
             : mutated.detail
       });
-      console.log(`${verdict.padEnd(22)} ${entry.id}`);
+      // THE ELAPSED TIME BESIDE THE VERDICT. cto/AdaptaLabs#61: a
+      // RUNNER_DID_NOT_FINISH at five minutes and one three seconds in are the
+      // same line otherwise, and they mean opposite things - a ceiling that
+      // fired on a slow entry, or a runner that died. Both invocations, because
+      // the ceiling bounds each of them separately.
+      const elapsed = `${(baseline.elapsedMs / 1000).toFixed(1)}s + ${(mutated.elapsedMs / 1000).toFixed(1)}s`;
+      console.log(`${verdict.padEnd(22)} ${entry.id} (${elapsed})`);
     }
   } finally {
     restoreAll();
@@ -963,6 +1174,18 @@ async function main() {
 
   const failed = results.filter((result) => result.verdict !== KILLED);
   console.log(`\n${results.length - failed.length}/${results.length} mutations killed.`);
+
+  // THE RUN MEASURES ITS OWN MARGIN. cto/AdaptaLabs#61 asked for the CI figure,
+  // which had only ever been an extrapolation from a developer machine, and the
+  // cheapest way to have it is for every job log to state it. Printed whatever
+  // the verdicts were: a red run is exactly when somebody wants to know whether
+  // five minutes was enough.
+  const slowest = slowestRun(timings);
+  console.log(
+    `Slowest runner invocation ${(slowest.ms / 1000).toFixed(1)}s ` +
+      `(${slowest.id}, ${slowest.phase}), against a ${RUNNER_TIMEOUT_MS / 1000}s ceiling: ` +
+      `${slowest.ms > 0 ? (RUNNER_TIMEOUT_MS / slowest.ms).toFixed(0) : 'no'}x margin.`
+  );
 
   if (failed.length > 0) {
     console.error('\nEntries that did not report KILLED:');
