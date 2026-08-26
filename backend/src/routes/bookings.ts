@@ -869,19 +869,76 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
 // needed". Not the escalation it was raised as - `$1` was always `req.user!.id`
 // - but a route named for a bulk mutation, carrying that mutation ready to
 // uncomment, on the weakest gate we have, and with no caller anywhere in the
-// tree. The route below returns a superset of what it returned.
+// tree. `GET /my/bookings/all` below returns a superset of what it returned,
+// which is the whole of the "nothing is lost" argument and the reason that
+// route was renamed out of "debug" rather than deleted beside this one (#54).
 //
 // Pinned in bookings.cleanup-cancelled-is-gone.test.ts, which fails BY NAME if
 // it comes back.
 
-// GET /api/my/bookings/debug - Debug endpoint to see all bookings (including cancelled)
-router.get('/my/bookings/debug', requireAuth, async (req: Request, res: Response) => {
+/**
+ * GET /api/bookings/my/bookings/all - the caller's OWN bookings, cancelled ones
+ * included, owner-scoped by `WHERE b.user_id = $1`.
+ *
+ * IT WAS CALLED `/my/bookings/debug` UNTIL cto/AdaptaLabs#54, and the rename is
+ * the whole change - same gate, same statement, same response. A route named
+ * "debug" tells the next reader it is disposable, and this one is not: the
+ * comment above and `bookings.cleanup-cancelled-is-gone.test.ts` both rest the
+ * argument that #49's deletion cost nothing on THIS route returning a superset
+ * of what the deleted one returned. Deleting it would have quietly invalidated
+ * a merged MR's rationale, which is exactly what a confident cleanup does to a
+ * route whose name invites one.
+ *
+ * `GET /my/bookings` below is the participant-facing surface and it splits
+ * active bookings into upcoming and past. This one is the flat, unfiltered
+ * view, which is why the cancelled rows only exist here.
+ *
+ * SO IT IS A TEST-FIXTURE SURFACE, and #54 asked for it to be named as one
+ * rather than dressed up as a feature. Its only consumer in the tree is the
+ * suite; nothing in the product wants a cancelled-bookings view and this route
+ * is not an argument that anything should. It is here because a merged
+ * deletion's correctness argument observes cancelled bookings through it, and
+ * that is the entire justification.
+ *
+ * ponytail: an unbounded read - no LIMIT and no cursor, so the response grows
+ * with the caller's whole booking history.
+ *   -> #66. A bare LIMIT would silently truncate a route whose contract is
+ *      "all of them", so the bound wants keyset pagination on the
+ *      `(created_at, id)` this already orders by, or a decision that it is not
+ *      worth having.
+ */
+router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
     
-    // Get ALL bookings for this user (including cancelled)
+    // Get ALL bookings for this user (including cancelled).
+    //
+    // NOT `b.*`, for the reason the sibling route below already carries in
+    // full: the bookings row holds admin_notes - a researcher's free-text
+    // judgement about this participant - plus approved_by and approved_at, and
+    // spreading the row reads all of it out of the database. That leak has
+    // happened here before, on `GET /my/bookings`, and is recorded at
+    // learnings.md:349.
+    //
+    // THE RESPONSE MAP IS NOT THE GUARD. It was the only thing keeping those
+    // three columns off the wire on this route, and a refute gate proved the
+    // guard was worth nothing by adding `admin_notes: booking.admin_notes` to
+    // the map: 1313 passed / 1313 on the mutated tree and on the baseline,
+    // interleaved. Nothing in the backend suite could see it. So the fix is at
+    // the PROJECTION, like the sibling's, which removes the class rather than
+    // the instance - a column never read cannot be mapped by accident.
+    //
+    // Pinned by `sends no researcher-only column to the caller, whatever the
+    // row carries` in bookings.cleanup-cancelled-is-gone.test.ts, which asserts
+    // both halves: the projection does not say `b.*`, and a row carrying all
+    // three fields reaches the caller with none of them.
+    const ownBookingColumns = `
+      b.id, b.session_id, b.status, b.created_at, b.cancelled_at
+    `;
+
     const allBookingsResult = await pool.query(`
-      SELECT b.*, s.start_time as session_start_time, s.end_time as session_end_time,
+      SELECT ${ownBookingColumns},
+             s.start_time as session_start_time, s.end_time as session_end_time,
              o.title as opportunity_title, o.type as opportunity_type
       FROM bookings b
       JOIN sessions s ON b.session_id = s.id
@@ -906,8 +963,12 @@ router.get('/my/bookings/debug', requireAuth, async (req: Request, res: Response
       }))
     });
   } catch (error) {
-    logger.error('Error fetching debug bookings', { error });
-    res.status(500).json({ error: 'Failed to fetch debug bookings' });
+    // "debug" is gone from the client-visible string too (#54). The defect that
+    // issue closed was a name telling the next reader this route is
+    // disposable, and a 500 body saying "debug bookings" serves that name
+    // straight to the caller.
+    logger.error('Error fetching all bookings for user', { error });
+    res.status(500).json({ error: 'Failed to fetch bookings' });
   }
 });
 

@@ -68,10 +68,20 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  * `docs/FORGE-CONFLUENCE-REBUILD-SPEC.md` already marked "optional". No
  * component, page, hook, test, script or spec imported the export.
  *
- * NOTHING IS LOST. `GET /api/bookings/my/bookings/debug` returns a superset -
+ * NOTHING IS LOST. `GET /api/bookings/my/bookings/all` returns a superset -
  * the caller's bookings including cancelled ones - owner-scoped by the same
- * `WHERE b.user_id = $1`. The last arm below pins that, so the claim that this
- * deletion costs nothing is asserted rather than asserted-in-prose.
+ * `WHERE b.user_id = $1`. The last two arms below pin that, so the claim that
+ * this deletion costs nothing is asserted rather than asserted-in-prose.
+ *
+ * THAT ROUTE WAS `GET /api/bookings/my/bookings/debug` UNTIL cto/AdaptaLabs#54,
+ * and the rename is the point of #54 rather than an incidental tidy. This
+ * docblock is the argument that #49's deletion cost nothing, and it rests
+ * entirely on that route continuing to exist - while the route's own name told
+ * the next reader it was disposable. #54 considered deleting it and rewriting
+ * this argument from first principles, and chose the smaller, truer change:
+ * the route keeps its gate, its statement and its response, and loses the name
+ * that invited a confident wrong cleanup. So this argument is unchanged in
+ * substance; only the URL it names has moved.
  *
  * The inventory in `authorisation-inventory.test.ts` walks the real mount graph
  * and compares whole maps, so a re-added route fails there too - but it fails
@@ -149,7 +159,20 @@ describe('bookings cleanup-cancelled is gone', () => {
     expect(res.body).toEqual({ upcoming: [], past: [] });
   });
 
-  it('leaves the caller their cancelled bookings on the debug route scoped to their own id', async () => {
+  it('answers 404 on the old debug spelling of the superset route', async () => {
+    // #54 renamed `/my/bookings/debug` to `/my/bookings/all`. Without this arm
+    // the rename could have been a COPY - the old path left mounted beside the
+    // new one - and the arm below would pass identically while the name the
+    // rename existed to remove was still being served. Its control is that
+    // arm: the new path answers 200 on the same router in the same file.
+    await request(listening(appAs('employee', CALLER_ID)))
+      .get('/api/bookings/my/bookings/debug')
+      .expect(404);
+
+    expect(mockQuery).not.toHaveBeenCalled();
+  });
+
+  it('leaves the caller their cancelled bookings on the all route scoped to their own id', async () => {
     // THE REPLACEMENT, asserted rather than promised. This is the capability
     // the deleted route provided, and it is owner-scoped by the caller's id -
     // which is also the evidence for the triage verdict that the deleted route
@@ -157,7 +180,7 @@ describe('bookings cleanup-cancelled is gone', () => {
     mockQuery.mockResolvedValue({ rows: [CANCELLED_ROW] } as never);
 
     const res = await request(listening(appAs('employee', CALLER_ID)))
-      .get('/api/bookings/my/bookings/debug')
+      .get('/api/bookings/my/bookings/all')
       .expect(200);
 
     // The presence control: the fixture DOES come back, so the scoping
@@ -168,5 +191,94 @@ describe('bookings cleanup-cancelled is gone', () => {
     const [sql, params] = mockQuery.mock.calls[0] as [string, string[]];
     expect(sql).toContain('WHERE b.user_id = $1');
     expect(params).toEqual([CALLER_ID]);
+  });
+
+  it('says nothing about "debug" to the caller, including on the 500 path', async () => {
+    // #54's defect was a NAME telling the next reader this route is
+    // disposable, and renaming the path left that name being served anyway:
+    // the catch block answered `{"error":"Failed to fetch debug bookings"}`.
+    // A refute gate on !270 found it because nothing asserted it - `git grep
+    // "Failed to fetch debug\|fetching debug"` over every tracked file
+    // returned those two lines and nothing else, so the rename was incomplete
+    // and the whole suite was green.
+    //
+    // The error path rather than the happy path, because that is where the
+    // string actually lived, and a route's 500 body is client-visible.
+    mockQuery.mockRejectedValue(new Error('connection terminated') as never);
+
+    const res = await request(listening(appAs('employee', CALLER_ID)))
+      .get('/api/bookings/my/bookings/all')
+      .expect(500);
+
+    // THE CONTROL: the error path really was taken, so the absence below is
+    // read off the response that carries the string rather than off a 200.
+    expect(res.body.error).toBeTruthy();
+    expect(JSON.stringify(res.body).toLowerCase()).not.toContain('debug');
+  });
+
+  it('sends no researcher-only column to the caller, whatever the row carries', async () => {
+    // OWNER-SCOPED IS NOT THE SAME AS SAFE TO SPREAD. The bookings row holds
+    // `admin_notes` - a researcher's free-text judgement about this
+    // participant, written on a surface labelled "Admin Notes (Optional)" -
+    // plus `approved_by` and `approved_at`. `WHERE b.user_id = $1` keeps
+    // another user's row out; it does nothing about which of the caller's OWN
+    // columns reach the caller's browser. This repository has already shipped
+    // that leak once on the sibling route, recorded at learnings.md:349.
+    //
+    // WHY THIS ARM EXISTS. The route used `SELECT b.*` and relied entirely on
+    // the response map to drop those three fields, and a refute gate on !270
+    // proved the map was an unguarded guard: adding
+    // `admin_notes: booking.admin_notes` to it measured 1313 passed / 1313 on
+    // both the mutated and the baseline tree, interleaved. The leak was
+    // invisible to all 78 backend suites.
+    //
+    // So the fixture below carries all three fields even though the narrowed
+    // projection means production never selects them - a test that only fed
+    // the columns the query asks for could not tell a narrowed projection from
+    // a lucky one, and would go green again the moment somebody widened it.
+    mockQuery.mockResolvedValue({
+      rows: [
+        {
+          ...CANCELLED_ROW,
+          admin_notes: 'flaky attendance, do not re-invite',
+          approved_by: 'researcher-9',
+          approved_at: new Date('2026-01-03T09:00:00.000Z'),
+        },
+      ],
+    } as never);
+
+    const res = await request(listening(appAs('employee', CALLER_ID)))
+      .get('/api/bookings/my/bookings/all')
+      .expect(200);
+
+    // THE CONTROL FOR THE ABSENCES BELOW, and without it they all pass against
+    // an empty response, a 500 body or a route that returned nothing at all.
+    expect(res.body.bookings).toHaveLength(1);
+    expect(res.body.bookings[0].status).toBe('cancelled');
+
+    // Over the whole serialised body rather than key-by-key, so a field
+    // renamed on the way out - `notes`, `internal_notes` - is caught by its
+    // VALUE even when its key is not one of the three below.
+    const wire = JSON.stringify(res.body);
+    for (const secret of [
+      'admin_notes',
+      'approved_by',
+      'approved_at',
+      'flaky attendance, do not re-invite',
+      'researcher-9',
+    ]) {
+      expect({ secret, onTheWire: wire.includes(secret) }).toEqual({
+        secret,
+        onTheWire: false,
+      });
+    }
+
+    // AND THE PROJECTION, which is where the class is closed rather than the
+    // instance. A column never selected cannot be mapped out by accident, so
+    // the map stops being the only thing between a researcher's notes and a
+    // participant's Network tab.
+    const [sql] = mockQuery.mock.calls[0] as [string];
+    expect(sql).not.toContain('b.*');
+    expect(sql).toContain('b.id, b.session_id, b.status, b.created_at, b.cancelled_at');
   });
 });
