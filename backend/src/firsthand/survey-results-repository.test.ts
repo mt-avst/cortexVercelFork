@@ -62,7 +62,8 @@ import {
   answerCountsByStep,
   listResponsesForOpportunity,
   listResponsesForStudy,
-  studyHasResponses
+  studyHasResponses,
+  MAX_AGGREGATE_RESPONSE_CHARS
 } from "./survey-results-repository";
 import { RESULTS_STATEMENT_TIMEOUT_MS } from "./runtime-database";
 import { RuntimeDatabaseBusyError } from "./runtime-pool-admission";
@@ -249,6 +250,84 @@ describe("survey results readers", () => {
       // Off-by-one in the other direction: refusing at the bound rather than
       // past it would refuse a study that fits.
       expect(responses).toHaveLength(200_000);
+    });
+  });
+
+  /**
+   * THE OPEN-TEXT BODY BOUND. cto/AdaptaLabs#9, option A.
+   *
+   * The row bound above does not bound the BODY: `surveyAnswerSchema.text` is a
+   * bare `z.string()` with no length limit, so a handful of multi-megabyte
+   * answers is a few-hundred-megabyte `res.json` - the heap that OOM-kills live
+   * sessions on the 2Gi pod, and the body a stalled reader holds the one results
+   * permit against. This is the SECOND 413, on total free-text characters rather
+   * than row count.
+   *
+   * Both directions, and every free-text field, because a counter that saw only
+   * `text` would pass a study whose whole payload was in `selectedOption`.
+   */
+  describe("the open-text body bound", () => {
+    const pushAnswer = (payload: Record<string, unknown>) => {
+      rowsToReturn.push({
+        session_id: `session_${rowsToReturn.length}`,
+        step_id: "q1",
+        step_type: "open_text",
+        response_payload: payload,
+        saved_at: "2026-08-17T10:00:00.000Z"
+      });
+    };
+
+    it("pins the character ceiling as a literal", () => {
+      // A number reported to a reviewer is the literal or it is derived from
+      // the thing it is meant to guard. Asserted here so a change to the
+      // ceiling is a failing test, not a silent policy move.
+      expect(MAX_AGGREGATE_RESPONSE_CHARS).toBe(5_000_000);
+    });
+
+    it("refuses rather than serving a body past the character ceiling", async () => {
+      // One answer, one character over the line. A researcher handed a
+      // few-hundred-megabyte page is a browser that hangs and a pod that may
+      // OOM; the streamed CSV export is the path for a study this large.
+      pushAnswer({ text: "x".repeat(MAX_AGGREGATE_RESPONSE_CHARS + 1) });
+
+      await expect(
+        listResponsesForOpportunity({ opportunityId: "o", studyId: "s" })
+      ).rejects.toMatchObject({ statusCode: 413 });
+    });
+
+    it("serves a body sitting exactly on the character ceiling", async () => {
+      // Refusing at the bound rather than past it would refuse a study that
+      // fits - the same off-by-one the row bound guards in both directions.
+      pushAnswer({ text: "x".repeat(MAX_AGGREGATE_RESPONSE_CHARS) });
+
+      const responses = await listResponsesForOpportunity({
+        opportunityId: "o",
+        studyId: "s"
+      });
+
+      expect(responses).toHaveLength(1);
+    });
+
+    it("counts selectedOption and selectedOptions, not only text", async () => {
+      // The budget is spread across three free-text fields so no single answer
+      // is over the line, but their sum is. A counter reading only `text` would
+      // serve this body.
+      const third = Math.floor(MAX_AGGREGATE_RESPONSE_CHARS / 3) + 1;
+      pushAnswer({ text: "a".repeat(third) });
+      pushAnswer({ selectedOption: "b".repeat(third) });
+      pushAnswer({ selectedOptions: ["c".repeat(third)] });
+
+      await expect(
+        listResponsesForOpportunity({ opportunityId: "o", studyId: "s" })
+      ).rejects.toMatchObject({ statusCode: 413 });
+    });
+
+    it("applies the same bound to the study-wide reader", async () => {
+      pushAnswer({ text: "x".repeat(MAX_AGGREGATE_RESPONSE_CHARS + 1) });
+
+      await expect(listResponsesForStudy("s")).rejects.toMatchObject({
+        statusCode: 413
+      });
     });
   });
 

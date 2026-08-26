@@ -45,6 +45,76 @@ type ResponseFilter =
  */
 const MAX_RESPONSE_ROWS = 200_000;
 
+/**
+ * The most free-text characters an aggregate results BODY may carry.
+ * cto/AdaptaLabs#9, option A.
+ *
+ * `MAX_RESPONSE_ROWS` bounds the row count, but not the body: an open-text
+ * answer has no length limit at the write boundary (`surveyAnswerSchema.text`
+ * is a bare `z.string()`), so the AGGREGATE of many normal answers - or a few
+ * large ones, each still under the 100kb request-body limit - is a
+ * few-hundred-megabyte `res.json` on a single-replica 2Gi pod. That is two
+ * problems, and this closes ONE of them outright:
+ *
+ *  - the heap that OOM-kills every live participant session - CLOSED, the body
+ *    is now bounded;
+ *  - the buffered body a stalled reader holds the one results permit against
+ *    until `close` - only BOUNDED, not closed. These routes still `res.json`
+ *    the whole body and release the permit on `close`, and a bounded body is
+ *    still ~12-19MB at the ceiling, which does not fit the socket buffer and so
+ *    still stalls. Closing that means not buffering the aggregate at all, the
+ *    way the CSV twin streams - tracked as cto/AdaptaLabs#85, newly viable now
+ *    the heap is bounded.
+ *
+ * The CSV twin STREAMS and has neither problem, which is why the refusal points
+ * a large study there rather than at nothing.
+ *
+ * Counted over the free-text PAYLOAD fields only - `text`, `selectedOption`,
+ * `selectedOptions` - because that is the only axis a participant can drive
+ * unbounded per answer. The other text in the body, `step_prompt` (surfaced in
+ * `asked_as` and `removed_questions`), is server-sourced from the study and
+ * capped at `maxPromptLength` per wording, and it appears in the body once per
+ * DISTINCT wording, not per answer - so its cost scales with the number of
+ * author rewordings, an authoring-limited quantity, not with the answer count.
+ *
+ * ponytail: `step_prompt` length is uncounted here. Its pathological ceiling is
+ *   ~200k distinct 2000-char wordings (~400MB), reachable only by ~100k+
+ *   interleaved author edits each answered once - author self-sabotage, not a
+ *   participant DoS - so it stays comment-only per AGENTS.md (production cannot
+ *   realistically hit it). The upgrade path if it ever matters: count distinct
+ *   `step_prompt` values here, or bound the serialised body directly (#85).
+ *
+ * Five million characters is past any interactive study; a study larger than
+ * this is a database export, not a page. Written as a literal here and asserted
+ * as the same literal in the test, not derived from it.
+ */
+export const MAX_AGGREGATE_RESPONSE_CHARS = 5_000_000;
+
+/**
+ * The free-text length one stored answer contributes to the body.
+ *
+ * Only the fields `surveyAnswerSchema` allows to be unbounded strings. `rating`
+ * is an integer and negligible; the session id and timestamps are fixed width.
+ */
+function payloadTextLength(payload: Record<string, unknown>): number {
+  let total = 0;
+
+  const text = payload.text;
+  if (typeof text === "string") total += text.length;
+
+  const selectedOption = payload.selectedOption;
+  if (typeof selectedOption === "string") total += selectedOption.length;
+
+  const selectedOptions = payload.selectedOptions;
+  if (Array.isArray(selectedOptions)) {
+    for (const option of selectedOptions) {
+      if (typeof option === "string") total += option.length;
+    }
+  }
+
+  return total;
+}
+
 /** The one row mapping, shared by every reader in this file. */
 function toStoredResponse(row: ResponseRow): StoredResponse {
   return {
@@ -108,6 +178,30 @@ async function listResponsesWhere(
           413,
           "RESPONSE_SET_TOO_LARGE"
         );
+      }
+
+      /**
+       * REFUSED BEFORE THE BODY IS BUILT - the second half of the bound.
+       *
+       * Summed here, over the raw rows and with an early exit, rather than by
+       * serialising the aggregate and measuring it: a body large enough to
+       * refuse is a body too large to have built safely on this pod, so the
+       * check that saves the heap cannot be the one that allocates it. The
+       * structural body (a `session_id` per open-text answer) is bounded by
+       * `MAX_RESPONSE_ROWS`, and the wording text by authoring - so the
+       * participant-driven free text is the only axis left to bound here. See
+       * the constant's docblock for the axis this deliberately does not count.
+       */
+      let totalTextChars = 0;
+      for (const row of result.rows) {
+        totalTextChars += payloadTextLength(row.response_payload ?? {});
+        if (totalTextChars > MAX_AGGREGATE_RESPONSE_CHARS) {
+          throw new AppError(
+            "This study has collected more open-text than can be shown in one request. Ask for a database export.",
+            413,
+            "RESULTS_BODY_TOO_LARGE"
+          );
+        }
       }
 
       return result.rows.map(toStoredResponse);
