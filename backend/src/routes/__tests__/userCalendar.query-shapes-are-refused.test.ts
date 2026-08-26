@@ -10,10 +10,11 @@ import express from 'express';
  * does, at the OAuth callback (`code`, `state`) and my-events
  * (`start_time`, `end_time`).
  *
- * The callback is the one worth the test: an array `state` compared against
- * the session's stored state with `!==` is always unequal, and an array `code`
- * is truthy past `if (!code)` and lands in the token exchange. `validateQuery`
- * refuses the shape before any of that runs.
+ * The callback is the one worth the test: an array `code` is truthy past
+ * `if (!code)` and would land in the token exchange. `validateQuery` refuses a
+ * non-string `code` (and `state`) shape before any of that runs. (The old
+ * session-state comparison this comment used to cite was dead code, removed in
+ * #83.)
  *
  * Refusal arms assert no database connection was ever taken - the callback
  * handler's FIRST line is `pool.connect()`, so mounting the validator after
