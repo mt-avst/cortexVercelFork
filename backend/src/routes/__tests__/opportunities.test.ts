@@ -545,8 +545,71 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls and surveys'
+        'External link is required for published polls, surveys and one-question opportunities'
       );
+    });
+
+    /**
+     * The same rule, on the type that was missing from it.
+     *
+     * `question` hands the participant to another site and has no native path
+     * at all, but the publish gate named only `unmoderated`, `poll` and
+     * `survey`. So this call used to answer 201, and the study it created was
+     * one nobody could take part in: the detail page renders a disabled "Link
+     * unavailable" button, which is honest and far too late.
+     *
+     * At the ROUTE rather than only against `findPublishProblem`, because the
+     * predicate being right proves nothing about whether this endpoint asks
+     * it. Both were checked - the create path calls it unconditionally on
+     * `data.type`, and PATCH's `changesPublishShape` fires on `status` and on
+     * `external_link_optional`, neither of which is type-specific.
+     */
+    it('should require external link for a published question', async () => {
+      const response = await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'published'
+          // Missing external_link_optional
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'External link is required for published polls, surveys and one-question opportunities'
+      );
+    });
+
+    it('still lets a question be saved as a draft with no link', async () => {
+      // The refusal is about publishing, not about authoring. An author must
+      // be able to write the title before they have the link.
+      mockQuery.mockResolvedValueOnce({ rows: [] }); // user upsert
+      mockQuery.mockResolvedValueOnce({
+        rows: [
+          {
+            id: 'q-draft-1',
+            type: 'question',
+            title: 'Valid Question Title',
+            purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+            status: 'draft',
+            external_link_optional: null,
+            owner_user_id: 'test-user-id',
+            created_at: new Date(),
+            updated_at: new Date()
+          }
+        ]
+      }); // opportunity insert
+
+      await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          status: 'draft'
+        })
+        .expect(201);
     });
 
     /**
@@ -568,7 +631,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls and surveys'
+        'External link is required for published polls, surveys and one-question opportunities'
       );
     });
 
@@ -4226,7 +4289,7 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toBe(
-        'External link is required for published polls and surveys'
+        'External link is required for published polls, surveys and one-question opportunities'
       );
     });
 

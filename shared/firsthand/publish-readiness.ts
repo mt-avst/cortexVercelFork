@@ -48,7 +48,7 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
   native_survey_study_required:
     "Add questions, or link an existing set of questions, before publishing",
   external_link_required:
-    "External link is required for published polls and surveys"
+    "External link is required for published polls, surveys and one-question opportunities"
 };
 
 /**
@@ -137,14 +137,37 @@ export const findPublishProblem = (
     return null;
   }
 
-  if (input.type === "poll" || input.type === "survey") {
-    // The link is required only where the participant is actually being sent
-    // somewhere else. A native poll needs its questions instead.
-    if (input.deliveryMode === "native") {
-      return input.hasLinkedStudy || input.hasInlineSurvey
-        ? null
-        : { code: "native_survey_study_required" };
-    }
+  // Native delivery exists for a poll and a survey only, so this branch is
+  // asked about those two rather than about `deliveryMode` alone. A `question`
+  // carrying `native` is not a native question - there is no runner for one -
+  // and must still be asked for its link below.
+  if (
+    (input.type === "poll" || input.type === "survey") &&
+    input.deliveryMode === "native"
+  ) {
+    return input.hasLinkedStudy || input.hasInlineSurvey
+      ? null
+      : { code: "native_survey_study_required" };
+  }
+
+  // Everything that hands the participant to another site needs somewhere to
+  // send them.
+  //
+  // `question` is in this set and was missing from it, which is the whole of
+  // the defect: the gate named three types and `question` was not one, so a
+  // one-question study published with an empty link and the author was told
+  // nothing. What the participant then met was a disabled "Link unavailable"
+  // button - honest, and the wrong place to find out.
+  //
+  // It belongs here rather than in a branch of its own because it is external
+  // by construction, not by choice: `getTabsForType` gives it the External Link
+  // step unconditionally and offers no native alternative. If a native path is
+  // ever added (#78), this is one of the places that has to learn about it.
+  if (
+    input.type === "poll" ||
+    input.type === "survey" ||
+    input.type === "question"
+  ) {
     if (!isPublishableExternalLink(input.externalLink)) {
       return { code: "external_link_required" };
     }
