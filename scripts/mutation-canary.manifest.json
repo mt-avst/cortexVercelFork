@@ -1429,9 +1429,9 @@
   },
   {
     "id": "port-fails-closed-rather-than-becoming-nan",
-    "why": "cto/AdaptaLabs#48. PORT ended in .catch(() => 3001), and that .catch NEVER FIRED for a non-numeric value - z.string().transform(Number) returns NaN rather than throwing, so there was nothing for it to catch. Measured on the schema before the change: PORT=abc parsed to NaN and PORT= parsed to 0. The live consumer is app.listen(config.PORT) in backend/src/index.ts, and listen(NaN) binds an EPHEMERAL port, so on Kubera the readiness probe on 3001 never passes and no log line names the cause. The mutation restores that exact .catch(): it type-checks and PORT stays a number, so nothing fails to build. MEASURED, not asserted: applied, it fails 8 of 37 in this spec - all six 'refuses to boot on the unusable PORT' arms, the named NaN arm, and the message arm - and the unset, valid and CORS_ORIGIN arms stay green. An earlier version of this note claimed only the NaN arm could see it, which was a claim about verification that the measurement refuted. The NaN arm is still the one worth naming here, because it is the only one that pins the SHAPE of the old defect - a value that parsed successfully into NaN rather than a value that was refused - and NaN === NaN is false, so it has to be written as a refusal check rather than as toBe(NaN).",
+    "why": "cto/AdaptaLabs#48. PORT ended in .catch(() => 3001), and that .catch NEVER FIRED for a non-numeric value - z.string().transform(Number) returns NaN rather than throwing, so there was nothing for it to catch. Measured on the schema before the change: PORT=abc parsed to NaN and PORT= parsed to 0. The live consumer is app.listen(config.PORT) in backend/src/index.ts, and listen(NaN) binds an EPHEMERAL port, so on Kubera the readiness probe on 3001 never passes and no log line names the cause. The mutation restores that exact .catch(): it type-checks and PORT stays a number, so nothing fails to build. MEASURED, not asserted, and RE-MEASURED on the #59 branch after the spec grew: applied, it fails 12 of 52 in this spec - all nine 'refuses to boot on the unusable PORT' arms, the named ceiling arm, the named NaN arm, and the message arm - and the unset, valid and CORS_ORIGIN arms stay green. It was 8 of 37 before #59 added the three over-the-ceiling arms and the ceiling arm, and the spec has since grown again; the figure is restated rather than left, because a count nobody re-measures is how a note starts lying. An earlier version of this note claimed only the NaN arm could see it, which was a claim about verification that the measurement refuted. The NaN arm is still the one worth naming here, because it is the only one that pins the SHAPE of the old defect - a value that parsed successfully into NaN rather than a value that was refused - and NaN === NaN is false, so it has to be written as a refusal check rather than as toBe(NaN).",
     "file": "shared/config/environment.ts",
-    "anchor": "  PORT: z.coerce.number().int().positive().default(3001),",
+    "anchor": "  PORT: z.coerce.number().int().positive().max(65535).default(3001),",
     "mutation": "  PORT: z.string().transform(Number).catch(() => 3001),",
     "runner": "jest",
     "spec": "src/config/__tests__/environment.test.ts",
@@ -1468,5 +1468,55 @@
     "needsDatabase": true,
     "spec": "src/services/__tests__/gamification-postgres.test.ts",
     "test": "renders the same cursor under a non-UTC session TimeZone"
+  },
+  {
+    "id": "port-refuses-a-value-above-the-16-bit-ceiling",
+    "why": "cto/AdaptaLabs#59. .int().positive() alone answers a wider question than 'is this a port': every positive integer passed, so PORT=1e5 coerced to 100000 and validated CLEANLY, then failed inside app.listen() - a boot failure moved from the place that names the variable to the place that does not. Measured on the schema before this change, on ab8e605: PORT=1e5 -> 100000 accepted, PORT=99999 -> 99999 accepted, PORT=65536 -> 65536 accepted. 65535 is not a policy number somebody picked, it is the largest value a 16-bit port field holds. The mutation removes .max(65535) and nothing else, so it type-checks and PORT is still a number - the same shape as the defect it restores. MEASURED, not asserted, on this branch: applied, it fails 4 of 52 in this spec - the '65536', '99999' and '1e5' arms of 'refuses to boot on the unusable PORT', plus the named ceiling arm - and every other arm including the 65535 control stays green. The ceiling arm is the one named here because it is the only one that pins 65535 and 65536 as LITERALS on both sides; the it.each arms would still read as a pass if the ceiling moved to 70000.",
+    "file": "shared/config/environment.ts",
+    "anchor": "  PORT: z.coerce.number().int().positive().max(65535).default(3001),",
+    "mutation": "  PORT: z.coerce.number().int().positive().default(3001),",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "names 65535 as the ceiling and 65536 as over it"
+  },
+  {
+    "id": "cors-origin-must-be-an-http-scheme",
+    "why": "cto/AdaptaLabs#59. zod 3's .url() is new URL(), which parses ANY scheme, so the validator was too loose rather than bypassed - a different defect from #48 and not covered by its fix. Measured on the schema before this change, on ab8e605, ALL ACCEPTED: CORS_ORIGIN=localhost:3000 (read as the scheme 'localhost:' with the path '3000', which is exactly what somebody types when they mean http://localhost:3000), htp://example.com, ftp://example.com and javascript:alert(1). The live consumer is the cors() origin in backend/src/index.ts and a browser Origin header is always scheme://host[:port] with a lower-cased scheme, so each of those boots happily and then matches nothing, reaching an operator as browser CORS errors on every request rather than as a config fault. The mutation DELETES the .refine line, which is what a revert or a tidy-up would do, and the remaining chain still type-checks. MEASURED, not asserted, on this branch: applied, it fails 6 of 52 in this spec - all six arms of 'refuses to boot on the non-http scheme CORS_ORIGIN', including the single-slash http:/x.com arm - and the valid-origin control arms and the unset default stay green, which is what says the refine narrows rather than refuses everything.",
+    "file": "shared/config/environment.ts",
+    "anchor": "    .refine((value) => /^https?:\\/\\//.test(value), 'CORS origin must be an http(s) URL')\n",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "refuses to boot on the non-http scheme CORS_ORIGIN \"localhost:3000\""
+  },
+  {
+    "id": "cors-origin-is-trimmed-before-it-is-validated",
+    "why": "cto/AdaptaLabs#59, the half raised by the refute gate on !267. Measured on the schema before this change, on ab8e605: CORS_ORIGIN=' https://x.com ' was ACCEPTED and kept its spaces, because the WHATWG URL parser strips surrounding whitespace while zod returns the ORIGINAL string. A padded value matches no Origin header for the same reason a bad scheme does not, and it is the likelier accident of the two - a trailing space in a chart value or an .env line is invisible in review. The assertion is on the RESULTING VALUE rather than on the parse succeeding: the padded value PARSES EITHER WAY, so a test that only checked 'does not throw' would be decorative. A PREVIOUS VERSION OF THIS NOTE claimed the .trim()/.url() ORDER was what this entry protected, and the refute gate on !272 refuted it - the swapped schema passed all 47 arms of the spec. The order does matter, but only for non-ASCII whitespace, and it now has its own entry (cors-origin-is-trimmed-before-the-url-parser-sees-it) with an arm that can actually see it. MEASURED, not asserted, on this branch: applied, it fails 4 of 52 in this spec - the three trimming arms plus the process.env write-back arm - and everything else stays green. The space arm is the one pinned because the canary selects with jest's -t, which is a regex, and a title rendering a tab is not a usable pattern.",
+    "file": "shared/config/environment.ts",
+    "anchor": "  CORS_ORIGIN: z\n    .string()\n    .trim()\n",
+    "mutation": "  CORS_ORIGIN: z\n    .string()\n",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "trims a space-padded CORS_ORIGIN rather than carrying the padding into the cors origin"
+  },
+  {
+    "id": "cors-origin-is-trimmed-before-the-url-parser-sees-it",
+    "why": "cto/AdaptaLabs#59, and it exists because the refute gate on !272 REFUTED the claim that the .trim()/.url() order was load-bearing. Measured: swapping to .string().url().trim() passed all 47 arms the spec then had, because new URL() strips leading and trailing C0-and-space itself, so .url() never sees ASCII padding as a problem under either order, and the .refine sits on the ZodEffects wrapping the string so it receives the trimmed value either way. The orders diverge ONLY on whitespace String.prototype.trim() strips and the WHATWG parser does not. Measured on both: CORS_ORIGIN='\\u00a0https://x.com\\u00a0' (U+00A0) and '\\u3000https://x.com' (U+3000) are ACCEPTED and normalised with .trim() first, and REFUSED as malformed with .url() first. A non-breaking space is what a value pasted out of a rendered wiki page or a Slack message carries and is invisible in every review tool there is, so the shipped order is the deliberately permissive one. The mutation is the swap itself rather than a deletion, which is what makes this entry the standing proof of the order rather than a note asserting it. MEASURED on this branch: applied, it fails exactly 1 of 52 - the named non-breaking-space arm - and 51 pass, which is the whole point: before that arm existed the swap was a NO-OP against this spec.",
+    "file": "shared/config/environment.ts",
+    "anchor": "  CORS_ORIGIN: z\n    .string()\n    .trim()\n    .url('CORS origin must be a valid URL')\n",
+    "mutation": "  CORS_ORIGIN: z\n    .string()\n    .url('CORS origin must be a valid URL')\n    .trim()\n",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "trims a non-breaking space, which the URL parser leaves in place"
+  },
+  {
+    "id": "cors-origin-normalisation-reaches-process-env",
+    "why": "cto/AdaptaLabs#59, raised by the refute gate on !272. zod parses a COPY of process.env and never writes back, so trimming CORS_ORIGIN in the schema fixes config.CORS_ORIGIN - two readers, both backend/src/index.ts - and leaves process.env.CORS_ORIGIN padded for the ELEVEN readers that use it directly: routes/auth.ts x6, routes/userCalendar.ts x2, services/userCalendar.ts x3, every one a redirect target or an OAuth callback URL built by concatenation. The SCHEME half of #59 covers all thirteen transitively, because a bad scheme stops the boot before any of them runs; the PADDING half did not. Measured against real express before the write-back existed: res.redirect(process.env.CORS_ORIGIN) at auth.ts:300 answered 302 with location '%20https://x.com%20', a relative-path redirect to a route that does not exist. The mutation deletes the write-back entirely, which is what a tidy-up removing an apparently pointless self-assignment would do, and the remaining module still builds and still boots. MEASURED on this branch: applied, it fails exactly 1 of 52 in this spec - the named arm - and the two control arms beside it (unset stays unset, an already-clean value comes back byte-identical) stay green, which is what says the write-back narrows a value somebody wrote rather than inventing one.",
+    "file": "backend/src/config/index.ts",
+    "anchor": "if (process.env.CORS_ORIGIN !== undefined) {\n  process.env.CORS_ORIGIN = config.CORS_ORIGIN;\n}\n",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "writes the trimmed origin back, so a padded value cannot reach a redirect"
   }
 ]

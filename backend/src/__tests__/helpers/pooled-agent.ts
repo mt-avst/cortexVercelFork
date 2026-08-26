@@ -101,10 +101,15 @@ import supertest from 'supertest';
  * means something. An `Authorization` header or a `Cookie` set on request N is
  * not visible on request N+1 over the same socket.
  *
- * NOT WIRED INTO VITEST. `setup.ts` is jest's `setupFilesAfterEach`, so the
- * vitest-owned globs do not get this. Measured rather than assumed: `supertest`
- * appears in one vitest-owned file at one call site, so the churn there is a
- * rounding error. Tracked as cto/AdaptaLabs#60.
+ * WIRED INTO BOTH RUNNERS (cto/AdaptaLabs#60, closed). `setup.ts` is jest's
+ * `setupFilesAfterEnv`, so for a while the vitest-owned globs did not get this
+ * at all - `supertest` appears in one vitest-owned file at one call site, so the
+ * churn there was a rounding error and it was left. It is closed now:
+ * `helpers/vitest-setup.ts` is `vitest.config.ts`'s `setupFiles` and installs
+ * the same agent, and `__tests__/pooled-agent-vitest.test.ts` counts the
+ * connections on that side so the wiring cannot silently come undone.
+ *
+ * Two entry points, one agent. Anything changed here changes both.
  */
 export const TEST_HTTP_AGENT = new http.Agent({ keepAlive: true });
 

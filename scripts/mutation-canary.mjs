@@ -618,28 +618,30 @@ export function selectNamedTest(assertions, testName) {
  * THE CEILING ON ONE RUNNER INVOCATION, and the reason there is one at all.
  *
  * `spawnSync` with no `timeout` waits for ever, and "for ever" is not
- * hypothetical here: TEN of the manifest's 143 entries set `needsDatabase`
- * and reach a real Postgres through a pool, where a lock never granted or a
- * server that accepts the socket and never answers hangs the runner rather than
- * failing it. cto/AdaptaLabs#40 was the same observation from the other end -
- * the pool set no `statement_timeout`, so a slow statement waited instead of
- * failing by name. That half is now closed: the backend pool carries a
- * server-side 120s statement bound and a 125s client-side one (config/index.ts),
- * so a wedged statement in one of those ten fails an entry by name well inside
- * this ceiling. This ceiling still covers everything a statement bound cannot.
+ * hypothetical here: the entries that set `needsDatabase` reach a real Postgres
+ * through a pool, where a lock never granted or a server that accepts the socket
+ * and never answers hangs the runner rather than failing it. #40 was the same
+ * observation from the other end - the pool set no `statement_timeout`, so a
+ * slow statement waited instead of failing by name. That half is now closed:
+ * the backend pool carries a server-side 120s statement bound and a 125s
+ * client-side one (config/index.ts), so a wedged statement on one of those
+ * entries fails by name well inside this ceiling. This ceiling still covers
+ * everything a statement bound cannot.
  *
- * These counts go stale every time the manifest grows, and they have twice:
- * 132/124 when measured at 139, then 139/131 when !267 took it to 143. If you
- * are reading this after another manifest change, re-measure rather than trust
- * it - `needsDatabase` and the total are both one line of node over the JSON.
+ * The rest hang more rarely and not never: a runner can wedge on a timer, an
+ * open handle or a machine out of process slots.
  *
- * The remaining 133 hang more rarely and not never: a runner can wedge on a
- * timer, an open handle or a machine out of process slots.
+ * COUNTS ARE DELIBERATELY NOT WRITTEN DOWN HERE. This paragraph used to say
+ * "EIGHT of the manifest's 132 entries", and by the time the refute gate on
+ * !272 checked it the real figures were TEN of 146 - a note nobody re-measures
+ * becomes a note that lies, and the manifest is appended to by nearly every
+ * branch. `node -e` over the manifest answers both questions in a second, which
+ * is cheaper than a number that has to be maintained.
  *
  * Unbounded, any of those stops this BLOCKING job producing output until GitLab
  * kills the whole thing, and that failure has no NAME - no entry, no verdict,
- * no line saying which of the 143 mutations was in flight. Bounded, the same
- * event is one line naming the entry.
+ * no line saying which mutation was in flight. Bounded, the same event is one
+ * line naming the entry.
  *
  * ponytail: one flat ceiling for every entry, not a per-entry budget.
  *   -> cto/AdaptaLabs#61. Measured over a whole run: per-entry median 3.65s,

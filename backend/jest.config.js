@@ -12,13 +12,16 @@ module.exports = {
   //
   // Vitest ALSO owns `*-postgres.test.ts` under __tests__ (#32): real-Postgres
   // concurrency tests for core routes, which cannot run here because the pool
-  // is mocked. Ignoring the suffix keeps the two runners' globs DISJOINT - the
-  // include in vitest.config.ts matches exactly what this pattern excludes.
+  // is mocked. And `*-vitest.test.ts` (#60): suites that assert something about
+  // the vitest side itself, which by definition cannot be proved from here.
+  // Ignoring both suffixes keeps the two runners' globs DISJOINT - the include
+  // in vitest.config.ts matches exactly what these patterns exclude.
   testPathIgnorePatterns: [
     '/node_modules/',
     '/__tests__/\\.',
     '/src/firsthand/',
     '-postgres\\.test\\.ts$',
+    '-vitest\\.test\\.ts$',
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',

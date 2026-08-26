@@ -14,12 +14,40 @@ import { defineConfig } from "vitest/config";
 // `*.test.ts` under __tests__ is jest-only. `test-backend-db` runs these
 // against a real Postgres (`vitest run postgres`); the no-DB vitest job skips
 // them via FIRSTHAND_SKIP_DB_TESTS.
+//
+// And `*-vitest.test.ts` under src/**/__tests__/** (#60), which is where a
+// guard on THIS FILE has to live. `-postgres` was the only vitest-owned suffix
+// outside src/firsthand, and every one of those needs a database - so a test
+// proving the `setupFiles` below is wired would have been switched off by
+// default on the gate that blocks a merge. jest.config.js excludes the same
+// suffix, so the two runners' globs stay disjoint exactly as they did before:
+// a `*-postgres.test.ts` or a `*-vitest.test.ts` under __tests__ is
+// vitest-only, every other `*.test.ts` under __tests__ is jest-only.
+//
+// DISJOINT IS NOT THE SAME AS COMPLETE, and the refute gate on !272 measured
+// the difference. jest's ignores are unanchored path regexes and so repo-wide,
+// while these includes are scoped to `src/**/__tests__/**` - so a
+// `*-postgres.test.ts` or `*-vitest.test.ts` placed OUTSIDE a `__tests__`
+// directory is collected by NEITHER runner and vanishes silently. Demonstrated
+// with a probe asserting `1 === 2`: jest collected 0, vitest collected 0. That
+// hole predates the `-vitest` suffix; it is #70, not something to widen these
+// globs for in passing.
+//
+// `setupFiles` is #60 itself. `src/__tests__/setup.ts` is jest's
+// `setupFilesAfterEnv`, so the pooled keep-alive test agent it installs
+// (cto/AdaptaLabs#44) never reached this side and every supertest call here
+// opened a connection it threw away. See helpers/vitest-setup.ts for why it is
+// a separate file rather than a shared one, and for the measured teardown
+// ordering, which relative to a test file's own `afterAll` is the reverse of
+// jest's.
 export default defineConfig({
   test: {
     include: [
       "src/firsthand/**/*.{test,spec}.ts",
-      "src/**/__tests__/**/*-postgres.test.ts"
+      "src/**/__tests__/**/*-postgres.test.ts",
+      "src/**/__tests__/**/*-vitest.test.ts"
     ],
+    setupFiles: ["src/__tests__/helpers/vitest-setup.ts"],
     environment: "node"
   }
 });
