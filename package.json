@@ -12,7 +12,7 @@
     "test:smoke": "playwright test e2e/production-smoke.test.ts --config=playwright.prod.config.ts",
     "test:admin-create-study": "playwright test e2e/superadmin-create-study.test.ts --config=playwright.superadmin.config.ts",
     "typecheck": "cd backend && npm run typecheck && cd ../frontend && npm run typecheck",
-    "test:scripts": "node --test scripts/check-release-will-deploy.test.js scripts/lib/pg-ssl.test.js scripts/lib/build-revision.test.js scripts/set-superadmin.test.js scripts/role-scripts-tls.test.js scripts/mutation-canary.test.js scripts/mutation-canary.integrity.test.js",
+    "test:scripts": "node --test scripts/check-release-will-deploy.test.js scripts/lib/pg-ssl.test.js scripts/lib/build-revision.test.js scripts/set-superadmin.test.js scripts/role-scripts-tls.test.js scripts/mutation-canary.test.js scripts/mutation-canary.integrity.test.js scripts/mutation-canary.wiring.test.js",
     "test:canary": "node scripts/mutation-canary.mjs",
     "test:all": "npm run test:backend && npm run test:backend:vitest && npm run test:frontend && npm run test:scripts && npm run test:e2e",
     "test:coverage": "cd backend && npm run test -- --coverage && cd ../frontend && npm run test -- --coverage",
