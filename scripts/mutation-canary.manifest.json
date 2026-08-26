@@ -1240,13 +1240,13 @@
   },
   {
     "id": "results-read-csv-route-releases-at-the-boundary",
-    "why": "The middleware can offer an early release and the routes can simply not call it - every unit test would stay green and the routes would keep the measured outage. The source scan is the only thing that sees the call site, and this proves the scan is not decorative.",
+    "why": "cto/AdaptaLabs#9. The study CSV route hands the global results permit back at the preflight-to-stream boundary, so the client-paced drain is not inside the permit - #9 measured one admin holding it for the whole drain, ten a minute, refusing every other admin. #85 added a SECOND releaseResultsReadPermit(res) to this file (the aggregate route), so the bare-line anchor is now ambiguous; re-pointed to the unique comment+call. Dropping the CSV release reverts the route to holding the permit through the drain, caught by the all-four structural test.",
     "file": "backend/src/routes/firsthand.ts",
-    "anchor": "  releaseResultsReadPermit(res);",
-    "mutation": "",
+    "anchor": "  // AFTER the last thing that can throw, so a refusal still runs inside the\n  // permit and cannot be raced by the caller who was queued behind it.\n  releaseResultsReadPermit(res);",
+    "mutation": "  // AFTER the last thing that can throw, so a refusal still runs inside the\n  // permit and cannot be raced by the caller who was queued behind it.",
     "runner": "jest",
     "spec": "src/routes/__tests__/runtime-pool-admission-routes.test.ts",
-    "test": "releases the permit early on the two CSV routes and neither aggregate route"
+    "test": "releases the permit early on all four results routes"
   },
   {
     "id": "results-read-per-caller-limit-is-not-tighter-than-decided",
@@ -1821,5 +1821,25 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
     "test": "refuses an attacker-minted state replayed from a different browser"
+  },
+  {
+    "id": "results-read-firsthand-aggregate-releases-before-json",
+    "why": "cto/AdaptaLabs#85, the residual availability half of #9. GET /studies/:studyId/results buffered its res.json body and held the single results permit through the whole drain, which a slow reader controls - denying another admin's aggregate reads. !288 bounded the body so early release is now safe. This mutation drops releaseResultsReadPermit(res) before res.json, reverting to permit-held-through-drain; caught by the all-four structural test. Anchored on the #85 comment+call so it is unique against the CSV route's release in the same file.",
+    "file": "backend/src/routes/firsthand.ts",
+    "anchor": "  // #85 (residual of #9): read and aggregation done, and !288 bounded the\n  // aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit back\n  // BEFORE the client-paced `res.json` drain - the same lever the .csv twin\n  // below took out of the permit. The per-caller slot (held to `close`) bounds\n  // concurrent buffered bodies. See releaseResultsReadPermit.\n  releaseResultsReadPermit(res);",
+    "mutation": "  // #85 (residual of #9): read and aggregation done, and !288 bounded the\n  // aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit back\n  // BEFORE the client-paced `res.json` drain - the same lever the .csv twin\n  // below took out of the permit. The per-caller slot (held to `close`) bounds\n  // concurrent buffered bodies. See releaseResultsReadPermit.",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/runtime-pool-admission-routes.test.ts",
+    "test": "releases the permit early on all four results routes"
+  },
+  {
+    "id": "results-read-opportunity-aggregate-releases-before-json",
+    "why": "cto/AdaptaLabs#85, the residual availability half of #9. GET /:id/survey-results buffered its res.json body and held the single results permit through the whole drain (slow-reader controlled), denying another admin's aggregate reads. !288 bounded the body so early release is now safe. This mutation drops releaseResultsReadPermit(res) before res.json; caught by the all-four structural test. Anchored on the #85 comment+call, unique against the CSV release in the same file.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "  // #85 (residual of #9): the DB read and aggregation are done, and !288 bounded\n  // the aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit\n  // back BEFORE the client-paced `res.json` drain - the same lever the .csv twin\n  // below took out of the permit. The per-caller slot (held to `close`) bounds\n  // concurrent buffered bodies. See releaseResultsReadPermit.\n  releaseResultsReadPermit(res);",
+    "mutation": "  // #85 (residual of #9): the DB read and aggregation are done, and !288 bounded\n  // the aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit\n  // back BEFORE the client-paced `res.json` drain - the same lever the .csv twin\n  // below took out of the permit. The per-caller slot (held to `close`) bounds\n  // concurrent buffered bodies. See releaseResultsReadPermit.",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/runtime-pool-admission-routes.test.ts",
+    "test": "releases the permit early on all four results routes"
   }
 ]

@@ -290,7 +290,7 @@ describe('the results-read gate', () => {
   });
 
   /**
-   * WHICH OF THE FOUR HAND THE PERMIT BACK EARLY - cto/AdaptaLabs#9.
+   * ALL FOUR HAND THE PERMIT BACK EARLY - cto/AdaptaLabs#9 and its residual #85.
    *
    * A SOURCE SCAN, and it has to be: the call is inside a handler, and this
    * file reads mounted middleware stacks, which cannot see in there. Running
@@ -298,28 +298,31 @@ describe('the results-read gate', () => {
    * participants - and would still be four separate tests that a fifth route
    * added later escapes.
    *
-   * The split is a DECISION, not a coincidence, which is why it is written down
-   * as a whole map rather than as two assertions:
+   * The map is written whole, not as four assertions, because the split is a
+   * DECISION:
    *
-   *   the .csv routes DO. Their permit is handed back at the preflight-to-
-   *   stream boundary, because everything after it waits on a socket the client
-   *   paces - and #9 measured one admin holding that permit for the whole drain
-   *   timeout, ten times a minute, refusing every other admin including the
-   *   superadmin.
+   *   the .csv routes hand the permit back at the preflight-to-stream boundary,
+   *   because everything after it waits on a socket the client paces - and #9
+   *   measured one admin holding that permit for the whole drain timeout, ten
+   *   times a minute, refusing every other admin including the superadmin.
    *
-   *   the aggregate routes DO NOT. `res.json` buffers the body, and that body
-   *   carries every open-text answer verbatim, so the heap the permit exists
-   *   for genuinely is held until the client drains it. Releasing there would
-   *   hand back a permit while still holding what the permit is for - trading
-   *   an OOM kill, which drops every live participant session, for an
-   *   admin-versus-admin availability problem. They stay exposed, and #9
-   *   records it.
+   *   the aggregate routes hand it back AFTER the DB read and aggregation, right
+   *   before `res.json`. #9 originally left them holding it because `res.json`
+   *   buffers every open-text answer verbatim and the heap the permit exists for
+   *   was unbounded - releasing there would have handed back a permit while
+   *   still holding what the permit is for. !288 (#9 option A) bounded that body
+   *   (MAX_AGGREGATE_RESPONSE_CHARS caps participant free text at 5M chars, ~17MB
+   *   of heap on that axis; `step_prompt` is uncounted - a documented author-only
+   *   ceiling, not participant-reachable), so the participant-facing body is
+   *   bounded and the phase after `res.json` is the client-paced drain - the same
+   *   lever the CSV routes took out of the permit. #85 closes the residual by
+   *   releasing here too; the per-caller slot (held to `close`) bounds concurrent
+   *   buffered bodies at two per admin. See releaseResultsReadPermit.
    *
-   * So a route that starts releasing early, or a .csv route that stops, fails
-   * here - and either direction is a decision somebody should have to make on
-   * purpose.
+   * So a route that STOPS releasing early fails here - a regression on either
+   * the availability bound (#9/#85) that someone should have to make on purpose.
    */
-  it('releases the permit early on the two CSV routes and neither aggregate route', () => {
+  it('releases the permit early on all four results routes', () => {
     const releasesEarlyIn = (file: string): Record<string, boolean> => {
       const source = fs.readFileSync(
         path.resolve(__dirname, '..', file),
@@ -340,16 +343,15 @@ describe('the results-read gate', () => {
       return verdicts;
     };
 
-    // THE CONTROL for the two `false`s below. An absence-assertion passes just
-    // as well when the scan matched nothing at all - a renamed function, a
-    // reformatted call, a split that put every handler in one block. These two
-    // `true`s are the proof the scan can still see a release.
+    // Exact-map equality, so a broken scan (renamed function, reformatted call,
+    // a split that collapsed every handler into one block) shows up as missing
+    // or wrong keys rather than passing silently.
     expect(releasesEarlyIn('firsthand.ts')).toEqual({
-      '/studies/:studyId/results': false,
+      '/studies/:studyId/results': true,
       '/studies/:studyId/results.csv': true
     });
     expect(releasesEarlyIn('opportunities.ts')).toEqual({
-      '/:id/survey-results': false,
+      '/:id/survey-results': true,
       '/:id/survey-results.csv': true
     });
   });

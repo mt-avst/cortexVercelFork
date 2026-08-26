@@ -203,12 +203,13 @@ function callerAlreadyReading(): AppError {
  * whole request.
  *
  * THIS DOCBLOCK SAID "THE WHOLE REQUEST" FOR BOTH, and that was true of all
- * four routes until cto/AdaptaLabs#9. It is still true of the two AGGREGATE
- * routes; the two CSV routes now hand the permit back at their preflight-to-
- * stream boundary, because the phase after it is paced by the client and a
- * permit whose length the client chooses is a lever rather than a bound. See
- * `releaseResultsReadPermit`. The per-caller slot is held to `close` on all
- * four.
+ * four routes until cto/AdaptaLabs#9. Now ALL FOUR hand the global permit back
+ * before the client-paced phase - the two CSV routes at their preflight-to-
+ * stream boundary (#9), the two aggregate routes right before `res.json` once
+ * !288 bounded the buffered body (#85). The phase after each release is paced by
+ * the client, and a permit whose length the client chooses is a lever rather
+ * than a bound. See `releaseResultsReadPermit`. The per-caller slot is held to
+ * `close` on all four.
  *
  * Released on the response's `close`, which Node emits both when a response
  * completes and when the connection is torn down early - so a caller who
@@ -350,10 +351,11 @@ export function boundResultsRead(
 /**
  * Hands the GLOBAL permit back before the response has drained.
  *
- * For the two CSV routes, and called at the preflight-to-stream boundary. What
- * the permit exists to bound is the heap, and after !210 the streaming phase's
- * heap is one batch plus the id list - not the 200,001 rows this file's own
- * docblock still describes. So the phase after this call is not the phase the
+ * Called by ALL FOUR results routes: the two CSV routes at the preflight-to-
+ * stream boundary, and the two aggregate routes right before `res.json`. What
+ * the permit exists to bound is the heap, and after !210 the CSV streaming
+ * phase's heap is one batch plus the id list - not the 200,001 rows this file's
+ * own docblock still describes. So the phase after this call is not the phase the
  * permit was written for; it is the phase the CLIENT controls, and a permit the
  * client controls the length of is not a bound, it is a lever.
  *
@@ -375,13 +377,15 @@ export function boundResultsRead(
  * to the same `releaseOnce` the close listener calls, so the ceiling cannot be
  * widened by calling this from a handler that has already finished.
  *
- * NOT called by the two aggregate routes, and that is not an omission. Their
- * body carries every open-text answer verbatim, so the heap genuinely is held
- * until the client drains it, and releasing there would be handing back a
- * permit while still holding what the permit is for. They remain exposed to the
- * same occupancy attack - recorded on cto/AdaptaLabs#9 rather than fixed here,
- * because closing it needs the aggregate BODY bounded, which is a decision
- * about what a researcher is shown.
+ * CALLED BY THE TWO AGGREGATE ROUTES SINCE cto/AdaptaLabs#85, and #9 recorded
+ * exactly why it could not be earlier: `res.json` buffers every open-text answer
+ * verbatim, so releasing while the heap was unbounded would have handed back a
+ * permit while still holding what the permit is for. !288 (#9 option A) bounded
+ * that body (MAX_AGGREGATE_RESPONSE_CHARS ~= 17MB), so the aggregate routes now
+ * release after the read and aggregation, right before `res.json`; the phase
+ * after is the client-paced drain of a bounded body, which is the same lever the
+ * CSV routes took out of the permit. The per-caller slot (not released here)
+ * bounds the concurrent buffered bodies this leaves outstanding, two per admin.
  */
 export function releaseResultsReadPermit(res: Response): void {
   earlyRelease.get(res)?.();

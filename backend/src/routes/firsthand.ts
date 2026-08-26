@@ -738,10 +738,19 @@ router.get('/studies/:studyId/results', requireAdmin, studyResultsLimiter, bound
 
   // The same envelope the per-opportunity reader returns. One logical resource
   // answered two ways is how the two mint routes started drifting.
-  return res.json({
+  const body = {
     title: stored.study.title,
     results: aggregateSurveyResults(stored.steps, responses)
-  });
+  };
+
+  // #85 (residual of #9): read and aggregation done, and !288 bounded the
+  // aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit back
+  // BEFORE the client-paced `res.json` drain - the same lever the .csv twin
+  // below took out of the permit. The per-caller slot (held to `close`) bounds
+  // concurrent buffered bodies. See releaseResultsReadPermit.
+  releaseResultsReadPermit(res);
+
+  return res.json(body);
 }));
 
 // GET /api/firsthand/studies/:studyId/results.csv - raw answers for export
