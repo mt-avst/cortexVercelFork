@@ -294,7 +294,7 @@ Alpha testing can proceed if:
 ## 📝 Next Steps After Testing
 
 1. **Document Issues**
-   - Add to `KNOWN_ISSUES.md`
+   - File a GitLab issue (see `docs/agents/issue-tracker.md`)
    - Prioritize fixes
 
 2. **Fix Critical Bugs**

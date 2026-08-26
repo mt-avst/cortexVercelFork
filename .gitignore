@@ -96,3 +96,6 @@ demo/*.js
 demo/*.js.map
 demo/*.d.ts
 demo/*.d.ts.map
+
+# GitLab CI npm download cache (see .test-base in .gitlab-ci.yml)
+.npm/

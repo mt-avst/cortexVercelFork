@@ -328,13 +328,12 @@ Ensure these are set in production:
 ## 📚 Documentation
 
 ### For Users
-- **[User Guide](USER_GUIDE.md)** - Complete guide for end users
+- **[User Guide](docs/USER_GUIDE.md)** - Complete guide for end users
 
 ### For Admins
-- **[Admin Guide](ADMIN_GUIDE.md)** - Complete guide for researcher admins
+- **[Admin Guide](docs/ADMIN_GUIDE.md)** - Complete guide for researcher admins
 
 ### For Developers
-- **[Plan](plan.md)** - Project plan, scope, and data model
 
 ### Testing & status
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - How to run tests (E2E, smoke, accessibility)
@@ -438,7 +437,7 @@ Backend logs are written to console. In production, consider using a proper logg
 AdaptaLabs is currently in **alpha testing phase**. 
 
 ### For Alpha Testers
-- Read the **[User Guide](USER_GUIDE.md)** for detailed instructions
+- Read the **[User Guide](docs/USER_GUIDE.md)** for detailed instructions
 - Check **[Known Issues](KNOWN_ISSUES.md)** for limitations and workarounds
 - Use the **"Send Feedback"** link in the app to report issues
 
