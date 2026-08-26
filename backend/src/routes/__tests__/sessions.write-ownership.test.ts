@@ -167,11 +167,12 @@ const answering = (ownerUserId: string | null, opportunityExists = true): void =
 /**
  * Every statement the handler issued, across BOTH sinks.
  *
- * `POST /api/opportunities/:id/sessions` inserts through a transaction client
- * from `pool.connect()`; `POST /api/sessions` inserts on the pool directly.
- * Collecting both means the write assertions keep working if a handler moves
- * between the two - a refactor that would otherwise silently disarm a
- * single-sink assertion into passing for the wrong reason.
+ * Both `POST /api/opportunities/:id/sessions` and `POST /api/sessions` now
+ * insert through a transaction client from `pool.connect()`. The second one did
+ * NOT until cto/AdaptaLabs#42 - it inserted on the pool directly - and this
+ * collection is why that move cost nothing here: a single-sink assertion would
+ * have silently disarmed into passing for the wrong reason. Keep both sinks,
+ * because the ownership probes still land on `pool.query`.
  */
 let clientQuery: jest.Mock;
 

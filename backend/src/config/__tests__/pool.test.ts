@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { pool } from '../../config';
+import { pool, POOL_QUERY_TIMEOUT_MS, POOL_STATEMENT_TIMEOUT_MS } from '../../config';
 
 /**
  * The exported backend pool serves all Express traffic, and without these
@@ -19,6 +19,52 @@ describe('backend pool error guards', () => {
     // transaction. That gap is closed by this pair.
     expect((pool as unknown as EventEmitter).listenerCount('acquire')).toBe(1);
     expect((pool as unknown as EventEmitter).listenerCount('release')).toBe(1);
+  });
+});
+
+/**
+ * THE STATEMENT BOUND, PINNED AS LITERALS (cto/AdaptaLabs#40).
+ *
+ * Here rather than in the real-Postgres file next door, because this runs on
+ * every gate that blocks a merge. The `-postgres.test.ts` suite proves the bound
+ * genuinely CANCELS, but it is skipped by the no-database vitest job, and a
+ * policy constant guarded only where a database happens to exist is guarded
+ * today and not tomorrow.
+ *
+ * EVERY EXPECTATION BELOW IS A LITERAL. A test that reads
+ * POOL_STATEMENT_TIMEOUT_MS on both sides moves with the constant and cannot see
+ * it change, which is the whole failure this repo's rule about pinning policy
+ * constants exists to stop. Changing 120_000 must fail HERE, by name, and force
+ * whoever changed it to re-read the headroom measurements in config/index.ts.
+ */
+describe('backend pool statement bound', () => {
+  it('bounds a statement at 120 seconds, server-side', () => {
+    expect(POOL_STATEMENT_TIMEOUT_MS).toBe(120_000);
+  });
+
+  it('bounds a silent server at 125 seconds, client-side', () => {
+    expect(POOL_QUERY_TIMEOUT_MS).toBe(125_000);
+  });
+
+  it('lets the SERVER win every ordinary race, so a timeout arrives as 57014', () => {
+    // Not a restatement of the two literals above: it is the RELATIONSHIP that
+    // decides which mechanism fires. Inverted, the client gives up first, pg
+    // destroys the connection, and the error loses its SQLSTATE - so the
+    // retryable 503 errorHandler maps from 57014 becomes an opaque 500.
+    expect(POOL_QUERY_TIMEOUT_MS).toBeGreaterThan(POOL_STATEMENT_TIMEOUT_MS);
+  });
+
+  /**
+   * THE WIRING, not the constants. Deleting `options` from the Pool leaves all
+   * three assertions above green - the constants would still hold the right
+   * numbers and reach nothing. This reads what was actually handed to pg.
+   */
+  it('hands the bound to pg as a startup parameter, not as a later SET', () => {
+    const options = (pool as unknown as { options: { options?: string; query_timeout?: number } }).options;
+    // The literal string, because that is what travels in the startup packet.
+    // Interpolating the constant here would move with it and see nothing.
+    expect(options.options).toBe('-c statement_timeout=120000');
+    expect(options.query_timeout).toBe(125_000);
   });
 });
 

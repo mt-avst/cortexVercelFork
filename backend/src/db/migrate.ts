@@ -1,5 +1,66 @@
 import { pool } from '../config';
 
+/**
+ * A MIGRATION MUST NOT BE ABLE TO REPORT SUCCESS AFTER A CANCELLED STATEMENT.
+ *
+ * TWELVE blocks below wrap `IF NOT EXISTS` / `DROP IF EXISTS` DDL in a
+ * try/catch that logged the message and carried on. They swallowed EVERY error
+ * class, which was survivable while nothing bounded a statement: the query
+ * waited, and a slow deploy is at least a visible one.
+ *
+ * Twelve, measured - `grep -c 'catch (error: any)'` returned 9 more after the
+ * 3 an independent review named. They are the same shape for the same reason,
+ * so fixing 3 would have left 9 able to swallow the same cancellation.
+ *
+ * cto/AdaptaLabs#40 put a 120s `statement_timeout` on this pool, and that turned
+ * the swallow into a silent deploy failure. Proven by fault injection - 57014
+ * raised on the dedup DELETE, nothing else changed:
+ *
+ *   ℹ️  Session event dedup index may already exist: canceling statement due to
+ *       statement timeout
+ *   ✅ Database migrations completed successfully
+ *   pg_indexes WHERE indexname='uq_session_event_dedup' -> 0
+ *
+ * A successful-looking migration with the dedup constraint absent. That DELETE
+ * is a `NOT IN` anti-join over `opportunity_session_events`, which grows with
+ * every participant session lifecycle event, so it is the likeliest statement
+ * in this file to cross the bound - the danger is not theoretical.
+ *
+ * SQLSTATE CLASS 42 IS THE ONLY BENIGN CLASS. "Syntax error or access rule
+ * violation" is where Postgres puts duplicate_table (42P07), duplicate_object
+ * (42710), duplicate_column (42701), undefined_table (42P01) and
+ * undefined_column (42703) - exactly the "the schema is already in this shape"
+ * outcomes these blocks exist to tolerate. Everything else now rethrows:
+ * cancellations (57014), connection loss (class 08), resource exhaustion
+ * (class 53), deadlocks (40P01) and lock timeouts (55P03).
+ *
+ * DELIBERATELY NOT BENIGN: unique_violation (23505), which on the
+ * `CREATE UNIQUE INDEX` below means the dedup DELETE left duplicates behind;
+ * and check_violation (23514), which on the users role constraint means real
+ * rows violate it. Both used to be swallowed and both are genuine failures. If
+ * either starts failing a deploy, that is this guard working - the constraint
+ * was silently absent before, not applied.
+ *
+ * THERE IS STILL NO `BEGIN` IN THIS FILE, so a rethrow leaves a partially
+ * applied schema. That is not new and it is not made worse by failing loudly
+ * rather than quietly; a partial schema that says so beats a partial schema
+ * that reports success. Wrapping the run in a transaction is the upgrade path.
+ *
+ * ponytail: one error-class predicate for all three blocks rather than a
+ * per-block allow-list.
+ *   -> the blocks tolerate the same thing for the same reason, so a second
+ *   predicate would be a second thing to keep in step. Split it if a block
+ *   ever needs to tolerate something the others must not.
+ */
+function rethrowUnlessSchemaAlreadyApplied(error: unknown, note: string): void {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === 'string' && code.startsWith('42')) {
+    console.log(`ℹ️  ${note}:`, (error as Error).message);
+    return;
+  }
+  throw error;
+}
+
 export async function runMigrations() {
   console.log('⏳ Connecting to database...');
   const client = await pool.connect();
@@ -397,9 +458,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  Question type already exists in opportunity_type enum');
       }
-    } catch (error: any) {
-      // Log the error but don't fail the migration
-      console.log('ℹ️  Could not add question type to enum (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add question type to enum (may already exist)');
     }
 
     // Add 'interview' type to existing enum if it doesn't exist
@@ -419,9 +479,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  Interview type already exists in opportunity_type enum');
       }
-    } catch (error: any) {
-      // Log the error but don't fail the migration
-      console.log('ℹ️  Could not add interview type to enum (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add interview type to enum (may already exist)');
     }
 
     // Add participant_type_required column if it doesn't exist
@@ -441,8 +500,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  participant_type_required column already exists in opportunities table');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not add participant_type_required column (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add participant_type_required column (may already exist)');
     }
 
     // Add participant_type_specific_details column if it doesn't exist
@@ -462,8 +521,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  participant_type_specific_details column already exists in opportunities table');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not add participant_type_specific_details column (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add participant_type_specific_details column (may already exist)');
     }
 
     // Adds `display_width`, which is RETIRED: nothing writes it and NO SURFACE
@@ -492,8 +551,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  display_width column already exists in opportunities table');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not add display_width column (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add display_width column (may already exist)');
     }
 
     // Add start_date and end_date columns for external link study types (poll, survey, question, unmoderated)
@@ -512,8 +571,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  start_date column already exists in opportunities table');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not add start_date column (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add start_date column (may already exist)');
     }
 
     try {
@@ -531,8 +590,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  end_date column already exists in opportunities table');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not add end_date column (may already exist):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not add end_date column (may already exist)');
     }
 
     // Migrate is_researcher_admin to role column if needed
@@ -591,8 +650,8 @@ export async function runMigrations() {
       } else {
         console.log('ℹ️  is_researcher_admin column does not exist, skipping migration');
       }
-    } catch (error: any) {
-      console.log('ℹ️  Could not migrate is_researcher_admin to role (may already be migrated):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not migrate is_researcher_admin to role (may already be migrated)');
     }
 
     // Migrate unique constraint to partial unique index (for cancelled bookings to allow rebooking)
@@ -608,8 +667,8 @@ export async function runMigrations() {
       `);
       
       console.log('✅ Migrated unique constraint to partial unique index');
-    } catch (error: any) {
-      console.log('ℹ️  Could not migrate unique constraint (may already be migrated):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not migrate unique constraint (may already be migrated)');
     }
 
     // Create opportunity_clicks table for click tracking (M6)
@@ -772,8 +831,8 @@ export async function runMigrations() {
         ALTER COLUMN requested_role SET NOT NULL;
       `);
       console.log('✅ Added requested_role column to admin_requests');
-    } catch (error: any) {
-      console.log('ℹ️  requested_role column may already exist:', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'requested_role column may already exist');
     }
 
     // Create indexes for admin_requests
@@ -792,8 +851,8 @@ export async function runMigrations() {
           CHECK (role IN ('employee', 'researcher_admin', 'superadmin'));
       `);
       console.log('✅ Updated role constraint to include superadmin');
-    } catch (error: any) {
-      console.log('ℹ️  Could not update role constraint (may already be updated):', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Could not update role constraint (may already be updated)');
     }
 
     // Create feedback table for storing user feedback (superadmin inbox)
@@ -895,8 +954,8 @@ export async function runMigrations() {
         CREATE UNIQUE INDEX IF NOT EXISTS uq_session_event_dedup
           ON opportunity_session_events(firsthand_session_id, event_type)
       `);
-    } catch (error: any) {
-      console.log('ℹ️  Session event dedup index may already exist:', error.message);
+    } catch (error) {
+      rethrowUnlessSchemaAlreadyApplied(error, 'Session event dedup index may already exist');
     }
     console.log('✅ Created opportunity_session_events table');
 
