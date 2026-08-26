@@ -13,3 +13,16 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
+
+## Priority labels
+
+Orthogonal to the five roles above, every open issue also carries one scoped priority label:
+
+| Label | Meaning |
+| ------------- | ------------------------------------------------------------------- |
+| `priority::1` | Production correctness, security or data loss - fix before feature work |
+| `priority::2` | Reliability under load or important debt - schedule deliberately |
+| `priority::3` | Tooling, harness and polish - fine to defer |
+
+Scoped labels are mutually exclusive - setting one replaces another. When triaging, assign
+both a role label and a priority.
