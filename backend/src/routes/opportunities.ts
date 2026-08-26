@@ -3715,7 +3715,29 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       
       res.status(201).json(createdSessions);
     } catch (error) {
-      await client.query('ROLLBACK');
+      // Never let a failing ROLLBACK mask the error that caused it. A dropped
+      // connection is one of the failures this transaction exists to survive,
+      // and it makes the ROLLBACK throw as well - so without the guard the raw
+      // connection error replaces the real cause on its way out.
+      //
+      // WHAT IS AND IS NOT AT STAKE HERE, because it is narrower than it looks
+      // and the issue that raised it (#67) overstated this route. The outer
+      // catch below flattens everything that is not an AppError to
+      // `500 Failed to create sessions`, and nothing in this transaction body
+      // throws an AppError - `client.query` raises pg errors. So the STATUS IS
+      // 500 EITHER WAY and the response cannot see this bug at all; measured,
+      // by reverting this line and watching the named test fail on the logged
+      // error while its `.expect(500)` still passed. What the guard preserves
+      // is the LOG: `logger.error('Error creating sessions')` gets the
+      // constraint violation instead of a bare "Connection terminated
+      // unexpectedly" with no SQLSTATE. Diagnostic, not data - the server
+      // aborts the transaction itself when the connection dies.
+      //
+      // The sibling sites in routes/sessions.ts have no outer catch, so there
+      // the same one-line fix IS caller-visible (409 rather than 500).
+      //
+      // Same fix and same reason as routes/sessions.ts:278 (!271).
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       client.release();
@@ -3843,7 +3865,9 @@ router.delete('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, r
         deleted_count: deleteResult.rowCount
       });
     } catch (txError) {
-      await client.query('ROLLBACK');
+      // Guarded for the reason spelled out at the POST handler above: a
+      // ROLLBACK that throws on a dead connection would replace txError.
+      await client.query('ROLLBACK').catch(() => {});
       throw txError;
     } finally {
       client.release();
