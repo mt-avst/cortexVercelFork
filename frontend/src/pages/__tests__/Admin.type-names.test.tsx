@@ -107,8 +107,8 @@ describe('Admin dashboard type names', () => {
 
     // The lozenge is uppercased by CSS, not by the string, so assert on the
     // text content the component actually renders.
-    expect(within(table).getByText('Usability test')).toBeInTheDocument();
-    expect(within(table).getByText('Recorded study')).toBeInTheDocument();
+    expect(within(table).getByText('Live session')).toBeInTheDocument();
+    expect(within(table).getByText('Recorded session')).toBeInTheDocument();
   });
 
   it('never badges a study with the admin-only taxonomy', async () => {

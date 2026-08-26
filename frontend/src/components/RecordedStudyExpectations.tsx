@@ -57,7 +57,7 @@ export function RecordedStudyExpectations({ brief }: RecordedStudyExpectationsPr
           "Before you start: nothing is recorded until you press record" and a
           participant would read it as coming from Cortex. */}
       <p className="recorded-study-expectations__source">
-        From Cortex. This applies to every recorded study, and researchers cannot change it
+        From Cortex. This applies to every recorded session, and researchers cannot change it
       </p>
 
       <ul className="recorded-study-expectations__list">

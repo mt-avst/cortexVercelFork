@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe('OpportunityDetail type badge', () => {
-  // Scoped to the hero badge row: "recorded study" also appears in the
+  // Scoped to the hero badge row: "recorded session" also appears in the
   // disclosure block and on the start button, so a page-wide text query would
   // pass without the badge ever changing.
   it('names the type in its hero badge the way a participant is told everywhere else', async () => {
@@ -83,7 +83,7 @@ describe('OpportunityDetail type badge', () => {
 
     const badgeRow = container.querySelector('.mission-brief-content > div');
     expect(badgeRow).not.toBeNull();
-    expect(badgeRow?.textContent).toMatch(/recorded study/i);
+    expect(badgeRow?.textContent).toMatch(/recorded session/i);
   });
 
   it('never shows a participant the word "unmoderated"', async () => {

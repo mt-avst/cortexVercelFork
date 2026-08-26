@@ -10,13 +10,13 @@ describe('useDocumentTitle', () => {
   });
 
   it('sets the document title while mounted', () => {
-    renderHook(() => useDocumentTitle('Recorded study session'));
-    expect(document.title).toBe('Recorded study session');
+    renderHook(() => useDocumentTitle('Recorded session'));
+    expect(document.title).toBe('Recorded session');
   });
 
   it('restores the previous title on unmount', () => {
-    const { unmount } = renderHook(() => useDocumentTitle('Recorded study session'));
-    expect(document.title).toBe('Recorded study session');
+    const { unmount } = renderHook(() => useDocumentTitle('Recorded session'));
+    expect(document.title).toBe('Recorded session');
 
     unmount();
     expect(document.title).toBe('AdaptaLabs');

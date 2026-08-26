@@ -299,7 +299,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     ).not.toBeInTheDocument();
     // ...and the type helper copy no longer names an internal product.
     expect(
-      screen.getByText('Self-guided recorded study')
+      screen.getByText('Self-guided, recorded in the browser')
     ).toBeInTheDocument();
   });
 

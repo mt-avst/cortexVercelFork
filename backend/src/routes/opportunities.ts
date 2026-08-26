@@ -2172,7 +2172,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
         // whose session payload then fails to assemble.
         title: (data.title || existingOpp.rows[0].title || 'Untitled study').trim(),
         intro_text: (
-          data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded study'
+          data.purpose_one_liner || existingOpp.rows[0].purpose_one_liner || 'Recorded session'
         ).trim(),
         consent_text: inlineStudyInput.consent_text.trim(),
         consent_template_id: inlineStudyInput.consent_template_id ?? null,
@@ -2561,12 +2561,12 @@ router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth,
   // this guard the API would tell an anonymous caller that a poll records their screen
   // and voice. The frontend gates on type too, but the API is the contract.
   if (type !== 'unmoderated' || !studyId) {
-    throw new NotFoundError('Recorded study');
+    throw new NotFoundError('Recorded session');
   }
 
   const taskCount = await countStudyTasks(studyId);
   if (taskCount === null) {
-    throw new NotFoundError('Recorded study');
+    throw new NotFoundError('Recorded session');
   }
 
   // Study status is deliberately not checked. A published opportunity linked to a draft
@@ -2698,7 +2698,7 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
     // survey linking a study is now the designed state, so it becomes routine.
     // A survey is served by its own route, not this one.
     if (loaded.row.type !== 'unmoderated') {
-      throw new NotFoundError('Recorded study');
+      throw new NotFoundError('Recorded session');
     }
     if (loaded.row.status !== 'published') {
       return res.status(403).json({ error: 'Opportunity is not published' });
@@ -2730,7 +2730,7 @@ router.post(['/:id/recorded-study-session', '/:id/firsthand-handoff'], requireAu
         studyId,
         kind: linked.study.kind
       });
-      throw new NotFoundError('Recorded study');
+      throw new NotFoundError('Recorded session');
     }
   }
 

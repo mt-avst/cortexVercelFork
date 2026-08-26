@@ -456,7 +456,7 @@ const MyBookings: React.FC = () => {
 
         {sessionEvents.length > 0 && (
           <section className="my-bookings-section my-bookings-section-past">
-            <h2 className="my-bookings-section-title">Self-guided sessions</h2>
+            <h2 className="my-bookings-section-title">Recorded sessions</h2>
             <div className="booking-cards-grid">
               {sessionEvents.map((event) => (
                 <Card key={event.id} className="booking-card booking-card-past">
@@ -482,7 +482,14 @@ const MyBookings: React.FC = () => {
                         <dt className="booking-metadata-label">Type</dt>
                         <dd className="booking-metadata-value d-flex align-items-center gap-1">
                           <Monitor size={14} aria-hidden="true" />
-                          Unmoderated
+                          {/* Every session event on this list is an unmoderated
+                              study, but the NAME still comes from the one place
+                              that names types. Spelled out here, this said
+                              "Unmoderated" while the badge two sections up said
+                              "Recorded study" - the same list describing itself
+                              two ways, which is the drift the shared helper
+                              exists to stop. */}
+                          {getParticipantFacingType('unmoderated')}
                         </dd>
                       </div>
                     </dl>

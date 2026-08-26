@@ -17,8 +17,8 @@ describe('StudyFilters', () => {
   it('labels every chip in participant vocabulary', () => {
     renderFilters();
 
-    expect(screen.getByRole('button', { name: 'Recorded study' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Usability test' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Recorded session' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Live session' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'Quick poll' })).toBeVisible();
     expect(screen.getByRole('button', { name: 'One question' })).toBeVisible();
   });
@@ -42,17 +42,17 @@ describe('StudyFilters', () => {
   it('still reports the internal type value when a chip is chosen', () => {
     const onFilterChange = renderFilters();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Recorded study' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recorded session' }));
     expect(onFilterChange).toHaveBeenCalledWith('unmoderated');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Usability test' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Live session' }));
     expect(onFilterChange).toHaveBeenCalledWith('test');
   });
 
   it('marks the active chip as pressed, and only that one', () => {
     renderFilters('unmoderated');
 
-    expect(screen.getByRole('button', { name: 'Recorded study' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Recorded session' })).toHaveAttribute(
       'aria-pressed',
       'true'
     );

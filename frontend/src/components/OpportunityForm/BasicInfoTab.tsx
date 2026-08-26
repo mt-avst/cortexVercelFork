@@ -88,7 +88,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                   (formData.delivery_mode === 'native'
                     ? 'Detailed feedback, answered in Cortex'
                     : 'Opens an external survey tool for detailed feedback')}
-                {formData.type === 'unmoderated' && 'Self-guided recorded study'}
+                {formData.type === 'unmoderated' && 'Self-guided, recorded in the browser'}
                 {!formData.type && ' '}
               </div>
               <select
@@ -115,8 +115,8 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
                 <option value="poll" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📊 Quick poll - Quick opinion gathering</option>
                 <option value="question" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>❓ One question - Single question session</option>
                 <option value="survey" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>📋 Survey - Detailed feedback collection</option>
-                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 Usability test - Interactive session with participants</option>
-                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Recorded study - Self-guided, recorded in the browser</option>
+                <option value="test" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🧪 Live session - Usability test you moderate, at a booked time</option>
+                <option value="unmoderated" style={{ fontSize: '1.04rem', padding: '0.4rem' }}>🖥️ Recorded session - Usability test the participant runs alone, recorded in the browser</option>
               </select>
                 {validationErrors.type && (
                 <FieldError id="type-error">{validationErrors.type}</FieldError>

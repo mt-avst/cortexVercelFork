@@ -37,7 +37,7 @@ describe('OpportunityRow', () => {
   it('speaks the participant vocabulary, not the internal taxonomy', () => {
     renderRow(opp({ type: 'unmoderated' }));
 
-    expect(screen.getByText('Recorded study')).toBeVisible();
+    expect(screen.getByText('Recorded session')).toBeVisible();
     expect(screen.queryByText(/unmoderated/i)).toBeNull();
   });
 
@@ -73,7 +73,7 @@ describe('OpportunityRow', () => {
       screen.getByRole('link', { name: /Triage a failing Bitbucket pipeline/i })
     ).toBeVisible();
     expect(
-      screen.getByRole('link', { name: /Start recorded study/i })
+      screen.getByRole('link', { name: /Start recorded session/i })
     ).toBeVisible();
   });
 

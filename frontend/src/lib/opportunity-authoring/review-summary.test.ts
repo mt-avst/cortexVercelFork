@@ -108,13 +108,17 @@ describe('buildReviewSummary', () => {
   });
 
   describe('basics section', () => {
+    // Spelled out as literals rather than read from getParticipantFacingType,
+    // deliberately: a table that derives its expectation from the thing it is
+    // checking cannot see that thing change. These six ARE the contract, and
+    // this screen used to disagree with the rest of the app about two of them.
     it.each([
-      ['test', 'Usability Test'],
+      ['test', 'Live session'],
       ['interview', 'Interview'],
-      ['poll', 'Poll'],
+      ['poll', 'Quick poll'],
       ['survey', 'Survey'],
-      ['question', 'Question'],
-      ['unmoderated', 'Unmoderated Test']
+      ['question', 'One question'],
+      ['unmoderated', 'Recorded session']
     ])('labels type %s as %s', (type, label) => {
       const sections = buildReviewSummary(completeInput({ type }));
       const basics = findSection(sections, 'basics');
@@ -124,6 +128,18 @@ describe('buildReviewSummary', () => {
 
     it('marks an unchosen type as missing, with "Not chosen"', () => {
       const sections = buildReviewSummary(completeInput({ type: '' }));
+      const item = findItem(findSection(sections, 'basics'), 'Research Study Type');
+      expect(item?.value).toBe('Not chosen');
+      expect(item?.missing).toBe(true);
+    });
+
+    // The label table is now built from getParticipantFacingType, which answers
+    // "Study" for anything it does not recognise. That is right for a
+    // participant reading a browse row and wrong here, where an unrecognised
+    // type must still read as nothing chosen. Without this, a stray value would
+    // show a confident "Study" and count as complete on the publish check.
+    it('marks an unrecognised type as missing rather than calling it "Study"', () => {
+      const sections = buildReviewSummary(completeInput({ type: 'wat' }));
       const item = findItem(findSection(sections, 'basics'), 'Research Study Type');
       expect(item?.value).toBe('Not chosen');
       expect(item?.missing).toBe(true);
