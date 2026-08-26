@@ -269,7 +269,7 @@ Every current REST endpoint becomes a resolver function. Frontend calls `invoke(
 | Resolver | Payload | Returns | Notes |
 |----------|---------|--------|--------|
 | `submitFeedback` | `{ category, feedback, userAgent, url }` | `{ success: boolean }` | Store; user from context. |
-| `getFeedback` | — | `FeedbackItem[]` | requireAdmin. |
+| `getFeedback` | — | `{ items: FeedbackItem[], has_more }` | requireAdmin. Capped at the newest 1000 rows server-side, `has_more` when rows exist past the cap (cto/AdaptaLabs#81); the cursor rework is #86. |
 | `deleteFeedback` | `{ id: string }` | `{ success }` | requireSuperadmin. |
 | `exportFeedbackCsv` | — | CSV content or signed URL | requireAdmin; if Forge allows file download pattern. |
 
@@ -478,7 +478,7 @@ Frontend calls: `invoke('resolverName', payload)`. Payload must be a plain objec
 | getMonthlyLeaderboard | limit? | LeaderboardEntry[] |
 | getPointsHistory | limit?, before? | PointsHistoryPage |
 | submitFeedback | category, feedback, userAgent, url | { success } |
-| getFeedback | — | FeedbackItem[] |
+| getFeedback | — | { items: FeedbackItem[], has_more } |
 | deleteFeedback | id | { success } |
 | getNotificationPreferences | — | NotificationPreferenceResponse |
 | updateNotificationPreferences | on_book_email, on_cancel_email | NotificationPreferenceResponse |

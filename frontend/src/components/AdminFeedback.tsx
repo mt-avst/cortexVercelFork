@@ -11,6 +11,14 @@ import { formatDateTime } from '../utils/datetime';
 const AdminFeedback: React.FC = () => {
   const { user } = useAuth();
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
+  // cto/AdaptaLabs#81: the server caps the list and says when rows exist past
+  // the cap. The sort/paginate below runs over the loaded slice, which is the
+  // whole table until the cap is reached - the notice is what keeps that
+  // honest once it is not. NOT named hasMore: getPreviewText's destructure in
+  // the row renderer already binds that name to "the preview was cut", and a
+  // byte-identical `{hasMore && (` resolving to two different variables is a
+  // trap for readers and anchor-based tooling alike.
+  const [listTruncated, setListTruncated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ show: boolean; item: FeedbackItem | null }>({ show: false, item: null });
@@ -31,8 +39,9 @@ const AdminFeedback: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const data = await getFeedback();
-      setFeedback(data);
+      const result = await getFeedback();
+      setFeedback(result.items);
+      setListTruncated(result.has_more);
     } catch (error: unknown) {
       logger.error('Failed to load feedback', {
         error: error instanceof Error ? error : undefined,
@@ -352,7 +361,8 @@ const AdminFeedback: React.FC = () => {
           Feedback Inbox
           {feedback.length > 0 && (
             <span className="badge bg-secondary ms-2" style={{ fontSize: '0.65rem', verticalAlign: 'middle' }}>
-              {feedback.length}
+              {/* A truncated list's count is a floor, not a total. */}
+              {listTruncated ? `${feedback.length}+` : feedback.length}
             </span>
           )}
         </h3>
@@ -375,6 +385,27 @@ const AdminFeedback: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {listTruncated && (
+        <div
+          data-testid="feedback-truncation-notice"
+          role="status"
+          className="alert d-flex align-items-center gap-2 mb-3"
+          style={{
+            backgroundColor: 'rgba(255, 193, 7, 0.12)',
+            border: '1px solid rgba(255, 193, 7, 0.3)',
+            color: 'var(--text-primary)',
+            borderRadius: '8px'
+          }}
+        >
+          <AlertTriangle size={16} />
+          <span>
+            {/* The count is the rows actually shown, so this sentence cannot
+                drift from the server's cap. */}
+            Showing the most recent {feedback.length} feedback items. Older items are not listed here - use Export to download the full set.
+          </span>
+        </div>
+      )}
 
       {feedback.length === 0 ? (
         <div className="text-center py-5">

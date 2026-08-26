@@ -12,6 +12,15 @@ import { streamCsvExport } from '../utils/csv-stream';
 
 const router: IRouter = Router();
 
+/**
+ * The most rows GET /api/feedback will put in one response. cto/AdaptaLabs#81.
+ *
+ * A policy number: the UI copy in AdminFeedback.tsx states it, the pinning
+ * test asserts it as a literal, and #86 is the ticket that would replace it
+ * with a cursor. Change all of them together or none.
+ */
+export const FEEDBACK_LIST_LIMIT = 1000;
+
 // POST /api/feedback - Submit feedback (saves to database, optionally sends email)
 router.post('/', asyncHandler(async (req: Request, res: Response) => {
   const { feedback, category, userAgent, url } = req.body;
@@ -63,26 +72,40 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
 }));
 
 /**
- * GET /api/feedback - List all feedback (admin access).
+ * GET /api/feedback - List the most recent feedback (admin access). Bounded
+ * since cto/AdaptaLabs#81 - it read the whole table before.
  *
- * ponytail: an unbounded read - no LIMIT and no cursor, so the response grows
- *   with every feedback row ever submitted.
- *   -> #81. NOT fixed by #65, which streamed the two CSV EXPORTS either side
- *      of this. An export's contract is "give me everything", so streaming
- *      removes its ceiling without changing what success means; this route
- *      feeds a UI, so it wants the `has_more` + `?before=` shape that
- *      points-history and #66 already use, and that is a different decision
- *      taken against a frontend caller which actually exists. Filed rather
- *      than folded in.
+ * The shape is a fixed cap plus `has_more`, NOT the `?before=` keyset that
+ * points-history and the bookings list use (#81's option 3, Nick's call).
+ * The one consumer, AdminFeedback.tsx, sorts client-side on three fields over
+ * the whole loaded set; a `(created_at, id)` keyset can preserve exactly one
+ * of those sorts, so a cursor here is a visible UX change, not a drop-in.
+ *
+ * We fetch cap+1 and derive `has_more` from the sentinel row, so the flag is
+ * measured by the same read it describes rather than by a COUNT that could
+ * race it. The sentinel row never reaches the wire. `id DESC` tiebreaks equal
+ * timestamps for the same reason the export's keyset carries the id: two rows
+ * in one request share a created_at, and an unstable order across refreshes
+ * reads as rows appearing and vanishing.
+ *
+ * ponytail: past FEEDBACK_LIST_LIMIT rows the UI shows only the newest cap
+ *   and the streamed CSV export is the route to the rest.
+ *   -> #86, the (created_at, id) cursor rework, triggered if `has_more: true`
+ *      ever shows up in production responses.
  */
 router.get('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const result = await pool.query(
     `SELECT id, user_id, user_name, user_email, category, feedback, url, user_agent, created_at
      FROM feedback
-     ORDER BY created_at DESC`
+     ORDER BY created_at DESC, id DESC
+     LIMIT $1`,
+    [FEEDBACK_LIST_LIMIT + 1]
   );
 
-  res.json({ success: true, data: result.rows });
+  const hasMore = result.rows.length > FEEDBACK_LIST_LIMIT;
+  const rows = hasMore ? result.rows.slice(0, FEEDBACK_LIST_LIMIT) : result.rows;
+
+  res.json({ success: true, data: rows, has_more: hasMore });
 }));
 
 // DELETE /api/feedback/:id - Delete a feedback item (superadmin only)
