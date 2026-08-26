@@ -50,7 +50,7 @@ The API refuses a mismatched pairing at the boundary rather than only in the pic
 
 Four items, in the order they are worth doing.
 
-### 1. `question` has no native path at all
+### 1. `question` has no native path at all - tracked as #78
 
 Smallest gap, and the engine that would close it already ships.
 
@@ -65,7 +65,7 @@ Publishing something unusable should not be possible.
 **Scope of the absence assertion**: grepped all `.ts` and `.tsx` under `shared`, `backend/src` and `frontend/src`, excluding test files.
 51 references to the `question` type, none of them touching `native`, `firsthand` or `delivery_mode`.
 
-### 2. Moderated test and interview capture nothing
+### 2. Moderated test and interview capture nothing - tracked as #79
 
 Biggest gap, biggest build.
 
@@ -76,7 +76,7 @@ The researcher runs the session on a call - the meeting link is `meeting_locatio
 The components exist separately: a recorded runner, a booking system, transcript generation.
 Nothing joins them for a live moderated session.
 
-### 3. External poll and survey return no data
+### 3. External poll and survey return no data - not tracked
 
 `external_link_optional` is required before publish, the call to action is a `window.open`, and the only thing that comes back is `trackOpportunityClick(id, 'action')`.
 Started, abandoned, completed and the answers themselves are all invisible to Cortex.
@@ -85,7 +85,7 @@ The existing `backend/src/firsthand/callback-delivery.ts` does **not** cover thi
 It delivers outbound lifecycle events from Cortex to an integrator (`session_started`, `session_completed`, `session_abandoned`, `session_failed`), not inbound results from Typeform, SurveyMonkey or similar.
 Closing this gap means either an inbound ingest path or an explicit decision that an external study's data stays external.
 
-### 4. Consent exists only on the native paths
+### 4. Consent exists only on the native paths - not tracked
 
 Deliberate, and argued for at `frontend/src/pages/OpportunityForm.tsx:497`: a hand-off's consent lives in the tool on the other side of the link, and an empty Consent step would imply Cortex has a say in something it does not.
 
@@ -94,7 +94,18 @@ For external and booked studies, Cortex holds no consent record for a study it r
 
 ## Recommended order
 
-Build the native path for `question` first.
+Build the native path for `question` first (#78).
 It is a `delivery_mode` branch plus a one-question reuse of SurveyRunner, it closes the publish-readiness hole in the same change, and it is the only one of the four that adds no new machinery.
+The publish-readiness half is worth splitting out and doing on its own first: it is a few lines, and until it lands a researcher can publish a study nobody can take part in.
 
-Items 2 and 3 are both real product decisions rather than fixes, and each deserves its own GitLab issue in `cto/AdaptaLabs` before any code is written.
+Item 2 (#79) is a product decision before it is a ticket, and the issue carries the questions that need answering before anyone starts.
+
+Items 3 and 4 are deliberately untracked.
+Both are decisions about what Cortex is for rather than defects in what it does, and neither has an owner asking for it.
+Raise them when someone does.
+
+## Naming
+
+`test` and `unmoderated` are named as a pair - **Live session** and **Recorded session** - as of !273, 2026-08-26.
+They are one research method differing only in whether a researcher is present, and the previous names ("Usability test" and "Recorded study") implied the recorded one was not a usability test.
+The word *Recorded* is load-bearing rather than decorative: it carries the first part of the recording disclosure, and it reaches a participant long before the detail page does.

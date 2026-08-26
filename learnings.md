@@ -404,12 +404,21 @@ Every finding below started as something visible on screen and was only then che
 - 🔥 **Renaming a type is a layout change.**
   "Recorded study" is wider than "Unmoderated" and overflowed the type column by 4px in the same fixed table.
   jsdom has no layout engine, so none of 528 tests could see it; only re-measuring in the browser did.
+  Confirmed again on 2026-08-26 renaming to "Recorded session", and **character count is not the measurement**: two extra characters were 11.8px, not the ~15px arithmetic implied ("Recorded study" 125.7px, "Recorded session" 137.5px, measured in Chrome at the badge's own type rules).
+  `.admin-data-table .col-type` now carries those numbers in its comment so the next rename starts from a measurement rather than a guess.
 
 ### One name per type
 
 `test` was "User Test" in the authoring form, "APP TESTING" on the dashboard badge and "Usability test" on browse - three words for one thing, so a researcher and a participant could not discuss the same study without translating.
 `getParticipantFacingType` is now the only place a type becomes words, on admin surfaces as well as participant ones, and `formatOpportunityType` is deleted rather than kept: a second formatter is exactly how three names happened.
 The dashboard's STUDY TYPE filter also had **no `unmoderated` option at all**, so recorded studies could not be filtered for - found only because the test enumerates `OPPORTUNITY_TYPES` instead of listing types by hand.
+
+**One name per type is not enough on its own - types that are one method need to be named as a pair.** (2026-08-26)
+`test` and `unmoderated` are the same research method differing only in whether a researcher is present, but were called "Usability test" and "Recorded study", which implied the recorded one was not a usability test.
+They are now **Live session** and **Recorded session**.
+"Moderated"/"Unmoderated" was rejected twice over: `interview` is also moderated and also booked, so it would imply an interview is not; and no shipping research platform uses those words as in-product type labels (UserTesting has "Live Conversations", Maze "Interview Studies") - they name what happens and treat moderation as a category.
+"Recorded" was kept deliberately because it is doing **consent work**: it is the first and most-repeated part of the recording disclosure `RecordedStudyExpectations` completes on the detail page, and it reaches a participant on the browse row and the booking card long before that page does.
+The single-source rule had already been broken twice in silence - `review-summary.ts` kept a private label table and `MyBookings.tsx` hardcoded "Unmoderated" - so **one helper is not a guarantee unless something fails when a second list appears**.
 
 ### Traps that cost real time
 
