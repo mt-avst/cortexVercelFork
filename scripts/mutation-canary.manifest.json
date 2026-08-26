@@ -1376,5 +1376,25 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
     "test": "gives an admin whose database role was revoked after login the participant view"
+  },
+  {
+    "id": "test-http-client-pools-its-sockets",
+    "why": "The pooled agent is installed once in setup.ts and every other suite benefits without mentioning it. Dropping the call reverts the whole repo to one TCP connection per supertest request - measured, 1858 sockets in TIME_WAIT a run against a 16384-port ephemeral range - and nothing would fail, because no assertion anywhere else looks at a connection count (cto/AdaptaLabs#44).",
+    "file": "backend/src/__tests__/setup.ts",
+    "anchor": "installPooledTestAgent();",
+    "mutation": "// installPooledTestAgent();",
+    "runner": "jest",
+    "spec": "src/__tests__/pooled-agent.test.ts",
+    "test": "reuses the socket ACROSS tests, not merely within one"
+  },
+  {
+    "id": "listening-server-never-closes-a-pooled-socket",
+    "why": "Node closes an idle keep-alive connection after keepAliveTimeout, and a client reusing one it has just closed gets ECONNRESET - which superagent reports as `socket hang up`, the exact text of the flake the pooling exists to remove. Restoring Node's 5000ms default reintroduces it invisibly: measured 5 resets in 6 at 5000, 0 in 6 at 0 (cto/AdaptaLabs#44).",
+    "file": "backend/src/__tests__/helpers/listening.ts",
+    "anchor": "  server.keepAliveTimeout = 0;",
+    "mutation": "  server.keepAliveTimeout = 5000;",
+    "runner": "jest",
+    "spec": "src/__tests__/listening-helper.test.ts",
+    "test": "disables the server keep-alive timeout, so a pooled socket is never closed under the client"
   }
 ]
