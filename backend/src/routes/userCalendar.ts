@@ -21,31 +21,32 @@ const router: IRouter = Router();
  * Handle Google OAuth callback
  * Stores encrypted tokens in database and redirects to frontend
  */
-// `validateQuery` (#43): an array `state` compared with `!==` against the
-// session's stored state is always unequal, and an array `code` is truthy
-// past the missing-code check and lands in the token exchange.
+// `validateQuery` (#43): an array `code` is truthy past the missing-code check
+// below and would otherwise land in the token exchange, so the validator
+// refuses a non-string `code` shape at the boundary. (`state` is validated for
+// shape too but no longer read by the handler - see #83.)
 router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
     const code = req.query.code as string;
-    const state = req.query.state as string;
-    interface SessionWithGoogleState {
-      googleOAuthState?: string;
-    }
-    const sessionState = (req.session as SessionWithGoogleState).googleOAuthState;
-    
+
+    // No OAuth `state` is verified here, and that is deliberate rather than an
+    // omission (cto/AdaptaLabs#83). Nothing initiates a separate calendar OAuth
+    // flow: the `/auth/connect` route was removed and `userCalendarService
+    // .getAuthUrl` has no caller, so calendar tokens are obtained during Google
+    // login in routes/auth.ts (which binds its own state, #82), not through this
+    // callback. The old guard compared the query state against
+    // `req.session.googleOAuthState`, a value assigned NOWHERE in the repo, so it
+    // could never fire - a check that read as protection while being dead code.
+    // Removed with its interface and its `delete` rather than left misleading.
+
     // In demo mode, code might not be present - handle gracefully
     if (!code && userCalendarService.isInDemoMode()) {
       logger.debug('Demo mode: Handling callback without code');
       // For demo mode, we'll just mark as connected with mock tokens
     } else if (!code) {
       return res.status(400).json({ error: 'Authorization code missing' });
-    }
-
-    // Verify state (optional in demo mode)
-    if (state && sessionState && state !== sessionState) {
-      return res.status(400).json({ error: 'Invalid state parameter' });
     }
 
     const userId = req.session.user!.id;
@@ -82,9 +83,6 @@ router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema
       'Bearer',
       'https://www.googleapis.com/auth/calendar.readonly',
     ]);
-
-    // Clear state from session
-    delete (req.session as any).googleOAuthState;
 
     // Redirect to frontend success page
     const frontendUrl = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000';

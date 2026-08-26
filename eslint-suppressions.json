@@ -105,7 +105,7 @@
   },
   "backend/src/routes/userCalendar.ts": {
     "@typescript-eslint/no-explicit-any": {
-      "count": 2
+      "count": 1
     },
     "@typescript-eslint/no-unused-vars": {
       "count": 1
