@@ -727,6 +727,103 @@ describe('a save that half-worked is not announced as a success', () => {
     // Still on Review, not gone.
     expect(currentStepName()).toMatch(/Review/);
   });
+
+  /**
+   * Walk a create to the commit with one confirmed slot, and let `createSessions`
+   * fail however the caller says.
+   */
+  const commitWithFailingSessions = async (rejection: unknown) => {
+    vi.mocked(createSessions).mockRejectedValueOnce(rejection);
+
+    renderCreate();
+    fillBasics('test');
+    fireEvent.click(forwardControl()!);
+    fireEvent.click(forwardControl()!);
+    fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    fireEvent.click(forwardControl()!);
+    fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
+
+    await waitFor(() => expect(vi.mocked(createOpportunity)).toHaveBeenCalledTimes(1));
+  };
+
+  /** The whole banner as the author reads it, not the fragment a regex matched. */
+  const bannerText = async (match: RegExp) =>
+    (await screen.findByText(match)).textContent?.replace(/\s+/g, ' ').trim() ?? '';
+
+  it('shows the clashing times the 409 named, and says to change them', async () => {
+    await commitWithFailingSessions({
+      response: {
+        status: 409,
+        // The route's own wording: `Session overlaps with existing sessions:
+        // ${formatTime(start)} - ${formatTime(end)}`.
+        data: { error: 'Session overlaps with existing sessions: 10:00 AM - 10:30 AM' }
+      }
+    });
+
+    const banner = await bannerText(/10:00 AM - 10:30 AM/);
+    // The fact that breaks the loop: WHICH slots clash.
+    expect(banner).toContain('Session overlaps with existing sessions: 10:00 AM - 10:30 AM');
+    // And the advice that can actually be followed from here. The batch is
+    // atomic, so nothing was created and the slots are still on the step named.
+    expect(banner).toMatch(/change the times on the Session Management step/i);
+    // NOT the advice that sends them to re-add the same slots and hit the same 409.
+    expect(banner).not.toMatch(/from the dashboard/i);
+    expect(currentStepName()).toMatch(/Review/);
+
+    /*
+     * This message is two lines wide at the container, and the icon used to be
+     * an inline sibling of the text - so line two wrapped UNDERNEATH it. Nothing
+     * else in the suite would notice that coming back, because it is not a
+     * string and not a step.
+     */
+    expect(screen.getByRole('alert')).toHaveClass('d-flex', 'align-items-start');
+  });
+
+  it('falls back to the generic sentence when the 409 carried no message', async () => {
+    // Otherwise the fallback is dead copy the moment the 409 path is pinned.
+    await commitWithFailingSessions({ response: { status: 409, data: {} } });
+
+    expect(await bannerText(/time slots were not/i)).toBe(
+      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+    );
+    expect(currentStepName()).toMatch(/Review/);
+  });
+
+  it('gives a 500 different advice from a 409, and does not print its message', async () => {
+    /*
+     * The twin of the 409 arm, and it is doing two jobs.
+     *
+     * A fix that surfaced the server string and gave IDENTICAL advice for both
+     * statuses passes every other assertion in this block. And outside
+     * production `errorHandler` puts the raw `error.message` in the body of a
+     * 500, so this also pins that an internal message does not reach the author.
+     * The 409 arm above is the control: it proves this assertion can see a
+     * server message when one is meant to be rendered.
+     */
+    await commitWithFailingSessions({
+      response: {
+        status: 500,
+        data: { error: 'insert or update on table "sessions" violates foreign key constraint' }
+      }
+    });
+
+    const banner = await bannerText(/time slots were not/i);
+    expect(banner).toBe(
+      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+    );
+    expect(banner).not.toMatch(/foreign key constraint/i);
+    expect(screen.queryByText(/foreign key constraint/i)).not.toBeInTheDocument();
+    expect(currentStepName()).toMatch(/Review/);
+  });
+
+  it('still reports a rejection that is not an object at all', async () => {
+    await commitWithFailingSessions(undefined);
+
+    expect(await bannerText(/time slots were not/i)).toBe(
+      'The opportunity was saved but its time slots were not. Add them from the dashboard.'
+    );
+    expect(currentStepName()).toMatch(/Review/);
+  });
 });
 
 describe('the step that is not a StepActions row still names where it goes', () => {
