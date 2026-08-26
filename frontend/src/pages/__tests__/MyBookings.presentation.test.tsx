@@ -175,7 +175,7 @@ describe('MyBookings presentation', () => {
     renderPage();
     await screen.findAllByText(/ScriptRunner/);
 
-    expect(screen.getAllByText('Usability test').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Live session').length).toBeGreaterThan(0);
     // (a /^TEST$/ check here was vacuous - the raw type renders lowercase,
     // so it could never match either way. The assertion above does the work.)
   });

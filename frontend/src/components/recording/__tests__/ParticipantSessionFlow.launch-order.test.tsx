@@ -168,7 +168,7 @@ async function walkToLaunch(token: string, withTarget = true) {
 
   // A study with no task page has no open-then-share sequence: the launch
   // collapses to one button with its own label.
-  const startLabel = withTarget ? "Start recording" : "Start recorded study";
+  const startLabel = withTarget ? "Start recording" : "Start recorded session";
 
   return screen.findByRole("button", { name: startLabel });
 }

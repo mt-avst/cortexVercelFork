@@ -621,9 +621,9 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                             missing outright, so recorded studies - the whole
                             reason the type exists - could not be filtered for. */}
                         <option value="">All Types</option>
-                        <option value="test">🧪 Usability test</option>
+                        <option value="test">🧪 Live session</option>
                         <option value="interview">💼 Interview</option>
-                        <option value="unmoderated">🖥️ Recorded study</option>
+                        <option value="unmoderated">🖥️ Recorded session</option>
                         <option value="poll">📊 Quick poll</option>
                         <option value="survey">📋 Survey</option>
                         <option value="question">❓ One question</option>

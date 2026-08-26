@@ -2703,7 +2703,7 @@ describe('Opportunities API', () => {
 
       const created = mockCreateStudy.mock.calls[0][0];
       expect(created.title).toBe('Untitled study');
-      expect(created.intro_text).toBe('Recorded study');
+      expect(created.intro_text).toBe('Recorded session');
     });
 
     it('claims an unowned study when an edit links one', async () => {

@@ -423,7 +423,7 @@ export function ParticipantSessionFlow({
           <div className="journey-brand">
             <span aria-hidden="true" className="journey-brand-logo" />
             <span className="journey-brand-name">
-              <b>Recorded study</b>
+              <b>Recorded session</b>
               <small>participant view</small>
             </span>
           </div>
@@ -1226,7 +1226,7 @@ function SetupAndStartStage({
                 }}
                 type="button"
               >
-                {isStarting ? "Requesting permissions…" : "Start recorded study"}
+                {isStarting ? "Requesting permissions…" : "Start recorded session"}
               </button>
               <button
                 className="button secondary"

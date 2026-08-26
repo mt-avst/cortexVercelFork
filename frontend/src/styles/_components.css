@@ -2977,13 +2977,20 @@ body.admin-page .header .container {
   min-width: 320px;
 }
 
-/* Column 2: Type - centered lozenges. Sized for "Recorded study", the longest
-   participant-facing type name, which at 14% overflowed its cell by 4px the
-   moment the badge stopped saying "Unmoderated". Renaming a type is a layout
-   change in a `table-layout: fixed` table. */
+/* Column 2: Type - centered lozenges. Sized for the longest type name, which is
+   now "Recorded session". Renaming a type is a layout change in a
+   `table-layout: fixed` table, so these two numbers move with the name.
+
+   MEASURED, not counted off the string. Rendered at the badge's own type rules
+   (0.7rem, uppercase, 600, 0.03em tracking, 8px side padding) in Chrome:
+   "Recorded study" was 125.7px and "Recorded session" is 137.5px, so the column
+   needs 12px more than it did - hence 140px -> 152px, and the extra 1% which is
+   worth about that much at the table widths this page is used at. Character
+   count is not the measurement: the previous longest name was two characters
+   shorter but only 11.8px narrower. */
 .admin-data-table .col-type {
-  width: 15%;
-  min-width: 140px;
+  width: 16%;
+  min-width: 152px;
   text-align: center;
 }
 

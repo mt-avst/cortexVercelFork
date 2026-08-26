@@ -64,7 +64,7 @@ const RecordingSession = () => {
 
   // Static title for the participant recording surface (A4 precedent wording).
   // Placed before the early returns below to keep hook order unconditional.
-  useDocumentTitle("Recorded study session");
+  useDocumentTitle("Recorded session");
 
   const isAuthResolved = !loading && initialAuthCheck;
   const isLoggedIn = Boolean(user);

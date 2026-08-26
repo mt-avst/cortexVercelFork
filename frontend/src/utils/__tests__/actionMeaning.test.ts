@@ -40,6 +40,6 @@ describe('getActionMeaning', () => {
 
   it('tolerates a type concatenated with a status, as its sibling does', () => {
     expect(getActionMeaning('unmoderatedpublished')).toBe('Started the study');
-    expect(getParticipantActionLabel('unmoderatedpublished')).toBe('Start recorded study');
+    expect(getParticipantActionLabel('unmoderatedpublished')).toBe('Start recorded session');
   });
 });

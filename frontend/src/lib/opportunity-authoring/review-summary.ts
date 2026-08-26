@@ -1,4 +1,7 @@
+import { OPPORTUNITY_TYPES } from '@shared/constants';
 import type { PublishProblemCode } from '@shared/firsthand/publish-readiness';
+
+import { getParticipantFacingType } from '../../utils/opportunityUtils';
 
 /**
  * The check-answers screen, built by walking the same step list the stepper
@@ -98,18 +101,24 @@ export interface ReviewSummaryInput {
 }
 
 /**
- * The words this form uses elsewhere for each research study type. Kept as a
- * lookup rather than a switch so an unrecognised or empty type falls through
- * to "missing" in one place instead of needing its own branch.
+ * The words this form uses elsewhere for each research study type.
+ *
+ * BUILT from `getParticipantFacingType` rather than spelled out again. Hand-
+ * written, this table drifted: it said "Usability Test" and "Unmoderated Test"
+ * while every other surface said "Usability test" and "Recorded study", so the
+ * check-answers screen was the one place calling two types something nothing
+ * else called them. A second list of the same facts is a second list that can
+ * stop agreeing, which is the argument this whole module is built on.
+ *
+ * Still a lookup rather than a direct call, and that is the point: an
+ * unrecognised or empty type must come back `undefined` so it falls through to
+ * "Not chosen" and counts as missing. `getParticipantFacingType` answers
+ * "Study" for anything it does not know, which is right for a participant
+ * reading a row and wrong for an author who has chosen nothing yet.
  */
-const STUDY_TYPE_LABELS: Record<string, string> = {
-  test: 'Usability Test',
-  interview: 'Interview',
-  poll: 'Poll',
-  survey: 'Survey',
-  question: 'Question',
-  unmoderated: 'Unmoderated Test'
-};
+const STUDY_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  Object.values(OPPORTUNITY_TYPES).map((type) => [type, getParticipantFacingType(type)])
+);
 
 /** "1 question" against "2 questions", spelled out once rather than per call site. */
 const pluralise = (count: number, noun: string): string =>

@@ -414,19 +414,33 @@ const baseTypeOf = (type: string | null | undefined): string => {
 };
 
 /**
- * What a participant should be told this is.
+ * What anyone should be told this is - participant and admin alike.
  *
  * The browse list showed the internal taxonomy - UNMODERATED, APP TESTING,
  * QUESTION - which is the research team's vocabulary, not the vocabulary of the
  * person being asked to give up an hour. "Unmoderated" describes the absence of
  * a researcher, which is a fact about how the study is run rather than anything
- * a participant needs. `formatOpportunityType` stays as it is for admin
- * surfaces, where the real type names are what an admin is working with.
+ * a participant needs. This is now the ONLY place a type gets a name: the admin
+ * formatter that used to sit beside it is gone, and every surface reads here, so
+ * a researcher and a participant discussing a study use the same word.
+ *
+ * `test` and `unmoderated` are a pair and are named as one. They are the same
+ * research method - a usability test - differing only in whether a researcher
+ * is present, so naming one of them "Usability test" implied the other was not
+ * one. "Live" against "Recorded" is the difference itself, in the two words a
+ * participant most needs before clicking: is someone waiting for me, and am I
+ * about to be recorded.
+ *
+ * "Recorded" is load-bearing rather than decorative. It is the first and
+ * most-repeated part of the recording disclosure that RecordedStudyExpectations
+ * completes on the detail page, and it reaches a participant on the browse row,
+ * the filter chip and the booking card long before that page does. A name for
+ * this type that drops the word is accurate and quietly less honest.
  */
 export const getParticipantFacingType = (type: string | null | undefined): string => {
   switch (baseTypeOf(type)) {
-    case 'unmoderated': return 'Recorded study';
-    case 'test': return 'Usability test';
+    case 'unmoderated': return 'Recorded session';
+    case 'test': return 'Live session';
     case 'interview': return 'Interview';
     case 'poll': return 'Quick poll';
     case 'survey': return 'Survey';
@@ -493,7 +507,7 @@ export const getParticipantActionLabel = (type: string | null | undefined): stri
     case 'poll': return 'Open poll';
     case 'survey': return 'Open survey';
     case 'question': return 'Answer';
-    case 'unmoderated': return 'Start recorded study';
+    case 'unmoderated': return 'Start recorded session';
     default: return 'Take part';
   }
 };

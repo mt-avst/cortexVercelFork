@@ -25,8 +25,8 @@ describe('getParticipantFacingType', () => {
   // QUESTION. "Unmoderated" is a researcher's word for "nobody is watching" and
   // means nothing to the person being asked to take part.
   it.each([
-    ['unmoderated', 'Recorded study'],
-    ['test', 'Usability test'],
+    ['unmoderated', 'Recorded session'],
+    ['test', 'Live session'],
     ['interview', 'Interview'],
     ['poll', 'Quick poll'],
     ['survey', 'Survey'],
@@ -41,8 +41,8 @@ describe('getParticipantFacingType', () => {
 
   // The API has been seen returning type concatenated with status.
   it('survives a type concatenated with its status', () => {
-    expect(getParticipantFacingType('unmoderatedpublished')).toBe('Recorded study');
-    expect(getParticipantFacingType('testdraft')).toBe('Usability test');
+    expect(getParticipantFacingType('unmoderatedpublished')).toBe('Recorded session');
+    expect(getParticipantFacingType('testdraft')).toBe('Live session');
   });
 
   it('falls back to something neutral for an unknown type', () => {
@@ -67,7 +67,7 @@ describe('getParticipantActionLabel', () => {
     ['poll', 'Open poll'],
     ['survey', 'Open survey'],
     ['question', 'Answer'],
-    ['unmoderated', 'Start recorded study'],
+    ['unmoderated', 'Start recorded session'],
   ])('labels %s as %s', (type, expected) => {
     expect(getParticipantActionLabel(type)).toBe(expected);
   });

@@ -55,7 +55,7 @@ const STEPS = [
   {
     index: 2,
     title: 'People take part',
-    description: 'Participants book a slot, answer inside Cortex, or run a recorded study in their own browser.',
+    description: 'Participants book a slot, answer inside Cortex, or run a recorded session in their own browser.',
   },
   {
     index: 3,
