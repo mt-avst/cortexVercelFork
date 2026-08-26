@@ -18,7 +18,7 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 3. [Booking a Session](#booking-a-session)
 4. [Managing Your Bookings](#managing-your-bookings)
 5. [Polls and Surveys](#polls-and-surveys)
-6. [Unmoderated Studies](#unmoderated-studies)
+6. [Recorded Sessions](#recorded-sessions)
 7. [Troubleshooting](#troubleshooting)
 8. [FAQ](#faq)
 
@@ -51,21 +51,21 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 
 - The home page shows all available opportunities
 - Each opportunity card shows:
-  - **Type**: Usability test, Recorded study, Quick poll, Survey, Interview or One question
+  - **Type**: Live session, Recorded session, Quick poll, Survey, Interview or One question
   - **Title**: Name of the opportunity
   - **Purpose**: Brief description
-  - **Available Sessions**: Number of remaining slots, on the types you book. Unmoderated, polls and surveys show roughly how long they take instead
+  - **Available Sessions**: Number of remaining slots, on the types you book. Recorded sessions, polls and surveys show roughly how long they take instead
 
 ### Filtering Opportunities
 
 - Use the **type filter** buttons above the list to filter by:
   - All
-  - Usability test
-  - Recorded study
+  - Live session
+  - Recorded session
   - Survey
   - Quick poll
   - Interview
-  - Question
+  - One question
 
 ### Searching Opportunities
 
@@ -131,7 +131,7 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 2. You'll see:
    - **Upcoming bookings**: sessions still to come
    - **Past bookings**: sessions that have happened
-   - **Self-guided sessions**: unmoderated studies you have started, shown only once you have started one. See [Unmoderated Studies](#unmoderated-studies)
+   - **Recorded sessions**: recorded sessions you have started, shown only once you have started one. See [Recorded Sessions](#recorded-sessions)
 
 ### Canceling a Booking
 
@@ -176,15 +176,17 @@ now tells you the working route in place of the dead button.
 
 ---
 
-## Unmoderated Studies
+## Recorded Sessions
 
-An unmoderated study is self-guided.
+A recorded session is self-guided.
 There is no researcher with you and nothing to book.
 You work through a short list of tasks on your own, while Cortex records your screen and microphone in the browser.
 The research team watches the recording afterwards.
 
+It is the same kind of study as a **Live session**, run without a researcher present - which is why the two names are a pair.
+
 They appear in the opportunity list like anything else.
-Filter by **Unmoderated** to find them, and the card tells you roughly how long the study takes.
+Filter by **Recorded session** to find them, and the card tells you roughly how long the study takes.
 
 ### What You Need
 
@@ -212,14 +214,14 @@ Nothing is recorded until you have agreed to it and pressed start.
 The session page is one long page of six numbered blocks: Welcome, Consent, Setup and start, Task, Upload and Done.
 Each unlocks as you finish the one before it.
 
-1. Open the opportunity and click **Start Test**. The session opens in the same tab and takes over the page
+1. Open the opportunity and click **Start recorded session**. The session opens in the same tab and takes over the page
 2. **Welcome**: read the brief and what to expect, then click **Continue to consent**. The tasks themselves come one at a time once recording starts, so you meet each page as you would normally
 3. **Consent**: read what you are agreeing to, then click **I agree and want to continue**. Choosing **I do not agree** ends the study there and nothing is recorded
 4. **Setup and start**: Cortex checks your browser, window size, microphone and screen sharing. If something fails, fix it and click **Check again**
 5. **Open the task window**: this opens a small panel that floats above your other windows and holds your tasks. Everything from here happens in that panel
    - In the panel, click **Open the task page**. It opens in its own window
    - Then click **Start recording** in the panel, allow your microphone, and pick the task page in the browser's sharing chooser. In Chrome and Edge it is under the **Window** tab. Sharing your whole screen works just as well if you cannot find it
-   - If the study has no page for you to use, there is a single **Start recorded study** button on the Cortex page instead
+   - If the study has no page for you to use, there is a single **Start recorded session** button on the Cortex page instead
 6. **Task**: work through the tasks one at a time in the floating panel. Do what the task asks in the task window, saying what you are thinking as you go, then click **I’ve completed this task** to move on
    - **Your tasks follow you.** The panel stays above your other windows, so you can read the task without switching back and forth, and it closes itself when you finish - along with the task window, so there is nothing left open once you are done
    - Move or resize it like any other window, or drag it to a second screen. **Bring the task page back** in the panel re-opens the task window if you lose it behind something
@@ -305,7 +307,7 @@ A session you declined or left part-way through shows as **Abandoned**.
 - Try a different browser
 - Contact support if the problem continues
 
-### I Can't Start an Unmoderated Study
+### I Can't Start a Recorded Session
 
 If the **Start Test** button is disabled, or you are told the study is not yet configured, the research team has not finished setting it up.
 Contact them, or try again later.
@@ -377,7 +379,7 @@ No, for privacy reasons, you can only see:
 3. Contact support: nfine@adaptavist.com
 4. Submit a ticket via Service Desk
 
-### Do I Need to Book an Unmoderated Study?
+### Do I Need to Book a Recorded Session?
 
 No.
 There is nothing to book and no time slot to keep.
@@ -386,7 +388,7 @@ Open it and start whenever it suits you.
 ### Is My Camera Recorded?
 
 No.
-An unmoderated study records your screen and your microphone only.
+A recorded session records your screen and your microphone only.
 Your camera is never switched on.
 
 ### Can I Stop a Recorded Session Once It Has Started?

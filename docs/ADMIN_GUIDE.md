@@ -16,7 +16,7 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 1. [Getting Started](#getting-started)
 2. [Creating an Opportunity](#creating-an-opportunity)
 3. [Managing Sessions](#managing-sessions)
-4. [Unmoderated Studies](#unmoderated-studies)
+4. [Recorded Sessions](#recorded-sessions)
 5. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
 6. [Consent](#consent)
 7. [Publishing Opportunities](#publishing-opportunities)
@@ -50,7 +50,7 @@ The dashboard shows:
 
 ### Finding your way around the form
 
-The form is a series of steps, listed across the top. How many there are depends on the type you pick: an external poll has three, a recorded study has four, and before you have chosen a type at all there are two.
+The form is a series of steps, listed across the top. How many there are depends on the type you pick: an external poll has three, a recorded session has four, and before you have chosen a type at all there are two.
 Each step says where it sits in the sequence - *Step 3 of 4* - what it is for, and how it is doing.
 
 Every step reports one of four states, with an icon and words as well as a colour:
@@ -86,14 +86,16 @@ Two controls used to look almost identical and do very different things. They ar
 Fill in the required fields:
 
 - **Type**: Select from:
-  - 🧪 **Usability test**: Interactive session with participants
+  - 🧪 **Live session**: Usability test you moderate, at a booked time
   - 📊 **Quick poll**: Quick questions/voting
   - 📋 **Survey**: Detailed feedback collection
   - 💬 **Interview**: One-on-one interviews
   - ❓ **One question**: Single question opportunities
-  - 🖥️ **Recorded study**: Self-guided study recorded in the participant's browser. See [Unmoderated Studies](#unmoderated-studies)
+  - 🖥️ **Recorded session**: Usability test the participant runs alone, recorded in their browser. See [Recorded Sessions](#recorded-sessions)
 
   These are the same names participants see. Cortex uses one name per type everywhere now; the older admin-only labels ("App Testing", "Unmoderated Testing") are gone.
+
+  **Live session** and **Recorded session** are one research method, not two. Both are usability tests; they differ only in whether you are present, which is why they are named as a pair. The older names ("Usability test" and "Recorded study") implied the recorded one was a different kind of study.
 
 - **Title**: Clear, descriptive title (required)
 - **Purpose (One-liner)**: Brief description shown on list (required)
@@ -177,14 +179,14 @@ A **One question** opportunity has no native mode and always uses an external li
 
 ---
 
-## Unmoderated Studies
+## Recorded Sessions
 
-An unmoderated study is self-guided: there is no moderator and no time slot.
+A recorded session is self-guided: there is no moderator and no time slot.
 The participant works through a list of tasks on their own while Cortex records their screen and microphone in the browser.
 You watch the recording afterwards.
 
 Use it when you want to see people actually using something, without booking time with each of them.
-Use a **Test** or **Interview** instead when you need to be in the room.
+Use a **Live session** or **Interview** instead when you need to be in the room.
 
 ### What you need before you start
 
@@ -196,10 +198,10 @@ Use a **Test** or **Interview** instead when you need to be in the room.
 
 1. Go to Admin Dashboard
 2. Click **"Create New Opportunity"**
-3. On **Basic Information**, set **Research Study Type** to **"🖥️ Recorded study - Self-guided, recorded in the browser"**
+3. On **Basic Information**, set **Research Study Type** to **"🖥️ Recorded session - Usability test the participant runs alone, recorded in the browser"**
 4. Fill in Title and Purpose as usual on **Basic Information** and **Content & Details**
 
-Choosing Unmoderated replaces the External Link step with a **Task List** step.
+Choosing Recorded session replaces the External Link step with a **Task List** step.
 There is no Session Management step, because there is nothing to book.
 
 ### Step 2: Write the Task List
@@ -348,7 +350,7 @@ The controls are the same ones the Task List uses, and they exist because a twen
 
 ### Consent
 
-Consent is its own step now, shared with recorded studies, and it follows the questions. See [Consent](#consent).
+Consent is its own step now, shared with recorded sessions, and it follows the questions. See [Consent](#consent).
 
 ### Starting from an existing set of questions
 
@@ -373,14 +375,14 @@ There is a CSV export.
 ### Common mistakes
 
 - **Writing a rating question without deciding the scale** - the save is refused rather than picking one for you
-- **Expecting a recorded study's consent wording** - a survey records nothing, and its consent text says so
+- **Expecting a recorded session's consent wording** - a survey records nothing, and its consent text says so
 - **Reordering questions after people have answered** - answers are attached to a question by its position, so this is refused on the opportunity form. Make a new opportunity instead
 
 ---
 
 ## Consent
 
-Consent is its own step, and it is the last one. It follows **Questions** on a poll or survey answered in Cortex, and **Task List** on a recorded study. The **Create opportunity** button lives there, so you pass through it on the way to saving.
+Consent is its own step, and it is the last one. It follows **Questions** on a poll or survey answered in Cortex, and **Task List** on a recorded session. The **Create opportunity** button lives there, so you pass through it on the way to saving.
 
 **It opens locked, showing the approved wording**, the template it comes from and its version - for example *Standard survey consent (version 1)*, with a line saying what it covers. There is nothing to type into, because for most studies there is nothing to decide: the approved wording is the wording.
 
@@ -389,7 +391,7 @@ There are two templates, and they are deliberately different:
 - **Standard recorded-session consent** covers screen and microphone recording, who sees the recording, and how a participant ends it
 - **Standard survey consent** says what is stored, who sees it, and that **no screen, microphone or camera is recorded**
 
-A survey never gets the recorded wording and a recorded study never gets the survey wording. Reusing the recorded text on a survey would have participants agreeing to a capture that never happens.
+A survey never gets the recorded wording and a recorded session never gets the survey wording. Reusing the recorded text on a survey would have participants agreeing to a capture that never happens.
 
 ### If your study needs different wording
 
