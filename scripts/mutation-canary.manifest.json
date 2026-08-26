@@ -1731,5 +1731,45 @@
     "runner": "vitest",
     "spec": "src/firsthand/survey-results-repository.test.ts",
     "test": "refuses rather than serving a body past the character ceiling"
+  },
+  {
+    "id": "feedback-list-fetches-the-sentinel-row-that-measures-has-more",
+    "why": "cto/AdaptaLabs#81. The route fetches FEEDBACK_LIST_LIMIT + 1 rows and derives has_more from the presence of the extra row. Drop the + 1 and has_more can never be true: the database hands back at most the cap, the sentinel is never seen, and a table past the cap presents as a complete list - the silent truncation the issue exists to prevent, reintroduced with every test of the visible rows still green. Proven KILLED before entry: the parameter-pinning arm fails by name, asserting the bound value 1001 as a literal.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "    [FEEDBACK_LIST_LIMIT + 1]",
+    "mutation": "    [FEEDBACK_LIST_LIMIT]",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/feedback.list-bounded.test.ts",
+    "test": "asks the database for the cap plus one rows, as a bound parameter"
+  },
+  {
+    "id": "feedback-list-has-more-is-strict-at-exactly-the-cap",
+    "why": "cto/AdaptaLabs#81. has_more compares the fetched row count against the cap with a strict greater-than: at exactly FEEDBACK_LIST_LIMIT rows the sentinel is absent, nothing was cut off, and the flag must be false. Weaken the comparison to >= and a table holding exactly the cap tells the admin rows were truncated when none were - a notice pointing at an export that holds nothing the page does not. Proven KILLED before entry: the exactly-the-cap arm fails by name.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "  const hasMore = result.rows.length > FEEDBACK_LIST_LIMIT;",
+    "mutation": "  const hasMore = result.rows.length >= FEEDBACK_LIST_LIMIT;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/feedback.list-bounded.test.ts",
+    "test": "returns exactly the cap with has_more false when the table holds exactly the cap"
+  },
+  {
+    "id": "feedback-list-keeps-the-sentinel-row-off-the-wire",
+    "why": "cto/AdaptaLabs#81. The cap+1th row exists only to measure has_more and must be sliced off before the response. Ship it and the route sends one more row than its stated cap - a lie small enough to survive every eyeball, and the constant the UI copy and the pinning test agree on quietly becomes a different number on the wire. Proven KILLED before entry: the overflow arm fails by name, asserting exactly 1000 rows beside has_more true.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "  const rows = hasMore ? result.rows.slice(0, FEEDBACK_LIST_LIMIT) : result.rows;",
+    "mutation": "  const rows = result.rows;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/feedback.list-bounded.test.ts",
+    "test": "returns exactly the cap with has_more true when the table overflows it"
+  },
+  {
+    "id": "feedback-list-cap-keeps-the-newest-rows",
+    "why": "cto/AdaptaLabs#81. A cap without a cursor means anything only because it keeps the NEWEST rows - the UI copy says 'the most recent 1000' and the truncation notice points admins past the cap to the export. Delete the ORDER BY and an unordered LIMIT hands back an arbitrary 1000 rows: silent truncation of an unpredictable subset, the exact failure the issue exists to stop, and the review gate measured the whole 1497-test suite green under it. Proven KILLED before entry: the bound-parameter arm now asserts the clause and fails by name.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "     ORDER BY created_at DESC, id DESC\n     LIMIT $1`,",
+    "mutation": "     LIMIT $1`,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/feedback.list-bounded.test.ts",
+    "test": "asks the database for the cap plus one rows, as a bound parameter"
   }
 ]

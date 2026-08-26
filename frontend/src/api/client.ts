@@ -762,6 +762,11 @@ export interface FeedbackItem {
   created_at: string;
 }
 
+export interface FeedbackListResult {
+  items: FeedbackItem[];
+  has_more: boolean;
+}
+
 /**
  * Get all feedback. EVERY ADMIN, not just a superadmin.
  *
@@ -772,10 +777,20 @@ export interface FeedbackItem {
  * removed a tab those admins are meant to see. cto/AdaptaLabs#15.
  *
  * `deleteFeedback` below IS superadmin-only, and that asymmetry is deliberate.
+ *
+ * Bounded since cto/AdaptaLabs#81: the server caps the list at its
+ * FEEDBACK_LIST_LIMIT newest rows and reports `has_more` when rows exist past
+ * the cap. The full set is only reachable through the streamed CSV export.
  */
-export const getFeedback = async (): Promise<FeedbackItem[]> => {
+export const getFeedback = async (): Promise<FeedbackListResult> => {
   const response = await api.get('/feedback');
-  return response.data.data;
+  return {
+    items: response.data.data,
+    // Strict equality, not truthiness: a backend that predates #81 sends no
+    // has_more at all, and `undefined` must read as "nothing known to be cut
+    // off", not as a truncation notice over a complete list.
+    has_more: response.data.has_more === true,
+  };
 };
 
 /**
