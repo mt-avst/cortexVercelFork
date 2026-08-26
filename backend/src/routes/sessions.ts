@@ -502,7 +502,9 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
       
       res.json(updatedSession);
     } catch (error) {
-      await client.query('ROLLBACK');
+      // Guarded for the reason spelled out at :278: a ROLLBACK that throws on
+      // a dead connection would replace the error that caused it.
+      await client.query('ROLLBACK').catch(() => {});
       throw error;
     } finally {
       client.release();
@@ -622,7 +624,9 @@ router.post('/sync-booked-counts', requireSuperadmin, asyncHandler(async (req: R
       synced_count: syncedCount
     });
   } catch (error) {
-    await client.query('ROLLBACK');
+    // Guarded for the reason spelled out at :278: a ROLLBACK that throws on a
+    // dead connection would replace the error that caused it.
+    await client.query('ROLLBACK').catch(() => {});
     throw error;
   } finally {
     client.release();

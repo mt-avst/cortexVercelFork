@@ -1581,5 +1581,15 @@
     "needsDatabase": true,
     "spec": "src/routes/__tests__/bookings-all-keyset-postgres.test.ts",
     "test": "walks the whole booking history with the cursor, with no duplicates and no gaps"
+  },
+  {
+    "id": "rollback-failure-does-not-mask-the-original-error",
+    "why": "cto/AdaptaLabs#67. The transaction on POST /api/opportunities/:id/sessions ended `catch { await client.query('ROLLBACK'); throw error; }` with nothing on the ROLLBACK, and a dropped connection is one of the very failures the transaction exists to survive - it makes the ROLLBACK throw too, and THAT error propagates instead of the one that caused it. Damage is diagnostic rather than data: the server aborts the transaction itself when the connection dies, so nothing is half-committed, but the cause is gone from both the response and the log. The mutation is the exact pre-fix line, which is also what a tidy-up deleting an apparently pointless empty catch would produce. This handler's OUTER catch flattens every non-AppError to a flat 500, so the STATUS CODE is 500 either way and is structurally blind to this - the named test therefore asserts on `logger.error`'s payload, which is where the difference actually lands, and its control arm proves the ROLLBACK is still issued on a live connection so the assertion cannot pass against a handler that stopped rolling back. Measured on this branch: applied, it fails exactly 1 of 9 in this spec - the named arm - and the other eight, including the three sibling sites and the negative control, stay green.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "      // Same fix and same reason as routes/sessions.ts:278 (!271).\n      await client.query('ROLLBACK').catch(() => {});",
+    "mutation": "      // Same fix and same reason as routes/sessions.ts:278 (!271).\n      await client.query('ROLLBACK');",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/rollback-failure-does-not-mask-the-original-error.test.ts",
+    "test": "POST /api/opportunities/:id/sessions logs the constraint violation, not the dead connection"
   }
 ]
