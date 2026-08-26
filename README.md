@@ -337,7 +337,7 @@ Ensure these are set in production:
 
 ### Testing & status
 - **[TESTING_GUIDE.md](TESTING_GUIDE.md)** - How to run tests (E2E, smoke, accessibility)
-- **[Known Issues](KNOWN_ISSUES.md)** - Known limitations and workarounds
+- **[Known Issues](https://gitlab.adaptavist.net/cto/AdaptaLabs/-/issues)** - tracked as GitLab issues (KNOWN_ISSUES.md is a pointer)
 - **[End-to-end testing checklist](docs/END_TO_END_TESTING_CHECKLIST.md)** - Manual full-flow checklist
 
 ## Current Status
@@ -438,7 +438,7 @@ AdaptaLabs is currently in **alpha testing phase**.
 
 ### For Alpha Testers
 - Read the **[User Guide](docs/USER_GUIDE.md)** for detailed instructions
-- Check **[Known Issues](KNOWN_ISSUES.md)** for limitations and workarounds
+- Check the **[GitLab issues](https://gitlab.adaptavist.net/cto/AdaptaLabs/-/issues)** for known limitations
 - Use the **"Send Feedback"** link in the app to report issues
 
 ### Feedback & Support
