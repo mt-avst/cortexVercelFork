@@ -540,3 +540,141 @@ test('the cause is reported for the runner that writes no stderr', async () => {
   // empty lines and the reader gets nothing.
   assert.equal(mostTellingLine('a\n\n\n\nb'), 'a b');
 });
+
+/**
+ * THE TWO WAYS THE HARNESS ITSELF MANUFACTURES A VERDICT. cto/AdaptaLabs#50.
+ *
+ * `SURVIVED` is emitted on one fact: the named test PASSED while the mutation
+ * was supposed to be in the file. Everything upstream of that fact was
+ * unchecked - whether the runner reached the end at all, and whether the
+ * mutation was still on disk when it stopped - so both failures arrived as a
+ * verdict about somebody's test rather than as a verdict about this harness.
+ */
+test('a runner that never finished is not graded', async () => {
+  const { verdictFor, runnerFinished, RUNNER_DID_NOT_FINISH, KILLED, RUNNER_TIMEOUT_MS } =
+    await load();
+
+  const ran = (status) => [{ fullName: 'x a test name', status, failure: '' }];
+
+  // Killed at the ceiling, or never spawned: `spawnSync` writes no report, and
+  // no report is an empty assertion list. Ungated, an unfinished BASELINE reads
+  // as TEST_MISSING - the manifest naming a test that is right there.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [],
+      mutatedAssertions: [],
+      testName: 'a test name',
+      baselineFinished: false
+    }),
+    RUNNER_DID_NOT_FINISH
+  );
+
+  // And an unfinished MUTATED run read as MUTATION_DID_NOT_BUILD, sending the
+  // reader to look for a syntax error in a mutation that is fine.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: [],
+      testName: 'a test name',
+      mutatedFinished: false
+    }),
+    RUNNER_DID_NOT_FINISH
+  );
+
+  // THE CONTROL. The same inputs with both runs finishing still grade normally,
+  // so a guard wired to fire always would fail here rather than pass silently.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: ran('failed'),
+      testName: 'a test name'
+    }),
+    KILLED
+  );
+
+  // The three shapes `spawnSync` reports a disaster in, and the one it does not.
+  assert.equal(runnerFinished({ status: 1 }), true);
+  assert.equal(runnerFinished({ error: new Error('spawnSync npx ETIMEDOUT') }), false);
+  assert.equal(runnerFinished({ error: new Error('spawnSync npx ENOENT') }), false);
+  assert.equal(runnerFinished({ signal: 'SIGKILL' }), false);
+
+  // PINNED AS A LITERAL, not derived from the constant, because a test that
+  // reads the constant cannot see the constant change. Five minutes is roughly
+  // forty times the slowest entry measured on a loaded developer machine.
+  assert.equal(RUNNER_TIMEOUT_MS, 300000);
+});
+
+test('a mutation that was gone from disk is not a survivor', async () => {
+  const { verdictFor, MUTATION_WAS_LOST, SURVIVED, KILLED } = await load();
+
+  const ran = (status) => [{ fullName: 'x a test name', status, failure: '' }];
+
+  // The exact inputs that report SURVIVED - the named test passed under
+  // mutation - with the one extra fact that the mutation was not in the file
+  // the runner read. A pass then says nothing about the test.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: ran('passed'),
+      testName: 'a test name',
+      mutationHeld: false
+    }),
+    MUTATION_WAS_LOST
+  );
+
+  // A KILL is worth no more than a survivor once the mutation is gone: the test
+  // went red for some other reason entirely, which is the false-KILLED family
+  // MUTATION_IS_MALFORMED already covers from the other side.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: ran('failed'),
+      testName: 'a test name',
+      mutationHeld: false
+    }),
+    MUTATION_WAS_LOST
+  );
+
+  // THE CONTROLS. Held, the same two inputs grade exactly as before - so this
+  // guard cannot be swallowing real verdicts, and SURVIVED is still reachable.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: ran('passed'),
+      testName: 'a test name',
+      mutationHeld: true
+    }),
+    SURVIVED
+  );
+  assert.equal(
+    verdictFor({
+      baselineAssertions: ran('passed'),
+      mutatedAssertions: ran('failed'),
+      testName: 'a test name',
+      mutationHeld: true
+    }),
+    KILLED
+  );
+
+  // A BASELINE problem still outranks it. The mutation being lost is only
+  // interesting once the named test was known to exist and pass, and reporting
+  // it over TEST_MISSING would send the reader to the wrong file.
+  assert.equal(
+    verdictFor({
+      baselineAssertions: [],
+      mutatedAssertions: ran('passed'),
+      testName: 'a test name',
+      mutationHeld: false
+    }),
+    'TEST_MISSING'
+  );
+});
+
+test('only KILLED still exits zero once the new verdicts exist', async () => {
+  const { exitCodeFor, KILLED, RUNNER_DID_NOT_FINISH, MUTATION_WAS_LOST } = await load();
+
+  // Both are harness failures rather than coverage failures, and both must
+  // block: a verdict nobody has to act on is a verdict nobody reads.
+  assert.equal(exitCodeFor([{ verdict: KILLED }, { verdict: RUNNER_DID_NOT_FINISH }]), 1);
+  assert.equal(exitCodeFor([{ verdict: KILLED }, { verdict: MUTATION_WAS_LOST }]), 1);
+});

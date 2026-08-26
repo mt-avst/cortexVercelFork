@@ -57,6 +57,23 @@
  *     because this harness reported one: a mutation that orphaned a bind
  *     parameter turned the named test red at RUNTIME without ever evaluating
  *     the property, and every guard above was satisfied. See MALFORMED_MUTATION.
+ *  6. A RUN THAT NEVER FINISHED IS NOT A VERDICT. `spawnSync` had no ceiling,
+ *     so a wedged runner stopped this blocking job producing output until CI
+ *     killed the whole thing - a red with no entry name attached to it. See
+ *     RUNNER_TIMEOUT_MS and RUNNER_DID_NOT_FINISH.
+ *  7. THE MUTATION HAS TO STILL BE ON DISK WHEN THE RUNNER STOPS. Nothing
+ *     checked, so anything that put the original bytes back mid-run - the
+ *     second harness this header warns about, an editor, a `git restore` -
+ *     produced a passing test and was graded SURVIVED, which reads as "your
+ *     test is decorative" about a test that is fine. cto/AdaptaLabs#50. See
+ *     MUTATION_WAS_LOST.
+ *
+ *     Reproduce with a one-entry manifest and a saboteur that reverts the
+ *     target file the moment the mutation appears in it:
+ *       while grep -q "$ANCHOR" "$FILE"; do sleep 0.05; done; cp "$PRISTINE" "$FILE"
+ *     Measured, interleaved, three rounds each: the harness before this guard
+ *     said SURVIVED 3/3, after it says MUTATION_WAS_LOST 3/3, and with the
+ *     saboteur off both say KILLED 3/3.
  *
  * RUN IT IN A DEDICATED WORKTREE. Two harnesses backing up and restoring one
  * checkout clobber each other silently.
@@ -82,6 +99,8 @@ export const TEST_AMBIGUOUS = 'TEST_AMBIGUOUS';
 export const BASELINE_RED = 'BASELINE_RED';
 export const MUTATION_DID_NOT_BUILD = 'MUTATION_DID_NOT_BUILD';
 export const MUTATION_IS_MALFORMED = 'MUTATION_IS_MALFORMED';
+export const RUNNER_DID_NOT_FINISH = 'RUNNER_DID_NOT_FINISH';
+export const MUTATION_WAS_LOST = 'MUTATION_WAS_LOST';
 
 const RUNNERS = new Set(['jest', 'vitest']);
 
@@ -433,7 +452,24 @@ export function mutationIsMalformed(failure) {
  * longer exists is not a broken test, a broken test is not an uncovered line,
  * and a mutation that does not compile is not a decorative assertion.
  */
-export function verdictFor({ baselineAssertions, mutatedAssertions, testName }) {
+export function verdictFor({
+  baselineAssertions,
+  mutatedAssertions,
+  testName,
+  // DEFAULTED TRUE, so the baseline-only call below - which passes an empty
+  // mutated list on purpose to reach MUTATION_DID_NOT_BUILD - keeps behaving
+  // exactly as it did. Only the loop, which has the evidence, passes them.
+  baselineFinished = true,
+  mutatedFinished = true,
+  mutationHeld = true
+}) {
+  // A RUN THAT NEVER FINISHED HAS NOTHING TO GRADE, and it used to be graded
+  // anyway. Killed, timed out or never spawned, `spawnSync` wrote no report,
+  // and no report is an empty assertion list - which reads as TEST_MISSING on
+  // the baseline and MUTATION_DID_NOT_BUILD on the mutated side. Both send the
+  // reader to the manifest or to the mutation, and neither is the problem.
+  if (!baselineFinished) return RUNNER_DID_NOT_FINISH;
+
   const baseline = selectNamedTest(baselineAssertions, testName);
 
   // THE ANTI-ROT GUARD: renamed or deleted, the build breaks.
@@ -455,6 +491,26 @@ export function verdictFor({ baselineAssertions, mutatedAssertions, testName }) 
 
   // A test already failing proves nothing by failing again.
   if (baseline.matched[0].status !== 'passed') return BASELINE_RED;
+
+  if (!mutatedFinished) return RUNNER_DID_NOT_FINISH;
+
+  // THE MUTATION HAS TO STILL BE ON DISK WHEN THE RUNNER STOPS, and nothing
+  // checked. This is the hole cto/AdaptaLabs#50 is about: SURVIVED is emitted
+  // on the strength of the named test PASSING under mutation, and a mutation
+  // that was never in the file the runner read produces exactly that - a pass,
+  // graded as "your test is decorative". The two are indistinguishable in the
+  // job log, and they send the reader to opposite ends of the repository.
+  //
+  // It is not a hypothetical route. This file's own header says it: "two
+  // harnesses backing up and restoring one checkout clobber each other
+  // silently". Anything that puts the original bytes back while the runner is
+  // still working - a second harness, an editor, a `git restore`, a formatter
+  // on save - lands here, and every one of them used to land as SURVIVED.
+  //
+  // Checked on the bytes rather than on the anchor, because a mutation is
+  // sometimes a DELETION and "the anchor is back" and "the mutation is gone"
+  // are then the same string.
+  if (!mutationHeld) return MUTATION_WAS_LOST;
 
   const mutated = selectNamedTest(mutatedAssertions, testName);
 
@@ -558,6 +614,50 @@ export function selectNamedTest(assertions, testName) {
   };
 }
 
+/**
+ * THE CEILING ON ONE RUNNER INVOCATION, and the reason there is one at all.
+ *
+ * `spawnSync` with no `timeout` waits for ever, and "for ever" is not
+ * hypothetical here: EIGHT of the manifest's 132 entries set `needsDatabase`
+ * and reach a real Postgres through a pool, where a lock never granted or a
+ * server that accepts the socket and never answers hangs the runner rather than
+ * failing it. #40 is the same observation from the other end - the pool sets no
+ * `statement_timeout`, so a slow statement waits instead of failing by name.
+ *
+ * The remaining 124 hang more rarely and not never: a runner can wedge on a
+ * timer, an open handle or a machine out of process slots.
+ *
+ * Unbounded, any of those stops this BLOCKING job producing output until GitLab
+ * kills the whole thing, and that failure has no NAME - no entry, no verdict,
+ * no line saying which of the 132 mutations was in flight. Bounded, the same
+ * event is one line naming the entry.
+ *
+ * ponytail: one flat ceiling for every entry, not a per-entry budget.
+ *   -> cto/AdaptaLabs#61. Measured over a whole run: per-entry median 3.65s,
+ *   p90 4.08s, slowest 7.26s, so the ceiling is 41x the worst observed run on
+ *   this machine and cannot fire on an entry that is merely slow. The margin on
+ *   a CI runner is an ESTIMATE, roughly 27x, and that is what #61 exists for:
+ *   a genuinely slow entry would be killed at five minutes and reported as a
+ *   harness failure. The upgrade path is a `timeoutMs` on the manifest entry,
+ *   defaulted to this.
+ */
+export const RUNNER_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Whether the runner got to the end under its own steam.
+ *
+ * `spawnSync` reports three different disasters in two places and NEITHER was
+ * consulted before: `error` carries a failure to spawn at all (ENOENT on npx,
+ * EAGAIN when the machine is out of process slots) and the ETIMEDOUT kill, and
+ * `signal` carries any other death by signal - an OOM kill, an operator's
+ * Ctrl-C reaching the child. All three used to arrive here as "there is no
+ * report", which is reported as MUTATION_DID_NOT_BUILD: a verdict that sends
+ * the reader to look for a syntax error in a mutation that is fine.
+ */
+export function runnerFinished(run) {
+  return !run?.error && !run?.signal;
+}
+
 /** Runs one named test and reports whether it passed and how many ran. */
 function runNamedTest(entry, reportDir, suffix) {
   const outputFile = path.join(reportDir, `${entry.id}.${suffix}.json`);
@@ -571,6 +671,17 @@ function runNamedTest(entry, reportDir, suffix) {
   const run = spawnSync('npx', argv, {
     cwd,
     encoding: 'utf8',
+    timeout: RUNNER_TIMEOUT_MS,
+    // SIGTERM leaves a wedged runner's own children behind; the point of the
+    // ceiling is that the harness gets its turn back.
+    //
+    // ponytail: kills `npx`, not the process group, so a wedged vitest worker
+    //   can outlive it as an orphan. `spawnSync` cannot signal a group. It
+    //   costs nothing that matters - every spec here gets its own database, and
+    //   the job is failing by then anyway - but if orphans ever become a
+    //   nuisance, this call has to become an async spawn with `detached: true`
+    //   and a `process.kill(-pid)`.
+    killSignal: 'SIGKILL',
     env: {
       ...process.env,
       // >=32 characters, or four suites fail to LOAD while the runner still
@@ -596,9 +707,12 @@ function runNamedTest(entry, reportDir, suffix) {
 
   return {
     assertions: readAssertions(parsed),
+    finished: runnerFinished(run),
     // stderr first because it is where jest puts the cause; the report's own
     // message second because vitest writes no stderr at all.
-    detail: mostTellingLine(run.stderr) || firstSuiteMessage(parsed)
+    detail: runnerFinished(run)
+      ? mostTellingLine(run.stderr) || firstSuiteMessage(parsed)
+      : `the runner did not finish: ${run.error?.message ?? `killed by ${run.signal}`}`
   };
 }
 
@@ -765,7 +879,8 @@ async function main() {
       const baselineVerdict = verdictFor({
         baselineAssertions: baseline.assertions,
         mutatedAssertions: [],
-        testName: entry.test
+        testName: entry.test,
+        baselineFinished: baseline.finished
       });
 
       if (baselineVerdict !== MUTATION_DID_NOT_BUILD) {
@@ -785,16 +900,43 @@ async function main() {
         continue;
       }
 
-      writeFileSync(file, applyMutation(source, entry.anchor, entry.mutation));
+      const mutatedSource = applyMutation(source, entry.anchor, entry.mutation);
+      writeFileSync(file, mutatedSource);
       const mutated = runNamedTest(entry, reportDir, 'mutated');
+      // READ BACK BEFORE RESTORING, or the check is against this harness's own
+      // restore and can never fail.
+      let mutationHeld = false;
+      try {
+        mutationHeld = readFileSync(file, 'utf8') === mutatedSource;
+      } catch {
+        // The file went away under the run. Not held, and not a crash: the
+        // verdict says so and the restore below puts it back.
+      }
       writeFileSync(file, source);
 
       const verdict = verdictFor({
         baselineAssertions: baseline.assertions,
         mutatedAssertions: mutated.assertions,
-        testName: entry.test
+        testName: entry.test,
+        // NO `baselineFinished` HERE, and its absence is deliberate. The
+        // baseline-only call above short-circuits every unfinished baseline
+        // with `continue`, so it would be `true` at this line always - a line
+        // that cannot fail, in the file whose whole subject is checks that
+        // cannot fail. Measured: with it present, deleting it broke nothing
+        // (165 pass, 0 fail), while deleting the one above it fails
+        // `main() hands verdictFor whether the BASELINE runner finished`.
+        mutatedFinished: mutated.finished,
+        mutationHeld
       });
-      results.push({ id: entry.id, verdict, detail: mutated.detail });
+      results.push({
+        id: entry.id,
+        verdict,
+        detail:
+          verdict === MUTATION_WAS_LOST
+            ? `${entry.file} no longer held the mutation when the runner stopped, so nothing about ` +
+              'this entry was measured. Something else wrote to the tree during the run.'
+            : mutated.detail
+      });
       console.log(`${verdict.padEnd(22)} ${entry.id}`);
     }
   } finally {
