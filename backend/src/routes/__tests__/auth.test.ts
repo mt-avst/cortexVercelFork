@@ -3,6 +3,7 @@ import request from 'supertest';
 import { listening } from '../../__tests__/helpers/listening';
 import express from 'express';
 import session from 'express-session';
+import cookieParser from 'cookie-parser';
 
 // Mock the database pool for testing (factory uses only inline jest.fn() to avoid TDZ)
 jest.mock('../../config', () => ({
@@ -57,13 +58,19 @@ function mockOidc(overrides: Record<string, any> = {}) {
   return mockClient;
 }
 
-// Logs in via the real /auth/login flow to obtain a valid, registered state token,
-// exactly as a real client would — the app's CSRF state store only recognizes states
-// that were actually issued via /login.
-async function loginAndGetState(app: express.Application): Promise<string> {
-  const res = await request(listening(app)).get('/auth/login').expect(302);
+// Logs in via the real /auth/login flow, exactly as a real browser would: the
+// returned supertest AGENT holds the cookies /login set - both the session and
+// the browser-bound `adaptalabs_oauth_state` cookie the callback now requires
+// (cto/AdaptaLabs#82) - so the same agent must be used for the callback request.
+// A plain `request(app)` would drop those cookies and fail the state binding,
+// which is exactly the login-CSRF the binding closes.
+async function loginAgent(
+  app: express.Application
+): Promise<{ agent: ReturnType<typeof request.agent>; state: string }> {
+  const agent = request.agent(listening(app));
+  const res = await agent.get('/auth/login').expect(302);
   const url = new URL(res.headers.location);
-  return url.searchParams.get('state')!;
+  return { agent, state: url.searchParams.get('state')! };
 }
 
 describe('Authentication Routes', () => {
@@ -90,6 +97,7 @@ describe('Authentication Routes', () => {
 
     app = express();
     app.use(express.json());
+    app.use(cookieParser());
     app.use(session({
       secret: 'test-secret',
       resave: false,
@@ -148,7 +156,7 @@ describe('Authentication Routes', () => {
     });
 
     it('should handle successful authentication', async () => {
-      const state = await loginAndGetState(app);
+      const { agent, state } = await loginAgent(app);
 
       // Mock user upsert query
       mockClientQuery.mockResolvedValueOnce({
@@ -165,7 +173,7 @@ describe('Authentication Routes', () => {
       // Mock notification preferences creation
       mockClientQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await request(listening(app))
+      const response = await agent
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(302);
 
@@ -191,22 +199,35 @@ describe('Authentication Routes', () => {
       expect(response.body.error).toBe('Invalid state parameter');
     });
 
+    it('refuses an attacker-minted state replayed from a different browser (login CSRF, #82)', async () => {
+      // The attacker begins their own OIDC login and captures a valid, unused
+      // state on THEIR browser (agent). The victim's browser carries no
+      // adaptalabs_oauth_state cookie, so a plain client models it.
+      const { state } = await loginAgent(app);
+
+      const response = await request(listening(app))
+        .get(`/auth/callback?state=${state}&code=test-code`)
+        .expect(400);
+
+      expect(response.body.error).toBe('Invalid state parameter');
+    });
+
     it('should handle OIDC callback errors', async () => {
       mockOidc({
         callback: (jest.fn() as any).mockRejectedValue(new Error('OIDC callback failed')),
       });
-      const state = await loginAndGetState(app);
+      const { agent, state } = await loginAgent(app);
 
-      await request(listening(app))
+      await agent
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(500);
     });
 
     it('should handle database errors during user creation', async () => {
-      const state = await loginAndGetState(app);
+      const { agent, state } = await loginAgent(app);
       mockClientQuery.mockRejectedValueOnce(new Error('Database error'));
 
-      await request(listening(app))
+      await agent
         .get(`/auth/callback?state=${state}&code=test-code`)
         .expect(500);
     });

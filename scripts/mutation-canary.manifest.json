@@ -1791,5 +1791,35 @@
     "runner": "jest",
     "spec": "src/utils/__tests__/csv-stream.mechanics.test.ts",
     "test": "lets the deadline win a late stall instead of granting the full drain budget"
+  },
+  {
+    "id": "google-callback-validates-oauth-state",
+    "why": "cto/AdaptaLabs#82. GET /auth/google-callback must enforce the browser-bound OAuth state before minting a session; the check lives in consumeOAuthState and the callback must ACT on its result. This mutation calls the helper for its side effects but drops the guard, so a forged callback (attacker's code, no matching cookie) proceeds to a 302 + session cookie - the login-CSRF the fix closes. Proven KILLED before entry against the production path.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "    const stateResult = consumeOAuthState(req, res, state);\n    if (!stateResult.ok) {\n      logger.error('OAuth state validation failed', { reason: stateResult.error });\n      return res.status(400).json({ error: stateResult.error });\n    }",
+    "mutation": "    consumeOAuthState(req, res, state);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
+    "test": "refuses a forged callback with NO state and creates no session"
+  },
+  {
+    "id": "google-callback-consumes-oauth-state-once",
+    "why": "cto/AdaptaLabs#82 replay half. consumeOAuthState marks a state used so one captured state cannot drive a second callback (session fixation). This mutation leaves used=false, so a state re-presented WITH its original cookie is accepted again. The named test isolates this from the cookie-clearing by re-sending the state cookie, so only the used flag can refuse the replay. Proven KILLED before entry: the replay returns 302 instead of 400.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "  stateData.used = true;",
+    "mutation": "  stateData.used = false;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
+    "test": "refuses a consumed state even when the browser re-sends the state cookie"
+  },
+  {
+    "id": "oauth-state-is-browser-bound",
+    "why": "cto/AdaptaLabs#82, the actual login-CSRF fix. The OAuth state store is a process-global map any caller can populate via /login or /google-login, so the security gate demonstrated an attacker could mint a valid unused state, capture their own code, and lure a victim to the callback with both - logging the victim into the attacker's identity. consumeOAuthState binds the state to a cookie set on the initiating browser (shared by BOTH callbacks). This mutation drops the cookie binding (keeps `bound` referenced so it still builds), restoring the exploit: a victim with no cookie but the attacker's valid state is accepted. Proven KILLED before entry: the cross-browser replay returns 302 instead of 400.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "  const cookies = req.cookies as Record<string, string> | undefined;\n  const bound = cookies?.[OAUTH_STATE_COOKIE];\n\n  // Browser binding first: no valid cookie means this callback did not begin on\n  // this browser, regardless of what the store holds.\n  if (typeof state !== 'string' || !bound || state !== bound) {\n    return { ok: false, error: 'Invalid state parameter' };\n  }",
+    "mutation": "  const cookies = req.cookies as Record<string, string> | undefined;\n  const bound = cookies?.[OAUTH_STATE_COOKIE];\n  void bound;\n\n  if (typeof state !== 'string') {\n    return { ok: false, error: 'Invalid state parameter' };\n  }",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
+    "test": "refuses an attacker-minted state replayed from a different browser"
   }
 ]
