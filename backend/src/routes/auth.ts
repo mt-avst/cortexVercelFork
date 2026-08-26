@@ -16,6 +16,7 @@ import {
   describeOidcClientIdConflictWarning,
   describeOidcCredentialSource,
 } from '../config/oidcCredentials';
+import { validateQuery, oauthCallbackQuerySchema } from '../validation/schemas';
 
 logger.debug('Auth module loaded', { oidcIssuer: process.env.OIDC_ISSUER });
 
@@ -385,7 +386,10 @@ router.get('/google-login', async (req, res) => {
  * Processes the Google OAuth callback, exchanges code for tokens,
  * retrieves user info, creates/updates user, and auto-connects calendar.
  */
-router.get('/google-callback', async (req, res) => {
+// `validateQuery` (#43): this route is UNAUTHENTICATED and destructured
+// `code`/`state` raw - an array `code` is truthy past the missing-code check
+// and lands in the token exchange. The shape is refused before the handler.
+router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (req, res) => {
   try {
     const { code, state } = req.query;
 

@@ -5,6 +5,11 @@ import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import { logger } from '../utils/logger';
+import {
+  validateQuery,
+  oauthCallbackQuerySchema,
+  userCalendarEventsQuerySchema,
+} from '../validation/schemas';
 
 const router: IRouter = Router();
 
@@ -16,7 +21,10 @@ const router: IRouter = Router();
  * Handle Google OAuth callback
  * Stores encrypted tokens in database and redirects to frontend
  */
-router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+// `validateQuery` (#43): an array `state` compared with `!==` against the
+// session's stored state is always unequal, and an array `code` is truthy
+// past the missing-code check and lands in the token exchange.
+router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {
@@ -96,7 +104,8 @@ router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res:
  * Get user's calendar events for a date range
  * Returns events that might conflict with session bookings
  */
-router.get('/my-events', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+// `validateQuery` (#43): the two casts below are true only because it has run.
+router.get('/my-events', requireAuth, validateQuery(userCalendarEventsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const dbClient = await pool.connect();
   
   try {

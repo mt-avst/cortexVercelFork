@@ -460,3 +460,65 @@ export const validateQuery = <T>(schema: z.ZodSchema<T>) => {
     }
   };
 };
+
+/**
+ * QUERY-SHAPE SCHEMAS for the routes that read `req.query` directly
+ * (cto/AdaptaLabs#43).
+ *
+ * Express parses `?x=a&x=b` into a string ARRAY and `?x[foo]=bar` into an
+ * OBJECT, so `req.query.x as string` asserts something the parser does not
+ * promise. Each schema below says only what the route actually relies on:
+ * every parameter is an OPTIONAL BARE STRING. Required-ness, format and
+ * range stay in the routes, which already own those refusals and their
+ * response wording - the schema's job is the SHAPE, so an array or object
+ * is refused at the boundary instead of becoming a dropped WHERE filter, a
+ * pg type error 500, or a comma-joined value nobody chose.
+ *
+ * `z.object` (non-strict) also strips keys a route never reads, so a
+ * validated `req.query` holds exactly the parameters listed here.
+ *
+ * `query-reads-go-through-a-validator.test.ts` is the structural scan that
+ * fails when a route segment reads `req.query` without naming a mechanism;
+ * the per-route `.query-shapes` suites prove each mounting behaviourally.
+ */
+
+/** GET /api/admin/requests - the cosmetic status display filter. */
+export const adminRequestsQuerySchema = z.object({
+  status: z.string().optional(),
+});
+
+/** DELETE /api/admin/admins - the target user id. */
+export const adminRevokeAdminQuerySchema = z.object({
+  id: z.string().optional(),
+});
+
+/**
+ * The two OAuth callback landings: GET /auth/google-callback (unauthenticated)
+ * and GET /api/calendar/auth/callback. Same two parameters, same shape rule.
+ */
+export const oauthCallbackQuerySchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+});
+
+/** GET /api/calendar/my-events - the caller's own conflict window. */
+export const userCalendarEventsQuerySchema = z.object({
+  start_time: z.string().optional(),
+  end_time: z.string().optional(),
+});
+
+/** GET /api/calendar/events - admin calendar read, ownership-gated in-route. */
+export const calendarEventsQuerySchema = z.object({
+  start_time: z.string().optional(),
+  end_time: z.string().optional(),
+  calendar_id: z.string().optional(),
+});
+
+/** GET /api/calendar/availability. */
+export const calendarAvailabilityQuerySchema = z.object({
+  start_time: z.string().optional(),
+  end_time: z.string().optional(),
+  duration_minutes: z.string().optional(),
+  calendar_id: z.string().optional(),
+  exclude_weekends: z.string().optional(),
+});

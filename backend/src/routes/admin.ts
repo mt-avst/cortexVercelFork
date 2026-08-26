@@ -10,6 +10,11 @@ import { logger } from '../utils/logger';
 // copy kept. See utils/csv-cell.ts for why that mattered here specifically.
 import { csvCell } from '../utils/csv-cell';
 import { streamCsvExport } from '../utils/csv-stream';
+import {
+  validateQuery,
+  adminRequestsQuerySchema,
+  adminRevokeAdminQuerySchema,
+} from '../validation/schemas';
 
 const router: Router = Router();
 
@@ -369,7 +374,11 @@ router.post('/request', requireAuth, withLiveRole, asyncHandler(async (req: Requ
 }));
 
 // GET /api/admin/requests - Get all admin requests (superadmin only)
-router.get('/requests', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+//
+// `validateQuery` (#43): an array-valued `status` walked past the typeof
+// check below and SILENTLY DROPPED the WHERE filter. Superadmin-only and the
+// filter is cosmetic, so no scope widening - but a behaviour nobody chose.
+router.get('/requests', requireSuperadmin, validateQuery(adminRequestsQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const { status } = req.query;
   
   let query = `
@@ -521,7 +530,11 @@ router.get('/admins', requireSuperadmin, asyncHandler(async (req: Request, res: 
 }));
 
 // DELETE /api/admin/admins - Revoke admin access (superadmin only)
-router.delete('/admins', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {
+//
+// `validateQuery` (#43): `?id=a&id=b` sent a string array into the uuid
+// parameter below, a 500. The cast on the next line is true only because the
+// validator has already run.
+router.delete('/admins', requireSuperadmin, validateQuery(adminRevokeAdminQuerySchema), asyncHandler(async (req: Request, res: Response) => {
   const adminId = req.query.id as string;
   const superadminId = req.user!.id;
   

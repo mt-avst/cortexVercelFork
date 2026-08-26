@@ -1651,5 +1651,75 @@
     "runner": "vitest",
     "spec": "src/routes/__tests__/csv-exports-keyset-postgres.test.ts",
     "test": "exports every feedback row exactly once across batch boundaries"
+  },
+  {
+    "id": "admin-requests-validates-the-query-shape",
+    "why": "cto/AdaptaLabs#43. An array-valued ?status walked past `typeof === 'string'` and SILENTLY DROPPED the WHERE filter - superadmin-only and cosmetic, so not a scope widening, but a behaviour nobody chose. Unwiring validateQuery here reopens exactly that, with every other suite green. Proven KILLED before entry: the named arm answers 200 instead of 400 under this mutation.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "router.get('/requests', requireSuperadmin, validateQuery(adminRequestsQuerySchema), asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.get('/requests', requireSuperadmin, asyncHandler(async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.query-shapes-are-refused.test.ts",
+    "test": "refuses a repeated status without touching the database"
+  },
+  {
+    "id": "google-callback-validates-the-query-shape",
+    "why": "cto/AdaptaLabs#43, the UNAUTHENTICATED site. An array ?code is truthy past `if (!code)` and lands in the token exchange - the caller picks their status code on the auth surface, the same shape !253 measured on GET /:id/sessions. Unwiring the validator is one middleware argument and nothing else notices.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (req, res) => {",
+    "mutation": "router.get('/google-callback', async (req, res) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/auth.google-callback-query-shapes.test.ts",
+    "test": "refuses a repeated code with the validator 400"
+  },
+  {
+    "id": "calendar-availability-validates-the-query-shape",
+    "why": "cto/AdaptaLabs#43. Before the validator, ?duration_minutes=30&duration_minutes=60 answered 200 - parseInt read the comma-join '30,60' as 30, a value nobody sent - measured live before the fix. This mutation restores that answer while the rest of the suite stays green.",
+    "file": "backend/src/routes/calendar.ts",
+    "anchor": "router.get('/availability', requireAdmin, validateQuery(calendarAvailabilityQuerySchema), async (req: Request, res: Response) => {",
+    "mutation": "router.get('/availability', requireAdmin, async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/calendar.query-shapes-are-refused.test.ts",
+    "test": "refuses a repeated duration_minutes without reaching the service"
+  },
+  {
+    "id": "user-calendar-callback-validates-the-query-shape",
+    "why": "cto/AdaptaLabs#43. An array ?state compared with !== against a PRESENT session state is always unequal - and when either side is absent the check skips entirely, a pre-existing fail-open tracked separately, so the validator is not what that check leans on. The live risk is an array ?code, truthy into the token exchange. The named arm also asserts no pool connection was taken, so a validator mounted after the handler's first line fails it too.",
+    "file": "backend/src/routes/userCalendar.ts",
+    "anchor": "router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/userCalendar.query-shapes-are-refused.test.ts",
+    "test": "refuses a repeated code without taking a database connection"
+  },
+  {
+    "id": "validate-query-actually-parses",
+    "why": "cto/AdaptaLabs#43. validateQuery is the mechanism every wired route now leans on, and this mutation turns it into a pass-through that still mounts, still nexts, and still satisfies the structural scan - which proves a mechanism is MENTIONED, not that it runs. Only a behavioural arm can kill it; the nested-object shape is the one that walks past Array.isArray thinking too.",
+    "file": "backend/src/validation/schemas.ts",
+    "anchor": "      req.query = schema.parse(req.query);",
+    "mutation": "      req.query = req.query;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.query-shapes-are-refused.test.ts",
+    "test": "refuses a nested-object status without touching the database"
+  },
+  {
+    "id": "request-id-reflection-holds-its-shape",
+    "why": "cto/AdaptaLabs#43's sixth site - a header, not a query. Dropping the shape test reflects any bare string: unbounded length back into a response header, and a CR/LF in the value makes setHeader THROW a 500 out of the logging middleware. The typeof half alone survives every other test in the suite.",
+    "file": "backend/src/utils/logger.ts",
+    "anchor": "        typeof rawRequestId === 'string' && /^[A-Za-z0-9._-]{1,128}$/.test(rawRequestId)",
+    "mutation": "        typeof rawRequestId === 'string'",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/logger.request-id.test.ts",
+    "test": "replaces a value over the length bound with a generated id"
+  },
+  {
+    "id": "admin-requests-authz-runs-before-the-validator",
+    "why": "cto/AdaptaLabs#43, a property this MR CREATES: validateQuery sits AFTER requireSuperadmin, so an anonymous hostile-shaped request answers 401 (the gate), not 400 (the validator). Swap the order and the whole 1484-test suite stays green while a pre-auth oracle opens - a 400 confirming the superadmin route exists and naming its parameters to a caller with no role. Proven KILLED before entry: the swap reddens the mount-order arm by name.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "router.get('/requests', requireSuperadmin, validateQuery(adminRequestsQuerySchema), asyncHandler",
+    "mutation": "router.get('/requests', validateQuery(adminRequestsQuerySchema), requireSuperadmin, asyncHandler",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/admin.query-shapes-are-refused.test.ts",
+    "test": "answers 401, not the validator 400, for an anonymous hostile-shaped GET /requests"
   }
 ]

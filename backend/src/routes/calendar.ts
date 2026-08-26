@@ -3,7 +3,12 @@ import { requireAdmin } from '../middleware/authenticate';
 import calendarService from '../services/calendar';
 import { pool } from '../config';
 import { logger } from '../utils/logger';
-import { MAX_TIME_SLOTS_PER_REQUEST } from '../validation/schemas';
+import {
+  MAX_TIME_SLOTS_PER_REQUEST,
+  validateQuery,
+  calendarEventsQuerySchema,
+  calendarAvailabilityQuerySchema,
+} from '../validation/schemas';
 
 const router: Router = Router();
 
@@ -53,7 +58,12 @@ async function callerOwnsCalendar(userId: string, calendarId: string): Promise<b
 }
 
 // GET /api/calendar/events - Get calendar events for admin
-router.get('/events', requireAdmin, async (req: Request, res: Response) => {
+//
+// `validateQuery` (#43): the casts below relied on three coincidences - a
+// multi-value array dying as `Invalid Date`, a single-element array parsing
+// via `toString`, and the ownership helper catching pg's type error for an
+// array `calendar_id`. The shape is now refused at the boundary instead.
+router.get('/events', requireAdmin, validateQuery(calendarEventsQuerySchema), async (req: Request, res: Response) => {
   try {
     const { start_time, end_time, calendar_id } = req.query;
     
@@ -116,7 +126,11 @@ router.get('/events', requireAdmin, async (req: Request, res: Response) => {
 });
 
 // GET /api/calendar/availability - Check time slot availability
-router.get('/availability', requireAdmin, async (req: Request, res: Response) => {
+//
+// `validateQuery` (#43): `?duration_minutes=30&duration_minutes=60` used to
+// answer 200 - `parseInt(String(['30','60']))` reads the comma-join as 30, a
+// value nobody sent. Measured before the fix, refused after it.
+router.get('/availability', requireAdmin, validateQuery(calendarAvailabilityQuerySchema), async (req: Request, res: Response) => {
   try {
     const { start_time, end_time, duration_minutes, calendar_id, exclude_weekends } = req.query;
     
