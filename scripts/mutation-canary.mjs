@@ -917,10 +917,25 @@ function gitPorcelain() {
 }
 
 /**
- * EVERY ARGUMENT THIS SCRIPT ACCEPTS. There is exactly one, and the shortness of
- * this set is the point rather than an oversight - see `unrecognisedArgs`.
+ * EVERY BARE ARGUMENT THIS SCRIPT ACCEPTS. There is exactly one, and the
+ * shortness of this set is the point rather than an oversight - see
+ * `unrecognisedArgs`.
  */
 export const ACCEPTED_ARGS = new Set(['--allow-dirty']);
+
+/**
+ * EVERY VALUE-TAKING ARGUMENT, all in `--flag=value` form. These two exist for
+ * CI sharding (cto/AdaptaLabs#77) and their values are checked in
+ * `parseShardArgs` - digit-only, 1-based, both-or-neither - because an operator
+ * interface that accepts a typo without comment is how a scoped verification
+ * becomes no verification.
+ *
+ * SHARDING IS NOT THE FILTER #53 REFUSES. A filter selects a subset and lets
+ * that run's verdict stand for the whole; a shard is one cell of a
+ * deterministic partition whose union is the whole manifest, and the CI gate
+ * is ALL shards green. Every entry still runs exactly once per pipeline.
+ */
+export const ACCEPTED_VALUE_ARGS = new Set(['--shard-index', '--shard-total']);
 
 /**
  * The arguments this script does not understand, so it can refuse them.
@@ -941,11 +956,80 @@ export const ACCEPTED_ARGS = new Set(['--allow-dirty']);
  *
  * Fails CLOSED, like every other guard in this file: an operator interface that
  * accepts a typo without comment is how a scoped verification becomes no
- * verification. A value-taking flag would need its VALUES checked too; there is
- * no such flag today, so a mistyped `--allow-dirty=yes` is simply unrecognised.
+ * verification. The two value-taking flags have their VALUES checked in
+ * `parseShardArgs`; `--allow-dirty` takes no value, so a mistyped
+ * `--allow-dirty=yes` is simply unrecognised.
+ *
+ * A bare `--shard-index` (no `=`) is deliberately RECOGNISED here and refused
+ * by `parseShardArgs` instead, so the message names the missing value rather
+ * than disowning a flag that plainly exists.
  */
 export function unrecognisedArgs(argv) {
-  return argv.filter((arg) => !ACCEPTED_ARGS.has(arg));
+  return argv.filter((arg) => {
+    if (ACCEPTED_ARGS.has(arg)) return false;
+    if (ACCEPTED_VALUE_ARGS.has(arg)) return false;
+    const eq = arg.indexOf('=');
+    if (eq !== -1 && ACCEPTED_VALUE_ARGS.has(arg.slice(0, eq))) return false;
+    return true;
+  });
+}
+
+/**
+ * The shard request, or null for the full run - which stays the default and
+ * the only local shape. Refusals, not fallbacks, for everything else:
+ *
+ * - both-or-neither: one flag alone is a half-configured partition, and half a
+ *   partition run as a whole is exactly the filtered run #53 exists to refuse;
+ * - digit-only values: `Number()` reads `1e1`, `0x2` and `-1` happily, and in
+ *   this position every one of them is a typo (the PORT lesson from #59);
+ * - 1-based and bounded, matching GitLab's own `CI_NODE_INDEX`, which is where
+ *   the values come from in CI (`parallel:` sets both, so a mismatched pair
+ *   cannot be typed into one job there - this guard is for every other caller).
+ */
+export function parseShardArgs(argv) {
+  const values = new Map();
+  for (const arg of argv) {
+    const eq = arg.indexOf('=');
+    const name = eq === -1 ? arg : arg.slice(0, eq);
+    if (!ACCEPTED_VALUE_ARGS.has(name)) continue;
+    if (eq === -1) throw new Refusal(`${name} needs a value: ${name}=<n>`);
+    if (values.has(name)) throw new Refusal(`${name} was given twice`);
+    values.set(name, arg.slice(eq + 1));
+  }
+  if (values.size === 0) return null;
+  if (!values.has('--shard-index') || !values.has('--shard-total')) {
+    throw new Refusal(
+      '--shard-index and --shard-total come as a pair - both or neither. One alone is ' +
+        'half a partition, and running half a partition as though it were the whole ' +
+        'manifest is the filtered run this harness refuses on principle.'
+    );
+  }
+  for (const [name, raw] of values) {
+    if (!/^[0-9]+$/.test(raw)) {
+      throw new Refusal(`${name}=${raw} is not a plain integer (digits only, no sign, no exponent)`);
+    }
+  }
+  const shardIndex = Number(values.get('--shard-index'));
+  const shardTotal = Number(values.get('--shard-total'));
+  if (shardTotal < 1) throw new Refusal('--shard-total must be at least 1');
+  if (shardIndex < 1 || shardIndex > shardTotal) {
+    throw new Refusal(
+      `--shard-index is 1-based and at most the total: got index ${shardIndex} of ${shardTotal}`
+    );
+  }
+  return { shardIndex, shardTotal };
+}
+
+/**
+ * One cell of the partition: entries sorted by id, entry i (0-based) belongs to
+ * shard `(i % total) + 1`. Sorted by ID rather than taken in manifest order so
+ * the cell an entry lands in depends on nothing but the ids - a reordering
+ * diff cannot shuffle the partition. Same manifest + same total in every job
+ * means the union is the whole manifest by construction.
+ */
+export function shardSlice(entries, shardIndex, shardTotal) {
+  const sorted = [...entries].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return sorted.filter((_, index) => index % shardTotal === shardIndex - 1);
 }
 
 async function main() {
@@ -956,7 +1040,8 @@ async function main() {
     console.error(
       `Refusing to run: unrecognised argument${unrecognised.length > 1 ? 's' : ''} ` +
         `${unrecognised.join(' ')}\n` +
-        `The only accepted argument is ${[...ACCEPTED_ARGS].join(' ')}.\n` +
+        `The accepted arguments are ${[...ACCEPTED_ARGS].join(' ')} and the CI sharding pair ` +
+        `${[...ACCEPTED_VALUE_ARGS].map((flag) => `${flag}=<n>`).join(' ')}.\n` +
         'There is NO filter flag: this runner always runs the whole manifest, because a\n' +
         'run scoped to the entries a diff added cannot see a pre-existing entry the same\n' +
         'diff broke. Ignoring this argument would have run all of them anyway, silently,\n' +
@@ -966,6 +1051,11 @@ async function main() {
   }
 
   const allowDirty = args.includes('--allow-dirty');
+
+  // Before the dirty-tree guard for the same reason the unrecognised check is:
+  // a malformed argument gets a message about the argument, not about the tree.
+  // Throws Refusal, which the entry point reports as `Refusing to run:` exit 2.
+  const shard = parseShardArgs(args);
 
   const dirtyBefore = gitPorcelain();
   if (dirtyBefore && !allowDirty) {
@@ -988,7 +1078,21 @@ async function main() {
     process.exit(2);
   }
 
-  const unrunnable = databaseEntriesWithoutADatabase(entries, process.env);
+  // The whole manifest is validated above whatever the shard, so a broken
+  // entry fails every shard rather than only the one that owns it. The slice
+  // decides what RUNS, never what is checked.
+  const selected = shard ? shardSlice(entries, shard.shardIndex, shard.shardTotal) : entries;
+  if (shard && selected.length === 0) {
+    console.error(
+      `Refusing to run: shard ${shard.shardIndex} of ${shard.shardTotal} selects no entries ` +
+        `from a ${entries.length}-entry manifest.\n` +
+        'A shard that runs nothing reads exactly like a shard that passed, so an oversized\n' +
+        '--shard-total quietly deletes coverage. Lower the total or fix the wiring.'
+    );
+    process.exit(2);
+  }
+
+  const unrunnable = databaseEntriesWithoutADatabase(selected, process.env);
   if (unrunnable.length > 0) {
     console.error(
       'Refusing to run: these entries need a real database and FIRSTHAND_TEST_DATABASE_URL\n' +
@@ -1002,8 +1106,18 @@ async function main() {
   // SAY HOW MANY ENTRIES ARE ABOUT TO RUN. The cheaper half of cto/AdaptaLabs#53:
   // whatever the argument parser does, a run that states its own size makes both
   // "I meant to scope this" and "the manifest lost entries" visible in line one
-  // rather than in a wall clock nobody was watching.
-  console.log(`Running all ${entries.length} manifest entries; there is no filter.`);
+  // rather than in a wall clock nobody was watching. A shard states its cell of
+  // the partition the same way, so the slice lines across a pipeline's jobs sum
+  // to the manifest - checkable from the logs alone.
+  if (shard) {
+    console.log(
+      `Shard ${shard.shardIndex} of ${shard.shardTotal}: running ${selected.length} of ` +
+        `${entries.length} manifest entries. The union of all ${shard.shardTotal} shards is ` +
+        'the whole manifest; there is no filter.'
+    );
+  } else {
+    console.log(`Running all ${entries.length} manifest entries; there is no filter.`);
+  }
 
   const reportDir = mkdtempSync(path.join(tmpdir(), 'mutation-canary-'));
   const originals = new Map();
@@ -1048,7 +1162,7 @@ async function main() {
   const timings = [];
 
   try {
-    for (const entry of entries) {
+    for (const entry of selected) {
       // Yields to the event loop so a queued signal can actually be delivered.
       // Without it every iteration is blocking `spawnSync` and the handlers
       // above never run.

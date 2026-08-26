@@ -484,10 +484,22 @@ mutation-canary:
     # protecting anything, and before a review gate found it, the guard read a
     # missing git as a clean tree and said nothing at all.
     - apk add --no-cache git
+  # SHARDED, cto/AdaptaLabs#77. Each of the four jobs runs one cell of a
+  # deterministic partition (entries sorted by id, round-robin); the union is
+  # the whole manifest and the merge gate is ALL shards green, so this is not
+  # the filtered run ADR-0004 forbids - no entry is ever skipped, they are
+  # spread. `parallel:` makes GitLab set CI_NODE_INDEX/CI_NODE_TOTAL itself, so
+  # a mismatched pair cannot be typed here; if `parallel:` is ever removed,
+  # both variables go unset, the empty values fail the runner's digit-only
+  # check, and the job goes red rather than quietly running one full manifest.
+  # The runner refuses a shard that selects nothing, so an oversized count
+  # cannot delete coverage silently. Pick the count against runner capacity:
+  # four queued shards serialise back to the old wall time.
+  parallel: 4
   script:
     - npm ci
     - cd backend && npm ci
     # `npm ci` writes nothing tracked, so the clean-tree guard is satisfied and
     # stays armed - it is what stops a run that died mid-mutation from being
     # mistaken for a passing one.
-    - cd "$CI_PROJECT_DIR" && npm run test:canary
+    - cd "$CI_PROJECT_DIR" && npm run test:canary -- --shard-index="$CI_NODE_INDEX" --shard-total="$CI_NODE_TOTAL"
