@@ -3204,10 +3204,19 @@ router.get('/:id/survey-results', requireAdmin, surveyResultsLimiter, boundResul
     studyId: context.studyId
   });
 
-  return res.json({
+  const body = {
     title: context.title,
     results: aggregateSurveyResults(context.steps, responses)
-  });
+  };
+
+  // #85 (residual of #9): the DB read and aggregation are done, and !288 bounded
+  // the aggregate body (MAX_AGGREGATE_RESPONSE_CHARS), so hand the global permit
+  // back BEFORE the client-paced `res.json` drain - the same lever the .csv twin
+  // below took out of the permit. The per-caller slot (held to `close`) bounds
+  // concurrent buffered bodies. See releaseResultsReadPermit.
+  releaseResultsReadPermit(res);
+
+  return res.json(body);
 }));
 
 // GET /api/opportunities/:id/survey-results.csv - raw answers for export
