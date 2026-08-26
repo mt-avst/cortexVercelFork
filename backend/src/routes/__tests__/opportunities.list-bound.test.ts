@@ -14,6 +14,7 @@ jest.mock('../../utils/database', () => ({
 import opportunitiesRouter, {
   MAX_OPPORTUNITIES_RETURNED,
   MAX_OPPORTUNITY_SEARCH_LENGTH,
+  MAX_SESSIONS_RETURNED,
 } from '../opportunities';
 import { pool } from '../../config';
 import { isDatabaseAvailable } from '../../utils/database';
@@ -167,6 +168,178 @@ describe('GET /api/opportunities is bounded', () => {
     );
 
     expect(res.status).toBe(413);
+  });
+});
+
+/**
+ * THE INNER DIMENSION, WHICH THE OUTER CEILING COULD NOT SEE. cto/AdaptaLabs#41.
+ *
+ * The block above bounds the number of OPPORTUNITIES. The listing then fans out
+ * over the ids it returned with `WHERE s.opportunity_id = ANY($1::uuid[])` and
+ * no `LIMIT` at all, so the worst case was 1000 opportunities multiplied by
+ * however many sessions each one holds, materialised in one round trip. A bound
+ * on the row count of the outer query cannot see an unbounded read hanging off
+ * it - which is #22's own lesson, one level in, and it was found by the refute
+ * gate on the MR that added the outer ceiling.
+ *
+ * REFUSES RATHER THAN TRUNCATING. A `LIMIT` on the fan-out would drop sessions
+ * from SOME opportunities and hand back the rest as if complete - a lie with no
+ * marker on it, and worse than the outer truncation #22 refused, because the
+ * caller cannot see which opportunity was shortened.
+ *
+ * 5000 IS ASSERTED AS A LITERAL below, and the `LIMIT 5001` arm is what keeps
+ * the refusal reachable: without the probe row the `>` is unsatisfiable and the
+ * refusal silently becomes the truncation.
+ */
+const sessionRow = (n: number, opportunityId = 'opp-0') => ({
+  id: `sess-${n}`,
+  opportunity_id: opportunityId,
+  start_time: new Date('2026-02-01T10:00:00Z'),
+  end_time: new Date('2026-02-01T11:00:00Z'),
+  capacity: 5,
+  actual_booked_count: 1,
+  location_or_meet_link_optional: null,
+  created_at: new Date('2026-01-01T00:00:00Z'),
+  updated_at: new Date('2026-01-01T00:00:00Z'),
+});
+
+/** The batch session query the route actually sent, or '' if it never got that far. */
+const sessionsSql = (): string => {
+  const call = mockQuery.mock.calls.find((c) => String(c[0]).includes('FROM sessions s'));
+  return call ? String(call[0]) : '';
+};
+
+/** One opportunity, and `sessions` session rows hanging off it. */
+const fanOutReturns = (sessions: number) => {
+  mockQuery.mockImplementation(async (sql: unknown) => {
+    if (String(sql).includes('SELECT role FROM users')) {
+      return { rows: [{ role: 'researcher_admin' }] };
+    }
+    if (String(sql).includes('FROM opportunities o')) {
+      return { rows: [opportunityRow(0)] };
+    }
+    if (String(sql).includes('FROM sessions s')) {
+      return { rows: Array.from({ length: sessions }, (_, i) => sessionRow(i)) };
+    }
+    return { rows: [] };
+  });
+};
+
+describe('the session fan-out under GET /api/opportunities is bounded too', () => {
+  it('holds the sessions ceiling at the number that was decided', () => {
+    // The literal, not `MAX_SESSIONS_RETURNED`. A test that builds its
+    // expectation from the constant cannot see the constant change.
+    expect(MAX_SESSIONS_RETURNED).toBe(5000);
+  });
+
+  it('asks the database for one session more than it will return', async () => {
+    fanOutReturns(1);
+
+    await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(sessionsSql()).toContain('LIMIT 5001');
+  });
+
+  it('refuses with 413 rather than truncating when the fan-out exceeds the ceiling', async () => {
+    fanOutReturns(5001);
+
+    const res = await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(res.status).toBe(413);
+    expect(res.body.maximumSessions).toBe(5000);
+  });
+
+  /**
+   * WHO THE REFUSAL TAKES DOWN, as a test name rather than as prose in a
+   * docblock. Raised by the refute gate on !267: the disposition was argued and
+   * its cost was never named, so the next reader would have met it in production.
+   *
+   * `GET /api/opportunities` is NOT an admin route. `frontend/src/pages/Home.tsx:42`
+   * calls `getOpportunities({})` with no filters, so the ANONYMOUS PARTICIPANT
+   * HOME PAGE is this same request. Above the ceiling every visitor gets a 413
+   * with no `?limit` to lower, no cursor and no retry that would succeed - a
+   * whole-product outage rather than a degraded admin view.
+   *
+   * It is accepted for the reason #22 accepted the same cost on the outer
+   * ceiling: a catalogue that has outgrown this route should fail loudly and get
+   * pagination. It is accepted with its name written down.
+   *
+   * The count behind it has no time filter and never shrinks - cto/AdaptaLabs#62.
+   */
+  it.each<[string, 'employee' | null]>([
+    ['anonymous, which is the participant home page', null],
+    ['a signed-in employee', 'employee'],
+  ])('refuses the catalogue for %s too, not only for an admin', async (_who, role) => {
+    fanOutReturns(5001);
+
+    const res = await request(listening(appAs(role))).get('/api/opportunities');
+
+    expect(res.status).toBe(413);
+    expect(res.body.maximumSessions).toBe(5000);
+  });
+
+  /**
+   * THE ARM THAT WOULD HAVE CAUGHT THE OBVIOUS WRONG IMPLEMENTATION.
+   *
+   * The fan-out sits inside a `try` whose `catch` logs and CARRIES ON with an
+   * empty sessions map, because a transient session read failure should not take
+   * the whole catalogue down. A refusal raised by THROWING inside that block
+   * would be swallowed by it and answered as a 200 with every `sessions` array
+   * empty - the exact silent truncation the ceiling exists to prevent, wearing a
+   * success status. So the status is asserted as not-200 as well as as 413.
+   */
+  it('does not let the swallow-and-continue catch turn the refusal into a 200', async () => {
+    fanOutReturns(5001);
+
+    const res = await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(res.status).not.toBe(200);
+    expect(Array.isArray(res.body)).toBe(false);
+  });
+
+  // CONTROL ARM. The refusal above passes just as well if the route refuses
+  // every listing that has any sessions at all, so exactly the ceiling must
+  // still come back.
+  it('returns the catalogue at exactly the sessions ceiling', async () => {
+    fanOutReturns(5000);
+
+    const res = await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].sessions).toHaveLength(5000);
+  });
+
+  // CONTROL ARM, the second kind: an assertion about session COUNTS passes just
+  // as well when sessions stopped being embedded at all. This proves the
+  // detector still sees an ordinary session on an ordinary listing.
+  it('still embeds sessions on a listing far below the ceiling', async () => {
+    fanOutReturns(3);
+
+    const res = await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].sessions).toHaveLength(3);
+    expect(res.body[0].sessions[0]).toMatchObject({ capacity: 5, booked_count: 1, remaining: 4 });
+  });
+
+  // The pre-existing behaviour this change had to preserve: a FAILED session
+  // read is still logged and answered as a catalogue with empty session arrays,
+  // not as a refusal and not as a 500.
+  it('still answers with empty sessions when the fan-out query itself fails', async () => {
+    mockQuery.mockImplementation(async (sql: unknown) => {
+      if (String(sql).includes('FROM opportunities o')) {
+        return { rows: [opportunityRow(0)] };
+      }
+      if (String(sql).includes('FROM sessions s')) {
+        throw new Error('connection terminated unexpectedly');
+      }
+      return { rows: [] };
+    });
+
+    const res = await request(listening(anonApp)).get('/api/opportunities');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].sessions).toEqual([]);
   });
 });
 

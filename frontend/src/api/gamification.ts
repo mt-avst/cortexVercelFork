@@ -56,11 +56,17 @@ export interface PointsTransaction {
 }
 
 // One page of the caller's own transactions. `has_more` reports that older rows
-// exist; reaching them needs a cursor this route does not have yet
-// (cto/AdaptaLabs#23).
+// exist (cto/AdaptaLabs#23); `next_before` is how they are asked for
+// (cto/AdaptaLabs#47) - pass it back as the `before` argument below.
+//
+// ECHO `next_before` VERBATIM. Do NOT rebuild a cursor from a transaction's own
+// `created_at`: the server stores microseconds and this JSON carries whatever
+// `pg` and `Date` agreed on, so a hand-built cursor rounds down and skips rows.
+// It is `null` exactly when `has_more` is false.
 export interface PointsHistoryPage {
   transactions: PointsTransaction[];
   has_more: boolean;
+  next_before: string | null;
 }
 
 export interface SessionCompletionResult {
@@ -100,11 +106,17 @@ export const gamificationApi = {
   // Get user's AdaptaBits history.
   //
   // Returns the PAGE, not the array. `has_more` is the only thing that
-  // distinguishes a full page from the end of the caller's history, since this
-  // route has no cursor - dropping it here to keep the old signature would put
-  // the silent truncation straight back (cto/AdaptaLabs#23).
-  getPointsHistory: async (limit: number = 20): Promise<PointsHistoryPage> => {
-    const response = await api.get(`/gamification/points-history?limit=${limit}`);
+  // distinguishes a full page from the end of the caller's history - dropping it
+  // here to keep the old signature would put the silent truncation straight back
+  // (cto/AdaptaLabs#23).
+  //
+  // `before` is the previous page's `next_before` and nothing else
+  // (cto/AdaptaLabs#47). encodeURIComponent because the cursor is a `<timestamp>,<id>`
+  // pair: an unencoded `,` is legal in a query string and an unencoded `+`
+  // would decode as a space.
+  getPointsHistory: async (limit: number = 20, before?: string | null): Promise<PointsHistoryPage> => {
+    const cursor = before ? `&before=${encodeURIComponent(before)}` : '';
+    const response = await api.get(`/gamification/points-history?limit=${limit}${cursor}`);
     return response.data;
   }
 };

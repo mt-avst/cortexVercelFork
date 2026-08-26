@@ -11,6 +11,7 @@
  */
 import { pool } from '../config';
 import * as gamification from '../../../shared/services/gamification';
+import type { PointsHistoryCursor } from '../../../shared/services/gamification';
 import type { OpportunityType } from '../../../shared/types';
 
 export type {
@@ -19,6 +20,7 @@ export type {
   UserAchievement,
   PointsTransaction,
   PointsHistoryPage,
+  PointsHistoryCursor,
   LeaderboardEntry,
 } from '../../../shared/services/gamification';
 
@@ -51,8 +53,12 @@ export async function resetMonthlyPoints() {
   return gamification.resetMonthlyPoints(pool);
 }
 
-export async function getPointsHistory(userId: string, limit: number = 20) {
-  return gamification.getPointsHistory(pool, userId, limit);
+export async function getPointsHistory(
+  userId: string,
+  limit: number = 20,
+  before?: PointsHistoryCursor | null
+) {
+  return gamification.getPointsHistory(pool, userId, limit, before);
 }
 
 export async function awardPointsAfterApproval(

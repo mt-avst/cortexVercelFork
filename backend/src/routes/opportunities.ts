@@ -884,6 +884,72 @@ type UpdateOpportunityBody = UpdateOpportunityRequest & {
 export const MAX_OPPORTUNITIES_RETURNED = 1000;
 
 /**
+ * THE OTHER HALF OF THE SAME BOUND, and the listing had only one of them.
+ *
+ * cto/AdaptaLabs#41, found by the refute gate on !253. The ceiling above bounds
+ * the number of OPPORTUNITIES. The listing then fans out over the ids it
+ * returned with `WHERE s.opportunity_id = ANY($1::uuid[])` and NO `LIMIT`, so
+ * the worst case was 1000 opportunities multiplied by however many sessions each
+ * one holds, materialised into a single result set in one round trip. A bound on
+ * the row count of the outer query cannot see an unbounded read hanging off it -
+ * which is #22's own lesson, one level in.
+ *
+ * The clicks fan-out beside it never had the shape: it is a `GROUP BY` over the
+ * same id list, so it returns at most one row per opportunity.
+ *
+ * REFUSES RATHER THAN TRUNCATING, which is the disposition this route already
+ * chose and the reason it is the cheap answer here. A `LIMIT` on the fan-out
+ * would silently drop sessions from SOME opportunities and hand back the rest as
+ * if they were complete - a lie with no marker on it at all, and worse than the
+ * outer truncation #22 refused, because the caller cannot even see which
+ * opportunity was shortened. The alternatives were considered and are heavier:
+ * bounding sessions per opportunity at WRITE time needs a migration and a
+ * decision about existing rows, and dropping the embedded sessions altogether is
+ * a wire-contract change that `frontend/src/pages/Admin.tsx:771` consumes today
+ * (it sums `capacity` and `booked_count` across `opportunity.sessions`).
+ *
+ * WHO IT TAKES DOWN WHEN IT FIRES, said plainly because the refusal is the
+ * decision and its cost belongs beside it. This is not an admin-only route:
+ * `frontend/src/pages/Home.tsx:42` calls it with no filters, so the ANONYMOUS
+ * PARTICIPANT HOME PAGE is the same request. Above the ceiling every visitor
+ * gets a 413 with no `?limit` to lower, no cursor and no retry that would
+ * succeed. That is the same "no smaller request to retry with" cost the outer
+ * ceiling accepted, and it is accepted here for the same reason - a catalogue
+ * that has outgrown this route should fail loudly and get pagination - but it
+ * is a whole-product outage rather than a degraded admin view, and it is pinned
+ * by a named arm in opportunities.list-bound.test.ts rather than left here as
+ * prose.
+ *
+ * 5000, and it is a policy number rather than a measurement, chosen the same way
+ * 1000 was. An opportunity is hand-authored and a real catalogue is dozens with a
+ * handful of sessions each - call it 250, which is roughly 20x below this ceiling
+ * rather than the "two orders of magnitude" an earlier draft of this comment
+ * claimed. Measured against the OUTER ceiling instead, 5000 is an average of five
+ * sessions per opportunity at 1000 opportunities, which is the tighter and more
+ * honest way to read it. A deployment that reaches 5000 embedded sessions is
+ * already serialising megabytes per catalogue load, and the answer there is
+ * pagination rather than a larger constant - the same conclusion #22 reached.
+ *
+ * THE COUNT ONLY EVER GOES UP. The fan-out has no time filter, so it returns
+ * every session ever created for every published study, past and future, and
+ * nothing reclaims them. Session creation is capped per REQUEST at
+ * `MAX_TIME_SLOTS_PER_REQUEST` and not cumulatively. So this ceiling is dated
+ * rather than merely latent - see the ponytail note.
+ *
+ * Written as a NUMBER HERE and asserted as the same number in the test rather
+ * than derived from this constant.
+ *
+ * ponytail: a flat ceiling on a fan-out that has no time filter, so the count it
+ *   bounds grows monotonically over the platform's lifetime and is never reclaimed
+ *   -> cto/AdaptaLabs#62, which carries the disposition options - filter the
+ *      fan-out to upcoming sessions, or paginate the listing. Pointed at #60 and
+ *      NOT at #41, which this change closes: the comment is the ledger and the
+ *      issue is the alarm, so an upgrade path aimed at a closed issue is a
+ *      ceiling with no alarm left on it.
+ */
+export const MAX_SESSIONS_RETURNED = 5000;
+
+/**
  * THE LONGEST `?q=` THIS ROUTE WILL SEARCH FOR, and it REFUSES above it.
  *
  * `q` is correctly parameterised - it has never been an injection - but it
@@ -1078,6 +1144,10 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
     const allSessionsMap: Map<string, any[]> = new Map();
     try {
       const sessionsResult = await pool.query(
+        // ONE MORE THAN WILL EVER BE RETURNED, for the same reason the listing
+        // query above asks for `MAX_OPPORTUNITIES_RETURNED + 1`: without the
+        // `+ 1` the `>` below is unsatisfiable, the 413 is unreachable, and the
+        // refusal silently becomes the truncation it exists to prevent.
         `SELECT s.*,
                 COALESCE(COUNT(b.id) FILTER (WHERE b.status = 'booked'), 0)::int as actual_booked_count,
                 s.opportunity_id
@@ -1086,9 +1156,23 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
          WHERE s.opportunity_id = ANY($1::uuid[])
          GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
                   s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
-         ORDER BY s.opportunity_id, s.start_time ASC`,
+         ORDER BY s.opportunity_id, s.start_time ASC
+         LIMIT ${MAX_SESSIONS_RETURNED + 1}`,
         [opportunityIds]
       );
+      // DECIDED BEFORE THE ROWS ARE MAPPED, and it RETURNS rather than throwing.
+      // The catch below turns a failed session read into an empty sessions array
+      // and carries on, which is right for a transient database error and would
+      // be catastrophic for a refusal - a thrown 413 would be swallowed into a
+      // 200 carrying no sessions at all, which is the silent truncation this
+      // ceiling exists to prevent (cto/AdaptaLabs#41). `res.json` does not throw,
+      // so the return leaves the handler here.
+      if (sessionsResult.rows.length > MAX_SESSIONS_RETURNED) {
+        return res.status(413).json({
+          error: `Too many sessions to list; this route returns at most ${MAX_SESSIONS_RETURNED}`,
+          maximumSessions: MAX_SESSIONS_RETURNED
+        });
+      }
 
       // Group sessions by opportunity_id
       for (const session of sessionsResult.rows) {

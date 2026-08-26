@@ -36,6 +36,12 @@ services:
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET}
       - OIDC_REDIRECT_URL=${OIDC_REDIRECT_URL}
       - ADMIN_EMAILS=${ADMIN_EMAILS}
+      # REQUIRED, and the backend now REFUSES TO BOOT without it (cto/AdaptaLabs#48).
+      # Compose substitutes an unset host variable as an EMPTY STRING - unlike
+      # BACKEND_PORT above, whose `:-` default also covers empty - and an empty
+      # CORS_ORIGIN used to be coerced silently to http://localhost:3000, which in
+      # production presents as browser CORS errors rather than as a config fault.
+      # Set it from docker.env.production.example, which carries a valid literal.
       - CORS_ORIGIN=${CORS_ORIGIN}
       - EMAIL_FROM=${EMAIL_FROM}
       - EMAIL_FROM_NAME=${EMAIL_FROM_NAME}

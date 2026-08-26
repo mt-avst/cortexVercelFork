@@ -15,6 +15,8 @@ import {
   getMonthlyLeaderboard,
   getPointsHistory
 } from '../services/gamification';
+import { parsePointsHistoryCursor } from '../../../shared/services/gamification';
+import type { PointsHistoryCursor } from '../services/gamification';
 
 const router: Router = Router();
 
@@ -91,13 +93,13 @@ const DEFAULT_LEADERBOARD_LIMIT = 10;
  *     "rest" to reach: rank 101 is not withheld, it is not on the board.
  *   - `/points-history` REFUSES above the ceiling with a 400, AND reports
  *     `has_more` at or below it. The rows are the caller's OWN transactions -
- *     they are entitled to all of them - and the route has no offset or cursor,
- *     so a clamped short response would be indistinguishable from the end of
- *     history. The 400 makes the ceiling visible; `has_more` makes the truncation
- *     visible for every page under it, including the default 20. See
- *     `pointsHistoryLimit`, cto/AdaptaLabs#24 and #23. (A cursor is the fuller
- *     fix, deferred until a paginated points-history view exists - none does
- *     today; see the note on `MAX_POINTS_HISTORY_LIMIT`.)
+ *     they are entitled to all of them - so a clamped short response would be
+ *     indistinguishable from the end of history. The 400 makes the ceiling
+ *     visible; `has_more` makes the truncation visible for every page under it,
+ *     including the default 20. See `pointsHistoryLimit`, cto/AdaptaLabs#24 and
+ *     #23. The ceiling is now a PAGE SIZE rather than a wall: `?before=` reaches
+ *     the rest of the history a page at a time (cto/AdaptaLabs#47), which is why
+ *     100 stays where it is instead of growing.
  *
  * THE THIRD DISPOSITION IS NOT IN THIS FILE, and the set only makes sense read
  * together: `GET /api/opportunities` answers 413 above its ceiling and offers
@@ -189,6 +191,35 @@ export function pointsHistoryLimit(raw: unknown): number | null {
   return parsed;
 }
 
+/**
+ * THE QUERY-STRING SHAPES OF A `?before=` CURSOR. cto/AdaptaLabs#47.
+ *
+ * The FORMAT is not decided here - `parsePointsHistoryCursor` in
+ * shared/services/gamification.ts owns it, beside the `next_before` that emits
+ * it, so the parser and the producer cannot drift apart in separate modules.
+ * What is decided here is what express can hand over that a string parser has no
+ * opinion about:
+ *
+ *   ABSENT     -> `undefined`, the first page. Not a refusal: no cursor is the
+ *                 normal case and it must not become a 400.
+ *   A REPEAT   -> `?before=a&before=b` arrives as an ARRAY, and it is REFUSED
+ *                 rather than coerced. `parseLimit` above already settled this
+ *                 disposition for this file, and `GET /api/opportunities`
+ *                 settled it again for the same reason: taking the first value
+ *                 or joining them answers a question nobody asked.
+ *   ANYTHING
+ *   UNREADABLE -> `null`, matching `pointsHistoryLimit`'s convention that null
+ *                 is the refusal the route turns into a 400. It matters that
+ *                 this is not silently treated as ABSENT: that would answer a
+ *                 malformed cursor with a silent jump back to the top of
+ *                 history, which is a wrong answer wearing a 200.
+ */
+export function pointsHistoryCursor(raw: unknown): PointsHistoryCursor | null | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string') return null;
+  return parsePointsHistoryCursor(raw);
+}
+
 // GET /api/gamification/profile - Get user's AdaptaBits profile
 router.get('/profile', requireAuth, async (req: Request, res: Response) => {
   try {
@@ -269,8 +300,12 @@ router.get('/leaderboard/monthly', async (req: Request, res: Response) => {
 // was the only consumer in the tree and its `getPointsHistory` had no callers
 // at all, so the honest shape cost nothing to adopt.
 //
-// `has_more` says the rows exist; it does not make them REACHABLE. That needs a
-// cursor - see the ponytail note on `PointsHistoryPage`.
+// PAGED FOR REAL SINCE cto/AdaptaLabs#47. `has_more` said the older rows
+// existed; `?before=` is how they are asked for, and `next_before` is the value
+// to send. Keyset on `(created_at, id)` rather than OFFSET, because points are
+// awarded WHILE a user reads their own history and OFFSET skips or repeats rows
+// when a transaction lands between two requests. The reasoning is on
+// `PointsHistoryCursor` in shared/services/gamification.ts.
 router.get('/points-history', requireAuth, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.id;
@@ -281,7 +316,16 @@ router.get('/points-history', requireAuth, async (req: Request, res: Response) =
     if (limit === null) {
       return res.status(400).json({ error: `limit must not exceed ${MAX_POINTS_HISTORY_LIMIT}` });
     }
-    const history = await getPointsHistory(userId, limit);
+    // null means a cursor arrived that this route will not put into SQL.
+    // Refused here rather than at the database, where an unparseable timestamp
+    // or uuid is a 500 with the cause only in the log.
+    const before = pointsHistoryCursor(req.query.before);
+    if (before === null) {
+      return res.status(400).json({
+        error: 'before must be a cursor of the form <created_at>,<id> as returned in next_before'
+      });
+    }
+    const history = await getPointsHistory(userId, limit, before);
 
     res.json(history);
   } catch (error) {
