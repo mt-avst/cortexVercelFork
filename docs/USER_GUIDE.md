@@ -214,7 +214,7 @@ Nothing is recorded until you have agreed to it and pressed start.
 The session page is one long page of six numbered blocks: Welcome, Consent, Setup and start, Task, Upload and Done.
 Each unlocks as you finish the one before it.
 
-1. Open the opportunity and click **Start recorded session**. The session opens in the same tab and takes over the page
+1. Open the opportunity and click **Start recorded study**. The session opens in the same tab and takes over the page
 2. **Welcome**: read the brief and what to expect, then click **Continue to consent**. The tasks themselves come one at a time once recording starts, so you meet each page as you would normally
 3. **Consent**: read what you are agreeing to, then click **I agree and want to continue**. Choosing **I do not agree** ends the study there and nothing is recorded
 4. **Setup and start**: Cortex checks your browser, window size, microphone and screen sharing. If something fails, fix it and click **Check again**
