@@ -74,8 +74,24 @@ export const backendEnvSchema = z.object({
   // for the reason spelled out above: a deliberately-written empty value carries a
   // failed intent that an absent name does not.
   //
-  // Pinned as a literal in backend/src/config/__tests__/environment.test.ts.
-  PORT: z.coerce.number().int().positive().default(3001),
+  // `.max(65535)` IS THE REAL CEILING (#59). `.int().positive()` alone accepts
+  // any positive integer, so `PORT=1e5` coerced to 100000 and passed validation
+  // honestly - 100000 IS an integer - then failed inside `app.listen()`, which
+  // is the wrong place for it. Measured on this schema before the change:
+  // `PORT=1e5` -> 100000 accepted, `PORT=99999` -> 99999 accepted. A port is a
+  // 16-bit field, so 65535 is not a policy number somebody picked; it is the
+  // largest value `listen()` can bind. Pinned as a literal in
+  // backend/src/config/__tests__/environment.test.ts, on both sides: 65535
+  // boots and 65536 does not.
+  //
+  // ponytail: `z.coerce.number()` is `Number()`, so it still reads NUMERIC
+  //   LITERALS rather than port strings - `PORT=0x10` becomes 16 and
+  //   `PORT=' 3001 '` becomes 3001. Both land on a usable port so neither can
+  //   reach the #48 failure mode, and every PORT setter in the tree is the
+  //   literal 3001 (swept over all tracked files for #59). Upgrade path if a
+  //   hex port ever does bite: `z.string().trim().regex(/^\d+$/).pipe(...)`,
+  //   which refuses the shape rather than the value.
+  PORT: z.coerce.number().int().positive().max(65535).default(3001),
 
   // Database Configuration
   DATABASE_URL: z.string().optional(),
@@ -105,13 +121,47 @@ export const backendEnvSchema = z.object({
   // localhost default, which is what `npm run dev` relies on.
   // `.kubera/playground-backend.yaml` sets a valid absolute URL.
   //
-  // ponytail: `.url()` accepts ANY scheme, so `localhost:3000` (scheme
-  //   `localhost:`, path `3000`) and `htp://x` still boot and match no browser
-  //   Origin header
-  //   -> #59, pinned as acceptance arms in environment.test.ts. Upgrade path is a
-  //      `.refine()` on http(s), which is a different defect from this one - a
-  //      validator too loose, not a validator bypassed.
-  CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').default('http://localhost:3000'),
+  // AND IT MUST BE AN http(s) ORIGIN, TRIMMED (#59). `.url()` is `new URL()`,
+  // which parses ANY scheme, so the validator was answering a much wider
+  // question than the one being asked. Measured on this schema before the
+  // change, all ACCEPTED: `localhost:3000` (read as the scheme `localhost:`
+  // with the path `3000` - exactly what somebody types when they mean
+  // `http://localhost:3000`), `htp://example.com`, `ftp://example.com`,
+  // `javascript:alert(1)`, and `' https://x.com '` keeping its padding.
+  //
+  // A browser `Origin` header is always `scheme://host[:port]`, lower-cased
+  // scheme, no padding, and the cors() middleware in backend/src/index.ts
+  // compares it to this string. So every one of those boots happily and then
+  // matches nothing, which reaches an operator as browser CORS errors on every
+  // request rather than as a config fault - the same end state #48 fixed,
+  // reached by a different route.
+  //
+  // `.trim()` before `.url()` so the padding is gone before anything looks at
+  // it; a trailing space in a chart value or an `.env` line is invisible in
+  // review, and trimming is what the operator meant. It only ever widens what
+  // boots. The `.refine()` narrows, so it is the deploy-risk half: swept over
+  // ALL tracked files for CORS_ORIGIN before merging, every value set anywhere
+  // in the tree is http or https (`.kubera/playground-backend.yaml`,
+  // `backend/env.example`, `backend/env.production.example`,
+  // `docker.env.production.example`, and `docker-compose.prod.yml` which just
+  // passes `${CORS_ORIGIN}` through from the operator's environment).
+  //
+  // Case-sensitive on purpose: `HTTP://x.com` is a URL no browser will ever
+  // send as an Origin, so accepting it would leave the same hole through a
+  // narrower door. Pinned as literals in
+  // backend/src/config/__tests__/environment.test.ts.
+  //
+  // ponytail: the scheme is checked, the PATH is not - `http://x.com/` and
+  //   `http://x.com/app` still boot and still match no Origin header
+  //   -> #64, same family, left out because `docker-compose.prod.yml` passes an
+  //      operator-supplied value this repo cannot sweep, so refusing a trailing
+  //      slash is a deploy-risk decision that wants its own review.
+  CORS_ORIGIN: z
+    .string()
+    .trim()
+    .url('CORS origin must be a valid URL')
+    .refine((value) => /^https?:\/\//.test(value), 'CORS origin must be an http(s) URL')
+    .default('http://localhost:3000'),
 
   // Security Configuration
   //
