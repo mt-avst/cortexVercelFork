@@ -1,7 +1,7 @@
 # AdaptaLabs User Guide
 
-**Version**: 7.3.23  
-**Last Updated**: 2025-01-27
+**Version**: 7.43.4  
+**Last Updated**: 2026-08-18
 
 ---
 
@@ -438,6 +438,6 @@ When reporting an issue, please include:
 
 ---
 
-**Last Updated**: 2025-01-27  
-**Version**: 7.3.23
+**Last Updated**: 2026-08-18  
+**Version**: 7.43.4
 

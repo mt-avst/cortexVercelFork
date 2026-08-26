@@ -160,7 +160,7 @@ weaken the connection.
 - [x] **Error boundary** – Frontend `App` wrapped in `ErrorBoundary` (`frontend/src/components/ErrorBoundary.tsx`).
 - [x] **API logging** – Routes use `logger` (not `console`) for errors.
 - [x] **Health check** – The backend serves `GET /health` (used by the Kubera liveness/readiness probes on port 3001); the frontend serves its own `/health` probe. These are internal probes, not a public JSON status page.
-- [x] **DB connectivity** – After deploy, verify `GET /api/opportunities` returns 200 (confirms DB + env through the nginx proxy).
+- [x] **DB connectivity** – After deploy, verify `GET /api/opportunities` returns 200 (confirms DB + env through the nginx proxy). A **413** from this route is not a connectivity fault: it is the ceiling on embedded sessions (`MAX_SESSIONS_RETURNED = 5000` in `backend/src/routes/opportunities.ts`), which refuses rather than silently truncating, and it applies to anonymous callers too.
 - [x] **RDS Multi-AZ declared** – `multiAz: true` in `.kubera/playground-backend.yaml`: a synchronous standby in a second AZ with automatic failover. Change it there, not in the AWS console, to avoid manifest/instance drift – it is the likeliest of the three to get toggled off to trim spend. Listed here rather than under Data and backups because it is an availability control, not a backup – it replicates mistakes as faithfully as it replicates good writes. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
 - [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS Multi-AZ applied** – Unverified: confirming the live instance reports `MultiAZ: true` needs AWS RDS read access.
 
@@ -171,6 +171,7 @@ weaken the connection.
 - [x] **RDS deletion protection declared** – `deletionProtection: true` in `.kubera/playground-backend.yaml`. Change it there, not in the AWS console, to avoid manifest/instance drift. Deleting the instance deliberately means flipping the flag off in the manifest first.
 - [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS deletion protection applied** – Unverified: confirming the live instance reports it needs AWS RDS read access.
 - [x] **Migrations** – Run automatically on every deploy by the backend init container (`npm run migrate && npm run seed && npm run migrate:firsthand` against `DB_URL`); idempotent and checksum-guarded. There is no manual `run-migrations` endpoint.
+  **They now fail the deploy rather than the schema.** Only SQLSTATE class 42 ("the schema is already in this shape") is tolerated; a cancelled statement, a lost connection or a constraint violation rethrows and aborts the init container. Twelve blocks previously swallowed every error class, so a statement cancelled by the pool's 120s `statement_timeout` was logged as "may already exist" and the deploy reported success with the schema change absent. `backend/src/db/migrate.ts` has no `BEGIN`, so a rethrow still leaves a partially applied schema - it says so now instead of claiming success.
 
 ## Performance and monitoring
 

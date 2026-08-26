@@ -262,7 +262,7 @@ Every current REST endpoint becomes a resolver function. Frontend calls `invoke(
 | `getAchievements` | — | `UserAchievement[]` | requireAuth. |
 | `getLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. No `user_id` in the payload (cto/AdaptaLabs#17). |
 | `getMonthlyLeaderboard` | `{ limit?: number }` | `LeaderboardEntry[]` | Public. No `user_id` in the payload (cto/AdaptaLabs#17). |
-| `getPointsHistory` | `{ limit?: number }` | `PointsHistoryPage` | requireAuth. `{ transactions, has_more }`, not a bare array (cto/AdaptaLabs#23). |
+| `getPointsHistory` | `{ limit?: number, before?: string }` | `PointsHistoryPage` | requireAuth. `{ transactions, has_more, next_before }`, not a bare array (cto/AdaptaLabs#23). Keyset paged on `(created_at, id)` (cto/AdaptaLabs#47): `before` is the previous page's `next_before`, echoed verbatim, and `next_before` is null exactly when `has_more` is false. |
 
 ### 4.6 Feedback
 
@@ -476,7 +476,7 @@ Frontend calls: `invoke('resolverName', payload)`. Payload must be a plain objec
 | getAchievements | — | UserAchievement[] |
 | getLeaderboard | limit? | LeaderboardEntry[] |
 | getMonthlyLeaderboard | limit? | LeaderboardEntry[] |
-| getPointsHistory | limit? | PointsHistoryPage |
+| getPointsHistory | limit?, before? | PointsHistoryPage |
 | submitFeedback | category, feedback, userAgent, url | { success } |
 | getFeedback | — | FeedbackItem[] |
 | deleteFeedback | id | { success } |
