@@ -45,11 +45,13 @@ an empty result from a too-narrow search is indistinguishable from a correct one
 
 ## CI waits
 
-The `mutation-canary` job takes roughly 20-25 minutes and runs only on MRs touching
-`backend/`, `shared/`, `scripts/`, the root lockfile or `.gitlab-ci.yml`; frontend-only and
-docs-only MRs skip it, so their MR pipelines finish in a few minutes. Poll to match the
-job's known duration rather than sleeping on a fixed long timer - ten minutes of dead air
-past a green result is the recorded cost of guessing.
+The `mutation-canary` job is sharded across four parallel jobs and runs only on MRs
+touching `backend/`, `shared/`, `scripts/`, the root lockfile or `.gitlab-ci.yml`;
+frontend-only and docs-only MRs skip it entirely. Measured on !276's pipeline (151
+entries): slowest shard 5.6 minutes wall, whole MR pipeline 11.5 minutes to green,
+against ~24 minutes serial before. Poll to match the job's known duration rather than
+sleeping on a fixed long timer - ten minutes of dead air past a green result is the
+recorded cost of guessing. Prefer merging with auto-merge armed so nobody watches at all.
 
 Never scope the canary below the full manifest: a filtered run is structurally blind to a
 pre-existing entry the same diff broke (that reddened main once already). The path gate
