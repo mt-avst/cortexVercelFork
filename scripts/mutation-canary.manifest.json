@@ -1591,5 +1591,65 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/rollback-failure-does-not-mask-the-original-error.test.ts",
     "test": "POST /api/opportunities/:id/sessions logs the constraint violation, not the dead connection"
+  },
+  {
+    "id": "csv-export-destroys-rather-than-ending-tidily",
+    "why": "cto/AdaptaLabs#65. Once the header row of a streamed CSV is written the status is 200 and cannot be taken back, so a batch read that fails part-way through cannot become a 500. What it must NOT do is finish tidily: `res.end()` there hands an admin a shorter CSV that parses perfectly, with nothing on the page or in the file saying it is incomplete - someone computing a total over part of their data and unable to tell. `res.destroy()` makes it a broken download, which is the truth and the only signal left. The mutation is the exact tidy-end a reader would write who saw `destroy` and thought it abrupt. Measured on this branch: applied, it fails exactly 1 of 11 in this spec - the named arm - and the other ten stay green, including the control proving a healthy two-batch export still completes normally.",
+    "file": "backend/src/utils/csv-stream.ts",
+    "anchor": "    res.destroy();",
+    "mutation": "    res.end();",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/csv-exports-are-streamed.test.ts",
+    "test": "destroys the connection when a batch fails part-way through, rather than ending tidily"
+  },
+  {
+    "id": "csv-cell-neutralises-formulas-for-human-authored-text",
+    "why": "cto/AdaptaLabs#65. Excel and Google Sheets execute a cell beginning =, +, - or @ as a formula. Before #65 `routes/admin.ts` and `routes/feedback.ts` each carried a PRIVATE `escapeCsvField` that quoted and stopped there, while the survey export next door had already been fixed - so a feedback body of `=HYPERLINK(\"http://evil.test\")`, free text submitted by ANY authenticated user, reached a superadmin's spreadsheet as a live formula. That is untrusted-to-trusted running from the least privileged user in the system to the most. The mutation makes the neutraliser the identity function, which is what deleting an apparently pointless regex looks like. Measured on this branch: applied, it fails 8 of 31 across the two specs named below; the `humanAuthored` FLAG is pinned separately because for a uuid or an ISO timestamp the two branches are provably the same function, so a route-level control could not see it.",
+    "file": "backend/src/utils/csv-cell.ts",
+    "anchor": "  /^[=+\\-@]/.test(value) ? `\\t${value}` : value;",
+    "mutation": "  value;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/csv-cell.test.ts",
+    "test": "prefixes a value beginning = with a tab"
+  },
+  {
+    "id": "csv-cell-leaves-generated-values-unprefixed",
+    "why": "cto/AdaptaLabs#65, and it is the CONTROL for the entry above. \"It was neutralised\" passes just as well against a helper that tab-prefixes EVERY cell - which would stop timestamps being dates and ids being ids in the spreadsheet, the entire reason to export them. This mutation is that over-prefixing. It is pinned at the HELPER rather than through a route on purpose: an earlier version of this control ran through the feedback export and asserted its uuid was unprefixed, and flipping that route's `csvCell(id, false)` to `true` passed 11 of 11, because no uuid or ISO timestamp can begin with =, + or @ and the two branches are therefore the same function there. Equivalent mutant, not a coverage gap - so the branch is asserted where the outputs actually differ. Measured: applied, it fails exactly 1 of 20 in this spec.",
+    "file": "backend/src/utils/csv-cell.ts",
+    "anchor": "  escapeCsvValue(humanAuthored ? neutraliseCsvFormula(value) : value);",
+    "mutation": "  escapeCsvValue(neutraliseCsvFormula(value));",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/csv-cell.test.ts",
+    "test": "does NOT neutralise when the value is one we generated"
+  },
+  {
+    "id": "csv-export-batch-size-is-the-number-that-was-decided",
+    "why": "cto/AdaptaLabs#65. The batch size is the bound: it is what turns an unbounded read that materialised a whole table into a walk holding one batch. A test that DERIVES its expectation from the constant cannot see the constant change, so both the unit arm and the two route arms write 500 out as a literal. This mutation halves it, which is what a well-meaning tuning change looks like, and it is caught rather than absorbed. Measured on this branch: applied, it fails exactly 1 of 11 in this spec.",
+    "file": "backend/src/utils/csv-stream.ts",
+    "anchor": "export const CSV_EXPORT_BATCH_ROWS = 500;",
+    "mutation": "export const CSV_EXPORT_BATCH_ROWS = 250;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/csv-exports-are-streamed.test.ts",
+    "test": "holds the batch size at the number that was decided"
+  },
+  {
+    "id": "bookings-export-keeps-the-uuid-tiebreak-in-its-keyset",
+    "why": "cto/AdaptaLabs#65. The bookings export orders by `s.start_time DESC, b.created_at DESC, b.id DESC` and NEITHER timestamp is unique - two people booking the same session in one request share both to the microsecond. Drop `b.id` from the comparison and a batch boundary landing between two equal rows makes the next batch's predicate match nothing, so the walk stops early and the export silently contains one batch instead of the whole table. That is precisely the silent truncation #65 says a bare LIMIT would have caused, reintroduced through the fix. The mutation is the tidier-looking two-column key. Its named test is the real-Postgres walk, because a mocked pool returns whatever it was told to and cannot see this at all.",
+    "file": "backend/src/routes/admin.ts",
+    "anchor": "                OR (s.start_time, b.created_at, b.id) < ($2::timestamptz, $3::timestamptz, $4::uuid))",
+    "mutation": "                OR (s.start_time, b.created_at) < ($2::timestamptz, $3::timestamptz))",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/csv-exports-keyset-postgres.test.ts",
+    "test": "exports every booking exactly once when the whole key but the uuid is constant"
+  },
+  {
+    "id": "feedback-export-keeps-the-uuid-tiebreak-in-its-keyset",
+    "why": "cto/AdaptaLabs#65, the same defect on the simpler of the two exports. `feedback.created_at` is not unique, so under `created_at` alone a batch boundary inside a group of equal timestamps ends the walk early and the CSV holds 500 rows instead of every row. The named test seeds 1,200 rows across only THREE distinct timestamps precisely so every boundary lands inside such a group, and it asserts each id appears exactly once rather than only counting - a count alone passes against a walk that repeated one batch and dropped another. Real Postgres, because the predicate is evaluated by the database and by nothing else.",
+    "file": "backend/src/routes/feedback.ts",
+    "anchor": "                OR (created_at, id) < ($1::timestamptz, $2::uuid))",
+    "mutation": "                OR created_at < $1::timestamptz)",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/csv-exports-keyset-postgres.test.ts",
+    "test": "exports every feedback row exactly once across batch boundaries"
   }
 ]

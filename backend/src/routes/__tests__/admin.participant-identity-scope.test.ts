@@ -144,19 +144,48 @@ describe('GET /api/admin/dashboard participant-identity scope', () => {
     // two constants hold the same value, so no behavioural assertion can tell
     // them apart - which is exactly why the shape has to be asserted as a
     // shape, and asserted completely.
-    const identityBinding = src.match(/JOIN users u[\s\S]*?`, \[(\w+)\]\);/);
-    expect(identityBinding).not.toBeNull();
-    expect(identityBinding![1]).toBe('participantIdentityOwnerId');
+    // SLICED PER HANDLER RATHER THAN REGEXED ACROSS THE FILE. The note above
+    // records a lazy pattern spanning from one handler into the next and
+    // reporting a match that was not there. Slicing on the two `router.get`
+    // sites removes that whole class instead of tightening the pattern again,
+    // and it is what let this survive #65 turning the export into a keyset
+    // walk: the binding is still asserted, it simply is no longer the only
+    // parameter in its array.
+    const dashboardHandler = src.slice(
+      src.indexOf("router.get('/dashboard'"),
+      src.indexOf("router.get('/export/bookings'")
+    );
+    const exportHandler = src.slice(src.indexOf("router.get('/export/bookings'"));
+    // Both slices are non-empty and in the expected order, or every assertion
+    // below is vacuously true against an empty string.
+    expect(dashboardHandler.length).toBeGreaterThan(0);
+    expect(exportHandler.length).toBeGreaterThan(0);
 
-    // And every count query is bound to the OTHER constant. Counted rather
-    // than pattern-matched across the file: a lazy `COUNT([\s\S]*?` regex
-    // spans from one handler into the next and reports a match that is not
-    // there - it did, on the first draft of this assertion.
+    // The dashboard's recent_bookings still binds the identity constant, and
+    // still as the sole parameter. The dashboard handler names BOTH constants
+    // by design - counts for the count queries, identity for recent_bookings -
+    // so the useful assertion is WHICH ONE reaches the query carrying the
+    // participant join, not that the other is absent. Safe as a lazy match
+    // here in a way it was not across the file, because the slice is one
+    // handler: there is no next handler for it to run into.
+    const dashboardIdentityBinding = dashboardHandler.match(
+      /JOIN users u[\s\S]*?`, \[(\w+)\]\);/
+    );
+    expect(dashboardIdentityBinding).not.toBeNull();
+    expect(dashboardIdentityBinding![1]).toBe('participantIdentityOwnerId');
+
+    // The export binds it FIRST, which is what `$1` - the owner filter - takes.
+    // #65 added four parameters after it for the keyset walk and the limit.
+    expect(exportHandler).toMatch(/\[\s*participantIdentityOwnerId,/);
+    // THE ASSERTION THAT KILLS THE ORIGINAL DEFECT. Re-binding the export to
+    // the counts constant is the mutation this whole file exists for, and the
+    // two constants hold the same value, so no behavioural test can tell them
+    // apart. The export handler must not name it at all.
+    expect(exportHandler).not.toContain('countsOwnerId');
+
+    // And every count query is still bound to the OTHER constant.
     const countBindings = src.match(/\[(?:now, )?countsOwnerId(?:, now)?\]/g) ?? [];
-    const identityBindings = src.match(/\[participantIdentityOwnerId\]/g) ?? [];
     expect(countBindings).toHaveLength(4);
-    // One per handler: the dashboard's recent_bookings and the CSV export.
-    expect(identityBindings).toHaveLength(2);
   });
 
   it('does not scope a superadmin, who is meant to see the whole platform', async () => {
@@ -201,7 +230,11 @@ describe('GET /api/admin/export/bookings participant-identity scope', () => {
 
     const [sql, params] = identityCalls()[0] as [string, unknown[]];
     expect(String(sql)).toMatch(/o\.owner_user_id\s*=\s*\$1/);
-    expect(params).toEqual(['admin-1']);
+    // ASSERTED IN FULL, not by index. Since #65 the export is a keyset walk:
+    // `$1` is still the owner scope, `$2`-`$4` are the batch cursor and are
+    // null on the first batch, `$5` is the batch size as a LITERAL. A sixth
+    // parameter, or the owner id moving out of `$1`, fails here.
+    expect(params).toEqual(['admin-1', null, null, null, 500]);
   });
 
   it('does not scope a superadmin', async () => {
@@ -210,7 +243,7 @@ describe('GET /api/admin/export/bookings participant-identity scope', () => {
       .expect(200);
 
     const [, params] = identityCalls()[0] as [string, unknown[]];
-    expect(params).toEqual([null]);
+    expect(params).toEqual([null, null, null, null, 500]);
   });
 
   it('refuses a non-admin without querying anything', async () => {
