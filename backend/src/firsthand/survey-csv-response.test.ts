@@ -9,7 +9,8 @@ vi.mock("../utils/logger", () => ({
 import {
   writeSurveyCsv,
   SURVEY_CSV_DRAIN_TIMEOUT_MS,
-  SURVEY_CSV_EXPORT_DEADLINE_MS
+  SURVEY_CSV_EXPORT_DEADLINE_MS,
+  type SurveyCsvExportTimeoutReason
 } from "./survey-csv-response";
 import { logger } from "../utils/logger";
 import type { StudyStep } from "../../../shared/firsthand/contract";
@@ -831,5 +832,19 @@ describe("bounding an export that never finishes", () => {
     expect(SURVEY_CSV_DRAIN_TIMEOUT_MS).toBeLessThan(
       SURVEY_CSV_EXPORT_DEADLINE_MS
     );
+  });
+
+  it("keeps the timeout reason union at exactly the two bounds", () => {
+    // Since #80 the reason union is one shared declaration under both
+    // callers' aliases. This file's own history is why the membership is
+    // pinned: a gate once rejected a three-member version of it, because the
+    // error message renders with a binary ternary and a third member would
+    // read as a drain failure. Compile-time: Record<union, true> against an
+    // exact literal fails to build if the union moves either way.
+    const everyReason: Record<SurveyCsvExportTimeoutReason, true> = {
+      export_deadline: true,
+      drain_timeout: true
+    };
+    expect(Object.keys(everyReason)).toHaveLength(2);
   });
 });
