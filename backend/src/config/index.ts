@@ -10,6 +10,40 @@ dotenv.config();
 // Validate environment variables
 const config: BackendEnvironment = getBackendConfig();
 
+/**
+ * THE NORMALISED ORIGIN IS WRITTEN BACK, DELIBERATELY (#59).
+ *
+ * zod parses a COPY of `process.env` and never writes to it, and
+ * `config.CORS_ORIGIN` has only two readers - the `cors()` origin and the
+ * startup log line, both in backend/src/index.ts. `process.env.CORS_ORIGIN` has
+ * ELEVEN more outside tests (routes/auth.ts x6, routes/userCalendar.ts x2,
+ * services/userCalendar.ts x3), every one of them a redirect target or an OAuth
+ * callback URL built by string concatenation.
+ *
+ * The SCHEME half of #59 reaches all thirteen for free: a bad scheme stops the
+ * boot, so none of them ever runs. The PADDING half did not, and the gap is not
+ * theoretical - measured against real express, `res.redirect(' https://x.com ')`
+ * at routes/auth.ts:300 answers `302` with
+ * `location: "%20https://x.com%20"`, a relative-path redirect to a route that
+ * does not exist.
+ *
+ * ONLY WHEN IT WAS ALREADY SET. Assigning unconditionally would put the schema
+ * default into a variable nobody set, and those eleven readers are chains like
+ * `process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3001'`
+ * - so an unset variable resolving to the CORS default would silently change
+ * which fallback wins. This narrows a value somebody wrote; it never invents one.
+ *
+ * ponytail: normalising the environment is a plaster over eleven readers that
+ *   should be reading `config`
+ *   -> #71. Routing them through the validated object is the real fix and it
+ *      touches the auth routes, which is its own review. The eleven do not even
+ *      agree on their own fallbacks - some to :3000, some to :3001, some to
+ *      FRONTEND_URL first - so that change is a decision, not a rename.
+ */
+if (process.env.CORS_ORIGIN !== undefined) {
+  process.env.CORS_ORIGIN = config.CORS_ORIGIN;
+}
+
 const databaseUrl = resolveDatabaseUrl(process.env);
 // Never logs the URL or password itself - just which env var supplied the
 // connection and whether a password was present, so a bad credential shows

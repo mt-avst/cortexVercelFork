@@ -24,6 +24,15 @@ import { defineConfig } from "vitest/config";
 // a `*-postgres.test.ts` or a `*-vitest.test.ts` under __tests__ is
 // vitest-only, every other `*.test.ts` under __tests__ is jest-only.
 //
+// DISJOINT IS NOT THE SAME AS COMPLETE, and the refute gate on !272 measured
+// the difference. jest's ignores are unanchored path regexes and so repo-wide,
+// while these includes are scoped to `src/**/__tests__/**` - so a
+// `*-postgres.test.ts` or `*-vitest.test.ts` placed OUTSIDE a `__tests__`
+// directory is collected by NEITHER runner and vanishes silently. Demonstrated
+// with a probe asserting `1 === 2`: jest collected 0, vitest collected 0. That
+// hole predates the `-vitest` suffix; it is #70, not something to widen these
+// globs for in passing.
+//
 // `setupFiles` is #60 itself. `src/__tests__/setup.ts` is jest's
 // `setupFilesAfterEnv`, so the pooled keep-alive test agent it installs
 // (cto/AdaptaLabs#44) never reached this side and every supertest call here

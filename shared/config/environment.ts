@@ -136,10 +136,29 @@ export const backendEnvSchema = z.object({
   // request rather than as a config fault - the same end state #48 fixed,
   // reached by a different route.
   //
-  // `.trim()` before `.url()` so the padding is gone before anything looks at
-  // it; a trailing space in a chart value or an `.env` line is invisible in
-  // review, and trimming is what the operator meant. It only ever widens what
-  // boots. The `.refine()` narrows, so it is the deploy-risk half: swept over
+  // `.trim()` because a trailing space in a chart value or an `.env` line is
+  // invisible in review, and trimming is what the operator meant. It only ever
+  // widens what boots.
+  //
+  // WHAT THE ORDER ACTUALLY BUYS, measured rather than assumed - an earlier
+  // version of this comment claimed the order was load-bearing for ASCII
+  // padding, and the refute gate showed it was not. Swapping to
+  // `.url().trim()` passes all 47 arms of environment.test.ts, because
+  // `new URL()` strips leading and trailing C0-and-space ITSELF, so `.url()`
+  // never sees the padding as a problem under either order.
+  //
+  // They diverge only on whitespace `String.prototype.trim()` strips and the
+  // WHATWG parser does not. Measured, both orders:
+  //
+  //   '\u00a0https://x.com\u00a0'  trim().url(): accepted   url().trim(): REFUSED
+  //   '\u3000https://x.com'          trim().url(): accepted   url().trim(): REFUSED
+  //
+  // So THIS order is the more permissive one, and a non-breaking space pasted
+  // out of a wiki page or a Slack message is the accident it forgives. Pinned
+  // by a U+00A0 arm in environment.test.ts, which is what makes the order
+  // load-bearing rather than decorative.
+  //
+  // The `.refine()` narrows, so it is the deploy-risk half: swept over
   // ALL tracked files for CORS_ORIGIN before merging, every value set anywhere
   // in the tree is http or https (`.kubera/playground-backend.yaml`,
   // `backend/env.example`, `backend/env.production.example`,
@@ -148,14 +167,24 @@ export const backendEnvSchema = z.object({
   //
   // Case-sensitive on purpose: `HTTP://x.com` is a URL no browser will ever
   // send as an Origin, so accepting it would leave the same hole through a
-  // narrower door. Pinned as literals in
+  // narrower door. `http:/x.com` with ONE slash goes the same way - `new URL()`
+  // normalises it to `http://x.com/` but zod returns the string as written, so
+  // it is refused rather than repaired. Both are pinned as literals in
   // backend/src/config/__tests__/environment.test.ts.
+  //
+  // THE ASYMMETRY WITH #64 IS DELIBERATE AND WORTH NAMING, because the
+  // deploy-risk argument below applies to both. An upper-cased scheme and a
+  // trailing slash are equally broken config, and equally unsweepable in the
+  // `${CORS_ORIGIN}` that `docker-compose.prod.yml` takes from an operator.
+  // They are treated differently because the right FIX differs: refusing an
+  // upper-cased scheme is the whole answer, whereas for a path the likely
+  // answer is to NORMALISE (`new URL(v).origin` is exactly what a browser
+  // sends) rather than refuse - and choosing between refusing and normalising
+  // is a design decision, not a line to bolt onto somebody else's MR.
   //
   // ponytail: the scheme is checked, the PATH is not - `http://x.com/` and
   //   `http://x.com/app` still boot and still match no Origin header
-  //   -> #64, same family, left out because `docker-compose.prod.yml` passes an
-  //      operator-supplied value this repo cannot sweep, so refusing a trailing
-  //      slash is a deploy-risk decision that wants its own review.
+  //   -> #64, same family.
   CORS_ORIGIN: z
     .string()
     .trim()

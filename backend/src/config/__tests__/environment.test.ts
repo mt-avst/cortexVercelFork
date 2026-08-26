@@ -264,7 +264,13 @@ describe('backend CORS_ORIGIN validation', () => {
     'htp://example.com',
     'ftp://example.com',
     'javascript:alert(1)',
-    'HTTPS://EXAMPLE.COM'
+    'HTTPS://EXAMPLE.COM',
+    // ONE SLASH. `new URL()` normalises `http:/x.com` to `http://x.com/`, but
+    // zod returns the string as written, so what reaches cors() is the broken
+    // form. Refused rather than repaired, and written down here because a
+    // narrowing nobody records is a narrowing somebody rediscovers in an
+    // incident.
+    'http:/x.com'
   ])('refuses to boot on the non-http scheme CORS_ORIGIN %p', (value) => {
     setVar('CORS_ORIGIN', value);
     expect(() => validateBackendEnvironment()).toThrow(/CORS origin must be an http\(s\) URL/);
@@ -278,12 +284,18 @@ describe('backend CORS_ORIGIN validation', () => {
    * does. This is the likelier accident of the two: a trailing space in a chart
    * value or an `.env` line is invisible in review.
    *
-   * Asserting the RESULT rather than that it merely parses. A `.trim()` that
-   * ran after `.url()` instead of before it would satisfy "does not throw"
-   * while leaving the spaces on.
+   * Asserting the RESULT rather than that it merely parses, because the padded
+   * value PARSES EITHER WAY: `new URL(' https://x.com ')` succeeds, since the
+   * WHATWG parser strips leading and trailing C0-and-space itself. A "does not
+   * throw" assertion here would be decorative.
    *
-   * Two arms, and the SPACE one is what the canary pins - a title rendering a
-   * tab or a newline is not a usable `-t` regex.
+   * WHAT AN EARLIER VERSION OF THIS DOCBLOCK GOT WRONG. It said a `.trim()`
+   * running after `.url()` would leave the spaces on. It would not: the refine
+   * and the result both see the trimmed value under either order, and the
+   * refute gate on !272 measured the swapped schema passing all 47 arms of this
+   * file. The order IS load-bearing, but only for whitespace
+   * `String.prototype.trim()` strips and the URL parser does not - which is why
+   * the U+00A0 arm below exists. Without it, nothing here can see the order.
    */
   it('trims a space-padded CORS_ORIGIN rather than carrying the padding into the cors origin', () => {
     setVar('CORS_ORIGIN', ' https://x.com ');
@@ -293,6 +305,34 @@ describe('backend CORS_ORIGIN validation', () => {
   it('trims tab and newline padding too, which is what an unresolved chart value leaves', () => {
     setVar('CORS_ORIGIN', '\thttp://localhost:3000\n');
     expect(validateBackendEnvironment().CORS_ORIGIN).toBe('http://localhost:3000');
+  });
+
+  /**
+   * THE ARM THAT MAKES `.trim()` BEFORE `.url()` LOAD-BEARING.
+   *
+   * A non-breaking space is what a value pasted out of a wiki page, a Slack
+   * message or a rendered document carries, and it is invisible in every review
+   * tool there is. `String.prototype.trim()` strips U+00A0 and U+3000; the
+   * WHATWG URL parser strips neither.
+   *
+   * Measured on both orders: with `.trim()` first both are accepted and
+   * normalised; with `.url()` first both are REFUSED as malformed. So this is
+   * the only arm in the file that fails when the two are swapped, and the
+   * choice it pins is the permissive one - forgive the paste, do not fail the
+   * boot over a character nobody can see.
+   *
+   * The characters are written as escapes and the title is plain ASCII, so the
+   * canary can select this test with jest's `-t` regex and so a reviewer can
+   * tell which whitespace is meant without measuring the pixels.
+   */
+  it('trims a non-breaking space, which the URL parser leaves in place', () => {
+    // U+00A0, what a value pasted out of a rendered page carries.
+    setVar('CORS_ORIGIN', '\u00a0https://x.com\u00a0');
+    expect(validateBackendEnvironment().CORS_ORIGIN).toBe('https://x.com');
+
+    // U+3000, the ideographic space. Same class, different keyboard.
+    setVar('CORS_ORIGIN', '\u3000https://x.com');
+    expect(validateBackendEnvironment().CORS_ORIGIN).toBe('https://x.com');
   });
 
   // CONTROL ARM. `.kubera/playground-backend.yaml` sets exactly this shape, and
@@ -325,5 +365,75 @@ describe('backend CORS_ORIGIN validation', () => {
 
     expect(parsed).toBe('refused');
     expect(parsed).not.toBe('http://localhost:3000');
+  });
+});
+
+/**
+ * THE NORMALISED ORIGIN REACHES THE OTHER ELEVEN READERS (#59).
+ *
+ * Raised by the refute gate on !272, which measured the gap rather than
+ * reasoning about it. zod parses a COPY of `process.env`, so trimming
+ * `CORS_ORIGIN` in the schema fixes `config.CORS_ORIGIN` - two readers, both in
+ * backend/src/index.ts - and leaves `process.env.CORS_ORIGIN` padded for the
+ * ELEVEN readers that use it directly: routes/auth.ts x6, routes/userCalendar.ts
+ * x2, services/userCalendar.ts x3, every one a redirect target or an OAuth
+ * callback URL built by concatenation.
+ *
+ * The SCHEME half needed nothing here: a bad scheme stops the boot, so those
+ * eleven never run. The PADDING half did. Measured against real express before
+ * the write-back, `res.redirect(process.env.CORS_ORIGIN)` at auth.ts:300
+ * answered `302` with `location: "%20https://x.com%20"` - a relative-path
+ * redirect to a route that does not exist.
+ *
+ * `backend/src/config/index.ts` is where it belongs rather than inside
+ * `validateBackendEnvironment`: a function called "validate" that mutates the
+ * process environment is a surprise, and the eleven readers are a backend
+ * concern, not a shared-schema one.
+ */
+describe('backend CORS_ORIGIN normalisation reaching process.env', () => {
+  const importConfig = (): void => {
+    jest.isolateModules(() => {
+      require('../index');
+    });
+  };
+
+  afterEach(() => {
+    setVar('CORS_ORIGIN', ORIGINAL_CORS_ORIGIN);
+  });
+
+  it('writes the trimmed origin back, so a padded value cannot reach a redirect', () => {
+    setVar('CORS_ORIGIN', ' https://x.com ');
+
+    importConfig();
+
+    expect(process.env.CORS_ORIGIN).toBe('https://x.com');
+  });
+
+  /**
+   * THE CONTROL, and it is the reason the write-back is conditional.
+   *
+   * Assigning unconditionally would put the schema default into a variable
+   * nobody set - and those eleven readers are chains like
+   * `process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3001'`,
+   * so an unset variable resolving to the CORS default would silently change
+   * which fallback wins. Without this arm, that regression reads as a pass.
+   */
+  it('leaves an UNSET CORS_ORIGIN unset rather than filling in the schema default', () => {
+    setVar('CORS_ORIGIN', undefined);
+
+    importConfig();
+
+    expect(process.env.CORS_ORIGIN).toBeUndefined();
+  });
+
+  // A value that needed no normalising must come back byte-identical, so the
+  // write-back cannot be mistaken for a pass when it is rewriting things it
+  // should not touch.
+  it('leaves an already-clean CORS_ORIGIN exactly as it was', () => {
+    setVar('CORS_ORIGIN', 'https://adaptalabs.kubera-playground.adaptavist.net');
+
+    importConfig();
+
+    expect(process.env.CORS_ORIGIN).toBe('https://adaptalabs.kubera-playground.adaptavist.net');
   });
 });

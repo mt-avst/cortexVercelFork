@@ -90,12 +90,18 @@ describe('the pooled test agent, under vitest', () => {
     expect(bare).toBe(REQUESTS);
   });
 
-  it('shares ONE agent with the jest side rather than building a second one', async () => {
-    // Both runners install the same module-level agent, so a refactor that gave
-    // vitest its own copy - or left `maxSockets` bounded on it - would be
-    // invisible without this. `Infinity` is load-bearing: a bounded pool turns
-    // "a handler that waits on a second request" into a worker that hangs,
-    // which arrives as a CI job timeout with no named failing test.
+  it('hands out the module-level agent, not a per-file copy with its own options', async () => {
+    // WHAT THIS CAN AND CANNOT SEE, corrected after the refute gate on !272
+    // pointed out the title claimed more than the assertion. Vitest isolates
+    // each test file, so nothing here observes the jest side; what it observes
+    // is that the setup file and this file resolve the SAME `pooled-agent.ts`
+    // instance, and that the agent a request ends up with is that one rather
+    // than a fresh copy. That is the useful property: a refactor that built a
+    // second agent per file, or left `maxSockets` bounded on it, fails here.
+    //
+    // `Infinity` is load-bearing: a bounded pool turns "a handler that waits on
+    // a second request" into a worker that hangs, which arrives as a CI job
+    // timeout with no named failing test.
     expect(TEST_HTTP_AGENT.maxSockets).toBe(Number.POSITIVE_INFINITY);
     expect(
       (TEST_HTTP_AGENT as unknown as { options: { keepAlive?: boolean } }).options.keepAlive

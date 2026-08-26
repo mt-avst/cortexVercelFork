@@ -75,8 +75,13 @@ export function listening(app: unknown): Server {
 
 /**
  * Closes everything `listening` opened. Registered as a global `afterAll` in
- * ../setup.ts, so no test file has to remember - and an unclosed server would
- * hold the worker open and turn a passing run into a hang.
+ * BOTH runners' setup files - ../setup.ts for jest, ../helpers/vitest-setup.ts
+ * for vitest (cto/AdaptaLabs#60) - so no test file has to remember, and an
+ * unclosed server would hold the worker open and turn a passing run into a hang.
+ *
+ * Idempotent: it clears the map it closes, so a file that already called it in
+ * its own `afterAll` (`routes/__tests__/bookings-concurrency-postgres.test.ts`
+ * does) simply leaves the global one nothing to do.
  */
 export function closeListeningServers(): Promise<void> {
   const open = [...servers.values()];
