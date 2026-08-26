@@ -1068,10 +1068,10 @@
   },
   {
     "id": "points-history-asks-for-one-row-more-than-it-returns",
-    "why": "WITHOUT THE +1, `has_more` IS UNSATISFIABLE and silently always false - the exact defect cto/AdaptaLabs#23 was opened for, wearing the fix's clothes. `getPointsHistory` has no offset and no cursor, so a full page and the end of a caller's own transaction history are the same response unless one extra row is fetched to tell them apart. The mutation binds `limit` instead of `limit + 1`: `rows.length > limit` can then never be true, every page reports the history as finished, and the caller with fifty transactions on the default twenty is told those twenty are all there is. Same shape as `MAX_CSV_PARTICIPANTS + 1`, and it survived a review there once already. Only a real query can see it - the route-level spec mocks the service and would return whatever the mock was told to.",
+    "why": "WITHOUT THE +1, `has_more` IS UNSATISFIABLE and silently always false - the exact defect cto/AdaptaLabs#23 was opened for, wearing the fix's clothes. A full page and the end of a caller's own transaction history are the same response unless one extra row is fetched to tell them apart. The mutation binds `limit` instead of `limit + 1`: `rows.length > limit` can then never be true, every page reports the history as finished, and the caller with fifty transactions on the default twenty is told those twenty are all there is. Same shape as `MAX_CSV_PARTICIPANTS + 1`, and it survived a review there once already. Only a real query can see it - the route-level spec mocks the service and would return whatever the mock was told to. ANCHOR RENAMED BY cto/AdaptaLabs#47, which added the keyset cursor and so appended two bind parameters to this line. The PROPERTY is untouched and the entry keeps its id: `+ 1` is still the probe row and it is still the only thing making `has_more` satisfiable. Recorded here because this is what an ANCHOR_MISSING is FOR - the harness reported it by name on a full run, where a manifest filtered to one branch's own new entries could not have seen it, and a silent re-add under a new id would have been a rename undone.",
     "file": "shared/services/gamification.ts",
-    "anchor": "    `, [userId, limit + 1]);",
-    "mutation": "    `, [userId, limit]);",
+    "anchor": "    `, [userId, limit + 1, before?.created_at ?? null, before?.id ?? null]);",
+    "mutation": "    `, [userId, limit, before?.created_at ?? null, before?.id ?? null]);",
     "runner": "vitest",
     "spec": "src/services/__tests__/gamification-postgres.test.ts",
     "test": "reports has_more when older rows exist beyond the page",
@@ -1396,5 +1396,47 @@
     "runner": "jest",
     "spec": "src/__tests__/listening-helper.test.ts",
     "test": "disables the server keep-alive timeout, so a pooled socket is never closed under the client"
+  },
+  {
+    "id": "port-fails-closed-rather-than-becoming-nan",
+    "why": "cto/AdaptaLabs#48. PORT ended in .catch(() => 3001), and that .catch NEVER FIRED for a non-numeric value - z.string().transform(Number) returns NaN rather than throwing, so there was nothing for it to catch. Measured on the schema before the change: PORT=abc parsed to NaN and PORT= parsed to 0. The live consumer is app.listen(config.PORT) in backend/src/index.ts, and listen(NaN) binds an EPHEMERAL port, so on Kubera the readiness probe on 3001 never passes and no log line names the cause. The mutation restores that exact .catch(): it type-checks and PORT stays a number, so nothing fails to build. MEASURED, not asserted: applied, it fails 8 of 37 in this spec - all six 'refuses to boot on the unusable PORT' arms, the named NaN arm, and the message arm - and the unset, valid and CORS_ORIGIN arms stay green. An earlier version of this note claimed only the NaN arm could see it, which was a claim about verification that the measurement refuted. The NaN arm is still the one worth naming here, because it is the only one that pins the SHAPE of the old defect - a value that parsed successfully into NaN rather than a value that was refused - and NaN === NaN is false, so it has to be written as a refusal check rather than as toBe(NaN).",
+    "file": "shared/config/environment.ts",
+    "anchor": "  PORT: z.coerce.number().int().positive().default(3001),",
+    "mutation": "  PORT: z.string().transform(Number).catch(() => 3001),",
+    "runner": "jest",
+    "spec": "src/config/__tests__/environment.test.ts",
+    "test": "never yields NaN for a non-numeric PORT, which listen would bind as an ephemeral port"
+  },
+  {
+    "id": "session-fan-out-probe-row-keeps-the-413-reachable",
+    "why": "cto/AdaptaLabs#41. GET /api/opportunities bounds its outer dimension at 1000 opportunities and then fanned out over those ids with no LIMIT at all, so the worst case was 1000 opportunities times however many sessions each holds in one result set. The fix bounds the product and REFUSES above it. The probe row is the whole reason the refusal is reachable: drop the plus one and the comparison rows.length > MAX_SESSIONS_RETURNED can never be true, the 413 becomes dead code, and the refusal silently becomes the truncation it exists to prevent - with no test able to see it, because every request-level arm mocks pool.query and gets its row count from the mock rather than from the SQL. Only an assertion on the SQL text can, which is why that arm exists. Same shape and same reason as MAX_CSV_PARTICIPANTS + 1 and the listing query's own probe row.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "         LIMIT ${MAX_SESSIONS_RETURNED + 1}`,",
+    "mutation": "         LIMIT ${MAX_SESSIONS_RETURNED}`,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.list-bound.test.ts",
+    "test": "asks the database for one session more than it will return"
+  },
+  {
+    "id": "points-history-keyset-keeps-its-id-tiebreak",
+    "why": "cto/AdaptaLabs#47. The keyset cursor compares (created_at, id) as a ROW, and the id half is the only thing separating two transactions awarded by the same statement - points_transactions.created_at is TIMESTAMPTZ with no uniqueness, and awardPoints can write two rows on one instant. Drop the tiebreak and a page boundary landing between twins excludes BOTH when it excludes the one just read, so a row the caller owns disappears from their history for ever with nothing reporting it. The mutation keeps $4 referenced so the statement still binds four parameters and every other arm stays green - measured 1 failed / 18 against a real Postgres, and 11 failed when a sloppier version left $4 unused, which is the difference between proving the tiebreak matters and proving the SQL still parses. Only the twin arm can see this: it is the one that seeds two rows at the same microsecond and pages with limit 1 so a boundary falls between them.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "        AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))",
+    "mutation": "        AND ($3::timestamptz IS NULL OR (created_at < $3::timestamptz AND $4::uuid IS NOT NULL))",
+    "runner": "vitest",
+    "needsDatabase": true,
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "returns both of two transactions that share a created_at exactly once"
+  },
+  {
+    "id": "points-history-cursor-is-rendered-in-utc",
+    "why": "cto/AdaptaLabs#47, raised by the refute gate on !267 as the single most load-bearing token in the query and the one with no guard. to_char renders a TIMESTAMPTZ in the SESSION's TimeZone, so without AT TIME ZONE 'UTC' next_before is a wall-clock reading in whatever zone the connection carries - labelled Z regardless - and is fed back into a $3::timestamptz that reads an offsetless value as being in that same zone. The round trip then closes only by coincidence, when the session is UTC, which it is in CI and in every container this repo starts: the gate measured the removal passing 18 of 18 before this arm existed. The gate's own probe measured Pacific/Kiritimati at +14 paging 50 pages and seeing ONE unique row, and America/New_York silently losing 5 of 8. Neither raised an error. The mutation is a pure SQL-string edit so it always builds, and only the arm that reads through a pool pinned to a non-UTC session can see it - measured 1 failed alone, failing with the test's own 50-page bound rather than hanging, and the same arm passes with the token present.",
+    "file": "shared/services/gamification.ts",
+    "anchor": "             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS cursor_at",
+    "mutation": "             to_char(created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS cursor_at",
+    "runner": "vitest",
+    "needsDatabase": true,
+    "spec": "src/services/__tests__/gamification-postgres.test.ts",
+    "test": "renders the same cursor under a non-UTC session TimeZone"
   }
 ]

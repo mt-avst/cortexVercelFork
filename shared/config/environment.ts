@@ -53,24 +53,29 @@ export const backendEnvSchema = z.object({
   // drops the received value fails a named test rather than degrading quietly.
   NODE_ENV: z.enum(NODE_ENVS).default('development'),
 
-  // ponytail: NODE_ENV was made fail-closed on its own, and the other `.catch()`
-  //   fields in this schema were deliberately left alone. NODE_ENV was the only one
-  //   whose coercion DISABLED A SECURITY CONTROL; these two break the app visibly
-  //   instead, and bundling them would have made one deploy-risk decision
-  //   unreviewable. The two live ceilings:
-  //     PORT        - `.catch` never fires for a non-numeric value, because
-  //                   `transform(Number)` returns NaN rather than throwing. `PORT=abc`
-  //                   gives NaN, and app.listen(NaN) binds an ephemeral port, so the
-  //                   readiness probe on 3001 fails with nothing saying why.
-  //     CORS_ORIGIN - a malformed URL becomes http://localhost:3000 in silence, which
-  //                   presents in production as browser CORS errors, not as a config
-  //                   fault. It narrows access rather than widening it, so it is an
-  //                   availability ceiling and not a security one.
-  //   ENABLE_CSRF and FRONTEND_URL here have NO consumer at all - index.ts and every
-  //   route read those two straight off process.env - so their `.catch()` is inert.
-  //   -> #48. Upgrade path: `z.coerce.number().int().positive().default(3001)` for
-  //   PORT and `.default()` for CORS_ORIGIN, both of which keep unset working.
-  PORT: z.string().transform(Number).catch(() => 3001),
+  // FAILS CLOSED on an unusable value (#48), for the same reason NODE_ENV does:
+  // a value that quietly becomes something else at boot is invisible from the
+  // logs and lands as a symptom somewhere unrelated.
+  //
+  // WHAT `.catch(() => 3001)` ACTUALLY DID. It never fired for a non-numeric
+  // value at all, because `transform(Number)` RETURNS NaN rather than throwing -
+  // there was nothing for the `.catch` to catch. Measured on this schema before
+  // the change: `PORT=abc` parsed to NaN and `PORT=''` parsed to 0. Live consumer
+  // is `app.listen(config.PORT)` in backend/src/index.ts, and `listen(NaN)` binds
+  // an EPHEMERAL port, so on Kubera the readiness probe on 3001 fails, the pod
+  // never goes Ready, and nothing in the logs names the cause.
+  //
+  // `z.coerce.number()` rather than `z.string().transform(Number)` because the
+  // coercion is then INSIDE the schema, so `.int().positive()` runs against the
+  // number and a failure is a ZodError - which validateBackendEnvironment below
+  // turns into the boot-time throw. The three cases separate exactly as NODE_ENV's
+  // do: UNSET -> 3001 (`npm run dev` sets nothing), a usable port -> itself,
+  // anything else -> a named refusal at import. `PORT=''` throws with the rest,
+  // for the reason spelled out above: a deliberately-written empty value carries a
+  // failed intent that an absent name does not.
+  //
+  // Pinned as a literal in backend/src/config/__tests__/environment.test.ts.
+  PORT: z.coerce.number().int().positive().default(3001),
 
   // Database Configuration
   DATABASE_URL: z.string().optional(),
@@ -90,9 +95,33 @@ export const backendEnvSchema = z.object({
   ),
 
   // CORS Configuration
-  CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').catch(() => 'http://localhost:3000'),
+  //
+  // `.default` rather than `.catch` (#48). A malformed URL used to become
+  // http://localhost:3000 in SILENCE - measured on this schema - and the live
+  // consumer is the cors() origin in backend/src/index.ts, so in production that
+  // presented as browser CORS errors on every request rather than as a config
+  // fault. It narrows access rather than widening it, so this is availability and
+  // not security; it is still a value nobody chose. Unset still yields the
+  // localhost default, which is what `npm run dev` relies on.
+  // `.kubera/playground-backend.yaml` sets a valid absolute URL.
+  //
+  // ponytail: `.url()` accepts ANY scheme, so `localhost:3000` (scheme
+  //   `localhost:`, path `3000`) and `htp://x` still boot and match no browser
+  //   Origin header
+  //   -> #59, pinned as acceptance arms in environment.test.ts. Upgrade path is a
+  //      `.refine()` on http(s), which is a different defect from this one - a
+  //      validator too loose, not a validator bypassed.
+  CORS_ORIGIN: z.string().url('CORS origin must be a valid URL').default('http://localhost:3000'),
 
   // Security Configuration
+  //
+  // ponytail: ENABLE_CSRF and FRONTEND_URL still `.catch()`, and #48 left them
+  //   there deliberately. Both are INERT: index.ts and every route read these two
+  //   straight off `process.env`, so nothing consumes the parsed value and the
+  //   coercion has no ceiling to hit. FRONTEND_URL in particular IS set in
+  //   `.kubera/playground-backend.yaml`, so making it fail closed is a deploy-risk
+  //   decision with no consumer to justify it today. Upgrade path: give either a
+  //   real consumer and it takes `.default()` in the same edit.
   ENABLE_CSRF: z.string().transform(val => val === 'true').catch(() => false),
 
   // Email Configuration (Optional)
@@ -122,7 +151,9 @@ export const backendEnvSchema = z.object({
   FIRSTHAND_INTEGRATION_SECRET: z.string().min(32, 'FirstHand integration secret must be at least 32 characters').optional(),
 
   // S3 bucket + region for the internalised recording storage, reached via the
-  // backend's IRSA role (default AWS credential chain — no static keys).
+  // backend's IRSA role (default AWS credential chain — no static keys). Unset
+  // FIRSTHAND_S3_BUCKET disables S3 storage; FIRSTHAND_S3_REGION falls back to
+  // AWS_REGION and then us-east-1.
   FIRSTHAND_S3_BUCKET: z.string().optional(),
   FIRSTHAND_S3_REGION: z.string().optional(),
 });
@@ -210,171 +241,4 @@ export const getBackendConfig = (): BackendEnvironment => {
  */
 export const getFrontendConfig = (): FrontendEnvironment => {
   return validateFrontendEnvironment();
-};
-
-// ============================================================================
-// ENVIRONMENT HELPERS
-// ============================================================================
-
-/**
- * Check if running in production
- */
-export const isProduction = (): boolean => {
-  return process.env.NODE_ENV === 'production';
-};
-
-/**
- * Check if running in development
- */
-export const isDevelopment = (): boolean => {
-  return process.env.NODE_ENV === 'development';
-};
-
-/**
- * Check if running in test
- */
-export const isTest = (): boolean => {
-  return process.env.NODE_ENV === 'test';
-};
-
-/**
- * Get environment-specific configuration
- */
-export const getEnvironmentConfig = () => {
-  const env = process.env.NODE_ENV || 'development';
-
-  const configs = {
-    development: {
-      logLevel: 'debug',
-      enableCors: true,
-      enableCsrf: false,
-      enableRateLimit: false,
-    },
-    production: {
-      logLevel: 'info',
-      enableCors: false,
-      enableCsrf: true,
-      enableRateLimit: true,
-    },
-    test: {
-      logLevel: 'error',
-      enableCors: true,
-      enableCsrf: false,
-      enableRateLimit: false,
-    },
-  };
-
-  return configs[env as keyof typeof configs] || configs.development;
-};
-
-// ============================================================================
-// ENVIRONMENT DOCUMENTATION
-// ============================================================================
-
-/**
- * Environment variable documentation
- */
-export const ENVIRONMENT_DOCS = {
-  backend: {
-    NODE_ENV: 'Application environment (development, production, test)',
-    PORT: 'Port number for the backend server',
-    DATABASE_URL: 'PostgreSQL database connection string',
-    SESSION_SECRET: 'Secret key for session encryption (min 32 characters)',
-    OIDC_ISSUER: 'OpenID Connect issuer URL',
-    OIDC_CLIENT_ID: 'OpenID Connect client ID',
-    OIDC_CLIENT_SECRET: 'OpenID Connect client secret',
-    OIDC_REDIRECT_URL: 'OpenID Connect redirect URL',
-    ADMIN_EMAILS: 'Comma-separated list of admin email addresses',
-    CORS_ORIGIN: 'CORS origin URL for frontend',
-    ENABLE_CSRF: 'Enable CSRF protection (true/false)',
-    EMAIL_FROM: 'Email address for sending emails',
-    EMAIL_FROM_NAME: 'Display name for email sender',
-    EMAIL_SMTP_HOST: 'SMTP server hostname',
-    EMAIL_SMTP_PORT: 'SMTP server port',
-    EMAIL_SMTP_USER: 'SMTP username',
-    EMAIL_SMTP_PASS: 'SMTP password',
-    GOOGLE_SERVICE_ACCOUNT_EMAIL: 'Google service account email',
-    GOOGLE_PRIVATE_KEY: 'Google service account private key',
-    GOOGLE_CALENDAR_ID: 'Google Calendar ID',
-    GOOGLE_OAUTH_CLIENT_ID: 'Google OAuth client ID for user calendar integration',
-    GOOGLE_OAUTH_CLIENT_SECRET: 'Google OAuth client secret for user calendar integration',
-    GOOGLE_OAUTH_REDIRECT_URI: 'Google OAuth redirect URI for calendar callback',
-    FRONTEND_URL: 'Frontend application URL',
-    FIRSTHAND_INTEGRATION_SECRET: 'HMAC-SHA256 secret referenced by the internalised runtime\'s integration-auth helpers. Minimum 32 characters.',
-    FIRSTHAND_S3_BUCKET: 'S3 bucket for internalised FirstHand recording storage (e.g. firsthand-{env}), reached via the backend IRSA role. Unset disables S3 storage.',
-    FIRSTHAND_S3_REGION: 'AWS region for the FirstHand recording bucket. Falls back to AWS_REGION, then us-east-1.',
-  },
-  frontend: {
-    VITE_API_URL: 'Backend API URL',
-    VITE_API_BASE_URL: 'Backend API base URL (optional)',
-    VITE_AUTH_BASE_URL: 'Backend auth base URL (optional)',
-    VITE_ENVIRONMENT: 'Frontend environment (development, production, test)',
-    VITE_ENABLE_ANALYTICS: 'Enable analytics tracking (true/false)',
-    VITE_ENABLE_DEBUG: 'Enable debug mode (true/false)',
-  },
-};
-
-// ============================================================================
-// ENVIRONMENT EXAMPLES
-// ============================================================================
-
-/**
- * Example environment files
- */
-export const ENVIRONMENT_EXAMPLES = {
-  backend: {
-    development: `NODE_ENV=development
-PORT=3001
-DATABASE_URL=postgresql://user:pass@localhost:5432/adaptalabs_dev
-SESSION_SECRET=your_random_session_secret_here_at_least_32_chars
-OIDC_ISSUER=https://your-idp.com
-OIDC_CLIENT_ID=your_client_id
-OIDC_CLIENT_SECRET=your_client_secret
-OIDC_REDIRECT_URL=http://localhost:3001/auth/callback
-ADMIN_EMAILS=admin1@company.com,admin2@company.com
-CORS_ORIGIN=http://localhost:3000
-ENABLE_CSRF=false
-FRONTEND_URL=http://localhost:3000
-
-# FirstHand integration secret (used by the internalised runtime's integration-auth)
-FIRSTHAND_INTEGRATION_SECRET=your_shared_firsthand_secret_here_at_least_32_chars`,
-
-    production: `NODE_ENV=production
-PORT=3001
-DATABASE_URL=postgresql://user:pass@prod-db:5432/adaptalabs
-SESSION_SECRET=your_production_session_secret_at_least_32_chars
-OIDC_ISSUER=https://your-idp.com
-OIDC_CLIENT_ID=your_client_id
-OIDC_CLIENT_SECRET=your_client_secret
-OIDC_REDIRECT_URL=https://api.yourdomain.com/auth/callback
-ADMIN_EMAILS=admin1@company.com,admin2@company.com
-CORS_ORIGIN=https://yourdomain.com
-ENABLE_CSRF=true
-EMAIL_FROM=noreply@yourdomain.com
-EMAIL_FROM_NAME=Adaptalabs Research Platform
-EMAIL_SMTP_HOST=smtp.yourdomain.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USER=noreply@yourdomain.com
-EMAIL_SMTP_PASS=your_smtp_password
-GOOGLE_SERVICE_ACCOUNT_EMAIL=your-service-account@project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\\nYour private key here\\n-----END PRIVATE KEY-----"
-GOOGLE_CALENDAR_ID=primary
-GOOGLE_OAUTH_CLIENT_ID=your_oauth_client_id
-GOOGLE_OAUTH_CLIENT_SECRET=your_oauth_client_secret
-GOOGLE_OAUTH_REDIRECT_URI=https://api.yourdomain.com/api/calendar/auth/callback
-FRONTEND_URL=https://yourdomain.com
-
-# FirstHand integration secret (used by the internalised runtime's integration-auth)
-FIRSTHAND_INTEGRATION_SECRET=your_production_shared_firsthand_secret_min_32_chars`,
-  },
-
-  frontend: {
-    development: `VITE_API_URL=http://localhost:3001
-VITE_ENVIRONMENT=development
-VITE_ENABLE_DEBUG=true`,
-
-    production: `VITE_API_URL=https://api.yourdomain.com
-VITE_ENVIRONMENT=production
-VITE_ENABLE_ANALYTICS=true`,
-  },
 };

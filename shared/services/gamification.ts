@@ -97,16 +97,91 @@ export interface LeaderboardEntry {
  * their own rows - data they own and are entitled to - which is the case the
  * repo's refuse-rather-than-truncate rule exists for.
  *
- * `has_more` does not make the older rows REACHABLE; it makes their existence
- * visible. Reaching them needs a cursor, which is the follow-up.
+ * `next_before` CLOSES THE OTHER HALF (cto/AdaptaLabs#47). `has_more` made the
+ * older rows VISIBLE and left them unreachable - a caller could be told history
+ * continued and still have no way to ask for it. Pagination that lies is worse
+ * than pagination that stops, and pagination that points at a door it will not
+ * open is only slightly better.
  *
- * ponytail: a boolean, not a cursor
- *   -> upgrade to a keyset cursor on (created_at, id) when a paginated
- *      points-history view exists; none does today
+ * IT IS PRODUCED BY THE SERVER AND ECHOED BACK VERBATIM, and that is not
+ * decoration. `created_at` is `TIMESTAMPTZ`, which Postgres stores to the
+ * MICROSECOND, and `pg` parses it into a JavaScript `Date`, which holds
+ * MILLISECONDS. A caller building its own cursor out of the `created_at` it sees
+ * in `transactions` would therefore round 12:00:00.123456 down to 12:00:00.123
+ * and skip every row in between on the next page - the precise defect keyset
+ * pagination is chosen to avoid. `next_before` carries the microseconds because
+ * the query renders it with `to_char` rather than through the Date round trip.
+ *
+ * `null` when there is nothing after this page, so `has_more === false` and
+ * `next_before === null` cannot disagree.
  */
 export interface PointsHistoryPage {
   transactions: PointsTransaction[];
   has_more: boolean;
+  next_before: string | null;
+}
+
+/**
+ * A POSITION IN THE LEDGER, as `(created_at, id)`.
+ *
+ * THE `id` TIEBREAK IS THE WHOLE POINT and not a formality: `created_at` is not
+ * unique, and two transactions awarded by the same statement share a timestamp
+ * to the microsecond. A page boundary landing between them drops one for ever
+ * with `created_at` alone, and nothing anywhere reports it.
+ *
+ * KEYSET RATHER THAN `OFFSET`, because this is an append-only time-ordered
+ * ledger and `OFFSET` is wrong for it twice over: it re-scans everything it
+ * skips, so deep pages get linearly slower, and it SKIPS OR REPEATS rows when a
+ * transaction lands between two requests - which on this table it will, since
+ * points are awarded while a user reads their own history.
+ *
+ * `created_at` is the exact text the server emitted in `next_before`, parsed
+ * back by Postgres with `::timestamptz`. The route validates its shape before it
+ * ever reaches SQL.
+ */
+export interface PointsHistoryCursor {
+  created_at: string;
+  id: string;
+}
+
+/**
+ * THE PARSER LIVES BESIDE THE PRODUCER, not at the route.
+ *
+ * `next_before` is built four hundred lines below by `getPointsHistory`, and the
+ * only invariant that matters is that THIS FUNCTION ACCEPTS WHAT THAT ONE EMITS.
+ * Put the two in different modules and the format has two owners, which is how a
+ * timestamp format drifts by one digit and every second page comes back empty.
+ * `backend/src/routes/gamification.ts` wraps it for the query-string shapes
+ * express can hand over - an absent parameter, or an array from a repeat - and
+ * that wrapper is where the 400 is decided.
+ *
+ * SIX FRACTIONAL DIGITS, optional. `created_at` is `TIMESTAMPTZ`, Postgres keeps
+ * MICROSECONDS, and the round trip through `pg` into a JavaScript `Date` loses
+ * three of them - so a cursor rebuilt from a transaction's own `created_at`
+ * rounds down and skips every row in the gap. That is the exact failure keyset
+ * pagination is chosen to avoid, so the format has to carry what the column
+ * holds. A whole-second cursor is still a legitimate position and is accepted.
+ *
+ * `null` for anything else, because both halves reach SQL as a cast -
+ * `::timestamptz` and `::uuid` - where an unparseable value is SQLSTATE 22007 or
+ * 22P02 rather than an empty page.
+ */
+const CURSOR_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
+const CURSOR_UUID = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+export function parsePointsHistoryCursor(raw: string): PointsHistoryCursor | null {
+  // The timestamp half carries no comma, so the FIRST comma is the separator.
+  // Splitting on all of them would take `a,b,c` apart into three pieces and read
+  // the middle one as a uuid, which is a misreading rather than a refusal.
+  const separator = raw.indexOf(',');
+  if (separator === -1) return null;
+
+  const created_at = raw.slice(0, separator);
+  const id = raw.slice(separator + 1);
+
+  if (!CURSOR_TIMESTAMP.test(created_at) || !CURSOR_UUID.test(id)) return null;
+
+  return { created_at, id };
 }
 
 // AdaptaBits configuration
@@ -489,20 +564,71 @@ export async function resetMonthlyPoints(pool: Pool): Promise<void> {
  *
  * A COUNT(*) WOULD ALSO WORK and is a second query over the same index for a
  * boolean. One row is cheaper and cannot disagree with the page it describes.
+ *
+ * `before` MAKES THOSE OLDER ROWS REACHABLE (cto/AdaptaLabs#47), which `has_more`
+ * only promised. It is a keyset position, not an offset - see PointsHistoryCursor
+ * for why that choice is forced rather than preferred.
+ *
+ * THE `WHERE` IS ONE QUERY, NOT TWO. `$3::timestamptz IS NULL OR ...` keeps the
+ * unpaged and paged reads on the same statement, so a change to the ordering,
+ * the scoping predicate or the probe row cannot reach one and miss the other -
+ * which is how #17's cap reached one leaderboard and not its twin. A row
+ * comparison with a NULL cursor evaluates to NULL, and `TRUE OR NULL` is TRUE,
+ * so the first page is unaffected whatever Postgres decides about evaluation
+ * order.
+ *
+ * `ORDER BY created_at DESC, id DESC` MATCHES THE COMPARISON EXACTLY. An order
+ * that does not agree with the keyset predicate is not pagination, it is a
+ * lottery: rows can be skipped or repeated at every boundary. The pre-existing
+ * `ORDER BY created_at DESC` alone was already non-deterministic across equal
+ * timestamps, which no page boundary could see until there was one.
+ *
+ * `AT TIME ZONE 'UTC'` IS NOT DECORATION - DO NOT DELETE IT. `to_char` renders a
+ * TIMESTAMPTZ in the SESSION's `TimeZone`, so without the conversion the cursor
+ * would be a wall-clock reading in whatever zone the connection happened to
+ * carry, labelled `Z` regardless, and fed back into a `$3::timestamptz` that
+ * reads an offsetless value as being in that same session zone. The round trip
+ * then closes only by coincidence, when the session is UTC - which it is in CI
+ * and in every container this repository starts, so nothing would notice.
+ * Measured on a session pinned to Pacific/Kiritimati with the conversion
+ * removed: paging repeated page one until the test's own 50-page bound threw.
+ * `AT TIME ZONE 'UTC'` converts to a plain `timestamp` first, so `to_char` has
+ * no zone left to consult and the rendering is identical everywhere. Pinned by
+ * `renders the same cursor under a non-UTC session TimeZone` and by the canary
+ * entry `points-history-cursor-is-rendered-in-utc`.
  */
-export async function getPointsHistory(pool: Pool, userId: string, limit: number = 20): Promise<PointsHistoryPage> {
+export async function getPointsHistory(
+  pool: Pool,
+  userId: string,
+  limit: number = 20,
+  before?: PointsHistoryCursor | null
+): Promise<PointsHistoryPage> {
   const client = await pool.connect();
   try {
     const result = await client.query(`
-      SELECT * FROM points_transactions
+      SELECT *,
+             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at
+      FROM points_transactions
       WHERE user_id = $1
-      ORDER BY created_at DESC
+        AND ($3::timestamptz IS NULL OR (created_at, id) < ($3::timestamptz, $4::uuid))
+      ORDER BY created_at DESC, id DESC
       LIMIT $2
-    `, [userId, limit + 1]);
+    `, [userId, limit + 1, before?.created_at ?? null, before?.id ?? null]);
+
+    const page = result.rows.slice(0, limit);
+    const has_more = result.rows.length > limit;
+    const last = page[page.length - 1];
 
     return {
-      transactions: result.rows.slice(0, limit),
-      has_more: result.rows.length > limit
+      // `cursor_at` is a rendering of a column the caller already has; it is
+      // stripped so the wire shape stays `PointsTransaction` and the cursor has
+      // exactly one representation, `next_before`.
+      transactions: page.map(({ cursor_at: _cursor_at, ...transaction }) => transaction as PointsTransaction),
+      has_more,
+      // Only when there IS a next page. A cursor handed out at the end of
+      // history invites a request that can only come back empty, and a client
+      // looping until `next_before` is null would never stop.
+      next_before: has_more && last ? `${last.cursor_at},${last.id}` : null
     };
   } finally {
     client.release();

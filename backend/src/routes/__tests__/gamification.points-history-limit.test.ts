@@ -18,6 +18,7 @@ jest.mock('../../services/gamification', () => ({
 import gamificationRouter, {
   MAX_POINTS_HISTORY_LIMIT,
   pointsHistoryLimit,
+  pointsHistoryCursor,
 } from '../gamification';
 import { getPointsHistory } from '../../services/gamification';
 import { errorHandler } from '../../utils/errorHandler';
@@ -196,6 +197,157 @@ describe('GET /api/gamification/points-history limit', () => {
   });
 });
 
+/**
+ * `?before=` MAKES THE OLDER ROWS REACHABLE. cto/AdaptaLabs#47.
+ *
+ * #23 gave this route `has_more`, which killed the SILENT truncation - a short
+ * page stopped being indistinguishable from the end of history. It did not make
+ * the rows behind it askable for. A caller could be told their history continued
+ * and have no way to continue it, which is a half-open door: better than a lie,
+ * and still not an answer.
+ *
+ * THIS FILE PROVES THE BOUNDARY, NOT THE PAGING. The service is mocked here, so
+ * the keyset arithmetic - no row skipped, none repeated, equal timestamps
+ * separated by the id tiebreak - is unobservable and is proven against a real
+ * Postgres in services/__tests__/gamification-postgres.test.ts. What is
+ * observable here is what the route does with the string a browser sent, and
+ * that half matters on its own: BOTH halves of the cursor reach SQL as a cast,
+ * `::timestamptz` and `::uuid`, where an unparseable value is SQLSTATE 22007 or
+ * 22P02 - which this route's catch turns into a 500 with the cause only in the
+ * log. That is the same shape as the `?limit=-5` 500 above, one parameter over.
+ */
+describe('GET /api/gamification/points-history cursor', () => {
+  const CURSOR = '2026-08-25T09:41:07.481923Z,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f';
+
+  /** The cursor the route actually asked the service for. */
+  const requestedCursor = () => mockGetPointsHistory.mock.calls[0]?.[2];
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+    mockGetPointsHistory.mockResolvedValue({
+      transactions: [],
+      has_more: false,
+      next_before: null,
+    } as never);
+  });
+
+  // THE CONTROL, and it comes first on purpose: every refusal arm below would
+  // be satisfied by a route that refused every cursor outright.
+  it('passes a well-formed cursor through to the service', async () => {
+    await request(listening(app)).get(`${PATH}?before=${encodeURIComponent(CURSOR)}`).expect(200);
+
+    expect(requestedCursor()).toEqual({
+      created_at: '2026-08-25T09:41:07.481923Z',
+      id: '1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f',
+    });
+  });
+
+  // THE SECOND CONTROL. The first page must still work, and must be
+  // distinguishable from a paged one - a route that always passed a cursor
+  // would satisfy the arm above.
+  it('asks for the first page when no cursor is sent', async () => {
+    await request(listening(app)).get(PATH).expect(200);
+
+    expect(requestedCursor()).toBeUndefined();
+  });
+
+  it.each([
+    ['no separator at all', 'not-a-cursor'],
+    ['an unparseable timestamp half', 'yesterday,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f'],
+    ['a malformed uuid half', '2026-08-25T09:41:07.481923Z,not-a-uuid'],
+    ['an empty uuid half', '2026-08-25T09:41:07.481923Z,'],
+    ['an empty timestamp half', ',1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f'],
+    ['a SQL fragment where the uuid goes', "2026-08-25T09:41:07Z,1' OR '1'='1"],
+    ['a date with no time', '2026-08-25,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f'],
+  ])('refuses a cursor with %s rather than sending it to Postgres', async (_shape, cursor) => {
+    await request(listening(app)).get(`${PATH}?before=${encodeURIComponent(cursor)}`).expect(400);
+
+    // The refusal is worth nothing if the query ran anyway.
+    expect(mockGetPointsHistory).not.toHaveBeenCalled();
+  });
+
+  // The disposition `parseLimit` settled for this file, applied to the new
+  // parameter rather than rediscovered later: a repeated parameter arrives as
+  // an ARRAY, and taking the first or joining them answers a question nobody
+  // asked. `GET /api/opportunities` refuses the same shape for the same reason.
+  it('refuses a repeated before rather than coercing the array', async () => {
+    await request(listening(app))
+      .get(`${PATH}?before=${encodeURIComponent(CURSOR)}&before=${encodeURIComponent(CURSOR)}`)
+      .expect(400);
+
+    expect(mockGetPointsHistory).not.toHaveBeenCalled();
+  });
+
+  // cto/AdaptaLabs#47's whole point on the wire: `res.json(history)` forwards
+  // the envelope, and dropping `next_before` on the way out would leave the
+  // caller exactly where #23 left them - told there is more, unable to ask.
+  it('carries next_before onto the wire beside has_more', async () => {
+    mockGetPointsHistory.mockResolvedValue({
+      transactions: [{ id: 'txn-1' }],
+      has_more: true,
+      next_before: CURSOR,
+    } as never);
+
+    const response = await request(listening(app)).get(`${PATH}?limit=1`).expect(200);
+
+    expect(response.body.has_more).toBe(true);
+    expect(response.body.next_before).toBe(CURSOR);
+  });
+
+  // THE CONTROL for the arm above. A route echoing a hardcoded cursor would
+  // satisfy it, and a cursor at the end of history invites a request that can
+  // only come back empty - a client looping until it is null would never stop.
+  it('carries a null next_before at the end of history', async () => {
+    mockGetPointsHistory.mockResolvedValue({
+      transactions: [{ id: 'txn-1' }],
+      has_more: false,
+      next_before: null,
+    } as never);
+
+    const response = await request(listening(app)).get(`${PATH}?limit=1`).expect(200);
+
+    expect(response.body.has_more).toBe(false);
+    expect(response.body.next_before).toBeNull();
+  });
+});
+
+describe('pointsHistoryCursor', () => {
+  it('separates absent from unusable, because they are answered differently', () => {
+    // undefined - no cursor asked for, so the first page. null - a cursor this
+    // route will not read, so a 400. Collapsing the two would turn every
+    // malformed cursor into a silent jump back to the top of history, which is
+    // the coercion this repository refuses everywhere else.
+    expect(pointsHistoryCursor(undefined)).toBeUndefined();
+    expect(pointsHistoryCursor('')).toBeNull();
+    expect(pointsHistoryCursor(['a,b', 'c,d'])).toBeNull();
+    expect(pointsHistoryCursor(42)).toBeNull();
+  });
+
+  it('accepts the microsecond precision the server actually emits', () => {
+    // Six fractional digits, because `created_at` is TIMESTAMPTZ and Postgres
+    // keeps microseconds. A cursor rounded to the millisecond skips every row
+    // in between, which is the defect keyset pagination exists to avoid.
+    expect(pointsHistoryCursor('2026-08-25T09:41:07.481923Z,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f'))
+      .toEqual({
+        created_at: '2026-08-25T09:41:07.481923Z',
+        id: '1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f',
+      });
+
+    // A hand-written whole-second position is a legitimate place in the ledger
+    // even though it is not what the server hands out.
+    expect(pointsHistoryCursor('2026-08-25T09:41:07Z,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f'))
+      .not.toBeNull();
+  });
+
+  it('splits on the FIRST comma, so a comma in the id half cannot be misread', () => {
+    // The timestamp half carries no comma. Splitting on all of them would take
+    // `a,b,c` apart into three pieces and read the middle one as a uuid, which
+    // is a misreading rather than a refusal.
+    expect(pointsHistoryCursor('2026-08-25T09:41:07Z,1f5c9e2a-4b3d-4c8e-9f01-2a3b4c5d6e7f,extra'))
+      .toBeNull();
+  });
+});
+
 describe('pointsHistoryLimit', () => {
   it('holds the ceiling at the number that was decided', () => {
     expect(MAX_POINTS_HISTORY_LIMIT).toBe(100);
@@ -286,7 +438,7 @@ describe('every limit in routes/gamification.ts is bounded', () => {
    * gate named. Pinning the set means a new parser has to be added here
    * deliberately, and the canary entries pin that each one actually clamps.
    */
-  const BOUNDING_PARSERS = ['leaderboardLimit', 'pointsHistoryLimit'];
+  const BOUNDING_PARSERS = ['leaderboardLimit', 'pointsHistoryLimit', 'pointsHistoryCursor'];
 
   const isBounded = (line: string) =>
     BOUNDING_PARSERS.some((parser) => new RegExp(`\\b${parser}\\(req\\.query`).test(line));
@@ -346,7 +498,16 @@ describe('every limit in routes/gamification.ts is bounded', () => {
     // The gap a gate named: `isBounded` checks a name, and a `fooLimit` that
     // returned its input would satisfy a looser check. The set is pinned.
     expect(isBounded('  const limit = fooLimit(req.query.limit);')).toBe(false);
-    expect(BOUNDING_PARSERS).toEqual(['leaderboardLimit', 'pointsHistoryLimit']);
+    // `pointsHistoryCursor` joined the set with cto/AdaptaLabs#47 - a
+    // DELIBERATE edit, which is exactly what this list is for. It bounds a
+    // shape rather than a magnitude: an unparseable timestamp or uuid reaching
+    // `::timestamptz`/`::uuid` is a 500, so refusing at the boundary is the
+    // same job as refusing an over-large number.
+    expect(BOUNDING_PARSERS).toEqual([
+      'leaderboardLimit',
+      'pointsHistoryLimit',
+      'pointsHistoryCursor',
+    ]);
   });
 
   it('covers every read shape the scan claims to handle', () => {
@@ -360,8 +521,10 @@ describe('every limit in routes/gamification.ts is bounded', () => {
 
   it('finds the query reads it is supposed to be checking', () => {
     // A literal, so that deleting a route's limit handling - or adding a
-    // route the assertions below never reach - shows up here.
-    expect(readsQueryParam(source)).toHaveLength(3);
+    // route the assertions below never reach - shows up here. 4 since
+    // cto/AdaptaLabs#47 added `?before=` to points-history; the fourth read is
+    // `pointsHistoryCursor(req.query.before)`.
+    expect(readsQueryParam(source)).toHaveLength(4);
   });
 
   it('routes every query read through a bounded parser', () => {
@@ -384,8 +547,11 @@ describe('every limit in routes/gamification.ts is bounded', () => {
 
     expect(calls).toHaveLength(3);
 
-    // Every call site's final argument is the identifier `limit`...
-    expect(calls.filter((line) => !/,?\s*limit\)/.test(line))).toEqual([]);
+    // Every call site's row-count argument is the identifier `limit`, and the
+    // only thing permitted after it is the keyset cursor `before` - which is
+    // itself bounded by `pointsHistoryCursor` above (cto/AdaptaLabs#47). An
+    // arbitrary third argument still fails here.
+    expect(calls.filter((line) => !/\blimit(,\s*before)?\)/.test(line))).toEqual([]);
 
     // ...and every `limit` in this file is assigned from a bounding parser.
     const assignments = codeLines(source).filter((line) => /\bconst limit\s*=/.test(line));
