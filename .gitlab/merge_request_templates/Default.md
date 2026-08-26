@@ -2,9 +2,13 @@
 
 <!-- 10 lines max. A reviewer must be able to approve from this block alone. -->
 
+Closes #NN
+<!-- The Closes line stays OUTSIDE the table: a pipe between "Closes" and "#NN"
+     breaks GitLab's closing-pattern regex, and the issue silently stays open.
+     Found the hard way on !276/#77. -->
+
 | | |
 |---|---|
-| Closes | #NN |
 | Change | one sentence |
 | Commit type | `fix:` / `feat:` / `chore:` - and why, per ADR-0002 (deploy effect) |
 | Backend jest | N passed / N suites (baseline: N / N) |
