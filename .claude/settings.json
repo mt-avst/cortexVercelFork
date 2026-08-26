@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run test:*)",
+      "Bash(npx vitest run:*)",
+      "Bash(npx jest:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git grep:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "mcp__gitlab__whoami",
+      "mcp__gitlab__get_project",
+      "mcp__gitlab__get_issue",
+      "mcp__gitlab__list_issues",
+      "mcp__gitlab__list_issue_discussions",
+      "mcp__gitlab__list_labels",
+      "mcp__gitlab__get_merge_request",
+      "mcp__gitlab__list_merge_requests",
+      "mcp__gitlab__get_merge_request_diffs",
+      "mcp__gitlab__list_merge_request_pipelines",
+      "mcp__gitlab__list_commits",
+      "mcp__gitlab__get_commit"
+    ]
+  }
+}

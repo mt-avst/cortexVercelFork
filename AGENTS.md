@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Mirrored in [CLAUDE.md](./CLAUDE.md) for Claude Code sessions - change both together.
+[CLAUDE.md](./CLAUDE.md) imports this file - edit here, never there.
 
 ## Agent skills
 
@@ -35,3 +35,22 @@ Reference the issue from the comment once it exists. `/ponytail-debt` harvests e
 comment regardless, so the comment is the ledger and the issue is the alarm.
 
 This is the threshold `~/.claude/rules/common/code-review.md` asks each repo to set.
+
+## Sweeps
+
+String sweeps are case-insensitive by default (`grep -ri`), across every file type with no
+path filter. A case-sensitive sweep missed a `/recorded study/i` regex and cost two full
+132-second suite runs. State a sweep's actual scope beside any "no references" conclusion -
+an empty result from a too-narrow search is indistinguishable from a correct one.
+
+## CI waits
+
+The `mutation-canary` job takes roughly 20-25 minutes and runs only on MRs touching
+`backend/`, `shared/`, `scripts/`, the root lockfile or `.gitlab-ci.yml`; frontend-only and
+docs-only MRs skip it, so their MR pipelines finish in a few minutes. Poll to match the
+job's known duration rather than sleeping on a fixed long timer - ten minutes of dead air
+past a green result is the recorded cost of guessing.
+
+Never scope the canary below the full manifest: a filtered run is structurally blind to a
+pre-existing entry the same diff broke (that reddened main once already). The path gate
+above is job-level and all-or-nothing, which is the only safe shape.

@@ -176,7 +176,23 @@ lint:
   image: registry.hub.docker.com/library/node:20.20.2-alpine3.22
   needs: []
   interruptible: true
+  # Cache npm's DOWNLOAD store, not node_modules: `npm ci` deletes node_modules
+  # by design, so caching that would be a no-op, while the store keeps every
+  # tarball so repeat installs verify checksums instead of refetching. The dir
+  # sits inside the project (GitLab caches cannot leave it) and is gitignored,
+  # so the canary's clean-tree guard - which decides with `git status` - never
+  # sees it. key:files takes at most two files (a GitLab limit); the frontend
+  # lockfile not being in the key only means a frontend bump reuses the old
+  # store and adds to it, which is correct for a content-addressed store.
+  cache:
+    key:
+      files:
+        - package-lock.json
+        - backend/package-lock.json
+    paths:
+      - .npm/
   variables:
+    npm_config_cache: "$CI_PROJECT_DIR/.npm"
     # The backend takes its connection string from the first of these four that
     # is set - see backend/src/config/databaseUrl.ts, where reading DATABASE_URL
     # alone is recorded as a proven landmine. Blank all four: with any of them
@@ -423,6 +439,30 @@ test-scripts:
 # test-backend-db above.
 mutation-canary:
   extends: .test-base
+  # THE PATH GATE. This job is the expensive one (~20 min: two npm ci, a
+  # Postgres service, the full manifest) and every anchor in the manifest lives
+  # under backend/ or shared/ (140 + 11 of 151 entries as written - grep the
+  # manifest rather than trusting this comment). A frontend-only or docs-only
+  # MR cannot change a mutation outcome, so it skips the WHOLE job. Job-level
+  # and all-or-nothing on purpose: never scope the run below the full manifest
+  # instead - a filtered run is structurally blind to a pre-existing entry the
+  # same diff broke, which is how !267 reddened main, and why the runner
+  # refuses a filter flag (#53). On $PROD_REF the job stays unconditional:
+  # `changes` is only well-defined against an MR diff, and main gets the full
+  # check regardless.
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        paths:
+          - "backend/**/*"
+          - "shared/**/*"
+          - "scripts/**/*"
+          - "package.json"
+          - "package-lock.json"
+          - ".gitlab-ci.yml"
+    - if: '$CI_COMMIT_REF_NAME =~ $PROD_REF'
   services:
     - name: registry.hub.docker.com/library/postgres:17-alpine
       alias: postgres
