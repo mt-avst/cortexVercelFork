@@ -279,7 +279,11 @@ describe('Error Handler', () => {
      *
      * Nothing in this application set `statement_timeout` until the FirstHand
      * runtime pool began issuing one per checkout, so 57014 previously could
-     * not happen. Unmapped it fell to the default arm and answered 500
+     * not happen. It is now reachable from EVERY route rather than only the
+     * FirstHand ones: cto/AdaptaLabs#40 put a 120s server-side bound on the
+     * shared backend pool too (config/index.ts), which makes this mapping the
+     * difference between a retryable 503 and an opaque 500 on the whole surface.
+     * Unmapped it fell to the default arm and answered 500
      * "Database operation failed" - which on the participant answer-save path
      * tells somebody mid-survey that the server is broken, with no reason to
      * retry, on the one path where not retrying loses answers they have

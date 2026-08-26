@@ -187,52 +187,105 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
     throw new ValidationError('Validation failed', validationErrors);
   }
   
-  // Check for overlapping sessions
-  for (const session of sessions) {
-    const startTime = new Date(session.start_time);
-    const endTime = new Date(session.end_time);
-    const hasOverlap = await checkSessionOverlaps(opportunity_id, startTime, endTime);
-    if (hasOverlap) {
-      throw new ConflictError(`Session overlaps with existing sessions: ${formatTime(session.start_time)} - ${formatTime(session.end_time)}`);
-    }
-  }
-  
-  // Insert sessions into database
+  // ONE TRANSACTION FOR THE WHOLE BATCH (cto/AdaptaLabs#42).
+  //
+  // #22 capped this array at MAX_TIME_SLOTS_PER_REQUEST, which BOUNDS the work.
+  // It does not make it ATOMIC, and those are different properties. Before this,
+  // the checks and the inserts each ran on their own pooled connection with no
+  // BEGIN, so a failure at element k - a constraint violation, a statement
+  // timeout, a dropped connection, an aborted request - left elements 0..k-1
+  // committed and the caller holding an error that names none of them. A retry
+  // of the same payload then overlaps the rows the failed attempt just created
+  // and fails looking like the caller's fault.
+  //
+  // That is the shape #22's own reasoning refused elsewhere in the same MR: the
+  // cap was chosen as one constant refusing the WHOLE batch precisely because
+  // "partial creation leaves a half-populated calendar with nothing saying which
+  // half". The refusal path honoured that; the success path did not.
+  //
+  // THE CHECK AND THE INSERT ARE INTERLEAVED ON ONE CLIENT, deliberately. Run as
+  // two phases - every check, then every insert - the checks cannot see rows the
+  // batch itself is about to add, so a request whose OWN slots overlap each other
+  // was accepted and committed. Interleaved, element k's check sees elements
+  // 0..k-1 inside the transaction and refuses with the same 409 as any other
+  // overlap. This is a deliberate narrowing and it converges on the sibling
+  // route: POST /api/opportunities/:id/sessions already refuses an intra-batch
+  // overlap (with its own O(N^2) in-memory scan).
+  //
+  // "CONVERGES" IS PARTIAL, precisely. The sibling checks the batch against
+  // ITSELF only, in memory, and never against rows already in the table; this
+  // one checks against both, because the query it runs sees committed rows and
+  // the transaction's own. So the two now agree on intra-batch overlap and
+  // still differ on pre-existing overlap. Do not read the sentence above as
+  // "the two routes behave the same".
+  //
+  // AND THE MOCK BRANCH ABOVE HAS NO OVERLAP CHECK AT ALL. With no database,
+  // `addMockSessions` takes whatever it is given, so an overlapping batch is
+  // still a 201 there. Pre-existing and dev-only - `isDatabaseAvailable()` is
+  // false only when there is no database - but this change widens the gap
+  // between the two branches rather than narrowing it, so it is written down
+  // here rather than left for someone to rediscover from a demo.
+  const client = await pool.connect();
   const createdSessions = [];
-  for (const session of sessions) {
-    const result = await pool.query(
-      `INSERT INTO sessions (
-        opportunity_id,
-        start_time,
-        end_time,
-        capacity,
-        booked_count,
-        location_or_meet_link_optional
-      ) VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *, (capacity - booked_count) as remaining`,
-      [
-        opportunity_id,
-        session.start_time,
-        session.end_time,
-        session.capacity || 1,
-        0, // booked_count starts at 0
-        session.location_or_meet_link_optional || null,
-      ]
-    );
-    
-    const created = result.rows[0];
-    createdSessions.push({
-      ...created,
-      start_time: created.start_time.toISOString(),
-      end_time: created.end_time.toISOString(),
-      created_at: created.created_at.toISOString(),
-      updated_at: created.updated_at.toISOString(),
-    });
+  try {
+    await client.query('BEGIN');
+
+    for (const session of sessions) {
+      const startTime = new Date(session.start_time);
+      const endTime = new Date(session.end_time);
+      // Same client as the inserts, so it reads the transaction's own rows.
+      const hasOverlap = await checkSessionOverlaps(opportunity_id, startTime, endTime, undefined, client);
+      if (hasOverlap) {
+        throw new ConflictError(`Session overlaps with existing sessions: ${formatTime(session.start_time)} - ${formatTime(session.end_time)}`);
+      }
+
+      const result = await client.query(
+        `INSERT INTO sessions (
+          opportunity_id,
+          start_time,
+          end_time,
+          capacity,
+          booked_count,
+          location_or_meet_link_optional
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING *, (capacity - booked_count) as remaining`,
+        [
+          opportunity_id,
+          session.start_time,
+          session.end_time,
+          session.capacity || 1,
+          0, // booked_count starts at 0
+          session.location_or_meet_link_optional || null,
+        ]
+      );
+
+      const created = result.rows[0];
+      createdSessions.push({
+        ...created,
+        start_time: created.start_time.toISOString(),
+        end_time: created.end_time.toISOString(),
+        created_at: created.created_at.toISOString(),
+        updated_at: created.updated_at.toISOString(),
+      });
+    }
+
+    await client.query('COMMIT');
+  } catch (error) {
+    // Never let a failing ROLLBACK mask the error that caused it. A dropped
+    // connection is one of the failures this transaction exists to survive, and
+    // it makes the ROLLBACK throw as well - which would replace a 409 or a
+    // constraint error with a connection error and lose the real cause.
+    await client.query('ROLLBACK').catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  
-  // Auto-close opportunity if needed
+
+  // Outside the transaction on purpose: it is a separate, idempotent write on
+  // the opportunity, and holding the batch's transaction open across it would
+  // widen the window this fix exists to close.
   await autoCloseOpportunityIfNeeded(opportunity_id);
-  
+
   res.status(201).json(createdSessions);
 }));
 
