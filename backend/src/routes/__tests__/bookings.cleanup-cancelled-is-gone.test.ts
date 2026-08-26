@@ -188,9 +188,17 @@ describe('bookings cleanup-cancelled is gone', () => {
     expect(res.body.bookings).toHaveLength(1);
     expect(res.body.bookings[0].status).toBe('cancelled');
 
-    const [sql, params] = mockQuery.mock.calls[0] as [string, string[]];
+    const [sql, params] = mockQuery.mock.calls[0] as [string, unknown[]];
     expect(sql).toContain('WHERE b.user_id = $1');
-    expect(params).toEqual([CALLER_ID]);
+    // THE OWNER SCOPE IS `$1` AND STILL THE ONLY SCOPE. The three parameters
+    // after it arrived with cto/AdaptaLabs#66, which made this route a keyset
+    // PAGE: `$2` is the page size plus a probe row, `$3`/`$4` are the
+    // `?before=` cursor and are null on the first page. Asserted in full rather
+    // than by index, so a fifth parameter - or the owner id moving out of `$1` -
+    // fails here. The page arithmetic itself is pinned in
+    // bookings.all-is-paged.test.ts, and the real cursor walk in
+    // bookings-all-keyset-postgres.test.ts.
+    expect(params).toEqual([CALLER_ID, 101, null, null]);
   });
 
   it('says nothing about "debug" to the caller, including on the 500 path', async () => {

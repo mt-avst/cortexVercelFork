@@ -1519,5 +1519,67 @@
     "runner": "jest",
     "spec": "src/config/__tests__/environment.test.ts",
     "test": "writes the trimmed origin back, so a padded value cannot reach a redirect"
+  },
+  {
+    "id": "all-bookings-page-reports-has-more-when-there-is-more",
+    "why": "cto/AdaptaLabs#66. `GET /api/bookings/my/bookings/all` was an unbounded read whose whole contract is \"all of them, cancelled ones included\", so a bare LIMIT would have converted it into a SILENTLY TRUNCATED one - the caller cannot tell a complete answer from a clipped one, and had no way to ask for the rest. `has_more` is the half that makes the truncation visible, and hardcoding it `false` is the mutation that reinstates the original defect while leaving the page arithmetic, the ordering and the cursor all intact. The route follows the points-history disposition (report `has_more` where the rows are the caller's OWN) rather than the leaderboard clamp or `GET /api/opportunities`' 413, so this is the same guard as `points-history-page-reaches-the-wire` on the sibling surface.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      has_more: hasMore,",
+    "mutation": "      has_more: false,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.all-is-paged.test.ts",
+    "test": "reports has_more with a cursor when the probe row comes back"
+  },
+  {
+    "id": "all-bookings-page-reports-has-more-false-when-there-is-not",
+    "why": "THE CONTROL ON THE ENTRY ABOVE, and it is not a duplicate of it: `has_more: true` hardcoded satisfies every truncation assertion in the file, and a `has_more` that is ALWAYS TRUE is as useless as one that is always absent - it just fails in the other direction, telling a caller their history continues when it has ended and handing them a cursor that can only come back empty. Both arms are pinned because exactly one arm is what a `has_more` regression looks like. cto/AdaptaLabs#66; the same both-arms rule is written out at gamification.points-history-limit.test.ts:175-177.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      has_more: hasMore,",
+    "mutation": "      has_more: true,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.all-is-paged.test.ts",
+    "test": "reports has_more false and no cursor on a short page"
+  },
+  {
+    "id": "all-bookings-keyset-keeps-its-id-tiebreak",
+    "why": "cto/AdaptaLabs#66, and the same defect `points-history-keyset-keeps-its-id-tiebreak` pins on the ledger. `bookings.created_at` is not unique - two bookings written by one request share it to the microsecond - so a page boundary falling between two equal timestamps DROPS ONE FOR EVER under `created_at` alone, and nothing anywhere reports it: the response is a well-formed page of the right length with a row missing. Unobservable against the mocked pool jest gives this route, and unobservable against distinct timestamps, which is why the named test seeds the tie ON the first page boundary. The mutation is the shape that keeps `$4` bound so it is a real comparison change rather than a broken statement.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "        AND ($3::timestamptz IS NULL OR (b.created_at, b.id) < ($3::timestamptz, $4::uuid))",
+    "mutation": "        AND ($3::timestamptz IS NULL OR (b.created_at < $3::timestamptz AND $4::uuid IS NOT NULL))",
+    "runner": "vitest",
+    "needsDatabase": true,
+    "spec": "src/routes/__tests__/bookings-all-keyset-postgres.test.ts",
+    "test": "returns both of two bookings that share a created_at exactly once, across a page boundary"
+  },
+  {
+    "id": "all-bookings-asks-for-one-row-more-than-it-returns",
+    "why": "cto/AdaptaLabs#66. Without the `+ 1` probe row, a FULL PAGE and the EXACT END OF HISTORY are the same response, so `has_more` can only be derived from `rows.length === ALL_BOOKINGS_PAGE_SIZE` - which is wrong for the caller who has exactly a page of bookings, and wrong in the direction that INVENTS rows that do not exist and hands out a cursor to reach them. The same line and the same mutation as `points-history-asks-for-one-row-more-than-it-returns` and `LIMIT MAX + 1`, one of the mutations that survived 824 jest and 602 vitest tests on !210.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    `, [userId, ALL_BOOKINGS_PAGE_SIZE + 1, before?.created_at ?? null, before?.id ?? null]);",
+    "mutation": "    `, [userId, ALL_BOOKINGS_PAGE_SIZE, before?.created_at ?? null, before?.id ?? null]);",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.all-is-paged.test.ts",
+    "test": "asks the database for one row more than a page, and for no more than that"
+  },
+  {
+    "id": "all-bookings-page-size-is-the-number-that-was-decided",
+    "why": "cto/AdaptaLabs#66. The page size is a POLICY NUMBER - 100, chosen because this is the flat \"everything I have ever booked\" view rather than a scrolling feed, so one page answers every realistic history in one request while still refusing to grow without limit. A test that derived its expectation from the constant could not see the constant change; three mutations survived exactly that way in one session here, including one that widened a concurrency cap. The named test asserts the LITERAL, so widening the page silently fails by name.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "export const ALL_BOOKINGS_PAGE_SIZE = 100;",
+    "mutation": "export const ALL_BOOKINGS_PAGE_SIZE = 500;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.all-is-paged.test.ts",
+    "test": "holds the page size at the number that was decided"
+  },
+  {
+    "id": "all-bookings-cursor-is-rendered-in-utc",
+    "why": "cto/AdaptaLabs#66, carrying over the finding `points-history-cursor-is-rendered-in-utc` recorded on #47. `to_char` renders a TIMESTAMPTZ in the SESSION's TimeZone, so without the conversion the cursor is a wall-clock reading in whatever zone the connection happens to carry, labelled `Z` regardless, and fed back into a `$3::timestamptz` that reads a `Z` suffix as UTC. Under a UTC session - CI, and every container this repo starts - the round trip closes by coincidence and nothing notices. The named test therefore runs the whole route suite against a database whose TimeZone is Pacific/Kiritimati (+14), with a control asserting through the APP POOL that the zone really applied; under the mutation the cursor is fourteen hours ahead of the row it describes and the walk repeats its first page until the bounded loop fails by name rather than hanging.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "             to_char(b.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS cursor_at",
+    "mutation": "             to_char(b.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS cursor_at",
+    "runner": "vitest",
+    "needsDatabase": true,
+    "spec": "src/routes/__tests__/bookings-all-keyset-postgres.test.ts",
+    "test": "walks the whole booking history with the cursor, with no duplicates and no gaps"
   }
 ]
