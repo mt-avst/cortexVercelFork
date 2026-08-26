@@ -27,7 +27,17 @@ process.env.SESSION_SECRET ||= 'jest-local-test-constant-not-a-real-secret'; // 
 // unclosed server cannot leave a jest worker hanging.
 import { closeListeningServers } from './helpers/listening';
 
+// supertest opens a fresh TCP connection for every request unless it is given
+// a pooling agent, and a full run of this suite parks ~2,200 sockets in
+// TIME_WAIT because of it (cto/AdaptaLabs#44). Installed globally for the same
+// reason the close above is: so no test file has to remember.
+import { destroyPooledTestAgent, installPooledTestAgent } from './helpers/pooled-agent';
+
+installPooledTestAgent();
+
 afterAll(async () => {
+  // Client first, then servers - see `destroyPooledTestAgent`.
+  destroyPooledTestAgent();
   await closeListeningServers();
 });
 

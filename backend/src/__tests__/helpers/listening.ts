@@ -49,6 +49,26 @@ export function listening(app: unknown): Server {
   }
 
   const server = createServer(app as RequestListener).listen(0);
+  // THE OTHER HALF OF THE POOLING, and without it the pooling is a NET LOSS.
+  //
+  // `helpers/pooled-agent.ts` gives the test client a keep-alive agent, so a
+  // socket is held open between requests instead of one being opened per
+  // request. Node's server closes an idle keep-alive connection after
+  // `keepAliveTimeout`, which defaults to 5000ms - and a client that reuses a
+  // socket the server has just closed gets ECONNRESET, which superagent
+  // reports as `socket hang up`. That is the SAME error text as the socket
+  // pressure this whole pair of helpers exists to remove, so it would have
+  // been indistinguishable from the flake it was meant to fix.
+  //
+  // Measured, interleaved, same pooled agent, one request then 6s idle then
+  // another: default 5000ms server, 5 resets in 6; `keepAliveTimeout = 0`, 0
+  // in 6. Six seconds between two requests to one app is not exotic under the
+  // load this repo's suites run at.
+  //
+  // Zero is safe here in a way it would not be in production: nothing holds
+  // these servers open, because `closeListeningServers` destroys every
+  // connection at the end of each file.
+  server.keepAliveTimeout = 0;
   servers.set(app, server);
   return server;
 }

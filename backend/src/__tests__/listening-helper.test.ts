@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, jest } from '@jest/globals';
 import net from 'node:net';
+import { createServer } from 'node:http';
 import request from 'supertest';
 import express from 'express';
 
@@ -118,6 +119,37 @@ describe('the listening helper', () => {
     // run that never finishes rather than a test that fails - the shape this
     // whole file exists to avoid - so it is asserted directly.
     expect(server.listening).toBe(false);
+  });
+
+  it('disables the server keep-alive timeout, so a pooled socket is never closed under the client', () => {
+    // THE HAZARD THE POOLED AGENT BRINGS WITH IT. Since
+    // `helpers/pooled-agent.ts` the client holds a socket between requests, and
+    // Node's server closes an idle keep-alive connection after
+    // `keepAliveTimeout`. Reusing one the server has just closed is
+    // ECONNRESET, which superagent reports as `socket hang up` - the EXACT
+    // text of the socket-pressure flake both helpers exist to remove, so the
+    // regression would have been indistinguishable from the bug in any log.
+    //
+    // Measured standalone, interleaved, one pooled agent across two servers,
+    // one request then six seconds idle then another:
+    //
+    //   server keepAliveTimeout 5000 (Node's default) : 5 resets in 6
+    //   server keepAliveTimeout 0                     : 0 resets in 6
+    //
+    // Six seconds between two requests to one app is not exotic at the load
+    // these suites run at. Asserted as a literal rather than reproduced,
+    // because the behaviour only appears at the real 5000ms default - a
+    // shorter window makes Node send `Keep-Alive: timeout=0`, which the client
+    // honours by not reusing the socket at all - so a behavioural arm would
+    // cost the whole suite six seconds of sleeping to watch one number.
+    expect(listening(buildApp()).keepAliveTimeout).toBe(0);
+
+    // THE SENTINEL, and it is what stops the line above reading Node's default
+    // back and calling it ours. `server-timeouts.test.ts` was written without
+    // one and a deleted assignment survived, because Node's default happened
+    // to equal the number being pinned. If this ever reaches 0, the assertion
+    // above stops meaning anything and this says so.
+    expect(createServer().keepAliveTimeout).toBe(5000);
   });
 
   it('binds again after a close, rather than handing back a dead server', async () => {
