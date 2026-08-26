@@ -143,10 +143,108 @@ function mountPathOf(layer: Layer): string {
   return literal[1].replace(/\\\//g, '/');
 }
 
-/** The verdict the middleware chain of one route earns. */
+/**
+ * WHO WRITES `req.user` FROM THE SESSION, AND WHO MUST RUN AFTER THEM. #56.
+ *
+ * `requireAuth` and `optionalAuth` COPY `req.session.user` onto `req.user`,
+ * role included - and the role in a session is the one snapshotted at login.
+ * Every other middleware in the vocabulary must run after that copy, but NOT
+ * all for the same reason, and an earlier draft of this docblock gave one
+ * reason for all five. Read off the source rather than remembered:
+ *
+ *   `requireAdmin` (authenticate.ts:83), `requireSuperadmin` (:105),
+ *   `withLiveRole` (:150) and `withLiveRoleIfPresent` (:208) all read
+ *   `req.session?.user` and never `req.user`. They do not NEED `req.user` set;
+ *   they SET it, to the live role read from `users`. A copier after one of
+ *   them therefore CLOBBERS that live role with the login snapshot, re-opening
+ *   #14, #37 or #45 on that route.
+ *
+ *   `bindParticipantSession` is the only one that reads `req.user` outright
+ *   (`middleware/firsthand-session.ts:33`). A copier after IT means `req.user`
+ *   is still unset at the moment it reads.
+ *
+ * Two mechanisms, one rule - the copy comes first - and the throw says which
+ * mechanism it hit, because "overwrites the live role" is simply untrue of the
+ * bind pair and a message that lies is worse than a message that is vague.
+ *
+ * Named rather than anonymous so an ordering failure says WHICH pair.
+ */
+const SESSION_COPIERS = new Map<unknown, string>([
+  [requireAuth, 'requireAuth'],
+  [optionalAuth, 'optionalAuth']
+]);
+
+/** Why a session copy running after this one breaks it. */
+type BreakageMode = 'clobbers-live-role' | 'reads-unset-req-user';
+
+const MUST_RUN_AFTER_THE_COPY = new Map<unknown, [string, BreakageMode]>([
+  [requireAdmin, ['requireAdmin', 'clobbers-live-role']],
+  [requireSuperadmin, ['requireSuperadmin', 'clobbers-live-role']],
+  [withLiveRole, ['withLiveRole', 'clobbers-live-role']],
+  [withLiveRoleIfPresent, ['withLiveRoleIfPresent', 'clobbers-live-role']],
+  [bindParticipantSession, ['bindParticipantSession', 'reads-unset-req-user']]
+]);
+
+const BREAKAGE_REASON: Record<BreakageMode, string> = {
+  'clobbers-live-role': 'so it overwrites the live role with the session copy',
+  'reads-unset-req-user': 'so req.user is still unset when it reads it'
+};
+
+/**
+ * The verdict the middleware chain of one route earns.
+ *
+ * THE PRIMITIVE IS POSITIONAL, not membership (#56). The previous version's
+ * only primitive was `stack.some(...)`, which says a handler is somewhere in
+ * the chain and nothing about where - so reversing the real catalogue chain to
+ * `withLiveRoleIfPresent, optionalAuth` left the verdict reading
+ * `optional-session+live-role` when `optionalAuth` now ran last and overwrote
+ * the live role with the session copy. A verdict that survives its own chain
+ * being reversed is not a verdict, and this file writes verdicts down as fact.
+ *
+ * The ordering check covers every verdict at once rather than per route, and it
+ * refuses rather than downgrading: an out-of-order chain is a bug on the route,
+ * not a weaker regime somebody chose. `refuses a chain whose ORDER defeats the
+ * gate it carries` and its control below prove both directions.
+ *
+ * WHAT "EVERY VERDICT" DOES NOT MEAN, so the claim is not read wider than the
+ * check. It is every verdict in the VOCABULARY THIS FILE KNOWS - the seven
+ * handlers in the two maps above. #56's fourth bullet, the limiter ordering, is
+ * NOT covered: moving `surveyResultsLimiter` ahead of `requireAdmin` on
+ * `GET /api/opportunities/:id/survey-results` leaves this file green, because
+ * `perUserLimiter` and `boundResultsRead` read `req.user?.id` with a
+ * shared-bucket fallback and are not middlewares this file has an identity for.
+ * That reversal is red by name elsewhere - `opportunities.test.ts` and the
+ * results-read gate, measured at five failures - and
+ * `a-limiter-sits-after-the-auth-gate-not-before-it` is its canary.
+ *
+ * ponytail: the vocabulary is a hand-written pair of maps, so a middleware that
+ * reads `req.user` and is not listed is invisible to the ordering check.
+ *   -> a new one is only safe silently if it does not depend on the copy;
+ *      anything that reads `req.user` or writes a live role belongs in
+ *      MUST_RUN_AFTER_THE_COPY, and adding it there is a one-line diff.
+ */
 function verdictOf(stack: HandlerLayer[]): Verdict {
-  const carries = (handler: unknown) =>
-    stack.some((entry) => entry.handle === handler);
+  const handlers = stack.map((entry) => entry.handle);
+  const carries = (handler: unknown) => handlers.includes(handler);
+
+  // LAST copy against FIRST dependant, which is the strictest reading of a
+  // chain that mentions one of these twice - once router-level and once on the
+  // route, say. Absent handlers drop out on the `-1` guards below rather than
+  // by arithmetic.
+  for (const [copier, copierName] of SESSION_COPIERS) {
+    const copiedAt = handlers.lastIndexOf(copier);
+    if (copiedAt === -1) continue;
+
+    for (const [dependant, [dependantName, mode]] of MUST_RUN_AFTER_THE_COPY) {
+      const runsAt = handlers.indexOf(dependant);
+      if (runsAt !== -1 && runsAt < copiedAt) {
+        throw new Error(
+          `chain order: ${copierName} runs after ${dependantName}, ` +
+            BREAKAGE_REASON[mode]
+        );
+      }
+    }
+  }
 
   if (carries(requireSuperadmin)) return 'superadmin';
   if (carries(requireAdmin)) return 'admin';
@@ -467,7 +565,12 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   // called it, and it carried a commented-out bulk DELETE. See
   // bookings.cleanup-cancelled-is-gone.test.ts.
   'GET /api/bookings/my/bookings': 'session',
-  'GET /api/bookings/my/bookings/debug': 'session',
+  // `GET /api/bookings/my/bookings/debug` was here, same verdict, and the
+  // verdict never changed: #54 RENAMED the route to `/my/bookings/all` and
+  // touched nothing else. It is the route `bookings.cleanup-cancelled-is-gone
+  // .test.ts` rests #49's "nothing is lost" argument on, so a name that told
+  // the next reader it was disposable was the actual defect.
+  'GET /api/bookings/my/bookings/all': 'session',
   'GET /api/bookings/opportunities/:id/bookings': 'admin',
   'GET /api/bookings/pending-approvals': 'session',
   'POST /api/bookings/:bookingId/approve': 'session',
@@ -660,6 +763,13 @@ const discovered = (): Record<string, Verdict> => ({
 });
 
 describe('the authorisation inventory', () => {
+  /** A throwaway route carrying `chain` in the given order, ready to walk. */
+  const reversed = (...chain: express.RequestHandler[]) => {
+    const probe = express.Router();
+    probe.get('/x', ...chain, (_req, _res) => undefined);
+    return () => inventory(probe, '');
+  };
+
   it('has a written-down verdict for every route, and no verdict without a route', () => {
     // Whole-map equality, BOTH directions. A route added anywhere in the graph
     // fails until somebody writes down what guards it; an entry left behind by
@@ -917,6 +1027,105 @@ describe('the authorisation inventory', () => {
       'GET /probe/admin': 'admin',
       'GET /probe/super': 'superadmin'
     });
+  });
+
+  it('refuses a chain whose ORDER defeats the gate it carries', () => {
+    // #56. `verdictOf`'s only primitive used to be `some`, which is MEMBERSHIP:
+    // it said a handler was somewhere in the chain and nothing about where.
+    // Express runs a chain in order, and every middleware in the vocabulary
+    // either writes `req.user` or reads it, so several of these pairs work in
+    // exactly one order.
+    //
+    // MEASURED before the fix, not assumed: reversing the real catalogue chain
+    // to `router.get('/', withLiveRoleIfPresent, optionalAuth, ...)` in
+    // `opportunities.ts:981` left this whole file at 21/21 green while the
+    // verdict `optional-session+live-role` had become a false statement about
+    // the route - `optionalAuth` ran last and overwrote the live role with the
+    // session copy. One arm of
+    // `opportunities.inline-admin-gates-read-live-role.test.ts` was the only
+    // thing in 1309 backend tests that saw it.
+    //
+    // Each arm below is the WRONG order of a pair the product actually uses.
+    expect(reversed(withLiveRoleIfPresent, optionalAuth)).toThrow(
+      'chain order: optionalAuth runs after withLiveRoleIfPresent'
+    );
+    expect(reversed(withLiveRole, requireAuth)).toThrow(
+      'chain order: requireAuth runs after withLiveRole'
+    );
+    expect(reversed(bindParticipantSession, requireAuth)).toThrow(
+      'chain order: requireAuth runs after bindParticipantSession'
+    );
+    expect(reversed(requireAdmin, requireAuth)).toThrow(
+      'chain order: requireAuth runs after requireAdmin'
+    );
+    expect(reversed(requireSuperadmin, optionalAuth)).toThrow(
+      'chain order: optionalAuth runs after requireSuperadmin'
+    );
+  });
+
+  it('names the right mechanism, which is not the same one for all five', () => {
+    // A refute gate on !270 caught the message asserting "overwrites req.user
+    // with the session copy" for EVERY pair, and that is simply untrue of the
+    // bind pair. Read off the source: `requireAdmin` (authenticate.ts:83),
+    // `requireSuperadmin` (:105), `withLiveRole` (:150) and
+    // `withLiveRoleIfPresent` (:208) all read `req.session?.user` and never
+    // `req.user` - a copier after them CLOBBERS the live role they wrote.
+    // `bindParticipantSession` is the one that reads `req.user`
+    // (firsthand-session.ts:33), so a copier after IT is an unset read.
+    //
+    // Pinned as two literals because the tails are the whole correction, and
+    // the arm above passes on the prefix alone - it would go green again the
+    // moment somebody collapsed both messages back into one.
+    expect(reversed(withLiveRoleIfPresent, optionalAuth)).toThrow(
+      'so it overwrites the live role with the session copy'
+    );
+    expect(reversed(bindParticipantSession, requireAuth)).toThrow(
+      'so req.user is still unset when it reads it'
+    );
+
+    // And the two really are different, so a single shared message cannot
+    // satisfy both assertions above by accident.
+    expect(reversed(bindParticipantSession, requireAuth)).not.toThrow(
+      'so it overwrites the live role with the session copy'
+    );
+  });
+
+  it('accepts every one of those pairs the right way round', () => {
+    // THE CONTROL FOR THE REFUSAL ABOVE, and it is the arm that matters most.
+    // A check that throws on everything passes the five assertions above just
+    // as well as a correct one, and it would make the whole inventory
+    // unbuildable rather than strict. Same pairs, right order, each landing on
+    // the verdict it should.
+    const probe = express.Router();
+    const noop = (_req: unknown, _res: unknown, next: () => void) => next();
+
+    probe.get('/optional-live', optionalAuth, withLiveRoleIfPresent, noop);
+    probe.get('/live', requireAuth, withLiveRole, noop);
+    probe.get('/bound', requireAuth, bindParticipantSession, noop);
+    probe.get('/admin', requireAuth, requireAdmin, noop);
+    probe.get('/super', optionalAuth, requireSuperadmin, noop);
+
+    expect(inventory(probe, '')).toEqual({
+      'GET /optional-live': 'optional-session+live-role',
+      'GET /live': 'session+live-role',
+      'GET /bound': 'participant-token',
+      'GET /admin': 'admin',
+      'GET /super': 'superadmin'
+    });
+  });
+
+  it('sees the order across the router-level and per-route halves of a chain', () => {
+    // The chain a route really runs is `router.use` middleware FOLLOWED BY the
+    // route's own handlers, and `inventory` concatenates them in that order
+    // before asking for a verdict. A check that only looked at `route.stack`
+    // would pass this: the reversal here spans the two halves.
+    const outer = express.Router();
+    outer.use(withLiveRole);
+    outer.get('/late-auth', requireAuth, (_req, _res) => undefined);
+
+    expect(() => inventory(outer, '')).toThrow(
+      'chain order: requireAuth runs after withLiveRole'
+    );
   });
 
   it('inherits a router-level gate down into a nested router', () => {

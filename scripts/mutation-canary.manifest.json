@@ -1369,13 +1369,43 @@
   },
   {
     "id": "catalogue-listing-chain-order-is-load-bearing",
-    "why": "MEMBERSHIP IS NOT ORDER, and the authorisation inventory only checks membership: verdictOf's `carries()` is `stack.some(...)`, so swapping the two middlewares leaves the route filed as `optional-session+live-role` while the route no longer is one. Express runs the chain in order, and optionalAuth running LAST overwrites req.user with the session copy - throwing away the live role withLiveRoleIfPresent just read, and restoring #45's defect in full. The refute gate on !264 measured the swap at 1 failed / 1300, caught by a single arm, which is why that arm needs an entry: it is the only thing in the repository that can see this. The table-wide version of the gap is filed as cto/AdaptaLabs#56.",
+    "why": "MEMBERSHIP IS NOT ORDER. Express runs the chain in order, and optionalAuth running LAST overwrites req.user with the session copy - throwing away the live role withLiveRoleIfPresent just read, and restoring #45's defect in full. The refute gate on !264 measured the swap at 1 failed / 1300, caught by this single arm, because verdictOf's only primitive was then `stack.some(...)` and the route stayed filed as `optional-session+live-role` while no longer being one. cto/AdaptaLabs#56 has since made verdictOf POSITIONAL, so the authorisation inventory now refuses this swap table-wide and five of its arms go red too (measured, 5 failed / 24 on this exact mutation, against 0 before). This entry stays because it pins the BEHAVIOURAL arm - the inventory reads a middleware stack and can never observe that a revoked admin gets the admin view, which is the defect itself rather than its shape.",
     "file": "backend/src/routes/opportunities.ts",
     "anchor": "router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {",
     "mutation": "router.get('/', withLiveRoleIfPresent, optionalAuth, asyncHandler(async (req: Request, res: Response) => {",
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
     "test": "gives an admin whose database role was revoked after login the participant view"
+  },
+  {
+    "id": "the-all-bookings-route-projects-columns-rather-than-spreading-the-row",
+    "why": "THE SECOND TIME THIS EXACT LEAK HAS BEEN WRITTEN IN THIS FILE. learnings.md:349 records `SELECT b.*` on `/bookings/my/bookings` sending admin_notes - a researcher's free-text judgement of a participant - to that participant, invisible in the UI and fully readable in the Network tab. The sibling was fixed at the PROJECTION (participantBookingColumns); `/my/bookings/all` was left on `b.*` with only the response map keeping the three fields off the wire, and a refute gate on !270 proved the map was an unguarded guard: adding `admin_notes: booking.admin_notes` to it measured 1313 passed / 1313 on both the mutated and the baseline tree, interleaved, so the leak was invisible to all 78 backend suites. This mutation is that gate's mutation. The route now projects five named columns, which closes the class rather than the instance - a column never selected cannot be mapped out by accident - and the arm named below feeds a row carrying all three fields so it can still tell a narrowed projection from a lucky one.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "        status: booking.status,\n        created_at: booking.created_at.toISOString(),",
+    "mutation": "        status: booking.status,\n        admin_notes: booking.admin_notes,\n        created_at: booking.created_at.toISOString(),",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cleanup-cancelled-is-gone.test.ts",
+    "test": "sends no researcher-only column to the caller, whatever the row carries"
+  },
+  {
+    "id": "the-superset-route-49-rests-on-cannot-quietly-leave",
+    "why": "cto/AdaptaLabs#54. `GET /api/bookings/my/bookings/all` has no client caller anywhere in the tree. SCOPE STATED AS MEASURED, because a first draft of this sentence was wider than the check behind it: `git grep -n \"my/bookings\"` at 150911d across every tracked file, no path or extension filter, returns 9 hits in 7 files OUTSIDE backend/ - demo/demo-server.ts:283,284, docs/CORTEX-FOR-CLAUDEL-UNMODERATED-PLANNING.md:128, e2e/accessibility.test.ts:419,431, frontend/src/api/client.ts:389, learnings.md:349, plan.md:124 and shared/types/index.ts:194. Every one of them refers to the SIBLING route `/my/bookings`; none names the debug path, so the conclusion holds and only the stated scope was wrong. `git grep -n \"bookings/debug\"` over the same tree returns 5 hits, all backend, all accounted for. So it looks exactly like the no-op route #49 deleted, and it is not: `bookings.cleanup-cancelled-is-gone.test.ts` rests the whole argument that #49's deletion cost nothing on this route returning a superset. #54 renamed it out of `/debug` for that reason; this entry is the alarm that says deleting it is red BY NAME rather than a map diff, because a name is a hint and a failing test is not.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) => {",
+    "mutation": "router.get('/my/bookings/all-removed', requireAuth, async (req: Request, res: Response) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.cleanup-cancelled-is-gone.test.ts",
+    "test": "leaves the caller their cancelled bookings on the all route scoped to their own id"
+  },
+  {
+    "id": "authorisation-inventory-checks-chain-ORDER-not-membership",
+    "why": "cto/AdaptaLabs#56, and the entry has to be here rather than on a route because the property is table-wide. verdictOf used to derive every verdict from `stack.some(...)`, which is membership: it said a handler was somewhere in the chain and nothing about where. Reversing the real catalogue chain in opportunities.ts left the whole inventory at 21/21 green while `optional-session+live-role` had become a false statement about the route (measured, both arms). The fix makes the primitive positional, and THIS mutation restores membership semantics exactly - indexOf becomes a boolean dressed as a position, so it can never be less than the copier's index and the throw can never fire. EVERY REAL ROUTE STAYS GREEN UNDER IT, which is the point: the only things that can see it are the throwaway-probe arms, measured at 3 failed / 25 - `refuses a chain whose ORDER defeats the gate it carries`, `names the right mechanism, which is not the same one for all five` and `sees the order across the router-level and per-route halves of a chain`. The fourth ordering arm, `accepts every one of those pairs the right way round`, is the CONTROL and correctly stays green, which is why the figure is three and not four. Those arms are what must not be deleted.",
+    "file": "backend/src/routes/__tests__/authorisation-inventory.test.ts",
+    "anchor": "      const runsAt = handlers.indexOf(dependant);",
+    "mutation": "      const runsAt = handlers.includes(dependant) ? Number.MAX_SAFE_INTEGER : -1;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/authorisation-inventory.test.ts",
+    "test": "refuses a chain whose ORDER defeats the gate it carries"
   },
   {
     "id": "test-http-client-pools-its-sockets",
