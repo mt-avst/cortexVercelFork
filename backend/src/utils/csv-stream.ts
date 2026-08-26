@@ -1,5 +1,9 @@
 import type { Response } from 'express';
 
+import {
+  makeBoundedSocketWrite,
+  type SocketWriteTimeoutReason
+} from './bounded-socket-write';
 import { CSV_ROW_SEPARATOR } from './csv-cell';
 import { logger } from './logger';
 
@@ -70,7 +74,7 @@ export const CSV_EXPORT_DEADLINE_MS = 300_000;
 export const CSV_EXPORT_DRAIN_TIMEOUT_MS = 30_000;
 
 /** Which bound fired. Carried into the log and asserted on. */
-export type CsvExportTimeoutReason = 'export_deadline' | 'drain_timeout';
+export type CsvExportTimeoutReason = SocketWriteTimeoutReason;
 
 /**
  * Thrown INTO the existing failure path rather than beside it.
@@ -136,83 +140,16 @@ export async function streamCsvExport<TCursor>({
   const startedAt = Date.now();
   const remainingBudgetMs = () => CSV_EXPORT_DEADLINE_MS - (Date.now() - startedAt);
 
-  /**
-   * Writes one chunk, waiting for the socket if its buffer is full.
-   *
-   * EVERY LISTENER IS REMOVED ON EVERY PATH, and the timer with them. Attaching
-   * `once('drain')` and `once('error')` and letting whichever did not fire stay
-   * attached accumulates one dead listener per slow write - thousands on a
-   * large export, with the MaxListenersExceededWarning arriving long after the
-   * cause. `close` is waited on as well as `error`, because a caller who hangs
-   * up mid-download produces neither a drain nor an error, and without it this
-   * promise would never settle.
-   *
-   * This mechanism is deliberately the same as `writeSurveyCsv`'s, down to the
-   * listener bookkeeping, because that one was corrected by two independent
-   * gates and by mutation testing. See the ponytail at the bottom of this file
-   * about the two not yet being one function.
-   */
-  const write = (chunk: string) =>
-    new Promise<void>((resolve, reject) => {
-      if (res.destroyed || res.writableEnded) {
-        resolve();
-        return;
-      }
-
-      if (res.write(chunk)) {
-        resolve();
-        return;
-      }
-
-      // Whichever bound is nearer wins. Late in a long export the remaining
-      // whole-export budget is the shorter of the two, and waiting a full
-      // drain budget past the deadline would let the last write overshoot it.
-      const budgetMs = remainingBudgetMs();
-      if (budgetMs <= 0) {
-        reject(new CsvExportTimeoutError('export_deadline'));
-        return;
-      }
-
-      // A holder rather than a `let` only because of ordering: the cleanup
-      // closure must exist before the listeners it removes, and the timer must
-      // be created after the handler that clears it.
-      const drainWait: { timer?: ReturnType<typeof setTimeout> } = {};
-
-      const done = (settle: () => void) => () => {
-        clearTimeout(drainWait.timer);
-        res.off('drain', onDrain);
-        res.off('error', onError);
-        res.off('close', onClose);
-        settle();
-      };
-
-      const onDrain = done(() => resolve());
-      const onError = done(() =>
-        reject(new Error('The connection failed while writing the export.'))
-      );
-      // Not an error: the caller left, which the loop below detects and stops
-      // for. Resolving lets it reach that check rather than throwing into the
-      // destroy path.
-      const onClose = done(() => resolve());
-      // REJECTS, and must. Resolving on a timeout would let the loop carry on
-      // to the next batch and then call `res.end()` - a short CSV that parses,
-      // handed to an admin who has no way to tell.
-      const onTimeout = done(() =>
-        reject(
-          new CsvExportTimeoutError(
-            remainingBudgetMs() <= 0 ? 'export_deadline' : 'drain_timeout'
-          )
-        )
-      );
-
-      drainWait.timer = setTimeout(
-        onTimeout,
-        Math.min(CSV_EXPORT_DRAIN_TIMEOUT_MS, budgetMs)
-      );
-      res.once('drain', onDrain);
-      res.once('error', onError);
-      res.once('close', onClose);
-    });
+  // The write/drain machinery lives in bounded-socket-write.ts (#80) - one
+  // copy, two callers. This caller supplies its OWN budgets and error type;
+  // the survey export supplies different ones, and equal values today do not
+  // make them the same number (see the constants' docblocks).
+  const write = makeBoundedSocketWrite({
+    res,
+    remainingBudgetMs,
+    drainTimeoutMs: CSV_EXPORT_DRAIN_TIMEOUT_MS,
+    makeTimeoutError: (reason) => new CsvExportTimeoutError(reason)
+  });
 
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -281,14 +218,3 @@ export async function streamCsvExport<TCursor>({
     res.destroy();
   }
 }
-
-// ponytail: this file's write/drain machinery is a second copy of
-//   `writeSurveyCsv`'s in firsthand/survey-csv-response.ts, not a shared one.
-//   -> #80. Folding them together means untangling the survey one's deadline
-//      from `boundResultsRead`'s admission control and its own error taxonomy,
-//      which is a change to the most security-reviewed file in this area and
-//      does not belong in the MR that first creates the second caller. The
-//      copy is faithful and deliberate rather than accidental; the risk it
-//      carries is that a future correction lands in one and not the other,
-//      which is precisely what #65 found had already happened to
-//      `escapeCsvField` across three files.

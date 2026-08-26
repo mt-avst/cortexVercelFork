@@ -1,5 +1,9 @@
 import type { Response } from 'express';
 
+import {
+  makeBoundedSocketWrite,
+  type SocketWriteTimeoutReason
+} from '../utils/bounded-socket-write';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import {
   CSV_LINE_ENDING,
@@ -58,7 +62,7 @@ export const SURVEY_CSV_EXPORT_DEADLINE_MS = 300_000;
 export const SURVEY_CSV_DRAIN_TIMEOUT_MS = 30_000;
 
 /** Which of the two bounds fired. Carried into the log, and asserted on. */
-export type SurveyCsvExportTimeoutReason = 'export_deadline' | 'drain_timeout';
+export type SurveyCsvExportTimeoutReason = SocketWriteTimeoutReason;
 
 /**
  * Thrown INTO the existing failure path rather than beside it.
@@ -155,120 +159,20 @@ export async function writeSurveyCsv(
     SURVEY_CSV_EXPORT_DEADLINE_MS
   );
 
-  /**
-   * Writes one chunk, waiting for the socket if its buffer is full.
-   *
-   * EVERY LISTENER IS REMOVED ON EVERY PATH. The first version attached
-   * `once('drain')` and `once('error')` and let whichever did not fire stay
-   * attached - so a large export under backpressure accumulated one dead error
-   * listener per slow write, thousands of them, with the
-   * MaxListenersExceededWarning arriving long after the cause.
-   *
-   * `close` is waited on as well as `error`. A caller who hangs up mid-download
-   * produces neither a drain nor an error, so without it this promise would
-   * never settle and the loop would wait forever for a socket nobody is
-   * reading.
-   */
-  const write = (chunk: string) =>
-    new Promise<void>((resolve, reject) => {
-      // DEFENCE IN DEPTH, and measured to be exactly that rather than the
-      // fix. `close` fires ONCE, so a write on a response destroyed before it
-      // can never be settled by a listener attached afterwards - Node emits no
-      // `error` either, handing ERR_STREAM_DESTROYED to an absent callback and
-      // returning false. Both gates found that and both reproduced it.
-      //
-      // But the guard that CLOSES it is the one before the header write, not
-      // this one. Mutation testing says so plainly: removing the header guard
-      // alone fails a test by name, removing this one alone fails nothing, and
-      // removing both fails. With the header guard and the loop's own hangup
-      // check in place, nothing async happens between either check and the
-      // write that follows it, so this branch is unreachable today.
-      //
-      // Kept anyway, because it makes `write` safe independently of its
-      // callers - but described as what it is. An unreachable guard advertised
-      // as the fix is how the next reader deletes the wrong one.
-      if (res.destroyed || res.writableEnded) {
-        resolve();
-        return;
-      }
-
-      if (res.write(chunk)) {
-        resolve();
-        return;
-      }
-
-      // THE WAIT IS BOUNDED, and before this line it was not. `drain`,
-      // `error` and `close` are the only three events that could settle this
-      // promise, and a client whose TCP window is zero emits none of them -
-      // so the export stopped here forever, holding the only results-read
-      // permit. Demonstrated rather than argued: a response whose `write`
-      // returns false and never drains left this promise unsettled past five
-      // seconds, half the queue timeout every other admin is waiting out.
-      //
-      // Whichever bound is nearer wins. Late in a long export the remaining
-      // whole-export budget is the shorter of the two, and waiting the full
-      // drain budget past the deadline would let the last write overshoot it.
-      const budgetMs = remainingBudgetMs();
-
-      // EQUIVALENT TO LETTING THE TIMER BELOW FIRE, and measured to be: with
-      // a spent budget `Math.min` yields a non-positive delay, Node clamps it
-      // to the next tick, and `onTimeout` rejects with the same reason. The
-      // mutation removing this branch survives, correctly.
-      //
-      // Kept because a `setTimeout` with a negative delay is the kind of thing
-      // a reader stops at, and stated as what it is rather than as a guard
-      // that does something - an unreachable branch advertised as load-bearing
-      // is how the next reader deletes the wrong one.
-      if (budgetMs <= 0) {
-        reject(new SurveyCsvExportTimeoutError('export_deadline'));
-        return;
-      }
-
-      // A holder rather than a `let`, and only because of ordering: the
-      // cleanup closure must exist before the listeners it removes, and the
-      // timer must be created after the handler `done` produces. One of the
-      // three has to be able to see something that does not exist yet.
-      const drainWait: { timer?: ReturnType<typeof setTimeout> } = {};
-
-      const done = (settle: () => void) => () => {
-        // The timer is cleared on EVERY path, for the same reason the three
-        // listeners are: a per-write timer left armed on a large export is a
-        // handle leak, and one that outlives the request keeps the process
-        // awake in tests.
-        clearTimeout(drainWait.timer);
-        res.off('drain', onDrain);
-        res.off('error', onError);
-        res.off('close', onClose);
-        settle();
-      };
-
-      const onDrain = done(() => resolve());
-      const onError = done(() =>
-        reject(new Error('The connection failed while writing the export.'))
-      );
-      // Not an error: the caller left, which the loop below detects and stops
-      // for. Resolving lets it reach that check rather than throwing into the
-      // destroy path.
-      const onClose = done(() => resolve());
-      // REJECTS, and must. Resolving on a timeout would let the loop carry on
-      // to the next row and then call `res.end()` - a short CSV that parses,
-      // handed to a researcher who has no way to tell.
-      const onTimeout = done(() =>
-        reject(
-          new SurveyCsvExportTimeoutError(
-            remainingBudgetMs() <= 0 ? 'export_deadline' : 'drain_timeout'
-          )
-        )
-      );
-
-      drainWait.timer = setTimeout(
-        onTimeout,
-        Math.min(SURVEY_CSV_DRAIN_TIMEOUT_MS, budgetMs)
-      );
-      res.once('drain', onDrain);
-      res.once('error', onError);
-      res.once('close', onClose);
-    });
+  // The write/drain machinery lives in utils/bounded-socket-write.ts (#80) -
+  // one copy, two callers. THE HISTORY THAT SHAPED IT IS RECORDED THERE: the
+  // listener-per-slow-write leak, the unbounded wait that held the only
+  // results-read permit, and which guards mutation testing proved load-bearing
+  // versus defence in depth. This caller supplies its OWN budgets and error
+  // type - the deadline here is sized against `boundResultsRead` admission,
+  // which the admin exports do not contend with, so equal values today are
+  // two decisions, not one (see the constants' docblocks above).
+  const write = makeBoundedSocketWrite({
+    res,
+    remainingBudgetMs,
+    drainTimeoutMs: SURVEY_CSV_DRAIN_TIMEOUT_MS,
+    makeTimeoutError: (reason) => new SurveyCsvExportTimeoutError(reason)
+  });
 
   try {
     // OPENED INSIDE THE TRY, and that is not tidiness. Called above the

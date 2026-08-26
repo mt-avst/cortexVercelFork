@@ -11,8 +11,8 @@
   },
   {
     "id": "csv-writer-honours-backpressure",
-    "why": "Ignoring `res.write`'s return value turns a slow client into an unbounded heap at the socket - reintroducing, one layer up, exactly the problem streaming removes at the database. It also disarms the listener-leak test as a side effect, because a writer that never waits never attaches a listener.",
-    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "why": "Ignoring `res.write`'s return value turns a slow client into an unbounded heap at the socket - reintroducing, one layer up, exactly the problem streaming removes at the database. It also disarms the listener-leak test as a side effect, because a writer that never waits never attaches a listener. Moved here by cto/AdaptaLabs#80: the write loop is one copy with two callers now, so this line guards both exports at once.",
+    "file": "backend/src/utils/bounded-socket-write.ts",
     "anchor": "      if (res.write(chunk)) {",
     "mutation": "      if (res.write(chunk) || true) {",
     "runner": "vitest",
@@ -31,8 +31,8 @@
   },
   {
     "id": "csv-writer-removes-its-listeners",
-    "why": "A large export under backpressure accumulates one dead error listener per slow write - thousands of them, with the MaxListenersExceededWarning arriving long after the cause. The bug this fixed had no test, so it could come straight back.",
-    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "why": "A large export under backpressure accumulates one dead error listener per slow write - thousands of them, with the MaxListenersExceededWarning arriving long after the cause. The bug this fixed had no test, so it could come straight back. Moved here by cto/AdaptaLabs#80: the write loop is one copy with two callers now, so this line guards both exports at once.",
+    "file": "backend/src/utils/bounded-socket-write.ts",
     "anchor": "        res.off('drain', onDrain);\n        res.off('error', onError);\n        res.off('close', onClose);\n",
     "mutation": "",
     "runner": "vitest",
@@ -41,8 +41,8 @@
   },
   {
     "id": "csv-writer-treats-a-hangup-as-a-hangup",
-    "why": "`close` settling a pending write must RESOLVE. Rejecting routes every ordinary cancellation - a closed tab, a navigation away - into the failure path and logs it as an export failure. The bytes are identical either way, so only the log can see it.",
-    "file": "backend/src/firsthand/survey-csv-response.ts",
+    "why": "`close` settling a pending write must RESOLVE. Rejecting routes every ordinary cancellation - a closed tab, a navigation away - into the failure path and logs it as an export failure. The bytes are identical either way, so only the log can see it. Moved here by cto/AdaptaLabs#80: the write loop is one copy with two callers now, so this line guards both exports at once.",
+    "file": "backend/src/utils/bounded-socket-write.ts",
     "anchor": "      const onClose = done(() => resolve());",
     "mutation": "      const onClose = done(() => reject(new Error('closed')));",
     "runner": "vitest",
@@ -1771,5 +1771,25 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/feedback.list-bounded.test.ts",
     "test": "asks the database for the cap plus one rows, as a bound parameter"
+  },
+  {
+    "id": "csv-writer-timeout-rejects-rather-than-resolves",
+    "why": "cto/AdaptaLabs#80. A drain timeout that RESOLVES lets the loop carry on to the next batch and reach res.end() - a short CSV that parses, handed to a reader with no way to tell. Rejecting routes it into the caller's catch, which destroys the socket, and the broken download is the truth. Guards both exports since the #80 fold. Proven KILLED before entry: the never-drains arm of the admin mechanics suite fails by name, measured as this MR's null control before the extraction and re-measured against the shared module after it.",
+    "file": "backend/src/utils/bounded-socket-write.ts",
+    "anchor": "      const onTimeout = done(() =>\n        reject(\n          makeTimeoutError(\n            remainingBudgetMs() <= 0 ? 'export_deadline' : 'drain_timeout'\n          )\n        )\n      );",
+    "mutation": "      const onTimeout = done(() => resolve());",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/csv-stream.mechanics.test.ts",
+    "test": "destroys within the drain budget when the socket never drains"
+  },
+  {
+    "id": "csv-writer-clamps-a-late-drain-wait-to-the-deadline",
+    "why": "cto/AdaptaLabs#80 follow-through from the security gate on the fold: the drain timer is armed with min(drain budget, remaining export budget), and dropping the clamp lets the LAST stalled write of a long export overshoot the whole-export deadline by up to the full drain budget - on the survey caller that is the only results-read permit held past the ceiling it was sized against. The gate proved the admin caller's side of this seam had no guard at all: a never-expiring budget closure survived 1501 jest and 715 vitest tests. Proven KILLED before entry: the late-stall arm walks the clock to ten seconds short of the deadline and fails by name under both the clamp removal and the never-expiring-closure mutation.",
+    "file": "backend/src/utils/bounded-socket-write.ts",
+    "anchor": "        Math.min(drainTimeoutMs, budgetMs)",
+    "mutation": "        drainTimeoutMs",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/csv-stream.mechanics.test.ts",
+    "test": "lets the deadline win a late stall instead of granting the full drain budget"
   }
 ]
