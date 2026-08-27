@@ -31,12 +31,27 @@ const slot = (startIso: string, endIso: string) => ({
   ),
 });
 
-// Tomorrow, so the slots land inside the component's own default date range
-// (startDate = tomorrow, endDate = +7 days). A fixed date would fall out of
-// range and pass for the wrong reason.
+/**
+ * The next WEEKDAY at this time, inside the component's own default date range
+ * (startDate = tomorrow, endDate = +7 days). A fixed date would fall out of
+ * range and pass for the wrong reason.
+ *
+ * Weekday, not simply tomorrow. `excludeWeekends` defaults TRUE, so the grid
+ * gives a Saturday or Sunday no column at all and a slot placed there is never
+ * drawn. A `tomorrow` fixture therefore passed Sunday to Thursday and FAILED
+ * EVERY FRIDAY AND SATURDAY - measured on Friday 2026-08-28, three tests red on
+ * a clean `main` for no reason but the day of the week.
+ *
+ * The sibling suite `AdminSessionManager.manual-slots.test.tsx` already had this
+ * fix; it was not carried across to here, which is how the same defect shipped
+ * twice.
+ */
 const tomorrowAt = (hour: number, minute = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
   d.setHours(hour, minute, 0, 0);
   return d;
 };
