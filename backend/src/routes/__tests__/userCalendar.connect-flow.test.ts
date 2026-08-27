@@ -38,7 +38,19 @@ jest.mock('../../config', () => ({
 }));
 
 const demoMode = jest.fn(() => false);
-const getAuthUrl = jest.fn((state?: string) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`);
+/**
+ * Models the REAL `getAuthUrl`, which returns a different shape per mode: a
+ * Google consent URL when a client is configured, and a URL pointing back at
+ * our OWN callback with `code=demo` when it is not.
+ *
+ * A mock that always returned the Google URL hid the demo path entirely, which
+ * is how a route that never worked in demo mode looked tested.
+ */
+const getAuthUrl = jest.fn((state?: string) =>
+  demoMode()
+    ? `http://localhost:3001/api/calendar/auth/callback?code=demo&state=${state ?? 'demo'}`
+    : `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`
+);
 const getTokens = jest.fn(async (_code: string) => ({
   accessToken: 'real-access-token',
   refreshToken: 'real-refresh-token',
@@ -63,7 +75,22 @@ import { errorHandler } from '../../utils/errorHandler';
 
 const mockConnect = pool.connect as unknown as jest.Mock;
 
-const appWithSession = (id = 'user-1') => {
+/**
+ * A DISTINCT user per app unless one is named.
+ *
+ * `/auth/connect` carries a per-user rate limiter whose bucket is module-level
+ * and therefore shared across every test in this file. With a fixed default id,
+ * adding connect-flow tests silently drained the shared bucket and a LATER test
+ * failed with "no state cookie was set" - a 429 it never asked about, in a test
+ * about something else entirely.
+ *
+ * A fresh id per app is also what production looks like: these are different
+ * researchers. A test that genuinely needs two requests from one user names the
+ * id explicitly, which is now a deliberate act rather than a default.
+ */
+let sessionCounter = 0;
+
+const appWithSession = (id = `user-${++sessionCounter}`) => {
   const app = express();
   app.use(express.json());
   app.use(cookieParser());
@@ -100,7 +127,11 @@ beforeEach(() => {
   jest.clearAllMocks();
   setNodeEnv('test');
   demoMode.mockReturnValue(false);
-  getAuthUrl.mockImplementation((state?: string) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`);
+  getAuthUrl.mockImplementation((state?: string) =>
+    demoMode()
+      ? `http://localhost:3001/api/calendar/auth/callback?code=demo&state=${state ?? 'demo'}`
+      : `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`
+  );
   dbClient.query.mockImplementation(async () => ({ rows: [] }));
   mockConnect.mockImplementation(async () => dbClient);
 });
@@ -127,6 +158,84 @@ describe('GET /api/calendar/auth/connect', () => {
     const cookie = setCookie.find((c) => c.startsWith(`${STATE_COOKIE}=`))!;
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=Lax/i);
+  });
+
+  it('starts the DEMO flow in development, which needs no Google credentials', async () => {
+    /*
+     * The capability this restores. Before `/auth/connect` was deleted in
+     * v2.5.1, demo mode gave a complete working flow with no Google secrets at
+     * all: `getAuthUrl` returns a URL pointing back at our own callback with
+     * `code=demo`, the callback mints demo tokens, `connection-status` flips to
+     * connected, and `generateMockEvents` produces busy time deliberately
+     * aligned with the demo sessions at 10am/2pm/3pm.
+     *
+     * The first version of this route refused demo mode outright, with no
+     * NODE_ENV consideration - so the route and the callback DISAGREED (the
+     * callback permits the demo path in development) and a developer could not
+     * start a flow locally at all. The refusal is right for production and was
+     * applied too widely.
+     */
+    demoMode.mockReturnValue(true);
+    setNodeEnv('development');
+
+    const res = await request(listening(appWithSession())).get('/api/calendar/auth/connect');
+
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toContain('/api/calendar/auth/callback');
+    expect(res.headers.location).toContain('code=demo');
+
+    // No state cookie on the demo path: nothing consumes one, so issuing it
+    // would leave an entry in the store and a cookie in the jar for a full TTL
+    // for no purpose.
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
+  it.each(['production', 'test'])(
+    'refuses to start a demo flow under NODE_ENV=%s',
+    async (nodeEnv) => {
+      // The control, and the half that matters in production: the demo consent
+      // URL mints FABRICATED tokens, so a researcher would connect successfully
+      // and then trust invented busy time.
+      demoMode.mockReturnValue(true);
+      setNodeEnv(nodeEnv);
+
+      const res = await request(listening(appWithSession())).get('/api/calendar/auth/connect');
+
+      expect(res.status).toBe(503);
+      expect(res.body.code).toBe('CALENDAR_OAUTH_NOT_CONFIGURED');
+      expect(getAuthUrl).not.toHaveBeenCalled();
+    }
+  );
+
+  it('agrees with the callback about when a demo flow is allowed', async () => {
+    /*
+     * THE REGRESSION GUARD. The whole defect was the two conditions drifting:
+     * the route refused demo mode always, the callback permitted it in
+     * development. Neither being wrong on its own - just different.
+     *
+     * So this asserts the PAIR, in both directions, rather than each end
+     * separately. Whichever way a future change moves one of them, this fails.
+     */
+    demoMode.mockReturnValue(true);
+
+    for (const [nodeEnv, expectConnect, expectCallback] of [
+      ['development', 302, 302],
+      ['test', 503, 503],
+      ['production', 503, 503],
+    ] as Array<[string, number, number]>) {
+      setNodeEnv(nodeEnv);
+
+      const connect = await request(listening(appWithSession())).get('/api/calendar/auth/connect');
+      const callback = await request(listening(appWithSession())).get(
+        '/api/calendar/auth/callback?code=demo'
+      );
+
+      expect({ nodeEnv, connect: connect.status, callback: callback.status }).toEqual({
+        nodeEnv,
+        connect: expectConnect,
+        callback: expectCallback,
+      });
+    }
   });
 
   it('refuses to start a flow when no OAuth client is configured', async () => {
@@ -463,6 +572,18 @@ describe('a caller can tell "not connected" from "cannot be connected"', () => {
     demoMode.mockReturnValue(true);
     const unavailable = await request(listening(appWithSession())).get('/api/calendar/connection-status');
     expect(unavailable.body.available).toBe(false);
+  });
+
+  it('offers the control in development demo mode, where a flow CAN start', async () => {
+    // `available` drives whether the UI renders a Connect button, so it has to
+    // mean the same thing as "the connect route will not 503" - otherwise a
+    // developer gets no button locally, or a production user gets a dead one.
+    demoMode.mockReturnValue(true);
+    setNodeEnv('development');
+
+    const res = await request(listening(appWithSession())).get('/api/calendar/connection-status');
+
+    expect(res.body.available).toBe(true);
   });
 
   it('carries availability on the my-events 404, so no second request is needed', async () => {

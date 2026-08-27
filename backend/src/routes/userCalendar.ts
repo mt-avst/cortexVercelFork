@@ -33,15 +33,44 @@ const calendarOAuthState = createOAuthStateGuard<CalendarOAuthFlow>({
 });
 
 /**
- * Whether a real Google calendar connection can be started at all.
+ * WHICH calendar OAuth flow may be started here, in ONE place.
  *
- * False means no OAuth client is configured, in which case `getAuthUrl` returns
- * a URL that points straight back at our own callback with `code=demo` and
- * mints FABRICATED tokens. Offering that to a researcher would be worse than
- * offering nothing: they would connect successfully and then trust invented
- * busy time.
+ * `real`         - a Google OAuth client is configured; the genuine flow runs.
+ * `demo`         - no client, but this is a developer's machine. `getAuthUrl`
+ *                  returns a URL pointing back at our own callback with
+ *                  `code=demo`, the callback mints demo tokens, and
+ *                  `generateMockEvents` produces busy time aligned with the
+ *                  demo sessions. A complete working flow with no credentials,
+ *                  which is what this route was for before v2.5.1 deleted it.
+ * `unavailable`  - no client, and not a developer's machine. Refused, because
+ *                  those demo tokens are FABRICATED: a researcher would connect
+ *                  successfully and then trust invented busy time, which is
+ *                  worse than being offered nothing.
+ *
+ * ONE function because the first version of this had the connect route and the
+ * callback deciding it SEPARATELY, and they disagreed - the route refused demo
+ * mode always, the callback permitted it in development. Neither was wrong on
+ * its own; the pair was incoherent, and a developer could not start a flow
+ * locally at all. `agrees with the callback about when a demo flow is allowed`
+ * is the test that fails if they ever drift again.
+ *
+ * `config.NODE_ENV` rather than `process.env`: it is a zod enum with three
+ * members, so a typo in the environment cannot widen the permissive branch.
  */
-const calendarOAuthAvailable = (): boolean => !userCalendarService.isInDemoMode();
+type CalendarOAuthMode = 'real' | 'demo' | 'unavailable';
+
+const calendarOAuthMode = (): CalendarOAuthMode => {
+  if (!userCalendarService.isInDemoMode()) return 'real';
+  return config.NODE_ENV === 'development' ? 'demo' : 'unavailable';
+};
+
+/**
+ * Whether a flow can be started at all - what the UI needs in order to decide
+ * whether to render a Connect control. It must mean exactly "the connect route
+ * will not 503", or a developer gets no button locally and a production user
+ * gets a dead one.
+ */
+const calendarOAuthAvailable = (): boolean => calendarOAuthMode() !== 'unavailable';
 
 /**
  * How many calendar-connect flows one user may start per minute.
@@ -81,9 +110,12 @@ const calendarConnectLimiter = perUserLimiter(
 // would spend a bucket on unauthenticated requests and `req.user` would be
 // absent, collapsing every caller into one shared bucket.
 router.get('/auth/connect', requireAuth, calendarConnectLimiter, asyncHandler(async (req: Request, res: Response) => {
-  if (!calendarOAuthAvailable()) {
+  const mode = calendarOAuthMode();
+
+  if (mode === 'unavailable') {
     logger.info('Refusing to start a calendar OAuth flow: no OAuth client is configured', {
       userId: req.session.user!.id,
+      nodeEnv: config.NODE_ENV,
     });
     return res.status(503).json({
       error: 'Calendar connection is not configured on this deployment',
@@ -91,8 +123,19 @@ router.get('/auth/connect', requireAuth, calendarConnectLimiter, asyncHandler(as
     });
   }
 
-  // The user is bound to the STATE, server-side, because the callback cannot
-  // read the session - see the callback below.
+  if (mode === 'demo') {
+    // No state issued: the demo callback does not consume one, so minting it
+    // would leave an entry in the store and a cookie in the jar for a full TTL
+    // for nothing. The demo callback identifies the user from the session, which
+    // it CAN read - unlike the real one, this redirect never leaves our origin.
+    logger.info('Starting a DEMO calendar flow (development only, no Google client configured)', {
+      userId: req.session.user!.id,
+    });
+    return res.redirect(userCalendarService.getAuthUrl());
+  }
+
+  // The real flow. The user is bound to the STATE, server-side, because the
+  // callback cannot read the session - see the callback below.
   const state = calendarOAuthState.issue(res, { userId: req.session.user!.id });
   return res.redirect(userCalendarService.getAuthUrl(state));
 }));
@@ -175,10 +218,10 @@ router.get('/auth/callback', validateQuery(oauthCallbackQuerySchema), asyncHandl
     // the permissive branch has to be asked for by name: `config.NODE_ENV` is
     // the validated value (a zod enum defaulting to 'development'), so this
     // cannot be widened by a typo in the environment.
-    const demoMode = userCalendarService.isInDemoMode();
-    const demoAllowed = demoMode && config.NODE_ENV === 'development';
+    const mode = calendarOAuthMode();
+    const demoAllowed = mode === 'demo';
 
-    if (demoMode && !demoAllowed) {
+    if (mode === 'unavailable') {
       // No initiator can reach here in this state - /auth/connect refuses - so
       // this is only reachable by hand, and it is refused by hand too. A user
       // must never be handed fabricated tokens outside a developer's machine.
