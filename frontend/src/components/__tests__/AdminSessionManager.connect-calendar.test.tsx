@@ -31,9 +31,21 @@ vi.mock('../../utils/navigation', () => ({
   navigation: { toAdmin: vi.fn() },
 }));
 
+/**
+ * The next WEEKDAY at this time, inside the component's default date range.
+ *
+ * Weekday, not simply tomorrow: `excludeWeekends` defaults TRUE, so the grid
+ * gives a Saturday or Sunday no column and a slot placed there is never drawn.
+ * A `tomorrow` fixture passed Sunday to Thursday and FAILED EVERY FRIDAY AND
+ * SATURDAY - measured on Friday 2026-08-28, red on a clean `main` for no reason
+ * but the day of the week.
+ */
 const tomorrowAt = (hour: number, minute = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) {
+    d.setDate(d.getDate() + 1);
+  }
   d.setHours(hour, minute, 0, 0);
   return d;
 };
