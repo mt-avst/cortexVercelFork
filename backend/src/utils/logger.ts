@@ -29,11 +29,59 @@ export function redactSensitiveUrl(url: string | undefined): string | undefined 
 
   const pathRedacted = url.replace(/(\/session\/)[^/?#]+/g, '$1[REDACTED]');
 
-  return pathRedacted.replace(
-    // Matches ?code=... or &code=..., stopping at the next separator or fragment.
-    new RegExp(`([?&](?:${SENSITIVE_QUERY_PARAMS.join('|')})=)[^&#]*`, 'gi'),
-    '$1[REDACTED]'
-  );
+  // Redact the query by PARSING it, not by matching the raw string (#84). A raw
+  // regex over `?code=...` misses what the route's own parser (qs) still reads
+  // as `code`: a percent-encoded name (`?%63ode=SECRET`) and bracket notation
+  // (`?code[0]=SECRET`) both decode/normalise to `code` for the handler but
+  // slip past a literal `code=` match, leaking the value to the log. Matching
+  // the decoded base name closes both.
+  const queryStart = pathRedacted.indexOf('?');
+  if (queryStart === -1) return pathRedacted;
+
+  const fragmentStart = pathRedacted.indexOf('#', queryStart);
+  const queryString =
+    fragmentStart === -1
+      ? pathRedacted.slice(queryStart + 1)
+      : pathRedacted.slice(queryStart + 1, fragmentStart);
+  const fragment = fragmentStart === -1 ? '' : pathRedacted.slice(fragmentStart);
+
+  const sensitive = SENSITIVE_QUERY_PARAMS as readonly string[];
+  let changed = false;
+
+  // Per-segment, so every non-sensitive parameter is preserved byte-for-byte
+  // (no re-encoding of values like `redirect=/admin`); only a sensitive value is
+  // rewritten, and its raw name is kept.
+  const redactedQuery = queryString
+    .split('&')
+    .map((segment) => {
+      if (segment === '') return segment;
+      const eq = segment.indexOf('=');
+      const rawName = eq === -1 ? segment : segment.slice(0, eq);
+
+      // Match on the DECODED base name: `qs` reads `code[0]`/`code[foo]` as
+      // `code`, and percent-decodes `%63ode` to `code`, so both must compare
+      // equal to `code` here even though the raw string does not.
+      let decodedName: string;
+      try {
+        decodedName = decodeURIComponent(rawName.replace(/\+/g, ' '));
+      } catch {
+        decodedName = rawName;
+      }
+      const baseName = decodedName.split('[')[0].toLowerCase();
+
+      if (sensitive.includes(baseName)) {
+        changed = true;
+        return `${rawName}=[REDACTED]`;
+      }
+      return segment;
+    })
+    .join('&');
+
+  // Only rewrite when something was actually redacted, so a URL carrying no
+  // credential is logged exactly as received.
+  if (!changed) return pathRedacted;
+
+  return `${pathRedacted.slice(0, queryStart + 1)}${redactedQuery}${fragment}`;
 }
 
 /**
