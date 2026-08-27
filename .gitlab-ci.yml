@@ -211,6 +211,18 @@ lint:
 
 test-backend:
   extends: .test-base
+  # SHARDED to bound peak memory. The single-process jest run of the whole
+  # backend suite (1500+ tests) was OOM-killed (exit 137, 'OOMKilled') on the
+  # shared runners at the container's memory ceiling - every test passed, then
+  # the container was reaped at cleanup. `parallel: N` makes GitLab set
+  # CI_NODE_INDEX/CI_NODE_TOTAL itself (a mismatched pair cannot be typed by
+  # hand), and jest/vitest `--shard=<index>/<total>` split the test FILES across
+  # the N jobs, so each holds a fraction of the modules and workers. Same
+  # mechanism the mutation-canary uses below. If `parallel:` is ever removed the
+  # pair is unset and `--shard=/` fails loudly rather than silently running one
+  # unsharded job back at the ceiling. Sharding by FILE is safe here: jest and
+  # vitest each isolate a file per worker, so no cross-file state is split.
+  parallel: 2
   variables:
     # shared/config/environment.ts validates the environment at import time and
     # requires a session secret of at least 32 characters. Without one, 4 of the
@@ -248,8 +260,8 @@ test-backend:
   script:
     - npm ci
     - cd backend && npm ci
-    - npm test
-    - npm run test:vitest
+    - npm test -- --shard="$CI_NODE_INDEX/$CI_NODE_TOTAL"
+    - npm run test:vitest -- --shard="$CI_NODE_INDEX/$CI_NODE_TOTAL"
 
 # The suites that need a real database, which until now ran nowhere but on a
 # developer's machine.
