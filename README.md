@@ -314,7 +314,10 @@ Ensure these are set in production:
 - `DATABASE_URL` - Production database
 - `OIDC_*` - Production OIDC configuration
 - `CORS_ORIGIN` - Production frontend URL
-- `GOOGLE_SERVICE_ACCOUNT_JSON` - Production Google Calendar credentials
+- `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` / `GOOGLE_OAUTH_REDIRECT_URI` -
+  OPTIONAL. Only for per-user calendar connection in a deployed environment. Without them the
+  connect route answers 503 and nothing else degrades; local development gets a complete
+  credential-free demo flow. See `GOOGLE_CALENDAR_SETUP.md`
 - `EMAIL_*` - Production email configuration
 
 ### Security Checklist

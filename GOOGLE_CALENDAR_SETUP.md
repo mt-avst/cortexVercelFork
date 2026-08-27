@@ -14,17 +14,29 @@ This guide will help you set up Google Calendar integration for your Adaptalabs 
 > and writes no event id (cto/AdaptaLabs#89).
 > Per-user OAuth is the direction being taken instead.
 
-> **Part 1 (User Calendar OAuth) works, once credentials are provisioned.**
-> `GET /api/calendar/auth/connect` was restored for cto/AdaptaLabs#89 (it had
-> been deleted in v2.5.1, which left `connection-status` answering
-> `{"connected":false}` for every user, permanently).
-> With no `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` configured,
-> that route answers **503** and the UI offers no Connect control - deliberately,
-> because the demo-mode consent URL points back at our own callback and mints
-> **fabricated** tokens, which would leave a researcher trusting invented busy
-> time.
-> Follow Part 1 below, then see `.kubera/playground-backend.yaml` for where the
-> two values go.
+> **Part 1 (User Calendar OAuth) works. You do NOT need credentials to try it.**
+>
+> `GET /api/calendar/auth/connect` was restored for cto/AdaptaLabs#89 (it had been
+> deleted in v2.5.1, which left `connection-status` answering `{"connected":false}`
+> for every user, permanently).
+>
+> There are **three modes**, decided in one place - `calendarOAuthMode()` in
+> `backend/src/routes/userCalendar.ts`:
+>
+> | Mode | When | What happens |
+> |---|---|---|
+> | `real` | `GOOGLE_OAUTH_CLIENT_ID` and `..._SECRET` are set | the genuine Google flow |
+> | `demo` | they are not, and `NODE_ENV=development` | a COMPLETE working flow with no credentials: the consent URL points back at our own callback with `code=demo`, tokens are minted, `connection-status` flips to `connected`, and mock busy time appears at 10am/2pm/3pm, aligned with the demo sessions |
+> | `unavailable` | they are not, and this is not development | `503`, and the UI offers no Connect control |
+>
+> **So local development needs nothing from Google.** Follow Part 1 below only when
+> you want a researcher's REAL free/busy in a deployed environment; then see
+> `.kubera/playground-backend.yaml` for where the two values go.
+>
+> The `unavailable` refusal is deliberate rather than a gap: those demo tokens are
+> **fabricated**, and a researcher who connected successfully and then trusted
+> invented busy time is worse off than one offered no button at all.
+>
 > Skip Part 2 entirely.
 
 Authoring does not depend on either of them: the Session Management slot picker

@@ -3,6 +3,7 @@
 Domain glossary for Cortex (AdaptaLabs).
 Use these terms exactly in issue titles, test names and proposals - do not drift to synonyms.
 Seeded 2026-08-26; extend via `/domain-modeling` when a term gets resolved, not speculatively.
+Calendar terms added 2026-08-27 after #89.
 
 ## Terms
 
@@ -22,3 +23,17 @@ Seeded 2026-08-26; extend via `/domain-modeling` when a term gets resolved, not 
   `ponytail:` comment naming the ceiling and upgrade path (see AGENTS.md).
 - **Mutation canary** - the curated manifest of load-bearing lines, each paired with the one
   test that must fail when the line changes (`scripts/mutation-canary.*`, ADR-0004).
+- **Calendar mode** - `real` / `demo` / `unavailable`, decided once by `calendarOAuthMode()`
+  in `routes/userCalendar.ts` and read by BOTH ends of the OAuth flow. `demo` is a complete
+  working connection with no Google credentials (development only); `unavailable` refuses,
+  because demo tokens are fabricated. Say "mode", not "demo mode is on" - the latter hides
+  the development/production distinction that is the whole point (#89, ADR-0006).
+- **Generated slot** vs **hand-entered slot** - the availability endpoint GENERATES a grid on
+  duration boundaries from 07:00 UTC without consulting any calendar; a researcher can also
+  HAND-ENTER one. Hand-entered slots and real sessions are *protected*: they win the overlap
+  prune and skip the duration filter, because a slot the researcher asked for that is silently
+  dropped is worse than a crowded grid (#89).
+- **Availability** is not **free/busy**. Availability needs no calendar and always works.
+  Free/busy is the researcher's real commitments and needs a connected calendar; without one
+  the grid is unchecked and the UI says so. Conflating the two is what made #89 look like a
+  calendar bug when the picker was actually discarding a perfectly good grid.
