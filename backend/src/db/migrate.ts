@@ -427,6 +427,34 @@ export async function runMigrations() {
       ADD COLUMN IF NOT EXISTS researcher_notes_updated_by UUID REFERENCES users(id) ON DELETE SET NULL
     `);
 
+    /*
+     * Clear the fabricated Google event ids (cto/AdaptaLabs#89).
+     *
+     * Until this release `CalendarService.createEvent` simulated its writes and
+     * answered `{ success: true, eventId: 'demo-event-<now>' }`, and the booking
+     * route wrote that id here. So production rows record Google events that
+     * have never existed - which is not merely untidy: the cancel and reschedule
+     * paths are gated on `booking.gcal_event_id` being truthy, so every one of
+     * them attempts to delete or update a phantom event and logs about failing.
+     *
+     * Idempotent, and scoped by the exact prefix that only the simulation ever
+     * produced - a real Google event id is base32hex and never starts
+     * `demo-event-`. Nulling the column is the honest value: no event exists.
+     *
+     * ponytail: a data UPDATE in a runner with no version table, so this
+     *   re-scans `bookings` unindexed on every boot, forever
+     *   -> no issue: negligible at this table's size and a full migration
+     *   versioning scheme is the real fix, not an index for this one statement.
+     *   Revisit if `bookings` grows past ~1e6 rows or boot time becomes a
+     *   concern. Verified idempotent against a real Postgres 17: UPDATE 2, then
+     *   UPDATE 0, then UPDATE 0.
+     */
+    await client.query(`
+      UPDATE bookings
+      SET gcal_event_id = NULL
+      WHERE gcal_event_id LIKE 'demo-event-%'
+    `);
+
     // Create indexes for bookings
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_bookings_user 

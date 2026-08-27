@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../config';
 import { requireAuth, requireAdmin, optionalAuth, withLiveRole } from '../middleware/authenticate';
 import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types';
-import calendarService from '../services/calendar';
+import calendarService, { CALENDAR_NOT_CONFIGURED } from '../services/calendar';
 import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import emailService, { EmailService } from '../services/email';
@@ -185,6 +185,11 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
           eventId: calendarResult.eventId,
           bookingId: booking.id
         });
+      } else if (createResult.error === CALENDAR_NOT_CONFIGURED) {
+        // Expected, and not a fault of this booking. Logged at INFO because a
+        // WARN that fires on literally every booking is how a warning stops
+        // meaning anything (cto/AdaptaLabs#89).
+        logger.info('No calendar event created: calendar is not configured', { bookingId: booking.id });
       } else {
         logger.warn('Calendar event creation failed', {
           bookingId: booking.id,
@@ -286,7 +291,17 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       id: booking.id,
       session_id: booking.session_id,
       status: booking.status,
-      calendar: calendarResult.success ? 'success' : 'error',
+      // cto/AdaptaLabs#89: this said `'success'` on every booking ever made,
+      // alongside a fabricated `demo-event-<now>` id, because the calendar
+      // service simulated its writes. Three states rather than two, because
+      // "we never had a calendar to write to" and "the write failed" are
+      // different things to whoever is reading this - and calling the first one
+      // `error` would be a new falsehood in place of the old one.
+      calendar: calendarResult.success
+        ? 'success'
+        : calendarResult.error === CALENDAR_NOT_CONFIGURED
+          ? 'not_configured'
+          : 'error',
       calendarEventId: calendarResult.eventId
     });
 
@@ -472,6 +487,13 @@ router.post('/:id/cancel', requireAuth, withLiveRole, asyncHandler(async (req: R
           // Handle 404 as success (event might already be deleted)
           if (deleteResult.error?.includes('404') || deleteResult.error?.includes('Not Found')) {
             logger.info('Calendar event not found (already deleted)', { eventId: booking.gcal_event_id });
+          } else if (deleteResult.error === CALENDAR_NOT_CONFIGURED) {
+            // Expected on every pre-existing booking, because production rows
+            // hold fabricated `demo-event-*` ids from before cto/AdaptaLabs#89.
+            // The migration nulls those, but a WARN here would fire on every
+            // cancellation until it has run everywhere - and a warning that
+            // fires every time is a warning that means nothing.
+            logger.info('No calendar event deleted: calendar is not configured', { bookingId });
           } else {
             logger.warn('Calendar event deletion failed', { eventId: booking.gcal_event_id, error: deleteResult.error || 'Unknown error' });
           }
@@ -777,6 +799,12 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
         
         if (updateResult.success) {
           logger.info('Calendar event updated', { eventId: booking.gcal_event_id, bookingId });
+        } else if (updateResult.error === CALENDAR_NOT_CONFIGURED) {
+          // Short-circuited rather than falling through to delete+create, which
+          // would make three refused calls and log three WARNs per reschedule of
+          // any pre-existing booking - permanently, in the same log stream the
+          // create path above was cleaned up to protect.
+          logger.info('No calendar event updated: calendar is not configured', { bookingId });
         } else {
           // If update fails, delete old event and create new one
           logger.warn('Calendar event update failed, attempting delete+create', {

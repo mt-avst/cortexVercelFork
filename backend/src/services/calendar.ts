@@ -10,6 +10,14 @@ export interface CalendarServiceConfig {
   domainWideDelegation?: boolean;
 }
 
+/**
+ * What an unconfigured calendar answers.
+ *
+ * Exported because routes/bookings.ts branches on it in three places; three
+ * copies of the string literal is three chances for one of them to drift.
+ */
+export const CALENDAR_NOT_CONFIGURED = 'Calendar is not configured';
+
 export class CalendarService {
   private auth: any;
   private calendar: any;
@@ -20,20 +28,61 @@ export class CalendarService {
     this.initializeAuth();
   }
 
+  /**
+   * cto/AdaptaLabs#89.
+   *
+   * This shared service-account client has NO implementation and there is no
+   * value of any environment variable that turns one on. That was true before
+   * this change too - `initializeAuth` was unconditional - but it was recorded
+   * as "demo mode" at INFO while the constructor below read three GOOGLE_*
+   * variables that nothing consumed. A deployment that looked configurable and
+   * was not is the trap the issue is really about: setting those variables in
+   * Kubera changed nothing at all.
+   *
+   * So the state is named honestly and reported at WARN when someone has
+   * actually supplied credentials, because that is the case where a human is
+   * expecting an effect and will not get one. Per-user calendars are the
+   * direction being taken instead (services/userCalendar.ts, which does have a
+   * real Google REST implementation).
+   */
   private initializeAuth() {
-    // Always use demo mode for now - calendar not configured
-    logger.info('Calendar service initialized in demo mode');
     this.auth = null;
     this.calendar = null;
+
+    const supplied = Boolean(this.config.serviceAccountEmail || this.config.privateKey || this.config.calendarId);
+    if (supplied) {
+      logger.warn(
+        'Shared Google Calendar credentials were supplied but this service has no client: no events will be created. ' +
+        'Per-user calendars are handled by services/userCalendar.ts (cto/AdaptaLabs#89).',
+        { hasServiceAccountEmail: Boolean(this.config.serviceAccountEmail), hasCalendarId: Boolean(this.config.calendarId) }
+      );
+      return;
+    }
+
+    logger.info('Shared Google Calendar is not configured: calendar writes will be refused, not simulated');
   }
 
   async createEvent(event: CalendarEvent): Promise<{ success: boolean; eventId?: string; error?: string }> {
     try {
       if (!this.calendar) {
-        // Demo mode - return mock success
-        const mockEventId = `demo-event-${Date.now()}`;
-        logger.debug('Demo: Created calendar event', { title: event.title, startTime: event.startTime.toISOString() });
-        return { success: true, eventId: mockEventId };
+        // Refused, NOT simulated. This used to answer
+        // `{ success: true, eventId: 'demo-event-<now>' }`, and the caller wrote
+        // that fabricated id into `bookings.gcal_event_id` - so the database
+        // recorded a Google event that had never existed and cancellation later
+        // tried to delete it. Reporting the truth is cheaper than any of that.
+        // Deliberately at DEBUG and deliberately WITHOUT the title.
+        //
+        // `event.title` is built by the booking route as
+        // `<opportunity title> with <participant name>`, so a WARN here wrote a
+        // participant's name and which study they are in to the production log
+        // on EVERY booking. The caller logs this condition once at INFO with a
+        // booking id, and initializeAuth warns once at boot if credentials were
+        // supplied - between them the steady state is recorded without either
+        // the personal data or the alert dilution.
+        logger.debug('Refusing to create a calendar event: calendar is not configured', {
+          startTime: event.startTime.toISOString(),
+        });
+        return { success: false, error: CALENDAR_NOT_CONFIGURED };
       }
 
       const calendarEvent = {
@@ -85,9 +134,8 @@ export class CalendarService {
   async updateEvent(eventId: string, event: CalendarEvent): Promise<{ success: boolean; error?: string }> {
     try {
       if (!this.calendar) {
-        // Demo mode - return mock success
-        logger.debug('Demo: Updated calendar event', { eventId, title: event.title });
-        return { success: true };
+        logger.debug('Refusing to update a calendar event: calendar is not configured', { eventId });
+        return { success: false, error: CALENDAR_NOT_CONFIGURED };
       }
 
       const calendarEvent = {
@@ -131,9 +179,8 @@ export class CalendarService {
   async deleteEvent(eventId: string): Promise<{ success: boolean; error?: string }> {
     try {
       if (!this.calendar) {
-        // Demo mode - return mock success
-        logger.debug('Demo: Deleted calendar event', { eventId });
-        return { success: true };
+        logger.debug('Refusing to delete a calendar event: calendar is not configured', { eventId });
+        return { success: false, error: CALENDAR_NOT_CONFIGURED };
       }
 
       await this.calendar.events.delete({
@@ -151,15 +198,9 @@ export class CalendarService {
   async getEvent(eventId: string): Promise<{ success: boolean; event?: any; error?: string }> {
     try {
       if (!this.calendar) {
-        // Demo mode - return mock event
-        return { 
-          success: true, 
-          event: { 
-            id: eventId, 
-            summary: 'Demo Event',
-            status: 'confirmed'
-          } 
-        };
+        // This answered `{ summary: 'Demo Event', status: 'confirmed' }`, which
+        // is an assertion that a particular event exists and is confirmed.
+        return { success: false, error: CALENDAR_NOT_CONFIGURED };
       }
 
       const response = await this.calendar.events.get({
@@ -174,15 +215,32 @@ export class CalendarService {
     }
   }
 
+  /**
+   * Busy events in a range.
+   *
+   * The DELIBERATE exception to #89's "refuse rather than pretend": an
+   * unconfigured calendar succeeds with zero events, and reports
+   * `configured: false` so a caller can tell "nothing is busy" from "we cannot
+   * know". "No busy events are known" is a true statement, and refusing here
+   * would take `checkTimeSlotAvailability` down with it - which is the slot
+   * picker, i.e. the only way to author a bookable slot. The test
+   * `still generates availability, so authoring survives an unconfigured
+   * calendar` is what fails if a later tidy-up makes this refuse.
+   */
   async getCalendarEvents(
-    startTime: Date, 
-    endTime: Date, 
-    calendarId?: string
-  ): Promise<{ success: boolean; events?: any[]; error?: string }> {
-    // Always return demo mode since calendar is not configured
-    logger.debug('Demo mode: Returning empty events (calendar not configured)');
-    const mockEvents: any[] = [];
-    return { success: true, events: mockEvents };
+    _startTime: Date,
+    _endTime: Date,
+    _calendarId?: string
+  ): Promise<{ success: boolean; events?: any[]; error?: string; configured?: boolean }> {
+    if (!this.calendar) {
+      logger.debug('Calendar not configured: reporting no known busy events');
+      return { success: true, events: [], configured: false };
+    }
+
+    // Unreachable while initializeAuth cannot build a client. Left as a refusal
+    // rather than a silent empty read so that filling that in cannot ship a
+    // read path that quietly answers "nothing is busy" for a real calendar.
+    return { success: false, error: 'Calendar read is not implemented', configured: true };
   }
 
   async checkTimeSlotAvailability(

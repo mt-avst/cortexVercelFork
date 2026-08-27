@@ -230,16 +230,22 @@ app.post('/api/sessions/:id/book', (req, res) => {
     return res.status(401).json({ error: 'Authentication required' });
   }
   
-  // Mock booking response
+  // Mock booking response.
+  //
+  // `calendar: 'not_configured'` and no event id, matching the real route
+  // (cto/AdaptaLabs#89). This answered `'success'` with a fabricated
+  // `demo-event-<now>` id, which is the exact symptom that issue exists to
+  // remove - and this is the one place a developer reproducing it locally would
+  // still have seen it.
   const mockBooking = {
     id: 'booking-' + Date.now(),
     session_id: sessionId,
     status: 'booked',
-    calendar: 'success',
-    calendarEventId: 'demo-event-' + Date.now()
+    calendar: 'not_configured',
+    calendarEventId: undefined
   };
   
-  console.log(`📅 Demo: Created calendar event for booking ${mockBooking.id}`);
+  console.log(`📅 Demo: No calendar event created for booking ${mockBooking.id} (calendar not configured)`);
   console.log(`📧 Demo: Sent confirmation email to ${req.session.user.email}`);
   console.log(`📧 Demo: Sent notification email to researcher`);
   

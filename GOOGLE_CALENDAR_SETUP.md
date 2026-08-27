@@ -2,6 +2,28 @@
 
 This guide will help you set up Google Calendar integration for your Adaptalabs application using Google Cloud Console.
 
+## Status, before you follow any of this
+
+> **Part 2 (Service Account Calendar) does nothing.**
+> `backend/src/services/calendar.ts` has no Google client and there is no value of
+> `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY` or `GOOGLE_CALENDAR_ID` that
+> builds one.
+> Setting those variables changes nothing except one WARN line at boot.
+> Booking used to report `calendar: "success"` with a fabricated
+> `demo-event-<timestamp>` id regardless; it now answers `calendar: "not_configured"`
+> and writes no event id (cto/AdaptaLabs#89).
+> Per-user OAuth is the direction being taken instead.
+
+> **Part 1 (User Calendar OAuth) has a real implementation and no way in.**
+> `backend/src/services/userCalendar.ts` implements the whole Google REST path,
+> but the route that started the OAuth flow was deleted in v2.5.1, so
+> `GET /api/calendar/connection-status` answers `{"connected":false}` for every
+> user, permanently.
+> Restoring that initiator is tracked on cto/AdaptaLabs#89.
+
+Authoring does not depend on either of them: the Session Management slot picker
+generates availability without a calendar, and slots can be typed in by hand.
+
 ## Overview
 
 The application uses **two types** of Google Calendar integrations:

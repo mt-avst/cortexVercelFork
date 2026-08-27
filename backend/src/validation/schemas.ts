@@ -326,6 +326,14 @@ export const MAX_TIME_SLOTS_PER_REQUEST = 200;
  * Validate session data without Zod (for legacy code paths)
  * Returns array of error messages, empty if valid
  */
+// ponytail: no future-time rule here, so a session can be created in the past
+//   -> #90. Deliberate: this validator is shared with the UPDATE path
+//   (routes/sessions.ts, two call sites in routes/opportunities.ts), where
+//   refusing a past instant would wrongly block editing a session that has
+//   already started - so the rule needs a create-only home. The only check
+//   today is client-side, in AdminSessionManager's manual add-slot control.
+//   Bounded: POST /api/bookings/sessions/:id/book already refuses a past
+//   session, so the result is unbookable clutter rather than an exploit.
 export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRequest): string[] => {
   const errors: string[] = [];
   
