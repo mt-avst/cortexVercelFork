@@ -266,3 +266,80 @@ test('the working manifest has lost no entry against origin/main without saying 
     `the manifest lost these entries against the merge-base without listing them in ${LEDGER_REL}: ${lost.join(', ')}`
   );
 });
+
+/**
+ * A `-postgres` spec must declare `needsDatabase`.
+ *
+ * The flag is what makes `ENVIRONMENT_FAILED` reachable: without it,
+ * `if (needsDatabase && environmentFailed(...)) return ENVIRONMENT_FAILED` is
+ * switched off for the entry, so a mutated run that goes red BECAUSE THE
+ * CONTAINER FAILED TO START is graded KILLED. That is a false kill in the one
+ * harness whose whole purpose is refusing them, and it fails in the safe-looking
+ * direction - green.
+ *
+ * Found by a gate on !298, which noticed a new entry had omitted it and that two
+ * older ones had too. Nothing enforced the invariant, which is why all three
+ * were able to omit it, so the invariant is enforced here rather than
+ * remembered. Keyed on the spec's filename because that is what actually decides
+ * whether a database is needed - the vitest config routes `*-postgres.test.ts`
+ * to the suites that start one.
+ */
+/**
+ * The predicate, in ONE place, so the control below exercises the real thing.
+ *
+ * It was written twice - once in the check, once in the control - and a gate
+ * demonstrated exactly what that costs: with an offender present in the
+ * manifest, changing the CHECK's regex to `-postgres.test.js` left the file at
+ * `pass / fail 0`, invariant blind and control still green. A control that
+ * re-declares its subject proves a copy works.
+ */
+const undeclaredNeedsDatabase = (entries) =>
+  entries
+    .filter((entry) => /-postgres\.test\.ts$/.test(entry.spec) && !entry.needsDatabase)
+    .map((entry) => entry.id);
+
+/**
+ * A `-postgres` spec must declare `needsDatabase`.
+ *
+ * The flag is what makes `ENVIRONMENT_FAILED` reachable: without it,
+ * `if (needsDatabase && environmentFailed(...)) return ENVIRONMENT_FAILED` is
+ * switched off for the entry, so a mutated run that goes red BECAUSE THE
+ * CONTAINER FAILED TO START is graded KILLED. That is a false kill in the one
+ * harness whose whole purpose is refusing them, and it fails in the
+ * safe-looking direction - green.
+ *
+ * Found by a gate on !298, which noticed a new entry had omitted it and that two
+ * older ones had too. Nothing enforced the invariant, which is why all three
+ * were able to omit it, so the invariant is enforced here rather than
+ * remembered. Keyed on the spec's filename because that is what actually decides
+ * whether a database is needed - backend/vitest.config.ts routes
+ * `*-postgres.test.ts` to the suites that start one.
+ */
+test('every -postgres spec declares needsDatabase', () => {
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '..', MANIFEST_REL), 'utf8')
+  );
+
+  const undeclared = undeclaredNeedsDatabase(manifest);
+
+  assert.deepEqual(
+    undeclared,
+    [],
+    'these entries run a -postgres spec without needsDatabase, so a container ' +
+      `failure would be graded KILLED: ${undeclared.join(', ')}`
+  );
+});
+
+test('the check above can see an offender, and calls the real predicate', () => {
+  // THE CONTROL, and it calls `undeclaredNeedsDatabase` - the same function the
+  // check calls - so breaking the predicate fails HERE too rather than leaving
+  // the check blind and this arm green.
+  assert.deepEqual(
+    undeclaredNeedsDatabase([
+      { id: 'made-up', spec: 'src/x/__tests__/thing-postgres.test.ts' },
+      { id: 'declared', spec: 'src/x/__tests__/other-postgres.test.ts', needsDatabase: true },
+      { id: 'not-a-db-spec', spec: 'src/x/__tests__/plain.test.ts' }
+    ]),
+    ['made-up']
+  );
+});

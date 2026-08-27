@@ -31,7 +31,8 @@ import {
   List, 
   RefreshCw, 
   ArrowLeft,
-  ArrowRight
+  ArrowRight,
+  Plus
 } from 'lucide-react';
 
 /*
@@ -88,6 +89,12 @@ interface CalendarViewProps {
   endDate: Date;
   excludeWeekends: boolean;
   sessions: Session[];
+  /**
+   * Slots the researcher explicitly asked for - hand-entered ones, and ones
+   * that are already real sessions. Exempt from the duration filter and given
+   * priority in the overlap prune (cto/AdaptaLabs#89).
+   */
+  protectedSlotKeys: ReadonlySet<string>;
 }
 
 /**
@@ -103,6 +110,204 @@ const toDateInputValue = (date: Date): string => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
+/**
+ * The hours the calendar timeline actually draws.
+ *
+ * ONE declaration, because four things depend on agreeing: the slot's vertical
+ * position, the hour labels down the side, the "unusually large slot height"
+ * threshold, and the manual-entry gate. They were three separate literals, and
+ * a slot outside the range was accepted, selected, created and drawn at ZERO
+ * HEIGHT - so it could not be clicked to remove it either (cto/AdaptaLabs#89).
+ */
+const TIMELINE_START_HOUR = 7;
+const TIMELINE_END_HOUR = 23;
+
+/**
+ * The slot key used everywhere in this file for slot identity.
+ *
+ * One expression, because selection, confirmation, the manual set and the
+ * pruning below all have to agree on what "the same slot" means, and four
+ * spellings of it is four chances to disagree.
+ */
+const slotKeyOf = (slot: { start: string; end: string }): string => `${slot.start}|${slot.end}`;
+
+/**
+ * Slots the researcher explicitly asked for, which outrank generated ones.
+ *
+ * Hand-entered slots and slots that are already real sessions. Both must
+ * survive the duration filter and the overlap prune below: a slot the
+ * researcher typed in, or one that already exists in the database, being
+ * silently dropped from the only view of it is worse than a crowded grid.
+ */
+type ProtectedKeys = ReadonlySet<string>;
+
+/**
+ * Remove overlapping slots, keeping protected ones in preference to generated
+ * ones.
+ *
+ * The prune is greedy over a sorted list, so ORDER decides who survives. That
+ * was start time alone, which broke the manual-slot control completely
+ * (cto/AdaptaLabs#89): the generated grid is contiguous :00/:30, so a
+ * hand-entered 14:15 always sorted after the generated 14:00-14:30 and was
+ * discarded before rendering - while still being selected and still being
+ * created, producing a session nobody could see. Protected slots now sort
+ * first, so the generated neighbours are the ones dropped. The researcher
+ * cannot have both, and the one they typed is the one they meant.
+ */
+const pruneOverlaps = (slots: AvailableSlot[], protectedKeys: ProtectedKeys): AvailableSlot[] => {
+  if (slots.length === 0) return slots;
+
+  const slotRanges = slots.map(slot => {
+    const start = new Date(slot.start).getTime();
+    const end = new Date(slot.end).getTime();
+    return {
+      slot,
+      start,
+      end,
+      // Exact-duplicate detection by time, not string.
+      key: `${start}|${end}`,
+      isProtected: protectedKeys.has(slotKeyOf(slot)),
+    };
+  });
+
+  // Exact duplicates by time collapse to one - preferring a protected copy, so
+  // a hand-entered slot that coincides exactly with a generated one keeps its
+  // protection rather than losing it to whichever arrived first.
+  const uniqueByTime = new Map<string, typeof slotRanges[0]>();
+  slotRanges.forEach(range => {
+    const existing = uniqueByTime.get(range.key);
+    if (!existing || (range.isProtected && !existing.isProtected)) {
+      uniqueByTime.set(range.key, range);
+    }
+  });
+  const uniqueSlots = Array.from(uniqueByTime.values());
+
+  uniqueSlots.sort((a, b) => {
+    // Protected first: this line is the fix, and the test
+    // `draws a hand-entered slot the generated grid cannot express` is what
+    // fails when it is removed.
+    if (a.isProtected !== b.isProtected) return a.isProtected ? -1 : 1;
+    if (a.start !== b.start) return a.start - b.start;
+    return a.end - b.end;
+  });
+
+  const nonOverlapping: Array<{ slot: AvailableSlot; start: number; end: number }> = [];
+
+  uniqueSlots.forEach(current => {
+    // Two slots overlap if they share ANY time. Adjacent slots - one ending
+    // exactly as another starts - do NOT overlap.
+    const hasOverlap = nonOverlapping.some(added => {
+      const isAdjacent = current.start === added.end || current.end === added.start;
+      const hasTimeOverlap = current.start < added.end && current.end > added.start;
+      return hasTimeOverlap && !isAdjacent;
+    });
+
+    if (!hasOverlap) {
+      nonOverlapping.push({ slot: current.slot, start: current.start, end: current.end });
+    }
+  });
+
+  // Back into chronological order: the prune's sort put protected slots first,
+  // and the grid positions slots by time but the DOM order should still read
+  // down the day.
+  return nonOverlapping
+    .sort((a, b) => a.start - b.start || a.end - b.end)
+    .map(entry => entry.slot);
+};
+
+/**
+ * Keep only slots matching the selected duration - except protected ones.
+ *
+ * A generated slot of the wrong length is noise. A real session or a
+ * hand-entered slot of the wrong length is a fact, and hiding it because the
+ * duration dropdown moved is how a 45-minute session becomes undeletable from
+ * this screen.
+ */
+const filterByDuration = (
+  slots: AvailableSlot[],
+  durationMinutes: number | undefined,
+  protectedKeys: ProtectedKeys
+): AvailableSlot[] => {
+  if (!durationMinutes) return slots;
+
+  return slots.filter(slot => {
+    if (protectedKeys.has(slotKeyOf(slot))) return true;
+    const slotDurationMinutes =
+      (new Date(slot.end).getTime() - new Date(slot.start).getTime()) / (1000 * 60);
+    // 30 seconds of tolerance for rounding, and no more.
+    return Math.abs(slotDurationMinutes - durationMinutes) <= 0.5;
+  });
+};
+
+/**
+ * Every day between two dates that the grid is willing to draw a column for.
+ *
+ * At module scope so the parent's slot counter derives its answer from the SAME
+ * function the grid does. Reimplementing it beside the counter is how the two
+ * drift - which they already had.
+ */
+const daysInRange = (startDate: Date, endDate: Date, excludeWeekends: boolean): Date[] => {
+  const days: Date[] = [];
+  const current = new Date(startDate);
+  const end = new Date(endDate);
+
+  while (current <= end) {
+    if (!excludeWeekends || (current.getDay() >= 1 && current.getDay() <= 5)) {
+      days.push(new Date(current));
+    }
+    current.setDate(current.getDate() + 1);
+  }
+  return days;
+};
+
+/**
+ * Most day columns the grid will ever draw at once.
+ *
+ * NOT `daysPerPage`, which is what the first attempt at this bounded. The grid
+ * renders `renderDayColumns(..., maxColumnsPerRow)` exactly TWICE - a first row
+ * and an "additional days" row - and that function's loop runs to `maxColumns`.
+ * So ten is the hard ceiling however high `daysPerPage` auto-adjusts (it goes to
+ * 14, 21 and 30), and a counter bounded by the page still over-reported on any
+ * range wider than ten visible days: measured 120 counted against 40 drawn at
+ * 30 weekdays.
+ *
+ * Kept beside the two constants it is derived from so the derivation is visible;
+ * `maxColumnsPerRow` is declared inside CalendarView and this must agree with it.
+ */
+const MAX_COLUMNS_PER_ROW = 5;
+const MAX_DRAWN_ROWS = 2;
+const MAX_DRAWN_DAYS = MAX_COLUMNS_PER_ROW * MAX_DRAWN_ROWS;
+
+/**
+ * The days actually ON SCREEN, which is a PAGE of the range and not the range.
+ *
+ * `daysPerPage` auto-adjusts to cover the range but CAPS AT 30, so any wider
+ * range paginates - and the counter, which bounded only the range, then counted
+ * days the grid was not drawing. Measured 40 counted against 20 drawn with the
+ * End Date moved out 60 days. That is the same over-report the range bound was
+ * added to fix, one control change away.
+ */
+const visibleDayKeys = (
+  startDate: Date,
+  endDate: Date,
+  excludeWeekends: boolean,
+  currentPage: number,
+  daysPerPage: number
+): Set<string> => {
+  const all = daysInRange(startDate, endDate, excludeWeekends);
+  const start = currentPage * daysPerPage;
+  // Whichever bound bites first. The page can be wider than the grid can draw.
+  const drawn = Math.min(daysPerPage, MAX_DRAWN_DAYS);
+  return new Set(all.slice(start, start + drawn).map(day => day.toDateString()));
+};
+
+/** Every slot the grid will actually draw, given what it was handed. */
+const slotsToDraw = (
+  slots: AvailableSlot[],
+  durationMinutes: number | undefined,
+  protectedKeys: ProtectedKeys
+): AvailableSlot[] => pruneOverlaps(filterByDuration(slots, durationMinutes, protectedKeys), protectedKeys);
+
 const CalendarView: React.FC<CalendarViewProps> = ({
   events,
   availableSlots,
@@ -117,7 +322,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   startDate,
   endDate,
   excludeWeekends,
-  sessions
+  sessions,
+  protectedSlotKeys
 }) => {
   /**
    * Slots whose label has already failed to render and been reported.
@@ -204,29 +410,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return session;
   }, [sessions]);
 
-  // Generate all days in the selected range, in the reader's local zone.
-  const generateDaysInRange = (): Date[] => {
-    const days: Date[] = [];
-    const current = new Date(startDate);
-    const end = new Date(endDate);
-    
-    // Simple approach: just iterate through the date range and filter weekends if needed
-    while (current <= end) {
-      if (excludeWeekends) {
-        const dayOfWeek = current.getDay();
-        // Only include weekdays (Monday = 1, Tuesday = 2, ..., Friday = 5)
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          days.push(new Date(current));
-        }
-      } else {
-        days.push(new Date(current));
-      }
-      current.setDate(current.getDate() + 1);
-    }
-    return days;
-  };
-
-  const allDays = generateDaysInRange();
+  // Days in the selected range, in the reader's local zone. The derivation is at
+  // module scope so the parent's counter uses the same one (cto/AdaptaLabs#89).
+  const allDays = daysInRange(startDate, endDate, excludeWeekends);
   
   // Calculate pagination based on days
   const totalPages = Math.ceil(allDays.length / daysPerPage);
@@ -234,100 +420,24 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const endDayIndex = startDayIndex + daysPerPage;
   const currentDays = allDays.slice(startDayIndex, endDayIndex);
   
-  // Determine if we need a multi-row layout (more than 5 days)
-  const needsMultiRow = currentDays.length > 5;
-  const firstRowDays = needsMultiRow ? currentDays.slice(0, 5) : currentDays;
-  const secondRowDays = needsMultiRow ? currentDays.slice(5) : [];
+  // Determine if we need a multi-row layout. Through the shared constant, not
+  // literal 5s: the row split and the per-row column cap have to agree, and
+  // while they were separate the true ceiling was `5 + MAX_COLUMNS_PER_ROW`
+  // rather than `MAX_COLUMNS_PER_ROW * MAX_DRAWN_ROWS` - so raising the constant
+  // to 7 made the counter read 280 against 240 drawn.
+  const needsMultiRow = currentDays.length > MAX_COLUMNS_PER_ROW;
+  const firstRowDays = needsMultiRow ? currentDays.slice(0, MAX_COLUMNS_PER_ROW) : currentDays;
+  const secondRowDays = needsMultiRow ? currentDays.slice(MAX_COLUMNS_PER_ROW) : [];
   
   // Use consistent column count for both rows (always 5 columns max for visual consistency)
-  const maxColumnsPerRow = 5;
+  const maxColumnsPerRow = MAX_COLUMNS_PER_ROW;
   
-  // Helper function to remove overlapping slots - keeps only non-overlapping slots
-  // This function aggressively removes any slots that share any time overlap
-  const removeOverlappingSlots = (slots: AvailableSlot[]): AvailableSlot[] => {
-    if (slots.length === 0) return slots;
-    
-    // Convert all slots to timestamp format first for accurate comparison
-    const slotRanges = slots.map(slot => {
-      const start = new Date(slot.start).getTime();
-      const end = new Date(slot.end).getTime();
-      return {
-        slot,
-        start,
-        end,
-        // Create a unique key for exact duplicate detection
-        key: `${start}|${end}`
-      };
-    });
-    
-    // First, remove exact duplicates by time (not string) - use Map to ensure uniqueness
-    const uniqueByTime = new Map<string, typeof slotRanges[0]>();
-    slotRanges.forEach(range => {
-      if (!uniqueByTime.has(range.key)) {
-        uniqueByTime.set(range.key, range);
-      }
-    });
-    const uniqueSlots = Array.from(uniqueByTime.values());
-    
-    // Sort by start time, then by end time (shorter slots first if same start)
-    uniqueSlots.sort((a, b) => {
-      if (a.start !== b.start) return a.start - b.start;
-      return a.end - b.end;
-    });
-    
-    const nonOverlapping: AvailableSlot[] = [];
-    
-    uniqueSlots.forEach(current => {
-      // Check if this slot overlaps with any already added slot
-      // Two slots overlap if they share ANY time (even a millisecond)
-      // Adjacent slots (one ends exactly when another starts) do NOT overlap
-      const hasOverlap = nonOverlapping.some(added => {
-        const addedStart = new Date(added.start).getTime();
-        const addedEnd = new Date(added.end).getTime();
-        
-        // Overlap occurs when they share time, but NOT when one ends exactly when another starts
-        // Use exact millisecond comparison for precision
-        const isAdjacent = (current.start === addedEnd) || (current.end === addedStart);
-        const hasTimeOverlap = (current.start < addedEnd && current.end > addedStart);
-        
-        return hasTimeOverlap && !isAdjacent;
-      });
-      
-      // Only add if no overlap found
-      if (!hasOverlap) {
-        nonOverlapping.push(current.slot);
-      }
-    });
-    
-    return nonOverlapping;
-  };
 
-  // Filter slots to only include those that match the selected duration (if duration is selected)
-  const durationFilteredSlots = durationMinutes 
-    ? (availableSlots || []).filter(slot => {
-        const slotStart = new Date(slot.start).getTime();
-        const slotEnd = new Date(slot.end).getTime();
-        const slotDurationMs = slotEnd - slotStart;
-        const slotDurationMinutes = slotDurationMs / (1000 * 60);
-        
-        // Strictly match the duration - allow only very small tolerance for rounding (within 30 seconds)
-        const toleranceMinutes = 0.5; // 30 seconds tolerance
-        const matchesDuration = Math.abs(slotDurationMinutes - durationMinutes) <= toleranceMinutes;
-        
-        if (!matchesDuration) {
-          logger.debug(`🔍 Filtered out slot with duration ${slotDurationMinutes.toFixed(2)}min (expected ${durationMinutes}min):`, {
-            start: slot.start,
-            end: slot.end,
-            duration: slotDurationMinutes
-          });
-        }
-        
-        return matchesDuration;
-      })
-    : (availableSlots || []);
-  
-  // Remove overlapping slots first, before grouping by date
-  const cleanedSlots = removeOverlappingSlots(durationFilteredSlots);
+  // Duration filter and overlap prune both live at module scope now, so the
+  // parent can compute the same drawn set for its counter instead of guessing
+  // at it - the counter used to report the PRE-filter, PRE-prune length and
+  // read 21 on a grid drawing 20.
+  const cleanedSlots = slotsToDraw(availableSlots || [], durationMinutes, protectedSlotKeys);
   
   // Filtered slots ready (debug logging removed for production)
   
@@ -369,8 +479,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
 
   // Helper function to calculate position percentage (7am = 0%, 11pm = 100%)
   const getTimePosition = (hour: number): number => {
-    const startHour = 7; // 7 AM
-    const endHour = 23; // 11 PM
+    const startHour = TIMELINE_START_HOUR;
+    const endHour = TIMELINE_END_HOUR;
     const totalHours = endHour - startHour; // 16 hours
     const adjustedHour = hour - startHour;
     return Math.max(0, Math.min(100, (adjustedHour / totalHours) * 100));
@@ -394,7 +504,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     }
     // If no duration selected, default to 30-minute marks
     
-    for (let hour = 7; hour <= 23; hour++) {
+    for (let hour = TIMELINE_START_HOUR; hour <= TIMELINE_END_HOUR; hour++) {
       // Always add hour marker (full hour)
       markers.push({ time: hour, isHour: true });
       
@@ -438,7 +548,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   // Helper function to render day columns with timeline layout
-  const renderDayColumns = (slotsByDate: Record<string, AvailableSlot[]>, days: Date[], maxColumns: number = 5) => {
+  const renderDayColumns = (
+    slotsByDate: Record<string, AvailableSlot[]>,
+    days: Date[],
+    maxColumns: number = MAX_COLUMNS_PER_ROW
+  ) => {
     // Define the type for column objects
     interface ColumnData {
       date: string;
@@ -455,7 +569,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         const rawSlots = slotsByDate[dateString] || [];
         
         // Remove overlapping slots and sort by start time
-        let nonOverlappingSlots = removeOverlappingSlots(rawSlots);
+        let nonOverlappingSlots = pruneOverlaps(rawSlots, protectedSlotKeys);
         
         // Final deduplication pass using a Set to ensure absolute uniqueness by time
         // Use the same key format as isSlotSelected for consistency
@@ -710,8 +824,22 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(finalHeight * 10000) / 10000;
                         
-                        // Slot height calculation
-                        if (roundedHeight > 5) {
+                        // Slot height calculation.
+                        //
+                        // Compared against what the slot's OWN duration implies
+                        // rather than a flat 5%. Protected slots are exempt from
+                        // the duration filter, so a 60-minute session drawn while
+                        // the duration control says 30 - the case that exemption
+                        // exists to allow - tripped a flat threshold three times
+                        // per render. What is worth warning about is a height
+                        // that disagrees with the slot's own span, which is a
+                        // real geometry fault.
+                        const timelineHours = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
+                        const expectedHeight =
+                          ((new Date(slot.end).getTime() - new Date(slot.start).getTime()) /
+                            (timelineHours * 60 * 60 * 1000)) *
+                          100;
+                        if (roundedHeight > expectedHeight * 1.5 + 1) {
                           logger.warn(`Unusually large slot height: ${roundedHeight}%`, {
                             slotStartHour,
                             slotEndHour,
@@ -1129,6 +1257,16 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   const { id: urlId } = useParams<{ id: string }>();
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+
+  /**
+   * Whether this researcher's own calendar could be read (cto/AdaptaLabs#89).
+   *
+   * Separate from `error` on purpose. A calendar that cannot be read is not a
+   * failure of this screen - busy events only DIM slots, so authoring carries
+   * on without them - but it IS something the researcher has to be told, or
+   * they will read an unchecked grid as one checked against their diary.
+   */
+  const [calendarStatus, setCalendarStatus] = useState<'unknown' | 'connected' | 'not-connected' | 'unavailable'>('unknown');
   
   // Persist selected slots in sessionStorage to survive navigation
   // Use URL parameter for stable key that doesn't change during component lifecycle
@@ -1136,7 +1274,7 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   // reads so that everything built on it below is stable too - four of the
   // effects and callbacks in this file reach it, and without this they could
   // not name their real dependencies without being rebuilt every render.
-  const getStorageKey = useCallback((type: 'selected' | 'confirmed') => {
+  const getStorageKey = useCallback((type: 'selected' | 'confirmed' | 'manual') => {
     // Use URL ID if available (for editing), otherwise use opportunityId or temp
     const key = urlId || opportunityId || 'temp';
     return `${type}Slots_${key}`;
@@ -1164,7 +1302,27 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     }
   }, [getStorageKey]);
 
+  /**
+   * Slots this researcher typed in by hand (cto/AdaptaLabs#89 item 2).
+   *
+   * Held as `start|end` keys, the same identity the selected and confirmed sets
+   * use, and merged into what the grid draws. The generated availability grid
+   * can only express starts that fall on a duration boundary from 07:00 UTC, so
+   * a 14:15 interview was not expressible through this screen at all - and the
+   * whole grid arrives from an endpoint, which is what this control exists to
+   * stop authoring depending on.
+   */
+  const getStoredManualSlotKeys = useCallback((): Set<string> => {
+    try {
+      const stored = sessionStorage.getItem(getStorageKey('manual'));
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }, [getStorageKey]);
+
   const [selectedSlots, setSelectedSlots] = useState<Set<string>>(getStoredSelectedSlots);
+  const [manualSlotKeys, setManualSlotKeys] = useState<Set<string>>(getStoredManualSlotKeys);
 
   /**
    * The backward control's label, in one place.
@@ -1235,6 +1393,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     }
   }, [getStorageKey]);
   
+  const persistManualSlotKeys = useCallback((slots: Set<string>) => {
+    try {
+      sessionStorage.setItem(getStorageKey('manual'), JSON.stringify(Array.from(slots)));
+    } catch (error) {
+      logger.warn('Failed to persist manual slots', { errorMessage: String(error) });
+    }
+  }, [getStorageKey]);
+
   // Calendar view controls. Local day boundaries: these are absolute instants
   // by the time they reach the API (toISOString below), so "tomorrow through
   // next week" now means the admin's own days rather than UTC's.
@@ -1414,12 +1580,53 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         ? getAvailability(startTime, actualEndTime, durationMinutes, undefined, excludeWeekends)
         : Promise.resolve({ available_slots: [], total_slots: 0, duration_minutes: 0, time_range: { start: '', end: '' } });
       
-      const [eventsResult, availabilityResult] = await Promise.all([
+      // allSettled, NOT all (cto/AdaptaLabs#89).
+      //
+      // `/api/calendar/my-events` answers 404 `Calendar not connected` for
+      // every user who has no token row, which in production is everyone: the
+      // route that started the OAuth flow was deleted and login is Okta/OIDC.
+      // Under Promise.all that 404 rejected the PAIR, so `setAvailableSlots`
+      // never ran and the grid rendered "No available slots" on every column -
+      // a researcher could not create a bookable slot through the UI at all,
+      // while `/api/calendar/availability` (which needs no connected calendar)
+      // had returned a full working-hours grid all along.
+      //
+      // The two are independent. Only the availability call can legitimately
+      // empty this grid, so only its failure is an error.
+      const [eventsSettled, availabilitySettled] = await Promise.allSettled([
         getMyCalendarEvents(startTime, actualEndTime),
         availabilityPromise
       ]);
-      
-      setCalendarEvents(eventsResult);
+
+      if (eventsSettled.status === 'fulfilled') {
+        setCalendarEvents(eventsSettled.value);
+        setCalendarStatus('connected');
+      } else {
+        const reason = eventsSettled.reason as { response?: { status?: number } } | undefined;
+        const status = reason?.response?.status;
+        // 404 is the backend's own "Calendar not connected"; anything else is a
+        // fault. Both mean no conflict overlay, and they are NOT the same thing
+        // to anyone diagnosing it - the distinction is kept for that reason and
+        // mirrors how CalendarGrid already treats the participant side.
+        setCalendarStatus(status === 404 ? 'not-connected' : 'unavailable');
+        setCalendarEvents([]);
+        logger.warn('Could not read the researcher calendar; continuing without conflict overlay', {
+          component: 'AdminSessionManager',
+          httpStatus: status,
+          errorMessage: eventsSettled.reason instanceof Error
+            ? eventsSettled.reason.message
+            : String(eventsSettled.reason),
+        });
+      }
+
+      if (availabilitySettled.status === 'rejected') {
+        // Rethrown into this function's own catch so the one place that maps an
+        // axios error to display text keeps doing it. Duplicating that mapping
+        // here is how the two copies drift.
+        throw availabilitySettled.reason;
+      }
+
+      const availabilityResult = availabilitySettled.value;
       setAvailableSlots(availabilityResult.available_slots);
       
       // Deliberately does NOT log the sessions prop. Reading it here made
@@ -1429,7 +1636,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // debug line. The sessions/slot correlation is logged by the sync effect
       // above, which genuinely depends on sessions.
       logger.debug('📅 Calendar data loaded:', {
-        eventsCount: eventsResult.length,
+        calendarStatus: eventsSettled.status === 'fulfilled' ? 'read' : 'unreadable',
+        eventsCount: eventsSettled.status === 'fulfilled' ? eventsSettled.value.length : 0,
         availableSlotsCount: availabilityResult.available_slots.length,
         sampleAvailableSlots: availabilityResult.available_slots.slice(0, 3).map(slot => ({
           start: slot.start,
@@ -1516,6 +1724,293 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     }
   }, [sessions, loadCalendarData, disabled]);
 
+  // Manual slot entry. Date and time are kept as the raw input strings so an
+  // incomplete pair simply disables the button rather than being coerced into
+  // some nearby instant.
+  const [manualDate, setManualDate] = useState('');
+  const [manualTime, setManualTime] = useState('');
+  const [manualError, setManualError] = useState('');
+
+  /**
+   * Every slot the grid should draw: whatever availability returned, plus the
+   * hand-entered ones, deduplicated on slot identity.
+   *
+   * Manual slots are built at exactly `durationMinutes` long so they survive
+   * CalendarView's duration filter. Building them at some other length would
+   * put a slot in this array that silently never renders, which is a worse
+   * failure than refusing to add it.
+   */
+  /**
+   * Slot keys for every REAL session, whether or not availability generated a
+   * slot at that instant.
+   *
+   * Without these, a session at an off-boundary time - the very thing the
+   * manual control exists to create - was drawn only while its key happened to
+   * be in this tab's sessionStorage. After a reload, or in another browser, a
+   * 14:15 session was absent from the calendar entirely: the grid draws only
+   * what is in `availableSlots`, and `getSessionForSlot` decorates a drawn slot
+   * rather than creating one. Table view is read-only and the per-slot delete
+   * needs a drawn slot, so the only way to remove it was Reset All - which
+   * refuses outright once anything is booked.
+   */
+  const sessionSlotKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    sessions.forEach(session => {
+      keys.add(`${toISOString(session.start_time)}|${toISOString(session.end_time)}`);
+    });
+    return keys;
+  }, [sessions]);
+
+  /**
+   * What the researcher explicitly asked for, as opposed to what availability
+   * generated. Survives the duration filter and wins the overlap prune.
+   */
+  const protectedSlotKeys = React.useMemo<ReadonlySet<string>>(
+    () => new Set([...manualSlotKeys, ...sessionSlotKeys]),
+    [manualSlotKeys, sessionSlotKeys]
+  );
+
+  /**
+   * Every slot the grid should be handed: whatever availability returned, plus
+   * the protected ones it did not include, deduplicated on slot identity.
+   *
+   * duration_minutes is derived from the pair rather than read from
+   * `durationMinutes`, so a slot keeps the length it was created at even if the
+   * researcher then changes the duration control.
+   */
+  const displaySlots = React.useMemo<AvailableSlot[]>(() => {
+    const generated = availableSlots || [];
+    const seen = new Set(generated.map(slotKeyOf));
+    const extra = Array.from(protectedSlotKeys)
+      .filter(key => !seen.has(key))
+      .map(key => {
+        const [start, end] = key.split('|');
+        return {
+          start,
+          end,
+          duration_minutes: Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000),
+        };
+      });
+    return [...generated, ...extra];
+  }, [availableSlots, protectedSlotKeys]);
+
+  /**
+   * What the grid will ACTUALLY draw, computed with the same functions the grid
+   * uses. The counter below reports this rather than `displaySlots.length`,
+   * which was pre-filter and pre-prune and read 21 on a grid drawing 20.
+   */
+  const drawnSlots = React.useMemo(() => {
+    const onScreen = visibleDayKeys(startDate, endDate, excludeWeekends, currentPage, daysPerPage);
+    return slotsToDraw(displaySlots, durationMinutes, protectedSlotKeys).filter(slot => {
+      const when = new Date(slot.start);
+      return !Number.isNaN(when.getTime()) && onScreen.has(when.toDateString());
+    });
+  }, [
+    displaySlots,
+    durationMinutes,
+    protectedSlotKeys,
+    startDate,
+    endDate,
+    excludeWeekends,
+    currentPage,
+    daysPerPage,
+  ]);
+
+  const handleAddManualSlot = useCallback(() => {
+    setManualError('');
+
+    if (!durationMinutes) {
+      setManualError('Choose a timeslot duration first.');
+      return;
+    }
+    if (!manualDate || !manualTime) {
+      setManualError('Enter both a date and a start time.');
+      return;
+    }
+
+    // Local wall-clock, matching every other time this screen shows. `new
+    // Date('2026-08-28T14:00')` is local in every browser this app supports,
+    // but the explicit component form cannot be misread as UTC by a reader.
+    const [year, month, day] = manualDate.split('-').map(Number);
+    const [hour, minute] = manualTime.split(':').map(Number);
+    if ([year, month, day, hour, minute].some(part => Number.isNaN(part))) {
+      setManualError('Enter both a date and a start time.');
+      return;
+    }
+
+    const start = new Date(year, month - 1, day, hour, minute, 0, 0);
+    if (Number.isNaN(start.getTime())) {
+      setManualError('Enter both a date and a start time.');
+      return;
+    }
+    // ponytail: the future-time rule is enforced HERE ONLY, in the browser
+    //   -> #90, so a direct POST /api/sessions can still create a past session.
+    //   `validateSessionData` (backend/src/validation/schemas.ts) is shared
+    //   with the UPDATE path, where refusing a past instant would wrongly block
+    //   editing a session that has already started - so the rule needs a
+    //   create-only home rather than being added there. Impact is bounded:
+    //   POST /api/bookings/sessions/:id/book already refuses a past session
+    //   (routes/bookings.ts), so the result is unbookable clutter, not an
+    //   exploitable path. Pre-existing for the generated-grid path too.
+    if (start.getTime() <= Date.now()) {
+      setManualError('Choose a time in the future.');
+      return;
+    }
+
+    const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+    const slotKey = `${start.toISOString()}|${end.toISOString()}`;
+
+    /*
+     * Refused on OVERLAP, not merely on an exact duplicate.
+     *
+     * The overlap prune keeps one slot per span, so a hand-entered slot that
+     * overlaps another protected slot - an existing session, or one added a
+     * moment ago - loses or wins arbitrarily on start time and the loser is
+     * dropped before rendering, while STILL being selected and still sent to
+     * `createSessions`. Confirm then fails server-side (`checkSessionOverlaps`
+     * throws and rolls back the whole batch) naming a time that appears nowhere
+     * on the grid, and every later Confirm fails identically.
+     *
+     * Refusing here is what makes "added, selected, creatable, never drawn"
+     * structurally impossible rather than merely unlikely. Adjacency is NOT
+     * overlap: 14:45 may start exactly as 14:15-14:45 ends.
+     */
+    /*
+     * Bounded to the hours the timeline draws, alongside the date window and
+     * the weekend filter below - the third and last way a slot could be
+     * "added, selected, creatable and never drawn" (cto/AdaptaLabs#89).
+     *
+     * Outside 07:00-23:00 `getTimePosition` clamps, so the slot renders at
+     * height 0% on an edge. A zero-height div cannot be clicked, so the per-slot
+     * delete cannot reach it, Table view is read-only, and Reset All refuses
+     * once anything is booked - the session becomes unremovable from this
+     * screen. 23:00 is the worst of them, because the timeline DRAWS a 23:00
+     * label, so the hour reads as in range.
+     */
+    const startHours = start.getHours() + start.getMinutes() / 60;
+    const endHours = startHours + durationMinutes / 60;
+    if (startHours < TIMELINE_START_HOUR || endHours > TIMELINE_END_HOUR) {
+      // Two different refusals, because one message cannot serve both. At 60
+      // minutes, 22:45 overruns the timeline - and telling the researcher to
+      // "pick a time between 07:00 and 23:00" when 22:45 IS between them reads
+      // as a bug in the form rather than a bound on the slot.
+      const latestStartMinutes = TIMELINE_END_HOUR * 60 - durationMinutes;
+      const latestStart =
+        `${String(Math.floor(latestStartMinutes / 60)).padStart(2, '0')}:` +
+        `${String(latestStartMinutes % 60).padStart(2, '0')}`;
+      setManualError(
+        startHours < TIMELINE_START_HOUR
+          ? `The calendar starts at ${String(TIMELINE_START_HOUR).padStart(2, '0')}:00, so it cannot draw a slot before then.`
+          : `A ${durationMinutes}-minute slot has to end by ${String(TIMELINE_END_HOUR).padStart(2, '0')}:00, so the latest start is ${latestStart}.`
+      );
+      return;
+    }
+
+    // ponytail: this bound is enforced on ENTRY only, not on what already
+    //   exists -> cto/AdaptaLabs#95. A session outside 07:00-23:00 that reached
+    //   the database another way is still drawn at clamped zero height and
+    //   cannot be clicked to remove it. The sibling future-time rule on this
+    //   same path carries the same shape of note (#90).
+
+    const startMs = start.getTime();
+    const endMs = end.getTime();
+    const overlaps = (otherStart: number, otherEnd: number) =>
+      otherStart < endMs && otherEnd > startMs;
+
+    const clashingSession = sessions.find(session =>
+      overlaps(new Date(session.start_time).getTime(), new Date(session.end_time).getTime())
+    );
+    if (clashingSession) {
+      const identical =
+        new Date(clashingSession.start_time).getTime() === startMs &&
+        new Date(clashingSession.end_time).getTime() === endMs;
+      // The clashing session's time is NAMED. A session outside the visible
+      // window still blocks the add, and a refusal about a time visible nowhere
+      // is the same complaint that produced the overlap gate in the first place.
+      const clashStart = formatClockTime(clashingSession.start_time) ?? '';
+      const clashEnd = formatClockTime(clashingSession.end_time) ?? '';
+      setManualError(
+        identical
+          ? 'That slot already exists.'
+          : `That overlaps an existing session at ${clashStart} - ${clashEnd}. Pick a time that does not.`
+      );
+      return;
+    }
+
+    const clashingManual = Array.from(manualSlotKeys).find(key => {
+      const [otherStart, otherEnd] = key.split('|');
+      return overlaps(new Date(otherStart).getTime(), new Date(otherEnd).getTime());
+    });
+    if (clashingManual) {
+      setManualError('That overlaps a slot you already added. Pick a time that does not.');
+      return;
+    }
+
+    // Always marked protected, even when it coincides exactly with a generated
+    // slot. Skipping that was the third shape of the same defect: an unprotected
+    // slot at a generated instant was then pruned away by a protected
+    // neighbour, and stayed selected.
+    setManualSlotKeys(prev => {
+      const next = new Set([...prev, slotKey]);
+      persistManualSlotKeys(next);
+      return next;
+    });
+
+    // Added AND selected, so the existing confirm step creates it. Adding
+    // without selecting would draw a slot the researcher then has to find and
+    // click, which is the sort of half-step that reads as a bug.
+    setSelectedSlots(prev => {
+      const next = new Set([...prev, slotKey]);
+      persistSelectedSlots(next);
+      return next;
+    });
+
+    // The date is deliberately kept: adding several slots on one day is the
+    // common case. The time is cleared because reusing it would create the
+    // duplicate refused above.
+    setManualTime('');
+
+    // Weekend columns are suppressed by default, so a Saturday slot would be
+    // added, selected, creatable - and never drawn. Turning the filter off is
+    // the only way to show what the researcher just asked for; leaving it on
+    // and silently hiding the slot is the same class of defect as the date
+    // window below.
+    const dayOfWeek = start.getDay();
+    if (excludeWeekends && (dayOfWeek === 0 || dayOfWeek === 6)) {
+      setExcludeWeekends(false);
+    }
+
+    // The grid draws days from startDate/endDate AND paginates them, so a slot
+    // outside that window would be added, selected, creatable - and invisible.
+    // Merely widening the range is not enough: a day three weeks out lands on
+    // page four and is just as unseen. The window MOVES to a week beginning at
+    // that day, which puts it on the first page by construction.
+    const dayStart = new Date(start);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(start);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    if (dayStart < startDate || dayEnd > endDate) {
+      const weekEnd = new Date(dayStart);
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+      setStartDate(dayStart);
+      setEndDate(weekEnd);
+      setCurrentPage(0);
+    }
+  }, [
+    durationMinutes,
+    manualDate,
+    manualTime,
+    manualSlotKeys,
+    sessions,
+    persistManualSlotKeys,
+    persistSelectedSlots,
+    startDate,
+    endDate,
+    excludeWeekends,
+  ]);
+
   const handleSlotSelect = useCallback((slot: AvailableSlot) => {
     const slotKey = `${slot.start}|${slot.end}`;
     logger.debug('🔵 SLOT SELECTED:', { 
@@ -1590,7 +2085,19 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       persistConfirmedSlots(newSet);
       return newSet;
     });
-  }, [selectedSlots, confirmedSlots, sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots]);
+
+    // A hand-entered slot leaves the grid when it is deselected. A generated one
+    // is redrawn by the next availability load whatever we do here, but a manual
+    // one only exists because this component remembers it - so without this a
+    // mistyped slot could be deselected and never removed.
+    setManualSlotKeys(prev => {
+      if (!prev.has(slotKey)) return prev;
+      const newSet = new Set(prev);
+      newSet.delete(slotKey);
+      persistManualSlotKeys(newSet);
+      return newSet;
+    });
+  }, [selectedSlots, confirmedSlots, sessions, onSessionsChange, persistSelectedSlots, persistConfirmedSlots, persistManualSlotKeys]);
 
   const handleCreateSessionsFromSelected = async () => {
     if (selectedSlots.size === 0) {
@@ -1716,15 +2223,19 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
   const handleClearSelected = () => {
     setSelectedSlots(new Set());
     setConfirmedSlots(new Set());
+    setManualSlotKeys(new Set());
     persistSelectedSlots(new Set());
     persistConfirmedSlots(new Set());
+    persistManualSlotKeys(new Set());
   };
 
   const handleClearVisualState = () => {
     setSelectedSlots(new Set());
     setConfirmedSlots(new Set());
+    setManualSlotKeys(new Set());
     persistSelectedSlots(new Set());
     persistConfirmedSlots(new Set());
+    persistManualSlotKeys(new Set());
     // Force refresh calendar to clear any visual state
     loadCalendarData();
   };
@@ -1763,8 +2274,10 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       // Clear all slot states
       setSelectedSlots(new Set());
       setConfirmedSlots(new Set());
+      setManualSlotKeys(new Set());
       persistSelectedSlots(new Set());
       persistConfirmedSlots(new Set());
+      persistManualSlotKeys(new Set());
       
       // Refresh calendar to show updated state
       await loadCalendarData();
@@ -1836,6 +2349,30 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         <div className="alert alert-danger" role="alert">
           <AlertTriangle size={18} className="me-2" />
           {error}
+        </div>
+      )}
+
+      {/*
+        cto/AdaptaLabs#89. The slots below come from the availability endpoint,
+        which knows nothing about this researcher's diary - so when their
+        calendar cannot be read, the grid is a list of times that LOOK checked
+        and are not. Saying so is the whole point: silence here is how "the
+        calendar is connected" gets believed. Not an error - authoring works
+        perfectly well without it, which is why this is not the red alert above.
+      */}
+      {calendarStatus === 'not-connected' && (
+        <div className="alert alert-info" role="alert">
+          <Info size={18} className="me-2" />
+          Your calendar is not connected, so these slots have not been checked against
+          your own commitments. You can still create them.
+        </div>
+      )}
+
+      {calendarStatus === 'unavailable' && (
+        <div className="alert alert-warning" role="alert">
+          <AlertTriangle size={18} className="me-2" />
+          Your calendar could not be read, so these slots have not been checked against
+          your own commitments. You can still create them.
         </div>
       )}
 
@@ -1927,10 +2464,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
           <div className="calendar-control-panel">
             <div className="control-panel-row">
               <div className="form-field-compact">
-                <label className="form-label-compact">
+                <label className="form-label-compact" htmlFor="calendarStartDate">
                   Start Date
                 </label>
                 <input
+                  id="calendarStartDate"
                   type="date"
                   className="form-control form-control-sm"
                   value={toDateInputValue(startDate)}
@@ -1949,10 +2487,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div className="form-field-compact">
-                <label className="form-label-compact">
+                <label className="form-label-compact" htmlFor="calendarEndDate">
                   End Date
                 </label>
                 <input
+                  id="calendarEndDate"
                   type="date"
                   className="form-control form-control-sm"
                   value={toDateInputValue(endDate)}
@@ -1971,10 +2510,11 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                 />
               </div>
               <div className="form-field-compact-sm">
-                <label className="form-label-compact">
+                <label className="form-label-compact" htmlFor="timeslotDuration">
                   Timeslot (mins)
                 </label>
                 <select
+                  id="timeslotDuration"
                   className="form-control form-control-sm"
                   value={durationMinutes || ''}
                   onChange={(e) => {
@@ -2030,10 +2570,75 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
               </div>
               <div className="control-panel-end">
                 <small className="control-panel-counter">
-                  {(availableSlots || []).length} slots available
+                  {drawnSlots.length} slots available
                 </small>
               </div>
             </div>
+          </div>
+
+          {/* Manual slot entry (cto/AdaptaLabs#89 item 2) */}
+          <div className="calendar-control-panel mb-2">
+            <div className="control-panel-row">
+              <div className="form-field-compact">
+                <label className="form-label-compact" htmlFor="manualSlotDate">
+                  Add a slot: date
+                </label>
+                <input
+                  id="manualSlotDate"
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={manualDate}
+                  onChange={(e) => {
+                    // Cleared here, not only on the next Add: a refusal that
+                    // survives the correction reads as a second refusal.
+                    setManualError('');
+                    setManualDate(e.target.value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="form-field-compact-sm">
+                <label className="form-label-compact" htmlFor="manualSlotTime">
+                  Start time
+                </label>
+                <input
+                  id="manualSlotTime"
+                  type="time"
+                  className="form-control form-control-sm"
+                  value={manualTime}
+                  onChange={(e) => {
+                    setManualError('');
+                    setManualTime(e.target.value);
+                  }}
+                  disabled={disabled}
+                />
+              </div>
+              <div className="form-field-compact d-flex align-items-center pt-4">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={handleAddManualSlot}
+                  disabled={disabled || !manualDate || !manualTime || !durationMinutes}
+                  title="Add this time as a selected slot, without using the calendar"
+                >
+                  <Plus size={14} className="me-1" />
+                  Add slot
+                </button>
+              </div>
+              <div className="control-panel-end">
+                <small className="text-muted">
+                  {durationMinutes
+                    ? `${durationMinutes} minutes long, in your own timezone`
+                    : 'Choose a timeslot duration first'}
+                </small>
+              </div>
+            </div>
+            {manualError && (
+              <div className="alert alert-warning mt-2 mb-0 py-2" role="alert">
+                <AlertTriangle size={14} className="me-2" />
+                {manualError}
+              </div>
+            )}
           </div>
 
           {/* View Switcher */}
@@ -2117,7 +2722,8 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   <CalendarView
                     key={`calendar-${startDate.toISOString()}-${endDate.toISOString()}-${sessions.length}`}
                     events={calendarEvents}
-                    availableSlots={availableSlots}
+                    availableSlots={displaySlots}
+                    protectedSlotKeys={protectedSlotKeys}
                     selectedSlots={selectedSlots}
                     confirmedSlots={confirmedSlots}
                     onSlotSelect={handleSlotSelect}

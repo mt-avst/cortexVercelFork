@@ -1640,7 +1640,8 @@
     "mutation": "                OR (s.start_time, b.created_at) < ($2::timestamptz, $3::timestamptz))",
     "runner": "vitest",
     "spec": "src/routes/__tests__/csv-exports-keyset-postgres.test.ts",
-    "test": "exports every booking exactly once when the whole key but the uuid is constant"
+    "test": "exports every booking exactly once when the whole key but the uuid is constant",
+    "needsDatabase": true
   },
   {
     "id": "feedback-export-keeps-the-uuid-tiebreak-in-its-keyset",
@@ -1650,7 +1651,8 @@
     "mutation": "                OR created_at < $1::timestamptz)",
     "runner": "vitest",
     "spec": "src/routes/__tests__/csv-exports-keyset-postgres.test.ts",
-    "test": "exports every feedback row exactly once across batch boundaries"
+    "test": "exports every feedback row exactly once across batch boundaries",
+    "needsDatabase": true
   },
   {
     "id": "admin-requests-validates-the-query-shape",
@@ -1931,5 +1933,16 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.my-bookings-projection.test.ts",
     "test": "narrows at the PROJECTION, which is the outer of the two guards"
+  },
+  {
+    "id": "migration-nulls-only-the-fabricated-event-ids",
+    "why": "cto/AdaptaLabs#89. Until this release CalendarService.createEvent simulated its writes and the booking route stored the fabricated `demo-event-<now>` id in bookings.gcal_event_id, so production rows record Google events that never existed - and cancel and reschedule are both gated on that column being truthy, so each chases a phantom. This migration nulls them. The mutation drops the WHERE predicate so it nulls EVERY id on every boot. That is harmless while no stored id is real, which is exactly why nothing could see it: a gate proved both deleting the statement and deleting only its WHERE passed 1553 jest and 716 vitest. Once the per-user OAuth work lands and real Google ids exist it is silent data loss on every pod restart. Proven KILLED before entry against a real Postgres 17: 6 of 7 arms fail, the named one first.",
+    "file": "backend/src/db/migrate.ts",
+    "anchor": "      UPDATE bookings\n      SET gcal_event_id = NULL\n      WHERE gcal_event_id LIKE 'demo-event-%'",
+    "mutation": "      UPDATE bookings\n      SET gcal_event_id = NULL",
+    "runner": "vitest",
+    "spec": "src/db/__tests__/migrate-nulls-only-fabricated-event-ids-postgres.test.ts",
+    "test": "LEAVES A REAL GOOGLE EVENT ID ALONE",
+    "needsDatabase": true
   }
 ]
