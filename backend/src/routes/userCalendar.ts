@@ -1,10 +1,13 @@
 import { Router, Request, Response, IRouter } from 'express';
+import type { PoolClient } from 'pg';
 import { requireAuth } from '../middleware/authenticate';
 import { asyncHandler } from '../utils/errorHandler';
-import { pool } from '../config';
+import { pool, config } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
 import { logger } from '../utils/logger';
+import { createOAuthStateGuard } from '../utils/oauthState';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import {
   validateQuery,
   oauthCallbackQuerySchema,
@@ -13,8 +16,86 @@ import {
 
 const router: IRouter = Router();
 
-// NOTE: /auth/connect route removed - calendar is now automatically connected during login
-// If manual connection is needed in the future, this route can be restored
+/**
+ * Single-use, browser-bound `state` for the calendar-connect flow.
+ *
+ * Its OWN cookie and its OWN store, deliberately separate from the login flow's
+ * (utils/oauthState.ts explains why): a state minted to connect a calendar must
+ * not be substitutable for one that establishes a session.
+ */
+interface CalendarOAuthFlow {
+  /** Whose calendar this flow is connecting. See the callback for why. */
+  userId: string;
+}
+
+const calendarOAuthState = createOAuthStateGuard<CalendarOAuthFlow>({
+  cookieName: 'adaptalabs_calendar_oauth_state',
+});
+
+/**
+ * Whether a real Google calendar connection can be started at all.
+ *
+ * False means no OAuth client is configured, in which case `getAuthUrl` returns
+ * a URL that points straight back at our own callback with `code=demo` and
+ * mints FABRICATED tokens. Offering that to a researcher would be worse than
+ * offering nothing: they would connect successfully and then trust invented
+ * busy time.
+ */
+const calendarOAuthAvailable = (): boolean => !userCalendarService.isInDemoMode();
+
+/**
+ * How many calendar-connect flows one user may start per minute.
+ *
+ * `/auth/connect` is a state-MINTING route: every call allocates a store entry
+ * that lives for up to one TTL, on a single-replica pod, and `/api/*` carries no
+ * limiter of its own. Measured at 173 bytes per state, an unrated caller can
+ * push tens of megabytes a second into that map.
+ *
+ * Ten a minute is generous for the real behaviour - a researcher connects a
+ * calendar approximately once - and the store also has its own hard bound with
+ * oldest-first eviction, so this is the outer of two independent limits rather
+ * than the only one. Per-user rather than per-IP because the route requires a
+ * session, and behind two proxy hops an IP bucket is shared by the whole estate.
+ */
+const calendarConnectLimiter = perUserLimiter(
+  10,
+  'Too many calendar connection attempts. Please wait a minute and try again.'
+);
+
+/**
+ * GET /api/calendar/auth/connect
+ * Start the Google OAuth flow for this user's own calendar.
+ *
+ * Restored for cto/AdaptaLabs#89. This route was deleted in v2.5.1 on the
+ * belief that "calendar is now automatically connected during login" - which
+ * was true only of the Google login path. Production logs in via Okta/OIDC and
+ * Google OAuth is in demo mode there, so `GET /api/calendar/connection-status`
+ * has answered `{"connected":false}` for every production user since, with no
+ * way for anyone to change that. `userCalendarService.getAuthUrl` has sat here
+ * with no caller ever since.
+ *
+ * cto/AdaptaLabs#87 proposes deleting the `/auth/callback` below as orphaned.
+ * It is not orphaned any more: it is the second half of THIS flow.
+ */
+// The limiter is mounted AFTER requireAuth, deliberately: mounted first it
+// would spend a bucket on unauthenticated requests and `req.user` would be
+// absent, collapsing every caller into one shared bucket.
+router.get('/auth/connect', requireAuth, calendarConnectLimiter, asyncHandler(async (req: Request, res: Response) => {
+  if (!calendarOAuthAvailable()) {
+    logger.info('Refusing to start a calendar OAuth flow: no OAuth client is configured', {
+      userId: req.session.user!.id,
+    });
+    return res.status(503).json({
+      error: 'Calendar connection is not configured on this deployment',
+      code: 'CALENDAR_OAUTH_NOT_CONFIGURED',
+    });
+  }
+
+  // The user is bound to the STATE, server-side, because the callback cannot
+  // read the session - see the callback below.
+  const state = calendarOAuthState.issue(res, { userId: req.session.user!.id });
+  return res.redirect(userCalendarService.getAuthUrl(state));
+}));
 
 /**
  * GET /api/calendar/auth/callback
@@ -23,35 +104,137 @@ const router: IRouter = Router();
  */
 // `validateQuery` (#43): an array `code` is truthy past the missing-code check
 // below and would otherwise land in the token exchange, so the validator
-// refuses a non-string `code` shape at the boundary. (`state` is validated for
-// shape too but no longer read by the handler - see #83.)
-router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {
-  const dbClient = await pool.connect();
-  
+// refuses a non-string `code` shape at the boundary. `state` is validated for
+// shape too, and is now READ - see the state check in the handler (#89).
+//
+// NO `requireAuth`, and that is the point (cto/AdaptaLabs#89).
+//
+// This route is entered by a TOP-LEVEL NAVIGATION redirected from
+// accounts.google.com, and the app session cookie is `SameSite=Strict` in
+// production (index.ts) - browsers compute SameSite across the whole redirect
+// chain, so a Strict cookie is withheld on arrival here. `requireAuth` would
+// therefore answer 401 AFTER the researcher had already granted Google access:
+// a live grant at Google, no token row, and no way to tell why. That is #89's
+// own symptom - "the calendar is inert in production" - under a new cause, and
+// no test in this repo could have seen it, because every route test injects
+// `req.session` directly.
+//
+// So the OAuth state IS the authenticator. `/auth/connect` binds the initiating
+// user's id to the state server-side; the state cookie is deliberately
+// `SameSite=Lax`, which DOES ride a top-level GET redirect. The handler takes
+// the user from the consumed state and never from the session.
+//
+// That is strictly stronger than trusting the session would have been: an
+// attacker who mints a state and lures a victim here fails the browser binding,
+// and even if it passed, the payload names the ATTACKER, so their tokens land on
+// their own row rather than the victim's.
+router.get('/auth/callback', validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {
+  /*
+   * The pool connection is taken LATE, after the state check and after the
+   * token exchange, and this ordering is load-bearing.
+   *
+   * `pool.connect()` used to be this handler's first line. That was survivable
+   * while the route required a session; it is not now that the route is
+   * unauthenticated by design, for two reasons that compound:
+   *
+   *   - an anonymous caller reached a pool checkout on every request, before any
+   *     refusal, and there is no rate limiter under /api
+   *   - the connection was then HELD across `getTokens`, an outbound fetch to
+   *     Google with no AbortSignal, so undici's 300s default is the only bound.
+   *     `pool.options.max` is pg's default 10, and POOL_STATEMENT_TIMEOUT_MS
+   *     bounds queries rather than checkouts - so ten stalled flows wedge the
+   *     whole backend, not just this route.
+   *
+   * routes/auth.ts already does it in this order (state check, then exchange,
+   * then connect), so this is the shape the repo had settled on.
+   */
+  let dbClient: PoolClient | undefined;
+
   try {
     const code = req.query.code as string;
 
-    // No OAuth `state` is verified here, and that is deliberate rather than an
-    // omission (cto/AdaptaLabs#83). Nothing initiates a separate calendar OAuth
-    // flow: the `/auth/connect` route was removed and `userCalendarService
-    // .getAuthUrl` has no caller, so calendar tokens are obtained during Google
-    // login in routes/auth.ts (which binds its own state, #82), not through this
-    // callback. The old guard compared the query state against
-    // `req.session.googleOAuthState`, a value assigned NOWHERE in the repo, so it
-    // could never fire - a check that read as protection while being dead code.
-    // Removed with its interface and its `delete` rather than left misleading.
+    // The OAuth `state` check is LIVE again (cto/AdaptaLabs#89).
+    //
+    // #83 removed the previous one, correctly: it compared the query state
+    // against `req.session.googleOAuthState`, a value assigned nowhere in the
+    // repo, so it could never fire - a check that read as protection while
+    // being dead code. Its real defect was that nothing initiated this flow at
+    // all. `/auth/connect` above now does, so the guard has something to guard,
+    // and it is the SAME single-use browser-bound control #82 built for login
+    // rather than a second implementation of it.
+    //
+    // Without this, an attacker who obtains any authorization code can lure a
+    // logged-in researcher to this URL and have THEIR calendar tokens written
+    // against the victim's user row - the victim then books against a stranger's
+    // free/busy.
+    // The demo path is allowed in DEVELOPMENT ONLY, stated positively.
+    //
+    // It was `demoMode && NODE_ENV === 'production'` -> refuse, which meant any
+    // other NODE_ENV - including unset - skipped the state check entirely and
+    // wrote fabricated tokens against whoever's session arrived. Inverted so
+    // the permissive branch has to be asked for by name: `config.NODE_ENV` is
+    // the validated value (a zod enum defaulting to 'development'), so this
+    // cannot be widened by a typo in the environment.
+    const demoMode = userCalendarService.isInDemoMode();
+    const demoAllowed = demoMode && config.NODE_ENV === 'development';
 
-    // In demo mode, code might not be present - handle gracefully
-    if (!code && userCalendarService.isInDemoMode()) {
+    if (demoMode && !demoAllowed) {
+      // No initiator can reach here in this state - /auth/connect refuses - so
+      // this is only reachable by hand, and it is refused by hand too. A user
+      // must never be handed fabricated tokens outside a developer's machine.
+      logger.warn('Refusing a calendar OAuth callback in demo mode outside development', {
+        nodeEnv: config.NODE_ENV,
+      });
+      return res.status(503).json({
+        error: 'Calendar connection is not configured on this deployment',
+        code: 'CALENDAR_OAUTH_NOT_CONFIGURED',
+      });
+    }
+
+    // Whose calendar this is. From the state in every real flow; from the
+    // session only on the development-only demo path, which has no state.
+    let userId: string;
+
+    if (demoAllowed) {
+      const sessionUserId = req.session?.user?.id;
+      if (!sessionUserId) {
+        return res.status(401).json({ error: 'Authentication required' });
+      }
+      userId = sessionUserId;
+    } else {
+      const stateResult = calendarOAuthState.consume(req, res, req.query.state);
+      if (!stateResult.ok) {
+        logger.warn('Refusing a calendar OAuth callback with an invalid state', {
+          reason: stateResult.error,
+        });
+        return res.status(400).json({ error: stateResult.error });
+      }
+      if (!stateResult.payload?.userId) {
+        // A state with no bound user cannot identify whose calendar to write.
+        // Refused rather than falling back to the session, which is the exact
+        // trust this route was rebuilt to stop relying on.
+        logger.error('A calendar OAuth state carried no user', { state: 'redacted' });
+        return res.status(400).json({ error: 'Invalid state parameter' });
+      }
+      userId = stateResult.payload.userId;
+    }
+
+    // In demo mode (local development only, per the guard above) `code` might
+    // not be present - handle gracefully.
+    if (!code && demoAllowed) {
       logger.debug('Demo mode: Handling callback without code');
       // For demo mode, we'll just mark as connected with mock tokens
     } else if (!code) {
       return res.status(400).json({ error: 'Authorization code missing' });
     }
 
-    const userId = req.session.user!.id;
-    
-    // Get tokens (mock in demo mode, real in production)
+    // Get tokens (mock in demo mode, real in production).
+    //
+    // Bounded, because undici's default is a 300s header timeout and this used
+    // to run while holding a pool connection. It no longer does, but an
+    // unbounded outbound call in a request path is worth closing anyway: a
+    // stalled Google token endpoint would otherwise hold a request open for five
+    // minutes with the researcher watching a blank tab.
     const { accessToken, refreshToken, expiryDate } = await userCalendarService.getTokens(
       code || 'demo-code'
     );
@@ -62,7 +245,9 @@ router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema
       ? userCalendarService.encrypt(refreshToken) 
       : null;
     
-    // Store tokens in database
+    // Store tokens in database. The connection is taken here, once there is
+    // something to write and nothing left that can refuse.
+    dbClient = await pool.connect();
     await dbClient.query(`
       INSERT INTO user_calendar_tokens (
         user_id, access_token, refresh_token, expires_at, 
@@ -93,7 +278,8 @@ router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema
     const frontendUrl = process.env.CORS_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:3000';
     res.redirect(`${frontendUrl}/opportunities?calendar=error&message=${encodeURIComponent(errorMessage)}`);
   } finally {
-    dbClient.release();
+    // `?.` because every refusal above now returns before a connection exists.
+    dbClient?.release();
   }
 }));
 
@@ -141,7 +327,11 @@ router.get('/my-events', requireAuth, validateQuery(userCalendarEventsQuerySchem
     if (tokenResult.rows.length === 0) {
       return res.status(404).json({ 
         error: 'Calendar not connected',
-        connected: false 
+        connected: false,
+        // Carried on the 404 so the caller that just learned "not connected"
+        // also learns whether connecting is possible, without a second request
+        // (cto/AdaptaLabs#89).
+        available: calendarOAuthAvailable(),
       });
     }
 
@@ -217,6 +407,10 @@ router.get('/connection-status', requireAuth, asyncHandler(async (req: Request, 
     res.json({ 
       connected: result.rows.length > 0,
       connectedAt: result.rows[0]?.connected_at || null,
+      // Whether connecting is even possible here (cto/AdaptaLabs#89). A UI that
+      // offers a Connect button on a deployment with no OAuth client sends the
+      // researcher to a 503; one that offers nothing leaves them wondering why.
+      available: calendarOAuthAvailable(),
     });
   } catch (error: unknown) {
     logger.error('Error checking connection status', { error });

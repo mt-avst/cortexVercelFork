@@ -445,7 +445,15 @@ const IN_HANDLER_GATES: Record<string, Verdict> = {
   // Constant-time `Bearer CRON_SECRET` compare in the handler, so that a
   // scheduler with no cookie can trigger the reminder job. Pinned by
   // `cron.constant-time-secret.test.ts`.
-  'GET /api/cron/send-reminders': 'in-handler-secret'
+  'GET /api/cron/send-reminders': 'in-handler-secret',
+  // Single-use, browser-bound OAuth `state` consumed in the handler, which
+  // carries the initiating user's id server-side. It CANNOT use `requireAuth`:
+  // the route is entered by a top-level navigation redirected from
+  // accounts.google.com, and the app session cookie is SameSite=Strict in
+  // production, so it is withheld across that redirect chain - `requireAuth`
+  // would 401 the researcher after they had already granted Google access
+  // (cto/AdaptaLabs#89). Pinned by `userCalendar.connect-flow.test.ts`.
+  'GET /api/calendar/auth/callback': 'in-handler-secret'
 };
 
 const ROUTES_DIR = path.join(__dirname, '..');
@@ -587,7 +595,8 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'POST /api/calendar/check-conflicts': 'admin',
 
   // userCalendar.ts - same /api/calendar prefix, personal rather than admin
-  'GET /api/calendar/auth/callback': 'session',
+  'GET /api/calendar/auth/callback': 'in-handler-secret',
+  'GET /api/calendar/auth/connect': 'session',
   'GET /api/calendar/my-events': 'session',
   'GET /api/calendar/connection-status': 'session',
   'DELETE /api/calendar/disconnect': 'session',
@@ -662,7 +671,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 90;
+const EXPECTED_ROUTE_COUNT = 91;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs

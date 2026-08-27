@@ -1,10 +1,10 @@
 import express, { Router } from 'express';
 import { Issuer, Client } from 'openid-client';
-import crypto from 'crypto';
 
 import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { logger } from '../utils/logger';
+import { createOAuthStateGuard, OAuthStateResult } from '../utils/oauthState';
 import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
 import {
   parseBootstrapSuperadminEmails,
@@ -32,91 +32,25 @@ if (oidcClientIdConflictWarning) {
 const router: Router = Router();
 let client: Client;
 
-// Store for state validation (in production, use Redis or similar)
-const stateStore = new Map<string, { timestamp: number; used: boolean }>();
-
-// Clean up expired states every 10 minutes
-// .unref() so this timer alone can't keep the process (or a Jest worker) alive
-setInterval(() => {
-  const now = Date.now();
-  for (const [state, data] of stateStore.entries()) {
-    if (now - data.timestamp > 10 * 60 * 1000) { // 10 minutes
-      stateStore.delete(state);
-    }
-  }
-}, 10 * 60 * 1000).unref();
-
-// The OAuth `state` is ALSO bound to a dedicated cookie on the browser that
-// started the login (cto/AdaptaLabs#82). The `stateStore` above is a
-// process-global map that any unauthenticated caller can populate by hitting
-// /login or /google-login, so "the state is in the store" does NOT prove the
-// callback belongs to the browser that began the flow: an attacker mints a
-// state, captures their own code, and lures the victim to the callback with
-// both (login CSRF / session fixation). Requiring the state to equal a nonce we
-// set on the initiating browser closes that - the victim, who never began a
-// login, carries no such cookie.
+// The OAuth `state` control that cto/AdaptaLabs#82 built here now lives in
+// utils/oauthState.ts, because the calendar-connect flow needs the same one
+// (cto/AdaptaLabs#89) and a security check kept in two copies eventually
+// differs in two copies. Behaviour is unchanged - single-use, expiring, and
+// bound to a nonce cookie on the browser that began the login, so an
+// attacker-minted state cannot drive a victim's callback. The five tests in
+// `auth.google-callback-state.test.ts` are what proves that.
 //
-// This is a SEPARATE cookie because the app session cookie is SameSite=Strict
-// in production and would not ride the cross-site OAuth callback; SameSite=Lax
-// is sent on the provider's top-level GET redirect back to us. Path '/' because
-// the flow starts at /api/auth/* but the provider redirect lands at /auth/*.
-const OAUTH_STATE_COOKIE = 'adaptalabs_oauth_state';
-const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
+// This flow's own cookie and its own store: a calendar state must not be
+// substitutable for a login state.
+const loginOAuthState = createOAuthStateGuard({ cookieName: 'adaptalabs_oauth_state' });
 
-const oauthStateCookieOptions = () => ({
-  httpOnly: true,
-  sameSite: 'lax' as const,
-  secure: process.env.NODE_ENV === 'production',
-  path: '/',
-});
+const issueOAuthState = (res: express.Response): string => loginOAuthState.issue(res);
 
-/**
- * Mint a fresh single-use OAuth state, record it in the store for expiry and
- * replay tracking, AND set it as a browser-bound cookie. Returns the state so
- * the caller can put it in the provider authorization URL.
- */
-function issueOAuthState(res: express.Response): string {
-  const state = crypto.randomBytes(32).toString('hex');
-  stateStore.set(state, { timestamp: Date.now(), used: false });
-  res.cookie(OAUTH_STATE_COOKIE, state, {
-    ...oauthStateCookieOptions(),
-    maxAge: OAUTH_STATE_TTL_MS,
-  });
-  return state;
-}
-
-type OAuthStateResult = { ok: true; state: string } | { ok: false; error: string };
-
-/**
- * Validate the OAuth `state` on a callback: it must (1) equal the nonce set on
- * THIS browser at login (CSRF binding), (2) be present in the store, and (3) be
- * unused (replay). On success the state is consumed - marked used and its
- * cookie cleared - so it cannot drive a second callback.
- */
-function consumeOAuthState(
+const consumeOAuthState = (
   req: express.Request,
   res: express.Response,
   state: unknown
-): OAuthStateResult {
-  const cookies = req.cookies as Record<string, string> | undefined;
-  const bound = cookies?.[OAUTH_STATE_COOKIE];
-
-  // Browser binding first: no valid cookie means this callback did not begin on
-  // this browser, regardless of what the store holds.
-  if (typeof state !== 'string' || !bound || state !== bound) {
-    return { ok: false, error: 'Invalid state parameter' };
-  }
-  if (!stateStore.has(state)) {
-    return { ok: false, error: 'Invalid state parameter' };
-  }
-  const stateData = stateStore.get(state);
-  if (!stateData || stateData.used) {
-    return { ok: false, error: 'State parameter already used' };
-  }
-  stateData.used = true;
-  res.clearCookie(OAUTH_STATE_COOKIE, oauthStateCookieOptions());
-  return { ok: true, state };
-}
+): OAuthStateResult => loginOAuthState.consume(req, res, state);
 
 // Initialize OIDC client
 async function initializeClient() {
