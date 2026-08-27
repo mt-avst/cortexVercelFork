@@ -1,0 +1,301 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { vi } from 'vitest';
+import ParticipantsTab, { bookingStatusLabel } from '../ParticipantsTab';
+import { OpportunityBookingRow, ResearcherNotesResponse } from '../../../api/types';
+
+function buildBooking(overrides: Partial<OpportunityBookingRow> = {}): OpportunityBookingRow {
+  return {
+    id: 'b1',
+    user_id: 'user-1',
+    session_id: 's1',
+    status: 'booked',
+    completion_status: 'pending',
+    session_start_time: '2026-09-01T10:00:00.000Z',
+    session_end_time: '2026-09-01T11:00:00.000Z',
+    participant_name: 'Jane Doe',
+    participant_email: 'jane@example.com',
+    business_unit: 'Ops',
+    role_title: 'Analyst',
+    researcher_notes: null,
+    researcher_notes_updated_at: null,
+    created_at: '2026-08-27T09:00:00.000Z',
+    updated_at: '2026-08-27T09:00:00.000Z',
+    ...overrides
+  };
+}
+
+const noopSave = async (): Promise<ResearcherNotesResponse> => ({
+  researcher_notes: null,
+  researcher_notes_updated_at: null
+});
+
+/**
+ * Drafts are owned by the PAGE, not by the component - the page survives its
+ * own loading states and the component does not. This harness stands in for
+ * that owner so the component can be exercised on its own.
+ */
+const Harness: React.FC<Partial<React.ComponentProps<typeof ParticipantsTab>> & {
+  bookings: OpportunityBookingRow[];
+}> = ({ bookings, ...overrides }) => {
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  return (
+    <ParticipantsTab
+      bookings={bookings}
+      loading={false}
+      error=""
+      onRefresh={() => undefined}
+      onSaveNotes={noopSave}
+      drafts={drafts}
+      onDraftsChange={setDrafts}
+      {...overrides}
+    />
+  );
+};
+
+const renderTab = (
+  bookings: OpportunityBookingRow[],
+  overrides: Partial<React.ComponentProps<typeof ParticipantsTab>> = {}
+) => render(<Harness bookings={bookings} {...overrides} />);
+
+describe('bookingStatusLabel', () => {
+  it.each([
+    [{ status: 'cancelled', completion_status: 'pending' }, 'Cancelled'],
+    [{ status: 'cancelled', completion_status: 'approved' }, 'Cancelled'],
+    [{ status: 'booked', completion_status: 'completed' }, 'Awaiting approval'],
+    [{ status: 'booked', completion_status: 'approved' }, 'Completed'],
+    [{ status: 'booked', completion_status: 'rejected' }, 'Rejected'],
+    [{ status: 'booked', completion_status: 'pending' }, 'Booked'],
+    [{ status: 'booked', completion_status: null }, 'Booked']
+  ])('labels %j as %s', (booking, expected) => {
+    expect(bookingStatusLabel(booking)).toBe(expected);
+  });
+});
+
+describe('ParticipantsTab', () => {
+  it('renders the empty state when nobody has booked', () => {
+    renderTab([]);
+
+    expect(screen.getByText('Nobody has booked a session yet.')).toBeInTheDocument();
+  });
+
+  it('renders the error INSTEAD of the empty state - a 403 is not "no bookings"', () => {
+    renderTab([], { error: 'Only the opportunity owner can view its participants' });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Only the opportunity owner can view its participants'
+    );
+    expect(screen.queryByText('Nobody has booked a session yet.')).not.toBeInTheDocument();
+  });
+
+  it('renders each booking with participant identity, slot and status', () => {
+    renderTab([
+      buildBooking(),
+      buildBooking({
+        id: 'b2',
+        participant_name: 'Sam Smith',
+        participant_email: 'sam@example.com',
+        status: 'cancelled'
+      })
+    ]);
+
+    expect(screen.getByText('Jane Doe')).toBeInTheDocument();
+    expect(screen.getByText('jane@example.com')).toBeInTheDocument();
+    expect(screen.getAllByText('Analyst, Ops')).toHaveLength(2);
+    expect(screen.getByText('Booked')).toBeInTheDocument();
+    expect(screen.getByText('Sam Smith')).toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('shows the stored note and its updated time', () => {
+    renderTab([
+      buildBooking({
+        researcher_notes: 'struggled with the export step',
+        researcher_notes_updated_at: '2026-08-27T10:00:00.000Z'
+      })
+    ]);
+
+    expect(screen.getByLabelText('Researcher notes for Jane Doe')).toHaveValue(
+      'struggled with the export step'
+    );
+    expect(screen.getByText(/^Updated /)).toBeInTheDocument();
+  });
+
+  it('disables Save until the note is edited, then saves the draft and shows the server timestamp', async () => {
+    const user = userEvent.setup();
+    const onSaveNotes = vi.fn(async (_bookingId: string, notes: string) => ({
+      researcher_notes: notes,
+      researcher_notes_updated_at: '2026-08-27T12:34:00.000Z'
+    }));
+    renderTab([buildBooking()], { onSaveNotes });
+
+    const saveButton = screen.getByRole('button', { name: 'Save note' });
+    expect(saveButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), 'good session');
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
+
+    await user.click(saveButton);
+
+    expect(onSaveNotes).toHaveBeenCalledWith('b1', 'good session');
+    expect(await screen.findByText(/^Updated /)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save note' })).toBeDisabled();
+    expect(screen.queryByText('Unsaved changes')).not.toBeInTheDocument();
+  });
+
+  it('keeps the draft and says so when the save fails', async () => {
+    const user = userEvent.setup();
+    const onSaveNotes = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    renderTab([buildBooking()], { onSaveNotes });
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), 'do not lose me');
+    await user.click(screen.getByRole('button', { name: 'Save note' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save this note');
+    expect(screen.getByLabelText('Researcher notes for Jane Doe')).toHaveValue('do not lose me');
+    expect(screen.getByRole('button', { name: 'Save note' })).toBeEnabled();
+  });
+
+  it('keeps text typed WHILE a save is in flight, and does not report it saved', async () => {
+    // The defect a refute gate demonstrated: `handleSave` captured the draft
+    // at click time and cleared it unconditionally on success, so anything
+    // typed between the click and the response was discarded - and the UI
+    // then showed "Updated ..." with the Save button disabled, a positive
+    // confirmation over lost text. Same family as the D2 autosave loss, on
+    // the one field this whole feature exists to store.
+    const user = userEvent.setup();
+    let resolveSave: (value: ResearcherNotesResponse) => void = () => undefined;
+    const onSaveNotes = vi.fn(
+      () =>
+        new Promise<ResearcherNotesResponse>((resolve) => {
+          resolveSave = resolve;
+        })
+    );
+    renderTab([buildBooking()], { onSaveNotes });
+
+    const textarea = screen.getByLabelText('Researcher notes for Jane Doe');
+    await user.type(textarea, 'first half');
+    await user.click(screen.getByRole('button', { name: 'Save note' }));
+
+    // Still typing while the request is in flight.
+    await user.type(textarea, ' and the rest');
+
+    resolveSave({
+      researcher_notes: 'first half',
+      researcher_notes_updated_at: '2026-08-27T12:00:00.000Z'
+    });
+
+    // The newer text survives, and the row still reads as unsaved, because
+    // what is on screen is NOT what the server stored.
+    expect(await screen.findByText('Unsaved changes')).toBeInTheDocument();
+    expect(textarea).toHaveValue('first half and the rest');
+    expect(screen.getByRole('button', { name: 'Save note' })).toBeEnabled();
+  });
+
+  it('shows a co-owner\'s note when the roster is refreshed after a local save', async () => {
+    // Reachable only because #79 made the roster owner-OR-superadmin, so two
+    // people can write the same booking's note. Local state that shadows the
+    // prop forever would show this researcher their own stale text.
+    const user = userEvent.setup();
+    const onSaveNotes = vi.fn(async (_id: string, notes: string) => ({
+      researcher_notes: notes,
+      researcher_notes_updated_at: '2026-08-27T12:00:00.000Z'
+    }));
+    const { rerender } = renderTab([buildBooking()], { onSaveNotes });
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), 'my note');
+    await user.click(screen.getByRole('button', { name: 'Save note' }));
+    expect(await screen.findByText(/^Updated /)).toBeInTheDocument();
+
+    // A Refresh brings back a newer row written by the co-owner.
+    rerender(
+      <Harness
+        bookings={[
+          buildBooking({
+            researcher_notes: 'CO-OWNER EDIT',
+            researcher_notes_updated_at: '2026-08-27T13:00:00.000Z'
+          })
+        ]}
+        onSaveNotes={onSaveNotes}
+      />
+    );
+
+    expect(screen.getByLabelText('Researcher notes for Jane Doe')).toHaveValue('CO-OWNER EDIT');
+  });
+
+  it('refuses an over-length note rather than silently truncating the paste', async () => {
+    // The backend's stated policy is refuse-never-truncate, on the grounds
+    // that a truncated note is a note the researcher believes they kept and
+    // did not. A browser `maxLength` does exactly that on paste, with no
+    // message - so the cap is enforced by refusing to save, and said out loud.
+    const user = userEvent.setup();
+    const onSaveNotes = vi.fn(noopSave);
+    renderTab([buildBooking({ researcher_notes: 'x'.repeat(20000) })], { onSaveNotes });
+
+    const textarea = screen.getByLabelText('Researcher notes for Jane Doe');
+    expect(textarea).not.toHaveAttribute('maxlength');
+
+    await user.type(textarea, 'yy');
+
+    expect(screen.getByText('2 characters over the 20000 limit')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save note' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'Save note' }));
+    expect(onSaveNotes).not.toHaveBeenCalled();
+  });
+
+  it('clears a failed save message as soon as the researcher retypes', async () => {
+    const user = userEvent.setup();
+    const onSaveNotes = vi.fn(async () => {
+      throw new Error('network down');
+    });
+    renderTab([buildBooking()], { onSaveNotes });
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), 'attempt');
+    await user.click(screen.getByRole('button', { name: 'Save note' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), '!');
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('does not re-enable one row\'s in-flight save when another row finishes', async () => {
+    const user = userEvent.setup();
+    const resolvers: Array<(value: ResearcherNotesResponse) => void> = [];
+    const onSaveNotes = vi.fn(
+      () =>
+        new Promise<ResearcherNotesResponse>((resolve) => {
+          resolvers.push(resolve);
+        })
+    );
+    renderTab([buildBooking(), buildBooking({ id: 'b2', participant_name: 'Sam Smith' })], {
+      onSaveNotes
+    });
+
+    await user.type(screen.getByLabelText('Researcher notes for Jane Doe'), 'jane note');
+    await user.click(screen.getAllByRole('button', { name: 'Save note' })[0]);
+    await user.type(screen.getByLabelText('Researcher notes for Sam Smith'), 'sam note');
+    await user.click(screen.getAllByRole('button', { name: /Save note|Saving/ })[1]);
+
+    // Sam's save lands first; Jane's is still in flight and must stay locked.
+    resolvers[1]({ researcher_notes: 'sam note', researcher_notes_updated_at: null });
+
+    await screen.findByText('Unsaved changes');
+    expect(screen.getAllByRole('button', { name: /Save note|Saving/ })[0]).toBeDisabled();
+  });
+
+  it('pins the ceiling at 20000 characters, as a literal', () => {
+    // 20000 the NUMBER, not the constant: a cap asserted via the constant
+    // cannot see the constant change (rules/common/testing.md). The backend
+    // pins the same literal in bookings.researcher-notes.test.ts, so the two
+    // sides cannot drift apart without one of them failing by name.
+    renderTab([buildBooking({ researcher_notes: 'x'.repeat(20001) })]);
+
+    expect(screen.getByText('1 characters over the 20000 limit')).toBeInTheDocument();
+  });
+});

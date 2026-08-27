@@ -2,13 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
+import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, getOpportunityBookings, updateBookingResearcherNotes, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
 import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
-import { Opportunity, SessionEvent } from '../api/types';
+import { Opportunity, SessionEvent, OpportunityBookingRow } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import SessionsTab from '../components/opportunity-analytics/SessionsTab';
+import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
 import { ArrowLeft, Info } from 'lucide-react';
 
 // Cortex Bar Chart component - pure CSS, no dependencies
@@ -150,9 +151,16 @@ const OpportunityAnalyticsPage: React.FC = () => {
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [error, setError] = useState<string>('');
   const [selectedPeriod, setSelectedPeriod] = useState<AnalyticsPeriod>(30);
-  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'results'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'sessions' | 'results' | 'participants'>('overview');
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
   const [loadingSessionEvents, setLoadingSessionEvents] = useState(false);
+  const [bookings, setBookings] = useState<OpportunityBookingRow[]>([]);
+  const [loadingBookings, setLoadingBookings] = useState(false);
+  const [bookingsError, setBookingsError] = useState('');
+  // Unsaved researcher notes, held HERE rather than inside ParticipantsTab.
+  // This component survives its own loading states; everything it renders
+  // does not, because the opportunity refetch below early-returns a spinner.
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [surveyResults, setSurveyResults] = useState<{ title: string; results: SurveyResultsData } | null>(null);
   const [loadingSurveyResults, setLoadingSurveyResults] = useState(false);
   const [surveyResultsError, setSurveyResultsError] = useState('');
@@ -256,6 +264,33 @@ const OpportunityAnalyticsPage: React.FC = () => {
       setLoadingSurveyResults(false);
     }
   }, [id]);
+
+  const loadBookings = useCallback(async () => {
+    if (!id) return;
+    setLoadingBookings(true);
+    setBookingsError('');
+    try {
+      setBookings(await getOpportunityBookings(id));
+    } catch (err: unknown) {
+      // Same honesty rule as loadSurveyResults above: "nobody booked" and
+      // "you may not see who booked" are different findings, and rendering
+      // the empty state for a 403 is the lie a researcher would act on.
+      const response = (err as { response?: { status?: number } }).response;
+      setBookingsError(
+        response?.status === 403
+          ? 'Only the opportunity owner can view its participants'
+          : 'Could not load the participants'
+      );
+      setBookings([]);
+    } finally {
+      setLoadingBookings(false);
+    }
+  }, [id]);
+
+  const saveResearcherNotes = useCallback(
+    (bookingId: string, notes: string) => updateBookingResearcherNotes(bookingId, notes),
+    []
+  );
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -457,6 +492,13 @@ const OpportunityAnalyticsPage: React.FC = () => {
     (opportunity.type === 'poll' || opportunity.type === 'survey') &&
     Boolean(opportunity.firsthand_study_id);
 
+  // The two moderated types (#79). Unconditional for them, unlike the two
+  // gates above, because a booked roster needs no linked study to exist -
+  // the booking system IS their data path, and an empty roster renders as an
+  // honest empty state rather than a missing tab.
+  const showsParticipants =
+    opportunity.type === 'test' || opportunity.type === 'interview';
+
   return (
     <div className="analytics-page-wrapper" style={{ position: 'relative', minHeight: '100vh' }}>
       {/* Theme-aware Background: Dark Mode gets neural particles on black */}
@@ -500,9 +542,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           {/* Sessions for a FirstHand-linked unmoderated study; Responses for a
-              natively-answered poll or survey. Mutually exclusive by type, so
-              the strip carries Overview plus whichever applies. */}
-          {(showsSessions || showsResults) && (
+              natively-answered poll or survey; Participants for the two
+              moderated types. Mutually exclusive by type, so the strip
+              carries Overview plus whichever applies. */}
+          {(showsSessions || showsResults || showsParticipants) && (
             <div className="cortex-date-selector" role="tablist" aria-label="Analytics section">
               <button
                 role="tab"
@@ -545,6 +588,23 @@ const OpportunityAnalyticsPage: React.FC = () => {
                   }}
                 >
                   Responses
+                </button>
+              )}
+              {showsParticipants && (
+                <button
+                  role="tab"
+                  type="button"
+                  className={`cortex-period-btn ${activeTab === 'participants' ? 'cortex-period-btn--active' : ''}`}
+                  aria-selected={activeTab === 'participants'}
+                  onClick={() => {
+                    setActiveTab('participants');
+                    // Refetched on every visit, same reasoning as Responses:
+                    // bookings arrive while the page is open, and a stale
+                    // roster is the one thing this view must not show.
+                    void loadBookings();
+                  }}
+                >
+                  Participants
                 </button>
               )}
             </div>
@@ -594,6 +654,22 @@ const OpportunityAnalyticsPage: React.FC = () => {
           events={sessionEvents}
           loading={loadingSessionEvents}
           onRefresh={loadSessionEvents}
+        />
+      ) : activeTab === 'participants' ? (
+        // Unmounted with the tab, like its siblings. What must NOT die with
+        // it - the unsaved note text - is held by this page instead, because
+        // the opportunity refetch above early-returns a spinner that unmounts
+        // this subtree anyway, so keeping the component mounted across tab
+        // switches would have protected the note from one route of loss and
+        // not the other.
+        <ParticipantsTab
+          bookings={bookings}
+          loading={loadingBookings}
+          error={bookingsError}
+          onRefresh={loadBookings}
+          onSaveNotes={saveResearcherNotes}
+          drafts={noteDrafts}
+          onDraftsChange={setNoteDrafts}
         />
       ) : loadingAnalytics ? (
         <div className="text-center py-5">

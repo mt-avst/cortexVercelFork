@@ -18,6 +18,8 @@ import { awardPoints, awardPointsAfterApproval } from '../services/gamification'
 import { parsePointsHistoryCursor } from '../../../shared/services/gamification';
 import type { PointsHistoryCursor } from '../services/gamification';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
+import { z } from 'zod';
+import { VALIDATION } from '../../../shared/constants';
 
 const router: Router = Router();
 
@@ -1166,17 +1168,58 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
       ORDER BY s.start_time DESC
     `, [userId, now]);
 
-    // Serialize dates for API response
+    // Serialize dates for API response.
+    //
+    // NAMED FIELD BY FIELD, NOT `{...booking}`, and that is the point rather
+    // than a style choice. The projection above is what keeps a
+    // researcher-only column out of this handler; this map is what keeps one
+    // off the wire if the projection is ever widened. A refute gate on #79
+    // measured the cost of having only the first: appending
+    // `b.researcher_notes` to `participantBookingColumns` passed 93 suites /
+    // 1537 tests with the spread in place, and the note would have reached
+    // this participant's Network tab. The sibling `/my/bookings/all` has
+    // mapped explicitly since #54 for the same reason.
+    //
+    // Same field set the spread produced, because production's SELECT only
+    // ever returned these - so the wire contract is unchanged.
     interface BookingRow {
+      id: string;
+      user_id: string;
+      session_id: string;
+      status: string;
+      completion_status: string | null;
+      completed_at: Date | null;
+      gcal_event_id: string | null;
+      reminder_sent_at: Date | null;
+      session_capacity: number;
+      session_location: string | null;
+      opportunity_title: string;
+      opportunity_type: string;
+      opportunity_purpose: string;
+      owner_name: string;
+      owner_email: string;
       session_start_time: Date;
       session_end_time: Date;
       cancelled_at?: Date | null;
       created_at: Date;
       updated_at: Date;
-      [key: string]: unknown;
     }
     const serializeBooking = (booking: BookingRow) => ({
-      ...booking,
+      id: booking.id,
+      user_id: booking.user_id,
+      session_id: booking.session_id,
+      status: booking.status,
+      completion_status: booking.completion_status,
+      completed_at: booking.completed_at,
+      gcal_event_id: booking.gcal_event_id,
+      reminder_sent_at: booking.reminder_sent_at,
+      session_capacity: booking.session_capacity,
+      session_location: booking.session_location,
+      opportunity_title: booking.opportunity_title,
+      opportunity_type: booking.opportunity_type,
+      opportunity_purpose: booking.opportunity_purpose,
+      owner_name: booking.owner_name,
+      owner_email: booking.owner_email,
       session_start_time: booking.session_start_time.toISOString(),
       session_end_time: booking.session_end_time.toISOString(),
       cancelled_at: booking.cancelled_at ? booking.cancelled_at.toISOString() : undefined,
@@ -1224,9 +1267,17 @@ router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req:
       return res.status(404).json({ error: 'Opportunity not found' });
     }
 
+    // Owner OR superadmin. This route used to admit the owner and nobody
+    // else - the trust model's odd one out, pinned as such in its test file
+    // until somebody resolved it on purpose. #79 is that resolution: the
+    // Participants tab reads this roster, superadmins see every other
+    // participant-data surface (#10, approve/reject below), and an
+    // asymmetric 403 here would blank one tab of a page the rest of which
+    // renders for them.
+    const isSuperadmin = req.user!.role === 'superadmin';
     const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);
-    if (!isOwner) {
-      return res.status(403).json({ error: 'Only the owner can view bookings for this opportunity' });
+    if (!isSuperadmin && !isOwner) {
+      return res.status(403).json({ error: 'Only the owner or a superadmin can view bookings for this opportunity' });
     }
 
     // Get bookings with participant details
@@ -1249,6 +1300,9 @@ router.get('/opportunities/:id/bookings', requireAdmin, asyncHandler(async (req:
       cancelled_at: booking.cancelled_at ? booking.cancelled_at.toISOString() : undefined,
       created_at: booking.created_at.toISOString(),
       updated_at: booking.updated_at.toISOString(),
+      researcher_notes_updated_at: booking.researcher_notes_updated_at
+        ? booking.researcher_notes_updated_at.toISOString()
+        : null,
     }));
 
     res.json(bookings);
@@ -1553,6 +1607,91 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
   } finally {
     client.release();
   }
+}));
+
+/**
+ * The whole body of PUT /:bookingId/notes, strict so a key this route does
+ * not know about is a refusal rather than a silent ignore - the lesson !222
+ * paid for. The ceiling refuses rather than truncates: a truncated note is a
+ * note the researcher believes they kept and did not.
+ */
+const ResearcherNotesBodySchema = z.object({
+  researcher_notes: z.string().max(VALIDATION.MAX_RESEARCHER_NOTES_CHARS),
+}).strict();
+
+// PUT /api/bookings/:bookingId/notes - the researcher's running note on one
+// moderated booking (#79). Owner-or-superadmin, same gate family as
+// approve/reject above; distinct from their `admin_notes`, which is the
+// completion-approval annotation. The participant never sees this field on
+// any route - both participant-facing projections in this file are explicit
+// column lists that exclude it by construction.
+router.put('/:bookingId/notes', requireAuth, asyncHandler(async (req: Request, res: Response) => {
+  const dbAvailable = await isDatabaseAvailable();
+  if (!dbAvailable) {
+    throw new AppError('Database not available. Please set up PostgreSQL to edit notes.', 503);
+  }
+
+  const { bookingId } = req.params;
+  const adminId = req.user!.id;
+
+  const parsed = ResearcherNotesBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError(
+      `researcher_notes must be a string of at most ${VALIDATION.MAX_RESEARCHER_NOTES_CHARS} characters, and no other key is accepted`
+    );
+  }
+
+  // Liveness (#14 family): the role that decides is the one in the users
+  // table now, not the one snapshotted into the session at login.
+  const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
+  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
+    throw new ForbiddenError('Only admins can edit researcher notes');
+  }
+
+  const bookingResult = await pool.query(`
+    SELECT b.id, o.owner_user_id
+    FROM bookings b
+    JOIN sessions s ON b.session_id = s.id
+    JOIN opportunities o ON s.opportunity_id = o.id
+    WHERE b.id = $1
+  `, [bookingId]);
+
+  if (bookingResult.rows.length === 0) {
+    throw new NotFoundError('Booking');
+  }
+
+  const isSuperadmin = userResult.rows[0].role === 'superadmin';
+  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {
+    throw new ForbiddenError('You can only edit notes for your own opportunities');
+  }
+
+  // '' stores as NULL: "no note" is one state, not two.
+  const notes = parsed.data.researcher_notes === '' ? null : parsed.data.researcher_notes;
+
+  const updateResult = await pool.query(`
+    UPDATE bookings
+    SET researcher_notes = $1,
+        researcher_notes_updated_at = NOW(),
+        researcher_notes_updated_by = $2
+    WHERE id = $3
+    RETURNING researcher_notes, researcher_notes_updated_at
+  `, [notes, adminId, bookingId]);
+
+  // The booking can be deleted between the ownership read above and this
+  // write - `DELETE FROM bookings WHERE session_id IN (...)` on the
+  // delete-sessions path does exactly that. Without this, `rows[0]` is
+  // undefined and the caller gets a 500 built from a TypeError.
+  if (updateResult.rows.length === 0) {
+    throw new NotFoundError('Booking');
+  }
+
+  const row = updateResult.rows[0];
+  res.json({
+    researcher_notes: row.researcher_notes,
+    researcher_notes_updated_at: row.researcher_notes_updated_at
+      ? row.researcher_notes_updated_at.toISOString()
+      : null,
+  });
 }));
 
 export default router;

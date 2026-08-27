@@ -33,11 +33,14 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  * it passed 844 of 844 jest tests, `tsc` clean. Measured on e717537, one gate
  * at a time.
  *
- * This route is also the odd one out in the trust model (routes/firsthand.ts):
- * it admits the opportunity owner AND NOBODY ELSE, not even a superadmin,
- * unlike every sibling around it. That asymmetry is pinned below too, so that
- * whichever way a future reader decides to resolve it, they have to do it on
- * purpose rather than by deleting a line.
+ * This route USED to be the odd one out in the trust model: it admitted the
+ * opportunity owner and nobody else, not even a superadmin. An earlier version
+ * of this file pinned that asymmetry "so that whichever way a future reader
+ * decides to resolve it, they have to do it on purpose". #79 resolved it on
+ * purpose: the roster is now owner-or-superadmin, matching the recorded trust
+ * model (#10: owners and superadmins see participant data) and the
+ * approve/reject gates fifty lines down, because the Participants tab this
+ * route now feeds is served to superadmins on every other opportunity surface.
  */
 type Role = 'employee' | 'researcher_admin' | 'superadmin';
 
@@ -106,6 +109,42 @@ describe('GET /api/bookings/opportunities/:id/bookings ownership', () => {
     expect(participantQuery()).toBeDefined();
   });
 
+  // THE READ HALF OF #79, which nothing else asserts. A refute gate measured
+  // the gap: making this route answer `researcher_notes: null` passed 93
+  // suites / 1537 tests, and so did dropping the `researcher_notes_updated_at`
+  // serialisation. The write is well pinned; without this, a later narrowing
+  // of `SELECT b.*` to an explicit column list - which this file's sibling
+  // actively campaigns for - would render empty boxes over stored notes, and
+  // a researcher typing into one would overwrite what was there.
+  it('returns the researcher note and its timestamp to the owner', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'admin-1' }] } as never);
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'b1',
+          participant_name: 'Sam Participant',
+          participant_email: 'sam@example.com',
+          business_unit: 'Ops',
+          role_title: 'Analyst',
+          session_start_time: new Date('2026-01-01T10:00:00Z'),
+          session_end_time: new Date('2026-01-01T11:00:00Z'),
+          created_at: new Date('2026-01-01T09:00:00Z'),
+          updated_at: new Date('2026-01-01T09:00:00Z'),
+          cancelled_at: null,
+          researcher_notes: 'froze up when asked about the dashboard',
+          researcher_notes_updated_at: new Date('2026-01-01T11:05:00Z'),
+        },
+      ],
+    } as never);
+
+    const res = await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(PATH)
+      .expect(200);
+
+    expect(res.body[0].researcher_notes).toBe('froze up when asked about the dashboard');
+    expect(res.body[0].researcher_notes_updated_at).toBe('2026-01-01T11:05:00.000Z');
+  });
+
   it('refuses a researcher_admin who does not own the opportunity', async () => {
     ownedBy('admin-2');
 
@@ -113,7 +152,7 @@ describe('GET /api/bookings/opportunities/:id/bookings ownership', () => {
       .get(PATH)
       .expect(403);
 
-    expect(res.body.error).toBe('Only the owner can view bookings for this opportunity');
+    expect(res.body.error).toBe('Only the owner or a superadmin can view bookings for this opportunity');
   });
 
   // The absence-assertion, with the control above proving it can be present.
@@ -129,14 +168,15 @@ describe('GET /api/bookings/opportunities/:id/bookings ownership', () => {
     expect(participantQuery()).toBeUndefined();
   });
 
-  it('refuses a superadmin too, which is this route and not the others', async () => {
+  it('serves a superadmin the roster for an opportunity they do not own', async () => {
     ownedBy('admin-2');
 
-    await request(listening(appAs('superadmin', 'root-1')))
+    const res = await request(listening(appAs('superadmin', 'root-1')))
       .get(PATH)
-      .expect(403);
+      .expect(200);
 
-    expect(participantQuery()).toBeUndefined();
+    expect(res.body).toHaveLength(1);
+    expect(participantQuery()).toBeDefined();
   });
 
   it('refuses an ownerless opportunity rather than adopting it', async () => {

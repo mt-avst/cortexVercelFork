@@ -251,6 +251,7 @@ describe('bookings cleanup-cancelled is gone', () => {
           admin_notes: 'flaky attendance, do not re-invite',
           approved_by: 'researcher-9',
           approved_at: new Date('2026-01-03T09:00:00.000Z'),
+          researcher_notes: 'froze up when asked about the dashboard',
         },
       ],
     } as never);
@@ -274,6 +275,8 @@ describe('bookings cleanup-cancelled is gone', () => {
       'approved_at',
       'flaky attendance, do not re-invite',
       'researcher-9',
+      'researcher_notes',
+      'froze up when asked about the dashboard',
     ]) {
       expect({ secret, onTheWire: wire.includes(secret) }).toEqual({
         secret,

@@ -79,6 +79,12 @@ export const VALIDATION = {
   MAX_TITLE_LENGTH: 200,
   /** Maximum length for descriptions */
   MAX_DESCRIPTION_LENGTH: 5000,
+  /**
+   * Ceiling for a researcher's running note on one booking (#79). A policy
+   * number, so it is pinned as a literal in
+   * bookings.researcher-notes.test.ts - refuse over it, never truncate.
+   */
+  MAX_RESEARCHER_NOTES_CHARS: 20000,
   /** Email validation regex */
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   /** URL validation regex */

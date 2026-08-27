@@ -575,6 +575,11 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'GET /api/bookings/pending-approvals': 'session',
   'POST /api/bookings/:bookingId/approve': 'session',
   'POST /api/bookings/:bookingId/reject': 'session',
+  // #79: the researcher-notes write. Same gate family as approve/reject one
+  // line up - `requireAuth`, then the handler re-reads the LIVE role and
+  // requires owner-or-superadmin on the opportunity. Owned by
+  // bookings.researcher-notes.test.ts, both directions.
+  'PUT /api/bookings/:bookingId/notes': 'session',
 
   // calendar.ts
   'GET /api/calendar/events': 'admin',
@@ -657,7 +662,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 89;
+const EXPECTED_ROUTE_COUNT = 90;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
