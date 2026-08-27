@@ -29,12 +29,23 @@
  * returns. It carries a control proving the scanner can still find one, and it
  * names what it does not read.
  *
- * WHAT IT DELIBERATELY DOES NOT DO: the superadmin bypass. Five of the six
- * sites let a superadmin through; `GET /api/bookings/opportunities/:id/
- * bookings` does not, and that asymmetry is real and load-bearing enough to be
- * named in the trust model in routes/firsthand.ts. Folding the bypass in here
- * would make the odd one out invisible at its own call site, and would make
- * granting it a one-word edit in a file no route review opens.
+ * WHAT IT DELIBERATELY DOES NOT DO: the superadmin bypass. Every call site
+ * that GRANTS one pairs this predicate with its own `isSuperadmin` term -
+ * including `GET /api/bookings/opportunities/:id/bookings`, which refused a
+ * superadmin until #79 widened it and moved its row under "the OPPORTUNITY
+ * owner, or a superadmin" in the trust model in routes/firsthand.ts.
+ *
+ * `POST /api/bookings/:id/cancel` grants NONE, and that asymmetry survives:
+ * it pairs this predicate with an `isAdmin` ROLE gate, so a superadmin who is
+ * neither the participant nor the owner is refused. Named here because it is
+ * now the only one, and an earlier version of this paragraph claimed the
+ * roster was - a refute gate caught the replacement asserting there were none
+ * at all. Pinned by `refuses a superadmin who does not own the opportunity`
+ * in bookings.cancel-ownership.test.ts.
+ *
+ * Folding the bypass in here would make granting it a one-word edit in a file
+ * no route review opens, and would hide from each call site the one decision
+ * that site is making.
  *
  * Shaped as `(row, user)` rather than `(ownerId, callerId)` on purpose. Two
  * bare strings in the same order are exactly the pair a refactor swaps without

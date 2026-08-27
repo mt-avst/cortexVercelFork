@@ -343,14 +343,24 @@ function requireSuperadminForStudyResults(req: Request): void {
 //     POST /api/bookings/:bookingId/approve|reject  a WRITE, listed here
 //                                             because it authors admin_notes
 //                                             about a named participant
+//     PUT  /api/bookings/:bookingId/notes   a WRITE, same reason: it authors
+//                                             researcher_notes about a named
+//                                             participant (#79)
+//     GET  /api/bookings/opportunities/:id/bookings   bookings.ts
+//     WAS the odd one out - owner AND NOBODY ELSE, not even a superadmin -
+//     and was pinned in both directions so that resolving it either way had
+//     to be a decision somebody made on purpose. #79 made that decision and
+//     moved the row here: the Participants tab reads this roster, a
+//     superadmin already reaches every participant name and email through
+//     /api/admin/export/bookings, and admin_notes on a COMPLETED booking
+//     through /pending-approvals (that handler filters
+//     completion_status = 'completed', so an approved or rejected booking's
+//     note is not reachable there - an earlier draft of this line said
+//     "every admin_notes", which overstated it). An asymmetric 403 would have
+//     blanked one tab of a page the rest of which renders for them. Its test
+//     file pins the new behaviour and says the same.
 //     GET  /api/admin/dashboard             recent_bookings, admin.ts
 //     GET  /api/admin/export/bookings       admin.ts
-//   the OPPORTUNITY owner AND NOBODY ELSE, not even a superadmin
-//     GET  /api/bookings/opportunities/:id/bookings   bookings.ts
-//     The odd one out, and not obviously intended. Named so a reader trained
-//     on the headings above is not surprised by a 403 - and now pinned in
-//     both directions, so resolving it either way is a decision somebody
-//     makes on purpose rather than a line that quietly goes missing.
 //   the STUDY owner, or a superadmin, and only for a COUNT
 //     GET  /studies/:studyId -> answer_counts       `mayReadCounts`, below
 //   a SUPERADMIN AND NOBODY ELSE, not even the study's own owner

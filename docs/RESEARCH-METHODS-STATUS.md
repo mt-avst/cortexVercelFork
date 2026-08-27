@@ -65,16 +65,18 @@ Publishing something unusable should not be possible.
 **Scope of the absence assertion**: grepped all `.ts` and `.tsx` under `shared`, `backend/src` and `frontend/src`, excluding test files.
 51 references to the `question` type, none of them touching `native`, `firsthand` or `delivery_mode`.
 
-### 2. Moderated test and interview capture nothing - tracked as #79
+### 2. Moderated test and interview capture researcher notes only - tracked as #79
 
-Biggest gap, biggest build.
+Biggest gap; the first slice is done.
 
-Both types get a Session Management tab and nothing else (`getTabsForType`, `frontend/src/pages/OpportunityForm.tsx:449`).
-No consent step, no recording, no notes, no results.
-The researcher runs the session on a call - the meeting link is `meeting_location_optional`, rendered as "Join via Google Meet / Zoom / Teams" in `frontend/src/pages/MyBookings.tsx:163` - and Cortex's entire record of what happened is "Booked a time" on the analytics card.
+Both types get a Session Management tab in the author form and nothing else (`getTabsForType`, `frontend/src/pages/OpportunityForm.tsx:449`).
+The researcher runs the session on a call - the meeting link is `meeting_location_optional`, rendered as "Join via Google Meet / Zoom / Teams" in `frontend/src/pages/MyBookings.tsx:163`.
 
-The components exist separately: a recorded runner, a booking system, transcript generation.
-Nothing joins them for a live moderated session.
+Since #79's first slice, the analytics page gives both types a Participants tab: the roster of who booked (`GET /api/bookings/opportunities/:id/bookings`, owner or superadmin) with a free-text researcher note per booking (`bookings.researcher_notes`, `PUT /api/bookings/:bookingId/notes`).
+The note is the researcher's own record and the participant never sees it - both participant-facing booking projections exclude the column by construction.
+
+Still absent, by decision (notes-first scope, 2026-08-27): no consent step, no recording or artefact ingest, no transcript.
+The recorded path's "transcript generation" is a prototype that interleaves prompts with typed answers - there is no speech-to-text in the repo - so capture parity would be new machinery, not reuse.
 
 ### 3. External poll and survey return no data - not tracked
 

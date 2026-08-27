@@ -1,12 +1,11 @@
 import axios, { AxiosResponse, AxiosError } from 'axios';
 
 import { API_CONFIG, getAuthUrl, getApiBaseUrl } from '../config/api';
-import { AppError, mapAxiosError } from '../utils/errorHandler';
 import { ensureCsrfToken, isCsrfError, isMutatingMethod, CSRF_HEADER } from './csrf';
 import { logger } from '../utils/logger';
 import { authNavigation, isAdminRoute, isProductionEnvironment, redirectTo, AUTH_ENDPOINTS } from '../utils/navigation';
 
-import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, BookingWithDetails, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailableSlot, AvailabilityResponse, ConflictCheckResponse, AdminRequest } from './types';
+import { User, Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, UpdateSessionRequest, Booking, UserBookings, RescheduleBookingRequest, CalendarEvent, AvailabilityResponse, ConflictCheckResponse, AdminRequest, OpportunityBookingRow, ResearcherNotesResponse } from './types';
 
 /**
  * Primary API client for all frontend API requests
@@ -411,8 +410,19 @@ export const rejectSession = async (bookingId: string, adminNotes?: string): Pro
   return response.data;
 };
 
-export const getOpportunityBookings = async (opportunityId: string): Promise<BookingWithDetails[]> => {
+// Typed as the admin roster row it actually returns - the old
+// `BookingWithDetails[]` annotation described the participant-side shape and
+// had no caller to notice (#79 gave this function its first one).
+export const getOpportunityBookings = async (opportunityId: string): Promise<OpportunityBookingRow[]> => {
   const response = await api.get(`/bookings/opportunities/${opportunityId}/bookings`);
+  return response.data;
+};
+
+export const updateBookingResearcherNotes = async (
+  bookingId: string,
+  researcherNotes: string
+): Promise<ResearcherNotesResponse> => {
+  const response = await api.put(`/bookings/${bookingId}/notes`, { researcher_notes: researcherNotes });
   return response.data;
 };
 

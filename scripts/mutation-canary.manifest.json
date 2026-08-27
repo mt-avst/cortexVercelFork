@@ -436,7 +436,7 @@
   },
   {
     "id": "opportunity-bookings-consults-ownership",
-    "why": "GET /api/bookings/opportunities/:id/bookings returns every participant's NAME, EMAIL, BUSINESS UNIT and ROLE TITLE. Neutering its owner check to `true` passed 844 of 844 jest tests on e717537 - measured, one gate at a time. The route is also the trust model's odd one out, admitting the owner and NOT a superadmin, so there is no sibling whose failure would stand in for this one.",
+    "why": "GET /api/bookings/opportunities/:id/bookings returns every participant's NAME, EMAIL, BUSINESS UNIT and ROLE TITLE. Neutering its owner check to `true` passed 844 of 844 jest tests on e717537 - measured, one gate at a time. #79 widened the gate to owner-OR-superadmin (the Participants tab feeds from this roster), so the mutation now opens the roster to every researcher_admin rather than to everybody; the named test still fails by name because its caller is a non-owner researcher_admin. Re-proven KILLED after the widening.",
     "file": "backend/src/routes/bookings.ts",
     "anchor": "    const isOwner = isOpportunityOwner(opportunityCheck.rows[0], req.user);",
     "mutation": "    const isOwner = true;",
@@ -1871,5 +1871,65 @@
     "runner": "jest",
     "spec": "src/utils/__tests__/logger.test.ts",
     "test": "redacts a bracket-notation parameter name"
+  },
+  {
+    "id": "researcher-notes-write-consults-ownership",
+    "why": "cto/AdaptaLabs#79. PUT /:bookingId/notes writes a researcher's free-text judgement about a named colleague onto their booking. This mutation opens the write to ANY live-role admin on any opportunity. The named test asserts both the 403 and that no UPDATE ran; under the mutation the handler answers 200 and runs the UPDATE. Proven KILLED before entry.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {\n    throw new ForbiddenError('You can only edit notes for your own opportunities');\n  }",
+    "mutation": "  if (false) {\n    throw new ForbiddenError('You can only edit notes for your own opportunities');\n  }",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
+    "test": "refuses a researcher_admin who does not own the opportunity, without writing"
+  },
+  {
+    "id": "researcher-notes-write-reads-live-role",
+    "why": "cto/AdaptaLabs#79, same liveness family as #14: the role that decides is the one in the users table now, not the one snapshotted into the session at login. This mutation keeps the existence check and drops the role check, so a demoted-to-employee session with a stale admin claim writes notes about a colleague. The named test's session claims researcher_admin while the live-role query answers employee. Proven KILLED before entry.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {\n    throw new ForbiddenError('Only admins can edit researcher notes');\n  }",
+    "mutation": "  if (userResult.rows.length === 0) {\n    throw new ForbiddenError('Only admins can edit researcher notes');\n  }",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
+    "test": "refuses a caller whose LIVE role is employee, whatever the session says"
+  },
+  {
+    "id": "researcher-notes-ceiling-is-pinned",
+    "why": "cto/AdaptaLabs#79. The notes ceiling is policy: refuse over it, never truncate. A test deriving its expectation from the constant cannot see the constant change (three mutations survived exactly that way on 2026-08-22), so the ceiling is pinned as a LITERAL in both the backend suite and the frontend textarea maxlength test. This mutation widens the ceiling 1000x; the backend literal pin fails by name. Proven KILLED before entry.",
+    "file": "shared/constants/index.ts",
+    "anchor": "  MAX_RESEARCHER_NOTES_CHARS: 20000,",
+    "mutation": "  MAX_RESEARCHER_NOTES_CHARS: 20000000,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
+    "test": "pins the ceiling at 20000 characters"
+  },
+  {
+    "id": "researcher-notes-write-superadmin-half-reads-live-role",
+    "why": "cto/AdaptaLabs#79. The ADMIN half of this route's liveness check has its own entry; the SUPERADMIN half had none, and a refute gate measured the gap: deciding `isSuperadmin` from `req.user!.role` - the LOGIN SNAPSHOT, since the route sits on `requireAuth` alone - passed all 1537 backend tests while letting a superadmin demoted since login write notes on any opportunity for the life of their session. Same family as the `authenticate.ts:70` finding. Proven KILLED before entry.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "  const isSuperadmin = userResult.rows[0].role === 'superadmin';\n  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {",
+    "mutation": "  const isSuperadmin = req.user!.role === 'superadmin';\n  if (!isSuperadmin && !isOpportunityOwner(bookingResult.rows[0], req.user)) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
+    "test": "refuses a caller whose LIVE role dropped from superadmin, on an opportunity they do not own"
+  },
+  {
+    "id": "opportunity-bookings-roster-returns-the-note",
+    "why": "cto/AdaptaLabs#79's READ half. The write is heavily pinned; the read was not, and a refute gate proved it: making this roster answer `researcher_notes: null` passed 93 suites / 1537 tests. The sibling route's own test file campaigns for replacing `SELECT b.*` with explicit column lists, so a future narrowing here would render empty boxes over stored notes - and a researcher typing into one would overwrite what was there. Proven KILLED before entry.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      researcher_notes_updated_at: booking.researcher_notes_updated_at\n        ? booking.researcher_notes_updated_at.toISOString()\n        : null,",
+    "mutation": "      researcher_notes: null,\n      researcher_notes_updated_at: booking.researcher_notes_updated_at\n        ? booking.researcher_notes_updated_at.toISOString()\n        : null,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.opportunity-bookings-ownership.test.ts",
+    "test": "returns the researcher note and its timestamp to the owner"
+  },
+  {
+    "id": "my-bookings-projection-excludes-researcher-columns",
+    "why": "cto/AdaptaLabs#79. `GET /api/bookings/my/bookings` is the route on which this repo ALREADY shipped `admin_notes` to the participant it was about (learnings.md:349). Its sibling has been pinned since #54; this one was not, and a refute gate appended `b.researcher_notes` to `participantBookingColumns` and measured 93 suites / 1537 passing. This mutation is that exact widening. Proven KILLED before entry, after the response map was also narrowed from a spread to named fields so the class is closed at both layers.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      b.id, b.user_id, b.session_id, b.status, b.completion_status, b.completed_at,\n      b.cancelled_at, b.gcal_event_id, b.reminder_sent_at, b.created_at, b.updated_at",
+    "mutation": "      b.id, b.user_id, b.session_id, b.status, b.completion_status, b.completed_at,\n      b.cancelled_at, b.gcal_event_id, b.reminder_sent_at, b.created_at, b.updated_at,\n      b.researcher_notes",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.my-bookings-projection.test.ts",
+    "test": "narrows at the PROJECTION, which is the outer of the two guards"
   }
 ]

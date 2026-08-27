@@ -403,8 +403,28 @@ export async function runMigrations() {
       ADD COLUMN IF NOT EXISTS admin_notes TEXT
     `);
     await client.query(`
-      ALTER TABLE bookings 
+      ALTER TABLE bookings
       ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ
+    `);
+
+    // Researcher notes on a moderated booking (#79). Distinct from
+    // `admin_notes`, which is the one-shot completion-approval annotation:
+    // this is the researcher's running record of the session itself, written
+    // from the Participants tab. Lives on the booking row so it is deleted
+    // with the booking, and so the participant-facing projections
+    // (`ownBookingColumns`, `participantBookingColumns` in routes/bookings.ts)
+    // exclude it by construction.
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS researcher_notes TEXT
+    `);
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS researcher_notes_updated_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS researcher_notes_updated_by UUID REFERENCES users(id) ON DELETE SET NULL
     `);
 
     // Create indexes for bookings
