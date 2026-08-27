@@ -249,7 +249,15 @@ router.get('/login', async (req, res) => {
  * @param res - Express response object
  * @returns Redirects to frontend on success or returns error response
  */
-router.get('/callback', async (req, res) => {
+// `validateQuery` (#84): this route reads its query through
+// `oidcClient.callbackParams(req)`, which parses `req.url` with querystring and
+// yields ARRAYS for repeated parameters - invisible to #43's `req.query`-read
+// scan. The validator refuses a non-string `code`/`state` SHAPE here at the
+// boundary (a 400 before the handler), so an array parameter never reaches
+// `callbackParams` and the token exchange. It does not narrow what
+// `callbackParams` reads (that is `req.url`); it refuses the malformed request
+// outright, exactly as the sibling google-callback does.
+router.get('/callback', validateQuery(oauthCallbackQuerySchema), async (req, res) => {
   try {
     // Check if OIDC client is available, retrying initialization if needed
     const oidcClient = await ensureClient();

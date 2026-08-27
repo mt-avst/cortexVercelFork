@@ -1841,5 +1841,35 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/runtime-pool-admission-routes.test.ts",
     "test": "releases the permit early on all four results routes"
+  },
+  {
+    "id": "oidc-callback-validates-the-query-shape",
+    "why": "cto/AdaptaLabs#84. GET /auth/callback reads its query through oidcClient.callbackParams(req), which parses req.url and yields arrays for repeated parameters - invisible to #43's req.query-read scan. validateQuery refuses a non-string code/state SHAPE with 400 before the handler, so an array never reaches the token exchange. Unwiring the validator lets a repeated code through to the handler's own 500 instead of the validator's 400. Proven KILLED before entry.",
+    "file": "backend/src/routes/auth.ts",
+    "anchor": "router.get('/callback', validateQuery(oauthCallbackQuerySchema), async (req, res) => {",
+    "mutation": "router.get('/callback', async (req, res) => {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/auth.oidc-callback-query-shapes.test.ts",
+    "test": "refuses a repeated code with the validator 400"
+  },
+  {
+    "id": "log-redaction-matches-the-decoded-parameter-name",
+    "why": "cto/AdaptaLabs#84. redactSensitiveUrl must match sensitive parameter names on the DECODED name: qs reads ?%63ode= as `code`, so a raw-string match leaks the value. This mutation stops decoding the name (decodedName = rawName), so a percent-encoded name is no longer recognised and the credential reaches the log. Proven KILLED before entry.",
+    "file": "backend/src/utils/logger.ts",
+    "anchor": "      let decodedName: string;\n      try {\n        decodedName = decodeURIComponent(rawName.replace(/\\+/g, ' '));\n      } catch {\n        decodedName = rawName;\n      }",
+    "mutation": "      const decodedName: string = rawName;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/logger.test.ts",
+    "test": "redacts a percent-encoded parameter name"
+  },
+  {
+    "id": "log-redaction-matches-the-bracket-base-name",
+    "why": "cto/AdaptaLabs#84. qs reads ?code[0]=/code[foo]= as the `code` parameter, so redaction must match the base name before any '['. This mutation drops the split('['), so bracket notation is no longer recognised and the value leaks to the log. Proven KILLED before entry.",
+    "file": "backend/src/utils/logger.ts",
+    "anchor": "      const baseName = decodedName.split('[')[0].toLowerCase();",
+    "mutation": "      const baseName = decodedName.toLowerCase();",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/logger.test.ts",
+    "test": "redacts a bracket-notation parameter name"
   }
 ]

@@ -116,6 +116,30 @@ describe('redactSensitiveUrl', () => {
     expect(redacted).toBe('/auth/callback?code=[REDACTED]&redirect=/admin');
   });
 
+  // #84: the parameter NAME can be encoded. `qs` (the route's parser) decodes
+  // `%63ode` to `code`, so the value is read as an authorization code but a
+  // literal `code=` regex never matched it - the credential reached the log.
+  it('redacts a percent-encoded parameter name', () => {
+    const redacted = redactSensitiveUrl('/auth/callback?%63ode=live-auth-code&state=xyz789');
+
+    expect(redacted).not.toContain('live-auth-code');
+    expect(redacted).not.toContain('xyz789');
+    expect(redacted).toContain('=[REDACTED]');
+  });
+
+  // #84: `qs` reads `code[0]`/`code[foo]` as the `code` parameter (an array or
+  // object), so bracket notation carries a live code past a literal `code=`
+  // match. `requestLogger` runs before `validateQuery` can 400 the shape.
+  // (Test title kept free of `[` so the mutation-canary `-t` regex can match it.)
+  it('redacts a bracket-notation parameter name', () => {
+    for (const name of ['code[0]', 'code[foo]', 'code%5B0%5D']) {
+      const redacted = redactSensitiveUrl(`/auth/callback?${name}=SENSITIVE_VALUE`);
+
+      expect(redacted).not.toContain('SENSITIVE_VALUE');
+      expect(redacted).toContain('[REDACTED]');
+    }
+  });
+
   it('leaves undefined alone', () => {
     expect(redactSensitiveUrl(undefined)).toBeUndefined();
   });
