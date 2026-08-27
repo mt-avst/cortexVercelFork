@@ -23,8 +23,15 @@ import express from 'express';
 
 jest.mock('../../middleware/authenticate');
 
+// `config.NODE_ENV` gates the development-only demo path in the callback
+// (cto/AdaptaLabs#89), so the mock has to carry it.
+const fakeConfig = { NODE_ENV: 'development' as string };
+
 jest.mock('../../config', () => ({
   pool: { query: jest.fn(), connect: jest.fn() },
+  get config() {
+    return fakeConfig;
+  },
 }));
 
 jest.mock('../../services/userCalendar', () => ({
@@ -62,7 +69,7 @@ const appWithSession = (id: string) => {
   return app;
 };
 
-/** No session: pins that `requireAuth` runs before `validateQuery`. */
+/** No session: pins that `requireAuth` runs before `validateQuery` on my-events. */
 const anonymousApp = () => {
   const app = express();
   app.use(express.json());
@@ -80,12 +87,40 @@ beforeEach(() => {
 });
 
 describe('requireAuth runs before the validator (mount order)', () => {
-  it('answers 401, not the validator 400, for an anonymous hostile-shaped callback', async () => {
+  it('refuses an anonymous hostile-shaped callback at the validator, taking no connection', async () => {
+    // This route deliberately has NO `requireAuth` (cto/AdaptaLabs#89): it is
+    // entered by a top-level navigation redirected from accounts.google.com,
+    // and the app session cookie is SameSite=Strict in production, so it is
+    // withheld across that redirect chain - `requireAuth` here would 401 the
+    // researcher after they had already granted Google access. The single-use
+    // browser-bound OAuth state is the authenticator instead, and it carries
+    // the initiating user's id server-side.
+    //
+    // So the anonymous refusal now comes from the validator rather than from
+    // auth, and what still matters is that it happens BEFORE the handler's
+    // first line, which is `pool.connect()`.
     const res = await request(listening(anonymousApp())).get('/api/calendar/auth/callback?code[]=a&code[]=b');
 
-    expect(res.status).toBe(401);
-    expect(res.body.error).not.toBe('Invalid query parameters');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid query parameters');
     expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  it('still refuses an anonymous well-formed callback', async () => {
+    // The control for the test above: dropping `requireAuth` must not have made
+    // this route open.
+    //
+    // This suite runs the service mock in DEMO mode with
+    // `fakeConfig.NODE_ENV = 'development'`, which is the one configuration that
+    // skips the state check - and on that path the handler still requires a
+    // session, so the refusal is a 401. The non-demo path refuses a missing
+    // state with a 400 instead; that arm lives in
+    // userCalendar.connect-flow.test.ts, which drives the callback through an
+    // app with no session middleware at all.
+    const res = await request(listening(anonymousApp())).get('/api/calendar/auth/callback?code=abc');
+
+    expect(res.status).toBe(401);
+    expect(res.body.error).toBe('Authentication required');
   });
 
   it('answers 401, not the validator 400, for an anonymous hostile-shaped my-events', async () => {
@@ -113,6 +148,10 @@ describe('GET /api/calendar/auth/callback query shapes', () => {
   });
 
   it('still completes the callback for a single well-formed code', async () => {
+    // Demo mode under NODE_ENV=development, which is the one configuration that
+    // skips the state check (the service mock above returns `isInDemoMode: true`
+    // and `fakeConfig.NODE_ENV` is 'development'). The state-bound path is
+    // covered end to end in userCalendar.connect-flow.test.ts.
     const res = await request(listening(appWithSession('user-1')))
       .get('/api/calendar/auth/callback?code=abc&state=xyz');
 

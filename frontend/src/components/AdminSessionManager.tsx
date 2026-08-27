@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Session, CreateSessionRequest, CalendarEvent, AvailableSlot } from '../api/types';
-import { getMyCalendarEvents, getAvailability } from '../api/client';
+import { getMyCalendarEvents, getAvailability, calendarConnectUrl } from '../api/client';
 import { createSessions, deleteAllSessions } from '../api/client';
 import { logger } from '../utils/logger';
 
@@ -1267,6 +1267,17 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
    * they will read an unchecked grid as one checked against their diary.
    */
   const [calendarStatus, setCalendarStatus] = useState<'unknown' | 'connected' | 'not-connected' | 'unavailable'>('unknown');
+
+  /**
+   * Whether this deployment can start a calendar OAuth flow at all
+   * (cto/AdaptaLabs#89).
+   *
+   * Read off the my-events 404 body rather than fetched separately, so learning
+   * "not connected" and learning "connectable" cost one request between them.
+   * Defaults false: offering a Connect control that leads to a 503 is worse
+   * than offering none.
+   */
+  const [calendarConnectAvailable, setCalendarConnectAvailable] = useState(false);
   
   // Persist selected slots in sessionStorage to survive navigation
   // Use URL parameter for stable key that doesn't change during component lifecycle
@@ -1601,9 +1612,12 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       if (eventsSettled.status === 'fulfilled') {
         setCalendarEvents(eventsSettled.value);
         setCalendarStatus('connected');
+        setCalendarConnectAvailable(false);
       } else {
-        const reason = eventsSettled.reason as { response?: { status?: number } } | undefined;
+        const reason = eventsSettled.reason as
+          { response?: { status?: number; data?: { available?: boolean } } } | undefined;
         const status = reason?.response?.status;
+        setCalendarConnectAvailable(reason?.response?.data?.available === true);
         // 404 is the backend's own "Calendar not connected"; anything else is a
         // fault. Both mean no conflict overlay, and they are NOT the same thing
         // to anyone diagnosing it - the distinction is kept for that reason and
@@ -2361,10 +2375,25 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
         perfectly well without it, which is why this is not the red alert above.
       */}
       {calendarStatus === 'not-connected' && (
-        <div className="alert alert-info" role="alert">
-          <Info size={18} className="me-2" />
-          Your calendar is not connected, so these slots have not been checked against
-          your own commitments. You can still create them.
+        <div className="alert alert-info d-flex align-items-center flex-wrap gap-2" role="alert">
+          <span>
+            <Info size={18} className="me-2" />
+            Your calendar is not connected, so these slots have not been checked against
+            your own commitments. You can still create them.
+          </span>
+          {/*
+            Offered ONLY when the deployment can actually start the flow. With no
+            Google OAuth client configured, /api/calendar/auth/connect answers
+            503 - and the demo-mode consent URL it would otherwise build points
+            back at our own callback and mints fabricated tokens, so a button
+            that "worked" would leave the researcher trusting invented busy time.
+          */}
+          {calendarConnectAvailable && (
+            <a className="btn btn-sm btn-outline-primary ms-auto" href={calendarConnectUrl()}>
+              <CalendarDays size={14} className="me-1" />
+              Connect your calendar
+            </a>
+          )}
         </div>
       )}
 

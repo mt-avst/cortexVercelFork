@@ -502,14 +502,29 @@ export const getMyCalendarEvents = async (
 
 /**
  * Check calendar connection status
+ *
+ * `available` reports whether connecting is possible on this deployment at all
+ * (cto/AdaptaLabs#89): false means no Google OAuth client is configured, so
+ * offering a Connect control would send the user to a 503.
  */
 export const getCalendarConnectionStatus = async (): Promise<{
   connected: boolean;
   connectedAt: string | null;
+  available?: boolean;
 }> => {
   const response = await api.get('/calendar/connection-status');
   return response.data;
 };
+
+/**
+ * Where to send the browser to start connecting a personal Google calendar.
+ *
+ * A full-page navigation rather than an axios call: the route answers a 302 to
+ * Google's consent screen, and XHR cannot follow a cross-origin redirect into a
+ * page the user has to interact with. Built the same way as the CSV export URL
+ * above, and for the same reason.
+ */
+export const calendarConnectUrl = (): string => `${getApiBaseUrl()}/api/calendar/auth/connect`;
 
 /**
  * Disconnect user's calendar

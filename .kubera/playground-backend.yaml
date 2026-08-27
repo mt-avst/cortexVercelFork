@@ -44,6 +44,29 @@ config:
     # return_url for the participant redirect back into Cortex, and the origin
     # media_url/session URLs are minted from.
     FRONTEND_URL: https://adaptalabs.kubera-playground.adaptavist.net
+    # Per-user Google Calendar connection (cto/AdaptaLabs#89).
+    #
+    # NOT SET YET, and the app is correct without it: with no client configured,
+    # GET /api/calendar/auth/connect answers 503 and the UI offers no Connect
+    # control at all, rather than offering one that dead-ends. Nothing else
+    # degrades - the slot picker generates availability without a calendar and
+    # slots can be entered by hand.
+    #
+    # To turn it on, three things are needed:
+    #   1. GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in the secret
+    #      store below (they are secrets - they do NOT belong in this file)
+    #   2. GOOGLE_OAUTH_REDIRECT_URI here, uncommented, exactly matching an
+    #      authorised redirect URI on the Google OAuth client
+    #   3. That same URI registered in Google Cloud Console
+    #
+    # The scope is calendar.readonly plus userinfo.email: Cortex reads free/busy
+    # to check slot conflicts and does not write to a personal calendar.
+    #
+    # GOOGLE_OAUTH_REDIRECT_URI: https://adaptalabs.kubera-playground.adaptavist.net/api/calendar/auth/callback
+    #
+    # The shared service-account trio (GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    # GOOGLE_PRIVATE_KEY, GOOGLE_CALENDAR_ID) is deliberately absent: nothing
+    # consumes it. Setting it changes nothing but one WARN line at boot.
 # App-level Okta OIDC. The chart registers an Okta app and injects clientID/clientSecret
 # into <app>-okta-secret (envFrom). Declared on THIS service (not the frontend) because
 # the backend runs the token exchange. Cannot be combined with okta_alb. The backend
@@ -64,6 +87,11 @@ secret:
   # Secret store holds FIRSTHAND_INTEGRATION_SECRET (min 32 chars) and SESSION_SECRET.
   # The Okta clientID/clientSecret come separately from the chart-provisioned
   # <app>-okta-secret (auto-mounted via envFrom when okta_app.enabled is true).
+  #
+  # GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET belong here too if
+  # per-user calendar connection is turned on - see the config note above
+  # (cto/AdaptaLabs#89). Absent today, and the app refuses the flow cleanly
+  # without them rather than falling back to fabricated tokens.
 # FirstHand bucket access (permanent): Cortex records into and plays back from
 # firsthand-playground, retained at migration rather than copied. The standalone
 # FirstHand app is retired (source RDS decommissioned 2026-08-11) - removing

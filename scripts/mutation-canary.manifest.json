@@ -1686,10 +1686,10 @@
   },
   {
     "id": "user-calendar-callback-validates-the-query-shape",
-    "why": "cto/AdaptaLabs#43. An array ?state compared with !== against a PRESENT session state is always unequal - and when either side is absent the check skips entirely, a pre-existing fail-open tracked separately, so the validator is not what that check leans on. The live risk is an array ?code, truthy into the token exchange. The named arm also asserts no pool connection was taken, so a validator mounted after the handler's first line fails it too.",
+    "why": "cto/AdaptaLabs#43. The live risk is an array ?code, which is truthy past the missing-code check and would land in the token exchange; validateQuery refuses the shape at the boundary. The named arm also asserts NO pool connection was taken, so a validator mounted after the handler's first line - which is `pool.connect()` - fails it too. That property matters more since #89 removed `requireAuth` from this route (the app session cookie is SameSite=Strict and cannot ride the redirect back from Google), because the validator is now the FIRST thing an unauthenticated caller meets. The anchor lost its `requireAuth` argument in #89 and this entry went ANCHOR_MISSING in CI - re-pointed, not deleted.",
     "file": "backend/src/routes/userCalendar.ts",
-    "anchor": "router.get('/auth/callback', requireAuth, validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {",
-    "mutation": "router.get('/auth/callback', requireAuth, asyncHandler(async (req: Request, res: Response) => {",
+    "anchor": "router.get('/auth/callback', validateQuery(oauthCallbackQuerySchema), asyncHandler(async (req: Request, res: Response) => {",
+    "mutation": "router.get('/auth/callback', asyncHandler(async (req: Request, res: Response) => {",
     "runner": "jest",
     "spec": "src/routes/__tests__/userCalendar.query-shapes-are-refused.test.ts",
     "test": "refuses a repeated code without taking a database connection"
@@ -1806,20 +1806,20 @@
   },
   {
     "id": "google-callback-consumes-oauth-state-once",
-    "why": "cto/AdaptaLabs#82 replay half. consumeOAuthState marks a state used so one captured state cannot drive a second callback (session fixation). This mutation leaves used=false, so a state re-presented WITH its original cookie is accepted again. The named test isolates this from the cookie-clearing by re-sending the state cookie, so only the used flag can refuse the replay. Proven KILLED before entry: the replay returns 302 instead of 400.",
-    "file": "backend/src/routes/auth.ts",
-    "anchor": "  stateData.used = true;",
-    "mutation": "  stateData.used = false;",
+    "why": "cto/AdaptaLabs#82 replay half, now living in utils/oauthState.ts after #89 extracted the guard so the login and calendar-connect flows share ONE implementation. `consume` marks a state used so one captured state cannot drive a second callback (session fixation). This mutation leaves used=false, so a state re-presented WITH its original cookie is accepted again. The named test isolates this from the cookie-clearing by re-sending the state cookie, so only the used flag can refuse the replay. Proven KILLED before entry: the replay returns 302 instead of 400. The anchor moved FILE in #89 and this entry went ANCHOR_MISSING in CI, which is the manifest doing its job - a moved security line must be re-pointed, never deleted.",
+    "file": "backend/src/utils/oauthState.ts",
+    "anchor": "      stateData.used = true;",
+    "mutation": "      stateData.used = false;",
     "runner": "jest",
     "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
     "test": "refuses a consumed state even when the browser re-sends the state cookie"
   },
   {
     "id": "oauth-state-is-browser-bound",
-    "why": "cto/AdaptaLabs#82, the actual login-CSRF fix. The OAuth state store is a process-global map any caller can populate via /login or /google-login, so the security gate demonstrated an attacker could mint a valid unused state, capture their own code, and lure a victim to the callback with both - logging the victim into the attacker's identity. consumeOAuthState binds the state to a cookie set on the initiating browser (shared by BOTH callbacks). This mutation drops the cookie binding (keeps `bound` referenced so it still builds), restoring the exploit: a victim with no cookie but the attacker's valid state is accepted. Proven KILLED before entry: the cross-browser replay returns 302 instead of 400.",
-    "file": "backend/src/routes/auth.ts",
-    "anchor": "  const cookies = req.cookies as Record<string, string> | undefined;\n  const bound = cookies?.[OAUTH_STATE_COOKIE];\n\n  // Browser binding first: no valid cookie means this callback did not begin on\n  // this browser, regardless of what the store holds.\n  if (typeof state !== 'string' || !bound || state !== bound) {\n    return { ok: false, error: 'Invalid state parameter' };\n  }",
-    "mutation": "  const cookies = req.cookies as Record<string, string> | undefined;\n  const bound = cookies?.[OAUTH_STATE_COOKIE];\n  void bound;\n\n  if (typeof state !== 'string') {\n    return { ok: false, error: 'Invalid state parameter' };\n  }",
+    "why": "cto/AdaptaLabs#82, the actual login-CSRF fix, now living in utils/oauthState.ts after #89 extracted the guard for the calendar-connect flow. The state store is a process-global map any caller can populate, so the security gate demonstrated an attacker could mint a valid unused state, capture their own code, and lure a victim to the callback with both - logging the victim into the attacker's identity. `consume` binds the state to a cookie set on the initiating browser. This mutation drops the cookie binding (keeps `bound` referenced so it still builds), restoring the exploit. Proven KILLED before entry: the cross-browser replay returns 302 instead of 400. It now guards BOTH flows from one place, so this single entry is worth more than it was.",
+    "file": "backend/src/utils/oauthState.ts",
+    "anchor": "      const bound = cookies?.[cookieName];\n\n      // Browser binding FIRST: no valid cookie means this callback did not begin\n      // on this browser, whatever the store holds.\n      if (typeof state !== 'string' || !bound || state !== bound) {\n        return { ok: false, error: 'Invalid state parameter' };\n      }",
+    "mutation": "      const bound = cookies?.[cookieName];\n      void bound;\n\n      if (typeof state !== 'string') {\n        return { ok: false, error: 'Invalid state parameter' };\n      }",
     "runner": "jest",
     "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
     "test": "refuses an attacker-minted state replayed from a different browser"
@@ -1935,6 +1935,16 @@
     "test": "narrows at the PROJECTION, which is the outer of the two guards"
   },
   {
+    "id": "calendar-callback-takes-its-user-from-the-state",
+    "why": "cto/AdaptaLabs#89. GET /api/calendar/auth/callback has NO requireAuth, deliberately: it is entered by a top-level navigation redirected from accounts.google.com, and the app session cookie is SameSite=Strict in production, so it is withheld across that redirect chain - requireAuth would 401 the researcher AFTER they granted Google access. The OAuth state carries the initiating user's id server-side and is the sole authority for whose calendar this is. This mutation prefers the session when one happens to be present, which is how a flow started by one researcher could be written against whoever's session arrives. Proven KILLED before entry: the named test drives a state minted for researcher-7 through an app whose session is someone-else-9 and asserts the INSERT parameters carry researcher-7. That test exists because this exact mutation SURVIVED first time round - in every other test the session and the state agree, so nothing could tell them apart.",
+    "file": "backend/src/routes/userCalendar.ts",
+    "anchor": "      userId = stateResult.payload.userId;",
+    "mutation": "      userId = req.session?.user?.id ?? stateResult.payload.userId;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/userCalendar.connect-flow.test.ts",
+    "test": "writes against the STATE's user even when a different session is present"
+  },
+  {
     "id": "migration-nulls-only-the-fabricated-event-ids",
     "why": "cto/AdaptaLabs#89. Until this release CalendarService.createEvent simulated its writes and the booking route stored the fabricated `demo-event-<now>` id in bookings.gcal_event_id, so production rows record Google events that never existed - and cancel and reschedule are both gated on that column being truthy, so each chases a phantom. This migration nulls them. The mutation drops the WHERE predicate so it nulls EVERY id on every boot. That is harmless while no stored id is real, which is exactly why nothing could see it: a gate proved both deleting the statement and deleting only its WHERE passed 1553 jest and 716 vitest. Once the per-user OAuth work lands and real Google ids exist it is silent data loss on every pod restart. Proven KILLED before entry against a real Postgres 17: 6 of 7 arms fail, the named one first.",
     "file": "backend/src/db/migrate.ts",
@@ -1944,5 +1954,25 @@
     "spec": "src/db/__tests__/migrate-nulls-only-fabricated-event-ids-postgres.test.ts",
     "test": "LEAVES A REAL GOOGLE EVENT ID ALONE",
     "needsDatabase": true
+  },
+  {
+    "id": "calendar-connect-is-rate-limited",
+    "why": "cto/AdaptaLabs#89. GET /api/calendar/auth/connect MINTS OAuth state, and every call allocates a store entry living up to one TTL on a single-replica pod - measured at 173 bytes each - while /api carries no limiter of its own. A security gate proved the limiter was a fix nothing enforced: deleting it from the route passed all 1582 backend tests. This repo's standard for a limiter (routes/firsthand.ts) is a named test PLUS a canary entry, and this is the second half. Proven KILLED before entry: the eleventh call in a minute returns 302 instead of 429.",
+    "file": "backend/src/routes/userCalendar.ts",
+    "anchor": "router.get('/auth/connect', requireAuth, calendarConnectLimiter, asyncHandler",
+    "mutation": "router.get('/auth/connect', requireAuth, asyncHandler",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/userCalendar.connect-flow.test.ts",
+    "test": "refuses the eleventh attempt in a minute with the route's own message"
+  },
+  {
+    "id": "calendar-callback-takes-its-pool-connection-late",
+    "why": "cto/AdaptaLabs#89. The callback is unauthenticated by design (the app session cookie is SameSite=Strict and cannot ride the redirect back from Google), so `pool.connect()` as its first line gave any anonymous caller a pool checkout before any refusal - and the connection was then HELD across the outbound token exchange, which has no AbortSignal. `pool.options.max` is pg's default 10 and POOL_STATEMENT_TIMEOUT_MS bounds queries rather than checkouts, so ten stalled flows wedge the whole backend rather than just this route. routes/auth.ts already orders it state-check, exchange, connect. Proven KILLED before entry: the refusal path takes a connection again.",
+    "file": "backend/src/routes/userCalendar.ts",
+    "anchor": "  let dbClient: PoolClient | undefined;",
+    "mutation": "  let dbClient: PoolClient | undefined = await pool.connect();",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/userCalendar.connect-flow.test.ts",
+    "test": "takes NO pool connection when it refuses"
   }
 ]
