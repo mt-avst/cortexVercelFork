@@ -1984,5 +1984,27 @@
     "runner": "jest",
     "spec": "src/services/__tests__/userCalendar.demo-events-are-deterministic.test.ts",
     "test": "returns the identical set of events for the same user and window, ten times over"
+  },
+  {
+    "id": "task-window-refuses-an-unsafe-target",
+    "why": "The task page is opened as window.open(\"\") - a same-origin about:blank - and then navigated by assigning location.href, so a javascript: target would execute in Cortex's own origin with the participant's session token and stored responses. This is the SINK, the last of four places isSafeTargetUrl is enforced and the one a refactor is most likely to remove as redundant. It rested on exactly one test.",
+    "file": "frontend/src/lib/recording/task-window.ts",
+    "anchor": "if (!isSafeTargetUrl(url)) {",
+    "mutation": "if (!url) {",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/lib/recording/task-window.test.ts",
+    "test": "refuses an unsafe target without opening anything"
+  },
+  {
+    "id": "authoring-form-refuses-an-unsafe-target-url",
+    "why": "The first of four places isSafeTargetUrl is enforced, and the one a researcher actually meets: without it an unsafe target_url is accepted by the authoring form and only refused deeper in, or not at all if a later schema is widened. Like the sink, it rested on exactly one test - against six and seven at the two schema layers.",
+    "file": "frontend/src/pages/OpportunityForm.tsx",
+    "anchor": "if (targetUrl && !isSafeTargetUrl(targetUrl)) {",
+    "mutation": "if (false) {",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/pages/__tests__/OpportunityForm.test.tsx",
+    "test": "sends the starting url, and blocks one that could run against the session"
   }
 ]
