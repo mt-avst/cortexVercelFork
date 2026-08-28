@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/errorHandler';
 import opportunitiesRouter from './opportunities';
 import sessionsRouter from './sessions';
 import bookingsRouter from './bookings';
+import bookingArtifactsRouter from './booking-artifacts';
 import calendarRouter from './calendar';
 import userCalendarRouter from './userCalendar';
 import gamificationRouter from './gamification';
@@ -58,6 +59,11 @@ router.use('/sessions', sessionsRouter);
 
 // Mount bookings routes
 router.use('/bookings', bookingsRouter);
+
+// Booking artefacts (#79 step 2) - same prefix, researcher-side ingest of
+// recordings and transcripts. A second router on one prefix is the house
+// pattern (calendar + userCalendar below).
+router.use('/bookings', bookingArtifactsRouter);
 
 // Mount calendar routes (admin calendar)
 router.use('/calendar', calendarRouter);

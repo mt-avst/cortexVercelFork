@@ -272,6 +272,40 @@ export async function createPresignedRecordingUploadUrl(input: {
 }
 
 /**
+ * Size AND ETag of the object at the key, or null when no object exists. The
+ * booking-artifact finalize (#79 step 2) stores the ETag because the presigned
+ * PUT URL stays valid for its whole window after finalize - S3 cannot revoke
+ * a signature - so a re-PUT can swap the bytes under a finalized row. The
+ * stored ETag is what lets the serving route detect the swap.
+ */
+export async function headS3ObjectStat(
+  objectKey: string
+): Promise<{ sizeBytes: number; etag: string | null } | null> {
+  const config = getS3StorageConfig();
+
+  try {
+    const head = await getS3Client(config).send(
+      new HeadObjectCommand({ Bucket: config.bucket, Key: objectKey })
+    );
+
+    if (typeof head.ContentLength !== "number") {
+      return null;
+    }
+
+    return { sizeBytes: head.ContentLength, etag: head.ETag ?? null };
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      (error.name === "NotFound" || error.name === "NoSuchKey")
+    ) {
+      return null;
+    }
+
+    throw error;
+  }
+}
+
+/**
  * Size of the object at the key, or null when no object exists. Used by
  * finalize as the only trusted source of fileSizeBytes.
  */

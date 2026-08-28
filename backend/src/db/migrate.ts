@@ -1137,6 +1137,82 @@ export async function runMigrations() {
     }
     console.log('✅ Created opportunity_session_events table');
 
+    // Booking artefacts (#79 step 2): recordings and transcripts of a
+    // moderated session, ingested AFTER the call (decision D1 - the platform's
+    // export, uploaded by the researcher). Attached to BOOKINGS (D4): the
+    // session happened to a person who booked, and the runtime session model
+    // cannot represent a session Cortex never ran. PUBLIC schema, like
+    // bookings - the firsthand pool's search_path never sees these.
+    //
+    // The attestation trio records D3's escape hatch: consent legitimately
+    // happened on the call for bookings made before the consent step shipped,
+    // and storing WHO asserted that, WHEN and HOW (a typed reason, never a
+    // bare boolean - review finding F13) is honest where silently allowing is
+    // not. The CHECK forbids a partial attestation for the same reason the
+    // consent shape CHECKs above forbid half a template pair.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS booking_artifacts (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('recording', 'transcript')),
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        file_size_bytes BIGINT NOT NULL,
+        storage_provider TEXT NOT NULL DEFAULT 's3',
+        relative_path TEXT NOT NULL UNIQUE,
+        uploaded_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        etag TEXT,
+        consent_attested_by UUID REFERENCES users(id) ON DELETE SET NULL,
+        consent_attested_at TIMESTAMPTZ,
+        consent_attestation_reason TEXT,
+        CONSTRAINT booking_artifacts_attestation_shape CHECK (
+          (consent_attested_at IS NULL AND consent_attestation_reason IS NULL)
+          OR (consent_attested_at IS NOT NULL AND consent_attestation_reason IS NOT NULL)
+        )
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_booking_artifacts_booking
+        ON booking_artifacts(booking_id, uploaded_at DESC)
+    `);
+    // Also as ALTER: `etag` joined the CREATE while this branch was still in
+    // review, and CREATE TABLE IF NOT EXISTS skips a table that already
+    // exists - so any database migrated mid-review (the local canary Postgres
+    // this repo's workflow creates, a dev DB) would keep the old shape and
+    // 500 on every finalize. The consent columns above use the same belt.
+    await client.query(`
+      ALTER TABLE booking_artifacts
+      ADD COLUMN IF NOT EXISTS etag TEXT
+    `);
+
+    // The presign window, mirroring the runtime's pending_recording_uploads
+    // (which lives in the FIRSTHAND migration runner - this is the public
+    // twin). A presigned PUT is a raw write capability; the row is what makes
+    // finalize refuse a URL nobody registered, and the UNIQUE path is what
+    // stops two presigns racing onto one key. The attestation reason is
+    // captured HERE so finalize persists what was asserted at presign time,
+    // not whatever the finalize body cares to say.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS pending_booking_artifact_uploads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('recording', 'transcript')),
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        relative_path TEXT NOT NULL UNIQUE,
+        requested_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        consent_attestation_reason TEXT,
+        valid_until TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_pending_booking_artifact_uploads_booking
+        ON pending_booking_artifact_uploads(booking_id)
+    `);
+    console.log('✅ Created booking_artifacts tables');
+
     console.log('✅ Database migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);
