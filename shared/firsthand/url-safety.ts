@@ -27,9 +27,20 @@ const RELATIVE_RESOLUTION_BASES = [
  * So only absolute http(s) URLs and same-origin root-relative paths are
  * allowed; protocol-relative ("//host") and every non-http scheme are rejected.
  *
- * This is enforced three times: on the authoring form, at the contract boundary
- * when a session payload is validated, and again at the sink in useTaskWindow,
- * so the window navigation never trusts its own input.
+ * For target_url this is enforced FOUR times, not the three this docblock used
+ * to claim: on the authoring form (OpportunityForm), in the inline-study schema,
+ * at the contract boundary when a session payload is validated (stepSchema), and
+ * again at the sink in useTaskWindow, so the window navigation never trusts its
+ * own input.
+ *
+ * The inline-study site is a genuinely separate one rather than a re-export of
+ * stepSchema: inline-study.ts imports this predicate directly and declares its
+ * own study-level target_url, so widening one schema would not widen the other.
+ * That is the reason the count was wrong - the miscount and the duplication have
+ * the same cause, and anyone relaxing this rule has four edits to make.
+ *
+ * The same predicate also guards callback_url and return_url in the contract,
+ * where only its absolute-URL branch can ever apply.
  *
  * THE RELATIVE BRANCH RESOLVES RATHER THAN PATTERN-MATCHES, and must stay that
  * way. It used to be `raw.startsWith("/") && !raw.startsWith("//")`, which the
