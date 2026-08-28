@@ -54,6 +54,11 @@ const testName = args[args.indexOf('-t') + 1];
 const phase = outputFile.endsWith('.baseline.json') ? 'BASELINE' : 'MUTATED';
 const mode = process.env['FAKE_' + phase] || 'pass';
 
+// Which directory the harness actually spawned us in. Recorded rather than
+// inferred: the whole point of the project field is the cwd, and nothing else
+// in the report would show it.
+if (process.env.FAKE_CWD_LOG) fs.appendFileSync(process.env.FAKE_CWD_LOG, process.cwd() + '\\n');
+
 // Death by signal, which is how a runner killed at the ceiling or by the OOM
 // killer reaches the harness: no report written, and \`run.signal\` set.
 if (mode === 'kill') process.kill(process.pid, 'SIGKILL');
@@ -162,6 +167,11 @@ function makeFixture(entryExtra = {}, { withSecondEntry = false } = {}) {
   // RUNNER_DID_NOT_FINISH and quietly pass three of these tests for the wrong
   // reason.
   fs.mkdirSync(path.join(root, 'backend'));
+  // The other project a `project` entry can name. Present unconditionally for
+  // the same reason `backend` is: a missing cwd is an ENOENT from spawnSync,
+  // which would report RUNNER_DID_NOT_FINISH and pass a cwd test for the wrong
+  // reason.
+  fs.mkdirSync(path.join(root, 'frontend'));
   fs.mkdirSync(path.join(root, 'fakebin'));
 
   fs.copyFileSync(SCRIPT, path.join(root, 'scripts', 'mutation-canary.mjs'));
@@ -522,4 +532,55 @@ test('half a shard pair is refused as an argument error, before anything runs', 
     },
     ['--shard-index=1']
   );
+});
+
+/**
+ * THE PROJECT FIELD IS CONNECTED, not merely validated.
+ *
+ * `projectDirFor` being right decides nothing on its own: the cwd is chosen at
+ * the `spawnSync` call site, and a unit test cannot see that call site. This
+ * runs the real main() and reads the directory the runner was actually spawned
+ * in, out of the fake npx itself.
+ */
+test('an entry naming the frontend project runs its spec from frontend/', (t) => {
+  // vitest, because a frontend entry may not name jest - frontend/ has no jest
+  // installed, and `validateManifest` refuses the pairing before anything runs.
+  const fixture = makeFixture({ project: 'frontend', runner: 'vitest' });
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const log = path.join(fixture.root, 'cwd.log');
+
+  const result = runHarness(fixture, {
+    FAKE_BASELINE: 'pass',
+    FAKE_MUTATED: 'fail',
+    FAKE_CWD_LOG: log
+  });
+
+  assert.equal(result.verdict, 'KILLED', result.output);
+  const seen = fs.readFileSync(log, 'utf8').trim().split('\n');
+  assert.ok(seen.length > 0, 'the fake npx never ran, so this proves nothing');
+  for (const cwd of seen) {
+    assert.equal(path.basename(cwd), 'frontend', `spawned in ${cwd}`);
+  }
+});
+
+test('an entry with no project still runs its spec from backend/', (t) => {
+  // THE CONTROL. Without it, a change that pointed every entry at frontend/
+  // would satisfy the test above perfectly, and would silently relocate all
+  // 197 existing entries.
+  const fixture = makeFixture();
+  t.after(() => fs.rmSync(fixture.root, { recursive: true, force: true }));
+  const log = path.join(fixture.root, 'cwd.log');
+
+  const result = runHarness(fixture, {
+    FAKE_BASELINE: 'pass',
+    FAKE_MUTATED: 'fail',
+    FAKE_CWD_LOG: log
+  });
+
+  assert.equal(result.verdict, 'KILLED', result.output);
+  const seen = fs.readFileSync(log, 'utf8').trim().split('\n');
+  assert.ok(seen.length > 0, 'the fake npx never ran, so this proves nothing');
+  for (const cwd of seen) {
+    assert.equal(path.basename(cwd), 'backend', `spawned in ${cwd}`);
+  }
 });
