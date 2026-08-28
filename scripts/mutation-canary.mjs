@@ -114,6 +114,33 @@ export const ENVIRONMENT_FAILED = 'ENVIRONMENT_FAILED';
 const RUNNERS = new Set(['jest', 'vitest']);
 
 /**
+ * The workspaces a spec can be run from.
+ *
+ * `runNamedTest` hardcoded `REPO_ROOT/backend`, which made the frontend
+ * STRUCTURALLY unreachable rather than merely uncovered - and the two read
+ * identically from the manifest, where every entry is backend or shared (grep
+ * the manifest rather than trusting a count here).
+ * That is the shape this harness exists to refuse everywhere else: an absence
+ * that looks like a decision.
+ */
+const PROJECTS = new Set(['backend', 'frontend']);
+
+/**
+ * Which workspace an entry's spec runs in.
+ *
+ * Optional, and DEFAULTS TO BACKEND, so every entry written before this field
+ * existed keeps running exactly where it ran. That default is the load-bearing
+ * half: getting it wrong relocates every existing entry at once, which is why it
+ * has its own control in the wiring suite rather than only a unit test.
+ */
+export function projectDirFor(entry) {
+  // Falls back rather than trusting the field: `validateManifest` runs first and
+  // refuses anything else, but this is a path segment handed to `path.join`, and
+  // a sink that trusts its input is the shape this harness exists to refuse.
+  return PROJECTS.has(entry?.project) ? entry.project : 'backend';
+}
+
+/**
  * A DELIBERATE REFUSAL, as distinct from this harness falling over.
  *
  * The top-level handler printed `Refusing to run: ${error.message}` for any
@@ -231,6 +258,32 @@ export function validateManifest(entries) {
 
     if (!RUNNERS.has(entry?.runner)) {
       problems.push(`${where}: runner must be one of ${[...RUNNERS].join(', ')}`);
+    }
+
+    // Absent is fine and means backend; present and unknown is a typo that
+    // would otherwise spawn in a directory that does not exist, and an ENOENT
+    // from spawnSync reports RUNNER_DID_NOT_FINISH - a harness fault, for what
+    // is really a manifest fault.
+    if (entry?.project !== undefined && !PROJECTS.has(entry.project)) {
+      problems.push(`${where}: project must be one of ${[...PROJECTS].join(', ')}`);
+    }
+
+    // Nothing under frontend/ reaches Postgres, so this pairing is a mistake
+    // rather than a configuration - and an expensive one to leave standing,
+    // because `needsDatabase` DOWNGRADES a red to ENVIRONMENT_FAILED. An entry
+    // wrongly claiming it would convert its own genuine failure into a shrug,
+    // which is the one direction this harness must never fail in.
+    if (entry?.project === 'frontend' && entry?.needsDatabase) {
+      problems.push(`${where}: a frontend entry cannot need a database`);
+    }
+
+    // frontend/ has no jest. The harness spawns a bare `npx jest`, which would
+    // DOWNLOAD a different jest major from the registry mid-run rather than
+    // fail, and report the wreckage as MUTATION_DID_NOT_BUILD or TEST_MISSING -
+    // a harness fault for what is a manifest fault, which is the same argument
+    // as the unknown-project refusal above.
+    if (entry?.project === 'frontend' && entry?.runner === 'jest') {
+      problems.push(`${where}: a frontend entry cannot use the jest runner`);
     }
 
     // A mutation identical to its anchor changes nothing, so the named test
@@ -801,7 +854,7 @@ export function runnerFinished(run) {
 /** Runs one named test and reports whether it passed and how many ran. */
 function runNamedTest(entry, reportDir, suffix) {
   const outputFile = path.join(reportDir, `${entry.id}.${suffix}.json`);
-  const cwd = path.join(REPO_ROOT, 'backend');
+  const cwd = path.join(REPO_ROOT, projectDirFor(entry));
 
   const argv =
     entry.runner === 'jest'
@@ -1307,7 +1360,11 @@ async function main() {
       const entry = entries.find((candidate) => candidate.id === result.id);
       console.error(`\n  ${result.id}: ${result.verdict}`);
       console.error(`    why the line matters: ${entry.why}`);
-      console.error(`    ${entry.file}  ->  ${entry.spec}  "${entry.test}"`);
+      // The project too: with two of them, a bare `src/x.test.ts` no longer says
+      // which workspace it lives in.
+      console.error(
+        `    ${entry.file}  ->  ${projectDirFor(entry)}/${entry.spec}  "${entry.test}"`
+      );
       if (result.detail) console.error(`    ${result.detail}`);
     }
   }

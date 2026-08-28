@@ -32,7 +32,6 @@ include:
       # 2. Enable branch based deployment every time a commit is pushed to an open MR source branch only
       # defaults to true
       feat-deploy-on-merge-request: "false"
-      feat-deploy-on-push: "false"
       
       # 3. Enable cleanup of any leftover branch based deployments on merge
       # defaults to true
@@ -452,16 +451,16 @@ test-scripts:
 mutation-canary:
   extends: .test-base
   # THE PATH GATE. This job is the expensive one (~20 min: two npm ci, a
-  # Postgres service, the full manifest) and every anchor in the manifest lives
-  # under backend/ or shared/ (140 + 11 of 151 entries as written - grep the
-  # manifest rather than trusting this comment). A frontend-only or docs-only
-  # MR cannot change a mutation outcome, so it skips the WHOLE job. Job-level
-  # and all-or-nothing on purpose: never scope the run below the full manifest
-  # instead - a filtered run is structurally blind to a pre-existing entry the
-  # same diff broke, which is how !267 reddened main, and why the runner
-  # refuses a filter flag (#53). On $PROD_REF the job stays unconditional:
-  # `changes` is only well-defined against an MR diff, and main gets the full
-  # check regardless.
+  # Postgres service, the full manifest) and every anchor in the manifest
+  # lives under backend/ or shared/ (grep the manifest rather than trusting
+  # a count here - the last one written down drifted from 151 entries to
+  # 197). A frontend-only or docs-only MR cannot change a mutation outcome,
+  # so it skips the WHOLE job. Job-level and all-or-nothing on purpose:
+  # never scope the run below the full manifest instead - a filtered run is
+  # structurally blind to a pre-existing entry the same diff broke, which is
+  # how !267 reddened main, and why the runner refuses a filter flag (#53).
+  # On $PROD_REF the job stays unconditional: `changes` is only well-defined
+  # against an MR diff, and main gets the full check regardless.
   rules:
     - if: $CI_COMMIT_TAG
       when: never

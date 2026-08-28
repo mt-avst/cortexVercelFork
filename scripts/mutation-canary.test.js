@@ -889,3 +889,280 @@ test('the run can say which single invocation came closest to the ceiling', asyn
   // empty case above just as well.
   assert.equal(slowestRun([{ id: 'only', phase: 'mutated', ms: 1 }]).id, 'only');
 });
+
+/**
+ * THE PROJECT A SPEC RUNS IN.
+ *
+ * `runNamedTest` hardcoded `REPO_ROOT/backend` as its cwd, which made the
+ * whole frontend unreachable: every one of the 197 entries was backend or
+ * shared, and that read as a coverage gap when half of it was a structural
+ * boundary. `project` lifts the boundary. It is optional and defaults to
+ * `backend`, so no existing entry changes meaning.
+ */
+test('projectDirFor defaults to backend and honours an explicit project', async () => {
+  const { projectDirFor } = await load();
+
+  // The default is the load-bearing half: 197 entries omit the field and must
+  // keep running exactly where they ran before.
+  assert.equal(projectDirFor(entry()), 'backend');
+  assert.equal(projectDirFor(entry({ project: 'backend' })), 'backend');
+  assert.equal(projectDirFor(entry({ project: 'frontend' })), 'frontend');
+  // The fallback, which nothing distinguished from a trusting `?? 'backend'`
+  // until these two lines: it is a path segment handed to path.join, so the
+  // sink must not trust a value validation would have refused.
+  assert.equal(projectDirFor(entry({ project: 'shared' })), 'backend');
+  assert.equal(projectDirFor(entry({ project: '../../etc' })), 'backend');
+});
+
+test('validation refuses a project this repo does not have', async () => {
+  const { validateManifest } = await load();
+
+  assert.match(
+    validateManifest([entry({ project: 'shared' })]).join(),
+    /project must be one of/
+  );
+  assert.match(
+    validateManifest([entry({ project: '' })]).join(),
+    /project must be one of/
+  );
+  // The control: the two real projects, and an absent field, all pass - or the
+  // assertions above would be satisfied by a rule that rejects everything.
+  assert.deepEqual(validateManifest([entry({ project: 'backend' })]), []);
+  // vitest, because the default runner in `entry()` is jest and a frontend
+  // entry may not name jest - see the runner-pairing test below.
+  assert.deepEqual(validateManifest([entry({ project: 'frontend', runner: 'vitest' })]), []);
+  assert.deepEqual(validateManifest([entry()]), []);
+});
+
+test('validation refuses a frontend entry that claims to need a database', async () => {
+  const { validateManifest } = await load();
+
+  // Nothing in frontend/ reaches Postgres, so this combination is a mistake
+  // rather than a configuration. It matters because `needsDatabase` suppresses
+  // a red into ENVIRONMENT_FAILED: an entry that wrongly claims it would
+  // convert its own genuine failure into a shrug.
+  assert.match(
+    validateManifest([
+      entry({ project: 'frontend', runner: 'vitest', needsDatabase: true })
+    ]).join(),
+    /frontend entry cannot need a database/
+  );
+  // The controls: the same claim is fine on the backend, and a frontend entry
+  // that makes no such claim is fine too.
+  assert.deepEqual(validateManifest([entry({ project: 'backend', needsDatabase: true })]), []);
+  assert.deepEqual(
+    validateManifest([entry({ project: 'frontend', runner: 'vitest', needsDatabase: false })]),
+    []
+  );
+});
+
+/**
+ * A FRONTEND ENTRY IS NOT RUNNABLE UNTIL CI CAN RUN IT.
+ *
+ * `project: 'frontend'` makes the runner able to spawn in `frontend/`. It does
+ * not make the JOB able to: the canary installs root and `backend` deps only,
+ * and its path gate excludes `frontend/**`, so a frontend entry would reach
+ * an `npx vitest` with no node_modules, and a frontend-only MR would skip the
+ * whole job while changing the very file the entry mutates.
+ *
+ * That second half is the one ADR-0004 forbids by name - a run that is
+ * structurally blind to a diff it should have caught. Both halves are deferred
+ * DELIBERATELY, because paying for them buys nothing while no frontend entry
+ * exists, and this test is what stops the deferral from being forgotten: add
+ * the first frontend entry and it fails by name until CI is fixed with it.
+ */
+test('.gitlab-ci.yml parses strictly, with no duplicated mapping keys', async () => {
+  // Its own test, because the guard below ALSO parses this file and would
+  // otherwise report a duplicate key under a name about frontend deps, sending
+  // the reader to the wrong subject entirely. js-yaml 4 throws on a duplicate;
+  // 3 does not, which is why the version is pinned in devDependencies.
+  const yaml = require('js-yaml');
+  const raw = fs.readFileSync(path.join(__dirname, '..', '.gitlab-ci.yml'), 'utf8');
+
+  assert.doesNotThrow(() => yaml.load(raw), 'the pipeline config does not parse strictly');
+  // The control: the parser really does refuse a duplicate, so a green above is
+  // evidence about the file rather than about a lenient parser.
+  assert.throws(() => yaml.load('a:\n  k: 1\n  k: 2\n'), /duplicated mapping key/);
+});
+
+test('validation refuses a frontend entry that names the jest runner', async () => {
+  const { validateManifest } = await load();
+
+  // frontend/ has no jest installed. A bare `npx jest` there DOWNLOADS a
+  // different jest major from the registry mid-run instead of failing, and the
+  // resulting mess reports as MUTATION_DID_NOT_BUILD - a harness fault blamed
+  // for a manifest fault.
+  assert.match(
+    validateManifest([entry({ project: 'frontend', runner: 'jest' })]).join(),
+    /frontend entry cannot use the jest runner/
+  );
+  // The controls: vitest on the frontend is the supported pairing, and jest on
+  // the backend is what 156 existing entries already do.
+  assert.deepEqual(validateManifest([entry({ project: 'frontend', runner: 'vitest' })]), []);
+  assert.deepEqual(validateManifest([entry({ project: 'backend', runner: 'jest' })]), []);
+});
+
+test('a frontend entry requires the canary job to install frontend deps and watch frontend paths', async (t) => {
+  const yaml = require('js-yaml');
+  let ci;
+  try {
+    ci = yaml.load(fs.readFileSync(path.join(__dirname, '..', '.gitlab-ci.yml'), 'utf8'));
+  } catch {
+    // SKIP, not a silent return: a bare `return` reports as a pass, and this
+    // guard is then disarmed by anything that makes the file unparseable - a
+    // duplicate key, or a `!reference` tag, which is ordinary GitLab and which
+    // js-yaml refuses. Safe only because the strict-parse test above sits on
+    // the same gate and reddens; if that test ever moves, this becomes a hole.
+    t.skip('.gitlab-ci.yml does not parse - see the strict-parse test');
+    return;
+  }
+  const job = ci['mutation-canary'];
+  assert.ok(job, 'the mutation-canary job is gone, so this guard is asserting nothing');
+
+  // TAKES THE JOB'S SHAPE AS AN ARGUMENT rather than closing over the real one.
+  // An earlier version closed over it, which made the control below assert that
+  // the REAL job is still unfixed - so the control failed the moment CI was
+  // fixed correctly, in every order of operations, and its only obvious remedy
+  // was deletion. A tripwire whose fix is to remove it protects nothing.
+  const requires = (entries, job) => {
+    // Keyed on the FILE as well as the declared project: the path-gate half of
+    // this is about which files get mutated, and an entry with a frontend file
+    // and no `project` would otherwise slip both limbs.
+    const hasFrontend = entries.some(
+      (e) => e.project === 'frontend' || e.file.startsWith('frontend/')
+    );
+    if (!hasFrontend) return [];
+    const missing = [];
+    if (!job.installs) missing.push('the job does not npm ci in frontend/');
+    if (!job.watches) missing.push('the path gate does not include frontend/');
+    return missing;
+  };
+
+  // THE DETECTOR, lifted out and named so it can have controls of its own.
+  // Inline, it was the only code reading the real job's shape and NOTHING
+  // exercised it: the real manifest has no frontend entry, so `requires`
+  // short-circuits before touching it. Setting both limbs true survived 36/0.
+  const detect = (job) => {
+    const asList = (v) => (Array.isArray(v) ? v : v == null ? [] : [v]);
+    // JOINED, not tested command by command. GitLab runs before_script and
+    // script in ONE shell, so a bare `cd frontend` on its own list item still
+    // governs a later `npm ci` - and requiring both in a single command
+    // rejected the most natural way to write the fix. `script` may also be a
+    // plain scalar, which spreading a string would shred into characters.
+    // No `.map(String)`: `join` coerces already, so a nested-array command (legal
+    // GitLab) flattens on its own - a control below pins that, and an explicit
+    // map was an equivalent mutant, which is dead code wearing a guard's coat.
+    const script = [...asList(job.before_script), ...asList(job.script)].join('\n');
+    // `.find`, not `[0]`: the real job's first rule is `if: $CI_COMMIT_TAG,
+    // when: never`, so the `changes` rule is never at index 0 there.
+    const paths = job.rules?.find((rule) => rule.changes)?.changes?.paths ?? [];
+
+    return {
+      // Must TARGET the frontend, not merely mention it. The real job already
+      // runs a root `npm ci` and `cd backend && npm ci`, so a check for an
+      // install alone reads true against a job that installs nothing here -
+      // measured, it survived every control.
+      installs:
+        /(cd|--prefix)\s+\S*frontend/.test(script) &&
+        /\bnpm\b[^\n]*\b(ci|install)\b/.test(script),
+      // A WILDCARD over the whole frontend tree, not merely a path under it.
+      // `frontend/package.json` starts with `frontend/` and would still let a
+      // change to frontend/src skip the entire canary - the silent direction,
+      // and the one ADR-0004 forbids by name.
+      watches: paths.some((p) => p.startsWith('frontend/**'))
+    };
+  };
+
+  // THE DETECTOR'S OWN CONTROLS, against synthetic jobs so they stay valid once
+  // the real job is fixed. Each pins one clause in both directions.
+  const y = (text) => detect(yaml.load(text));
+
+  // Accepted: the sanctioned forms, including the two-list-item and scalar
+  // shapes a person is most likely to write.
+  assert.deepEqual(
+    y('script:\n  - cd frontend && npm ci\nrules:\n  - changes:\n      paths: ["frontend/**/*"]\n'),
+    { installs: true, watches: true }
+  );
+  assert.equal(
+    y('script:\n  - cd frontend\n  - npm ci\n').installs,
+    true,
+    'two list items run in one shell and are a valid fix'
+  );
+  assert.equal(y('script: cd frontend && npm ci\n').installs, true, 'a scalar script');
+  assert.equal(y('script:\n  - npm --prefix frontend ci\n').installs, true, '--prefix form');
+  assert.equal(
+    y('script:\n  - [cd frontend, npm ci]\n').installs,
+    true,
+    'a nested-array command, which is legal GitLab'
+  );
+  assert.equal(
+    y('before_script:\n  - cd frontend && npm ci\n').installs,
+    true,
+    'before_script is not being scanned'
+  );
+
+  // Refused: the shapes that look like a fix and are not.
+  assert.equal(
+    y('script:\n  - npm ci\n  - cd backend && npm ci\n').installs,
+    false,
+    'a root npm ci is not a frontend install - this is the REAL job today'
+  );
+  assert.equal(
+    y('script:\n  - echo "the frontend needs no deps here" && npm ci\n').installs,
+    false,
+    'mentioning the frontend beside a root install is not a fix'
+  );
+  assert.equal(
+    y('script:\n  - cd frontend && echo hi\n').installs,
+    false,
+    'entering the directory without installing is not a fix'
+  );
+  assert.equal(
+    y('rules:\n  - changes:\n      paths: ["frontend/package.json"]\n').watches,
+    false,
+    'gating on one frontend file still lets frontend/src skip the job'
+  );
+  assert.equal(y('rules:\n  - changes:\n      paths: ["frontend/**"]\n').watches, true);
+  // Pins `.find`: the changes rule sits behind a `when: never`, as it does in
+  // the real job.
+  assert.equal(
+    y('rules:\n  - if: $CI_COMMIT_TAG\n    when: never\n  - changes:\n      paths: ["frontend/**/*"]\n').watches,
+    true,
+    'the changes rule is not always first'
+  );
+  assert.deepEqual(y('before_script:\n  - apk add git\nrules: []\n'), {
+    installs: false,
+    watches: false
+  });
+
+  const real = detect(job);
+
+  const entries = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
+  assert.deepEqual(
+    requires(entries, real),
+    [],
+    'a frontend entry has been added - fix .gitlab-ci.yml in the same change'
+  );
+
+  // THE CONTROLS, against SYNTHETIC unfixed jobs so they stay valid after the
+  // real job is fixed. One per limb, because a single "length > 0" is satisfied
+  // by whichever detector still works - and the dangerous direction is
+  // `watches`: a false positive there ships a frontend entry while a
+  // frontend-only MR skips the whole canary, which is silent. A false
+  // `installs` is loud by comparison - vitest with no node_modules.
+  const frontendEntry = entry({ project: 'frontend' });
+  assert.deepEqual(requires([frontendEntry], { installs: false, watches: true }), [
+    'the job does not npm ci in frontend/'
+  ]);
+  assert.deepEqual(requires([frontendEntry], { installs: true, watches: false }), [
+    'the path gate does not include frontend/'
+  ]);
+  // And the file-keyed limb, which no `project` field would catch.
+  assert.deepEqual(
+    requires([entry({ file: 'frontend/src/App.tsx' })], { installs: false, watches: false }).length,
+    2
+  );
+  // The negative control: a fully fixed job requires nothing, so the assertion
+  // above cannot be passing because `requires` always returns a non-empty list.
+  assert.deepEqual(requires([frontendEntry], { installs: true, watches: true }), []);
+});
