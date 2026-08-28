@@ -76,6 +76,10 @@ export interface SavePayloadFormState {
   inline_survey_consent_template_version: number | null;
   inline_survey_questions: WithClientId<SurveyQuestion>[];
   copied_from_study_id: string;
+  // Moderated consent (#79): the third consent home, on the opportunity row.
+  moderated_consent_text: string;
+  moderated_consent_template_id: string;
+  moderated_consent_template_version: number | null;
 }
 
 export interface SavePayloadInput {
@@ -96,11 +100,14 @@ export interface SavePayloadInput {
   staleStudyUpdatedAt: string | null;
 }
 
-export type SavePayload = Partial<CreateOpportunityRequest & {
+export type SavePayload = Partial<Omit<CreateOpportunityRequest, 'consent_text'> & {
   inline_study?: InlineStudyPayload;
   inline_survey?: InlineSurveyPayload;
   delivery_mode?: 'native' | 'external';
   expected_study_updated_at?: string;
+  // Null is a deliberate CLEAR on the update path; the create interface only
+  // knows string, so the widening lives here where both shapes are built.
+  consent_text?: string | null;
 }>;
 
 /**
@@ -134,7 +141,9 @@ export const buildSavePayload = ({
   linkedStudyUpdatedAt,
   staleStudyUpdatedAt
 }: SavePayloadInput): SavePayload => {
-  const data: Partial<CreateOpportunityRequest & {
+  const data: Partial<Omit<CreateOpportunityRequest, 'consent_text'> & {
+    // Null is a deliberate CLEAR on the update path - see SavePayload.
+    consent_text?: string | null;
     inline_study?: InlineStudyPayload;
     // Same reason as inline_study: the survey contract cannot be imported
     // into the flattened shared types, so it is added at the call site.
@@ -187,6 +196,35 @@ export const buildSavePayload = ({
   // Only include default_duration_minutes for test and interview types
   if (formData.type === 'test' || formData.type === 'interview') {
     data.default_duration_minutes = formData.default_duration_minutes;
+
+    /*
+     * Moderated consent (#79). Sent only on the two shapes that have the
+     * moderated Consent step, by the same field-travels-with-its-control rule
+     * as the external link above.
+     *
+     * The template pair is a CLAIM, never an instruction - the server checks
+     * it against the wording beside it and stores `custom` when they disagree,
+     * so nothing this form sends can make an opportunity claim approval it
+     * does not have. `custom` is omitted rather than sent: it is the server's
+     * answer, never the client's assertion.
+     *
+     * An empty field is a deliberate CLEAR (null) when the row HAD wording at
+     * load, and silence (omitted) when it never did - the durationToSend rule,
+     * applied to consent.
+     */
+    const consentText = formData.moderated_consent_text.trim();
+    if (consentText) {
+      data.consent_text = consentText;
+      if (
+        formData.moderated_consent_template_id !== CUSTOM_CONSENT_TEMPLATE_ID &&
+        formData.moderated_consent_template_version !== null
+      ) {
+        data.consent_template_id = formData.moderated_consent_template_id;
+        data.consent_template_version = formData.moderated_consent_template_version;
+      }
+    } else if (isEdit && (originalFormData?.moderated_consent_text ?? '').trim()) {
+      data.consent_text = null;
+    }
   }
 
   // Include start_date, end_date, and firsthand_study_id for external link / unmoderated types

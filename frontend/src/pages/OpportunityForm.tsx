@@ -93,8 +93,11 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
+import { VALIDATION } from '@shared/constants';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
+  DEFAULT_MODERATED_CONSENT_TEXT,
+  MODERATED_CONSENT_TEMPLATE,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE,
   resolveConsentTemplate
@@ -248,7 +251,8 @@ export const FIELD_LOCATIONS: Record<string, { tab: number; control?: string }> 
     tab: 3,
     control: 'inline_survey_duration_minutes'
   },
-  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' }
+  inline_survey_consent_text: { tab: 4, control: 'inline_survey_consent_text-heading' },
+  moderated_consent_text: { tab: 4, control: 'moderated_consent_text-heading' }
 };
 
 /**
@@ -483,25 +487,33 @@ export const getTabsForType = (
     });
   }
 
-  // Consent is a step of its own on exactly the paths that author a study, and
-  // on no others.
+  // Consent is a step of its own on the paths where Cortex either RUNS the
+  // study or STORES artefacts of it, and on no others.
   //
-  // Derived from the step that precedes it rather than re-tested against `type`
-  // and `deliveryMode`, deliberately. The four blocks above already encode which
-  // shapes author content; a fifth predicate saying the same thing in different
-  // words is a predicate that can stop agreeing with them, which is the exact
-  // drift B1 removed from the step bodies. If a future type authors a study, it
-  // pushes `questions` or `taskList` and gets a Consent step for free.
+  // Two ways in, deliberately distinct:
   //
-  // An external link, a booked session and a hand-off have no study, so there is
-  // no consent for this product to govern: what the participant agrees to lives
-  // in the tool on the other side of the link. Adding an empty Consent step
-  // there would imply Cortex has a say in something it does not.
+  // - A study-authoring shape (`questions` or `taskList` above) gets Consent
+  //   derived from that step rather than re-tested against `type`, so the two
+  //   cannot disagree - the drift B1 removed. A future type that authors a
+  //   study gets Consent for free.
+  // - The two MODERATED shapes (`sessions` above) get Consent by type (#79).
+  //   This used to be argued the other way - "a booked session has no study,
+  //   so there is no consent for this product to govern" - and that argument
+  //   EXPIRED the moment Cortex began storing a moderated session's recording
+  //   and transcript against the booking. The session still happens on a
+  //   third-party call; what the participant now agrees to at booking time is
+  //   what Cortex may hold afterwards.
+  //
+  // A pure hand-off (external link, `question`) keeps no artefacts, so it
+  // still has no Consent step: what its participant agrees to lives in the
+  // tool on the other side of the link, and an empty Consent step there would
+  // imply Cortex has a say in something it does not.
   const authoringStep = tabs.find(
     (tab) => tab.key === 'questions' || tab.key === 'taskList'
   );
+  const moderatedStep = tabs.find((tab) => tab.key === 'sessions');
 
-  if (authoringStep) {
+  if (authoringStep || moderatedStep) {
     tabs.push({
       id: 4,
       key: 'consent',
@@ -655,6 +667,16 @@ const OpportunityForm: React.FC = () => {
     inline_survey_consent_template_version:
       SURVEY_CONSENT_TEMPLATE.version as number | null,
     inline_survey_questions: [] as WithClientId<SurveyQuestion>[],
+    // Moderated consent (#79): the third consent home, for the two types with
+    // no study. Its own field trio for the same reason survey and recorded
+    // have theirs - a type change swaps which trio is live, and a shared one
+    // would carry the wrong template id across. A NEW moderated opportunity
+    // starts on the approved wording; hydration replaces this with whatever
+    // the row holds, including nothing.
+    moderated_consent_text: DEFAULT_MODERATED_CONSENT_TEXT as string,
+    moderated_consent_template_id: MODERATED_CONSENT_TEMPLATE.id as string,
+    moderated_consent_template_version:
+      MODERATED_CONSENT_TEMPLATE.version as number | null,
     // Where this opportunity's content comes from, replacing the two
     // `reuse_existing_*` booleans. One field rather than two because only one
     // authoring surface is ever rendered - `getTabsForType` returns the task
@@ -1525,6 +1547,16 @@ const OpportunityForm: React.FC = () => {
         status: opportunity.status === 'closed' ? 'draft' : opportunity.status,
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
+        // Moderated consent (#79): what the ROW holds, never the default. A row
+        // without wording hydrates empty - seeding the default here would make
+        // any unrelated save silently add consent nobody wrote. The template
+        // pair rides as stored; the server re-verifies any claim on save
+        // regardless.
+        moderated_consent_text: opportunity.consent_text || '',
+        moderated_consent_template_id:
+          opportunity.consent_template_id || CUSTOM_CONSENT_TEMPLATE_ID,
+        moderated_consent_template_version:
+          opportunity.consent_template_version ?? null,
         // Read from the linked study rather than defaulted. See authoredFields.
         ...authoredFields,
         // Read from the row rather than defaulted, so editing a native survey
@@ -1558,6 +1590,11 @@ const OpportunityForm: React.FC = () => {
         status: opportunity.status === 'closed' ? 'draft' as const : opportunity.status as 'draft' | 'published',
         start_date: opportunity.start_date || '',
         end_date: opportunity.end_date || '',
+        moderated_consent_text: opportunity.consent_text || '',
+        moderated_consent_template_id:
+          opportunity.consent_template_id || CUSTOM_CONSENT_TEMPLATE_ID,
+        moderated_consent_template_version:
+          opportunity.consent_template_version ?? null,
         // Seeded from the SERVER's state, not from the defaults. Seeding the
         // baseline from a fiction made hasChanges compare the author's content
         // against an empty list, so simply opening an opportunity looked like
@@ -1828,6 +1865,17 @@ const OpportunityForm: React.FC = () => {
     if (formData.type === 'test' || formData.type === 'interview') {
       if (!formData.meeting_location_optional || !formData.meeting_location_optional.trim()) {
         errors.meeting_location_optional = 'Enter where the session takes place';
+      }
+      // Moderated consent (#79) is OPTIONAL - a session that stores nothing
+      // needs no consent, and emptiness is how the author says so - so the
+      // only failure the field has is length, the same ceiling the server
+      // refuses over; validating here keeps the refusal on the step that owns
+      // the control.
+      // Trimmed, because the server schema trims before measuring - an
+      // untrimmed check here refused text the server would accept.
+      if (formData.moderated_consent_text.trim().length > VALIDATION.MAX_MODERATED_CONSENT_CHARS) {
+        errors.moderated_consent_text =
+          `Shorten the consent wording to ${VALIDATION.MAX_MODERATED_CONSENT_CHARS} characters or fewer`;
       }
       // Number.isFinite first: clearing the field stores NaN (parseInt('')), and
       // NaN < 5 and NaN > 240 are BOTH false, so an empty duration passed every
@@ -5017,6 +5065,54 @@ const OpportunityForm: React.FC = () => {
                           );
                           handleInputChange(
                             `${prefix}_consent_template_version`,
+                            selection.templateVersion
+                          );
+                        }}
+                      />
+
+                      {continueControl && (
+                      <StepActions
+                        isEdit={isEdit}
+                        onSaveAndExit={handleSaveAndExit}
+                        saving={saving}
+                        disabled={saveControlsDisabled}
+                        {...backwardControl}
+                        onSave={isEdit && hasChanges() ? () => handleSubmit() : undefined}
+                        {...continueControl}
+                      />
+                      )}
+                    </>
+                  )}
+
+                  {/* Consent for the MODERATED pair (#79): same step component,
+                      third consent home. No study exists here, so none of the
+                      study read-only machinery applies - the wording belongs to
+                      the opportunity row and only its owner reaches this form. */}
+                  {currentStep?.key === 'consent' && !authoringKind && (
+                    <>
+                      <ConsentStep
+                        key={opportunityId ?? 'unsaved-moderated'}
+                        kind="moderated"
+                        consentText={formData.moderated_consent_text}
+                        templateId={formData.moderated_consent_template_id}
+                        templateVersion={formData.moderated_consent_template_version}
+                        onBlur={() => handleBlur('moderated_consent_text')}
+                        fieldId="moderated_consent_text"
+                        validationError={validationErrors.moderated_consent_text}
+                        studyIsReadOnly={false}
+                        readOnlyReason={null}
+                        contentUnavailable={false}
+                        awaitingContent={false}
+                        contentStepTitle="Session Management"
+                        onGoToContent={() => setActiveTab(3)}
+                        onChange={(selection) => {
+                          handleInputChange('moderated_consent_text', selection.text);
+                          handleInputChange(
+                            'moderated_consent_template_id',
+                            selection.templateId
+                          );
+                          handleInputChange(
+                            'moderated_consent_template_version',
                             selection.templateVersion
                           );
                         }}

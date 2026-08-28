@@ -61,6 +61,9 @@ const formState = (overrides: Record<string, unknown> = {}): SavePayloadFormStat
   inline_survey_consent_text: '',
   inline_survey_consent_template_id: '',
   inline_survey_consent_template_version: null,
+  moderated_consent_text: '',
+  moderated_consent_template_id: 'custom',
+  moderated_consent_template_version: null,
   inline_survey_questions: [],
   copied_from_study_id: '',
   ...overrides

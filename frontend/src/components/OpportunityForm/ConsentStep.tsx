@@ -18,6 +18,19 @@ import {
 import FieldError from './FieldError';
 
 
+/**
+ * When the participant meets this consent, per kind. An exhaustive Record for
+ * the same reason consentTemplateIdForKind is one: the previous ternary here
+ * showed "before recording starts" for the moderated kind, which is false
+ * copy for a live call - Cortex neither starts nor records it. A fourth kind
+ * must say its own moment or fail to compile.
+ */
+const CONSENT_MOMENT_BY_KIND: Record<ConsentKind, string> = {
+  recorded: 'Shown before recording starts. The participant must accept it to continue.',
+  survey: 'Shown before the first question. The participant must accept it to continue.',
+  moderated: 'Shown before booking. The participant must accept it to book a session.'
+};
+
 export interface ConsentSelection {
   text: string;
   templateId: string;
@@ -177,9 +190,7 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
         Consent
       </h2>
       <p className="mb-0 section-description" style={{ fontSize: '0.95rem' }}>
-        {kind === 'survey'
-          ? 'Shown before the first question. The participant must accept it to continue.'
-          : 'Shown before recording starts. The participant must accept it to continue.'}
+        {CONSENT_MOMENT_BY_KIND[kind]}
       </p>
     </div>
   );
