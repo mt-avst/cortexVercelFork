@@ -157,6 +157,32 @@ const PERMITTED: Record<string, unknown> = {
   status: 'draft',
   start_date: '2030-01-01T10:00:00.000Z',
   end_date: '2030-01-02T10:00:00.000Z',
+  // Moderated consent (#79). The arranged opportunity is type 'interview', so
+  // the type gate in resolveModeratedConsentWrite is satisfied and these reach
+  // the allow-list rather than being refused a layer earlier - which is the
+  // layer this file is NOT about.
+  consent_text: 'You are agreeing to a live call that may be recorded.',
+  consent_template_id: 'moderated-default',
+  consent_template_version: 1,
+};
+
+/**
+ * Extra keys a column needs beside it to be a LEGAL save. The template pair
+ * may never travel without consent_text - a lone claim, nulls included, is
+ * refused by sentence (CONSENT_CLAIM_WITHOUT_TEXT) - so the census sends each
+ * half with the smallest body the write path accepts, and still asserts the
+ * column under test reaches the SET clause. The text is anything non-empty:
+ * resolution decides the stored pair, which is a different file's business.
+ */
+const COMPANIONS: Record<string, Record<string, unknown>> = {
+  consent_template_id: {
+    consent_text: 'You are agreeing to a live call that may be recorded.',
+    consent_template_version: 1,
+  },
+  consent_template_version: {
+    consent_text: 'You are agreeing to a live call that may be recorded.',
+    consent_template_id: 'moderated-default',
+  },
 };
 
 describe('PATCH /api/opportunities/:id column allow-list', () => {
@@ -303,7 +329,7 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     it.each(Object.keys(PERMITTED))('accepts %s and puts it in the SET clause', async (column) => {
       await request(listening(appAs('researcher_admin')))
         .patch(PATH)
-        .send({ [column]: PERMITTED[column] })
+        .send({ ...(COMPANIONS[column] ?? {}), [column]: PERMITTED[column] })
         .expect(200);
 
       const updates = updateStatements();
@@ -317,7 +343,7 @@ describe('PATCH /api/opportunities/:id column allow-list', () => {
     // compared them to the schema, so a mutation that added a sixteenth name to
     // the real allow-list passed all 22 tests. A pin that restates a policy
     // cannot see the policy change.
-    it('permits exactly the fifteen columns, and no more', () => {
+    it('permits exactly the eighteen columns, and no more', () => {
       expect([...UPDATABLE_OPPORTUNITY_COLUMNS].sort()).toEqual(Object.keys(PERMITTED).sort());
     });
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CreateSessionRequest, UpdateSessionRequest } from '../types';
-import { SESSION_CAPACITY } from '../../../shared/constants';
+import { SESSION_CAPACITY, VALIDATION } from '../../../shared/constants';
 import { inlineStudySchema } from '../../../shared/firsthand/inline-study';
 import { inlineSurveySchema } from '../../../shared/firsthand/survey-authoring';
 import {
@@ -151,6 +151,20 @@ export const CreateOpportunitySchema = z.object({
   // handler creates the study from this and links it, and a body carrying both
   // this and firsthand_study_id is refused rather than resolved by precedence.
   inline_survey: inlineSurveySchema.optional(),
+  // Moderated consent (#79): live sessions and interviews only, refused for
+  // every other type at the route boundary (the schema cannot see the type on
+  // PATCH, so the rule lives with the handler's other type rules). The
+  // template pair is a CLAIM about which approved wording consent_text is,
+  // resolved server-side exactly as the studies path resolves its own - the
+  // stored value comes from resolution, never from the client.
+  consent_text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(VALIDATION.MAX_MODERATED_CONSENT_CHARS)
+    .optional(),
+  consent_template_id: z.string().max(64).optional().nullable(),
+  consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: z.enum(['draft', 'published']).optional(),
@@ -197,6 +211,19 @@ export const UpdateOpportunitySchema = z.object({
    * may have round-tripped it into.
    */
   expected_study_updated_at: z.string().datetime({ offset: true }).optional(),
+  // Moderated consent (#79) - same rules as create, plus null to CLEAR:
+  // removing consent from a draft is legitimate authoring, and the handler
+  // nulls the template pair with it so the row cannot claim a template for
+  // wording it no longer holds.
+  consent_text: z
+    .string()
+    .trim()
+    .min(1)
+    .max(VALIDATION.MAX_MODERATED_CONSENT_CHARS)
+    .optional()
+    .nullable(),
+  consent_template_id: z.string().max(64).optional().nullable(),
+  consent_template_version: z.number().int().min(1).optional().nullable(),
   participant_type_required: ParticipantTypeSchema.optional(),
   participant_type_specific_details: z.string().optional(),
   status: OpportunityStatusSchema.optional(),

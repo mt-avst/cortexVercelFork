@@ -2,6 +2,27 @@ import { DEFAULT_CONSENT_TEXT } from "./inline-study";
 import { DEFAULT_SURVEY_CONSENT_TEXT } from "./survey-authoring";
 
 /**
+ * The approved wording for a MODERATED session - a live call with a researcher
+ * (#79). Defined here rather than in a study vocabulary file because a
+ * moderated session has no study: its consent is anchored on the opportunity
+ * and accepted at booking time, so there is no inline-study or survey-authoring
+ * module for this text to live in.
+ *
+ * The wording has to cover what the other two templates do not: the session
+ * happens on a third-party call, the recording - when there is one - is made by
+ * the meeting platform, and what Cortex stores is an ingested copy plus its
+ * transcript. "May be" is deliberate: a researcher can run an unrecorded
+ * session under the same consent, and promising less than might happen is the
+ * failure mode, not promising more.
+ */
+export const DEFAULT_MODERATED_CONSENT_TEXT =
+  "This is a live session with a researcher on a video call. The call may be " +
+  "recorded on the meeting platform, and the recording and its transcript may be " +
+  "stored for research analysis, visible to the research team. You can decline " +
+  "recording at the start of the call or ask for it to stop at any point; " +
+  "anything recorded up to that point is still kept for the research team.";
+
+/**
  * Consent templates: the approved wording, versioned, and the rule that decides
  * whether a given study is actually running on it.
  *
@@ -20,15 +41,22 @@ import { DEFAULT_SURVEY_CONSENT_TEXT } from "./survey-authoring";
  */
 
 /**
- * Which authoring vocabulary a study is written in, and therefore which
- * template family applies to it. A recorded session and a survey cannot share
- * consent copy: one describes screen and microphone capture and the other
- * states plainly that nothing is recorded.
+ * Which vocabulary the consent is written for, and therefore which template
+ * family applies. The three cannot share copy: `recorded` describes screen and
+ * microphone capture by this product, `survey` states plainly that nothing is
+ * recorded, and `moderated` describes a live call recorded - if at all - by the
+ * meeting platform and ingested afterwards (#79).
+ *
+ * `recorded` and `survey` are also `firsthand.studies.kind` values, constrained
+ * by `studies_kind_check` (migration 0009). `moderated` deliberately is NOT: a
+ * moderated session has no study, its consent lives on the opportunity row, and
+ * this union widening must never reach that CHECK.
  */
-export type ConsentKind = "recorded" | "survey";
+export type ConsentKind = "recorded" | "survey" | "moderated";
 
 export const RECORDED_CONSENT_TEMPLATE_ID = "recorded-default";
 export const SURVEY_CONSENT_TEMPLATE_ID = "survey-default";
+export const MODERATED_CONSENT_TEMPLATE_ID = "moderated-default";
 
 /**
  * The template id a study carries when its wording is nobody's approved
@@ -88,12 +116,32 @@ const CONSENT_TEMPLATE_VERSIONS: ConsentTemplateRegistry = [
     summary:
       "What is stored, who sees it, and that no screen, microphone or camera is recorded.",
     text: DEFAULT_SURVEY_CONSENT_TEXT
+  },
+  {
+    id: MODERATED_CONSENT_TEMPLATE_ID,
+    version: 1,
+    kind: "moderated",
+    name: "Standard live-session consent",
+    summary:
+      "A live call that may be recorded on the meeting platform, what is stored afterwards, and how a participant declines.",
+    text: DEFAULT_MODERATED_CONSENT_TEXT
   }
 ];
 
-/** The template id that applies to a study of this kind. */
+/**
+ * The template id that applies to consent of this kind. A lookup rather than a
+ * ternary so a fourth kind is a compile error here, not a silent fall-through
+ * to the recorded template - whose central claim (this product records your
+ * screen) would be false copy for it.
+ */
+const TEMPLATE_ID_BY_KIND: Record<ConsentKind, string> = {
+  recorded: RECORDED_CONSENT_TEMPLATE_ID,
+  survey: SURVEY_CONSENT_TEMPLATE_ID,
+  moderated: MODERATED_CONSENT_TEMPLATE_ID
+};
+
 export const consentTemplateIdForKind = (kind: ConsentKind): string =>
-  kind === "survey" ? SURVEY_CONSENT_TEMPLATE_ID : RECORDED_CONSENT_TEMPLATE_ID;
+  TEMPLATE_ID_BY_KIND[kind];
 
 /**
  * Whether an id names custom wording rather than a template.
@@ -255,6 +303,7 @@ export const resolveConsentTemplate = (
  */
 export const RECORDED_CONSENT_TEMPLATE = currentConsentTemplate("recorded");
 export const SURVEY_CONSENT_TEMPLATE = currentConsentTemplate("survey");
+export const MODERATED_CONSENT_TEMPLATE = currentConsentTemplate("moderated");
 
 /**
  * Every published version, for tests and for anything that needs to enumerate

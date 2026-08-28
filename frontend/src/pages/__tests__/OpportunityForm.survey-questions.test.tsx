@@ -178,18 +178,33 @@ describe('getTabsForType', () => {
     ]);
   });
 
-  it.each([
-    ['question', 'External Link'],
-    ['test', 'Session Management'],
-    ['interview', 'Session Management']
-  ])('gives %s no consent step, because it authors no study', (type, thirdStep) => {
-    expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
+  /**
+   * The rule changed with #79 and the change IS the finding: consent attaches
+   * where Cortex either runs the study or stores artefacts of it. The
+   * moderated pair now stores artefacts (recording, transcript, acceptance at
+   * booking), so they carry a Consent step; a pure hand-off still does not.
+   */
+  it('gives question no consent step, because Cortex keeps nothing of it', () => {
+    expect(getTabsForType('question').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
-      thirdStep,
+      'External Link',
       'Review'
     ]);
   });
+
+  it.each([['test'], ['interview']])(
+    'gives %s a consent step, because Cortex stores what it agrees to keep (#79)',
+    (type) => {
+      expect(getTabsForType(type).map((tab) => tab.title)).toEqual([
+        'Basic Information',
+        'Content & Details',
+        'Session Management',
+        'Consent',
+        'Review'
+      ]);
+    }
+  );
 
   it('defaults to the external link tab, which is what every existing poll is', () => {
     expect(getTabsForType('poll').map((tab) => tab.title)).toContain('External Link');

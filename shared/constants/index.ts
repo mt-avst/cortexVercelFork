@@ -85,6 +85,13 @@ export const VALIDATION = {
    * bookings.researcher-notes.test.ts - refuse over it, never truncate.
    */
   MAX_RESEARCHER_NOTES_CHARS: 20000,
+  /**
+   * Ceiling for a moderated opportunity's consent wording (#79). Matches
+   * INLINE_STUDY_LIMITS.maxConsentLength so neither consent home can hold a
+   * text the other would refuse. A policy number - pinned as a literal in
+   * opportunities.moderated-consent.test.ts.
+   */
+  MAX_MODERATED_CONSENT_CHARS: 10000,
   /** Email validation regex */
   EMAIL_REGEX: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
   /** URL validation regex */

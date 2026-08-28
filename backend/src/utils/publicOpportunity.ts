@@ -35,11 +35,19 @@ import { logger } from './logger';
 // from the bookings route instead. If in-person wayfinding before booking ever
 // matters, strip only when the value parses as a URL.
 //
-// Deliberately NOT stripped, both load-bearing for participants:
+// Deliberately NOT stripped, all load-bearing for participants:
 //   - external_link_optional, which is the link an external-link study is FOR
 //   - firsthand_study_id, which OpportunityDetail reads to decide whether the
 //     study is startable at all. Removing it silently breaks the unmoderated
 //     participant flow, and it is an opaque id rather than a secret.
+//   - consent_text and its template pair (#79): a VERDICT, not an oversight.
+//     A participant must be able to read a moderated opportunity's consent
+//     wording BEFORE booking - it is what they are deciding about - so the
+//     text is participant-facing by construction, and the template id/version
+//     are non-secret provenance metadata. This deny-list publishes new columns
+//     by default; these three are the first added since that property was
+//     documented, and they pass deliberately. Pinned by a test in
+//     opportunities.moderated-consent.test.ts.
 
 /**
  * What this serialiser can accept.

@@ -1855,6 +1855,16 @@
     "test": "releases the permit early on all four results routes"
   },
   {
+    "id": "moderated-consent-is-for-moderated-types",
+    "why": "cto/AdaptaLabs#79 step 1a. Consent fields on an opportunity are for the two moderated types and nothing else; resolveModeratedConsentWrite's type gate is the single point refusing them everywhere else, on all five write surfaces (create x2 branches, PATCH x2, duplicate). Dropping it lets a consent_text be stored on an unmoderated or survey opportunity - a row whose participants are governed by the STUDY's consent, so a second, contradictory consent home appears silently and nothing else notices: proven by mutation before entry, this exact if->false left every suite green except the named test, which fails 200-vs-400 asserting the exported sentence.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "  if (!MODERATED_CONSENT_TYPES.has(effectiveType)) {",
+    "mutation": "  if (false) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.moderated-consent.test.ts",
+    "test": "refuses consent_text on a poll PATCH, by the exact sentence"
+  },
+  {
     "id": "oidc-callback-validates-the-query-shape",
     "why": "cto/AdaptaLabs#84. GET /auth/callback reads its query through oidcClient.callbackParams(req), which parses req.url and yields arrays for repeated parameters - invisible to #43's req.query-read scan. validateQuery refuses a non-string code/state SHAPE with 400 before the handler, so an array never reaches the token exchange. Unwiring the validator lets a repeated code through to the handler's own 500 instead of the validator's 400. Proven KILLED before entry.",
     "file": "backend/src/routes/auth.ts",

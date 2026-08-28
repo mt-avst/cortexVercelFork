@@ -819,7 +819,10 @@ describe('Opportunities API', () => {
           status: 'draft',
           delivery_mode: 'external',
           start_date: '2026-03-01T09:00:00.000Z',
-          end_date: '2026-04-01T09:00:00.000Z'
+          end_date: '2026-04-01T09:00:00.000Z',
+          // Moderated consent (#79): interview is a moderated type, so these
+          // are legal here and the census below must see them bound.
+          consent_text: 'A distinct consent wording for the census'
         })
         .expect(201);
 
@@ -856,7 +859,11 @@ describe('Opportunities API', () => {
         participant_type_specific_details: 'A distinct participant detail',
         start_date: '2026-03-01T09:00:00.000Z',
         end_date: '2026-04-01T09:00:00.000Z',
-        delivery_mode: 'external'
+        delivery_mode: 'external',
+        // Resolution stores custom/null for wording that is no template's.
+        consent_text: 'A distinct consent wording for the census',
+        consent_template_id: 'custom',
+        consent_template_version: null
       };
 
       for (const [column, value] of Object.entries(expected)) {

@@ -53,6 +53,9 @@ import {
   PUBLISH_PROBLEM_MESSAGES,
   findPublishProblem
 } from '../../../shared/firsthand/publish-readiness';
+import {
+  resolveConsentTemplate
+} from '../../../shared/firsthand/consent-templates';
 import { isPublishableExternalLink } from '../../../shared/firsthand/url-safety';
 import type { DeliveryMode } from '../validation/schemas';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
@@ -122,6 +125,13 @@ export const UPDATABLE_OPPORTUNITY_COLUMNS: ReadonlySet<string> = new Set([
   'firsthand_study_id',
   'participant_type_required',
   'participant_type_specific_details',
+  // Moderated consent (#79): live sessions and interviews only. Allow-listed
+  // here - which both enforcement sites read - and additionally type-gated by
+  // resolveModeratedConsentWrite, because membership in this Set says a column
+  // MAY be written, not by whom or on what type.
+  'consent_text',
+  'consent_template_id',
+  'consent_template_version',
   'status',
   'start_date',
   'end_date',
@@ -269,6 +279,92 @@ export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
   survey:
     'This opportunity needs a set of survey questions, and that is a recorded task list'
 };
+
+/**
+ * Moderated consent (#79) is for the two moderated types and nothing else.
+ * Exported so tests assert the exact sentences rather than a word - swapping
+ * two refusal messages has left seven green tests lying here before.
+ */
+export const MODERATED_CONSENT_TYPES: ReadonlySet<string> = new Set(['test', 'interview']);
+export const CONSENT_FIELDS_WRONG_TYPE =
+  'Consent fields apply only to live sessions and interviews';
+export const CONSENT_CLAIM_WITHOUT_TEXT =
+  'A consent template claim travels with consent_text, never alone';
+
+/**
+ * What the consent columns should be written as, or null when the request
+ * carries none of them.
+ *
+ * The template pair in the body is a CLAIM about which approved wording
+ * `consent_text` is, resolved server-side exactly as the studies path resolves
+ * its own (see resolveConsentTemplate): a caller can understate its approval
+ * and can never overstate it. The stored pair comes from resolution, never from
+ * the request.
+ *
+ * Clearing (`consent_text: null`, PATCH only) nulls the pair with the text -
+ * the shape constraint `opportunities_consent_template_shape` would refuse a
+ * row claiming a template for wording it no longer holds, and refusing it here
+ * gives the caller a sentence instead of a constraint violation.
+ */
+export function resolveModeratedConsentWrite(
+  body: {
+    consent_text?: string | null;
+    consent_template_id?: string | null;
+    consent_template_version?: number | null;
+  },
+  effectiveType: string
+): { consent_text: string | null; consent_template_id: string | null; consent_template_version: number | null } | null {
+  const textPresent = body.consent_text !== undefined;
+  const claimPresent =
+    body.consent_template_id !== undefined || body.consent_template_version !== undefined;
+
+  if (!textPresent && !claimPresent) {
+    return null;
+  }
+
+  if (!MODERATED_CONSENT_TYPES.has(effectiveType)) {
+    // The sentence IS the message: errorHandler serialises `error.message` and
+    // drops the details array, so a sentence placed there never reaches the
+    // wire - the allow-list docblock above records the same fact.
+    throw new ValidationError(CONSENT_FIELDS_WRONG_TYPE);
+  }
+
+  if (!textPresent || body.consent_text == null) {
+    // A claim travelling without text is refused whatever its values - explicit
+    // nulls included. A lone `consent_template_id: null` used to fall through
+    // this branch as "nothing to write" while the raw nulls stayed in the body
+    // and reached the column loop directly: half the pair nulled, the shape
+    // constraint violated mid-request, and the resolver's whole promise (a
+    // sentence instead of a constraint violation) broken. The only legal
+    // null-shape is the clear: `consent_text: null`, with the pair either
+    // absent or also null.
+    if (
+      claimPresent &&
+      (!textPresent ||
+        body.consent_template_id != null ||
+        body.consent_template_version != null)
+    ) {
+      throw new ValidationError(CONSENT_CLAIM_WITHOUT_TEXT);
+    }
+    return textPresent
+      ? { consent_text: null, consent_template_id: null, consent_template_version: null }
+      : null;
+  }
+
+  const consentText = body.consent_text;
+  const resolved = resolveConsentTemplate({
+    kind: 'moderated',
+    consentText,
+    claimedTemplateId: body.consent_template_id,
+    claimedTemplateVersion: body.consent_template_version
+  });
+
+  return {
+    consent_text: consentText.trim(),
+    consent_template_id: resolved.id,
+    consent_template_version: resolved.version
+  };
+}
 
 /**
  * Wording for the link-time ownership refusal below, keyed by the kind that
@@ -1357,6 +1453,17 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       default_duration_minutes: data.default_duration_minutes || 30,
       status: data.status || 'draft',
       owner_user_id: req.user!.id,
+      // Moderated consent (#79): the same type gate and template resolution the
+      // database path runs, so the two branches cannot disagree about what a
+      // save stored. Computed inline: this branch has no earlier seam.
+      ...(() => {
+        const consent = resolveModeratedConsentWrite(data, data.type);
+        return {
+          consent_text: consent?.consent_text ?? null,
+          consent_template_id: consent?.consent_template_id ?? null,
+          consent_template_version: consent?.consent_template_version ?? null
+        };
+      })(),
       external_link_optional: data.external_link_optional?.trim() || null,
       participant_type_required: data.participant_type_required || 'any',
       participant_type_specific_details: data.participant_type_specific_details?.trim() || null,
@@ -1489,10 +1596,16 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
       type, title, purpose_one_liner, description_optional,
       product_optional, meeting_location_optional, default_duration_minutes, status,
       owner_user_id, external_link_optional, firsthand_study_id, participant_type_required,
-      participant_type_specific_details, start_date, end_date, delivery_mode
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      participant_type_specific_details, start_date, end_date, delivery_mode,
+      consent_text, consent_template_id, consent_template_version
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
     RETURNING *
   `;
+
+  // Moderated consent (#79): refused for every non-moderated type, resolved to
+  // its template BEFORE the row exists so the claim-is-input rule holds from
+  // the first write.
+  const consentColumns = resolveModeratedConsentWrite(data, data.type);
 
   // The study has to exist before the opportunity row that references it.
   //
@@ -1622,7 +1735,10 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
     // and the other types ignore it, so writing the resolved value keeps the
     // row honest rather than relying on the DDL default for some paths and the
     // request for others.
-    deliveryMode
+    deliveryMode,
+    consentColumns?.consent_text ?? null,
+    consentColumns?.consent_template_id ?? null,
+    consentColumns?.consent_template_version ?? null
   ];
 
   let result;
@@ -1722,10 +1838,27 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     if (!isSuperadmin && !isOpportunityOwner(existingOpportunity, req.user)) {
       throw new ForbiddenError('Only the owner can edit this opportunity');
     }
-    
+
+    // Moderated consent (#79): same gate and resolution as the database branch,
+    // against the EFFECTIVE type - the body's when it changes type, the stored
+    // one otherwise.
+    const mockConsent = resolveModeratedConsentWrite(
+      data,
+      data.type || existingOpportunity.type
+    );
+
+    // Same rule as the database branch: leaving the moderated pair strips
+    // consent, or the wording strands on a type that can never clear it.
+    const consentStrippedByTypeChange =
+      data.type !== undefined && !MODERATED_CONSENT_TYPES.has(data.type)
+        ? { consent_text: null, consent_template_id: null, consent_template_version: null }
+        : {};
+
     // Update the opportunity
     const updatedOpportunity = updateMockOpportunity(id, {
       ...data,
+      ...(mockConsent ?? {}),
+      ...consentStrippedByTypeChange,
       updated_at: new Date()
     });
     
@@ -1784,6 +1917,32 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   }
 
   const existingType = data.type || existingOpp.rows[0].type;
+
+  // Moderated consent (#79): refuse on the wrong effective type, resolve the
+  // template claim, and OVERWRITE what flows into the generic column loop -
+  // the stored pair must come from resolution, never from the request. When
+  // the body carries no consent fields, nothing is touched.
+  const consentWrite = resolveModeratedConsentWrite(data, existingType);
+  if (consentWrite) {
+    data.consent_text = consentWrite.consent_text;
+    data.consent_template_id = consentWrite.consent_template_id;
+    data.consent_template_version = consentWrite.consent_template_version;
+  }
+
+  // A type change out of the moderated pair strips consent in the same UPDATE.
+  // Without this, the wording stays on the row - and public, via
+  // toPublicOpportunity - on a type whose every consent PATCH the gate above
+  // refuses, so nobody could clear it without flipping the type back. Runs
+  // after the resolver on purpose: a body carrying BOTH a type change and
+  // consent fields was already refused by CONSENT_FIELDS_WRONG_TYPE, and
+  // seeding the nulls before the resolver would make it refuse this stripping
+  // as a wrong-type consent write.
+  if (data.type !== undefined && !MODERATED_CONSENT_TYPES.has(data.type)) {
+    data.consent_text = null;
+    data.consent_template_id = null;
+    data.consent_template_version = null;
+  }
+
   const existingLink = existingOpp.rows[0].external_link_optional;
   const existingFirstHandStudyId = existingOpp.rows[0].firsthand_study_id;
   const newLink = data.external_link_optional !== undefined ? data.external_link_optional : existingLink;
@@ -3346,6 +3505,12 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
       external_link_optional: existingOpportunity.external_link_optional,
       participant_type_required: existingOpportunity.participant_type_required,
       participant_type_specific_details: existingOpportunity.participant_type_specific_details,
+      // The sixth consent write surface: the db duplicate copies these three,
+      // and a mock copy that dropped them would rehearse the exact hole F5
+      // closed on the real one.
+      consent_text: existingOpportunity.consent_text ?? null,
+      consent_template_id: existingOpportunity.consent_template_id ?? null,
+      consent_template_version: existingOpportunity.consent_template_version ?? null,
       created_at: new Date(),
       updated_at: new Date(),
       owner_name: req.user!.name,
@@ -3389,8 +3554,9 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
     INSERT INTO opportunities (
       type, title, purpose_one_liner, description_optional,
       product_optional, default_duration_minutes, status,
-      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details
-    ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $9, $10)
+      owner_user_id, external_link_optional, participant_type_required, participant_type_specific_details,
+      consent_text, consent_template_id, consent_template_version
+    ) VALUES ($1, $2, $3, $4, $5, $6, 'draft', $7, $8, $9, $10, $11, $12, $13)
     RETURNING *
   `;
 
@@ -3414,7 +3580,16 @@ router.post('/:id/duplicate', requireAdmin, opportunityWriteLimiter, asyncHandle
       ? opp.external_link_optional
       : null,
     opp.participant_type_required,
-    opp.participant_type_specific_details
+    opp.participant_type_specific_details,
+    // Moderated consent (#79) is COPIED, not re-derived. Duplicating is how a
+    // researcher runs a repeat study; a copy that silently dropped consent
+    // would recruit and ingest recordings with no consent text at all - the
+    // review gate on this plan found exactly that hole before it shipped. The
+    // provenance pair rides along verbatim: the wording is the same wording,
+    // so what it resolves to cannot differ.
+    opp.consent_text ?? null,
+    opp.consent_template_id ?? null,
+    opp.consent_template_version ?? null
   ];
 
   const result = await pool.query(query, values);

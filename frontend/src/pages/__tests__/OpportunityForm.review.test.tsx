@@ -237,8 +237,11 @@ describe('Review is the only step that commits', () => {
     ['unmoderated', 5, 'Consent'],
     ['poll', 4, 'External Link'],
     ['question', 4, 'External Link'],
-    ['test', 4, 'Session Management'],
-    ['interview', 4, 'Session Management']
+    // Five since #79: Consent sits between Session Management and Review on
+    // the moderated pair, because Cortex now stores what those sessions agree
+    // to keep.
+    ['test', 5, 'Consent'],
+    ['interview', 5, 'Consent']
   ])(
     'on the %s path: no earlier step offers a commit control, and Review does',
     (type, expectedSteps, stepBeforeReview) => {
@@ -475,10 +478,11 @@ describe('the time slots confirmed on the session step are written by the commit
   it('writes them for a test, from Review', async () => {
     renderCreate();
     fillBasics('test');
-    // step 2, then the session step
+    // step 2, the session step, then Consent (on this path since #79)
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
 
     expect(currentStepName()).toMatch(/Review/);
@@ -709,6 +713,8 @@ describe('a save that half-worked is not announced as a success', () => {
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    // Consent sits between Session Management and Review since #79.
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
 
@@ -740,6 +746,8 @@ describe('a save that half-worked is not announced as a success', () => {
     fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'stub: confirm one slot' }));
+    // Consent sits between Session Management and Review since #79.
+    fireEvent.click(forwardControl()!);
     fireEvent.click(forwardControl()!);
     fireEvent.click(screen.getByRole('button', { name: 'Create opportunity' }));
 
@@ -827,7 +835,7 @@ describe('a save that half-worked is not announced as a success', () => {
 });
 
 describe('the step that is not a StepActions row still names where it goes', () => {
-  it('offers Continue: Review on Session Management', () => {
+  it('offers Continue: Consent on Session Management', () => {
     /*
      * The one forward control in this form that `StepActions` does not render.
      * Every "Continue: Review" assertion elsewhere sits on a StepActions step,
@@ -842,8 +850,12 @@ describe('the step that is not a StepActions row still names where it goes', () 
     fireEvent.click(forwardControl()!);
 
     expect(currentStepName()).toMatch(/Session Management/);
+    // Consent, not Review, since #79 put the consent step on this path. The
+    // hazard this test guards is unchanged: this is the one forward control
+    // StepActions does not render, so only an exact name here can catch it
+    // pointing at the wrong step.
     expect(
-      screen.getByRole('button', { name: 'Continue: Review' })
+      screen.getByRole('button', { name: 'Continue: Consent' })
     ).toBeInTheDocument();
   });
 });

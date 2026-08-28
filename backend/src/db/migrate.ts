@@ -427,6 +427,102 @@ export async function runMigrations() {
       ADD COLUMN IF NOT EXISTS researcher_notes_updated_by UUID REFERENCES users(id) ON DELETE SET NULL
     `);
 
+    // Moderated consent (#79). A live session's consent is anchored on the
+    // OPPORTUNITY - `firsthand.studies.consent_text` needs a study and a
+    // moderated session has none. Same three-column shape as migration 0013
+    // gave studies (text + template provenance) so "which approved wording is
+    // this" is answerable the same way in both homes. Nullable: an opportunity
+    // without consent text simply has no consent step, which is every
+    // pre-existing row and every non-moderated type.
+    await client.query(`
+      ALTER TABLE opportunities
+      ADD COLUMN IF NOT EXISTS consent_text TEXT
+    `);
+    await client.query(`
+      ALTER TABLE opportunities
+      ADD COLUMN IF NOT EXISTS consent_template_id TEXT
+    `);
+    await client.query(`
+      ALTER TABLE opportunities
+      ADD COLUMN IF NOT EXISTS consent_template_version INTEGER
+    `);
+
+    // The same three legal shapes 0013 constrains studies to: no claim at all,
+    // custom wording, or a named template at a named version. Guarded because
+    // ADD CONSTRAINT has no IF NOT EXISTS and this file re-runs on every boot.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'opportunities_consent_template_shape'
+            AND conrelid = 'opportunities'::regclass
+        ) THEN
+          ALTER TABLE opportunities
+            ADD CONSTRAINT opportunities_consent_template_shape
+            CHECK (
+              (consent_template_id IS NULL AND consent_template_version IS NULL)
+              OR (consent_template_id = 'custom' AND consent_template_version IS NULL)
+              OR (consent_template_id IS NOT NULL
+                  AND consent_template_id <> 'custom'
+                  AND consent_template_version IS NOT NULL)
+            );
+        END IF;
+      END $$;
+    `);
+
+    // What a participant ACCEPTED when they booked (#79), pinned at the moment
+    // of acceptance. The runtime path never snapshots wording - its acceptance
+    // event points at a study row that can be edited afterwards - and that
+    // asymmetry is a recorded defect of that path, not a precedent. Here the
+    // hash pins the exact text; the template columns pin what it claimed to
+    // be. Researcher-facing only, like researcher_notes above: both
+    // participant projections must exclude nothing here (the participant
+    // accepted it - it is their record too), but nothing here is secret
+    // either, so the columns simply ride the existing projections untouched.
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS consent_accepted_at TIMESTAMPTZ
+    `);
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS consent_template_id TEXT
+    `);
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS consent_template_version INTEGER
+    `);
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS consent_text_snapshot_hash TEXT
+    `);
+
+    // The twin of opportunities_consent_template_shape: the acceptance record
+    // pins the same pair, so it is constrained to the same three legal shapes.
+    // Added while the columns are still empty everywhere (step 1b is what
+    // starts writing them) - a shape constraint retrofitted onto populated
+    // columns has to argue with whatever drifted in first.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'bookings_consent_template_shape'
+            AND conrelid = 'bookings'::regclass
+        ) THEN
+          ALTER TABLE bookings
+            ADD CONSTRAINT bookings_consent_template_shape
+            CHECK (
+              (consent_template_id IS NULL AND consent_template_version IS NULL)
+              OR (consent_template_id = 'custom' AND consent_template_version IS NULL)
+              OR (consent_template_id IS NOT NULL
+                  AND consent_template_id <> 'custom'
+                  AND consent_template_version IS NOT NULL)
+            );
+        END IF;
+      END $$;
+    `);
+
     /*
      * Clear the fabricated Google event ids (cto/AdaptaLabs#89).
      *

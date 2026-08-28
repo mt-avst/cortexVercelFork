@@ -18,6 +18,10 @@ import {
 } from "../../../shared/firsthand/consent-templates";
 import { DEFAULT_CONSENT_TEXT } from "../../../shared/firsthand/inline-study";
 import { DEFAULT_SURVEY_CONSENT_TEXT } from "../../../shared/firsthand/survey-authoring";
+import {
+  DEFAULT_MODERATED_CONSENT_TEXT,
+  MODERATED_CONSENT_TEMPLATE_ID
+} from "../../../shared/firsthand/consent-templates";
 
 const RECORDED_V1 = currentConsentTemplate("recorded");
 const SURVEY_V1 = currentConsentTemplate("survey");
@@ -286,7 +290,8 @@ describe("the template registry", () => {
     expect(allConsentTemplates().map((template) => [template.id, template.version])).toEqual(
       [
         [RECORDED_CONSENT_TEMPLATE_ID, 1],
-        [SURVEY_CONSENT_TEMPLATE_ID, 1]
+        [SURVEY_CONSENT_TEMPLATE_ID, 1],
+        [MODERATED_CONSENT_TEMPLATE_ID, 1]
       ]
     );
   });
@@ -294,7 +299,7 @@ describe("the template registry", () => {
   it("hands out a copy, so a caller cannot edit the registry in place", () => {
     const first = allConsentTemplates();
     first.length = 0;
-    expect(allConsentTemplates()).toHaveLength(2);
+    expect(allConsentTemplates()).toHaveLength(3);
   });
 
   it("carries the two shipped defaults verbatim", () => {
@@ -464,5 +469,64 @@ describe("DEFAULT_SURVEY_CONSENT_TEXT", () => {
 
   it("is not the recorded wording", () => {
     expect(DEFAULT_SURVEY_CONSENT_TEXT).not.toBe(DEFAULT_CONSENT_TEXT);
+  });
+});
+
+describe("DEFAULT_MODERATED_CONSENT_TEXT (#79)", () => {
+  it("says the recording, when there is one, is the meeting platform's", () => {
+    // The central factual difference from the recorded template: Cortex does
+    // not capture the call. Claiming it does would be false copy.
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).toMatch(/recorded on the meeting platform/i);
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).not.toMatch(/records your screen/i);
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).not.toMatch(/screen share|sharing/i);
+  });
+
+  it("says 'may be', never 'is', about recording", () => {
+    // A researcher can run an unrecorded session under this consent; wording
+    // that promises recording always happens would be wrong about those.
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).toMatch(/may be recorded/i);
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).not.toMatch(/will be recorded/i);
+  });
+
+  it("covers the transcript, because ingest stores one alongside the recording", () => {
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).toMatch(/transcript/i);
+  });
+
+  it("tells the participant how to decline, and what happens to what exists", () => {
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).toMatch(/decline/i);
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).toMatch(/up to that point/i);
+  });
+
+  it("is neither of the other two wordings", () => {
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).not.toBe(DEFAULT_CONSENT_TEXT);
+    expect(DEFAULT_MODERATED_CONSENT_TEXT).not.toBe(DEFAULT_SURVEY_CONSENT_TEXT);
+  });
+});
+
+describe("the moderated kind never reaches firsthand.studies (#79)", () => {
+  /*
+   * `moderated` consent is anchored on the OPPORTUNITY row: a moderated session
+   * has no study, and `studies_kind_check` (migration 0009) permits exactly
+   * ('recorded','survey'). These pins hold the boundary from both sides - the
+   * migration must not learn the kind, and the kind must not silently become a
+   * studies value - because the failure mode is an INSERT that violates the
+   * CHECK in production, long after every unit test has passed.
+   */
+  const kindCheckSql = readFileSync(
+    path.resolve(__dirname, "../../db/firsthand-migrations/0009_firsthand_study_kind.sql"),
+    "utf8"
+  );
+
+  it("migration 0009's CHECK still names exactly recorded and survey", () => {
+    expect(kindCheckSql).toMatch(/kind IN \('recorded',\s*'survey'\)/);
+    expect(kindCheckSql).not.toMatch(/moderated/);
+  });
+
+  it("migration 0013 never classifies against the moderated template", () => {
+    const sql0013 = readFileSync(
+      path.resolve(__dirname, "../../db/firsthand-migrations/0013_firsthand_consent_template.sql"),
+      "utf8"
+    );
+    expect(sql0013).not.toMatch(/moderated/);
   });
 });

@@ -86,6 +86,12 @@ export interface Opportunity {
   participant_type_specific_details?: string;
   start_date?: string; // Study start date for external link types
   end_date?: string; // Study end date for countdown display
+  // Moderated consent (#79). On every response (SELECT * / RETURNING *), and
+  // deliberately PUBLIC: a participant must read the wording before booking -
+  // the verdict lives in backend/src/utils/publicOpportunity.ts.
+  consent_text?: string | null;
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
   created_at: string;
   updated_at: string;
   /**
@@ -128,6 +134,12 @@ export interface CreateOpportunityRequest {
   status?: 'draft' | 'published';
   start_date?: string;
   end_date?: string;
+  // Moderated consent (#79): live sessions and interviews only; refused at the
+  // route boundary for every other type. The template pair is a claim resolved
+  // server-side - see resolveModeratedConsentWrite.
+  consent_text?: string;
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
 }
 
 export interface UpdateOpportunityRequest {
@@ -147,6 +159,11 @@ export interface UpdateOpportunityRequest {
   participant_type_specific_details?: string;
   start_date?: string;
   end_date?: string;
+  // Moderated consent (#79). Null clears the wording, and the handler nulls
+  // the template pair with it.
+  consent_text?: string | null;
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
 }
 
 // ============================================================================
