@@ -450,17 +450,19 @@ test-scripts:
 # test-backend-db above.
 mutation-canary:
   extends: .test-base
-  # THE PATH GATE. This job is the expensive one (~20 min: two npm ci, a
-  # Postgres service, the full manifest) and every anchor in the manifest
-  # lives under backend/ or shared/ (grep the manifest rather than trusting
-  # a count here - the last one written down drifted from 151 entries to
-  # 197). A frontend-only or docs-only MR cannot change a mutation outcome,
-  # so it skips the WHOLE job. Job-level and all-or-nothing on purpose:
-  # never scope the run below the full manifest instead - a filtered run is
-  # structurally blind to a pre-existing entry the same diff broke, which is
-  # how !267 reddened main, and why the runner refuses a filter flag (#53).
-  # On $PROD_REF the job stays unconditional: `changes` is only well-defined
-  # against an MR diff, and main gets the full check regardless.
+  # THE PATH GATE. This job is the expensive one (~20 min: three npm ci, a
+  # Postgres service, the full manifest). Anchors live under backend/,
+  # shared/ AND frontend/ - the frontend ones arrived with the `project`
+  # field, so a frontend-only MR can now change a mutation outcome and
+  # frontend/ is gated here too (grep the manifest rather than trusting a
+  # count - the last one written down drifted from 151 entries to 197). A
+  # docs-only MR still skips the WHOLE job. Job-level and all-or-nothing on
+  # purpose: never scope the run below the full manifest instead - a
+  # filtered run is structurally blind to a pre-existing entry the same diff
+  # broke, which is how !267 reddened main, and why the runner refuses a
+  # filter flag (#53). On $PROD_REF the job stays unconditional: `changes`
+  # is only well-defined against an MR diff, and main gets the full check
+  # regardless.
   rules:
     - if: $CI_COMMIT_TAG
       when: never
@@ -468,6 +470,7 @@ mutation-canary:
       changes:
         paths:
           - "backend/**/*"
+          - "frontend/**/*"
           - "shared/**/*"
           - "scripts/**/*"
           - "package.json"
@@ -510,6 +513,7 @@ mutation-canary:
   script:
     - npm ci
     - cd backend && npm ci
+    - cd "$CI_PROJECT_DIR/frontend" && npm ci
     # `npm ci` writes nothing tracked, so the clean-tree guard is satisfied and
     # stays armed - it is what stops a run that died mid-mutation from being
     # mistaken for a passing one.
