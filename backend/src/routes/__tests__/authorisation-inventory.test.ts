@@ -589,6 +589,17 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   // bookings.researcher-notes.test.ts, both directions.
   'PUT /api/bookings/:bookingId/notes': 'session',
 
+  // booking-artifacts.ts (#79 step 2) - researcher-side ingest of recordings
+  // and transcripts of a moderated session. `requireAdmin` outright (the
+  // uploader is never a participant), then owner-or-superadmin on the
+  // opportunity through the booking join inside every handler, then the D3
+  // consent-or-attestation gate on the two write routes. Owned by
+  // booking-artifacts.test.ts, both directions.
+  'POST /api/bookings/:bookingId/artifacts/presign': 'admin',
+  'POST /api/bookings/:bookingId/artifacts/finalize': 'admin',
+  'GET /api/bookings/:bookingId/artifacts': 'admin',
+  'DELETE /api/bookings/:bookingId/artifacts/:artifactId': 'admin',
+
   // calendar.ts
   'GET /api/calendar/events': 'admin',
   'GET /api/calendar/availability': 'admin',
@@ -671,7 +682,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 91;
+const EXPECTED_ROUTE_COUNT = 95;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs
@@ -833,8 +844,8 @@ describe('the authorisation inventory', () => {
     // mounts nothing, so from that root alone the answer is one router; a set
     // pre-filled from disk answers 16 whatever it is handed.
     expect(routersReachedFrom([cronRouter]).size).toBe(1);
-    expect(routersReachedFrom([apiRouter]).size).toBe(14);
-    expect(routersReachedFrom(ROOTS.map(([, router]) => router)).size).toBe(16);
+    expect(routersReachedFrom([apiRouter]).size).toBe(15);
+    expect(routersReachedFrom(ROOTS.map(([, router]) => router)).size).toBe(17);
 
     // And it really is traversing rather than echoing its input: `api.ts` is
     // handed in alone and `session-outputs.ts` comes back with it.
@@ -867,6 +878,7 @@ describe('the authorisation inventory', () => {
       'admin.ts',
       'api.ts',
       'auth.ts',
+      'booking-artifacts.ts',
       'bookings.ts',
       'calendar.ts',
       'cron.ts',

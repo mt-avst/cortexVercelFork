@@ -2046,5 +2046,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.consent-acceptance.test.ts",
     "test": "refuses an acceptance whose echoed wording differs, by its own sentence"
+  },
+  {
+    "id": "booking-artifact-consent-gate",
+    "why": "cto/AdaptaLabs#79 step 2. Ingesting a recording or transcript of a moderated session requires recorded consent acceptance on the booking OR an explicit typed attestation that consent was obtained outside Cortex (decision D3, narrowed by F13). This refusal is the single point enforcing that at BOTH presign and finalize - resolveConsentGate is the shared gate. Dropping it stores research recordings of real participants with no consent record and no attestation, silently, which is the governance gap #79 exists to close. Proven by mutation before entry: this exact refusal->return-null left every suite green except the two named refusal tests; the named one fails 200-vs-400 asserting the exported ARTIFACT_CONSENT_REQUIRED sentence.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "    throw new ValidationError(ARTIFACT_CONSENT_REQUIRED);",
+    "mutation": "    return null;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "refuses presign with neither, by the exact sentence"
   }
 ]
