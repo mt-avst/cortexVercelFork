@@ -46,10 +46,13 @@ an empty result from a too-narrow search is indistinguishable from a correct one
 ## CI waits
 
 The `mutation-canary` job is sharded across four parallel jobs and runs only on MRs
-touching `backend/`, `shared/`, `scripts/`, the root lockfile or `.gitlab-ci.yml`;
-frontend-only and docs-only MRs skip it entirely. Measured on !276's pipeline (151
-entries): slowest shard 5.6 minutes wall, whole MR pipeline 11.5 minutes to green,
-against ~24 minutes serial before. Poll to match the job's known duration rather than
+touching `backend/`, `frontend/`, `shared/`, `scripts/`, the root lockfile or
+`.gitlab-ci.yml`; only docs-only MRs skip it entirely. **`frontend/` joined that list
+on 2026-08-28** (!308), when the first frontend entries landed - a frontend-only MR
+can change a mutation outcome now, so it must not skip. That is a real cost on every
+frontend MR, taken deliberately. Measured on !276's pipeline (151 entries): slowest
+shard 5.6 minutes wall, whole MR pipeline 11.5 minutes to green, against ~24 minutes
+serial before. Poll to match the job's known duration rather than
 sleeping on a fixed long timer - ten minutes of dead air past a green result is the
 recorded cost of guessing. Prefer merging with auto-merge armed so nobody watches at all.
 
@@ -57,7 +60,9 @@ Never scope the canary below the full manifest: a filtered run is structurally b
 pre-existing entry the same diff broke (that reddened main once already). The path gate
 above is job-level and all-or-nothing, which is the only safe shape.
 
-Running it LOCALLY needs a real Postgres. Sixteen entries are database-backed, and the
+Running it LOCALLY needs a real Postgres. Sixteen of the 199 entries are
+database-backed (185 `backend/`, 12 `shared/`, 2 `frontend/` - grep the manifest
+rather than trusting these counts), and the
 runner **refuses to start** rather than skipping them - correctly, because a skipped entry
 and a passing entry read identically in a green job. It exits 0 while refusing, so read the
 output, not the exit code. There is no filter flag by design.

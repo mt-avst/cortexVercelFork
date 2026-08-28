@@ -957,19 +957,14 @@ test('validation refuses a frontend entry that claims to need a database', async
 });
 
 /**
- * A FRONTEND ENTRY IS NOT RUNNABLE UNTIL CI CAN RUN IT.
+ * THE PIPELINE CONFIG IS PARSEABLE.
  *
- * `project: 'frontend'` makes the runner able to spawn in `frontend/`. It does
- * not make the JOB able to: the canary installs root and `backend` deps only,
- * and its path gate excludes `frontend/**`, so a frontend entry would reach
- * an `npx vitest` with no node_modules, and a frontend-only MR would skip the
- * whole job while changing the very file the entry mutates.
- *
- * That second half is the one ADR-0004 forbids by name - a run that is
- * structurally blind to a diff it should have caught. Both halves are deferred
- * DELIBERATELY, because paying for them buys nothing while no frontend entry
- * exists, and this test is what stops the deferral from being forgotten: add
- * the first frontend entry and it fails by name until CI is fixed with it.
+ * Its own test, and deliberately BEFORE the frontend-deps guard below, which
+ * also parses this file: without it, a duplicate mapping key reddened under a
+ * name about frontend dependencies and sent the reader to the wrong subject.
+ * That is not hypothetical - it is how a duplicated `feat-deploy-on-push` in
+ * the Kubera inputs was found, and it is also how this very docblock ended up
+ * over the wrong test for a while.
  */
 test('.gitlab-ci.yml parses strictly, with no duplicated mapping keys', async () => {
   // Its own test, because the guard below ALSO parses this file and would
@@ -1002,6 +997,26 @@ test('validation refuses a frontend entry that names the jest runner', async () 
   assert.deepEqual(validateManifest([entry({ project: 'backend', runner: 'jest' })]), []);
 });
 
+/**
+ * A FRONTEND ENTRY IS NOT RUNNABLE UNTIL CI CAN RUN IT.
+ *
+ * `project: 'frontend'` makes the RUNNER able to spawn in `frontend/`. It does
+ * not make the JOB able to: without frontend deps installed an entry reaches an
+ * `npx vitest` with no node_modules, and without `frontend/` in the path gate a
+ * frontend-only MR skips the whole job while changing the very file the entry
+ * mutates - the structurally blind run ADR-0004 forbids by name.
+ *
+ * Both halves were deferred deliberately when the `project` field landed (!307),
+ * and this test is what made the deferral impossible to forget. It worked: the
+ * first frontend entries (!308) turned it RED by name, and it went green only
+ * once CI was fixed in the same MR.
+ *
+ * IT IS STILL LOAD-BEARING now the work is done - it is what stops the install
+ * or the path gate being dropped later while frontend entries remain. So its
+ * controls probe SYNTHETIC jobs, not the real one: an earlier version asserted
+ * the real config was still broken, which meant fixing CI correctly failed the
+ * control for ever and the only obvious remedy was deleting it.
+ */
 test('a frontend entry requires the canary job to install frontend deps and watch frontend paths', async (t) => {
   const yaml = require('js-yaml');
   let ci;

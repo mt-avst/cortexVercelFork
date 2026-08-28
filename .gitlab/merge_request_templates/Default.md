@@ -14,7 +14,7 @@ Closes #NN
 | Backend jest | N passed / N suites (baseline: N / N) |
 | Backend vitest | N passed / N files |
 | Frontend | N passed / N files |
-| Canary | N/N killed, exit 0 - or SKIPPED by path gate (docs/frontend-only) |
+| Canary | N/N killed, exit 0 - or SKIPPED by path gate (docs-only; frontend/ is gated since !308) |
 | Lint / typecheck | clean / the known pre-existing errors only |
 | Risk | one line: what could this break and what proves it does not |
 
