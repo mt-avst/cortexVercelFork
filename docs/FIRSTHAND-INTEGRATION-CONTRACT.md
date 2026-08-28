@@ -376,6 +376,77 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ---
 
+## Study authoring constraints
+
+### `target_url` — what a study may point a participant at
+
+Any task step may carry a `target_url` (`stepSchema` in
+[shared/firsthand/contract.ts](../shared/firsthand/contract.ts)).
+It is the page the participant opens, screen-shares and works in while recording.
+
+#### Shape and scheme
+
+A `target_url` must be either an absolute `http:`/`https:` URL, or a same-origin path beginning
+with a single `/`.
+Protocol-relative URLs (`//host`) and every non-http scheme are rejected.
+
+The rule is strict because of how the page is opened, not out of caution.
+The task window is created as `window.open("")` — a same-origin `about:blank` document — and then
+navigated by assigning `location.href`.
+A `javascript:` URL assigned there would execute in Cortex's own origin, with access to the
+participant's session token and stored responses.
+
+It is enforced in four independent places, so no single edit can widen it:
+
+| Where | File |
+|---|---|
+| Authoring form | [frontend/src/pages/OpportunityForm.tsx](../frontend/src/pages/OpportunityForm.tsx) |
+| Contract boundary | [shared/firsthand/contract.ts](../shared/firsthand/contract.ts) |
+| Inline-study schema | [shared/firsthand/inline-study.ts](../shared/firsthand/inline-study.ts) |
+| The sink itself | [frontend/src/lib/recording/task-window.ts](../frontend/src/lib/recording/task-window.ts) |
+
+The predicate is `isSafeTargetUrl` in
+[shared/firsthand/url-safety.ts](../shared/firsthand/url-safety.ts).
+Its relative branch **resolves** the URL rather than pattern-matching it, and must stay that way —
+the docblock there records the four parser tricks (`\`, tab, CR, LF) that defeated the string
+check it replaced.
+
+#### Frameability is NOT a constraint — this changed in the folded-in architecture
+
+**A target that refuses to be framed is fine.** Atlassian cloud, Google, GitHub and most SaaS
+products send `X-Frame-Options` or a CSP `frame-ancestors` directive, and all of them are valid
+study targets today.
+
+This is worth stating explicitly because it used to be the opposite, and the old constraint is the
+kind that gets re-derived from first principles by anyone who assumes an embedded frame.
+The task page was originally rendered in an **iframe**, which meant any anti-framing target went
+permanently blank mid-recording — and undetectably so, because a blocked frame still fires
+`onLoad`, leaving the parent unable to tell a blocked page from a loaded one.
+
+That is precisely why the iframe was removed.
+The participant now opens and records a **real separate window** (`TaskWindowPanel` in
+[frontend/src/components/recording/StudyRunner.tsx](../frontend/src/components/recording/StudyRunner.tsx)),
+so the browser applies no framing policy at all.
+
+#### The live failure mode is pop-up blocking
+
+With framing gone, the way a task page fails to appear is the browser refusing the pop-up:
+`window.open` returns `null`, and the task window reports status `blocked`.
+The open therefore has to happen on a genuine user activation, which is why the participant clicks
+to open the task page rather than it appearing on its own.
+
+#### Practical guidance for authors
+
+- **Point at whatever page the study is actually about.** Third-party SaaS is fine.
+- **A relative `/path` target is Cortex's own origin.** Participant-facing copy deliberately calls
+  it "the task page" rather than naming a host, because naming Cortex's host there would be
+  misleading (`describeTarget` in
+  [frontend/src/lib/recording/task-target.ts](../frontend/src/lib/recording/task-target.ts)).
+- **A study with no `target_url` on any task step is not a recorded study.** The setup flow falls
+  back to a single start action instead of the open-then-share sequence.
+
+---
+
 ## Environment variables
 
 ### Cortex (this repo)
@@ -397,6 +468,14 @@ at session creation. Cortex sets `return_url = ${FRONTEND_URL}/opportunities/<id
 
 ## Verification history
 
+- **2026-08-28 (authoring constraints):** Added the **Study authoring constraints** section above.
+  Re-verified against the current tree rather than carried over from the 2026-07-16 participant UX
+  findings, and the headline claim **inverted**: finding A8's "`target_url` must be frameable" is
+  **obsolete**. There is no `<iframe>` anywhere in `frontend/src` (full-tree sweep); the task page
+  is opened as a separate window by `useTaskWindow`, and `StudyRunner.tsx` records that the iframe
+  was replaced *because* real products refuse to frame. The constraint that does bind is the
+  scheme/shape rule in `isSafeTargetUrl`, enforced at four sites. `contract_version` unchanged
+  (`1.0`, documentation only).
 - **2026-07-16 (endpoint 5 fix):** Recordings from any attempt **other than the latest** were
   advertised with a `media_url` that 404'd — Cortex rendered a player that could never load.
   Root cause: `getRuntimeAsset` resolved the session by id alone, and attempt 1's physical
