@@ -371,8 +371,21 @@ export const deleteAllSessions = async (opportunityId: string): Promise<{ messag
 };
 
 // Booking API functions
-export const bookSession = async (sessionId: string): Promise<Booking> => {
-  const response = await api.post(`/bookings/sessions/${sessionId}/book`);
+export const bookSession = async (
+  sessionId: string,
+  options?: { consentAccepted?: boolean; consentTextSeen?: string }
+): Promise<Booking> => {
+  // consent_accepted travels only as the literal true - the server refuses
+  // anything else on an opportunity carrying consent, and an opportunity
+  // without consent ignores it entirely (#79 step 1b). The echoed wording
+  // rides with it: the server refuses an acceptance whose text differs from
+  // the row's, so a consent edited mid-read cannot be "accepted" unseen.
+  const response = await api.post(
+    `/bookings/sessions/${sessionId}/book`,
+    options?.consentAccepted === true
+      ? { consent_accepted: true, consent_text_seen: options.consentTextSeen ?? '' }
+      : {}
+  );
   return response.data;
 };
 
