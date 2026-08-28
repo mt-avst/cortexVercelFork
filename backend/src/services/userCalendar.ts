@@ -3,8 +3,26 @@ import { logger } from '../utils/logger';
 import { encrypt as secureEncrypt, decryptAuto as secureDecrypt } from '../utils/encryption';
 
 /**
+ * THE CEILING ON A DEMO CALENDAR'S SPAN (cto/AdaptaLabs#96).
+ *
+ * `GET /api/calendar/my-events` validates `start_time` and `end_time` as plain
+ * optional strings - there is no range bound on the query - so the window handed
+ * to the mock generator is whatever the caller asked for. The generator walks
+ * one day at a time, and the version this replaced happened to stop early only
+ * because its `eventCount < 15` counter also sat in the loop condition. Take the
+ * counter away and a request for `start_time=2000-01-01&end_time=2200-01-01`
+ * walks 73,000 days and builds 200,000 event objects to serialise.
+ *
+ * Sixty-two days is a generous two months against a picker whose own default
+ * window is seven, so no real use is clipped. This is a backstop that turns
+ * "as long as you like" into "bounded", not a policy anybody should be reading
+ * as the supported range.
+ */
+export const MAX_DEMO_CALENDAR_DAYS = 62;
+
+/**
  * User Calendar Service
- * 
+ *
  * Handles user Google Calendar integration with demo mode support.
  * Automatically switches between demo and production modes based on configuration.
  */
@@ -559,154 +577,103 @@ export class UserCalendarService {
   }
 
   /**
-   * Generate realistic mock calendar events for testing
-   * Creates specific conflicts for Demo User 1 (demo@example.com) at common session times
+   * THE DEMO CALENDAR IS A FIXTURE, SO IT MUST NOT MOVE (cto/AdaptaLabs#96).
+   *
+   * This used to pick its times with `Math.random()` and ran fresh on every
+   * `GET /api/calendar/my-events`, so a researcher asking for the same week
+   * twice got different busy time and the slot picker reshuffled which slots it
+   * dimmed on every page load. Three identical calls measured on `10e4fc7`
+   * returned `08:30 12:15 09:15 10:45 14:00`, then `15:15 10:45 15:00 14:30
+   * 08:00`, then `13:00 09:00 13:15 11:00 10:30`. A moving fixture is
+   * indistinguishable from a calendar that genuinely changed, which is the one
+   * thing a demo must never be.
+   *
+   * IT ALSO USED TO DEPEND ON WHO WAS ASKING, and got that backwards. The
+   * 10am/2pm/3pm conflicts `GOOGLE_CALENDAR_SETUP.md` promises sat behind an
+   * `isDemoUser1` check keyed to `a1b2c3d4-e5f6-7890-abcd-ef1234567890` - the
+   * `/auth/demo-login` EMPLOYEE, who cannot reach the admin Session Management
+   * picker at all. A `researcher_admin`, the only role that can, fell to a
+   * second branch built from `9 + Math.floor(Math.random() * 8)`. The
+   * documented behaviour was unreachable by anyone in a position to see it.
+   *
+   * Both are now one table applied to every weekday for every user: same
+   * caller, same window, same answer, every time, and the anchors are the ones
+   * the documentation names.
+   *
+   * ponytail: every demo user sees an identical calendar
+   *   -> a demo of two researchers whose availability differs cannot be staged.
+   *      Deriving a per-user offset from a hash of the user id would fix it and
+   *      stay deterministic; nothing has needed it yet, and a second axis here
+   *      is a second thing that can drift away from the documentation.
+   *
+   * Demo mode is development-only - `calendarOAuthMode()` answers `real` or
+   * `unavailable` in a deployed environment - so nothing here is ever served to
+   * a real participant.
    */
   private generateMockEvents(startTime: string, endTime: string, userId?: string): CalendarEvent[] {
     const start = new Date(startTime);
     const end = new Date(endTime);
     const events: CalendarEvent[] = [];
 
-    // Check if this is Demo User 1 - create specific conflicts for them
-    const isDemoUser1 = userId === 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' || 
-                       !userId; // Default to Demo User 1 if no userId provided
+    /**
+     * The times `GOOGLE_CALENDAR_SETUP.md` promises, written as literals so
+     * that moving one has to fail a test by name rather than silently
+     * redefining what the documentation means. These line up with the demo
+     * sessions created by `reset-demo-data.ts`.
+     */
+    const dailyConflicts = [
+      { hour: 10, minute: 0, durationMinutes: 60, title: 'Team Standup' },
+      { hour: 14, minute: 0, durationMinutes: 60, title: 'Project Review Meeting' },
+      { hour: 15, minute: 0, durationMinutes: 45, title: 'Code Review Session' },
+    ];
 
-    if (isDemoUser1) {
-      // Create specific conflicts aligned with demo session times (10am, 2pm, 3pm)
-      // These will overlap with the sessions created by reset-demo-data.ts
-      const conflictTimes = [
-        { hour: 10, minute: 0, duration: 60, title: 'Team Standup' },
-        { hour: 10, minute: 30, duration: 45, title: 'Client Call' },
-        { hour: 14, minute: 0, duration: 60, title: 'Project Review Meeting' },
-        { hour: 14, minute: 30, duration: 30, title: 'Sprint Planning' },
-        { hour: 15, minute: 0, duration: 45, title: 'Code Review Session' },
-        { hour: 15, minute: 15, duration: 30, title: 'One-on-One with Manager' },
-      ];
+    // Local time throughout, because `setHours` is local and the picker draws
+    // in the researcher's own timezone. Iterating on a copy keeps `start`
+    // usable for the range check below.
+    const cursor = new Date(start);
+    cursor.setHours(0, 0, 0, 0);
 
-      let currentDate = new Date(start);
-      let eventCount = 0;
+    // Bounded, not merely terminating: see MAX_DEMO_CALENDAR_DAYS. An invalid
+    // date makes every comparison false, so the loop does not run rather than
+    // spinning.
+    let daysWalked = 0;
 
-      // Generate events for the next 7 days to ensure good coverage
-      while (currentDate <= end && eventCount < 15) {
-        const dayOfWeek = currentDate.getDay();
-        
-        // Only add events on weekdays (Monday-Friday)
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          // Create 1-2 conflicts per day at the specific times
-          const conflictsForDay = eventCount % 3 === 0 ? 2 : 1;
-          
-          for (let i = 0; i < conflictsForDay && eventCount < conflictTimes.length * 2; i++) {
-            const conflict = conflictTimes[eventCount % conflictTimes.length];
-            const eventStart = new Date(currentDate);
-            eventStart.setHours(conflict.hour, conflict.minute, 0, 0);
-            
-            const eventEnd = new Date(eventStart);
-            eventEnd.setMinutes(eventEnd.getMinutes() + conflict.duration);
+    while (cursor <= end && daysWalked < MAX_DEMO_CALENDAR_DAYS) {
+      daysWalked++;
+      const dayOfWeek = cursor.getDay();
+      const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
 
-            // Only add if event is within the requested range
-            if (eventStart >= start && eventEnd <= end) {
-              events.push({
-                id: `demo-conflict-${eventCount}-${eventStart.toISOString()}`,
-                title: conflict.title,
-                start: eventStart.toISOString(),
-                end: eventEnd.toISOString(),
-                startTime: eventStart,
-                endTime: eventEnd,
-                status: 'confirmed',
-                location: i === 0 ? 'Meeting Room B' : undefined,
-                description: `Existing calendar commitment for Demo User 1`,
-                attendees: [],
-              });
-              eventCount++;
-            }
-          }
-        }
+      if (isWeekday) {
+        for (const conflict of dailyConflicts) {
+          const eventStart = new Date(cursor);
+          eventStart.setHours(conflict.hour, conflict.minute, 0, 0);
 
-        // Move to next day
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-
-      // Also add a few random events for variety
-      const randomTemplates = [
-        { title: 'Lunch Break', duration: 60 },
-        { title: 'Training Session', duration: 90 },
-        { title: 'Department Meeting', duration: 45 },
-      ];
-
-      currentDate = new Date(start);
-      let randomCount = 0;
-      while (currentDate <= end && randomCount < 5) {
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          const template = randomTemplates[randomCount % randomTemplates.length];
-          const eventStart = new Date(currentDate);
-          eventStart.setHours(11 + Math.floor(Math.random() * 2), Math.floor(Math.random() * 4) * 15, 0);
-          
           const eventEnd = new Date(eventStart);
-          eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
+          eventEnd.setMinutes(eventEnd.getMinutes() + conflict.durationMinutes);
 
+          // A window can begin mid-morning or end mid-afternoon, so a whole
+          // day's worth of conflicts is not necessarily in range.
           if (eventStart >= start && eventEnd <= end) {
             events.push({
-              id: `demo-random-${randomCount}`,
-              title: template.title,
+              id: `demo-conflict-${eventStart.toISOString()}`,
+              title: conflict.title,
               start: eventStart.toISOString(),
               end: eventEnd.toISOString(),
               startTime: eventStart,
               endTime: eventEnd,
               status: 'confirmed',
-              location: undefined,
-              description: `Demo ${template.title} event`,
+              location: 'Meeting Room B',
+              description: 'Existing calendar commitment (demo data)',
               attendees: [],
             });
-            randomCount++;
           }
         }
-        currentDate.setDate(currentDate.getDate() + 1);
       }
-    } else {
-      // For other users, generate fewer/random events
-      const mockEventTemplates = [
-        { title: 'Team Standup', duration: 30 },
-        { title: 'Client Meeting', duration: 60 },
-        { title: 'Lunch Break', duration: 60 },
-      ];
 
-      const currentDate = new Date(start);
-      let eventCount = 0;
-      const maxEvents = 5;
-
-      while (currentDate <= end && eventCount < maxEvents) {
-        const dayOfWeek = currentDate.getDay();
-        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-          const template = mockEventTemplates[eventCount % mockEventTemplates.length];
-          const eventStart = new Date(currentDate);
-          eventStart.setHours(9 + Math.floor(Math.random() * 8), 
-                             Math.floor(Math.random() * 4) * 15, 0);
-          
-          const eventEnd = new Date(eventStart);
-          eventEnd.setMinutes(eventEnd.getMinutes() + template.duration);
-
-          if (eventStart >= start && eventEnd <= end) {
-            events.push({
-              id: `demo-event-${eventCount}`,
-              title: template.title,
-              start: eventStart.toISOString(),
-              end: eventEnd.toISOString(),
-              startTime: eventStart,
-              endTime: eventEnd,
-              status: 'confirmed',
-              location: Math.random() > 0.5 ? 'Meeting Room A' : undefined,
-              description: `Demo ${template.title} event for testing`,
-              attendees: [],
-            });
-            eventCount++;
-          }
-        }
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
+      cursor.setDate(cursor.getDate() + 1);
     }
-    
-    logger.debug('Generated mock calendar events', { count: events.length, isDemoUser1 });
+
+    logger.debug('Generated mock calendar events', { count: events.length, userId });
 
     return events;
   }

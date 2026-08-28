@@ -1974,5 +1974,15 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/userCalendar.connect-flow.test.ts",
     "test": "takes NO pool connection when it refuses"
+  },
+  {
+    "id": "demo-calendar-conflicts-do-not-move",
+    "why": "The demo calendar is a fixture and its whole value is being the same twice. It was built with Math.random() per request, so the slot picker reshuffled which slots it dimmed on every page load and a researcher could not tell a demo fixture from a calendar that had genuinely changed (cto/AdaptaLabs#96). Re-introducing variety here is an easy and plausible future edit, and it reads as an improvement.",
+    "file": "backend/src/services/userCalendar.ts",
+    "anchor": "      { hour: 10, minute: 0, durationMinutes: 60, title: 'Team Standup' },",
+    "mutation": "      { hour: 9 + Math.floor(Math.random() * 6), minute: 0, durationMinutes: 60, title: 'Team Standup' },",
+    "runner": "jest",
+    "spec": "src/services/__tests__/userCalendar.demo-events-are-deterministic.test.ts",
+    "test": "returns the identical set of events for the same user and window, ten times over"
   }
 ]

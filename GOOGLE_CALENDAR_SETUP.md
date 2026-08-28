@@ -27,6 +27,14 @@ This guide will help you set up Google Calendar integration for your Adaptalabs 
 > |---|---|---|
 > | `real` | `GOOGLE_OAUTH_CLIENT_ID` and `..._SECRET` are set | the genuine Google flow |
 > | `demo` | they are not, and `NODE_ENV=development` | a COMPLETE working flow with no credentials: the consent URL points back at our own callback with `code=demo`, tokens are minted, `connection-status` flips to `connected`, and mock busy time appears at 10am/2pm/3pm, aligned with the demo sessions |
+>
+> The demo busy time is a **fixture, and it does not move**: every weekday in the
+> requested range gets 10:00-11:00, 14:00-15:00 and 15:00-15:45, the same for every
+> user and identical on every call. It used to be built with `Math.random()` per
+> request, so the slot picker reshuffled which slots it dimmed on each page load,
+> and the 10am/2pm/3pm set above was reachable only by the `/auth/demo-login`
+> employee - never by a `researcher_admin`, the only role that can see the picker
+> (cto/AdaptaLabs#96).
 > | `unavailable` | they are not, and this is not development | `503`, and the UI offers no Connect control |
 >
 > **So local development needs nothing from Google.** Follow Part 1 below only when
