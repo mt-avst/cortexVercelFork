@@ -28,6 +28,8 @@ interface CalendarOAuthFlow {
   userId: string;
 }
 
+// Bare name in, prefixed cookie out: the guard applies the `__Host-` prefix
+// (#94), so the cookie on the wire is `__Host-adaptalabs_calendar_oauth_state`.
 const calendarOAuthState = createOAuthStateGuard<CalendarOAuthFlow>({
   cookieName: 'adaptalabs_calendar_oauth_state',
 });

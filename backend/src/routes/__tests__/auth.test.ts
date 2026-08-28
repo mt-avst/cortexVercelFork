@@ -58,19 +58,40 @@ function mockOidc(overrides: Record<string, any> = {}) {
   return mockClient;
 }
 
-// Logs in via the real /auth/login flow, exactly as a real browser would: the
-// returned supertest AGENT holds the cookies /login set - both the session and
-// the browser-bound `adaptalabs_oauth_state` cookie the callback now requires
-// (cto/AdaptaLabs#82) - so the same agent must be used for the callback request.
-// A plain `request(app)` would drop those cookies and fail the state binding,
-// which is exactly the login-CSRF the binding closes.
-async function loginAgent(
+// The login flow's state cookie name, carrying the `__Host-` prefix (#94).
+// Written as a literal here, and again in the sibling suites, deliberately: an
+// expectation derived from the module under test would follow that module if
+// the prefix were ever dropped, and the prefix is the control.
+const LOGIN_STATE_COOKIE = '__Host-adaptalabs_oauth_state';
+
+const stateCookieFrom = (setCookie: string[] | undefined): string => {
+  const cookie = (setCookie ?? [])
+    .map((c) => c.split(';')[0])
+    .find((c) => c.startsWith(`${LOGIN_STATE_COOKIE}=`));
+  if (!cookie) throw new Error(`no ${LOGIN_STATE_COOKIE} cookie was set`);
+  return cookie;
+};
+
+// Drives the real /auth/login flow, then hands back the state AND the
+// browser-bound state cookie so the caller can re-present it on the callback,
+// exactly as a browser does (cto/AdaptaLabs#82).
+//
+// The cookie is returned rather than left to a `request.agent` jar because
+// since #94 it is `Secure` unconditionally, and supertest's jar silently drops
+// a Secure cookie over http - measured, against an insecure control that
+// round-trips. A real browser DOES send it (localhost is a trustworthy origin)
+// and production is https, so this is the harness being stricter than the
+// world, not a behaviour change. A caller that omits the cookie is refused,
+// which is the login-CSRF the binding closes and is asserted below.
+async function beginLogin(
   app: express.Application
-): Promise<{ agent: ReturnType<typeof request.agent>; state: string }> {
-  const agent = request.agent(listening(app));
-  const res = await agent.get('/auth/login').expect(302);
+): Promise<{ state: string; stateCookie: string }> {
+  const res = await request(listening(app)).get('/auth/login').expect(302);
   const url = new URL(res.headers.location);
-  return { agent, state: url.searchParams.get('state')! };
+  return {
+    state: url.searchParams.get('state')!,
+    stateCookie: stateCookieFrom(res.headers['set-cookie'] as unknown as string[]),
+  };
 }
 
 describe('Authentication Routes', () => {
@@ -156,7 +177,7 @@ describe('Authentication Routes', () => {
     });
 
     it('should handle successful authentication', async () => {
-      const { agent, state } = await loginAgent(app);
+      const { state, stateCookie } = await beginLogin(app);
 
       // Mock user upsert query
       mockClientQuery.mockResolvedValueOnce({
@@ -173,8 +194,9 @@ describe('Authentication Routes', () => {
       // Mock notification preferences creation
       mockClientQuery.mockResolvedValueOnce({ rows: [] });
 
-      const response = await agent
+      const response = await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
+        .set('Cookie', stateCookie)
         .expect(302);
 
       expect(response.headers.location).toBe('http://localhost:3000');
@@ -203,7 +225,7 @@ describe('Authentication Routes', () => {
       // The attacker begins their own OIDC login and captures a valid, unused
       // state on THEIR browser (agent). The victim's browser carries no
       // adaptalabs_oauth_state cookie, so a plain client models it.
-      const { state } = await loginAgent(app);
+      const { state } = await beginLogin(app);
 
       const response = await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
@@ -216,19 +238,21 @@ describe('Authentication Routes', () => {
       mockOidc({
         callback: (jest.fn() as any).mockRejectedValue(new Error('OIDC callback failed')),
       });
-      const { agent, state } = await loginAgent(app);
+      const { state, stateCookie } = await beginLogin(app);
 
-      await agent
+      await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
+        .set('Cookie', stateCookie)
         .expect(500);
     });
 
     it('should handle database errors during user creation', async () => {
-      const { agent, state } = await loginAgent(app);
+      const { state, stateCookie } = await beginLogin(app);
       mockClientQuery.mockRejectedValueOnce(new Error('Database error'));
 
-      await agent
+      await request(listening(app))
         .get(`/auth/callback?state=${state}&code=test-code`)
+        .set('Cookie', stateCookie)
         .expect(500);
     });
   });

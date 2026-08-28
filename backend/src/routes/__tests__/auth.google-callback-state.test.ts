@@ -77,6 +77,24 @@ function installAttackerFetch() {
   return fetchMock;
 }
 
+/**
+ * The login flow's state cookie, as `name=value`, ready to re-present.
+ *
+ * The name carries the `__Host-` prefix (#94), written out in full rather than
+ * imported from the module under test - a value read back from the code being
+ * guarded would follow that code if the prefix were dropped, and the prefix is
+ * the whole control.
+ */
+const LOGIN_STATE_COOKIE = '__Host-adaptalabs_oauth_state';
+
+const stateCookieFrom = (setCookie: string[] | undefined): string => {
+  const cookie = (setCookie ?? [])
+    .map((c) => c.split(';')[0])
+    .find((c) => c.startsWith(`${LOGIN_STATE_COOKIE}=`));
+  if (!cookie) throw new Error(`no ${LOGIN_STATE_COOKIE} cookie was set`);
+  return cookie;
+};
+
 describe('GET /auth/google-callback state validation (login CSRF, #82)', () => {
   let app: express.Application;
   let originalFetch: typeof global.fetch;
@@ -124,11 +142,25 @@ describe('GET /auth/google-callback state validation (login CSRF, #82)', () => {
   it('refuses a callback whose state was never issued by this server', async () => {
     installAttackerFetch();
 
-    const res = await request(listening(app)).get(
-      '/auth/google-callback?code=attacker-code&state=never-issued-by-us'
-    );
+    // The cookie MATCHES the query state, so the browser-binding check PASSES
+    // and only the store-membership check can refuse this. Without the cookie
+    // the binding refused first and the store was never consulted - the test
+    // passed while asserting nothing about the thing its name promises. Proven:
+    // with the store check neutered it still passed. Its calendar sibling
+    // ('refuses a state this server never issued') always did this correctly.
+    const res = await request(listening(app))
+      .get('/auth/google-callback?code=attacker-code&state=never-issued-by-us')
+      .set('Cookie', `${LOGIN_STATE_COOKIE}=never-issued-by-us`);
 
     expect(res.status).toBe(400);
+    // The STRING, not just the status. `consume` has two guards - the store
+    // membership check and the `used` check - and the second refuses with a
+    // DIFFERENT message, so on status alone deleting the membership check still
+    // yields 400 and this test still passes. Proven: with `if (!store.has(state))`
+    // neutered, the status assertion alone stayed green and this line fails with
+    // "State parameter already used". The calendar sibling always asserted the
+    // string, which is why it was the only test in the repo killing that mutation.
+    expect(res.body.error).toBe('Invalid state parameter');
     expect(res.headers['set-cookie']).toBeUndefined();
   });
 
@@ -153,41 +185,67 @@ describe('GET /auth/google-callback state validation (login CSRF, #82)', () => {
   });
 
   it('accepts a state minted by google-login exactly once then refuses a replay', async () => {
-    // A real browser keeps the state cookie /google-login set, so the SAME agent
-    // must drive the callback - a plain client would drop the cookie and be
-    // refused (which is exactly the login-CSRF the binding closes).
-    const agent = request.agent(listening(app));
-    const login = await agent.get('/auth/google-login').expect(302);
+    // A real browser keeps the state cookie /google-login set, so the callback
+    // is driven WITH that cookie re-presented - a plain client would drop it and
+    // be refused, which is exactly the login-CSRF the binding closes (the test
+    // above is that arm).
+    //
+    // Presented explicitly rather than through `request.agent`'s jar: since #94
+    // the cookie is `Secure` unconditionally, and supertest's jar drops a Secure
+    // cookie over http. Measured, with an insecure control that round-trips.
+    // A real browser does send it (localhost is a trustworthy origin) and
+    // production is https, so this is the harness being stricter than the world.
+    const login = await request(listening(app)).get('/auth/google-login').expect(302);
     const state = new URL(login.headers.location).searchParams.get('state');
     expect(state).toBeTruthy();
+    const stateCookie = stateCookieFrom(login.headers['set-cookie'] as unknown as string[]);
 
     installAttackerFetch();
-    const ok = await agent.get(`/auth/google-callback?code=real-code&state=${state}`);
+    const ok = await request(listening(app))
+      .get(`/auth/google-callback?code=real-code&state=${state}`)
+      .set('Cookie', stateCookie);
     expect(ok.status).toBe(302);
     expect(ok.headers['set-cookie']).toBeDefined();
 
-    // Replaying the same state is refused - it is consumed and its cookie cleared.
+    // Replay WITH the cookie re-presented. That is what makes this arm able to
+    // fail: no cookie means the binding check refuses first, so neither the
+    // `used` flag nor anything else downstream is ever reached, and the test
+    // goes green under every single-line mutation - which is what an earlier
+    // version of this arm did. Measured: with `stateData.used = true` removed,
+    // the no-cookie form stayed green while this form fails by name.
     installAttackerFetch();
-    const replay = await agent.get(`/auth/google-callback?code=real-code&state=${state}`);
+    const replay = await request(listening(app))
+      .get(`/auth/google-callback?code=real-code&state=${state}`)
+      .set('Cookie', stateCookie);
     expect(replay.status).toBe(400);
+    expect(replay.body.error).toBe('State parameter already used');
     expect(replay.headers['set-cookie']).toBeUndefined();
+
+    // And the no-cookie replay, as its own arm rather than instead of the one
+    // above: this is the shape a real browser produces, because the successful
+    // consume cleared its cookie. It is refused by the BINDING, which the
+    // different error string proves - two refusal reasons, two assertions.
+    installAttackerFetch();
+    const bare = await request(listening(app)).get(
+      `/auth/google-callback?code=real-code&state=${state}`
+    );
+    expect(bare.status).toBe(400);
+    expect(bare.body.error).toBe('Invalid state parameter');
   });
 
   it('refuses a consumed state even when the browser re-sends the state cookie', async () => {
     // Isolates the single-use flag from the cookie-clearing: capture the state
     // cookie, consume the state once, then replay WITH the original cookie
     // re-attached. Binding passes, so only the `used` flag can refuse it.
-    const agent = request.agent(listening(app));
-    const login = await agent.get('/auth/google-login').expect(302);
+    const login = await request(listening(app)).get('/auth/google-login').expect(302);
     const state = new URL(login.headers.location).searchParams.get('state')!;
-    const setCookies = login.headers['set-cookie'] as unknown as string[];
-    const stateCookie = setCookies
-      .map((c) => c.split(';')[0])
-      .find((c) => c.startsWith('adaptalabs_oauth_state='))!;
+    const stateCookie = stateCookieFrom(login.headers['set-cookie'] as unknown as string[]);
     expect(stateCookie).toBeTruthy();
 
     installAttackerFetch();
-    const ok = await agent.get(`/auth/google-callback?code=real-code&state=${state}`);
+    const ok = await request(listening(app))
+      .get(`/auth/google-callback?code=real-code&state=${state}`)
+      .set('Cookie', stateCookie);
     expect(ok.status).toBe(302);
 
     installAttackerFetch();

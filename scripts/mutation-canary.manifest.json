@@ -1825,6 +1825,16 @@
     "test": "refuses an attacker-minted state replayed from a different browser"
   },
   {
+    "id": "oauth-state-cookie-keeps-the-host-prefix",
+    "why": "cto/AdaptaLabs#94. Since !299 the calendar callback takes its userId from the state's server-side payload rather than the session, which makes this cookie the SOLE authenticator. Without the __Host- prefix any sibling *.adaptavist.net host can set Domain=.adaptavist.net and toss a state in; the victim then completes consent against the attacker's state and THEIR Google refresh token lands on the ATTACKER's user_calendar_tokens row, readable via GET /api/calendar/my-events. This is the mutation to fear rather than dropping `secure` or adding a `domain`: those make the browser refuse the cookie, so the flow breaks loudly, whereas removing the prefix leaves every flow working exactly as before and silently reopens the hole. The prefix is applied here, once, for every flow. Proven KILLED before entry: the named test reports \"adaptalabs_oauth_state\" against the expected \"__Host-adaptalabs_oauth_state\".",
+    "file": "backend/src/utils/oauthState.ts",
+    "anchor": "  const cookieName = `${HOST_COOKIE_PREFIX}${options.cookieName}`;",
+    "mutation": "  const cookieName = options.cookieName;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/oauthState.test.ts",
+    "test": "prefixes the cookie name with __Host-, so a subdomain cannot toss one in"
+  },
+  {
     "id": "results-read-firsthand-aggregate-releases-before-json",
     "why": "cto/AdaptaLabs#85, the residual availability half of #9. GET /studies/:studyId/results buffered its res.json body and held the single results permit through the whole drain, which a slow reader controls - denying another admin's aggregate reads. !288 bounded the body so early release is now safe. This mutation drops releaseResultsReadPermit(res) before res.json, reverting to permit-held-through-drain; caught by the all-four structural test. Anchored on the #85 comment+call so it is unique against the CSV route's release in the same file.",
     "file": "backend/src/routes/firsthand.ts",

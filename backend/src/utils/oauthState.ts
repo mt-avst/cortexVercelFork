@@ -24,14 +24,60 @@ import type { Request, Response } from 'express';
  * flows substitutable for each other, which is a hole of the same shape as the
  * one this exists to close.
  *
- * ponytail: the nonce cookie has no `__Host-` prefix, so a sibling subdomain
- *   setting `Domain=.adaptavist.net` could toss one in
- *   -> #94, latent until Google OAuth credentials are provisioned. Since the
- *   calendar callback takes its user from the state's payload rather than the
- *   session, a tossed state would write the VICTIM's Google tokens onto the
- *   ATTACKER's row. The prefix makes that structurally impossible, and it needs
- *   `secure: true` unconditionally - which touches the LOGIN flow's cookie too,
- *   which is why it is not being changed in the same MR as the flow it protects.
+ * COOKIE TOSSING, and why the name carries a `__Host-` prefix (#94):
+ *
+ * Binding the state to a cookie moves the trust onto that cookie. A host-only
+ * cookie is not sole-authority material: anything able to write a cookie for
+ * this host can plant one. The attacker plants their own state and sends the
+ * victim a provider consent URL carrying it. The callback consumes a state whose
+ * payload names the ATTACKER, so the VICTIM's Google refresh token is stored
+ * against the ATTACKER's row and is readable through `GET /api/calendar/my-events`.
+ *
+ * The calendar callback takes its user from the state's server-side payload
+ * rather than from the session - correct, and what stops the callback 401ing
+ * after consent, but it is what makes the cookie the authority.
+ *
+ * WHICH HALF IS LIVE, because it is easy to get backwards and the first version
+ * of this comment did:
+ *
+ *   LATENT - the calendar half above. `calendarOAuthMode()` answers
+ *     `unavailable` with no Google credentials configured, and both the connect
+ *     route and the callback 503 before any state work happens.
+ *
+ *   LIVE - the LOGIN half. The same guard backs `adaptalabs_oauth_state` for the
+ *     Okta/OIDC flow: `/auth/login` issues it, `/auth/callback` consumes it, and
+ *     none of that touches Google. A tossed cookie there is #82's login CSRF
+ *     reopened - an attacker's `code` minting a session in the victim's browser.
+ *     That was reachable in production before the prefix landed.
+ *
+ * A `__Host-` cookie is accepted by the browser ONLY when it is `Secure`, has
+ * `Path=/`, and carries NO `Domain` attribute.
+ *
+ * WHAT THAT CLOSES, and what it does NOT - the two vectors have different fates
+ * and the first version of this comment wrongly claimed both were shut:
+ *
+ *   CLOSED - a sibling `*.adaptavist.net` host setting `Domain=.adaptavist.net`.
+ *     A `__Host-` name forbids `Domain` outright, so a sibling has no way to
+ *     express a cookie that lands here. Measured in Chrome across two hosts on
+ *     one parent domain: the bare-named toss arrives, the `__Host-` one never
+ *     enters the jar. This is the whole of the fix.
+ *
+ *   NOT CLOSED - XSS on this origin. The prefix constrains `Domain`, `Path` and
+ *     `Secure`; it says nothing about `HttpOnly`, so same-origin script can
+ *     still write a `__Host-` cookie and run the same flow. Measured: a
+ *     `document.cookie` write of a `__Host-` name is accepted and comes back on
+ *     the next request. Nothing here defends that, and nothing here should be
+ *     read as doing so - the control for it is whatever stops the XSS.
+ *
+ * Shadowing is closed for these cookies rather than merely narrowed: `cookie`
+ * parses a duplicate name first-wins, but a duplicate can no longer be PRODUCED
+ * for a `__Host-` name - `Domain` is refused, `Path` is pinned to `/`, and a
+ * same-host same-path write overwrites instead of duplicating.
+ *
+ * The prefix and the unconditional `secure` below are ONE change, not two. A
+ * `__Host-` cookie without `Secure` is refused outright, so adding the prefix
+ * while leaving `secure` conditional would not weaken the flow - it would break
+ * it completely outside production.
  *
  * ponytail: in-process store, so this is single-replica only
  *   -> #92, both OAuth flows break intermittently at replicaCount > 1 because a
@@ -42,7 +88,13 @@ import type { Request, Response } from 'express';
  */
 export interface OAuthStateGuardOptions {
   /**
-   * Cookie the nonce is bound to. MUST be distinct per flow.
+   * Cookie the nonce is bound to, WITHOUT the `__Host-` prefix. MUST be
+   * distinct per flow.
+   *
+   * Pass the bare name: the prefix is applied here rather than by each caller,
+   * so a third flow added later cannot forget it and quietly reintroduce #94.
+   * A name that already carries the prefix is REFUSED at construction - see
+   * `HOST_COOKIE_PREFIX`.
    *
    * A SEPARATE cookie from the app session, because that one is
    * SameSite=Strict in production and would not ride a cross-site OAuth
@@ -94,18 +146,76 @@ const DEFAULT_TTL_MS = 10 * 60 * 1000;
  */
 const MAX_PENDING_STATES = 10_000;
 
+/**
+ * Applied to every guard's cookie name, by the factory rather than by callers.
+ *
+ * Browsers accept a `__Host-` cookie only with `Secure`, `Path=/` and NO
+ * `Domain`, which is what makes a sibling subdomain unable to toss one in
+ * (#94). Because the browser enforces it, a violation is not a weaker cookie -
+ * it is NO cookie, and the flow fails closed rather than open.
+ *
+ * Measured 2026-08-28 in Chrome/Chromium against a local HTTP server, because
+ * the comment this replaces asserted the opposite and nobody had checked: over
+ * plain `http://localhost` a `__Host-` cookie with `Secure` IS accepted
+ * (localhost is a trustworthy origin), while the same cookie with a `Domain`,
+ * with `Path=/sub`, or without `Secure` was refused in all three cases. A
+ * bare-named `Secure` control WAS accepted, so those three refusals are the
+ * prefix rules and not `Secure`-over-http.
+ *
+ * Two limits of that measurement, stated rather than left to be discovered.
+ * It is ONE engine - Firefox and Safari were not tested, and trustworthy-origin
+ * handling is exactly the sort of detail that differs between them. And it
+ * covers `localhost` ONLY: a developer reaching the callback over
+ * `http://192.168.x.x`, a LAN hostname or an http tunnel gets no cookie and an
+ * OAuth flow that cannot complete. Both failure modes are fail-closed and loud -
+ * the flow stops - never a silently weaker cookie.
+ */
+const HOST_COOKIE_PREFIX = '__Host-';
+
 export function createOAuthStateGuard<P = undefined>(
   options: OAuthStateGuardOptions
 ): OAuthStateGuard<P> {
-  const { cookieName } = options;
+  // Refused at construction, not at request time. Both guards are built at
+  // module load, so a double prefix is a startup failure rather than a cookie
+  // named `__Host-__Host-...` that no browser sends and that would surface as
+  // an OAuth flow mysteriously never completing.
+  if (!options.cookieName) {
+    throw new Error('createOAuthStateGuard: cookieName is required');
+  }
+  // Case-INSENSITIVE, because the browser's prefix rule is. Measured in Chrome:
+  // `__host-lower` carrying a `Domain` is refused exactly as `__Host-` is, so a
+  // caller passing `__host-foo` really has passed a prefix. A case-sensitive
+  // check misses it and emits `__Host-__host-foo` - which Chrome accepts
+  // happily, so it would NOT fail loudly; it would just be a cookie under a name
+  // nothing else reads.
+  if (options.cookieName.toLowerCase().startsWith(HOST_COOKIE_PREFIX.toLowerCase())) {
+    throw new Error(
+      `createOAuthStateGuard: pass the bare cookie name; ${HOST_COOKIE_PREFIX} is applied here ` +
+        `(got "${options.cookieName}")`
+    );
+  }
+
+  const cookieName = `${HOST_COOKIE_PREFIX}${options.cookieName}`;
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
 
-  // Path '/' because a flow starts under /api/... but the provider redirect can
-  // land elsewhere (/auth/callback).
+  // Every attribute here is load-bearing for the `__Host-` prefix, not just
+  // tidy: the browser refuses the cookie outright if any of them is wrong.
+  //
+  //   path '/'      - required by the prefix, and independently correct: a flow
+  //                   starts under /api/... but the provider redirect can land
+  //                   elsewhere (/auth/callback).
+  //   secure        - required by the prefix, and UNCONDITIONAL. Not
+  //                   `NODE_ENV === 'production'`: that would emit a prefixed
+  //                   cookie with no `Secure` outside production, which browsers
+  //                   drop entirely. Safe locally because `http://localhost` is
+  //                   a trustworthy origin (measured; see HOST_COOKIE_PREFIX).
+  //   no `domain`   - required by the prefix, and the actual control: a Domain
+  //                   attribute is how a sibling subdomain would reach this
+  //                   cookie. Do not add one.
   const cookieOptions = () => ({
     httpOnly: true,
     sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
+    secure: true,
     path: '/',
   });
 

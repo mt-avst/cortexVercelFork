@@ -40,7 +40,7 @@ describe('createOAuthStateGuard - cookie attributes', () => {
     guard.issue(res);
 
     expect(cookies).toHaveLength(1);
-    expect(cookies[0].name).toBe('flow_a');
+    expect(cookies[0].name).toBe('__Host-flow_a');
     expect(cookies[0].options).toMatchObject({
       httpOnly: true,
       // Lax, NOT Strict: this cookie has to ride the provider's top-level GET
@@ -53,25 +53,122 @@ describe('createOAuthStateGuard - cookie attributes', () => {
     });
   });
 
-  it('marks the cookie secure in production and not otherwise', () => {
+  it('marks the cookie secure UNCONDITIONALLY, in every environment', () => {
+    // This test used to assert the opposite - `secure` false outside production
+    // - on the stated grounds that hardcoding `true` "would break every
+    // developer's http://localhost flow". That was never measured, and it is
+    // wrong: localhost is a trustworthy origin and Chromium accepts a `Secure`
+    // `__Host-` cookie over plain http there (probed 2026-08-28, with a
+    // no-Secure arm confirming the probe could still detect a refusal).
+    //
+    // It has to be unconditional, because a `__Host-` cookie WITHOUT `Secure`
+    // is refused by the browser outright. Conditional `secure` would not make
+    // the cookie weaker outside production - it would make it absent, and the
+    // OAuth flow would fail closed everywhere but production.
     const original = process.env.NODE_ENV;
     try {
       const guard = createOAuthStateGuard({ cookieName: 'flow_secure' });
 
-      process.env.NODE_ENV = 'production';
-      const prod = fakeRes();
-      guard.issue(prod.res);
-      expect(prod.cookies[0].options.secure).toBe(true);
-
-      process.env.NODE_ENV = 'development';
-      const dev = fakeRes();
-      guard.issue(dev.res);
-      // The control: an implementation that hardcoded `true` would pass the arm
-      // above and break every developer's http://localhost flow.
-      expect(dev.cookies[0].options.secure).toBe(false);
+      for (const env of ['production', 'development', 'test', undefined]) {
+        if (env === undefined) {
+          delete process.env.NODE_ENV;
+        } else {
+          process.env.NODE_ENV = env;
+        }
+        const { res, cookies } = fakeRes();
+        guard.issue(res);
+        expect(cookies[0].options.secure).toBe(true);
+      }
     } finally {
       process.env.NODE_ENV = original;
     }
+  });
+
+  it('prefixes the cookie name with __Host-, so a subdomain cannot toss one in', () => {
+    // The literal, not `HOST_COOKIE_PREFIX` read back from the module: an
+    // expectation derived from the code it guards cannot notice that code
+    // changing. Dropping the prefix is exactly #94 reopening.
+    const guard = createOAuthStateGuard({ cookieName: 'adaptalabs_oauth_state' });
+    const { res, cookies } = fakeRes();
+
+    guard.issue(res);
+
+    expect(cookies[0].name).toBe('__Host-adaptalabs_oauth_state');
+  });
+
+  it('sets NO domain attribute, which is what the prefix actually buys', () => {
+    // A Domain attribute is the mechanism of the attack - it is how a sibling
+    // `*.adaptavist.net` host would write a cookie that lands here. The browser
+    // would refuse a `__Host-` cookie carrying one, so this asserts we never
+    // ask: a Domain here means no cookie at all, and a flow that never
+    // completes.
+    const guard = createOAuthStateGuard({ cookieName: 'flow_no_domain' });
+    const { res, cookies, cleared } = fakeRes();
+
+    const state = guard.issue(res);
+    guard.consume(fakeReq({ '__Host-flow_no_domain': state }), res, state);
+
+    expect(cookies[0].options).not.toHaveProperty('domain');
+    // The clear path too - it is a second place the attributes are written.
+    expect(cleared[0].options).not.toHaveProperty('domain');
+  });
+
+  it('reads the callback cookie under the PREFIXED name, not the bare one', () => {
+    // The control for the rename: a guard that emitted the prefixed name but
+    // still read the bare one would set a cookie it could never consume, and
+    // every OAuth flow would fail. Both arms, because only the pair
+    // distinguishes "reads the right name" from "accepts anything".
+    const guard = createOAuthStateGuard({ cookieName: 'flow_read' });
+    const { res } = fakeRes();
+    const state = guard.issue(res);
+
+    expect(guard.consume(fakeReq({ '__Host-flow_read': state }), res, state)).toMatchObject({
+      ok: true,
+    });
+
+    const second = createOAuthStateGuard({ cookieName: 'flow_read_2' });
+    const two = fakeRes();
+    const state2 = second.issue(two.res);
+    expect(second.consume(fakeReq({ flow_read_2: state2 }), two.res, state2)).toEqual({
+      ok: false,
+      error: 'Invalid state parameter',
+    });
+  });
+
+  it('refuses a caller that passes an already-prefixed name, at construction', () => {
+    // Fail fast rather than emitting `__Host-__Host-...` - a cookie under a name
+    // nothing else reads, which would surface only as a flow that never
+    // completes.
+    expect(() => createOAuthStateGuard({ cookieName: '__Host-already' })).toThrow(
+      /pass the bare cookie name/
+    );
+    // Case-insensitively, because the browser's own prefix rule is: `__host-foo`
+    // really has a prefix. Without this arm the check could regress to
+    // `startsWith(HOST_COOKIE_PREFIX)` and stay green.
+    expect(() => createOAuthStateGuard({ cookieName: '__host-lower' })).toThrow(
+      /pass the bare cookie name/
+    );
+    expect(() => createOAuthStateGuard({ cookieName: '__HOST-UPPER' })).toThrow(
+      /pass the bare cookie name/
+    );
+    // The control: the bare equivalent must still be accepted, so the refusal
+    // is about the prefix and not about the name.
+    expect(() => createOAuthStateGuard({ cookieName: 'already' })).not.toThrow();
+  });
+
+  it('refuses an empty cookie name, at construction', () => {
+    // Its own arm rather than folded into the test above: deleting this refusal
+    // left all five OAuth suites green (69/69, measured), so the pair of
+    // construction guards read as covered when only one of them was. An empty
+    // name would emit a bare `__Host-` cookie shared by every flow that made the
+    // same mistake, which is precisely the flow-substitutability hole this
+    // module exists to prevent.
+    expect(() => createOAuthStateGuard({ cookieName: '' })).toThrow(/cookieName is required/);
+    // Ordered before the prefix check, so a falsy name gives this named message
+    // rather than a TypeError from `.toLowerCase()` on undefined.
+    expect(() =>
+      createOAuthStateGuard({ cookieName: undefined as unknown as string })
+    ).toThrow(/cookieName is required/);
   });
 
   it('clears the cookie with options matching the ones it was set with', () => {
@@ -82,10 +179,10 @@ describe('createOAuthStateGuard - cookie attributes', () => {
     const { res, cookies, cleared } = fakeRes();
 
     const state = guard.issue(res);
-    guard.consume(fakeReq({ flow_clear: state }), res, state);
+    guard.consume(fakeReq({ '__Host-flow_clear': state }), res, state);
 
     expect(cleared).toHaveLength(1);
-    expect(cleared[0].name).toBe('flow_clear');
+    expect(cleared[0].name).toBe('__Host-flow_clear');
     const { maxAge: _ignored, ...setOptions } = cookies[0].options;
     expect(cleared[0].options).toEqual(setOptions);
   });
@@ -137,7 +234,7 @@ describe('createOAuthStateGuard - expiry', () => {
       const state = guard.issue(res);
       jest.setSystemTime(start + 60_001);
 
-      const result = guard.consume(fakeReq({ flow_ttl: state }), res, state);
+      const result = guard.consume(fakeReq({ '__Host-flow_ttl': state }), res, state);
 
       expect(result).toEqual({ ok: false, error: 'State parameter expired' });
     } finally {
@@ -152,7 +249,7 @@ describe('createOAuthStateGuard - expiry', () => {
     const { res } = fakeRes();
 
     const state = guard.issue(res);
-    const result = guard.consume(fakeReq({ flow_ttl_ok: state }), res, state);
+    const result = guard.consume(fakeReq({ '__Host-flow_ttl_ok': state }), res, state);
 
     expect(result.ok).toBe(true);
   });
@@ -164,7 +261,7 @@ describe('createOAuthStateGuard - the payload', () => {
     const { res } = fakeRes();
 
     const state = guard.issue(res, { userId: 'researcher-7' });
-    const result = guard.consume(fakeReq({ flow_payload: state }), res, state);
+    const result = guard.consume(fakeReq({ '__Host-flow_payload': state }), res, state);
 
     // The calendar callback identifies the user from this and from nothing else,
     // because it cannot read the session cookie.
@@ -195,11 +292,11 @@ describe('createOAuthStateGuard - flows are not substitutable', () => {
 
     const calendarState = calendar.issue(res);
 
-    expect(login.consume(fakeReq({ login_state: calendarState }), res, calendarState)).toEqual({
+    expect(login.consume(fakeReq({ '__Host-login_state': calendarState }), res, calendarState)).toEqual({
       ok: false,
       error: 'Invalid state parameter',
     });
-    expect(login.consume(fakeReq({ calendar_state: calendarState }), res, calendarState)).toEqual({
+    expect(login.consume(fakeReq({ '__Host-calendar_state': calendarState }), res, calendarState)).toEqual({
       ok: false,
       error: 'Invalid state parameter',
     });
@@ -207,7 +304,7 @@ describe('createOAuthStateGuard - flows are not substitutable', () => {
     // And the control: the guard that DID mint it still accepts it, so the two
     // refusals above are about provenance rather than a broken guard.
     expect(
-      calendar.consume(fakeReq({ calendar_state: calendarState }), res, calendarState).ok
+      calendar.consume(fakeReq({ '__Host-calendar_state': calendarState }), res, calendarState).ok
     ).toBe(true);
   });
 });
@@ -227,7 +324,7 @@ describe('createOAuthStateGuard - the store is bounded', () => {
       guard.issue(res);
     }
 
-    expect(guard.consume(fakeReq({ flow_bound: first }), res, first)).toEqual({
+    expect(guard.consume(fakeReq({ '__Host-flow_bound': first }), res, first)).toEqual({
       ok: false,
       error: 'Invalid state parameter',
     });
@@ -244,6 +341,6 @@ describe('createOAuthStateGuard - the store is bounded', () => {
     }
     const newest = guard.issue(res);
 
-    expect(guard.consume(fakeReq({ flow_bound_recent: newest }), res, newest).ok).toBe(true);
+    expect(guard.consume(fakeReq({ '__Host-flow_bound_recent': newest }), res, newest).ok).toBe(true);
   });
 });
