@@ -1,6 +1,6 @@
 # Research methods - what is complete and what hands off
 
-Status of the six study types Cortex offers, as of 2026-08-26.
+Status of the six study types Cortex offers, as of 2026-08-26, with the #78 publish gate re-checked on 2026-08-28.
 
 Read-only survey of the code, not a plan.
 It records which research methods run end to end inside Cortex and which send the participant to a third-party site, along with what that costs in captured data.
@@ -57,10 +57,12 @@ Smallest gap, and the engine that would close it already ships.
 The form code says it outright at `frontend/src/pages/OpportunityForm.tsx:459`: *"`question` has no native path yet and keeps the link tab unconditionally"*.
 A one-question study is the smallest possible case of the survey runner already built for poll and survey.
 
-A second defect is stacked on it.
-`findPublishProblem` in `shared/firsthand/publish-readiness.ts:122` gates only `unmoderated`, `poll` and `survey`.
-A `question` opportunity can therefore be published with no link at all, and the participant is then shown a disabled "Link unavailable" button (`frontend/src/pages/OpportunityDetail.tsx:1257`).
-Publishing something unusable should not be possible.
+A second defect used to be stacked on it, and is now **fixed**.
+`findPublishProblem` gated only `unmoderated`, `poll` and `survey`, so a `question` opportunity could be published with no link at all and the participant was shown a disabled "Link unavailable" button.
+That shipped as commit `43ca805` on 2026-08-26 (merge `af2c9f4`): `findPublishProblem` now requires a usable external link before a `question` study can be published, and the reproduce steps in #78 no longer reproduce.
+Five named tests guard it in `backend/src/firsthand/publish-readiness.test.ts`, including `refuses a publish with no link` and `still permits saving an unlinked draft`.
+
+So #78 is now scoped to the native path alone.
 
 **Scope of the absence assertion**: grepped all `.ts` and `.tsx` under `shared`, `backend/src` and `frontend/src`, excluding test files.
 51 references to the `question` type, none of them touching `native`, `firsthand` or `delivery_mode`.

@@ -56,3 +56,19 @@ recorded cost of guessing. Prefer merging with auto-merge armed so nobody watche
 Never scope the canary below the full manifest: a filtered run is structurally blind to a
 pre-existing entry the same diff broke (that reddened main once already). The path gate
 above is job-level and all-or-nothing, which is the only safe shape.
+
+Running it LOCALLY needs a real Postgres. Sixteen entries are database-backed, and the
+runner **refuses to start** rather than skipping them - correctly, because a skipped entry
+and a passing entry read identically in a green job. It exits 0 while refusing, so read the
+output, not the exit code. There is no filter flag by design.
+
+```bash
+docker run -d --name cortex-canary-pg -e POSTGRES_DB=cortex_test \
+  -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -p 5434:5432 postgres:15
+FIRSTHAND_TEST_DATABASE_URL='postgresql://postgres:password@localhost:5434/cortex_test' \
+  node scripts/mutation-canary.mjs
+```
+
+A full unsharded run is roughly 20 minutes. Commit first: the runner mutates the working
+tree and refuses a dirty one without `--allow-dirty`, and never `git add` while it is
+running - that has staged a live mutation into a pushed commit before.
