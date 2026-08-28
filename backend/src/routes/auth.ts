@@ -42,6 +42,10 @@ let client: Client;
 //
 // This flow's own cookie and its own store: a calendar state must not be
 // substitutable for a login state.
+// Bare name in, prefixed cookie out: `createOAuthStateGuard` applies the
+// `__Host-` prefix (#94), so the cookie on the wire is
+// `__Host-adaptalabs_oauth_state`. Grepping for the literal below will not find
+// the name the browser actually stores.
 const loginOAuthState = createOAuthStateGuard({ cookieName: 'adaptalabs_oauth_state' });
 
 const issueOAuthState = (res: express.Response): string => loginOAuthState.issue(res);

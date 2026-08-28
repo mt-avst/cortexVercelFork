@@ -110,7 +110,11 @@ const dbClient = {
   release: jest.fn(),
 };
 
-const STATE_COOKIE = 'adaptalabs_calendar_oauth_state';
+// The `__Host-` prefix is part of the name the browser sees, so it is part of
+// what these tests must send back (#94). Written out in full rather than built
+// from a constant in the module under test: a jar key derived from the code
+// being guarded would follow that code if the prefix were ever dropped.
+const STATE_COOKIE = '__Host-adaptalabs_calendar_oauth_state';
 
 /** The state the connect route minted, read out of its own Set-Cookie. */
 const stateFromCookies = (setCookie: string[] | undefined): string => {
@@ -158,6 +162,12 @@ describe('GET /api/calendar/auth/connect', () => {
     const cookie = setCookie.find((c) => c.startsWith(`${STATE_COOKIE}=`))!;
     expect(cookie).toMatch(/HttpOnly/i);
     expect(cookie).toMatch(/SameSite=Lax/i);
+    // Secure and no Domain: both are conditions the browser imposes on a
+    // `__Host-` cookie, so failing either means the cookie is never stored and
+    // the flow silently never completes. NODE_ENV is 'test' here, which is
+    // exactly the case the old conditional `secure` got wrong.
+    expect(cookie).toMatch(/Secure/i);
+    expect(cookie).not.toMatch(/Domain=/i);
   });
 
   it('starts the DEMO flow in development, which needs no Google credentials', async () => {
@@ -447,12 +457,21 @@ describe('GET /api/calendar/auth/callback state binding', () => {
     // THE CONTROL. Every refusal below is satisfied by a callback that refuses
     // everything, which would be a different way of leaving no user able to
     // connect a calendar.
-    const agent = request.agent(listening(appWithSession()));
+    // The cookie is presented EXPLICITLY rather than through `request.agent`'s
+    // jar. Since #94 the state cookie is `Secure` unconditionally, and
+    // supertest's jar drops a Secure cookie over http - measured: an identical
+    // insecure cookie round-trips, the Secure one arrives as no Cookie header
+    // at all. That is a harness limitation, not the browser's behaviour: a real
+    // browser accepts a Secure cookie on localhost (also measured), and
+    // production is https. One app instance so both requests share the store.
+    const app = appWithSession();
 
-    const start = await agent.get('/api/calendar/auth/connect');
+    const start = await request(listening(app)).get('/api/calendar/auth/connect');
     const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
 
-    const res = await agent.get(`/api/calendar/auth/callback?code=real-code&state=${state}`);
+    const res = await request(listening(app))
+      .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
+      .set('Cookie', `${STATE_COOKIE}=${state}`);
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('calendar=connected');
@@ -512,11 +531,14 @@ describe('GET /api/calendar/auth/callback state binding', () => {
   });
 
   it('accepts a state exactly once', async () => {
-    const agent = request.agent(listening(appWithSession()));
-    const start = await agent.get('/api/calendar/auth/connect');
+    // Explicit cookie, not the agent jar - see the control above for why.
+    const app = appWithSession();
+    const start = await request(listening(app)).get('/api/calendar/auth/connect');
     const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
 
-    const first = await agent.get(`/api/calendar/auth/callback?code=real-code&state=${state}`);
+    const first = await request(listening(app))
+      .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
+      .set('Cookie', `${STATE_COOKIE}=${state}`);
     expect(first.status).toBe(302);
 
     const replay = await request(listening(appWithSession()))
