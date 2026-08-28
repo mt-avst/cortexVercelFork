@@ -169,6 +169,10 @@ const OpportunityDetail: React.FC = () => {
   const [loadingCalendar, setLoadingCalendar] = useState(false);
   // Table view booking confirmation state
   const [confirmBooking, setConfirmBooking] = useState<{ show: boolean; session: Session | null }>({ show: false, session: null });
+  // The consent gate (#79 step 1b): which session is waiting on the
+  // participant's consent decision. Both booking surfaces funnel through
+  // handleBookSession, so one gate covers them both.
+  const [consentGate, setConsentGate] = useState<{ show: boolean; sessionId: string | null }>({ show: false, sessionId: null });
   const errorBannerRef = useRef<HTMLDivElement | null>(null);
 
   /**
@@ -443,12 +447,36 @@ const OpportunityDetail: React.FC = () => {
       throw new Error('User session invalid');
     }
 
+    // The consent gate (#79 step 1b). An opportunity carrying consent wording
+    // books only through an explicit acceptance, so the flow detours through
+    // the consent modal and continues in its Accept handler. Thrown rather
+    // than returned so CalendarGrid unwinds the optimistic "booked" mark while
+    // the participant reads - and no setError first: a pending decision is not
+    // a failure, so nothing belongs in the banner.
+    if (opportunity?.consent_text?.trim()) {
+      setConsentGate({ show: true, sessionId });
+      throw new Error('Consent decision pending');
+    }
+
+    return performBooking(sessionId, false);
+  };
+
+  /**
+   * The booking call itself, past any consent gate. Same contract as
+   * handleBookSession: returns normally only if the booking happened.
+   */
+  const performBooking = async (sessionId: string, consentAccepted: boolean) => {
     try {
       setBookingLoading(sessionId);
       setError('');
       setBookingSuccess(null);
 
-      const bookingResult = await bookSession(sessionId);
+      const bookingResult = await bookSession(sessionId, {
+        consentAccepted,
+        // The wording THIS page displayed, echoed so the server can refuse an
+        // acceptance of text the participant never saw.
+        consentTextSeen: consentAccepted ? opportunity?.consent_text ?? '' : undefined,
+      });
 
       // Track action click for successful booking
       if (id) {
@@ -488,7 +516,10 @@ const OpportunityDetail: React.FC = () => {
       } else if (axiosError.response?.status === 404) {
         setError('Session not found or opportunity not published');
       } else if (axiosError.response?.status === 400) {
-        setError('Cannot book past sessions');
+        // The server's own sentence: a 400 here is either the past-session
+        // refusal or the consent-acceptance refusal, and hardcoding one of
+        // them showed the wrong message for the other.
+        setError(axiosError.response?.data?.error || 'Cannot book past sessions');
       } else if (axiosError.response?.status === 503) {
         setError('Database not available. Please try again later.');
       } else if (axiosError.response?.status === 500) {
@@ -1309,6 +1340,28 @@ const OpportunityDetail: React.FC = () => {
           setConfirmBooking({ show: false, session: null });
         }}
         onCancel={() => setConfirmBooking({ show: false, session: null })}
+      />
+
+      {/* The consent gate (#79 step 1b): the wording the participant is
+          accepting, verbatim from the opportunity. Cancel books nothing. */}
+      <ConfirmationModal
+        show={consentGate.show}
+        title="Consent"
+        message={opportunity?.consent_text?.trim() || ''}
+        confirmLabel="Accept and book"
+        cancelLabel="Cancel"
+        variant="primary"
+        onConfirm={() => {
+          const sessionId = consentGate.sessionId;
+          setConsentGate({ show: false, sessionId: null });
+          if (sessionId) {
+            // The error banner is the surface for a failure here, as on every
+            // other booking path; the catch exists because performBooking
+            // rethrows for CalendarGrid's sake and nothing above us awaits it.
+            void performBooking(sessionId, true).catch(() => undefined);
+          }
+        }}
+        onCancel={() => setConsentGate({ show: false, sessionId: null })}
       />
     </div>
   );

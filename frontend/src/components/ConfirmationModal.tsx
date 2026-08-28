@@ -86,8 +86,14 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = memo(({
     color: isDarkMode ? '#FFFFFF' : '#1A1A1A'
   };
 
+  // pre-wrap because callers pass real newlines (the booking confirm always
+  // has, and they silently collapsed); the scroll cap is for long content like
+  // consent wording, which may run to paragraphs.
   const messageStyle: React.CSSProperties = {
-    color: isDarkMode ? 'rgba(255, 255, 255, 0.85)' : '#374151'
+    color: isDarkMode ? 'rgba(255, 255, 255, 0.85)' : '#374151',
+    whiteSpace: 'pre-wrap',
+    maxHeight: '50vh',
+    overflowY: 'auto'
   };
 
   const cancelBtnStyle: React.CSSProperties = isDarkMode ? {

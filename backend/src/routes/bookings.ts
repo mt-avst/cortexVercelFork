@@ -20,8 +20,35 @@ import type { PointsHistoryCursor } from '../services/gamification';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
 import { z } from 'zod';
 import { VALIDATION } from '../../../shared/constants';
+import { createHash } from 'crypto';
 
 const router: Router = Router();
+
+/**
+ * Consent acceptance at booking (#79, step 1b).
+ *
+ * When the opportunity carries consent wording, booking is the one moment a
+ * live-session participant touches Cortex, so acceptance is captured HERE and
+ * pinned to the row: the moment, the template pair the opportunity held, and a
+ * sha256 of the trimmed wording - so what was accepted survives the wording
+ * being edited afterwards. The runtime path never pins wording; this one does.
+ *
+ * Exported so tests assert the exact sentence - errorHandler drops
+ * ValidationError's details array, so the sentence must BE the message.
+ */
+export const CONSENT_ACCEPTANCE_REQUIRED =
+  'Booking this session requires accepting its consent statement';
+
+/**
+ * The acceptance must be OF the wording the participant read. The client
+ * echoes the text it displayed; if the researcher edited the consent between
+ * page load and Accept, recording acceptance anyway would stamp a hash
+ * asserting the participant agreed to wording they never saw - the exact
+ * falsehood the snapshot exists to prevent. Compared trimmed, because that is
+ * what both sides store and hash.
+ */
+export const CONSENT_WORDING_CHANGED =
+  'The consent wording has changed since you read it; reload to review the current wording';
 
 // POST /api/bookings/sessions/:id/book - Book a session
 router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request, res: Response) => {
@@ -42,7 +69,8 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
     // Lock session row for update to prevent race conditions
     const sessionResult = await client.query(`
       SELECT s.*, o.status as opportunity_status, o.title as opportunity_title,
-             o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id
+             o.owner_user_id, o.purpose_one_liner, o.id as opportunity_id,
+             o.consent_text, o.consent_template_id, o.consent_template_version
       FROM sessions s
       JOIN opportunities o ON s.opportunity_id = o.id
       WHERE s.id = $1
@@ -81,6 +109,33 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       throw new ValidationError('Cannot book past sessions');
     }
 
+    // The consent gate (#79 step 1b), off the SAME locked row as every other
+    // guard. `=== true` and nothing looser: acceptance is a legal record, so a
+    // truthy string from a mangled client is not it. No wording on the
+    // opportunity means nothing to accept, and the booking is exactly what it
+    // was before consent existed.
+    const consentText =
+      typeof session.consent_text === 'string' ? session.consent_text.trim() : '';
+    if (consentText && req.body?.consent_accepted !== true) {
+      await client.query('ROLLBACK');
+      throw new ValidationError(CONSENT_ACCEPTANCE_REQUIRED);
+    }
+
+    // Accept-what-you-saw: the echoed wording must match the locked row's, or
+    // the acceptance is of text the participant never read. A body omitting
+    // the echo lands here too - our client always sends it, and a hand-rolled
+    // call that skips it has not demonstrated what was on its screen.
+    if (consentText) {
+      const seen =
+        typeof req.body?.consent_text_seen === 'string'
+          ? req.body.consent_text_seen.trim()
+          : '';
+      if (seen !== consentText) {
+        await client.query('ROLLBACK');
+        throw new ValidationError(CONSENT_WORDING_CHANGED);
+      }
+    }
+
     // Check if already booked by this user (only active bookings)
     const existingBooking = await client.query(
       'SELECT id FROM bookings WHERE user_id = $1 AND session_id = $2 AND status = $3',
@@ -115,12 +170,32 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       throw new ConflictError('Session is full');
     }
 
-    // Create booking
+    // Create booking. The acceptance record pins WHAT was accepted: the
+    // template pair comes from the opportunity row read under the SAME lock as
+    // the gate above, the SNAPSHOT is the trimmed wording itself (a hash can
+    // prove a later edit happened but can never produce the sentence the
+    // participant agreed to), and the hash rides for cheap comparison. The
+    // timestamp is NOW() in SQL, derived from the snapshot param, so it and
+    // created_at come from the SAME clock - an app-host timestamp could
+    // precede the row's own creation time under skew. Everything is null when
+    // the opportunity carries no wording, whatever the body volunteered:
+    // nothing was shown, so nothing was accepted.
     const bookingResult = await client.query(`
-      INSERT INTO bookings (user_id, session_id, status)
-      VALUES ($1, $2, 'booked')
+      INSERT INTO bookings (user_id, session_id, status,
+        consent_accepted_at, consent_template_id, consent_template_version,
+        consent_text_snapshot_hash, consent_text_snapshot)
+      VALUES ($1, $2, 'booked',
+        CASE WHEN $3::text IS NOT NULL THEN NOW() END,
+        $4, $5, $6, $3)
       RETURNING *
-    `, [userId, sessionId]);
+    `, [
+      userId,
+      sessionId,
+      consentText || null,
+      consentText ? session.consent_template_id : null,
+      consentText ? session.consent_template_version : null,
+      consentText ? createHash('sha256').update(consentText).digest('hex') : null,
+    ]);
 
     // Increment booked_count atomically
     await client.query(`
@@ -291,6 +366,18 @@ router.post('/sessions/:id/book', requireAuth, asyncHandler(async (req: Request,
       id: booking.id,
       session_id: booking.session_id,
       status: booking.status,
+      // The acceptance record this request just wrote, echoed so the caller's
+      // copy exists from the first response - matching the two /my/bookings
+      // projections. The snapshot TEXT deliberately stays off the wire here
+      // and there: the participant is looking at the wording already, and a
+      // list response repeating up to 10k chars per row is weight without a
+      // reader. The row keeps it for the day a dispute needs the sentence.
+      consent_accepted_at: booking.consent_accepted_at
+        ? new Date(booking.consent_accepted_at).toISOString()
+        : null,
+      consent_template_id: booking.consent_template_id ?? null,
+      consent_template_version: booking.consent_template_version ?? null,
+      consent_text_snapshot_hash: booking.consent_text_snapshot_hash ?? null,
       // cto/AdaptaLabs#89: this said `'success'` on every booking ever made,
       // alongside a fabricated `demo-event-<now>` id, because the calendar
       // service simulated its writes. Three states rather than two, because
@@ -694,6 +781,15 @@ router.post('/:id/reschedule', requireAuth, asyncHandler(async (req: Request, re
       throw new ValidationError('Target session must be from the same opportunity');
     }
 
+    // ponytail: a reschedule carries the booking's consent record unchanged,
+    //   nulls included - a booking made BEFORE its opportunity gained consent
+    //   wording moves freely without ever re-consenting. Deliberate: the
+    //   same-opportunity guard above means the wording cannot differ across
+    //   the move, and step 2's artefact-ingest gate treats a null acceptance
+    //   as "ask for attestation", so the absence stays visible downstream
+    //   rather than becoming a hole. Ceiling: if reschedule ever crosses
+    //   opportunities, acceptance must be re-taken here.
+
     if (targetSession.opportunity_status !== 'published') {
       await client.query('ROLLBACK');
       throw new ValidationError('Target opportunity not published');
@@ -1050,7 +1146,9 @@ router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) 
     // both halves: the projection does not say `b.*`, and a row carrying all
     // three fields reaches the caller with none of them.
     const ownBookingColumns = `
-      b.id, b.session_id, b.status, b.created_at, b.cancelled_at
+      b.id, b.session_id, b.status, b.created_at, b.cancelled_at,
+      b.consent_accepted_at, b.consent_template_id, b.consent_template_version,
+      b.consent_text_snapshot_hash
     `;
 
     // ASKS FOR ONE MORE ROW THAN IT RETURNS, on the same line `getPointsHistory`
@@ -1125,7 +1223,16 @@ router.get('/my/bookings/all', requireAuth, async (req: Request, res: Response) 
         opportunity_title: booking.opportunity_title,
         opportunity_type: booking.opportunity_type,
         session_start_time: booking.session_start_time.toISOString(),
-        session_end_time: booking.session_end_time.toISOString()
+        session_end_time: booking.session_end_time.toISOString(),
+        // The acceptance record (#79 step 1b) - selected above, and mapped
+        // here because this route serialises field-by-field on purpose: a
+        // column that is not named in this map never leaves the server.
+        consent_accepted_at: booking.consent_accepted_at
+          ? booking.consent_accepted_at.toISOString()
+          : null,
+        consent_template_id: booking.consent_template_id ?? null,
+        consent_template_version: booking.consent_template_version ?? null,
+        consent_text_snapshot_hash: booking.consent_text_snapshot_hash ?? null
       }))
     });
   } catch (error) {
@@ -1162,9 +1269,16 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
     // was invisible in the UI and fully readable in the Network tab. The two
     // fields the participant-facing page actually needs are completion_status
     // and completed_at, so narrowing costs nothing.
+    // The acceptance columns are on BOTH participant projections on purpose:
+    // the participant accepted the wording, so the record of when, which
+    // template and the hash of exactly what is their record too. Nothing here
+    // is researcher-only - the deny-by-projection rule these lists exist for
+    // (admin_notes, approvals) is untouched.
     const participantBookingColumns = `
       b.id, b.user_id, b.session_id, b.status, b.completion_status, b.completed_at,
-      b.cancelled_at, b.gcal_event_id, b.reminder_sent_at, b.created_at, b.updated_at
+      b.cancelled_at, b.gcal_event_id, b.reminder_sent_at, b.created_at, b.updated_at,
+      b.consent_accepted_at, b.consent_template_id, b.consent_template_version,
+      b.consent_text_snapshot_hash
     `;
 
     const upcomingResult = await pool.query(`
@@ -1231,6 +1345,10 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
       cancelled_at?: Date | null;
       created_at: Date;
       updated_at: Date;
+      consent_accepted_at: Date | null;
+      consent_template_id: string | null;
+      consent_template_version: number | null;
+      consent_text_snapshot_hash: string | null;
     }
     const serializeBooking = (booking: BookingRow) => ({
       id: booking.id,
@@ -1253,6 +1371,16 @@ router.get('/my/bookings', requireAuth, asyncHandler(async (req: Request, res: R
       cancelled_at: booking.cancelled_at ? booking.cancelled_at.toISOString() : undefined,
       created_at: booking.created_at.toISOString(),
       updated_at: booking.updated_at.toISOString(),
+      // The acceptance record (#79 step 1b). Selecting these and then mapping
+      // field-by-field WITHOUT them shipped once: the columns were read from
+      // the database and dropped right here, while the SQL-text tests stayed
+      // green - only a loaded-row wire assertion can see this map.
+      consent_accepted_at: booking.consent_accepted_at
+        ? booking.consent_accepted_at.toISOString()
+        : null,
+      consent_template_id: booking.consent_template_id,
+      consent_template_version: booking.consent_template_version,
+      consent_text_snapshot_hash: booking.consent_text_snapshot_hash,
     });
 
     res.json({

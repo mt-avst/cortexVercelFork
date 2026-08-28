@@ -218,6 +218,16 @@ export interface Booking {
   gcal_event_id?: string;
   cancelled_at?: string;
   reminder_sent_at?: string; // ISO timestamp when reminder email was sent
+  /**
+   * Consent acceptance (#79 step 1b), written at booking when the opportunity
+   * carried consent wording, null otherwise. The pair and the hash pin WHAT
+   * was accepted; on both participant projections deliberately - it is the
+   * participant's record too.
+   */
+  consent_accepted_at?: string | null;
+  consent_template_id?: string | null;
+  consent_template_version?: number | null;
+  consent_text_snapshot_hash?: string | null;
   created_at: string;
   updated_at: string;
 }

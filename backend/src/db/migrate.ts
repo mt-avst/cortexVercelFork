@@ -496,6 +496,40 @@ export async function runMigrations() {
       ALTER TABLE bookings
       ADD COLUMN IF NOT EXISTS consent_text_snapshot_hash TEXT
     `);
+    // The wording ITSELF, not only its hash. A security gate on step 1b made
+    // the case: custom consent wording is editable after acceptances exist,
+    // and a hash can prove the text changed but can never produce the sentence
+    // the participant actually agreed to - which is the whole record in a
+    // dispute. The hash stays for cheap comparisons; this column is the
+    // recoverable copy.
+    await client.query(`
+      ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS consent_text_snapshot TEXT
+    `);
+
+    // An acceptance without its sentence is the hash-only defect reborn, so
+    // the database refuses the shape outright: a recorded moment requires the
+    // recoverable text and its hash beside it. Added while no acceptance rows
+    // exist anywhere - a shape constraint retrofitted later has to argue with
+    // whatever drifted in first.
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'bookings_consent_acceptance_shape'
+            AND conrelid = 'bookings'::regclass
+        ) THEN
+          ALTER TABLE bookings
+            ADD CONSTRAINT bookings_consent_acceptance_shape
+            CHECK (
+              consent_accepted_at IS NULL
+              OR (consent_text_snapshot IS NOT NULL
+                  AND consent_text_snapshot_hash IS NOT NULL)
+            );
+        END IF;
+      END $$;
+    `);
 
     // The twin of opportunities_consent_template_shape: the acceptance record
     // pins the same pair, so it is constrained to the same three legal shapes.

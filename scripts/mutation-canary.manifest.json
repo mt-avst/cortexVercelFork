@@ -2026,5 +2026,25 @@
     "project": "frontend",
     "spec": "src/pages/__tests__/OpportunityForm.test.tsx",
     "test": "sends the starting url, and blocks one that could run against the session"
+  },
+  {
+    "id": "booking-consent-acceptance-gate",
+    "why": "cto/AdaptaLabs#79 step 1b. An opportunity carrying consent wording must refuse a booking whose body does not carry explicit acceptance - the gate reads consent off the SAME locked row as every other booking guard, and it is the only thing standing between a participant and a booked live session whose consent they never saw. Dropping it books every session as if no consent existed and writes NO acceptance record, so step 2's artefact ingest gate then reads an absence that looks identical to a pre-consent booking: proven by mutation before entry, this exact if->false left every suite green except the three named refusal tests, which fail 400-vs-201 asserting the exported sentence.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "    if (consentText && req.body?.consent_accepted !== true) {",
+    "mutation": "    if (false) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.consent-acceptance.test.ts",
+    "test": "refuses a body without acceptance, by the exact sentence, before any INSERT"
+  },
+  {
+    "id": "booking-consent-echo-gate",
+    "why": "cto/AdaptaLabs#79 step 1b. Acceptance must be OF the wording the participant read: the client echoes the displayed text and this comparison refuses a booking whose echo differs from the locked row's trimmed wording. Dropping it re-opens the accept-what-you-saw race a review gate named - a researcher edit between page load and Accept records acceptance with a hash asserting the participant agreed to wording they never saw, which is exactly the falsehood the snapshot exists to prevent. Proven by mutation before entry: this exact comparison->false fails the named test 201-vs-400 asserting the exported CONSENT_WORDING_CHANGED sentence, everything else green.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "      if (seen !== consentText) {",
+    "mutation": "      if (false) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.consent-acceptance.test.ts",
+    "test": "refuses an acceptance whose echoed wording differs, by its own sentence"
   }
 ]
