@@ -106,7 +106,13 @@ describe('BookingArtifactsSection', () => {
     expect(video!.getAttribute('src')).toBe(bookingArtifactMediaUrl('b1', 'a1'));
   });
 
-  it('offers a transcript a View link through the same gated route, not a player', () => {
+  it('renders a transcript inline on demand through the same gated route, not a player', async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      text: async () => 'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nInline cue.'
+    } as unknown as Response);
+
     render(
       <BookingArtifactsSection
         booking={booking()}
@@ -115,9 +121,16 @@ describe('BookingArtifactsSection', () => {
     );
 
     expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
-    const view = screen.getByRole('link', { name: 'View' });
-    expect(view).toHaveAttribute('href', bookingArtifactMediaUrl('b1', 'a1'));
-    expect(view).toHaveAttribute('target', '_blank');
+    // No transcript request until the researcher opens it.
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'View transcript' }));
+
+    expect(await screen.findByText('Inline cue.')).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(bookingArtifactMediaUrl('b1', 'a1'), {
+      credentials: 'include'
+    });
+    fetchSpy.mockRestore();
   });
 
   it("surfaces the media route's own refusal sentence when playback fails", async () => {
