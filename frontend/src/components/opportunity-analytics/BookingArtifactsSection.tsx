@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BookingArtifact, OpportunityBookingRow } from '../../api/types';
 import { bookingArtifactMediaUrl } from '../../api/client';
 import { BookingArtifactsController } from './useBookingArtifacts';
+import TranscriptView from './TranscriptView';
 
 /**
  * The artefacts of one booked session (#79 step 3): the researcher uploads
@@ -42,6 +43,7 @@ const ArtifactRow: React.FC<{
 }> = ({ booking, artifact, onDelete }) => {
   const [playing, setPlaying] = useState(false);
   const [playbackError, setPlaybackError] = useState('');
+  const [showingTranscript, setShowingTranscript] = useState(false);
 
   /**
    * The media route's refusals are display sentences - the ETag tripwire's
@@ -100,18 +102,16 @@ const ArtifactRow: React.FC<{
               {playing ? 'Hide player' : 'Play'}
             </button>
           ) : (
-            // Transcripts are servable through the same gated route (step 4
-            // renders them inline beside playback; until then, the raw text
-            // is a click away rather than stored and unreachable). The route
-            // answers text/plain with nosniff, so inline in a tab is safe.
-            <a
+            // Transcripts render INLINE through the same gated route (#79
+            // step 4): parsed to cues when the export is WebVTT, raw text
+            // otherwise. The route answers text/plain under nosniff.
+            <button
+              type="button"
               className="btn btn-sm btn-outline-secondary"
-              href={bookingArtifactMediaUrl(booking.id, artifact.id)}
-              target="_blank"
-              rel="noopener noreferrer"
+              onClick={() => setShowingTranscript((previous) => !previous)}
             >
-              View
-            </a>
+              {showingTranscript ? 'Hide transcript' : 'View transcript'}
+            </button>
           )}
           <button
             type="button"
@@ -146,6 +146,9 @@ const ArtifactRow: React.FC<{
         <p role="alert" style={{ marginTop: '6px', fontSize: '0.75rem', color: 'var(--bs-danger, #dc3545)' }}>
           {playbackError}
         </p>
+      )}
+      {showingTranscript && artifact.kind === 'transcript' && (
+        <TranscriptView mediaUrl={bookingArtifactMediaUrl(booking.id, artifact.id)} />
       )}
     </li>
   );
