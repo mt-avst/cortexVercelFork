@@ -1,7 +1,7 @@
 # AdaptaLabs User Guide
 
-**Version**: 7.43.4  
-**Last Updated**: 2026-08-18
+**Version**: 7.65.0  
+**Last Updated**: 2026-08-29
 
 ---
 
@@ -98,11 +98,12 @@ AdaptaLabs is an internal platform for researchers to post opportunities and for
 3. **Review** available session times
 4. **Select** a session with available slots
 5. **Click** the "Book" button
-6. **Confirm** your booking
+6. **Confirm** your booking - if the opportunity carries consent text (Live sessions and Interviews describe what the researcher may store afterwards, such as a recording of the call), it is shown to you here and **Accept and book** is what completes the booking
 
 ### What Happens When You Book
 
 - ✅ Your booking is confirmed
+- ✅ If you accepted consent text, the exact wording you saw is stored with your booking
 - ✅ A calendar event is created (Google Calendar)
 - ✅ You receive a confirmation email
 - ✅ The session slot count decreases

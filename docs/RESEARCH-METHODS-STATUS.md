@@ -1,6 +1,6 @@
 # Research methods - what is complete and what hands off
 
-Status of the six study types Cortex offers, as of 2026-08-26, with the #78 publish gate re-checked on 2026-08-28.
+Status of the six study types Cortex offers, as of 2026-08-26, with the #78 publish gate re-checked on 2026-08-28 and the moderated rows rewritten on 2026-08-29 after cto/AdaptaLabs#79 landed (!311-!315).
 
 Read-only survey of the code, not a plan.
 It records which research methods run end to end inside Cortex and which send the participant to a third-party site, along with what that costs in captured data.
@@ -10,7 +10,7 @@ The files that decide each of those are named inline so a future reader can re-c
 
 ## The six types
 
-Cortex has exactly six opportunity types, defined in `shared/constants/index.ts:262`.
+Cortex has exactly six opportunity types, defined in `shared/constants/index.ts:275`.
 
 | Method | Author | Participant runs it | Data lands in Cortex | Status |
 |---|---|---|---|---|
@@ -20,11 +20,15 @@ Cortex has exactly six opportunity types, defined in `shared/constants/index.ts:
 | Survey - external delivery | External Link tab | Third-party tool, new tab | Click count only | **Hands off** |
 | Poll - external delivery | External Link tab | Third-party tool, new tab | Click count only | **Hands off** |
 | Question ("one question") | External Link tab, no native option | Third-party tool, new tab | Click count only | **Hands off** |
-| Test ("Live session") | Session Management only | Zoom / Meet / Teams call | Booking count only | **Hands off** |
-| Interview | Session Management only | Zoom / Meet / Teams call | Booking count only | **Hands off** |
+| Test ("Live session") | Session Management + Consent | Zoom / Meet / Teams call | Consent acceptance, researcher notes, ingested recording + transcript, playback | **Artefact parity** |
+| Interview | Session Management + Consent | Zoom / Meet / Teams call | Consent acceptance, researcher notes, ingested recording + transcript, playback | **Artefact parity** |
 
 Poll and survey appear twice because `delivery_mode` genuinely splits them into two different products.
 `native` runs in Cortex, `external` is a hand-off, and the author picks per opportunity.
+
+**Artefact parity** means the artefacts land in Cortex but the session does not run there.
+The call still happens on a third-party platform; the researcher ingests that platform's own export afterwards.
+Capture is exactly as complete as the export and arrives after the call, by decision (#79, D1) - a hosted call or an automatic platform-API pull would be a later enhancement behind the same surface.
 
 ## What is complete
 
@@ -44,17 +48,36 @@ One engine serves both.
 Six question types - `instruction`, `open_text`, `single_choice`, `multi_choice`, `rating`, `nps` (`shared/firsthand/survey-authoring.ts:37`).
 Consent step, in-tab runner, a results panel and a CSV download on the analytics page.
 
-The API refuses a mismatched pairing at the boundary rather than only in the picker: `requiredStudyKindFor` in `backend/src/routes/opportunities.ts:247` maps unmoderated to the `recorded` vocabulary and native poll or survey to the `survey` vocabulary, and every other shape links no study at all.
+The API refuses a mismatched pairing at the boundary rather than only in the picker: `requiredStudyKindFor` in `backend/src/routes/opportunities.ts:257` maps unmoderated to the `recorded` vocabulary and native poll or survey to the `survey` vocabulary, and every other shape links no study at all.
+
+### Moderated test and interview - artefact parity, shipped as #79
+
+The gap this document originally named as its largest was closed in five merges (!311-!315), all landed 2026-08-28/29.
+The session still runs on a call - the meeting link is `meeting_location_optional`, rendered as "Join via Google Meet / Zoom / Teams" in `frontend/src/pages/MyBookings.tsx:163` - but everything around it now lands in Cortex:
+
+- **Consent authoring on the opportunity.** Both moderated types get a Consent step by type in `getTabsForType` (`frontend/src/pages/OpportunityForm.tsx:453`), anchored to the opportunity because there is no study row to hang it on.
+  The API refuses `consent_*` columns on every other type, at all six write surfaces - four through a single gate (`resolveModeratedConsentWrite`, `backend/src/routes/opportunities.ts:309`), while the two duplicate branches copy the already-resolved trio verbatim from a source that passed it.
+- **Acceptance recorded at booking.** The participant accepts the wording they were shown - the client echoes it back and the server refuses a mismatch - and the booking stores the acceptance timestamp (`NOW()` in SQL, same clock as `created_at`) plus the wording itself as `consent_text_snapshot`, so what was agreed to can be reproduced, not merely detected.
+- **Artefact ingest.** Recordings and transcripts upload against the booking via presign, direct S3 PUT and finalize (`backend/src/routes/booking-artifacts.ts`).
+  Ingest refuses unless the booking carries recorded acceptance or the researcher supplies a typed attestation that consent was obtained outside Cortex (`resolveConsentGate`), and a write-side playable-mime gate keeps stored-XSS shapes out.
+- **Playback.** A gated media route streams the recording to the owner or a superadmin, scope-bound to the booking in the path, with an ETag integrity tripwire against the live object (its MD5 limitation is tracked as cto/AdaptaLabs#99).
+  The Participants tab on the analytics page carries the artefact section: upload, on-demand `<video>` playback and delete-with-confirm.
+- **Transcript rendering.** An ingested WebVTT transcript renders inline as cues (`shared/firsthand/vtt-parser.ts`, `TranscriptView`), falling back to raw text when parsing misses.
+- **Researcher notes.** A free-text note per booking (`bookings.researcher_notes`), the researcher's own record - both participant-facing booking projections exclude the column by construction.
+
+Two things are deliberately not built, each a decision rather than an omission.
+Cortex does not host or record the call itself, and does not pull recordings from the meeting platform's API - ingest-afterwards was chosen (#79, D1) and a pull would be a later enhancement behind the same routes.
+There is no speech-to-text in the repo (#79, D2): a transcript artefact is whatever the platform exported, and the recorded path's "transcript generation" (`transcript-automation.ts`) remains a prototype that interleaves prompts with typed answers, so it offers nothing to reuse here.
 
 ## What needs work
 
-Four items, in the order they are worth doing.
+Three items, in the order they are worth doing.
 
 ### 1. `question` has no native path at all - tracked as #78
 
 Smallest gap, and the engine that would close it already ships.
 
-The form code says it outright at `frontend/src/pages/OpportunityForm.tsx:459`: *"`question` has no native path yet and keeps the link tab unconditionally"*.
+The form code says it outright at `frontend/src/pages/OpportunityForm.tsx:464`: *"`question` has no native path yet and keeps the link tab unconditionally"*.
 A one-question study is the smallest possible case of the survey runner already built for poll and survey.
 
 A second defect used to be stacked on it, and is now **fixed**.
@@ -67,20 +90,7 @@ So #78 is now scoped to the native path alone.
 **Scope of the absence assertion**: grepped all `.ts` and `.tsx` under `shared`, `backend/src` and `frontend/src`, excluding test files.
 51 references to the `question` type, none of them touching `native`, `firsthand` or `delivery_mode`.
 
-### 2. Moderated test and interview capture researcher notes only - tracked as #79
-
-Biggest gap; the first slice is done.
-
-Both types get a Session Management tab in the author form and nothing else (`getTabsForType`, `frontend/src/pages/OpportunityForm.tsx:449`).
-The researcher runs the session on a call - the meeting link is `meeting_location_optional`, rendered as "Join via Google Meet / Zoom / Teams" in `frontend/src/pages/MyBookings.tsx:163`.
-
-Since #79's first slice, the analytics page gives both types a Participants tab: the roster of who booked (`GET /api/bookings/opportunities/:id/bookings`, owner or superadmin) with a free-text researcher note per booking (`bookings.researcher_notes`, `PUT /api/bookings/:bookingId/notes`).
-The note is the researcher's own record and the participant never sees it - both participant-facing booking projections exclude the column by construction.
-
-Still absent, by decision (notes-first scope, 2026-08-27): no consent step, no recording or artefact ingest, no transcript.
-The recorded path's "transcript generation" is a prototype that interleaves prompts with typed answers - there is no speech-to-text in the repo - so capture parity would be new machinery, not reuse.
-
-### 3. External poll and survey return no data - not tracked
+### 2. External poll and survey return no data - not tracked
 
 `external_link_optional` is required before publish, the call to action is a `window.open`, and the only thing that comes back is `trackOpportunityClick(id, 'action')`.
 Started, abandoned, completed and the answers themselves are all invisible to Cortex.
@@ -89,24 +99,24 @@ The existing `backend/src/firsthand/callback-delivery.ts` does **not** cover thi
 It delivers outbound lifecycle events from Cortex to an integrator (`session_started`, `session_completed`, `session_abandoned`, `session_failed`), not inbound results from Typeform, SurveyMonkey or similar.
 Closing this gap means either an inbound ingest path or an explicit decision that an external study's data stays external.
 
-### 4. Consent exists only on the native paths - not tracked
+### 3. Consent exists only where Cortex runs the study or stores its artefacts - the pure hand-offs are untracked
 
-Deliberate, and argued for at `frontend/src/pages/OpportunityForm.tsx:497`: a hand-off's consent lives in the tool on the other side of the link, and an empty Consent step would imply Cortex has a say in something it does not.
+The moderated half of this item closed with #79: `test` and `interview` now carry opportunity-anchored consent with an acceptance record at booking, and ingest is gated on it (see above).
+The old argument - "a booked session has no study, so there is no consent for this product to govern" - expired the moment Cortex began storing a moderated session's recording, and the comment at `frontend/src/pages/OpportunityForm.tsx:490` now says so.
 
-Worth revisiting as research governance rather than as a bug.
-For external and booked studies, Cortex holds no consent record for a study it recruited participants for.
+What remains is the pure hand-off paths: external poll, external survey and `question`.
+Their consent lives in the tool on the other side of the link, deliberately, because Cortex keeps no artefacts of them and an empty Consent step would imply Cortex has a say in something it does not.
+For those paths Cortex still holds no consent record for a study it recruited participants for.
+Worth revisiting as research governance rather than as a bug - together with item 2, since ingesting external results would expire the argument for those paths exactly as artefact storage expired it for the moderated ones.
 
 ## Recommended order
 
 Build the native path for `question` first (#78).
-It is a `delivery_mode` branch plus a one-question reuse of SurveyRunner, it closes the publish-readiness hole in the same change, and it is the only one of the four that adds no new machinery.
-The publish-readiness half is worth splitting out and doing on its own first: it is a few lines, and until it lands a researcher can publish a study nobody can take part in.
+It is a `delivery_mode` branch plus a one-question reuse of SurveyRunner, and it is the only one of the three that adds no new machinery.
 
-Item 2 (#79) is a product decision before it is a ticket, and the issue carries the questions that need answering before anyone starts.
-
-Items 3 and 4 are deliberately untracked.
+Items 2 and 3 are deliberately untracked.
 Both are decisions about what Cortex is for rather than defects in what it does, and neither has an owner asking for it.
-Raise them when someone does.
+Raise them when someone does - and raise them together, because ingesting external results (item 2) would change the consent answer (item 3).
 
 ## Naming
 

@@ -1,7 +1,7 @@
 # AdaptaLabs Admin Guide
 
-**Version**: 7.49.0  
-**Last Updated**: 2026-08-21
+**Version**: 7.65.0  
+**Last Updated**: 2026-08-29
 
 ---
 
@@ -17,13 +17,14 @@ This guide will help you create and manage research opportunities on AdaptaLabs.
 2. [Creating an Opportunity](#creating-an-opportunity)
 3. [Managing Sessions](#managing-sessions)
 4. [Recorded Sessions](#recorded-sessions)
-5. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
-6. [Consent](#consent)
-7. [Publishing Opportunities](#publishing-opportunities)
-8. [Dashboard and Analytics](#dashboard-and-analytics)
-9. [Settings](#settings)
-10. [Managing Bookings](#managing-bookings)
-11. [Tips and Best Practices](#tips-and-best-practices)
+5. [Live Sessions and Interviews](#live-sessions-and-interviews)
+6. [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex)
+7. [Consent](#consent)
+8. [Publishing Opportunities](#publishing-opportunities)
+9. [Dashboard and Analytics](#dashboard-and-analytics)
+10. [Settings](#settings)
+11. [Managing Bookings](#managing-bookings)
+12. [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -314,6 +315,40 @@ Reopening an opportunity shows exactly what you wrote - the tasks or questions, 
 
 ---
 
+## Live Sessions and Interviews
+
+A Live session or Interview happens on a call - Google Meet, Zoom or Teams - at a time the participant books.
+Cortex does not join or record the call.
+What it holds is everything around it: the consent the participant accepted when booking, your own notes and the call platform's recording and transcript, which you upload afterwards.
+
+### Consent at booking
+
+Both types get a **Consent** step on the opportunity form, after Session Management.
+It opens locked on **Standard live-session consent (version 1)**, and customising works exactly as on the other paths - see [Consent](#consent).
+Unlike the other paths, the wording may also be **cleared entirely**: a session you will store nothing from needs no consent, and emptiness is how you say so - but then every later upload needs the typed statement below.
+
+The participant reads and accepts the wording **as part of booking a slot**.
+The acceptance is stored with the exact wording they saw, so editing the opportunity afterwards never changes what somebody has already agreed to.
+
+### After the session: the Participants tab
+
+Open the opportunity's analytics page and its **Participants** tab. For each booking you get:
+
+- The roster of who booked, with each booking's status
+- A private **researcher note** - your own record, never shown to the participant
+- **Artefact upload**: after the call, export the recording and transcript from the meeting platform and upload them against the booking (a cancelled booking refuses new uploads; its existing artefacts stay playable and deletable)
+- **Playback**: an uploaded recording plays inline; an uploaded transcript renders as timed captions (WebVTT), or as plain text if it is not VTT
+- **Delete**, with confirmation
+
+### If there is no consent record
+
+Uploading against a booking with **no recorded acceptance in Cortex** - one made before the opportunity carried consent wording, or on an opportunity whose author cleared the wording - asks you for a typed statement that consent was obtained outside Cortex, for example on the call itself.
+Expanding such a booking's artefacts says so with a banner, and the statement is stored with the artefact.
+
+There is no declined-but-booked state to attest around: a participant who declines the consent wording books nothing at all.
+
+---
+
 ## Polls and Surveys Answered in Cortex
 
 A Poll or Survey set to **In Cortex** collects its answers here rather than sending people to another tool.
@@ -382,16 +417,17 @@ There is a CSV export.
 
 ## Consent
 
-Consent is its own step, and it is the last one. It follows **Questions** on a poll or survey answered in Cortex, and **Task List** on a recorded session. The **Create opportunity** button lives there, so you pass through it on the way to saving.
+Consent is its own step, and it is the last one. It follows **Questions** on a poll or survey answered in Cortex, **Task List** on a recorded session, and **Session Management** on a Live session or Interview. The **Create opportunity** button lives there, so you pass through it on the way to saving.
 
 **It opens locked, showing the approved wording**, the template it comes from and its version - for example *Standard survey consent (version 1)*, with a line saying what it covers. There is nothing to type into, because for most studies there is nothing to decide: the approved wording is the wording.
 
-There are two templates, and they are deliberately different:
+There are three templates, and they are deliberately different:
 
 - **Standard recorded-session consent** covers screen and microphone recording, who sees the recording, and how a participant ends it
 - **Standard survey consent** says what is stored, who sees it, and that **no screen, microphone or camera is recorded**
+- **Standard live-session consent** covers what Cortex may hold after a moderated call - the platform's recording and transcript, uploaded by the researcher - and who sees it
 
-A survey never gets the recorded wording and a recorded session never gets the survey wording. Reusing the recorded text on a survey would have participants agreeing to a capture that never happens.
+Each type gets its own wording and never another type's. Reusing the recorded text on a survey would have participants agreeing to a capture that never happens.
 
 ### If your study needs different wording
 
