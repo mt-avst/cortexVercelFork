@@ -1,5 +1,9 @@
+import { Readable } from 'node:stream';
+import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
+
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import type { BookingArtifact } from '../../../shared/types';
 import { pool } from '../config';
 import { requireAdmin } from '../middleware/authenticate';
 import {
@@ -16,9 +20,12 @@ import { isPlayableMimeType } from '../firsthand/session-outputs';
 import { getMaximumRecordingSizeBytes } from '../firsthand/recording-limits';
 import {
   createPresignedRecordingUploadUrl,
+  createS3TranscriptArtifactResponse,
   deleteS3Object,
   headS3ObjectStat
 } from '../firsthand/runtime-object-storage-s3';
+import { createRecordingAssetResponse } from '../firsthand/object-storage';
+import type { RecordingAssetRecord } from '../firsthand/runtime-records';
 
 const router: Router = Router();
 
@@ -44,6 +51,12 @@ export const ARTIFACT_TRANSCRIPT_MIME_REFUSED =
   'Transcripts are accepted as text/vtt or text/plain only';
 export const ARTIFACT_RECORDING_MIME_REFUSED =
   'Recordings are accepted as video or audio types only';
+export const ARTIFACT_ETAG_MISSING =
+  'The storage backend returned no integrity tag for this upload, so it cannot be finalized';
+export const ARTIFACT_MEDIA_UNVERIFIED =
+  'This artefact carries no stored integrity tag, so it will not be served';
+export const ARTIFACT_MEDIA_CHANGED =
+  'The stored object no longer matches what was finalized for this artefact, so it will not be served';
 
 /**
  * Transcript ceiling, a LITERAL by design (10 MiB): a transcript is text, and
@@ -65,8 +78,22 @@ const PENDING_UPLOAD_VALIDITY_MS = 15 * 60 * 1000;
 const presignSchema = z
   .object({
     kind: z.enum(['recording', 'transcript']),
-    file_name: z.string().trim().min(1).max(255),
-    mime_type: z.string().trim().min(1).max(255),
+    // No control characters and no double quote: the stored name reaches a
+    // Content-Disposition header at serve time (`inline; filename="..."`),
+    // where a quote injects extra parameters and a CR/LF makes undici refuse
+    // the header - turning the artefact into a permanent 500 named after its
+    // own filename. Refused here, where the name arrives.
+    // eslint-disable-next-line no-control-regex
+    file_name: z.string().trim().min(1).max(255).regex(/^[^"\u0000-\u001f\u007f]+$/, {
+      message: 'file_name must not contain control characters or double quotes'
+    }),
+    // Printable ASCII only: the stored type becomes the media response's
+    // Content-Type, where a codepoint above U+00FF or a CR/LF makes undici
+    // throw - the same stores-fine-serves-never failure the file_name gate
+    // closes. NOT a bare token-pair regex on purpose: legitimate types carry
+    // parameters (`video/webm;codecs="vp9,opus"`), and mime types are ASCII
+    // by spec, so this refuses exactly the header-hostile shapes.
+    mime_type: z.string().trim().min(1).max(255).regex(/^[\x20-\x7e]+$/),
     file_size_bytes: z.number().int().positive(),
     // D3's escape hatch, F13-shaped: the attestation IS the typed reason - a
     // bare boolean asserts nothing anyone can later read. Optional; its
@@ -353,6 +380,17 @@ router.post(
       });
     }
 
+    // The null-ETag decision, made EXPLICITLY (fail closed): AWS returns an
+    // ETag for every object, so a HeadObject without one is essentially never
+    // - and an artefact finalized without one could never pass the media
+    // route's integrity check, becoming a row that stores fine and serves
+    // never. Refusing here keeps the invariant simple downstream: every
+    // finalized artefact has a non-null etag, so a null on a served row is a
+    // data error, not a legitimate legacy state.
+    if (objectStat.etag === null) {
+      return res.status(422).json({ error: ARTIFACT_ETAG_MISSING });
+    }
+
     // ponytail: no virus scanning on any upload path repo-wide - mime, size
     //   and key shape are verified, bytes are not inspected
     //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
@@ -405,12 +443,15 @@ router.get(
 
     const result = await pool.query(
       `
-      SELECT id, booking_id, kind, file_name, mime_type, file_size_bytes,
-             storage_provider, relative_path, uploaded_by, uploaded_at,
-             consent_attested_by, consent_attested_at, consent_attestation_reason
-      FROM booking_artifacts
-      WHERE booking_id = $1
-      ORDER BY uploaded_at DESC, id DESC
+      SELECT ba.id, ba.booking_id, ba.kind, ba.file_name, ba.mime_type,
+             ba.file_size_bytes, ba.storage_provider, ba.relative_path,
+             ba.uploaded_by, ba.uploaded_at, ba.consent_attested_by,
+             ba.consent_attested_at, ba.consent_attestation_reason,
+             u.name AS uploaded_by_name
+      FROM booking_artifacts ba
+      LEFT JOIN users u ON ba.uploaded_by = u.id
+      WHERE ba.booking_id = $1
+      ORDER BY ba.uploaded_at DESC, ba.id DESC
     `,
       [booking.id]
     );
@@ -489,6 +530,211 @@ router.delete(
   })
 );
 
+/**
+ * Storage-layer headers copied verbatim onto the client response - the same
+ * explicit allowlist as the session-outputs media route (deliberately a local
+ * copy: importing from that module would drag the whole runtime-repository
+ * graph into this router's tests for five strings). A storage change must not
+ * be able to leak arbitrary S3/origin headers through either media route.
+ */
+const FORWARDED_MEDIA_HEADERS = [
+  'content-type',
+  'content-length',
+  'content-range',
+  'accept-ranges',
+  'content-disposition'
+] as const;
+
+/**
+ * ETags compared SHAPE-BLIND on both sides: the SDK returns the tag quoted
+ * (`"abc123"`), and the stored value came from the same SDK - but comparing a
+ * quoted tag against an unquoted one refuses every serve forever, which reads
+ * exactly like the tripwire working. Stripping the quotes from BOTH sides
+ * before comparing means the check can only fire on the tag VALUE changing.
+ */
+function etagValuesDiffer(stored: string, live: string): boolean {
+  const unquote = (etag: string) => etag.replace(/^"/, '').replace(/"$/, '');
+  return unquote(stored) !== unquote(live);
+}
+
+// GET /api/bookings/:bookingId/artifacts/:artifactId/media - stream one
+// artefact to the opportunity's owner or a superadmin. Same shape as the
+// session-outputs media route: cookie-gated GET (CSRF-exempt, no body parser),
+// artefact scope-bound to the booking in the path, playable-mime gate on
+// recordings, nosniff + private no-store, header forwarding by allowlist.
+// URLs pointing here are minted by the FRONTEND CLIENT from its own configured
+// base - never from window.location, never from request headers.
+//
+// Deliberately NO consent re-check and NO booked-status check here: an
+// artefact row exists only if ingest passed the D3 gate, acceptance is never
+// updated or cleared, and a CANCELLED booking must still list, stream and
+// delete what was ingested while it was booked - review and cleanup are the
+// point. The write routes alone refuse on status (F14).
+router.get(
+  '/:bookingId/artifacts/:artifactId/media',
+  requireAdmin,
+  asyncHandler(async (req: Request, res: Response) => {
+    const booking = await loadOwnedBooking(req);
+    const { artifactId } = req.params;
+
+    // Aliased `a` so the scope-binding clause below is a UNIQUE line in this
+    // file - it anchors a canary entry (the delete route has a twin clause).
+    const artifactResult = await pool.query(
+      `
+      SELECT a.id, a.kind, a.file_name, a.mime_type, a.file_size_bytes,
+             a.storage_provider, a.relative_path, a.uploaded_at, a.etag
+      FROM booking_artifacts a
+      WHERE a.id = $1 AND a.booking_id = $2
+    `,
+      [artifactId, booking.id]
+    );
+
+    if (artifactResult.rows.length === 0) {
+      throw new NotFoundError('Artifact');
+    }
+    const artifact = artifactResult.rows[0];
+
+    if (artifact.storage_provider !== 's3') {
+      // A data error, not a request error: nothing writes any other provider.
+      logger.error('Booking artifact carries an unservable storage provider', {
+        artifactId: artifact.id,
+        storageProvider: artifact.storage_provider
+      });
+      throw new Error('Unsupported artifact storage provider');
+    }
+
+    // Serve only audio/video for recordings - the read-side twin of presign's
+    // write-side gate, kept because rows outlive route versions. Combined with
+    // nosniff below it stops a stored object with an HTML-ish type being
+    // served inline, same-origin, under an admin cookie.
+    if (artifact.kind === 'recording' && !isPlayableMimeType(artifact.mime_type)) {
+      throw new NotFoundError('Artifact media');
+    }
+
+    // The ETag tripwire this route exists to enforce: the presigned PUT URL
+    // from step 2 outlives finalize (S3 cannot revoke a signature), so a
+    // re-PUT can swap the bytes under a finalized row. The stored ETag is the
+    // record of what was finalized; a live object that no longer matches it is
+    // refused BY NAME rather than served as if it were the reviewed artefact.
+    // ponytail: for a single-part PUT under SSE-S3/none the ETag IS the
+    //   object's MD5, so the uploader who chose the original bytes can defeat
+    //   this with an MD5 collision pair -> cto/AdaptaLabs#99. Upgrade path:
+    //   S3 object versioning + a stored VersionId served back, which makes the
+    //   bytes immutable and retires this HeadObject entirely.
+    // Cost, decided not discovered: this HeadObject runs on EVERY request,
+    // including each Range request of a seeking player - doubling S3 calls
+    // for playback. Deliberate: a tripwire that skips range requests would
+    // let a swap ride in mid-stream.
+    const liveStat = await headS3ObjectStat(artifact.relative_path);
+    if (liveStat === null) {
+      throw new NotFoundError('Artifact media');
+    }
+    if (artifact.etag === null || liveStat.etag === null) {
+      // Fail CLOSED, decided explicitly: finalize refuses a null ETag, so a
+      // null on either side here is a state this route cannot vouch for.
+      return res.status(409).json({ error: ARTIFACT_MEDIA_UNVERIFIED });
+    }
+    if (etagValuesDiffer(artifact.etag, liveStat.etag)) {
+      return res.status(409).json({ error: ARTIFACT_MEDIA_CHANGED });
+    }
+
+    let mediaResponse: globalThis.Response;
+    try {
+      mediaResponse =
+        artifact.kind === 'recording'
+          ? await createRecordingAssetResponse(
+              {
+                // The runtime record shape; only fileName/mimeType/
+                // fileSizeBytes/storageProvider/relativePath drive the
+                // response - the rest label errors.
+                id: artifact.id,
+                sessionId: booking.id,
+                fileName: artifact.file_name,
+                mimeType: artifact.mime_type,
+                fileSizeBytes: Number(artifact.file_size_bytes),
+                durationSeconds: null,
+                storageProvider:
+                  artifact.storage_provider as RecordingAssetRecord['storageProvider'],
+                relativePath: artifact.relative_path,
+                uploadedAt: new Date(artifact.uploaded_at).toISOString()
+              },
+              { rangeHeader: req.headers.range ?? null }
+            )
+          : await createS3TranscriptArtifactResponse(artifact.relative_path);
+    } catch (err) {
+      const name = err instanceof Error ? err.name : '';
+      // A genuinely missing object is a clean 404; anything else - IRSA,
+      // bucket policy, throttling - surfaces as a 500 with a log rather than
+      // masquerading as "not found".
+      if (name === 'NoSuchKey' || name === 'NotFound') {
+        throw new NotFoundError('Artifact media');
+      }
+      logger.error('Booking artifact media unreadable', {
+        artifactId: artifact.id,
+        error: err
+      });
+      throw err instanceof Error ? err : new Error('Artifact media unreadable');
+    }
+
+    for (const header of FORWARDED_MEDIA_HEADERS) {
+      const value = mediaResponse.headers.get(header);
+      if (value !== null) {
+        res.setHeader(header, value);
+      }
+    }
+    // Consent-gated media: never let a shared cache store it, never let a
+    // browser sniff the content type away from the validated one, and never
+    // let another origin embed it as a subresource (the app-level helmet
+    // config disables CORP globally; defence in depth here - the strict
+    // cookie already refuses the credential cross-site).
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
+    res.status(mediaResponse.status);
+
+    if (!mediaResponse.body) {
+      // 416 unsatisfiable and any empty-body response carry headers only.
+      res.end();
+      return;
+    }
+
+    const nodeStream = Readable.fromWeb(
+      mediaResponse.body as NodeWebReadableStream<Uint8Array>
+    );
+    nodeStream.on('error', (streamErr) => {
+      logger.error('Booking artifact media stream failed mid-flight', {
+        artifactId: artifact.id,
+        error: streamErr
+      });
+      if (res.headersSent) {
+        // Bytes already on the wire: break the response so the client sees a
+        // truncated transfer, not a clean end.
+        res.destroy(streamErr);
+        return;
+      }
+      // Drop EVERY optimistically-forwarded media header, exactly as the
+      // session-outputs precedent does - leaving content-type behind labels
+      // the JSON error body video/webm (res.json only sets a type when none
+      // is present).
+      for (const header of FORWARDED_MEDIA_HEADERS) {
+        res.removeHeader(header);
+      }
+      res.status(500).json({ error: 'artifact_media_stream_failed' });
+    });
+    // A <video> client aborts on every seek and on unmount, and pipe()
+    // unpipes on destination close but never destroys the SOURCE - measured
+    // (with a pipeline() control): the S3 body and its socket stay held
+    // until an SDK timeout. Destroying the source releases them at once.
+    // ponytail: no NAMED test - deleting this block leaves the suite green
+    //   (a socket-abort assertion is flaky in supertest) -> cto/AdaptaLabs#99,
+    //   where S3 versioning retires the whole tripwire path this feeds.
+    res.on('close', () => {
+      nodeStream.destroy();
+    });
+    nodeStream.pipe(res);
+  })
+);
+
 interface ArtifactRow {
   id: string;
   booking_id: string;
@@ -499,6 +745,8 @@ interface ArtifactRow {
   storage_provider: string;
   relative_path: string;
   uploaded_by: string | null;
+  /** Joined at list time only; finalize's RETURNING row has no users join. */
+  uploaded_by_name?: string | null;
   uploaded_at: Date;
   // Deliberately NOT serialised, like relative_path: the ETag is the step 3
   // media route's server-side integrity check against a post-finalize re-PUT,
@@ -512,19 +760,22 @@ interface ArtifactRow {
 /**
  * Field-by-field on purpose, like every response map on the bookings routes:
  * a column not named here never leaves the server, whatever lands on the row
- * later. relative_path stays INTERNAL - the step 3 media route will mint URLs
+ * later. relative_path stays INTERNAL - the media route mints URLs
  * server-side, and a raw object key on the wire invites building one by hand.
+ * The return type is the SHARED wire contract (shared/types), so the frontend
+ * reads the same shape this map writes.
  */
-function serializeArtifact(row: ArtifactRow) {
+function serializeArtifact(row: ArtifactRow): BookingArtifact {
   return {
     id: row.id,
     booking_id: row.booking_id,
-    kind: row.kind,
+    kind: row.kind as BookingArtifact['kind'],
     file_name: row.file_name,
     mime_type: row.mime_type,
     // BIGINT arrives as a string from pg; the wire speaks numbers.
     file_size_bytes: Number(row.file_size_bytes),
     uploaded_by: row.uploaded_by,
+    uploaded_by_name: row.uploaded_by_name ?? null,
     uploaded_at: row.uploaded_at ? new Date(row.uploaded_at).toISOString() : null,
     consent_attested_by: row.consent_attested_by,
     consent_attested_at: row.consent_attested_at

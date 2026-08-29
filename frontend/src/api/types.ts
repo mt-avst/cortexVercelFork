@@ -34,6 +34,13 @@ export interface OpportunityBookingRow {
   role_title: string | null;
   researcher_notes: string | null;
   researcher_notes_updated_at: string | null;
+  /**
+   * When the participant accepted the opportunity's consent wording at
+   * booking (#79 step 1b); null on bookings that predate the wording or the
+   * feature. The artefact section reads this to decide whether an upload
+   * needs the typed attestation (D3's escape hatch).
+   */
+  consent_accepted_at: string | null;
   cancelled_at?: string;
   created_at: string;
   updated_at: string;

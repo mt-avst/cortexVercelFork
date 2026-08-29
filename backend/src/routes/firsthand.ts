@@ -359,6 +359,17 @@ function requireSuperadminForStudyResults(req: Request): void {
 //     "every admin_notes", which overstated it). An asymmetric 403 would have
 //     blanked one tab of a page the rest of which renders for them. Its test
 //     file pins the new behaviour and says the same.
+//     ALL  /api/bookings/:bookingId/artifacts...   booking-artifacts.ts (#79)
+//                                           - presign/finalize/list/delete
+//                                             plus :artifactId/media, one
+//                                             gate (loadOwnedBooking) shared
+//                                             by all five routes; recordings
+//                                             and transcripts OF a named
+//                                             participant's session, so the
+//                                             write side also runs the D3
+//                                             consent-or-attestation gate and
+//                                             the media route refuses a
+//                                             stored-ETag mismatch
 //     GET  /api/admin/dashboard             recent_bookings, admin.ts
 //     GET  /api/admin/export/bookings       admin.ts
 //   the STUDY owner, or a superadmin, and only for a COUNT

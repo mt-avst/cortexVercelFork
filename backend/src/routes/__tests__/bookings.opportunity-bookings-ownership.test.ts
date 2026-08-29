@@ -145,6 +145,47 @@ describe('GET /api/bookings/opportunities/:id/bookings ownership', () => {
     expect(res.body[0].researcher_notes_updated_at).toBe('2026-01-01T11:05:00.000Z');
   });
 
+  // #79 STEP 3 MADE THIS COLUMN LOAD-BEARING: the artefact section decides
+  // whether an upload needs the typed consent attestation by reading
+  // `consent_accepted_at` off this roster row. A review gate proved the gap
+  // both ways - narrowing `SELECT b.*` to a list without the column passed
+  // 138 bookings tests, and a roster row without the key rendered the
+  // frontend's upload control ENABLED with no attestation textarea anywhere.
+  it('carries consent_accepted_at to the owner - the artefact attestation gate reads it', async () => {
+    mockQuery.mockResolvedValueOnce({ rows: [{ owner_user_id: 'admin-1' }] } as never);
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: 'b1',
+          participant_name: 'Sam Participant',
+          participant_email: 'sam@example.com',
+          business_unit: 'Ops',
+          role_title: 'Analyst',
+          session_start_time: new Date('2026-01-01T10:00:00Z'),
+          session_end_time: new Date('2026-01-01T11:00:00Z'),
+          created_at: new Date('2026-01-01T09:00:00Z'),
+          updated_at: new Date('2026-01-01T09:00:00Z'),
+          cancelled_at: null,
+          // POPULATED, so the wire assertion cannot pass vacuously.
+          consent_accepted_at: new Date('2026-01-02T10:00:00Z'),
+        },
+      ],
+    } as never);
+
+    const res = await request(listening(appAs('researcher_admin', 'admin-1')))
+      .get(PATH)
+      .expect(200);
+
+    // The wire half: the value itself arrives, ISO-serialised by res.json.
+    expect(res.body[0].consent_accepted_at).toBe('2026-01-02T10:00:00.000Z');
+    // The SQL half, pinned by TEXT: the mock returns the fixture regardless
+    // of the projection, so only this can see the column leave the SQL. The
+    // pin is the PROPERTY (wildcard OR the column named explicitly), not the
+    // wildcard's spelling - narrowing `b.*` to an explicit list that keeps
+    // the column is a change someone should be able to make.
+    expect(participantQuery()).toMatch(/SELECT b\.\*|b\.consent_accepted_at/);
+  });
+
   it('refuses a researcher_admin who does not own the opportunity', async () => {
     ownedBy('admin-2');
 

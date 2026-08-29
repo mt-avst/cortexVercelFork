@@ -66,8 +66,18 @@ const PENDING_UPLOAD_VALIDITY_MS = 15 * 60 * 1000;
 
 const s3UploadRequestSchema = z.object({
   durationSeconds: z.number().nonnegative().nullable(),
-  fileName: z.string().min(1),
-  mimeType: z.string().min(1),
+  // No control characters and no double quote, mirroring the booking-artefact
+  // presign schema: this raw name is STORED (buildStorageFileName sanitises
+  // only the object key) and later reaches a Content-Disposition header,
+  // where buildInlineContentDisposition encodes it - the refusal here is
+  // defence in depth on the one path where the name is client-chosen.
+  // eslint-disable-next-line no-control-regex
+  fileName: z.string().min(1).regex(/^[^"\u0000-\u001f\u007f]+$/),
+  // Printable ASCII, like the booking-artefact twin: this type is signed into
+  // the presigned PUT and later serves as Content-Type, where non-Latin-1 or
+  // CR/LF throws at serve. Parameters (`;codecs=...`) are legitimate, so no
+  // token-pair regex - mime types are ASCII by spec.
+  mimeType: z.string().min(1).regex(/^[\x20-\x7e]+$/),
   fileSizeBytes: z.number().int().positive()
 });
 

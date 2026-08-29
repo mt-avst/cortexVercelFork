@@ -10,6 +10,7 @@ import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import SessionsTab from '../components/opportunity-analytics/SessionsTab';
 import ParticipantsTab from '../components/opportunity-analytics/ParticipantsTab';
+import { useBookingArtifacts } from '../components/opportunity-analytics/useBookingArtifacts';
 import { ArrowLeft, Info } from 'lucide-react';
 
 // Cortex Bar Chart component - pure CSS, no dependencies
@@ -161,6 +162,10 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // This component survives its own loading states; everything it renders
   // does not, because the opportunity refetch below early-returns a spinner.
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  // Booking artefact state (#79 step 3), held here for the same reason as the
+  // note drafts: an upload in flight and a half-typed attestation must
+  // survive the refetch spinner unmounting the tab.
+  const bookingArtifacts = useBookingArtifacts();
   const [surveyResults, setSurveyResults] = useState<{ title: string; results: SurveyResultsData } | null>(null);
   const [loadingSurveyResults, setLoadingSurveyResults] = useState(false);
   const [surveyResultsError, setSurveyResultsError] = useState('');
@@ -670,6 +675,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
           onSaveNotes={saveResearcherNotes}
           drafts={noteDrafts}
           onDraftsChange={setNoteDrafts}
+          artifacts={bookingArtifacts}
         />
       ) : loadingAnalytics ? (
         <div className="text-center py-5">

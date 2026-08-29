@@ -439,6 +439,68 @@ export const updateBookingResearcherNotes = async (
   return response.data;
 };
 
+// Booking artefact API functions (#79 step 3) - recordings and transcripts a
+// researcher ingests onto a booking after a moderated session. The wire shapes
+// are the SHARED contract (shared/types), written by serializeArtifact on the
+// backend and read here.
+export const getBookingArtifacts = async (
+  bookingId: string
+): Promise<import('./types').BookingArtifact[]> => {
+  const response = await api.get(
+    `/bookings/${encodeURIComponent(bookingId)}/artifacts`
+  );
+  return response.data;
+};
+
+export const presignBookingArtifact = async (
+  bookingId: string,
+  body: {
+    kind: import('./types').BookingArtifactKind;
+    file_name: string;
+    mime_type: string;
+    file_size_bytes: number;
+    consent_attestation_reason?: string;
+  }
+): Promise<import('./types').BookingArtifactPresignResponse> => {
+  const response = await api.post(
+    `/bookings/${encodeURIComponent(bookingId)}/artifacts/presign`,
+    body
+  );
+  return response.data;
+};
+
+export const finalizeBookingArtifact = async (
+  bookingId: string,
+  objectKey: string
+): Promise<import('./types').BookingArtifact> => {
+  const response = await api.post(
+    `/bookings/${encodeURIComponent(bookingId)}/artifacts/finalize`,
+    { object_key: objectKey }
+  );
+  return response.data;
+};
+
+export const deleteBookingArtifact = async (
+  bookingId: string,
+  artifactId: string
+): Promise<void> => {
+  await api.delete(
+    `/bookings/${encodeURIComponent(bookingId)}/artifacts/${encodeURIComponent(artifactId)}`
+  );
+};
+
+/**
+ * Playback URL for the gated media route. Built from the client's own
+ * configured base - the same rule as opportunitySurveyResultsCsvUrl and the
+ * backend's own URL minting: never from window.location, whose host an
+ * embedded or proxied context does not control.
+ */
+export const bookingArtifactMediaUrl = (
+  bookingId: string,
+  artifactId: string
+): string =>
+  `${getApiBaseUrl()}/api/bookings/${encodeURIComponent(bookingId)}/artifacts/${encodeURIComponent(artifactId)}/media`;
+
 // Calendar API functions
 export const getCalendarEvents = async (
   startTime: string, 

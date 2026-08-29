@@ -2056,5 +2056,45 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/booking-artifacts.test.ts",
     "test": "refuses presign with neither, by the exact sentence"
+  },
+  {
+    "id": "booking-artifact-media-etag-tripwire",
+    "why": "cto/AdaptaLabs#79 step 3. The presigned PUT URL from step 2 outlives finalize - S3 cannot revoke a signature - so a re-PUT can swap the bytes under a finalized artefact row. The stored ETag is the record of what was finalized, and this refusal is the ONLY point that compares it against the live object before serving; dropping it serves swapped bytes to a reviewer as if they were the reviewed artefact, silently. Proven by mutation before entry: replacing the refusal with a no-op comment (the block compiles, the if stays) left every suite green except the named test, which fails 200-vs-409 asserting the exported ARTIFACT_MEDIA_CHANGED sentence with the storage read proven un-consulted.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "      return res.status(409).json({ error: ARTIFACT_MEDIA_CHANGED });",
+    "mutation": "      /* mutated: mismatch refusal removed */",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "refuses when the live ETag differs from the stored one, by sentence, serving nothing"
+  },
+  {
+    "id": "booking-artifact-ownership-gate",
+    "why": "cto/AdaptaLabs#79 step 3 (gate created in step 2, pinned here with the media route). loadOwnedBooking is the single owner-or-superadmin gate ALL five booking-artifact routes share - presign, finalize, list, delete and the media route; this line is where it refuses. Neutering it lets any researcher_admin ingest, list, stream and delete recordings of another researcher's participants - a cross-tenant participant-data leak on every route at once. Proven by mutation before entry: appending '&& false' to the condition (compiles, gate never fires) failed exactly the five named ownership tests, one per route, each asserting the exported refusal sentence.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "  if (!isSuperadmin && !isOpportunityOwner(booking, req.user)) {",
+    "mutation": "  if (!isSuperadmin && !isOpportunityOwner(booking, req.user) && false) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "presign refuses a researcher who does not own the opportunity"
+  },
+  {
+    "id": "booking-artifact-media-scope-binding",
+    "why": "cto/AdaptaLabs#79 step 3, added on a review gate's demonstration: with the artefact lookup's booking scope-binding deleted, any admin who owns ONE booking can stream any artefact in the system by artefact id - loadOwnedBooking only proves ownership of the booking in the PATH. The gate proved the original test vacuous (the fixture's null did the refusing, not the clause); the suite's pool mock now honours parameters AND the named test pins the clause by TEXT, because a mutated SQL still receives both params so only the text can see the clause go. Proven by mutation before entry: this exact narrowing failed only the named test, asserting the WHERE clause string.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "      WHERE a.id = $1 AND a.booking_id = $2",
+    "mutation": "      WHERE a.id = $1",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "scope-binds the artefact to the booking in the path - 404, and storage never consulted"
+  },
+  {
+    "id": "recording-media-content-disposition-encoded",
+    "why": "cto/AdaptaLabs#79 step 3, added after a re-gate proved the fix one line from a no-op: reverting this call site to the raw `inline; filename=\"${asset.fileName}\"` interpolation left the FULL backend green (743 vitest + 1707 jest, identical totals to the fixed tree) while reintroducing the defect - undici header values are Latin-1, so any stored file name with a codepoint above U+00FF (CJK, Cyrillic, emoji; BOTH media paths store the raw client/researcher name) throws at serve and the recording is a permanent generic 500. The encoder's 14 unit tests cannot see the call site; this entry pins the WIRING. Proven by mutation before entry: this exact revert compiles and fails only the named test, which compares the response header against buildInlineContentDisposition's output.",
+    "file": "backend/src/firsthand/runtime-object-storage-s3.ts",
+    "anchor": "    \"Content-Disposition\": buildInlineContentDisposition(asset.fileName),",
+    "mutation": "    \"Content-Disposition\": `inline; filename=\"${asset.fileName}\"`,",
+    "runner": "vitest",
+    "spec": "src/firsthand/__tests__/content-disposition.test.ts",
+    "test": "puts the ENCODED Content-Disposition on the response, never the raw name"
   }
 ]

@@ -211,9 +211,12 @@ router.get(
       }
     }
     // Consent-gated media: never let a shared cache store it, never let a browser
-    // sniff the content type away from the validated audio/video type.
+    // sniff the content type away from the validated audio/video type, and never
+    // let another origin embed it as a subresource (helmet's CORP is disabled
+    // app-wide; the strict cookie already refuses the credential cross-site).
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
     res.status(mediaResponse.status);
 
     if (!mediaResponse.body) {
@@ -244,6 +247,13 @@ router.get(
         res.removeHeader(header);
       }
       res.status(500).json({ error: 'media_stream_failed' });
+    });
+    // A <video> client aborts on every seek and on unmount, and pipe()
+    // unpipes on destination close but never destroys the SOURCE - measured
+    // (with a pipeline() control): the S3 body and its socket stay held
+    // until an SDK timeout. Destroying the source releases them at once.
+    res.on('close', () => {
+      nodeStream.destroy();
     });
     nodeStream.pipe(res);
   })
