@@ -4,6 +4,7 @@ Domain glossary for Cortex (AdaptaLabs).
 Use these terms exactly in issue titles, test names and proposals - do not drift to synonyms.
 Seeded 2026-08-26; extend via `/domain-modeling` when a term gets resolved, not speculatively.
 Calendar terms added 2026-08-27 after #89.
+Moderated-capture terms added 2026-08-29 after #79.
 
 ## Terms
 
@@ -11,6 +12,16 @@ Calendar terms added 2026-08-27 after #89.
   Lives at `/opportunities/:id`; authored in OpportunityForm at `/admin/opportunities`.
 - **Session** - a bookable time slot belonging to an opportunity.
 - **Booking** - a participant's claim on a session.
+- **Booking artefact** - a recording or transcript of a moderated session, ingested against the
+  booking after the call (presign, direct S3 PUT, finalize - `routes/booking-artifacts.ts`).
+  The artefact is the call platform's own export; Cortex neither hosts nor records the call (#79, D1)
+  and runs no speech-to-text (D2).
+- **Consent acceptance** - the booking-time record that the participant accepted the
+  opportunity's consent wording: timestamp plus the wording itself as `consent_text_snapshot`.
+  Anchored to the OPPORTUNITY for moderated types (there is no study row), refused on every
+  other type (#79, D5).
+- **Attestation** - a researcher's typed statement that consent was obtained outside Cortex,
+  the only alternative the artefact ingest gate accepts to a recorded acceptance (#79, D3).
 - **Study** - a FirstHand study attached to an opportunity; the participant-facing research
   instrument. Runs in-process under `/api/firsthand/*` (the old HTTP integration is gone).
 - **`studies.kind`** - the column that separates the two study vocabularies (native
