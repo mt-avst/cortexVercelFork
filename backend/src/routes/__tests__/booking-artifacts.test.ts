@@ -39,6 +39,28 @@ jest.mock('../../firsthand/runtime-object-storage-s3', () => ({
   createPresignedRecordingUploadUrl: jest.fn(async () => 'https://s3.example/put-url'),
   headS3ObjectStat: jest.fn(async () => ({ sizeBytes: 1024, etag: '"etag-abc123"' })),
   deleteS3Object: jest.fn(async () => undefined),
+  createS3TranscriptArtifactResponse: jest.fn(
+    async () =>
+      new Response('WEBVTT\n', {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      })
+  ),
+}));
+
+jest.mock('../../firsthand/object-storage', () => ({
+  createRecordingAssetResponse: jest.fn(
+    async () =>
+      new Response('recording-bytes', {
+        headers: {
+          'Content-Type': 'video/webm',
+          'Content-Length': '15',
+          'Accept-Ranges': 'bytes',
+          // The allowlist must FILTER, not forward wholesale - this header
+          // must never reach the client.
+          'X-Amz-Meta-Leak': 'should-not-forward',
+        },
+      })
+  ),
 }));
 
 import bookingArtifactsRouter, {
@@ -47,19 +69,26 @@ import bookingArtifactsRouter, {
   ARTIFACT_ATTESTATION_REASON_EMPTY,
   ARTIFACT_TRANSCRIPT_MIME_REFUSED,
   ARTIFACT_RECORDING_MIME_REFUSED,
+  ARTIFACT_ETAG_MISSING,
+  ARTIFACT_MEDIA_UNVERIFIED,
+  ARTIFACT_MEDIA_CHANGED,
 } from '../booking-artifacts';
 import { pool } from '../../config';
 import {
   createPresignedRecordingUploadUrl,
+  createS3TranscriptArtifactResponse,
   headS3ObjectStat,
   deleteS3Object,
 } from '../../firsthand/runtime-object-storage-s3';
+import { createRecordingAssetResponse } from '../../firsthand/object-storage';
 import { errorHandler } from '../../utils/errorHandler';
 
 const mockQuery = pool.query as unknown as jest.Mock;
 const mockHead = headS3ObjectStat as unknown as jest.Mock;
 const mockPresign = createPresignedRecordingUploadUrl as unknown as jest.Mock;
 const mockDeleteObject = deleteS3Object as unknown as jest.Mock;
+const mockRecordingResponse = createRecordingAssetResponse as unknown as jest.Mock;
+const mockTranscriptResponse = createS3TranscriptArtifactResponse as unknown as jest.Mock;
 
 const OWNER = 'owner-1';
 const BOOKING = 'b0000000-0000-4000-8000-000000000001';
@@ -136,13 +165,26 @@ const arrange = (over: {
           ...over.artifact,
         };
 
-  mockQuery.mockImplementation(async (sql: unknown) => {
+  // The mock HONOURS ITS PARAMETERS, not just the SQL text. A review gate
+  // proved the earlier text-only version made every scope-binding test
+  // vacuous: deleting `AND booking_id = $2` from the media route passed all
+  // 48 tests, because the fixture's null was doing the refusing, not the
+  // clause. Now a lookup only answers when the route actually asked for the
+  // fixture's own identifiers.
+  mockQuery.mockImplementation(async (sql: unknown, rawParams: unknown) => {
     const text = String(sql);
+    const params = rawParams as unknown[] | undefined;
     if (text.includes('FROM bookings b')) {
-      return booking ? { rows: [booking], rowCount: 1 } : { rows: [], rowCount: 0 };
+      return booking && params?.[0] === BOOKING
+        ? { rows: [booking], rowCount: 1 }
+        : { rows: [], rowCount: 0 };
     }
     if (text.includes('FROM pending_booking_artifact_uploads')) {
-      return pending ? { rows: [pending], rowCount: 1 } : { rows: [], rowCount: 0 };
+      return pending &&
+        params?.[0] === pending.relative_path &&
+        params?.[1] === BOOKING
+        ? { rows: [pending], rowCount: 1 }
+        : { rows: [], rowCount: 0 };
     }
     if (text.includes('INSERT INTO booking_artifacts')) {
       return { rows: [artifact ?? {
@@ -162,8 +204,22 @@ const arrange = (over: {
         consent_attestation_reason: 'Consent taken verbally at the start of the call',
       }], rowCount: 1 };
     }
+    if (text.includes('DELETE FROM booking_artifacts')) {
+      return { rows: [], rowCount: 1 };
+    }
+    if (text.includes('FROM booking_artifacts ba')) {
+      // The list, keyed by booking.
+      return artifact && params?.[0] === BOOKING
+        ? { rows: [artifact], rowCount: 1 }
+        : { rows: [], rowCount: 0 };
+    }
     if (text.includes('FROM booking_artifacts')) {
-      return artifact ? { rows: [artifact], rowCount: 1 } : { rows: [], rowCount: 0 };
+      // The scoped single-artefact lookups (media, delete): id AND booking.
+      return artifact &&
+        params?.[0] === artifact.id &&
+        params?.[1] === BOOKING
+        ? { rows: [artifact], rowCount: 1 }
+        : { rows: [], rowCount: 0 };
     }
     return { rows: [], rowCount: 0 };
   });
@@ -186,6 +242,25 @@ beforeEach(() => {
   mockHead.mockResolvedValue({ sizeBytes: 1024, etag: '"etag-abc123"' } as never);
   mockDeleteObject.mockResolvedValue(undefined as never);
   mockPresign.mockResolvedValue('https://s3.example/put-url' as never);
+  // mockImplementation, not mockResolvedValue: a Response body is consumable
+  // once, so each call must mint a fresh one.
+  mockRecordingResponse.mockImplementation(
+    async () =>
+      new Response('recording-bytes', {
+        headers: {
+          'Content-Type': 'video/webm',
+          'Content-Length': '15',
+          'Accept-Ranges': 'bytes',
+          'X-Amz-Meta-Leak': 'should-not-forward',
+        },
+      }) as never
+  );
+  mockTranscriptResponse.mockImplementation(
+    async () =>
+      new Response('WEBVTT\n', {
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      }) as never
+  );
 });
 
 describe('ownership: every route is owner-or-superadmin through the booking join', () => {
@@ -194,6 +269,7 @@ describe('ownership: every route is owner-or-superadmin through the booking join
     ['finalize', () => request(listening(appAs('somebody-else'))).post(`/api/bookings/${BOOKING}/artifacts/finalize`).send({ object_key: 'k' })],
     ['list', () => request(listening(appAs('somebody-else'))).get(`/api/bookings/${BOOKING}/artifacts`)],
     ['delete', () => request(listening(appAs('somebody-else'))).delete(`/api/bookings/${BOOKING}/artifacts/artifact-1`)],
+    ['media', () => request(listening(appAs('somebody-else'))).get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`)],
   ])('%s refuses a researcher who does not own the opportunity', async (_name, send) => {
     arrange();
 
@@ -373,6 +449,32 @@ describe('mime and size ceilings, pinned as literals', () => {
     expect(callFor('INSERT INTO pending_booking_artifact_uploads')).toBeUndefined();
   });
 
+  it.each([
+    ['a codepoint above U+00FF', 'video/mp4会'],
+    ['a CR/LF pair', 'video/mp4\r\nx-injected: 1'],
+  ])('refuses a mime type carrying %s - it becomes the serve-time Content-Type', async (_what, mime) => {
+    // The file_name failure one field over: undici throws on the header at
+    // serve, so a row storing this type serves never. Printable ASCII only.
+    arrange({ booking: { consent_accepted_at: new Date() } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .post(`/api/bookings/${BOOKING}/artifacts/presign`)
+      .send({ ...PRESIGN_RECORDING, mime_type: mime });
+
+    expect(res.status).toBe(400);
+    expect(callFor('INSERT INTO pending_booking_artifact_uploads')).toBeUndefined();
+  });
+
+  it('accepts a mime type with parameters - codecs strings are legitimate', async () => {
+    arrange({ booking: { consent_accepted_at: new Date() } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .post(`/api/bookings/${BOOKING}/artifacts/presign`)
+      .send({ ...PRESIGN_RECORDING, mime_type: 'video/webm;codecs="vp9,opus"' });
+
+    expect(res.status).toBe(200);
+  });
+
   it('accepts an audio recording - the gate is playable, not video-only', async () => {
     arrange({ booking: { consent_accepted_at: new Date() } });
 
@@ -444,6 +546,40 @@ describe('the object key is server-derived', () => {
 
     expect(res.status).toBe(500);
     expect(callFor('INSERT INTO pending_booking_artifact_uploads')).toBeUndefined();
+  });
+
+  it.each([
+    ['a double quote', 'evil".html"; filename*=UTF-8\'\'x.webm'],
+    ['a CR/LF pair', 'call\r\nX-Injected: 1.webm'],
+    ['a NUL byte', 'call\u0000.webm']
+  ])('refuses a file name carrying %s - it reaches a Content-Disposition header at serve', async (_what, name) => {
+    arrange({ booking: { consent_accepted_at: new Date() } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .post(`/api/bookings/${BOOKING}/artifacts/presign`)
+      .send({ ...PRESIGN_RECORDING, file_name: name });
+
+    expect(res.status).toBe(400);
+    expect(callFor('INSERT INTO pending_booking_artifact_uploads')).toBeUndefined();
+  });
+
+  it('accepts a CJK file name and stores it RAW - header safety is owned by the encoder, not by refusing the name', async () => {
+    // A review gate measured the failure this pins against: 会議.webm
+    // presigned, uploaded and finalized cleanly, then 500ed on every serve,
+    // because the old Content-Disposition interpolation threw on any
+    // codepoint above U+00FF. buildInlineContentDisposition (unit-tested in
+    // firsthand/__tests__/content-disposition.test.ts against a real Headers
+    // object) now encodes at serve; refusing the researcher's own language
+    // at upload was the trade not taken.
+    arrange({ booking: { consent_accepted_at: new Date() } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .post(`/api/bookings/${BOOKING}/artifacts/presign`)
+      .send({ ...PRESIGN_RECORDING, file_name: '会議.webm' });
+
+    expect(res.status).toBe(200);
+    const insert = callFor('INSERT INTO pending_booking_artifact_uploads')!;
+    expect(insert[1]).toContain('会議.webm');
   });
 
   it('refuses a body carrying any unknown key - the schema is strict', async () => {
@@ -556,17 +692,202 @@ describe('responses never carry the raw object key', () => {
   });
 
   it('list scopes to the booking and serialises without relative_path', async () => {
-    arrange({ artifact: {} });
+    arrange({ artifact: { uploaded_by_name: 'Ada Researcher' } });
 
     const res = await request(listening(appAs(OWNER)))
       .get(`/api/bookings/${BOOKING}/artifacts`);
 
     expect(res.status).toBe(200);
     const select = callFor('FROM booking_artifacts')!;
-    expect(String(select[0])).toContain('WHERE booking_id = $1');
+    expect(String(select[0])).toContain('WHERE ba.booking_id = $1');
     expect(res.body).toHaveLength(1);
     expect(res.body[0]).not.toHaveProperty('relative_path');
+    expect(res.body[0]).not.toHaveProperty('etag');
     expect(res.body[0].file_name).toBe('call.webm');
+    // The uploader's NAME rides the list wire (a UUID is not a caption), from
+    // the users join - populated in the fixture so this pin is not vacuous.
+    expect(res.body[0].uploaded_by_name).toBe('Ada Researcher');
+  });
+});
+
+describe('finalize refuses an upload the store returned no ETag for', () => {
+  it('answers 422 by sentence and writes no artefact row - the null-etag decision, made explicitly', async () => {
+    arrange({ pending: {} });
+    mockHead.mockResolvedValue({ sizeBytes: 1024, etag: null } as never);
+
+    const res = await request(listening(appAs(OWNER)))
+      .post(`/api/bookings/${BOOKING}/artifacts/finalize`)
+      .send({ object_key: `booking-artifacts/${BOOKING}/key.webm` });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error).toBe(ARTIFACT_ETAG_MISSING);
+    expect(callFor('INSERT INTO booking_artifacts')).toBeUndefined();
+  });
+});
+
+describe('the media route: gate chain, then the ETag tripwire, then bytes', () => {
+  it('streams a recording with the security headers and only allowlisted storage headers', async () => {
+    arrange({ artifact: {} });
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`)
+      // supertest only buffers bodies of types it knows as text - a
+      // video/webm body needs collecting by hand or res.text is undefined.
+      .buffer(true)
+      .parse((response, callback) => {
+        let data = '';
+        response.on('data', (chunk) => { data += chunk; });
+        response.on('end', () => callback(null, data));
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.headers['cross-origin-resource-policy']).toBe('same-origin');
+    expect(res.headers['content-type']).toBe('video/webm');
+    // The allowlist filters - a storage header off the list never forwards.
+    expect(res.headers['x-amz-meta-leak']).toBeUndefined();
+    expect(res.body).toBe('recording-bytes');
+  });
+
+  it('forwards the Range header into the storage read', async () => {
+    arrange({ artifact: {} });
+
+    await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`)
+      .set('Range', 'bytes=0-99');
+
+    expect(mockRecordingResponse).toHaveBeenCalledWith(
+      expect.objectContaining({ relativePath: `booking-artifacts/${BOOKING}/key.webm` }),
+      { rangeHeader: 'bytes=0-99' }
+    );
+  });
+
+  it('refuses when the live ETag differs from the stored one, by sentence, serving nothing', async () => {
+    arrange({ artifact: {} });
+    mockHead.mockResolvedValue({ sizeBytes: 1024, etag: '"etag-SWAPPED"' } as never);
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe(ARTIFACT_MEDIA_CHANGED);
+    // The refusal happens BEFORE a byte is read - the object is not opened.
+    expect(mockRecordingResponse).not.toHaveBeenCalled();
+  });
+
+  it('compares ETags shape-blind: a live tag without quotes still matches a stored quoted one', async () => {
+    // The control for the mismatch test above: the tripwire fires on the
+    // VALUE changing, never on quoting. A compare that read quoted-vs-bare as
+    // different would refuse every serve forever - which looks exactly like
+    // the tripwire working.
+    arrange({ artifact: {} });
+    mockHead.mockResolvedValue({ sizeBytes: 1024, etag: 'etag-abc123' } as never);
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(200);
+  });
+
+  it.each([
+    ['stored', { artifact: { etag: null } }, { sizeBytes: 1024, etag: '"etag-abc123"' }],
+    ['live', { artifact: {} }, { sizeBytes: 1024, etag: null }],
+  ])('fails closed when the %s ETag is null, by its own sentence', async (_side, over, head) => {
+    arrange(over as Parameters<typeof arrange>[0]);
+    mockHead.mockResolvedValue(head as never);
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe(ARTIFACT_MEDIA_UNVERIFIED);
+    expect(mockRecordingResponse).not.toHaveBeenCalled();
+  });
+
+  it('a missing object is a 404, not a served hole', async () => {
+    arrange({ artifact: {} });
+    mockHead.mockResolvedValue(null as never);
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('scope-binds the artefact to the booking in the path - 404, and storage never consulted', async () => {
+    arrange({ artifact: null });
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-from-elsewhere/media`);
+
+    expect(res.status).toBe(404);
+    expect(mockHead).not.toHaveBeenCalled();
+    expect(mockRecordingResponse).not.toHaveBeenCalled();
+    // The CLAUSE, pinned by text: the params-honouring mock makes the 404
+    // above real behaviour, but a mutated SQL that dropped the binding would
+    // still PASS both params, so only the text can see the clause go. This
+    // assertion anchors the booking-artifact-media-scope-binding canary.
+    const lookup = callFor('FROM booking_artifacts a')!;
+    expect(String(lookup[0])).toContain('WHERE a.id = $1 AND a.booking_id = $2');
+    expect(lookup[1]).toEqual(['artifact-from-elsewhere', BOOKING]);
+  });
+
+  it('refuses a recording row whose stored mime is not playable - the read-side twin', async () => {
+    // The write side refuses these at presign, but rows outlive route
+    // versions; a text/html "recording" served inline under an admin cookie
+    // is stored XSS, so the read side re-checks.
+    arrange({ artifact: { mime_type: 'text/html' } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(404);
+    expect(mockHead).not.toHaveBeenCalled();
+  });
+
+  it('sends a clean 500 with no stale content headers when the stream errors before any bytes', async () => {
+    // The precedent's own gate, ported (session-outputs-internal.test.ts):
+    // leaving content-type behind would label the JSON error body video/webm.
+    arrange({ artifact: {} });
+    const failing = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error('s3 body read failed'));
+      },
+    });
+    mockRecordingResponse.mockResolvedValue(
+      new Response(failing, {
+        status: 200,
+        headers: {
+          'Content-Type': 'video/webm',
+          'Content-Length': '1024',
+          'Accept-Ranges': 'bytes',
+          'Content-Disposition': 'inline; filename="call.webm"',
+        },
+      }) as never
+    );
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(500);
+    expect(res.body.error).toBe('artifact_media_stream_failed');
+    expect(res.headers['content-type']).toContain('application/json');
+    expect(res.headers['content-disposition']).toBeUndefined();
+    expect(res.headers['accept-ranges']).toBeUndefined();
+  });
+
+  it('serves a transcript as text through the transcript path, ETag-checked like a recording', async () => {
+    arrange({ artifact: { kind: 'transcript', file_name: 't.vtt', mime_type: 'text/vtt', relative_path: `booking-artifacts/${BOOKING}/t.vtt` } });
+
+    const res = await request(listening(appAs(OWNER)))
+      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
+
+    expect(res.status).toBe(200);
+    expect(mockTranscriptResponse).toHaveBeenCalledWith(`booking-artifacts/${BOOKING}/t.vtt`);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['cache-control']).toBe('private, no-store');
+    expect(res.text).toBe('WEBVTT\n');
   });
 });
 
@@ -591,6 +912,15 @@ describe('delete removes the object first, then the row', () => {
     expect(res.status).toBe(404);
     expect(mockDeleteObject).not.toHaveBeenCalled();
     expect(callFor('DELETE FROM booking_artifacts')).toBeUndefined();
+    // Same text pin as the media twin - the mock honours params, but only
+    // the text can see the WHERE clause itself narrow.
+    const lookup = mockQuery.mock.calls.find(
+      (call: unknown[]) =>
+        String(call[0]).includes('FROM booking_artifacts') &&
+        String(call[0]).includes('consent_attested_by')
+    )!;
+    expect(String(lookup[0])).toContain('WHERE id = $1 AND booking_id = $2');
+    expect(lookup[1]).toEqual(['artifact-from-elsewhere', BOOKING]);
   });
 
   it('an already-absent object still removes the row - no orphan rows over holes', async () => {

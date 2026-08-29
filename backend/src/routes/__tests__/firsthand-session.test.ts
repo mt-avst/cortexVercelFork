@@ -384,6 +384,38 @@ describe('B4 POST /:token/recording/client-upload (S3-only)', () => {
     expect(mockRegisterPending).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['a double quote', 'a".webm'],
+    ['a CR/LF pair', 'a\r\nX: 1.webm'],
+  ])('rejects a fileName carrying %s - the raw name is stored and later reaches a header', async (_what, fileName) => {
+    // Mirrors the booking-artefact presign schema; defence in depth beside
+    // buildInlineContentDisposition, which encodes whatever is stored.
+    okSession();
+    const res = await request(listening(ownerApp))
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName, mimeType: 'video/webm', fileSizeBytes: 10 });
+    expect(res.status).toBe(422);
+    expect(mockRegisterPending).not.toHaveBeenCalled();
+  });
+
+  it('rejects a mimeType with a codepoint above U+00FF - it becomes the serve-time Content-Type', async () => {
+    okSession();
+    const res = await request(listening(ownerApp))
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName: 'a.webm', mimeType: 'video/mp4会', fileSizeBytes: 10 });
+    expect(res.status).toBe(422);
+    expect(mockRegisterPending).not.toHaveBeenCalled();
+  });
+
+  it('accepts a CJK fileName - the researcher-language trade is accept-and-encode, not refuse', async () => {
+    okSession();
+    mockPresign.mockResolvedValue('https://s3.example/put?sig=1');
+    const res = await request(listening(ownerApp))
+      .post(`/api/firsthand/session/${TOKEN}/recording/client-upload`)
+      .send({ durationSeconds: 1, fileName: '会議.webm', mimeType: 'video/webm', fileSizeBytes: 10 });
+    expect(res.status).toBe(200);
+  });
+
   it('rejects an over-cap declared size with 413', async () => {
     okSession();
     mockMaxBytes.mockReturnValue(2048);

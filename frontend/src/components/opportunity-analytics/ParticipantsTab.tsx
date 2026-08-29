@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { OpportunityBookingRow, ResearcherNotesResponse } from '../../api/types';
 import { VALIDATION } from '@shared/constants';
+import BookingArtifactsSection from './BookingArtifactsSection';
+import { BookingArtifactsController } from './useBookingArtifacts';
 
 /**
  * The same ceiling the server enforces. Held here so the researcher is told
@@ -43,6 +45,12 @@ export interface ParticipantsTabProps {
    */
   drafts: Record<string, string>;
   onDraftsChange: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  /**
+   * Artefact state and actions (#79 step 3), owned by the page for the same
+   * reason the note drafts are: an upload in flight must survive this
+   * component unmounting under the opportunity-refetch spinner.
+   */
+  artifacts: BookingArtifactsController;
 }
 
 /** What the row's status means to a researcher, not the raw enum pair. */
@@ -78,8 +86,13 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
   onRefresh,
   onSaveNotes,
   drafts,
-  onDraftsChange: setDrafts
+  onDraftsChange: setDrafts,
+  artifacts
 }) => {
+  // Which rows show their artefact section. Component-local on purpose: a
+  // collapse under the refetch spinner loses nothing, because everything the
+  // section renders lives in the page-owned controller.
+  const [expandedArtifactRows, setExpandedArtifactRows] = useState<Set<string>>(new Set());
   // Server state saved from THIS tab, layered over the roster prop - which is
   // stale the moment a save lands, until the next refresh.
   const [saved, setSaved] = useState<Record<string, ResearcherNotesResponse>>({});
@@ -194,6 +207,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Session</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Status</th>
                 <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500, width: '45%' }}>Researcher notes</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 500 }}>Artefacts</th>
               </tr>
             </thead>
             <tbody>
@@ -206,10 +220,13 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 const participantLabel = booking.participant_name ?? 'Unknown participant';
                 const overBy = value.length - MAX_NOTES_CHARS;
                 const saving = savingIds.has(booking.id);
+                const artifactsExpanded = expandedArtifactRows.has(booking.id);
+                const loadedArtifacts = artifacts.artifactsByBooking[booking.id];
+                const uploadInFlight = artifacts.uploads[booking.id] !== undefined;
                 return (
+                  <React.Fragment key={booking.id}>
                   <tr
-                    key={booking.id}
-                    style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))', verticalAlign: 'top' }}
+                    style={{ borderBottom: artifactsExpanded ? 'none' : '1px solid var(--cortex-border, rgba(255,255,255,0.04))', verticalAlign: 'top' }}
                   >
                     <td style={{ padding: '10px 12px' }}>
                       <span style={{ fontWeight: 500 }}>{participantLabel}</span>
@@ -275,7 +292,40 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                         ) : null}
                       </div>
                     </td>
+                    <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        aria-expanded={artifactsExpanded}
+                        aria-controls={`booking-artifacts-${booking.id}`}
+                        onClick={() =>
+                          setExpandedArtifactRows((previous) => {
+                            const next = new Set(previous);
+                            if (next.has(booking.id)) {
+                              next.delete(booking.id);
+                            } else {
+                              next.add(booking.id);
+                            }
+                            return next;
+                          })
+                        }
+                      >
+                        {artifactsExpanded ? 'Hide' : 'Artefacts'}
+                        {loadedArtifacts && loadedArtifacts.length > 0 ? ` (${loadedArtifacts.length})` : ''}
+                        {uploadInFlight ? ' …' : ''}
+                      </button>
+                    </td>
                   </tr>
+                  {artifactsExpanded && (
+                    <tr style={{ borderBottom: '1px solid var(--cortex-border, rgba(255,255,255,0.04))' }}>
+                      <td colSpan={5} style={{ padding: '0 12px 10px' }}>
+                        <div id={`booking-artifacts-${booking.id}`}>
+                          <BookingArtifactsSection booking={booking} controller={artifacts} />
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </tbody>

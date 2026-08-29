@@ -599,6 +599,11 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
   'POST /api/bookings/:bookingId/artifacts/finalize': 'admin',
   'GET /api/bookings/:bookingId/artifacts': 'admin',
   'DELETE /api/bookings/:bookingId/artifacts/:artifactId': 'admin',
+  // #79 step 3: the media route - same gate chain, then artefact scope-bound
+  // to the path booking, playable-mime on recordings, and the stored-ETag
+  // integrity check before a byte is served. Owned by
+  // booking-artifacts.test.ts, both directions.
+  'GET /api/bookings/:bookingId/artifacts/:artifactId/media': 'admin',
 
   // calendar.ts
   'GET /api/calendar/events': 'admin',
@@ -682,7 +687,7 @@ const EXPECTED_AUTHORISATION: Record<string, Verdict> = {
  * guards cannot notice the table changing - which is the whole point of a
  * count here.
  */
-const EXPECTED_ROUTE_COUNT = 95;
+const EXPECTED_ROUTE_COUNT = 96;
 
 /** Every router file in `src/routes`, read off disk rather than listed. */
 const ROUTER_FILES = fs

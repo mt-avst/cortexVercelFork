@@ -679,6 +679,49 @@ export interface FirstHandSessionOutputs {
 }
 
 // ============================================================================
+// BOOKING ARTEFACTS (#79) - recordings and transcripts of a moderated session,
+// ingested by the researcher after the call
+// ============================================================================
+
+export type BookingArtifactKind = 'recording' | 'transcript';
+
+/**
+ * One row of GET /api/bookings/:bookingId/artifacts, and the 201 body of
+ * finalize. This is the whole wire shape by design: `relative_path` and `etag`
+ * never leave the server (the media route mints URLs and verifies integrity
+ * server-side), so a field added here must also be added to
+ * `serializeArtifact` in backend/src/routes/booking-artifacts.ts - the map is
+ * field-by-field precisely so a new column does not ride along unreviewed.
+ */
+export interface BookingArtifact {
+  id: string;
+  booking_id: string;
+  kind: BookingArtifactKind;
+  file_name: string;
+  mime_type: string;
+  file_size_bytes: number;
+  uploaded_by: string | null;
+  /**
+   * The uploader's display name, joined at list time; null when the uploader
+   * row is gone or the response (e.g. finalize's 201) did not join users.
+   * Callers wanting a name after an upload re-list rather than patching one in.
+   */
+  uploaded_by_name: string | null;
+  uploaded_at: string | null;
+  consent_attested_by: string | null;
+  consent_attested_at: string | null;
+  consent_attestation_reason: string | null;
+}
+
+/** What POST /api/bookings/:bookingId/artifacts/presign answers with. */
+export interface BookingArtifactPresignResponse {
+  mode: 's3';
+  objectKey: string;
+  uploadUrl: string;
+  validUntil: string;
+}
+
+// ============================================================================
 // UTILITY TYPES
 // ============================================================================
 

@@ -363,6 +363,7 @@ describe('GET assets/:assetId/media - same-origin recording stream', () => {
     expect(response.headers['content-type']).toBe('video/webm');
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['cache-control']).toBe('private, no-store');
+    expect(response.headers['cross-origin-resource-policy']).toBe('same-origin');
     expect(Buffer.from(response.body).toString()).toBe('stream-bytes');
     expect(mockCreateAssetResponse).toHaveBeenCalledWith(
       { id: 'asset_1', mimeType: 'video/webm' },

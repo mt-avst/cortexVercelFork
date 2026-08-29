@@ -340,7 +340,7 @@ function isCsrfRejectionText(responseText: string): boolean {
  * the response status for the caller to judge, rejects only when the transfer
  * itself breaks.
  */
-function sendBlobWithProgress(input: {
+export function sendBlobWithProgress(input: {
   url: string;
   method: "PUT" | "POST";
   blob: Blob;

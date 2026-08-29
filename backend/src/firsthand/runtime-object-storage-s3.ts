@@ -167,6 +167,44 @@ async function openS3ObjectStream(objectKey: string, rangeHeader?: string) {
   };
 }
 
+/**
+ * RFC 6266 Content-Disposition value for an inline media response: an
+ * ASCII-only quoted fallback plus the RFC 5987 `filename*` form carrying the
+ * real name, UTF-8 percent-encoded.
+ *
+ * The naive `filename="${name}"` interpolation this replaces THREW at serve
+ * time for any name with a codepoint above U+00FF - header values are
+ * Latin-1 in undici (`Cannot convert argument to a ByteString`) - which made
+ * a recording named in CJK, Cyrillic or emoji a permanent generic 500.
+ * BOTH media paths were exposed: the runtime recording flow stores the
+ * participant client's raw fileName (firsthand-session.ts keeps
+ * `parsedBody.data.fileName`; buildStorageFileName sanitises only the object
+ * KEY), and booking artefacts (#79) store the researcher's raw name the same
+ * way - an earlier version of this comment claimed the runtime path was safe,
+ * and a review gate traced the chain and proved it was not. This encoder is
+ * the serve-side guarantee for both. The fallback also strips quotes and
+ * backslashes, which would otherwise escape the quoted-string.
+ */
+export function buildInlineContentDisposition(fileName: string): string {
+  // A lone surrogate (JSON.parse happily produces one from "\uD800") makes
+  // encodeURIComponent throw URIError - scrub to U+FFFD first, the same
+  // repair String.prototype.toWellFormed performs (not in this tsconfig's
+  // ES2020 lib).
+  const wellFormed = fileName.replace(
+    /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    "\uFFFD"
+  );
+  const asciiFallback = wellFormed
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_");
+  // encodeURIComponent leaves !'()* bare; RFC 5987 wants them pct-encoded.
+  const encoded = encodeURIComponent(wellFormed).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+  return `inline; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export async function createS3RecordingAssetResponse(
   asset: RecordingAssetRecord,
   rangeHeader?: string | null
@@ -179,7 +217,7 @@ export async function createS3RecordingAssetResponse(
 
   const baseHeaders = {
     "Content-Type": asset.mimeType,
-    "Content-Disposition": `inline; filename="${asset.fileName}"`,
+    "Content-Disposition": buildInlineContentDisposition(asset.fileName),
     "Accept-Ranges": "bytes"
   };
 
@@ -236,7 +274,12 @@ export async function createS3TranscriptArtifactResponse(
   return new Response((await openS3ObjectStream(artifactPath)).stream, {
     headers: {
       "Content-Type": "text/plain; charset=utf-8",
-      "Content-Disposition": `inline; filename="${path.basename(artifactPath)}"`
+      // ASCII by construction (both callers build the path through
+      // buildStorageFileName) - encoded anyway, so this file has no raw
+      // header interpolation left to copy.
+      "Content-Disposition": buildInlineContentDisposition(
+        path.basename(artifactPath)
+      )
     }
   });
 }

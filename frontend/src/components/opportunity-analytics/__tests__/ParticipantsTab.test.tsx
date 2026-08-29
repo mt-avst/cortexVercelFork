@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import ParticipantsTab, { bookingStatusLabel } from '../ParticipantsTab';
+import { buildArtifactsController } from './artifactsControllerStub';
 import { OpportunityBookingRow, ResearcherNotesResponse } from '../../../api/types';
 
 function buildBooking(overrides: Partial<OpportunityBookingRow> = {}): OpportunityBookingRow {
@@ -20,11 +21,13 @@ function buildBooking(overrides: Partial<OpportunityBookingRow> = {}): Opportuni
     role_title: 'Analyst',
     researcher_notes: null,
     researcher_notes_updated_at: null,
+    consent_accepted_at: null,
     created_at: '2026-08-27T09:00:00.000Z',
     updated_at: '2026-08-27T09:00:00.000Z',
     ...overrides
   };
 }
+
 
 const noopSave = async (): Promise<ResearcherNotesResponse> => ({
   researcher_notes: null,
@@ -49,6 +52,7 @@ const Harness: React.FC<Partial<React.ComponentProps<typeof ParticipantsTab>> & 
       onSaveNotes={noopSave}
       drafts={drafts}
       onDraftsChange={setDrafts}
+      artifacts={buildArtifactsController()}
       {...overrides}
     />
   );
@@ -70,6 +74,63 @@ describe('bookingStatusLabel', () => {
     [{ status: 'booked', completion_status: null }, 'Booked']
   ])('labels %j as %s', (booking, expected) => {
     expect(bookingStatusLabel(booking)).toBe(expected);
+  });
+});
+
+describe('the artefacts column (#79 step 3)', () => {
+  it('renders collapsed by default and expands to the artefact section on click', async () => {
+    const user = userEvent.setup();
+    renderTab([buildBooking()]);
+
+    expect(screen.queryByText('Session artefacts')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Artefacts' }));
+    expect(screen.getByText('Session artefacts')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Hide/ }));
+    expect(screen.queryByText('Session artefacts')).not.toBeInTheDocument();
+  });
+
+  it('points aria-controls at the panel it actually expands', async () => {
+    const user = userEvent.setup();
+    renderTab([buildBooking()]);
+
+    const toggle = screen.getByRole('button', { name: 'Artefacts' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const controlled = toggle.getAttribute('aria-controls')!;
+
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const panel = document.getElementById(controlled);
+    expect(panel).not.toBeNull();
+    expect(panel!.textContent).toContain('Session artefacts');
+  });
+
+  it('shows the loaded artefact count on the toggle', () => {
+    renderTab([buildBooking()], {
+      artifacts: buildArtifactsController({
+        artifactsByBooking: {
+          b1: [
+            {
+              id: 'a1',
+              booking_id: 'b1',
+              kind: 'recording',
+              file_name: 'call.webm',
+              mime_type: 'video/webm',
+              file_size_bytes: 1024,
+              uploaded_by: null,
+              uploaded_by_name: null,
+              uploaded_at: null,
+              consent_attested_by: null,
+              consent_attested_at: null,
+              consent_attestation_reason: null
+            }
+          ]
+        }
+      })
+    });
+
+    expect(screen.getByRole('button', { name: 'Artefacts (1)' })).toBeInTheDocument();
   });
 });
 
