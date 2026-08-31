@@ -5,7 +5,7 @@ import { asyncHandler, ValidationError, NotFoundError, ForbiddenError, ConflictE
 import { logger } from '../utils/logger';
 import { isDatabaseAvailable } from '../utils/database';
 import { autoCloseOpportunityIfNeeded } from '../utils/opportunityLifecycle';
-import { MAX_TIME_SLOTS_PER_REQUEST, validateSessionData } from '../validation/schemas';
+import { MAX_TIME_SLOTS_PER_REQUEST, NEW_SESSION_PAST_GRACE_MS, validateNewSessionData, validateSessionData } from '../validation/schemas';
 import { Session, CreateSessionRequest, UpdateSessionRequest } from '../types';
 import { getMockOpportunity, addMockSessions, getMockSessions, getAllMockSessions, updateMockSession, deleteMockSession } from '../../../demo/mock-data';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
@@ -96,6 +96,39 @@ const checkSessionOverlaps = async (
   return parseInt(result.rows[0].overlap_count) > 0;
 };
 
+
+/**
+ * PATCH-only: a session may KEEP a past start it already has - editing the
+ * capacity or meeting link of a session that has started is legitimate, and a
+ * client that echoes unchanged fields must not be refused for it - but it may
+ * not be MOVED into the past. Without this, the create-only rule (#90) was
+ * one request from undone: POST a future session, PATCH its start to 1999,
+ * and because the booking route's temporal guard reads END time, the result
+ * was bookable. Found by the security gate on the #90 diff.
+ *
+ * Same grace as the create rule, same reason: a retime to "now" arriving
+ * seconds late is not an attack. An unparseable requested start is left for
+ * validateSessionData's own arm (NaN comparisons are all false here).
+ */
+const pastRetimingError = (
+  requestedStart: string | undefined,
+  currentStart: string | Date
+): string | null => {
+  if (requestedStart === undefined) return null;
+  // Typed here for the same reason validateNewSessionData types the create
+  // path: new Date(null) is the epoch, so without this a null start earned
+  // the retiming sentence instead of a type error.
+  if (typeof requestedStart !== 'string') {
+    return 'Start time must be a valid ISO date string';
+  }
+  const requested = new Date(requestedStart).getTime();
+  if (requested === new Date(currentStart).getTime()) return null;
+  if (requested < Date.now() - NEW_SESSION_PAST_GRACE_MS) {
+    return 'Start time must not be moved into the past';
+  }
+  return null;
+};
+
 // Helper function to format time for error messages
 const formatTime = (dateString: string): string => {
   return new Date(dateString).toLocaleTimeString('en-US', {
@@ -145,7 +178,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
     // Validate all sessions
     const validationErrors: string[] = [];
     sessions.forEach((session: CreateSessionRequest, index: number) => {
-      const errors = validateSessionData(session);
+      const errors = validateNewSessionData(session);
       errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
     });
     
@@ -179,7 +212,7 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
   // Validate all sessions
   const validationErrors: string[] = [];
   sessions.forEach((session: CreateSessionRequest, index: number) => {
-    const errors = validateSessionData(session);
+    const errors = validateNewSessionData(session);
     errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
   });
   
@@ -251,8 +284,13 @@ router.post('/', requireAdmin, asyncHandler(async (req: Request, res: Response) 
         RETURNING *, (capacity - booked_count) as remaining`,
         [
           opportunity_id,
-          session.start_time,
-          session.end_time,
+          // The instant that was VALIDATED is the instant that is stored:
+          // V8 and Postgres disagree on offset-less strings (measured: an
+          // hour apart on this machine), so the raw input could store an
+          // instant the past-start rule never saw. Normalising to ISO UTC
+          // makes the two parsers read the same value.
+          new Date(session.start_time).toISOString(),
+          new Date(session.end_time).toISOString(),
           session.capacity || 1,
           0, // booked_count starts at 0
           session.location_or_meet_link_optional || null,
@@ -397,6 +435,11 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
       throw new ForbiddenError('Only the owner can edit this session');
     }
     
+    const mockRetiming = pastRetimingError(data.start_time, session.start_time);
+    if (mockRetiming) {
+      throw new ValidationError('Validation failed', [mockRetiming]);
+    }
+
     // Update mock session
     const updatedSession = updateMockSession(sessionId, data);
     if (!updatedSession) {
@@ -422,6 +465,11 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
   // Check capacity constraint
   if (data.capacity !== undefined && data.capacity < currentSessionData.booked_count) {
     throw new ValidationError(`Cannot reduce capacity below current bookings (${currentSessionData.booked_count})`);
+  }
+
+  const retiming = pastRetimingError(data.start_time, currentSessionData.start_time);
+  if (retiming) {
+    throw new ValidationError('Validation failed', [retiming]);
   }
   
   // Use transaction to prevent race conditions during overlap check and update
@@ -469,7 +517,16 @@ router.patch('/:id', requireAdmin, asyncHandler(async (req: Request, res: Respon
         }
         paramCount++;
         updateFields.push(`${key} = $${paramCount}`);
-        values.push(value);
+        // Times are stored as the instant that was VALIDATED, matching the
+        // create INSERTs: V8 and Postgres disagree on offset-less strings, so
+        // pushing the raw value could store an instant pastRetimingError
+        // never judged - reconstituting on UPDATE the exact state the create
+        // rule closed.
+        values.push(
+          (key === 'start_time' || key === 'end_time') && typeof value === 'string'
+            ? new Date(value).toISOString()
+            : value
+        );
       }
     });
     

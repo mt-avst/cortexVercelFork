@@ -2138,5 +2138,25 @@
     "runner": "jest",
     "spec": "src/__tests__/listening-helper.test.ts",
     "test": "consumes the reservoir rather than binding wildcard-ephemeral"
+  },
+  {
+    "id": "new-session-past-start-rule-exists",
+    "why": "The create-only refusal is the whole of cto/AdaptaLabs#90: without this line every session-create route accepts a 1999 start from an authenticated admin, and because the booking guard reads END time, a past-start session with a future end is fully bookable. Deleting the push leaves an empty if-block that builds and passes everything except the named refusal arms.",
+    "file": "backend/src/validation/schemas.ts",
+    "anchor": "    errors.push('Start time must not be in the past');",
+    "mutation": "",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.create-refuses-the-past.test.ts",
+    "test": "answers 400 to a past session and opens no transaction"
+  },
+  {
+    "id": "past-start-grace-is-bound-at-the-use-site",
+    "why": "The literal pin on NEW_SESSION_PAST_GRACE_MS cannot see a use-site widening: multiplying here turns the one-minute clock-skew grace into an hour with the constant test still green - the review gate proved the pair of guards is only complete with both arms.",
+    "file": "backend/src/validation/schemas.ts",
+    "anchor": "  if (start.getTime() < Date.now() - NEW_SESSION_PAST_GRACE_MS) {",
+    "mutation": "  if (start.getTime() < Date.now() - NEW_SESSION_PAST_GRACE_MS * 60) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/sessions.create-refuses-the-past.test.ts",
+    "test": "accepts within the grace window and refuses beyond it"
   }
 ]
