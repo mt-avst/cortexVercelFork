@@ -352,15 +352,14 @@ export const MAX_TIME_SLOTS_PER_REQUEST = 200;
 /**
  * Validate session data without Zod (for legacy code paths)
  * Returns array of error messages, empty if valid
+ *
+ * NO future-time rule HERE, on purpose: this validator is shared with the
+ * UPDATE path (routes/sessions.ts PATCH, plus the create sites), where
+ * refusing a past instant would wrongly block editing a session that has
+ * already started - correcting a capacity or a meeting link mid-session is
+ * legitimate. The create-only rule lives in `validateNewSessionData` below
+ * (cto/AdaptaLabs#90), which every CREATE site calls instead.
  */
-// ponytail: no future-time rule here, so a session can be created in the past
-//   -> #90. Deliberate: this validator is shared with the UPDATE path
-//   (routes/sessions.ts, two call sites in routes/opportunities.ts), where
-//   refusing a past instant would wrongly block editing a session that has
-//   already started - so the rule needs a create-only home. The only check
-//   today is client-side, in AdminSessionManager's manual add-slot control.
-//   Bounded: POST /api/bookings/sessions/:id/book already refuses a past
-//   session, so the result is unbookable clutter rather than an exploit.
 export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRequest): string[] => {
   const errors: string[] = [];
   
@@ -399,7 +398,7 @@ export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRe
    * The location's SCHEME, checked HERE rather than only on the zod schemas
    * above - because this hand-rolled validator is the one that actually runs.
    *
-   * `POST /api/opportunities/:id/sessions` calls `validateSessionData`;
+   * `POST /api/opportunities/:id/sessions` calls `validateNewSessionData`;
    * `CreateSessionsSchema` is imported by that route and never used, which is
    * one of the pre-existing unused-vars this file's suppression entry counts. I
    * hardened the zod schemas first and the four exploit tests still returned
@@ -415,6 +414,74 @@ export const validateSessionData = (data: CreateSessionRequest | UpdateSessionRe
     !isSafeMeetingLocation(data.location_or_meet_link_optional)
   ) {
     errors.push(MEETING_LOCATION_SCHEME_MESSAGE);
+  }
+
+  return errors;
+};
+
+/**
+ * How far in the past a NEW session's start may lie, in milliseconds.
+ *
+ * Not zero, deliberately: a researcher picking "now" from the UI, plus a
+ * request in flight, plus ordinary clock skew between browser and server,
+ * must not be refused for arriving seconds late. One minute absorbs all of
+ * that; a session genuinely authored for the past is hours or days out.
+ * Pinned as a literal in sessions.create-refuses-the-past.test.ts.
+ */
+export const NEW_SESSION_PAST_GRACE_MS = 60_000;
+
+/**
+ * The CREATE-ONLY session validator: everything `validateSessionData` checks,
+ * plus required time fields, plus the rule that a new session must not start
+ * in the past.
+ *
+ * cto/AdaptaLabs#90. The future-time rule was browser-only (the manual
+ * add-slot control in AdminSessionManager), so both create routes accepted a
+ * 1999 session from an authenticated admin's direct call. That was WORSE
+ * than clutter: the booking route's temporal guard reads `end_time`
+ * (bookings.ts, `new Date(session.end_time) <= new Date()`), so a session
+ * with a past start and a future end was fully BOOKABLE - the security gate
+ * demonstrated it, correcting an earlier claim here that bookings refused a
+ * past start. A separate function rather than a flag, because the shared
+ * validator serves the UPDATE path where a past start already on a session
+ * is legitimate, and a boolean argument is the shape that gets pasted
+ * wrongly.
+ *
+ * Required-and-typed HERE rather than in the shared validator, because on
+ * UPDATE an absent field means "unchanged" while on CREATE it used to mean a
+ * 500 from the NOT NULL constraint. A non-string gets the same sentence as
+ * an unparseable string: `new Date(null)` is the epoch, not NaN, so without
+ * the type check `null` would earn the past-start sentence instead of a type
+ * error.
+ *
+ * NaN needs no guard on the past-start comparison - NaN < x is false for
+ * every x, so an unparseable string is refused once, by the shared
+ * validator's own arm, and never double-reported. (A review gate proved an
+ * explicit isNaN clause here inert by deleting it under the full suite.)
+ */
+export const validateNewSessionData = (data: CreateSessionRequest): string[] => {
+  const errors: string[] = [];
+
+  for (const [field, label] of [
+    ['start_time', 'Start time'],
+    ['end_time', 'End time'],
+  ] as const) {
+    const value = (data as unknown as Record<string, unknown>)[field];
+    if (value === undefined) {
+      errors.push(`${label} is required`);
+    } else if (typeof value !== 'string') {
+      errors.push(`${label} must be a valid ISO date string`);
+    }
+  }
+  if (errors.length > 0) {
+    return errors;
+  }
+
+  errors.push(...validateSessionData(data));
+
+  const start = new Date(data.start_time);
+  if (start.getTime() < Date.now() - NEW_SESSION_PAST_GRACE_MS) {
+    errors.push('Start time must not be in the past');
   }
 
   return errors;

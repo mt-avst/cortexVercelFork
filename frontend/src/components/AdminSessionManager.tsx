@@ -1857,15 +1857,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       setManualError('Enter both a date and a start time.');
       return;
     }
-    // ponytail: the future-time rule is enforced HERE ONLY, in the browser
-    //   -> #90, so a direct POST /api/sessions can still create a past session.
-    //   `validateSessionData` (backend/src/validation/schemas.ts) is shared
-    //   with the UPDATE path, where refusing a past instant would wrongly block
-    //   editing a session that has already started - so the rule needs a
-    //   create-only home rather than being added there. Impact is bounded:
-    //   POST /api/bookings/sessions/:id/book already refuses a past session
-    //   (routes/bookings.ts), so the result is unbookable clutter, not an
-    //   exploitable path. Pre-existing for the generated-grid path too.
+    // UX-side arm of a rule the server now enforces: every session CREATE
+    // route refuses a past start via `validateNewSessionData`
+    // (backend/src/validation/schemas.ts, cto/AdaptaLabs#90). This check
+    // stays for the message quality - a refusal the researcher sees before
+    // submitting beats a 400 after - and is deliberately STRICTER than the
+    // server's one-minute clock-skew grace: authoring a slot for "right now"
+    // is never what a researcher means.
     if (start.getTime() <= Date.now()) {
       setManualError('Choose a time in the future.');
       return;
@@ -1923,8 +1921,9 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
     // ponytail: this bound is enforced on ENTRY only, not on what already
     //   exists -> cto/AdaptaLabs#95. A session outside 07:00-23:00 that reached
     //   the database another way is still drawn at clamped zero height and
-    //   cannot be clicked to remove it. The sibling future-time rule on this
-    //   same path carries the same shape of note (#90).
+    //   cannot be clicked to remove it. (The sibling future-time note that
+    //   used to sit beside this one was resolved by cto/AdaptaLabs#90: the
+    //   server now refuses a past start on every create route.)
 
     const startMs = start.getTime();
     const endMs = end.getTime();

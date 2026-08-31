@@ -18,7 +18,7 @@ import {
   CreateSessionsSchema,
   MAX_TIME_SLOTS_PER_REQUEST,
   validateRequest,
-  validateSessionData
+  validateNewSessionData
 } from '../validation/schemas';
 import { AppError, ValidationError, NotFoundError, ForbiddenError, asyncHandler } from '../utils/errorHandler';
 import { toPublicOpportunity, toPublicSession } from '../utils/publicOpportunity';
@@ -3800,7 +3800,7 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
       // Validate all sessions
       const validationErrors: string[] = [];
       sessions.forEach((session, index) => {
-        const errors = validateSessionData(session);
+        const errors = validateNewSessionData(session);
         errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
       });
       
@@ -3834,7 +3834,7 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
     // Validate all sessions
     const validationErrors: string[] = [];
     sessions.forEach((session, index) => {
-      const errors = validateSessionData(session);
+      const errors = validateNewSessionData(session);
       errors.forEach(error => validationErrors.push(`Session ${index + 1}: ${error}`));
     });
     
@@ -3878,8 +3878,11 @@ router.post('/:id/sessions', requireAdmin, asyncHandler(async (req: Request, res
         
         const values = [
           opportunityId,
-          session.start_time,
-          session.end_time,
+          // Store the validated instant, not the raw string - see the same
+          // normalisation in routes/sessions.ts (V8 vs Postgres on
+          // offset-less strings).
+          new Date(session.start_time).toISOString(),
+          new Date(session.end_time).toISOString(),
           session.capacity,
           session.location_or_meet_link_optional || null
         ];
