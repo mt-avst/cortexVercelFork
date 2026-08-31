@@ -63,6 +63,12 @@ function testFiles(dir: string): string[] {
  */
 const UNCONVERTED = /\brequest(?:\.agent)?\(\s*(?!listening\s*\()[A-Za-z_$]/;
 
+
+/**
+ * `.listen(0)` with nothing after the 0 - the bare wildcard bind. A host
+ * argument (`listen(0, '127.0.0.1')`) is the converted form and passes.
+ */
+const BARE_WILDCARD_BIND = /\.listen\(\s*0\s*\)/;
 describe('supertest call sites', () => {
   it('all go through listening(), so none binds its own server', () => {
     const offenders: string[] = [];
@@ -97,5 +103,41 @@ describe('supertest call sites', () => {
     ];
 
     expect(sample.filter((line) => UNCONVERTED.test(line))).toHaveLength(2);
+  });
+
+  it('no test file binds a bare listen(0): the wildcard bind is the #44 flake', () => {
+    // The second hazard, same decay pattern as the first: a test that binds
+    // its own server with `listen(0)` (no host) takes the IPv6 wildcard, and
+    // macOS will assign it a port whose 127.0.0.1 side another process owns -
+    // so its requests dial a stranger. results-read-concurrency.test.ts was
+    // converted by hand; this scan is what stops the next one arriving
+    // unconverted, silently, with a green suite.
+    const offenders: string[] = [];
+
+    for (const file of testFiles(backendSrc)) {
+      const relative = path.relative(backendSrc, file);
+      if (ALLOWED.has(relative)) continue;
+
+      const source = fs.readFileSync(file, 'utf8');
+      source.split('\n').forEach((line, index) => {
+        const code = line.replace(/\/\/.*$/, '');
+        if (code.trimStart().startsWith('*')) return;
+        if (BARE_WILDCARD_BIND.test(code)) {
+          offenders.push(`${relative}:${index + 1}  ${line.trim()}`);
+        }
+      });
+    }
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('can actually see a bare wildcard bind, when there is one', () => {
+    const sample = [
+      'const server = createServer(app).listen(0);',
+      "const bound = createServer(app).listen(0, '127.0.0.1');",
+      'const s = net.createServer().listen(0 );'
+    ];
+
+    expect(sample.filter((line) => BARE_WILDCARD_BIND.test(line))).toHaveLength(2);
   });
 });

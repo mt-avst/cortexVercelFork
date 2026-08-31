@@ -145,6 +145,75 @@ export function installPooledTestAgent(): void {
 }
 
 /**
+ * TURN A TRANSPORT-LEVEL FAILURE INTO NAMED EVIDENCE. cto/AdaptaLabs#44.
+ *
+ * This hook is the instrument that finally caught that flake's mechanism in
+ * the act: on any supertest error carrying no HTTP status - the signature of
+ * a failure below the protocol - it writes the dying request's socket state
+ * to stderr beside the failure jest formats. The 2026-08-31 diagnosis came
+ * from exactly these lines: every failing request was on a FRESH socket
+ * (`reusedSocket: false`, acquitting the keep-alive pool) and every failing
+ * URL named one of two squatted ports (convicting the wildcard bind - see
+ * helpers/listening.ts).
+ *
+ * It stays installed so a recurrence is a diagnosis, not an anecdote: the
+ * next transport failure will say which port it dialed and whether the
+ * socket was pooled, which is the difference between an evening of forensics
+ * and reading one line.
+ *
+ * `!err.status` rather than an error-code list, because the list is the part
+ * that goes stale: superagent surfaces these as ECONNRESET, HPE_* parse
+ * errors, EPIPE and friends, and any of them without a status means the
+ * transport, not the application, failed.
+ */
+export function installTransportForensics(): void {
+  const { Test } = supertest as unknown as {
+    Test: { prototype: Record<string, unknown> };
+  };
+  // Idempotent: a second installation would stack a second printer onto the
+  // chain and every failure would log twice. Each runner's setup calls this
+  // once per process today; this keeps that an invariant rather than a habit.
+  if (Test.prototype.__transportForensicsInstalled) return;
+  Test.prototype.__transportForensicsInstalled = true;
+  const original = Test.prototype.callback as (...args: unknown[]) => unknown;
+
+  Test.prototype.callback = function (
+    this: Record<string, unknown>,
+    err: { status?: number; message?: string; code?: string } | null,
+    res: unknown
+  ) {
+    if (err && !err.status) {
+      const req = this.req as
+        | { reusedSocket?: boolean; socket?: { localPort?: number; remotePort?: number } }
+        | undefined;
+      // The test name, because four workers interleave one stderr and the
+      // victim's identity is otherwise the one thing these lines omit. Both
+      // runners implement expect.getState(); guarded anyway, since forensics
+      // that can crash the failure path would be worse than none.
+      let test: string | null = null;
+      try {
+        test = expect.getState().currentTestName ?? null;
+      } catch {
+        // No expect in scope - a request fired outside any test. Name absent.
+      }
+      process.stderr.write(
+        `[transport-forensics] ${JSON.stringify({
+          message: err.message,
+          code: err.code,
+          method: this.method,
+          url: this.url,
+          reusedSocket: req?.reusedSocket ?? null,
+          localPort: req?.socket?.localPort ?? null,
+          remotePort: req?.socket?.remotePort ?? null,
+          test,
+        })}\n`
+      );
+    }
+    return original.call(this, err, res);
+  };
+}
+
+/**
  * Give the pooled sockets back before the servers go.
  *
  * Node unrefs a free keep-alive socket, so this is not what stands between the

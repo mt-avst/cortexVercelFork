@@ -236,7 +236,11 @@ async function startServer() {
   // Matches what index.ts sets, so the probe cannot measure an unbounded
   // request the production server would have cut off.
   server.timeout = 360_000;
-  server.listen(0);
+  // 127.0.0.1 explicitly: the probe dials that address, and a bare listen(0)
+  // binds the wildcard, which macOS can hand a port whose v4 loopback side
+  // another process owns - the probe would then measure a stranger's socket
+  // (cto/AdaptaLabs#44). This path awaits 'listening' anyway.
+  server.listen(0, '127.0.0.1');
   await once(server, 'listening');
 
   const { port } = server.address() as AddressInfo;

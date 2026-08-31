@@ -2118,5 +2118,25 @@
     "project": "frontend",
     "spec": "src/__tests__/nginx-entry-document-cache.test.ts",
     "test": "restates all four security headers beside the Cache-Control it declares"
+  },
+  {
+    "id": "test-port-probe-verifies-the-v4-loopback",
+    "why": "The whole reservoir rests on the probe binding 127.0.0.1 exactly: the kernel then only hands out ports free on the address supertest dials. A probe that bound the wildcard would verify ports whose v4 side limactl or a leftover postgres owns - measured 2026-08-31 at 3000 of 20000 wildcard binds landing on squatted ports against 0 of 20000 loopback binds - which is the cto/AdaptaLabs#44 flake reinstated with every suite green.",
+    "file": "backend/src/__tests__/helpers/listening.ts",
+    "anchor": "    probe.listen(0, '127.0.0.1', () => resolve(probe));",
+    "mutation": "    probe.listen(0, () => resolve(probe));",
+    "runner": "jest",
+    "spec": "src/__tests__/listening-helper.test.ts",
+    "test": "verifies ports on the v4 loopback exactly, where supertest dials"
+  },
+  {
+    "id": "listening-binds-from-the-verified-reservoir",
+    "why": "listening() must consume a verified port, not fall back to listen(0): the wildcard bind is what gets assigned a port whose 127.0.0.1 side another process owns, sending that suite's requests to a stranger - the cto/AdaptaLabs#44 red run, reproduced on demand by parking the ephemeral counter below a squatted band. Reverting this call is invisible to every functional test because every server still works whenever the counter is elsewhere.",
+    "file": "backend/src/__tests__/helpers/listening.ts",
+    "anchor": "  const server = createServer(app as RequestListener);\n  bindVerifiedPort(server);",
+    "mutation": "  const server = createServer(app as RequestListener).listen(0);",
+    "runner": "jest",
+    "spec": "src/__tests__/listening-helper.test.ts",
+    "test": "consumes the reservoir rather than binding wildcard-ephemeral"
   }
 ]

@@ -319,7 +319,13 @@ describe('a caller who hangs up', () => {
       // Never answers. The caller gives up instead.
     });
 
-    const server = createServer(app).listen(0);
+    // 127.0.0.1 EXPLICITLY, because that is the address `fire()` dials: a
+    // bare listen(0) binds the wildcard and can be assigned a port whose v4
+    // loopback side another process owns, which sends these requests to a
+    // stranger (cto/AdaptaLabs#44). This file binds its own server rather
+    // than using `listening()` and can afford the await, so it takes the
+    // direct form of the same fix.
+    const server = createServer(app).listen(0, '127.0.0.1');
     await once(server, 'listening');
     const { port } = server.address() as AddressInfo;
 

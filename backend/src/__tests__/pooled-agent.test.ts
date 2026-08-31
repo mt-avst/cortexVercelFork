@@ -141,3 +141,62 @@ describe('the pooled test agent', () => {
     own.destroy();
   });
 });
+
+describe('the transport-forensics hook (cto/AdaptaLabs#44)', () => {
+  it('writes socket state to stderr when a request dies below the protocol', async () => {
+    // The instrument that caught #44's mechanism - a failing request naming
+    // its port and whether its socket was pooled - has no other guard: it is
+    // installed in both runners' setups, and deleting either call site keeps
+    // every functional test green. This proves the wiring by firing it: a
+    // server that destroys every connection gives the client a transport
+    // error with no HTTP status, which is exactly the hook's trigger.
+    const app = express();
+    // listening() memoises per app, so the second call below returns this
+    // same server - which also keeps the call-sites scan's textual rule
+    // (`request(listening(...))`) satisfied without a variable.
+    listening(app).on('connection', (socket) => socket.destroy());
+
+    const written: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      await expect(request(listening(app)).get('/dead')).rejects.toThrow();
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    const forensics = written.filter((line) => line.includes('[transport-forensics]'));
+    expect(forensics).toHaveLength(1);
+    const parsed = JSON.parse(forensics[0].replace('[transport-forensics] ', ''));
+    expect(parsed).toMatchObject({ method: 'GET' });
+    expect(parsed.url).toContain('/dead');
+    // The victim's name, because workers interleave one stderr.
+    expect(parsed.test).toContain('writes socket state to stderr');
+    expect(parsed.message).toBeTruthy();
+  });
+
+  it('control: a plain failed assertion writes no forensics line', async () => {
+    // An HTTP error - status present - is the application failing, not the
+    // transport, and the hook must stay silent or every 404 in the suite
+    // would carry noise.
+    const app = express();
+    const written: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      written.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      await request(listening(app)).get('/missing').expect(404);
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+
+    expect(written.filter((line) => line.includes('[transport-forensics]'))).toHaveLength(0);
+  });
+});

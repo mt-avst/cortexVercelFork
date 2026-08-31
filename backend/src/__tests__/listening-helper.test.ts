@@ -4,7 +4,15 @@ import { createServer } from 'node:http';
 import request from 'supertest';
 import express from 'express';
 
-import { closeListeningServers, listening } from './helpers/listening';
+import {
+  PORT_RESERVOIR_LOW_WATER,
+  bindLoopbackProbe,
+  bindVerifiedPort,
+  closeListeningServers,
+  listening,
+  topUpVerifiedPorts,
+  verifiedPortCount,
+} from './helpers/listening';
 
 jest.mock('../utils/logger', () => ({
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
@@ -36,13 +44,18 @@ jest.mock('../utils/logger', () => ({
  * These are the answer. They count the syscall rather than trusting the shape.
  */
 
-/** Counts `listen(0)` calls - the ephemeral binds - for the duration of `run`. */
+/**
+ * Counts numeric binds for the duration of `run`. `listening()` binds a
+ * reserved port (a positive number) while supertest's own fallback binds 0;
+ * both are the bind this file counts, so a helper that quietly reverted to
+ * either shape still moves the number.
+ */
 async function countingEphemeralBinds<T>(run: () => Promise<T>): Promise<number> {
   const original = net.Server.prototype.listen;
   let binds = 0;
 
   net.Server.prototype.listen = function (this: net.Server, ...args: unknown[]) {
-    if (args[0] === 0) {
+    if (typeof args[0] === 'number') {
       binds += 1;
     }
     return (original as (...a: unknown[]) => net.Server).apply(this, args);
@@ -162,5 +175,84 @@ describe('the listening helper', () => {
     expect(second.address()).not.toBeNull();
 
     await request(second).get('/x').expect(200);
+  });
+});
+
+describe('the verified-port reservoir (cto/AdaptaLabs#44)', () => {
+  afterEach(async () => {
+    await closeListeningServers();
+  });
+
+  it('verifies ports on the v4 loopback exactly, where supertest dials', async () => {
+    // The load-bearing character of the whole mechanism. A probe that bound
+    // the wildcard would be assigned ports whose v4 loopback side another
+    // process owns - limactl and a leftover postgres, on the machine where
+    // this flake was finally caught - and "verified" would mean nothing.
+    const probe = await bindLoopbackProbe();
+    const address = probe.address();
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+    expect(address).toMatchObject({ address: '127.0.0.1', family: 'IPv4' });
+  });
+
+  it('consumes the reservoir rather than binding wildcard-ephemeral', async () => {
+    await topUpVerifiedPorts();
+    const before = verifiedPortCount();
+
+    listening(buildApp());
+
+    // A listening() that quietly went back to listen(0) leaves the reservoir
+    // untouched - and reopens the squatted-port flake with every other test
+    // in this file green.
+    expect(verifiedPortCount()).toBe(before - 1);
+  });
+
+  it('steps past a port taken since verification, and lands on the next', async () => {
+    // The cross-worker race, driven deterministically: another process binds
+    // the same wildcard port between verification and use. The bind failure
+    // is synchronous and the loop moves on; the async EADDRINUSE from the
+    // attempt it retried past must not crash the worker either.
+    const squatter = await bindLoopbackProbe();
+    const taken = (squatter.address() as net.AddressInfo).port;
+
+    // A genuinely usable port for the second attempt.
+    const probe = await bindLoopbackProbe();
+    const good = (probe.address() as net.AddressInfo).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+
+    // Re-bind the taken port on the WILDCARD, which is what an actual rival
+    // server does and what makes our own wildcard bind fail.
+    await new Promise<void>((resolve) => squatter.close(() => resolve()));
+    const rival = net.createServer().listen(taken);
+
+    const server = createServer();
+    // The list is consumed from the end, so the taken port is attempted first.
+    bindVerifiedPort(server, [good, taken]);
+
+    expect((server.address() as net.AddressInfo).port).toBe(good);
+
+    await new Promise<void>((resolve) => { rival.close(() => resolve()); });
+    await new Promise<void>((resolve) => { server.close(() => resolve()); });
+    // Two macrotask turns, so the swallowed EADDRINUSE has provably flushed
+    // without taking the worker down.
+    await new Promise((resolve) => setImmediate(() => setImmediate(resolve)));
+  });
+
+  it('an empty reservoir fails by name instead of falling back to listen(0)', () => {
+    const server = createServer();
+    expect(() => bindVerifiedPort(server, [])).toThrow(/reservoir ran dry/);
+    // And it must NOT have bound anything on the way out.
+    expect(server.address()).toBeNull();
+  });
+
+  it('pins the low-water mark as a literal', () => {
+    // The refill threshold is also the ceiling on new servers per test body.
+    // Pinned so widening or narrowing it is a decision a diff has to show.
+    expect(PORT_RESERVOIR_LOW_WATER).toBe(16);
+  });
+
+  it('control: the reservoir refills to the mark', async () => {
+    await topUpVerifiedPorts();
+    expect(verifiedPortCount()).toBeGreaterThanOrEqual(PORT_RESERVOIR_LOW_WATER);
   });
 });
