@@ -28,7 +28,8 @@ import FieldError from './FieldError';
 const CONSENT_MOMENT_BY_KIND: Record<ConsentKind, string> = {
   recorded: 'Shown before recording starts. The participant must accept it to continue.',
   survey: 'Shown before the first question. The participant must accept it to continue.',
-  moderated: 'Shown before booking. The participant must accept it to book a session.'
+  moderated:
+    'Shown before booking, if you set any - the participant must accept it to book a session. Leave it empty and nothing is asked.'
 };
 
 export interface ConsentSelection {
@@ -283,12 +284,25 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
               className="form-label mb-2"
               style={{ fontSize: '1rem', fontWeight: 600 }}
             >
-              Consent text *
+              {/*
+                The asterisk restates the validator, so it is per kind. Moderated
+                consent (#79) is OPTIONAL - clearing the wording is how the
+                author says this session stores nothing and asks no consent at
+                booking, and only length is validated - so a required marker
+                there would claim a rule that does not exist. The study kinds
+                keep it: their consent is required once there is content to
+                consent to.
+              */}
+              {kind === 'moderated' ? 'Consent text' : 'Consent text *'}
             </label>
             <textarea
               id={fieldId}
               className={`form-control ${validationError ? 'is-invalid' : ''}`}
               rows={6}
+              // The label's rule, restated where a screen reader can hear it -
+              // the asterisk alone is a visual-only signal. Same convention as
+              // BasicInfoTab's required fields.
+              aria-required={kind !== 'moderated'}
               value={consentText}
               onChange={(event) => applyText(event.target.value)}
               onBlur={onBlur}

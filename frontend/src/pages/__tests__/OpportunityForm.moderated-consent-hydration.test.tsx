@@ -98,7 +98,7 @@ describe('hydrating a moderated row never seeds consent it does not hold', () =>
 
     goToStep(/Consent/);
 
-    const textarea = await screen.findByLabelText('Consent text *');
+    const textarea = await screen.findByLabelText('Consent text');
     expect((textarea as HTMLTextAreaElement).value).toBe('');
   });
 
@@ -144,7 +144,7 @@ describe('hydrating a moderated row never seeds consent it does not hold', () =>
 
     goToStep(/Consent/);
 
-    const textarea = await screen.findByLabelText('Consent text *');
+    const textarea = await screen.findByLabelText('Consent text');
     expect((textarea as HTMLTextAreaElement).value).toBe(
       'Wording this researcher wrote themselves.'
     );

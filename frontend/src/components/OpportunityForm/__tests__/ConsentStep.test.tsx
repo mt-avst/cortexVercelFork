@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import ConsentStep, { type ConsentSelection } from '../ConsentStep';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
+  MODERATED_CONSENT_TEMPLATE,
   RECORDED_CONSENT_TEMPLATE,
   SURVEY_CONSENT_TEMPLATE
 } from '@shared/firsthand/consent-templates';
@@ -475,6 +476,48 @@ describe('ConsentStep - validation', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Consent text is required');
     expect(screen.getByLabelText(/Consent text/i)).toHaveClass('is-invalid');
   });
+
+  /**
+   * The label's asterisk is a claim about the validator, asserted per kind
+   * and BY NAME - a single test covering two renders left survey pinned by
+   * nothing, so `kind === 'moderated' || kind === 'survey'` would have
+   * survived it. Moderated consent (#79) is optional - clearing it means
+   * "this session stores nothing, no consent is asked at booking" and only
+   * length is validated - so its label must not mark the field required,
+   * while the study kinds' consent is required once there is content.
+   * Exact-match queries, because the substring regex the other tests use
+   * cannot see the asterisk at all; `aria-required` asserted alongside, so
+   * the rule reaches the accessibility tree and not only sighted readers.
+   */
+  it.each([
+    ['recorded', 'Consent text *', 'true', RECORDED_CONSENT_TEMPLATE],
+    ['survey', 'Consent text *', 'true', SURVEY_CONSENT_TEMPLATE],
+    ['moderated', 'Consent text', 'false', MODERATED_CONSENT_TEMPLATE]
+  ] as const)(
+    'labels the %s consent field "%s"',
+    (kind, label, ariaRequired, template) => {
+      renderStep({
+        kind,
+        consentText: template.text,
+        templateId: template.id,
+        templateVersion: template.version,
+        fieldId: `${kind}_consent_text`,
+        contentStepTitle: 'Content'
+      });
+
+      fireEvent.click(
+        screen.getByRole('button', { name: /Customise consent wording/i })
+      );
+
+      const textarea = screen.getByLabelText(label);
+      expect(textarea).toHaveAttribute('aria-required', ariaRequired);
+      expect(
+        screen.queryByLabelText(
+          kind === 'moderated' ? 'Consent text *' : 'Consent text'
+        )
+      ).not.toBeInTheDocument();
+    }
+  );
 
   it('uses the state key as the control id, so error routing can reach it', () => {
     renderStep({
