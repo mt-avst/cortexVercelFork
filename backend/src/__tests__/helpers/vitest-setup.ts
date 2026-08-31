@@ -1,7 +1,11 @@
-import { afterAll } from 'vitest';
+import { afterAll, beforeAll, beforeEach } from 'vitest';
 
-import { closeListeningServers } from './listening';
-import { destroyPooledTestAgent, installPooledTestAgent } from './pooled-agent';
+import { closeListeningServers, topUpVerifiedPorts } from './listening';
+import {
+  destroyPooledTestAgent,
+  installPooledTestAgent,
+  installTransportForensics,
+} from './pooled-agent';
 
 /**
  * THE VITEST HALF OF `../setup.ts` (cto/AdaptaLabs#60).
@@ -39,6 +43,13 @@ import { destroyPooledTestAgent, installPooledTestAgent } from './pooled-agent';
  * `Agent.destroy()` over sockets a closed server already destroyed is a no-op.
  */
 installPooledTestAgent();
+installTransportForensics();
+
+// The verified-port reservoir (cto/AdaptaLabs#44), same wiring as jest's
+// setup.ts: beforeAll for the initial bank, beforeEach because `listening()`
+// is called inside test bodies where no hook can refill it.
+beforeAll(topUpVerifiedPorts);
+beforeEach(topUpVerifiedPorts);
 
 afterAll(async () => {
   // Client first, then servers - see `destroyPooledTestAgent`.

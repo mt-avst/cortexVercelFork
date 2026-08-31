@@ -25,15 +25,30 @@ process.env.SESSION_SECRET ||= 'jest-local-test-constant-not-a-real-secret'; // 
 // Every server opened by `listening()` is closed once the file's tests are
 // done. Global rather than per-file so a new test file cannot forget, and an
 // unclosed server cannot leave a jest worker hanging.
-import { closeListeningServers } from './helpers/listening';
+//
+// The port reservoir refills in beforeAll AND beforeEach (cto/AdaptaLabs#44):
+// `listening()` is called inside test bodies, where no hook can run, so each
+// test starts with a full bank of ports verified free on 127.0.0.1 - the
+// address supertest actually dials.
+import { closeListeningServers, topUpVerifiedPorts } from './helpers/listening';
 
 // supertest opens a fresh TCP connection for every request unless it is given
 // a pooling agent, and a full run of this suite parks ~2,200 sockets in
 // TIME_WAIT because of it (cto/AdaptaLabs#44). Installed globally for the same
-// reason the close above is: so no test file has to remember.
-import { destroyPooledTestAgent, installPooledTestAgent } from './helpers/pooled-agent';
+// reason the close above is: so no test file has to remember. The forensics
+// hook is what caught #44's mechanism in the act; it stays so any future
+// transport-level failure names its socket state instead of just its victim.
+import {
+  destroyPooledTestAgent,
+  installPooledTestAgent,
+  installTransportForensics,
+} from './helpers/pooled-agent';
 
 installPooledTestAgent();
+installTransportForensics();
+
+beforeAll(topUpVerifiedPorts);
+beforeEach(topUpVerifiedPorts);
 
 afterAll(async () => {
   // Client first, then servers - see `destroyPooledTestAgent`.
