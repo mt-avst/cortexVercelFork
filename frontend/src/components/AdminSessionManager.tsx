@@ -123,6 +123,33 @@ const TIMELINE_START_HOUR = 7;
 const TIMELINE_END_HOUR = 23;
 
 /**
+ * Whether the timeline can draw a slot WHERE IT ACTUALLY IS.
+ *
+ * `getTimePosition` clamps, so a slot outside the drawn hours lands at height
+ * ~0% on an edge and cannot be clicked - and the per-slot delete is the only
+ * per-session removal on this screen (cto/AdaptaLabs#95). Slots this returns
+ * true for are drawn in the gutter row below the grid instead of in it.
+ *
+ * ONE declaration, because the manual-entry gate and the gutter have to agree:
+ * a slot the entry gate would refuse for being undrawable is exactly a slot the
+ * gutter has to catch when it reaches the database another way.
+ *
+ * The end hour is the START hour plus the slot's own span, NOT the end
+ * timestamp's local hour: a 23:30-00:30 slot reads as ending at 0.5 that way,
+ * which is inside the window by arithmetic and off the grid in fact.
+ */
+const isOutsideDrawableHours = (start: Date, end: Date): boolean => {
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return false;
+  const startHours = start.getHours() + start.getMinutes() / 60 + start.getSeconds() / 3600;
+  const endHours = startHours + (end.getTime() - start.getTime()) / (60 * 60 * 1000);
+  return startHours < TIMELINE_START_HOUR || endHours > TIMELINE_END_HOUR;
+};
+
+/** The same question asked of a slot rather than a pair of instants. */
+const slotIsOutsideDrawableHours = (slot: { start: string; end: string }): boolean =>
+  isOutsideDrawableHours(new Date(slot.start), new Date(slot.end));
+
+/**
  * The slot key used everywhere in this file for slot identity.
  *
  * One expression, because selection, confirmation, the manual set and the
@@ -410,6 +437,120 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     return session;
   }, [sessions]);
 
+  /**
+   * Everything about a slot that is the same wherever it is drawn.
+   *
+   * A slot appears in two places now - positioned on the timeline, or in the
+   * gutter row when the timeline cannot draw it (cto/AdaptaLabs#95) - and the
+   * gutter exists so the slot can be CLICKED. Two copies of "is this busy, is
+   * it mine, may it be clicked" is two chances for the gutter copy to drift
+   * into offering a delete the grid refuses, or refusing one the grid offers.
+   */
+  const describeSlot = (slot: AvailableSlot) => {
+    const session = getSessionForSlot(slot);
+    const isSelected = isSlotSelected(slot);
+    const isConfirmed = isSlotConfirmed(slot);
+    const isBusy = isSlotBusy(slot);
+    const isAllocated = isSlotAllocated(slot);
+    // Busy, full and allocated slots are not the researcher's to act on.
+    const isBlocked = isBusy || (!!session && session.remaining <= 0) || isAllocated;
+
+    let slotClass = 'calendar-slot';
+    if (isConfirmed || (session && session.remaining > 0)) {
+      slotClass += ' calendar-slot-admin-confirmed';
+    } else if (isSelected) {
+      slotClass += ' calendar-slot-admin-selected';
+    } else if (session && session.remaining <= 0) {
+      slotClass += ' calendar-slot-full';
+    } else if (isAllocated) {
+      slotClass += ' calendar-slot-admin-allocated';
+    } else if (isBusy) {
+      slotClass += ' calendar-slot-admin-busy';
+    } else {
+      // Available slot - matches user calendar ghost style
+      slotClass += ' calendar-slot-admin-available';
+    }
+
+    return { session, isSelected, isConfirmed, isBusy, isAllocated, isBlocked, slotClass };
+  };
+
+  type SlotStatus = ReturnType<typeof describeSlot>;
+
+  const slotTooltip = (slot: AvailableSlot, status: SlotStatus): string => {
+    try {
+      const timeSpan = `${formatTime(slot.start)} to ${formatTime(slot.end)}`;
+      const { session, isBusy, isAllocated, isSelected, isConfirmed } = status;
+
+      if (session) {
+        return `${timeSpan} - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
+      }
+      if (isBusy) return `${timeSpan} - This time slot conflicts with existing calendar events`;
+      if (isAllocated) return `${timeSpan} - This slot is allocated to another opportunity`;
+      if (isSelected) return `${timeSpan} - Selected for session creation`;
+      if (isConfirmed) return `${timeSpan} - Session confirmed`;
+      return `${timeSpan} - Available time slot`;
+    } catch (error) {
+      logger.error('Error formatting tooltip', { errorMessage: String(error), slotStart: slot.start });
+      return `${slot.start} to ${slot.end}`;
+    }
+  };
+
+  /**
+   * The slot's own times, or null if one of them cannot be read.
+   *
+   * Returning null keeps one bad timestamp from throwing during render and
+   * taking the whole session grid down with it. But an admin cannot tell a
+   * label that is hidden from a label that failed, so the cause has to go
+   * somewhere - once per slot, for the reason on the ref.
+   */
+  const slotTimeLabel = (slot: AvailableSlot): string | null => {
+    try {
+      return `${formatTime(slot.start)} - ${formatTime(slot.end)}`;
+    } catch (error) {
+      const slotKey = slotKeyOf(slot);
+      if (!reportedLabelFailures.current.has(slotKey)) {
+        reportedLabelFailures.current.add(slotKey);
+        logger.error('Could not render a time-slot label', {
+          component: 'AdminSessionManager',
+          slotStart: slot.start,
+          slotEnd: slot.end,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+      }
+      return null;
+    }
+  };
+
+  const clickSlot = (slot: AvailableSlot, status: SlotStatus) => {
+    const { session, isSelected, isConfirmed, isBusy, isAllocated, isBlocked } = status;
+    logger.debug('Slot clicked:', {
+      slotKey: slotKeyOf(slot),
+      isSelected,
+      isConfirmed,
+      isBusy,
+      isAllocated,
+      hasSession: !!session,
+      sessionId: session?.id,
+    });
+
+    if (isBlocked) {
+      logger.debug('Slot click blocked - busy, full, or allocated');
+      return;
+    }
+
+    if (isSelected) {
+      logger.debug('Deselecting slot');
+      onSlotDeselect(slot);
+    } else if (isConfirmed || session) {
+      // Existing session or confirmed slot - deselect immediately in one click
+      logger.debug(session ? 'Deselecting existing session slot' : 'Unassigning confirmed slot');
+      onSlotDeselect(slot);
+    } else {
+      logger.debug('Selecting free slot');
+      onSlotSelect(slot);
+    }
+  };
+
   // Days in the selected range, in the reader's local zone. The derivation is at
   // module scope so the parent's counter uses the same one (cto/AdaptaLabs#89).
   const allDays = daysInRange(startDate, endDate, excludeWeekends);
@@ -571,7 +712,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
         // Remove overlapping slots and sort by start time
         let nonOverlappingSlots = pruneOverlaps(rawSlots, protectedSlotKeys);
         
-        // Final deduplication pass using a Set to ensure absolute uniqueness by time
+        // Final deduplication pass using a Set to ensure absolute uniqueness by
+        // time. Both keys, which is what makes the render-time pass that used to
+        // sit below the timeline redundant: that one compared `start|end`
+        // strings only, so every duplicate it could catch is caught here first.
         // Use the same key format as isSlotSelected for consistency
         const seen = new Set<string>();
         const duplicateKeys = new Set<string>();
@@ -724,8 +868,26 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                     </small>
                   </div>
             
+                  {(() => {
+                    /*
+                     * Two placements for one day's slots (cto/AdaptaLabs#95).
+                     *
+                     * `getTimePosition` clamps, so a slot outside the drawn
+                     * hours lands at height ~0% on an edge: present in the DOM,
+                     * counted, and impossible to click - which on this screen
+                     * means impossible to delete, because the per-slot click IS
+                     * the only per-session removal (Table view is read-only and
+                     * Reset All refuses outright once anything is booked). Those
+                     * slots are drawn in the gutter row below the grid instead,
+                     * at their real times, clickable.
+                     */
+                    const timelineSlots = column.slots.filter(slot => !slotIsOutsideDrawableHours(slot));
+                    const gutterSlots = column.slots.filter(slot => slotIsOutsideDrawableHours(slot));
+
+                    return (
+                      <>
                   {/* Timeline Container */}
-                  <div style={{ 
+                  <div style={{
                     position: 'relative',
                     height: timelineHeight,
                     border: 'none',
@@ -735,7 +897,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                   }}>
                     {/* Positioned Slots */}
                     {column.slots.length === 0 ? (
-                      <div className="text-center" style={{ 
+                      <div className="text-center" style={{
                         fontSize: '0.8rem',
                         position: 'absolute',
                         top: '50%',
@@ -747,36 +909,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                         No available slots
                       </div>
                     ) : (
-                      (() => {
-                        // Final safety check: filter out any remaining duplicates before rendering
-                        const renderedKeys = new Set<string>();
-                        const slotsToRender = column.slots.filter((slot, idx) => {
-                          const slotKey = `${slot.start}|${slot.end}`;
-                          if (renderedKeys.has(slotKey)) {
-                            logger.error(`Filtering duplicate slot at render (index ${idx})`, {
-                              slotKey,
-                              start: slot.start,
-                              end: slot.end,
-                              totalSlots: column.slots.length
-                            });
-                            return false;
-                          }
-                          renderedKeys.add(slotKey);
-                          return true;
-                        });
-                        
-                        return slotsToRender.map((slot, slotIndex) => {
-                          // Create a truly unique key based on time (not index) to prevent duplicate rendering
-                          // Use the exact same key format as selection tracking
-                          const slotKey = `${slot.start}|${slot.end}`;
-                          const uniqueKey = slotKey; // Use consistent key format
-                          
-                          const isSelected = isSlotSelected(slot);
-                        const isConfirmed = isSlotConfirmed(slot);
-                        const isBusy = isSlotBusy(slot);
-                        const isAllocated = isSlotAllocated(slot);
-                        const session = getSessionForSlot(slot);
-                        
+                      timelineSlots.map((slot, slotIndex) => {
+                        const status = describeSlot(slot);
+                        const { session, isSelected, isConfirmed, isBlocked } = status;
+
                         // Session matching logic
                         if (sessions.length > 0 && !session && slotIndex === 0) {
                           // Only log for first slot to avoid spam
@@ -801,29 +937,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             });
                           }
                         }
-                        
+
                         // Calculate position based on time with high precision
                         const slotStartHour = getHourFromSlot(slot.start);
                         const slotEndHour = getHourFromSlot(slot.end);
-                        
+
                         // Use precise position calculations
                         const topPosition = Math.max(0, Math.min(100, getTimePosition(slotStartHour)));
                         const bottomPosition = Math.max(0, Math.min(100, getTimePosition(slotEndHour)));
-                        
+
                         // Calculate height as the exact difference - this prevents overlap
                         // Round to 4 decimal places to avoid floating point precision issues
                         const rawHeight = bottomPosition - topPosition;
                         const height = Math.round((Math.max(0.01, rawHeight)) * 10000) / 10000;
-                        
+
                         // Ensure height doesn't exceed container bounds
                         const maxAllowedHeight = 100 - topPosition;
                         const finalHeight = Math.min(height, maxAllowedHeight);
-                        
+
                         // Round position values to avoid sub-pixel rendering issues
                         // CRITICAL: Use exact percentage values to prevent overlap
                         const roundedTop = Math.round(topPosition * 10000) / 10000;
                         const roundedHeight = Math.round(finalHeight * 10000) / 10000;
-                        
+
                         // Slot height calculation.
                         //
                         // Compared against what the slot's OWN duration implies
@@ -851,34 +987,18 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             roundedHeight
                           });
                         }
-                        
+
                         // Ensure slots don't overlap by using exact percentage positioning
                         // The height should match exactly the time difference, not be fixed
-                        
-                        // Determine slot styling based on session status
-                        // Use CSS classes for consistent styling with user calendar
-                        let slotClass = 'calendar-slot';
-                        
-                        if (isConfirmed || (session && session.remaining > 0)) {
-                          slotClass += ' calendar-slot-admin-confirmed';
-                        } else if (isSelected) {
-                          slotClass += ' calendar-slot-admin-selected';
-                        } else if (session && session.remaining <= 0) {
-                          slotClass += ' calendar-slot-full';
-                        } else if (isAllocated) {
-                          slotClass += ' calendar-slot-admin-allocated';
-                        } else if (isBusy) {
-                          slotClass += ' calendar-slot-admin-busy';
-                        } else {
-                          // Available slot - matches user calendar ghost style
-                          slotClass += ' calendar-slot-admin-available';
-                        }
+
+                        const timeLabel = slotTimeLabel(slot);
+                        const shouldShowLabel = isSelected || isConfirmed || !!session;
 
                         return (
                           <div
-                            key={uniqueKey}
-                            className={`${slotClass} position-absolute`}
-                            style={{ 
+                            key={slotKeyOf(slot)}
+                            className={`${status.slotClass} position-absolute`}
+                            style={{
                               width: 'calc(100% - 16px)',
                               left: '8px',
                               top: `${roundedTop}%`,
@@ -894,138 +1014,61 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               zIndex: isSelected || isConfirmed ? 5 : 1,
                               pointerEvents: 'auto'
                             }}
-                        title={(() => {
-                          try {
-                            const session = getSessionForSlot(slot);
-                            const startTime = formatTime(slot.start);
-                            const endTime = formatTime(slot.end);
-                            const timeSpan = `${startTime} to ${endTime}`;
-                            
-                            let tooltipText = timeSpan;
-                            if (session) {
-                              tooltipText += ` - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
-                            } else if (isBusy) {
-                              tooltipText += ` - This time slot conflicts with existing calendar events`;
-                            } else if (isAllocated) {
-                              tooltipText += ` - This slot is allocated to another opportunity`;
-                            } else if (isSelected) {
-                              tooltipText += ` - Selected for session creation`;
-                            } else if (isConfirmed) {
-                              tooltipText += ` - Session confirmed`;
-                            } else {
-                              tooltipText += ` - Available time slot`;
-                            }
-                            return tooltipText;
-                          } catch (error) {
-                            logger.error('Error formatting tooltip', { errorMessage: String(error), slotStart: slot.start });
-                            return `${slot.start} to ${slot.end}`;
-                          }
-                        })()}
-                        onClick={() => {
-                          logger.debug('Slot clicked:', {
-                            slotKey: `${slot.start}|${slot.end}`,
-                            slotIndex,
-                            isSelected,
-                            isConfirmed,
-                            isBusy,
-                            isAllocated,
-                            hasSession: !!session,
-                            sessionId: session?.id
-                          });
-                          
-                          // Allow clicking on free slots, selected slots, confirmed slots, and existing sessions
-                          // Prevent clicking on busy slots, full sessions, and allocated slots
-                          if (isBusy || (session && session.remaining <= 0) || isAllocated) {
-                            logger.debug('Slot click blocked - busy, full, or allocated');
-                            return; // Don't allow clicking on busy, full, or allocated slots
-                          }
-                          
-                          if (isSelected) {
-                            logger.debug('Deselecting slot');
-                            onSlotDeselect(slot);
-                          } else if (isConfirmed || session) {
-                            // Existing session or confirmed slot - deselect immediately in one click
-                            logger.debug(session ? 'Deselecting existing session slot' : 'Unassigning confirmed slot');
-                            onSlotDeselect(slot);
-                          } else {
-                            logger.debug('Selecting free slot');
-                            onSlotSelect(slot);
-                          }
-                        }}
-                        onMouseEnter={(e) => {
-                          // Show time label on hover (CSS handles visual hover states)
-                          const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
-                          if (labelElement) {
-                            labelElement.style.opacity = '1';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          // Hide time label on mouse leave (unless selected/confirmed/has session)
-                          const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
-                          if (labelElement && !isSelected && !isConfirmed && !session) {
-                            labelElement.style.opacity = '0';
-                          }
-                        }}
+                            title={slotTooltip(slot, status)}
+                            onClick={() => clickSlot(slot, status)}
+                            onMouseEnter={(e) => {
+                              // Show time label on hover (CSS handles visual hover states)
+                              const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
+                              if (labelElement) {
+                                labelElement.style.opacity = '1';
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              // Hide time label on mouse leave (unless selected/confirmed/has session)
+                              const labelElement = e.currentTarget.querySelector('.timeslot-label') as HTMLElement;
+                              if (labelElement && !shouldShowLabel) {
+                                labelElement.style.opacity = '0';
+                              }
+                            }}
                           >
                             {/* Display time span label on the cell - show on hover or when selected */}
-                            {(() => {
-                              try {
-                                const startTime = formatTime(slot.start);
-                                const endTime = formatTime(slot.end);
-                                const timeLabel = `${startTime} - ${endTime}`;
-                                const shouldShowLabel = isSelected || isConfirmed || !!session;
-                                return (
-                                  <div 
-                                    className="timeslot-label"
-                                    style={{
-                                      position: 'absolute',
-                                      top: '50%',
-                                      left: '0',
-                                      right: '0',
-                                      transform: 'translateY(-50%)',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                      textAlign: 'center',
-                                      pointerEvents: 'none',
-                                      lineHeight: '1.2',
-                                      opacity: shouldShowLabel ? 1 : 0,
-                                      transition: 'opacity 0.2s ease'
-                                    }}>
-                                    {timeLabel}
-                                  </div>
-                                );
-                              } catch (error) {
-                                // Rendering null keeps one bad timestamp from
-                                // throwing during render and taking the whole
-                                // session grid down with it. But an admin cannot
-                                // tell a label that is hidden from a label that
-                                // failed, so the cause has to go somewhere -
-                                // once per slot, for the reason on the ref.
-                                const slotKey = `${slot.start}|${slot.end}`;
-                                if (!reportedLabelFailures.current.has(slotKey)) {
-                                  reportedLabelFailures.current.add(slotKey);
-                                  logger.error('Could not render a time-slot label', {
-                                    component: 'AdminSessionManager',
-                                    slotStart: slot.start,
-                                    slotEnd: slot.end,
-                                    errorMessage: error instanceof Error ? error.message : String(error),
-                                  });
-                                }
-                                return null;
-                              }
-                            })()}
+                            {timeLabel !== null && (
+                              <div
+                                className="timeslot-label"
+                                style={{
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '0',
+                                  right: '0',
+                                  transform: 'translateY(-50%)',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  textAlign: 'center',
+                                  pointerEvents: 'none',
+                                  lineHeight: '1.2',
+                                  opacity: shouldShowLabel ? 1 : 0,
+                                  transition: 'opacity 0.2s ease'
+                                }}>
+                                {timeLabel}
+                              </div>
+                            )}
                             {/* Show lock icon for unavailable slots */}
-                            {(isBusy || (session && session.remaining <= 0) || isAllocated) && (
+                            {isBlocked && (
                               <div style={{ position: 'absolute', top: '2px', right: '2px' }}>
                                 <Lock size={8} />
                               </div>
                             )}
-                            {/* Show checkbox icon ONLY when slot is selected (after user clicks) */}
-                            {!isBusy && !isAllocated && isSelected && (
-                              <div style={{ 
-                                position: 'absolute', 
-                                top: '2px', 
+                            {/* Show checkbox icon ONLY when slot is selected (after user clicks).
+                                Keyed on isBlocked, which is one case WIDER than the
+                                `!isBusy && !isAllocated` this replaced: a selected slot whose
+                                session has since filled up drew the lock and the tick on top of
+                                each other, both pinned to the same 2px corner, on a slot the
+                                click handler refuses anyway. The lock is the true one. */}
+                            {!isBlocked && isSelected && (
+                              <div style={{
+                                position: 'absolute',
+                                top: '2px',
                                 right: '2px',
                                 color: '#198754',
                                 pointerEvents: 'none'
@@ -1035,10 +1078,106 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                             )}
                           </div>
                         );
-                      });
-                      })()
+                      })
                     )}
                   </div>
+
+                        {/*
+                          * The gutter row: sessions the timeline cannot place.
+                          *
+                          * Full-height chips rather than positioned slivers,
+                          * because the ONLY thing wrong with these sessions is
+                          * that nobody can click them. Their real times are
+                          * always visible here - a hover-revealed label on a
+                          * row that exists to say "these are the odd ones" is
+                          * the same disclosure failure one step along.
+                          *
+                          * BELOW the timeline, not above it, and that is a
+                          * constraint rather than a preference: every column's
+                          * timeline is the same fixed height, so a gutter above
+                          * would push only the columns that have one downwards
+                          * and take their hours out of line with the hour axis
+                          * on the left. Below, every gutter starts at the same
+                          * offset and nothing moves.
+                          */}
+                        {gutterSlots.length > 0 && (
+                          <div
+                            className="calendar-gutter-row"
+                            title={`These sessions fall outside ${String(TIMELINE_START_HOUR).padStart(2, '0')}:00-${String(TIMELINE_END_HOUR).padStart(2, '0')}:00, the hours the calendar draws`}
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '4px',
+                              padding: '6px 8px',
+                              marginTop: '8px',
+                              borderTop: '2px solid rgba(255, 78, 80, 0.3)',
+                              backgroundColor: 'var(--bg-app)'
+                            }}
+                          >
+                            <small
+                              className="calendar-gutter-caption"
+                              style={{ color: 'var(--brand-headline)', fontSize: '0.7rem' }}
+                            >
+                              <CalendarX size={12} className="me-1" />
+                              Outside calendar hours
+                            </small>
+                            {gutterSlots.map(slot => {
+                              const status = describeSlot(slot);
+                              const timeLabel = slotTimeLabel(slot);
+                              return (
+                                <div
+                                  key={slotKeyOf(slot)}
+                                  className={`${status.slotClass} calendar-gutter-slot`}
+                                  role="button"
+                                  tabIndex={status.isBlocked ? -1 : 0}
+                                  aria-disabled={status.isBlocked || undefined}
+                                  title={slotTooltip(slot, status)}
+                                  onClick={() => clickSlot(slot, status)}
+                                  onKeyDown={(e) => {
+                                    // Keyboard reach, because this row exists so
+                                    // the slot can be acted on at all.
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      clickSlot(slot, status);
+                                    }
+                                  }}
+                                  style={{
+                                    position: 'relative',
+                                    minHeight: '28px',
+                                    padding: '4px 8px',
+                                    fontSize: '0.7rem',
+                                    cursor: status.isBlocked ? 'default' : 'pointer'
+                                  }}
+                                >
+                                  <span className="timeslot-label" style={{ opacity: 1 }}>
+                                    {timeLabel ?? 'Unreadable time'}
+                                  </span>
+                                  {status.isBlocked && (
+                                    <span style={{ position: 'absolute', top: '2px', right: '2px' }}>
+                                      <Lock size={8} />
+                                    </span>
+                                  )}
+                                  {!status.isBlocked && status.isSelected && (
+                                    <span
+                                      style={{
+                                        position: 'absolute',
+                                        top: '2px',
+                                        right: '2px',
+                                        color: '#198754',
+                                        pointerEvents: 'none'
+                                      }}
+                                    >
+                                      <CheckSquare size={12} />
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </>
               ) : (
                 /* Empty column placeholder */
@@ -1898,10 +2037,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
      * once anything is booked - the session becomes unremovable from this
      * screen. 23:00 is the worst of them, because the timeline DRAWS a 23:00
      * label, so the hour reads as in range.
+     *
+     * The SAME predicate the gutter row classifies by (cto/AdaptaLabs#95), so
+     * "what the entry gate refuses" and "what the gutter has to catch" cannot
+     * drift apart: a slot refused here is exactly a slot the grid could not
+     * have drawn had it arrived by another route.
      */
     const startHours = start.getHours() + start.getMinutes() / 60;
-    const endHours = startHours + durationMinutes / 60;
-    if (startHours < TIMELINE_START_HOUR || endHours > TIMELINE_END_HOUR) {
+    if (isOutsideDrawableHours(start, end)) {
       // Two different refusals, because one message cannot serve both. At 60
       // minutes, 22:45 overruns the timeline - and telling the researcher to
       // "pick a time between 07:00 and 23:00" when 22:45 IS between them reads
@@ -1918,12 +2061,13 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       return;
     }
 
-    // ponytail: this bound is enforced on ENTRY only, not on what already
-    //   exists -> cto/AdaptaLabs#95. A session outside 07:00-23:00 that reached
-    //   the database another way is still drawn at clamped zero height and
-    //   cannot be clicked to remove it. (The sibling future-time note that
-    //   used to sit beside this one was resolved by cto/AdaptaLabs#90: the
-    //   server now refuses a past start on every create route.)
+    // This bound is enforced on ENTRY only, and deliberately so: it is the
+    // message-quality arm, not the containment. A session outside the drawn
+    // hours that reached the database another way - the create routes carry no
+    // hour rule, and cannot, because the drawable window is the VIEWER's local
+    // one - is drawn in the gutter row and can be removed there
+    // (cto/AdaptaLabs#95). The sibling future-time note was resolved by
+    // cto/AdaptaLabs#90: the server refuses a past start on every create route.
 
     const startMs = start.getTime();
     const endMs = end.getTime();
