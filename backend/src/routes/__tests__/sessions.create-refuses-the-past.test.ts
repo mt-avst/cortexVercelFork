@@ -57,10 +57,11 @@ const mockIsDatabaseAvailable = isDatabaseAvailable as unknown as jest.Mock;
  * KEEPING the past start it already has is legitimate. Moving one INTO the
  * past via PATCH is refused separately - see the retiming describe below.
  *
- * The refusal SENTENCE is asserted at the validator, not on the wire: the
- * errorHandler's AppError branch sends `error.message` and drops the details
- * array, so the route-level proof is the 400/201 pair on bodies identical but
- * for the start time.
+ * The refusal SENTENCE now reaches the wire (cto/AdaptaLabs#101): the
+ * errorHandler's AppError branch carries the `details` array, so a past-slot
+ * batch answers 400 with `Start time must not be in the past` in `details`
+ * rather than a bare `Validation failed`. Asserted on the wire below, alongside
+ * the 400/201 pair on bodies identical but for the start time.
  */
 
 const OWNER = { id: 'admin-1', name: 'Olive', email: 'olive@example.com' };
@@ -154,6 +155,9 @@ describe('POST /api/sessions refuses a session in the past (cto/AdaptaLabs#90)',
       .send({ opportunity_id: OPP, sessions: [sessionAt(-24 * HOUR)] });
 
     expect(res.status).toBe(400);
+    // #101: the sentence naming the rule is on the wire now, not just at the
+    // validator - the researcher sees why, not a bare "Validation failed".
+    expect(JSON.stringify(res.body)).toContain('Start time must not be in the past');
     // THE BOUND ON BLAST RADIUS: refused before any client is taken, so
     // nothing is written and nothing is left half-created.
     expect(mockConnect).not.toHaveBeenCalled();
@@ -193,6 +197,7 @@ describe('POST /api/sessions refuses a session in the past (cto/AdaptaLabs#90)',
       .send({ opportunity_id: OPP, sessions: [sessionAt(-24 * HOUR)] });
 
     expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Start time must not be in the past');
     expect(addMockSessions).not.toHaveBeenCalled();
   });
 
@@ -239,7 +244,8 @@ describe('POST /api/opportunities/:id/sessions refuses the past on both branches
 
   it('mock branch: 400 naming the rule, and nothing is added', async () => {
     // This route builds its 400 body directly, so the sentence IS on the wire
-    // here - unlike the sessions router, whose errorHandler drops details.
+    // here - and since #101 the sessions router carries it via errorHandler's
+    // details too, so both routes now name the rule to the caller.
     mockIsDatabaseAvailable.mockResolvedValue(false as never);
     (getMockOpportunity as unknown as jest.Mock).mockReturnValue({
       id: OPP,

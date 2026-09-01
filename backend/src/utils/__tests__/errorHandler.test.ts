@@ -44,18 +44,39 @@ describe('Error Handler', () => {
   });
 
   describe('errorHandler middleware', () => {
-    it('should handle AppError correctly', () => {
+    it('should handle AppError correctly, carrying its details array (#101)', () => {
       const error = new ValidationError('Test validation error', ['field1', 'field2']);
 
       errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
+      // details is INCLUDED now: the branch used to drop it, so a batch refusal
+      // reached the client as a bare message with the specifics thrown away.
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Test validation error',
+        code: 'VALIDATION_ERROR',
+        details: ['field1', 'field2'],
+        timestamp: expect.any(String),
+        requestId: undefined,
+      });
+    });
+
+    it('omits details for an AppError that carries none (#101 control)', () => {
+      // The control that proves details is added only when PRESENT, not always:
+      // a plain ValidationError with no array must not grow an empty `details`.
+      const error = new ValidationError('Just a message');
+
+      errorHandler(error, mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      const body = (mockRes.json as jest.Mock).mock.calls[0][0];
+      expect(body).toEqual({
+        error: 'Just a message',
         code: 'VALIDATION_ERROR',
         timestamp: expect.any(String),
         requestId: undefined,
       });
+      expect('details' in body).toBe(false);
     });
 
     it('maps a body-parser JSON parse error to a clean 400, not a 500', () => {
