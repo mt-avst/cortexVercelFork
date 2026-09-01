@@ -2257,11 +2257,22 @@
     "id": "opportunities-fanout-reads-only-actionable-sessions-for-participants",
     "why": "The whole of cto/AdaptaLabs#62. Drop this and the participant catalogue fans out over every session ever created again, so the 5000 ceiling it feeds becomes a date rather than a risk - and because frontend/src/pages/Home.tsx issues the same request, that date is a whole-product 413 with no smaller request to retry. Invisible to every mocked suite: the sibling arms in opportunities.list-bound.test.ts assert SQL TEXT, and a text assertion cannot see which rows a predicate excludes. Only the real-Postgres spec inserts a finished session and looks.",
     "file": "backend/src/routes/opportunities.ts",
-    "anchor": "WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? '' : UPCOMING_SESSIONS_ONLY}",
+    "anchor": "WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? ADMIN_RECENT_SESSIONS_ONLY : UPCOMING_SESSIONS_ONLY}",
     "mutation": "WHERE s.opportunity_id = ANY($1::uuid[])",
     "runner": "vitest",
     "spec": "src/routes/__tests__/opportunities.list-upcoming-sessions-postgres.test.ts",
     "test": "leaves the finished session out of the anonymous catalogue",
+    "needsDatabase": true
+  },
+  {
+    "id": "opportunities-admin-fanout-windows-the-recent-tail",
+    "why": "cto/AdaptaLabs#103. The admin branch of the same fan-out used to be UNFILTERED, so its 5000 ceiling grew monotonically over the platform's lifetime - a date rather than a risk. #103's decision windows it to the live schedule plus a 14-day tail (ADMIN_RECENT_SESSIONS_ONLY). This mutation reverts the admin branch to unfiltered, which is exactly the tidy-up a reader wanting lifetime admin totals back would make - and it reopens the growth. Invisible to every mocked suite (the list-bound arms assert SQL TEXT); only the real-Postgres spec inserts a session older than the window and proves it absent for the admin. Distinct from the participant entry above, which shares this line but tests the anonymous branch.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? ADMIN_RECENT_SESSIONS_ONLY : UPCOMING_SESSIONS_ONLY}",
+    "mutation": "WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? '' : UPCOMING_SESSIONS_ONLY}",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.list-upcoming-sessions-postgres.test.ts",
+    "test": "hands an admin the recent and live sessions but not one past the window",
     "needsDatabase": true
   }
 ]

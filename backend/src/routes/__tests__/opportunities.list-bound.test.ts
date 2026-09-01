@@ -12,6 +12,7 @@ jest.mock('../../utils/database', () => ({
 }));
 
 import opportunitiesRouter, {
+  ADMIN_RECENT_SESSIONS_ONLY,
   MAX_OPPORTUNITIES_RETURNED,
   MAX_OPPORTUNITY_SEARCH_LENGTH,
   MAX_SESSIONS_RETURNED,
@@ -232,6 +233,13 @@ describe('the session fan-out under GET /api/opportunities is bounded too', () =
     expect(MAX_SESSIONS_RETURNED).toBe(5000);
   });
 
+  it('holds the admin recent-session window at the interval that was decided (#103)', () => {
+    // The literal, so widening or narrowing the fourteen-day tail that closes
+    // #103's growth fails here by name rather than silently moving the number an
+    // admin's recruitment and "this week" counts are summed over.
+    expect(ADMIN_RECENT_SESSIONS_ONLY).toBe(" AND s.end_time > NOW() - INTERVAL '14 days'");
+  });
+
   it('asks the database for one session more than it will return', async () => {
     fanOutReturns(1);
 
@@ -327,13 +335,13 @@ describe('the session fan-out under GET /api/opportunities is bounded too', () =
    *
    * These are SHAPE arms, and shape is all they are: a SQL-text assertion cannot
    * see the rows the predicate actually excludes, and this suite's pool is a
-   * mock. The BEHAVIOUR - a past session absent for a participant and present
-   * for an admin - is pinned against a real Postgres in
-   * `opportunities.list-upcoming-sessions-postgres.test.ts`, and that is the
-   * file to change if the disposition changes. Both halves are asserted here
-   * because a filter applied to BOTH branches would silently change the admin
-   * slot totals `frontend/src/pages/Admin.tsx:771` renders, and that is a
-   * product decision rather than this change's to make.
+   * mock. The BEHAVIOUR - a past session absent for a participant, a RECENT one
+   * present for an admin and an OLD one absent - is pinned against a real
+   * Postgres in `opportunities.list-upcoming-sessions-postgres.test.ts`, and that
+   * is the file to change if the disposition changes. Both halves are asserted
+   * here because the two branches carry DIFFERENT filters (#103 decided the
+   * admin one is a recent window, not the participant's strict live schedule),
+   * and a change that collapsed them to one must fail by name.
    *
    * `end_time`, not `start_time`, and the arm says so: `backend/src/routes/
    * bookings.ts:107` refuses a booking on `end_time <= now`, so a session in
@@ -354,12 +362,17 @@ describe('the session fan-out under GET /api/opportunities is bounded too', () =
     expect(sessionsSql()).not.toContain('s.start_time >= NOW()');
   });
 
-  it('leaves the admin fan-out unfiltered, because the admin slot totals count completed sessions', async () => {
+  it('windows the admin fan-out to a recent tail, not the whole archive (#103)', async () => {
     fanOutReturns(1);
 
     await request(listening(appAs('researcher_admin'))).get('/api/opportunities');
 
-    expect(sessionsSql()).not.toContain('NOW()');
+    // The admin branch IS filtered now - to the live schedule plus a recent
+    // tail - so its count tracks the schedule rather than growing for ever.
+    expect(sessionsSql()).toContain("s.end_time > NOW() - INTERVAL '14 days'");
+    // The control against collapsing the two branches: the admin filter is the
+    // WINDOW, not the participant's strict future-only bound.
+    expect(sessionsSql()).not.toMatch(/s\.end_time > NOW\(\)\s+GROUP/);
   });
 
   // CONTROL. The two arms above pass just as well if the route stopped fanning

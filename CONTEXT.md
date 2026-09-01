@@ -55,7 +55,8 @@ Drawable window and actionable session added 2026-09-01 after #95 and #62.
 - **Actionable session** - one a participant can still act on, `end_time > NOW()`, which is what
   the participant catalogue embeds. NOT "upcoming": a session already under way is still bookable
   (`routes/bookings.ts` refuses on end time), so the two differ by exactly the sessions in
-  progress. The admin listing deliberately still carries the whole archive (#62, #103).
+  progress. The admin listing embeds the live schedule plus a recent 14-day tail rather than the
+  whole archive (#62, #103), so its slot totals mean "recent + live", not "lifetime".
 - **Availability** is not **free/busy**. Availability needs no calendar and always works.
   Free/busy is the researcher's real commitments and needs a connected calendar; without one
   the grid is unchecked and the UI says so. Conflating the two is what made #89 look like a

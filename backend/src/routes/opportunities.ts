@@ -1026,13 +1026,15 @@ export const MAX_OPPORTUNITIES_RETURNED = 1000;
  * already serialising megabytes per catalogue load, and the answer there is
  * pagination rather than a larger constant - the same conclusion #22 reached.
  *
- * THE COUNT ONLY EVER GOES UP - FOR AN ADMIN. Session creation is capped per
- * REQUEST at `MAX_TIME_SLOTS_PER_REQUEST` and not cumulatively, and nothing
- * reclaims a past session, so an unfiltered fan-out is dated rather than merely
- * latent. The PARTICIPANT branch is no longer unfiltered: it reads only
- * sessions that can still be acted on (`UPCOMING_SESSIONS_ONLY`, below), so the
- * count that path bounds tracks the live schedule (cto/AdaptaLabs#62). The
- * admin branch still reads the archive - see the ponytail there.
+ * THE COUNT NO LONGER GROWS MONOTONICALLY ON EITHER BRANCH. Session creation is
+ * capped per REQUEST at `MAX_TIME_SLOTS_PER_REQUEST` and not cumulatively, and
+ * nothing reclaims a past session, so an UNFILTERED fan-out was dated rather
+ * than merely latent. The participant branch reads only sessions that can still
+ * be acted on (`UPCOMING_SESSIONS_ONLY`, below), tracking the live schedule
+ * (cto/AdaptaLabs#62); the admin branch reads the live schedule plus a bounded
+ * recent tail (`ADMIN_RECENT_SESSIONS_ONLY`, cto/AdaptaLabs#103). Both bounds
+ * track the schedule rather than the archive, so this ceiling is a safety limit
+ * again rather than a date on the calendar.
  *
  * Written as a NUMBER HERE and asserted as the same number in the test rather
  * than derived from this constant.
@@ -1061,33 +1063,56 @@ export const MAX_SESSIONS_RETURNED = 5000;
  * than a degraded admin view. Filtering here bounds that path by the LIVE
  * SCHEDULE, which does not grow monotonically.
  *
- * The admin branch keeps the unfiltered set because `frontend/src/pages/
- * Admin.tsx:771` sums `capacity` and `booked_count` across
- * `opportunity.sessions` for each study's slot totals. Whether those totals
- * should count completed sessions is a PRODUCT question, and answering it
- * silently inside a reliability fix is how a number changes under someone
- * without them being told.
+ * The admin branch is filtered too, but to a RECENT WINDOW rather than to the
+ * participant's strict `> NOW()` - see `ADMIN_RECENT_SESSIONS_ONLY` below and
+ * cto/AdaptaLabs#103, which is what settled the product question this comment
+ * used to leave open.
  *
  * NO PARTICIPANT-FACING READER CONSUMES THESE ROWS TODAY, and the sweep's
  * scope is stated so its narrowness is visible: every file under `frontend/src`,
  * `e2e` and `shared` that mentions `getOpportunities`, case-insensitively, then
- * each of those read for `sessions`. The only consumer of `opportunity.sessions`
- * from THIS route is `Admin.tsx`, which the admin branch still serves in full.
+ * each of those read for `sessions`. The consumers of `opportunity.sessions`
+ * from THIS route are all in `frontend/src/utils/adminDashboard.ts` (getRecruitment,
+ * getSessionsThisWeek, getNextSession, getClosingTime) rendered by `Admin.tsx`.
  * `Home.tsx` and the `OpportunityRow` it renders never touch them, and
  * `OpportunityDetail.tsx` gets its sessions from `GET /api/opportunities/:id` -
  * a different query, unchanged here. They do still go OUT on the participant
  * wire (`toPublicOpportunity` strips the joining link and keeps the rows), so
  * this is a payload change with no reader, not a no-op. Re-run that sweep
  * before widening the filter.
- *
- * ponytail: the ADMIN branch still has no time filter, so the count IT bounds
- *   still grows for ever -> cto/AdaptaLabs#103, which carries the disposition:
- *   decide the admin-totals question, paginate the listing, or archive past
- *   sessions. Pointed at #103 and NOT at #62, which this change closes - the
- *   comment is the ledger and the issue is the alarm, and an upgrade path aimed
- *   at a closed issue is a ceiling with no alarm left on it.
  */
 const UPCOMING_SESSIONS_ONLY = ` AND s.end_time > NOW()`;
+
+/**
+ * THE ADMIN FAN-OUT'S TIME FILTER (cto/AdaptaLabs#103).
+ *
+ * #62 filtered the PARTICIPANT branch to the live schedule and deliberately left
+ * the ADMIN branch unfiltered, because the admin dashboard sums these rows and
+ * whether its totals should count completed sessions was a PRODUCT question -
+ * one this route must not answer silently. #103 is that question, and Nick's
+ * answer: an admin study card means the LIVE SCHEDULE PLUS A RECENT TAIL, not
+ * the whole archive.
+ *
+ * A recent window rather than a strict `> NOW()`, because a re-run of the sweep
+ * above found a consumer the original comment predated:
+ * `adminDashboard.getSessionsThisWeek` counts THIS WEEK's already-COMPLETED
+ * sessions (rendered as "N completed" on the dashboard), so a strict future-only
+ * filter would zero that count. Fourteen days is deliberately generous - it
+ * comfortably covers the admin's local, Monday-anchored "this week" from any
+ * timezone (the backend clock is UTC; the frontend week is local) with room to
+ * spare, while bounding the past contribution so the fan-out no longer grows
+ * monotonically over the platform's lifetime. That unbounded growth - a 5000
+ * ceiling that was a DATE rather than a risk - was the whole of #103.
+ *
+ * `getRecruitment` (booked/capacity) now sums the live schedule plus this tail
+ * rather than all time; that is the intended meaning of the decision, and it is
+ * an improvement on a lifetime-cumulative ratio that never reclaimed a past
+ * session. Written as a LITERAL and pinned as the same literal in
+ * `opportunities.list-bound.test.ts`; the behavioural bound (a session past the
+ * window is absent, a recent one present) is pinned against real Postgres in
+ * `opportunities.list-upcoming-sessions-postgres.test.ts`.
+ */
+export const ADMIN_RECENT_SESSIONS_ONLY = ` AND s.end_time > NOW() - INTERVAL '14 days'`;
 
 /**
  * THE LONGEST `?q=` THIS ROUTE WILL SEARCH FOR, and it REFUSES above it.
@@ -1293,7 +1318,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
                 s.opportunity_id
          FROM sessions s
          LEFT JOIN bookings b ON s.id = b.session_id
-         WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? '' : UPCOMING_SESSIONS_ONLY}
+         WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? ADMIN_RECENT_SESSIONS_ONLY : UPCOMING_SESSIONS_ONLY}
          GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
                   s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
          ORDER BY s.opportunity_id, s.start_time ASC
