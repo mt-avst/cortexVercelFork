@@ -1845,6 +1845,26 @@
     "test": "prefixes the cookie name with __Host-, so a subdomain cannot toss one in"
   },
   {
+    "id": "session-cookie-keeps-the-host-prefix",
+    "why": "cto/AdaptaLabs#97, the session half of #94. In production adaptalabs_session is host-only with no Domain, so any sibling *.adaptavist.net host can set Domain=.adaptavist.net and toss a duplicate; `cookie` parses a duplicate name first-wins, so the planted cookie shadows the victim's post-login cookie indefinitely - a denial-of-login (the fixation escalation is separately blocked by req.session.regenerate() on both login paths). The __Host- prefix makes a sibling unable to express a cookie that lands here (it needs a Domain, which the prefix forbids). The prefix is CONDITIONAL, unlike #94's, because express-session refuses to set a Secure cookie over http, so a __Host- name outside production would emit no cookie and break local login; the sibling-toss threat is production-origin only. This is the mutation to fear rather than dropping `secure`: that breaks the flow loudly, whereas dropping the prefix leaves every flow working and silently reopens the hole. Proven KILLED before entry: with the prefix dropped, sessionCookieName('production') returns \"adaptalabs_session\" against the expected \"__Host-adaptalabs_session\".",
+    "file": "backend/src/utils/hostCookie.ts",
+    "anchor": "  return isSecureCookieEnv(nodeEnv) ? `${HOST_COOKIE_PREFIX}${SESSION_COOKIE_BASENAME}` : SESSION_COOKIE_BASENAME;",
+    "mutation": "  return SESSION_COOKIE_BASENAME;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/hostCookie.test.ts",
+    "test": "prefixes the session cookie with __Host- in production so a sibling subdomain cannot toss one in"
+  },
+  {
+    "id": "csrf-cookie-keeps-the-host-prefix",
+    "why": "cto/AdaptaLabs#97, the CSRF half. adaptalabs_csrf is the same host-only shape as the session cookie and tossable the same way; a shadowed CSRF cookie desyncs the double-submit pair and denies mutating requests. The prefix is keyed off csrf-csrf's secureCookies flag (itself NODE_ENV==='production') rather than being unconditional, because a __Host- name requires Secure and supertest's cookie jar silently drops Secure cookies over http - an unconditional prefix would break the double-submit round-trip in tests. Dropping the prefix is the silent regression: the cookie keeps working while a sibling regains the ability to toss one. Proven KILLED before entry: with the prefix dropped, csrfCookieName(true) returns \"adaptalabs_csrf\" against the expected \"__Host-adaptalabs_csrf\".",
+    "file": "backend/src/utils/hostCookie.ts",
+    "anchor": "  return secureCookies ? `${HOST_COOKIE_PREFIX}${CSRF_COOKIE_BASENAME}` : CSRF_COOKIE_BASENAME;",
+    "mutation": "  return CSRF_COOKIE_BASENAME;",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/hostCookie.test.ts",
+    "test": "prefixes the CSRF cookie with __Host- when cookies are secure so a sibling subdomain cannot toss one in"
+  },
+  {
     "id": "results-read-firsthand-aggregate-releases-before-json",
     "why": "cto/AdaptaLabs#85, the residual availability half of #9. GET /studies/:studyId/results buffered its res.json body and held the single results permit through the whole drain, which a slow reader controls - denying another admin's aggregate reads. !288 bounded the body so early release is now safe. This mutation drops releaseResultsReadPermit(res) before res.json, reverting to permit-held-through-drain; caught by the all-four structural test. Anchored on the #85 comment+call so it is unique against the CSV route's release in the same file.",
     "file": "backend/src/routes/firsthand.ts",

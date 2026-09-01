@@ -118,4 +118,46 @@ describe('CSRF protection', () => {
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe('logout');
   });
+
+  // cto/AdaptaLabs#97: when cookies are secure (production) the CSRF cookie must
+  // carry the __Host- prefix so a sibling *.adaptavist.net host cannot toss a
+  // duplicate. Read straight off the Set-Cookie header - supertest's jar drops
+  // the Secure cookie, which is exactly why the prefix is conditional.
+  it('names the CSRF cookie __Host-adaptalabs_csrf when cookies are secure', async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(cookieParser());
+    app.use(
+      session({
+        secret: 'test-session-secret',
+        resave: false,
+        saveUninitialized: false,
+        cookie: { secure: false, sameSite: 'lax' },
+      })
+    );
+    const { generateCsrfToken } = buildCsrfProtection({
+      secret: 'test-csrf-secret',
+      secureCookies: true,
+    });
+    app.get('/api/csrf-token', (req, res) => {
+      req.session.csrfSeeded = true;
+      res.json({ csrfToken: generateCsrfToken(req, res) });
+    });
+
+    const response = await request(listening(app)).get('/api/csrf-token');
+    const setCookie = response.headers['set-cookie'] as unknown as string[] | undefined;
+    const header = (setCookie ?? []).join('\n');
+    expect(header).toContain('__Host-adaptalabs_csrf=');
+    expect(header).toMatch(/Secure/i);
+    expect(header).not.toMatch(/Domain=/i);
+  });
+
+  it('keeps the CSRF cookie bare when cookies are not secure, so the double-submit round-trip survives http', async () => {
+    const app = buildApp();
+    const response = await request(listening(app)).get('/api/csrf-token');
+    const setCookie = response.headers['set-cookie'] as unknown as string[] | undefined;
+    const header = (setCookie ?? []).join('\n');
+    expect(header).toContain('adaptalabs_csrf=');
+    expect(header).not.toContain('__Host-');
+  });
 });

@@ -5,6 +5,7 @@ import { pool } from '../config';
 import { userCalendarService } from '../services/userCalendar';
 import { logger } from '../utils/logger';
 import { createOAuthStateGuard, OAuthStateResult } from '../utils/oauthState';
+import { sessionCookieName, sessionCookieClearOptions } from '../utils/hostCookie';
 import { isGoogleOAuthDemoMode } from '../../../shared/utils/demoMode';
 import {
   parseBootstrapSuperadminEmails,
@@ -329,7 +330,15 @@ router.post('/logout', (req, res) => {
       return res.status(500).json({ error: 'Logout failed' });
     }
     
-    res.clearCookie('adaptalabs_session');
+    // Clear by the SAME name and options the session was set with (#97). In
+    // production that is the __Host- prefixed name with Secure/Path=/, or the
+    // browser refuses the clearing cookie and the session cookie is never
+    // removed.
+    // process.env.NODE_ENV, not config.NODE_ENV, to match this module's idiom
+    // throughout - and the two are equivalent, since NODE_ENV fails the enum
+    // parse (fails the boot) for any value other than the three allowed.
+    const nodeEnv = process.env.NODE_ENV;
+    res.clearCookie(sessionCookieName(nodeEnv), sessionCookieClearOptions(nodeEnv));
     res.json({ success: true });
   });
 });
