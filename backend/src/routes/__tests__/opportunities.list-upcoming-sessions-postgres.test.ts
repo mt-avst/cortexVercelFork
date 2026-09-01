@@ -48,6 +48,7 @@ interface Fixture {
   adminId: string;
   opportunityId: string;
   pastSessionId: string;
+  ancientSessionId: string;
   futureSessionId: string;
   inProgressSessionId: string;
 }
@@ -64,6 +65,7 @@ async function seed(): Promise<Fixture> {
   const adminId = crypto.randomUUID();
   const opportunityId = crypto.randomUUID();
   const pastSessionId = crypto.randomUUID();
+  const ancientSessionId = crypto.randomUUID();
   const futureSessionId = crypto.randomUUID();
   const inProgressSessionId = crypto.randomUUID();
 
@@ -86,10 +88,13 @@ async function seed(): Promise<Fixture> {
     );
 
   await insertSession(pastSessionId, "-2 days", "-2 days 23 hours");
+  // Older than the admin fan-out's 14-day recent window (#103): present in the
+  // table, absent from what the admin listing embeds.
+  await insertSession(ancientSessionId, "-20 days", "-19 days 23 hours");
   await insertSession(inProgressSessionId, "-10 minutes", "20 minutes");
   await insertSession(futureSessionId, "3 days", "3 days 1 hour");
 
-  return { adminId, opportunityId, pastSessionId, futureSessionId, inProgressSessionId };
+  return { adminId, opportunityId, pastSessionId, ancientSessionId, futureSessionId, inProgressSessionId };
 }
 
 const sessionIdsFor = (body: unknown): string[] => {
@@ -209,16 +214,18 @@ describe.skipIf(skipDbTests)(
     });
 
     /**
-     * THE OTHER HALF OF THE DECISION, pinned so that "filter everywhere" fails
-     * by name rather than silently changing a number an admin reads.
+     * THE OTHER HALF OF THE DECISION (cto/AdaptaLabs#103). #62 left the admin
+     * branch unfiltered and recorded the product question; #103 answered it: an
+     * admin study card means the live schedule plus a RECENT TAIL, not the whole
+     * archive. So a recently-finished session is still embedded (the admin
+     * dashboard counts THIS WEEK's completed sessions and sums recruitment over
+     * the live-plus-recent set), while a session older than the window is not -
+     * which is what closes the monotonic growth the ceiling used to be a date for.
      *
-     * `frontend/src/pages/Admin.tsx:771` sums `capacity` and `booked_count`
-     * across these rows for each study's slot totals. Applying the participant
-     * filter here would drop completed sessions out of those totals, which may
-     * well be the right product answer - and is not this change's to give
-     * (cto/AdaptaLabs#103).
+     * Pinned as BEHAVIOUR against real Postgres because a SQL-text arm cannot see
+     * which rows `NOW() - INTERVAL '14 days'` actually excludes.
      */
-    it("still hands an admin every session, including the finished one", async () => {
+    it("hands an admin the recent and live sessions but not one past the window", async () => {
       const fixture = await seed();
 
       const res = await request(listening(app))
@@ -226,9 +233,13 @@ describe.skipIf(skipDbTests)(
         .set("x-test-user-id", fixture.adminId);
 
       expect(res.status).toBe(200);
-      expect(sessionIdsFor(res.body)).toEqual(
+      const ids = sessionIdsFor(res.body);
+      // The recently-finished (-2 days), in-progress and future sessions are all
+      // embedded; the ancient (-20 days) one, outside the recent window, is not.
+      expect(ids).toEqual(
         [fixture.pastSessionId, fixture.inProgressSessionId, fixture.futureSessionId].sort()
       );
+      expect(ids).not.toContain(fixture.ancientSessionId);
     });
   }
 );
