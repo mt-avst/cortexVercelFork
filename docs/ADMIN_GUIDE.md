@@ -684,6 +684,21 @@ Closed sessions:
 - Verify session times are in the future
 - Refresh the page
 
+### A Session Is Outside the Hours the Calendar Draws
+
+The Session Management calendar draws **07:00 to 23:00** in your own timezone, and the
+**Add a slot** control refuses a time outside that window because it could not draw it.
+
+Sessions can still reach a study another way - created through the API, or by a script, or
+authored by someone in a timezone where the same instant falls inside their working day. Those
+appear in an **Outside calendar hours** row directly beneath the day's column, labelled with their
+real start and end times. They behave exactly like any other slot: click one to remove it, or focus
+it and press Enter or Space if you are on the keyboard.
+
+Before this row existed such a session was drawn as a sliver a fraction of a pixel high on the top
+or bottom edge of the column - present, counted in the slot total, and impossible to click, which
+made it impossible to remove from this screen at all.
+
 ### Bookings Aren't Appearing
 
 - Check that opportunity is published

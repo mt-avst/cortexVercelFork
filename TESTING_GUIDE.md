@@ -55,6 +55,32 @@ npm run test:smoke
 npm run test:e2e:prod
 ```
 
+### The CSV export's ingress check (the cto/AdaptaLabs#11 launch gate)
+
+Run this **before the first real study collects responses**, because that is the first moment a
+truncated export could reach a researcher:
+
+```bash
+node scripts/csv-stream-check.mjs \
+  --url "https://adaptalabs.kubera-playground.adaptavist.net/api/opportunities/<id>/survey-results.csv" \
+  --cookie "connect.sid=<session>"
+```
+
+The streamed export destroys the socket on every failure path, so a failure part-way through cannot
+become a short CSV that parses. Nothing local can check the other half: if a buffering proxy sits in
+front, it collects the whole body first and a destroyed socket reaches the researcher as a
+complete-looking truncated file with a `Content-Length` on it.
+
+The script reports **STREAMED**, **BUFFERED** or **INCONCLUSIVE**, and exits 0 only when the verdict
+is STREAMED *and* the interrupt broke the transfer. `INCONCLUSIVE` is the honest answer against a
+small export - every signal it measures reads as buffered when there was nothing to buffer - so run
+it against a study with a few hundred responses, enough to cross the 100-participant batch boundary.
+
+It needs an admin session cookie and an opportunity with a linked study (`firsthand_study_id`);
+that is the route's own requirement, and it does not check the opportunity type. The **Responses**
+tab that offers the download in the UI is narrower - it appears only for a poll or survey - so a
+`curl`-able URL may exist for an opportunity whose page shows no download button.
+
 `run-alpha-tests.sh` was deleted on 2026-08-24. Its only job was running
 `e2e/critical-flows.test.ts`, which no Playwright config could collect, so the
 script could not do anything useful. The two commands above are what actually

@@ -5,6 +5,7 @@ Use these terms exactly in issue titles, test names and proposals - do not drift
 Seeded 2026-08-26; extend via `/domain-modeling` when a term gets resolved, not speculatively.
 Calendar terms added 2026-08-27 after #89.
 Moderated-capture terms added 2026-08-29 after #79.
+Drawable window and actionable session added 2026-09-01 after #95 and #62.
 
 ## Terms
 
@@ -44,6 +45,17 @@ Moderated-capture terms added 2026-08-29 after #79.
   HAND-ENTER one. Hand-entered slots and real sessions are *protected*: they win the overlap
   prune and skip the duration filter, because a slot the researcher asked for that is silently
   dropped is worse than a crowded grid (#89).
+- **Drawable window** - the hours the Session Management timeline actually draws, 07:00-23:00
+  in the VIEWER's local time (`TIMELINE_START_HOUR` / `TIMELINE_END_HOUR`). It is a property of
+  the grid, not of the data, which is why there is no server-side rule enforcing it: the same
+  instant is inside one researcher's window and outside another's (#95).
+- **Gutter row** - the row beneath a day's column carrying sessions outside the drawable window,
+  at their real times and clickable. It exists because `getTimePosition` clamps, so such a session
+  was drawn at a fraction of a pixel: present, counted, and impossible to remove (#95).
+- **Actionable session** - one a participant can still act on, `end_time > NOW()`, which is what
+  the participant catalogue embeds. NOT "upcoming": a session already under way is still bookable
+  (`routes/bookings.ts` refuses on end time), so the two differ by exactly the sessions in
+  progress. The admin listing deliberately still carries the whole archive (#62, #103).
 - **Availability** is not **free/busy**. Availability needs no calendar and always works.
   Free/busy is the researcher's real commitments and needs a connected calendar; without one
   the grid is unchecked and the UI says so. Conflating the two is what made #89 look like a
