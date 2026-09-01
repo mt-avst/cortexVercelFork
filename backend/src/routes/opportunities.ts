@@ -1026,24 +1026,68 @@ export const MAX_OPPORTUNITIES_RETURNED = 1000;
  * already serialising megabytes per catalogue load, and the answer there is
  * pagination rather than a larger constant - the same conclusion #22 reached.
  *
- * THE COUNT ONLY EVER GOES UP. The fan-out has no time filter, so it returns
- * every session ever created for every published study, past and future, and
- * nothing reclaims them. Session creation is capped per REQUEST at
- * `MAX_TIME_SLOTS_PER_REQUEST` and not cumulatively. So this ceiling is dated
- * rather than merely latent - see the ponytail note.
+ * THE COUNT ONLY EVER GOES UP - FOR AN ADMIN. Session creation is capped per
+ * REQUEST at `MAX_TIME_SLOTS_PER_REQUEST` and not cumulatively, and nothing
+ * reclaims a past session, so an unfiltered fan-out is dated rather than merely
+ * latent. The PARTICIPANT branch is no longer unfiltered: it reads only
+ * sessions that can still be acted on (`UPCOMING_SESSIONS_ONLY`, below), so the
+ * count that path bounds tracks the live schedule (cto/AdaptaLabs#62). The
+ * admin branch still reads the archive - see the ponytail there.
  *
  * Written as a NUMBER HERE and asserted as the same number in the test rather
  * than derived from this constant.
  *
- * ponytail: a flat ceiling on a fan-out that has no time filter, so the count it
- *   bounds grows monotonically over the platform's lifetime and is never reclaimed
- *   -> cto/AdaptaLabs#62, which carries the disposition options - filter the
- *      fan-out to upcoming sessions, or paginate the listing. Pointed at #60 and
- *      NOT at #41, which this change closes: the comment is the ledger and the
- *      issue is the alarm, so an upgrade path aimed at a closed issue is a
- *      ceiling with no alarm left on it.
+ * The ponytail for what is LEFT of that growth sits on `UPCOMING_SESSIONS_ONLY`
+ * below, beside the filter that closed half of it.
  */
 export const MAX_SESSIONS_RETURNED = 5000;
+
+/**
+ * THE FAN-OUT'S TIME FILTER, applied to the PARTICIPANT branch and not the
+ * admin one (cto/AdaptaLabs#62).
+ *
+ * `s.end_time > NOW()` is not "future sessions": it is the set a participant
+ * can still ACT on, and it is written to match `backend/src/routes/bookings.ts`
+ * exactly, which refuses a booking when `new Date(session.end_time) <= new
+ * Date()`. A session that started ten minutes ago and runs for another twenty
+ * is bookable, so it belongs in the catalogue; the same predicate on
+ * `start_time` would drop it while the product still offers it.
+ *
+ * WHY THE PARTICIPANT BRANCH ONLY. The ceiling above is a DATE rather than a
+ * risk: nothing reclaims a past session, so an unfiltered count grows over the
+ * platform's lifetime until every reader of this route gets a 413 with no
+ * smaller request to retry. `frontend/src/pages/Home.tsx:42` is one of those
+ * readers, which made the arrival of that date a whole-product outage rather
+ * than a degraded admin view. Filtering here bounds that path by the LIVE
+ * SCHEDULE, which does not grow monotonically.
+ *
+ * The admin branch keeps the unfiltered set because `frontend/src/pages/
+ * Admin.tsx:771` sums `capacity` and `booked_count` across
+ * `opportunity.sessions` for each study's slot totals. Whether those totals
+ * should count completed sessions is a PRODUCT question, and answering it
+ * silently inside a reliability fix is how a number changes under someone
+ * without them being told.
+ *
+ * NO PARTICIPANT-FACING READER CONSUMES THESE ROWS TODAY, and the sweep's
+ * scope is stated so its narrowness is visible: every file under `frontend/src`,
+ * `e2e` and `shared` that mentions `getOpportunities`, case-insensitively, then
+ * each of those read for `sessions`. The only consumer of `opportunity.sessions`
+ * from THIS route is `Admin.tsx`, which the admin branch still serves in full.
+ * `Home.tsx` and the `OpportunityRow` it renders never touch them, and
+ * `OpportunityDetail.tsx` gets its sessions from `GET /api/opportunities/:id` -
+ * a different query, unchanged here. They do still go OUT on the participant
+ * wire (`toPublicOpportunity` strips the joining link and keeps the rows), so
+ * this is a payload change with no reader, not a no-op. Re-run that sweep
+ * before widening the filter.
+ *
+ * ponytail: the ADMIN branch still has no time filter, so the count IT bounds
+ *   still grows for ever -> cto/AdaptaLabs#103, which carries the disposition:
+ *   decide the admin-totals question, paginate the listing, or archive past
+ *   sessions. Pointed at #103 and NOT at #62, which this change closes - the
+ *   comment is the ledger and the issue is the alarm, and an upgrade path aimed
+ *   at a closed issue is a ceiling with no alarm left on it.
+ */
+const UPCOMING_SESSIONS_ONLY = ` AND s.end_time > NOW()`;
 
 /**
  * THE LONGEST `?q=` THIS ROUTE WILL SEARCH FOR, and it REFUSES above it.
@@ -1249,7 +1293,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
                 s.opportunity_id
          FROM sessions s
          LEFT JOIN bookings b ON s.id = b.session_id
-         WHERE s.opportunity_id = ANY($1::uuid[])
+         WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? '' : UPCOMING_SESSIONS_ONLY}
          GROUP BY s.id, s.opportunity_id, s.start_time, s.end_time, s.capacity,
                   s.location_or_meet_link_optional, s.created_at, s.updated_at, s.booked_count
          ORDER BY s.opportunity_id, s.start_time ASC

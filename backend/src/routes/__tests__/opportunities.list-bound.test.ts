@@ -322,6 +322,60 @@ describe('the session fan-out under GET /api/opportunities is bounded too', () =
     expect(res.body[0].sessions[0]).toMatchObject({ capacity: 5, booked_count: 1, remaining: 4 });
   });
 
+  /**
+   * THE TIME FILTER ON THE PARTICIPANT BRANCH (cto/AdaptaLabs#62).
+   *
+   * These are SHAPE arms, and shape is all they are: a SQL-text assertion cannot
+   * see the rows the predicate actually excludes, and this suite's pool is a
+   * mock. The BEHAVIOUR - a past session absent for a participant and present
+   * for an admin - is pinned against a real Postgres in
+   * `opportunities.list-upcoming-sessions-postgres.test.ts`, and that is the
+   * file to change if the disposition changes. Both halves are asserted here
+   * because a filter applied to BOTH branches would silently change the admin
+   * slot totals `frontend/src/pages/Admin.tsx:771` renders, and that is a
+   * product decision rather than this change's to make.
+   *
+   * `end_time`, not `start_time`, and the arm says so: `backend/src/routes/
+   * bookings.ts:107` refuses a booking on `end_time <= now`, so a session in
+   * progress is still bookable and still belongs in the catalogue.
+   */
+  it.each<[string, 'employee' | null]>([
+    ['anonymous, which is the participant home page', null],
+    ['a signed-in employee', 'employee'],
+  ])('reads only sessions that can still be acted on for %s', async (_who, role) => {
+    fanOutReturns(1);
+
+    await request(listening(appAs(role))).get('/api/opportunities');
+
+    expect(sessionsSql()).toContain('s.end_time > NOW()');
+    // Not start_time: that would drop a session already under way, which the
+    // booking route still accepts.
+    expect(sessionsSql()).not.toContain('s.start_time > NOW()');
+    expect(sessionsSql()).not.toContain('s.start_time >= NOW()');
+  });
+
+  it('leaves the admin fan-out unfiltered, because the admin slot totals count completed sessions', async () => {
+    fanOutReturns(1);
+
+    await request(listening(appAs('researcher_admin'))).get('/api/opportunities');
+
+    expect(sessionsSql()).not.toContain('NOW()');
+  });
+
+  // CONTROL. The two arms above pass just as well if the route stopped fanning
+  // out at all, or if `sessionsSql()` started returning the wrong statement.
+  it('still asks for the fan-out on both branches, filtered or not', async () => {
+    for (const role of ['employee', 'researcher_admin'] as const) {
+      mockQuery.mockClear();
+      fanOutReturns(1);
+
+      await request(listening(appAs(role))).get('/api/opportunities');
+
+      expect(sessionsSql()).toContain('FROM sessions s');
+      expect(sessionsSql()).toContain('LIMIT 5001');
+    }
+  });
+
   // The pre-existing behaviour this change had to preserve: a FAILED session
   // read is still logged and answered as a catalogue with empty session arrays,
   // not as a refusal and not as a 500.
