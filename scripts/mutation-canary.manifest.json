@@ -2180,5 +2180,16 @@
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.out-of-range-sessions.test.tsx",
     "test": "draws one before the timeline starts in the gutter row, at full size"
+  },
+  {
+    "id": "opportunities-fanout-reads-only-actionable-sessions-for-participants",
+    "why": "The whole of cto/AdaptaLabs#62. Drop this and the participant catalogue fans out over every session ever created again, so the 5000 ceiling it feeds becomes a date rather than a risk - and because frontend/src/pages/Home.tsx issues the same request, that date is a whole-product 413 with no smaller request to retry. Invisible to every mocked suite: the sibling arms in opportunities.list-bound.test.ts assert SQL TEXT, and a text assertion cannot see which rows a predicate excludes. Only the real-Postgres spec inserts a finished session and looks.",
+    "file": "backend/src/routes/opportunities.ts",
+    "anchor": "WHERE s.opportunity_id = ANY($1::uuid[])${isAdmin ? '' : UPCOMING_SESSIONS_ONLY}",
+    "mutation": "WHERE s.opportunity_id = ANY($1::uuid[])",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/opportunities.list-upcoming-sessions-postgres.test.ts",
+    "test": "leaves the finished session out of the anonymous catalogue",
+    "needsDatabase": true
   }
 ]
