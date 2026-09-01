@@ -96,9 +96,15 @@ export const getSessionsThisWeek = (
 };
 
 /**
- * Published studies whose closing time is within `withinDays` and still in the
- * future. Uses `getClosingTime` (end_date, or last session end as fallback) so
- * a study sorts and warns on the same deadline it displays.
+ * Published studies that need attention within `withinDays`, by EITHER measure:
+ *  - a closing time (end_date, or last session end via getClosingTime) still in
+ *    the future and inside the window, OR
+ *  - an upcoming session inside the window.
+ *
+ * The session arm matters because getClosingTime prefers `end_date`: a study
+ * whose recruitment window has passed but which still has an imminent session
+ * would otherwise show that session in the table yet never appear here. The two
+ * views are now consistent - if the table calls it imminent, so does this.
  */
 export const getStudiesClosingSoon = (
   opportunities: Opportunity[],
@@ -108,10 +114,16 @@ export const getStudiesClosingSoon = (
   const horizon = now.getTime() + withinDays * MS_PER_DAY;
   return opportunities.filter((opp) => {
     if (opp.status !== 'published') return false;
+
     const closesAt = getClosingTime(opp);
-    if (!closesAt) return false;
-    const t = closesAt.getTime();
-    return t > now.getTime() && t <= horizon;
+    const closingWindow =
+      closesAt !== null && closesAt.getTime() > now.getTime() && closesAt.getTime() <= horizon;
+
+    // getNextSession already guarantees start >= now, so only the upper bound is left.
+    const next = getNextSession(opp, now);
+    const sessionWindow = next !== null && new Date(next.start_time).getTime() <= horizon;
+
+    return closingWindow || sessionWindow;
   });
 };
 

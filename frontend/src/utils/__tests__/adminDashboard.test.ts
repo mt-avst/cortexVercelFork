@@ -140,6 +140,28 @@ describe('getStudiesClosingSoon', () => {
     });
     expect(getStudiesClosingSoon([bookable], NOW, 3).map((o) => o.id)).toEqual(['b']);
   });
+
+  it('counts an imminent upcoming session even when end_date has already passed', () => {
+    // Recruitment window closed yesterday, but a session runs today - the table
+    // shows it as imminent, so this must too.
+    const stillRunning = opp({
+      id: 'r',
+      status: 'published',
+      end_date: '2026-08-18T17:00:00', // before NOW
+      sessions: [session({ start_time: '2026-08-19T16:00:00', end_time: '2026-08-19T16:30:00' })], // today, future
+    });
+    expect(getStudiesClosingSoon([stillRunning], NOW, 3).map((o) => o.id)).toEqual(['r']);
+  });
+
+  it('excludes a study whose only session is beyond the window (control)', () => {
+    const farSession = opp({
+      id: 'f',
+      status: 'published',
+      end_date: undefined,
+      sessions: [session({ start_time: '2026-08-30T09:00:00', end_time: '2026-08-30T10:00:00' })],
+    });
+    expect(getStudiesClosingSoon([farSession], NOW, 3)).toEqual([]);
+  });
 });
 
 describe('isFullyBooked / needsRecruitment', () => {
