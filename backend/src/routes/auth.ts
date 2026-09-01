@@ -11,7 +11,7 @@ import {
   shouldElevateToSuperadmin,
 } from '../utils/superadminBootstrap';
 
-import { SessionUser } from '../types';
+import { SessionUser, isAdminRole } from '../types';
 import {
   describeOidcClientIdConflictWarning,
   describeOidcCredentialSource,
@@ -591,7 +591,7 @@ router.get('/google-callback', validateQuery(oauthCallbackQuerySchema), async (r
         name: userInfo.name,
         email: userInfo.email,
         business_unit: 'Engineering', // Default, can be updated from Google profile if available
-        role_title: userRole === 'researcher_admin' || userRole === 'superadmin' ? 'Research Manager' : 'Software Engineer',
+        role_title: isAdminRole(userRole) ? 'Research Manager' : 'Software Engineer',
         role: userRole as 'employee' | 'researcher_admin' | 'superadmin',
       };
 

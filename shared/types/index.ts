@@ -27,6 +27,29 @@ export interface SessionUser {
   role: 'employee' | 'researcher_admin' | 'superadmin';
 }
 
+/**
+ * The admin-role set, written down once (cto/AdaptaLabs#57).
+ *
+ * "Which roles are admin" used to be spelled inline at 16 runtime sites, so the
+ * set could drift by editing one string and nothing would fail across the
+ * others - a gate measured a one-character deletion of `superadmin` that 1301
+ * tests still passed. A single predicate turns that one-character edit into a
+ * failure across every admin gate at once.
+ *
+ * The set membership itself - that BOTH `researcher_admin` and `superadmin` are
+ * admins - is pinned in the mutation canary (`is-admin-role-includes-*`), the
+ * property that had no enforcement anywhere until this predicate existed.
+ *
+ * Takes a bare string (and null/undefined) so the DB-sourced role reads
+ * (`userResult.rows[0].role`) and the session reads (`req.user?.role`) call it
+ * the same way. This is NOT the Postgres CHECK, the Zod `z.enum` or the type
+ * union - those are the same set stated for other consumers and stay as they
+ * are; this replaces only the runtime TypeScript predicates.
+ */
+export function isAdminRole(role: string | null | undefined): boolean {
+  return role === 'researcher_admin' || role === 'superadmin';
+}
+
 export interface AdminRequest {
   id: string;
   user_id: string;

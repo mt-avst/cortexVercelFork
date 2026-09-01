@@ -1,1 +1,6 @@
-[]
+[
+  {
+    "id": "catalogue-live-role-read-covers-superadmin-sessions",
+    "reason": "Renamed to is-admin-role-includes-superadmin in cto/AdaptaLabs#57. The inline `storedRole !== 'researcher_admin' && storedRole !== 'superadmin'` set check it anchored in withLiveRoleIfPresent no longer exists - it is now `!isAdminRole(storedRole)` - and the property it pinned (superadmin is an admin role) moved onto the isAdminRole predicate, where is-admin-role-includes-superadmin pins it against a direct unit assertion. No coverage lost: set membership is now pinned in BOTH directions on the predicate."
+  }
+]

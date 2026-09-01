@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config';
 import { requireAuth, requireAdmin, optionalAuth, withLiveRole } from '../middleware/authenticate';
-import { Booking, BookingWithDetails, RescheduleBookingRequest } from '../types';
+import { Booking, BookingWithDetails, RescheduleBookingRequest, isAdminRole } from '../types';
 import calendarService, { CALENDAR_NOT_CONFIGURED } from '../services/calendar';
 import { userCalendarService } from '../services/userCalendar';
 import { CalendarEvent } from '../../../shared/types';
@@ -437,7 +437,7 @@ router.post('/:id/cancel', requireAuth, withLiveRole, asyncHandler(async (req: R
 
   const { id: bookingId } = req.params;
   const userId = req.user!.id;
-  const isAdmin = req.user!.role === 'researcher_admin' || req.user!.role === 'superadmin';
+  const isAdmin = isAdminRole(req.user!.role);
 
   // Load booking with session and opportunity details.
   //
@@ -1565,7 +1565,7 @@ router.get('/pending-approvals', requireAuth, asyncHandler(async (req: Request, 
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [userId]);
-  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
+  if (userResult.rows.length === 0 || !isAdminRole(userResult.rows[0].role)) {
     throw new ForbiddenError('Only admins can view pending approvals');
   }
 
@@ -1625,7 +1625,7 @@ router.post('/:bookingId/approve', requireAuth, asyncHandler(async (req: Request
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
-  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
+  if (userResult.rows.length === 0 || !isAdminRole(userResult.rows[0].role)) {
     throw new ForbiddenError('Only admins can approve sessions');
   }
 
@@ -1709,7 +1709,7 @@ router.post('/:bookingId/reject', requireAuth, asyncHandler(async (req: Request,
 
   // Check if user is admin
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
-  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
+  if (userResult.rows.length === 0 || !isAdminRole(userResult.rows[0].role)) {
     throw new ForbiddenError('Only admins can reject sessions');
   }
 
@@ -1800,7 +1800,7 @@ router.put('/:bookingId/notes', requireAuth, asyncHandler(async (req: Request, r
   // Liveness (#14 family): the role that decides is the one in the users
   // table now, not the one snapshotted into the session at login.
   const userResult = await pool.query('SELECT role FROM users WHERE id = $1', [adminId]);
-  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {
+  if (userResult.rows.length === 0 || !isAdminRole(userResult.rows[0].role)) {
     throw new ForbiddenError('Only admins can edit researcher notes');
   }
 

@@ -72,7 +72,7 @@ import { ANALYTICS_TIME_ZONE, toAnalyticsDateString, weekOverWeekChange } from '
 import { resolveStudyDuration } from '../firsthand/study-duration';
 import { isOpportunityOwner } from '../utils/opportunityOwnership';
 
-import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest } from '../types';
+import { Opportunity, CreateOpportunityRequest, UpdateOpportunityRequest, Session, CreateSessionRequest, isAdminRole } from '../types';
 
 const router: Router = Router();
 
@@ -1195,7 +1195,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
     const type = req.query.type as string | undefined;
     const q = req.query.q as string | undefined;
     const status = req.query.status as string | undefined;
-    const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+    const isAdmin = isAdminRole(req.user?.role);
 
     if (q !== undefined && q.length > MAX_OPPORTUNITY_SEARCH_LENGTH) {
       return res.status(400).json({
@@ -1401,7 +1401,7 @@ router.get('/', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Re
 // opportunity is served at all, on the live role rather than the login one.
 router.get('/:id', optionalAuth, withLiveRoleIfPresent, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+  const isAdmin = isAdminRole(req.user?.role);
   
   // Check if database is available
   const dbAvailable = await isDatabaseAvailable();
@@ -2736,7 +2736,7 @@ const recordedStudyBriefLimiter = rateLimit({
 // the brief of a DRAFT study, so it reads the live role like its siblings.
 router.get('/:id/recorded-study-brief', recordedStudyBriefLimiter, optionalAuth, withLiveRoleIfPresent, publicRuntimeWork, asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
-  const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+  const isAdmin = isAdminRole(req.user?.role);
 
   const dbAvailable = await isDatabaseAvailable();
   if (!dbAvailable) {
@@ -3694,7 +3694,7 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
         return res.status(404).json({ error: 'Opportunity not found' });
       }
       
-      const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+      const isAdmin = isAdminRole(req.user?.role);
       
       // Non-admin users can only see published opportunities
       if (!isAdmin && opportunity.status !== 'published') {
@@ -3744,7 +3744,7 @@ router.get('/:id/sessions', optionalAuth, withLiveRoleIfPresent, asyncHandler(as
     }
     
     const opportunity = opportunityCheck.rows[0];
-    const isAdmin = req.user?.role === 'researcher_admin' || req.user?.role === 'superadmin';
+    const isAdmin = isAdminRole(req.user?.role);
     
     // Non-admin users can only see published opportunities
     if (!isAdmin && opportunity.status !== 'published') {

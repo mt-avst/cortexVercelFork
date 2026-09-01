@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { SessionUser } from '../types';
+import { SessionUser, isAdminRole } from '../types';
 import { pool } from '../config';
 import { logger } from '../utils/logger';
 
@@ -90,7 +90,7 @@ export const requireAdmin = async (req: Request, res: Response, next: NextFuncti
     return; // response already sent, failing closed
   }
 
-  if (role !== 'researcher_admin' && role !== 'superadmin') {
+  if (!isAdminRole(role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
 
@@ -206,7 +206,7 @@ export const withLiveRole = async (req: Request, res: Response, next: NextFuncti
  */
 export const withLiveRoleIfPresent = async (req: Request, res: Response, next: NextFunction) => {
   const storedRole = req.session?.user?.role;
-  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {
+  if (!isAdminRole(storedRole)) {
     return next();
   }
 
