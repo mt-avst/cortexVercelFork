@@ -2158,5 +2158,16 @@
     "runner": "jest",
     "spec": "src/routes/__tests__/sessions.create-refuses-the-past.test.ts",
     "test": "accepts within the grace window and refuses beyond it"
+  },
+  {
+    "id": "logger-stringify-applies-the-redaction",
+    "why": "The replacer on this line is the whole of cto/AdaptaLabs#88: unwire it and every failed API call serialises the axios error raw - a researcher's note about a named colleague on a failed notes save, and the live CSRF token on every failed mutating call. Both review gates proved the unwired form passes every functional test that existed before this suite.",
+    "file": "frontend/src/utils/logger.ts",
+    "anchor": "      return JSON.stringify(logEntry, redactRequestBodies);",
+    "mutation": "      return JSON.stringify(logEntry);",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/utils/__tests__/logger.redacts-request-bodies.test.ts",
+    "test": "a production log line names the failure but never the note"
   }
 ]
