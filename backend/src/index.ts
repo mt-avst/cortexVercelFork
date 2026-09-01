@@ -11,6 +11,7 @@ import { applyServerTimeouts } from './server-timeouts';
 import { createDatabaseHealthProbe } from './utils/deepHealth';
 import { errorHandler } from './utils/errorHandler';
 import { getBuildRevision } from './utils/buildInfo';
+import { sessionCookieName } from './utils/hostCookie';
 import { buildCsrfProtection, CSRF_ERROR_CODE } from './middleware/csrf';
 import { sendDueReminders } from './services/reminders';
 import { runFirstHandMaintenance } from './firsthand/maintenance';
@@ -127,7 +128,11 @@ const authLimiter = createAuthLimiter();
 // Session configuration
 app.use(session({
   secret: config.SESSION_SECRET,
-  name: 'adaptalabs_session',
+  // __Host- prefixed in production so a sibling *.adaptavist.net host cannot
+  // toss a duplicate session cookie (cto/AdaptaLabs#97); bare in development,
+  // where express-session cannot set a Secure cookie over http. Name derived in
+  // utils/hostCookie so the set and clear (routes/auth.ts) cannot drift apart.
+  name: sessionCookieName(config.NODE_ENV),
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -135,6 +140,9 @@ app.use(session({
     httpOnly: true,
     maxAge: SECURITY_CONFIG.SESSION_MAX_AGE_MS,
     sameSite: config.NODE_ENV === 'production' ? 'strict' : 'lax',
+    // Explicit Path=/ is a __Host- requirement (and express-session's default),
+    // stated so the prefixed name is a valid __Host- cookie.
+    path: '/',
     domain: config.NODE_ENV === 'production' ? undefined : 'localhost', // Allow cross-port cookie sharing in development
   },
 }));

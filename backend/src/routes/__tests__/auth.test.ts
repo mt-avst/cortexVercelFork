@@ -264,6 +264,12 @@ describe('Authentication Routes', () => {
         .expect(200);
 
       expect(response.body).toEqual({ success: true });
+      // #97: logout must clear by the SAME name the session was set with. Under
+      // NODE_ENV=test that is the bare name; in production it is the __Host-
+      // prefixed one (pinned directly in utils/__tests__/hostCookie.test.ts).
+      const setCookie = response.headers['set-cookie'] as unknown as string[] | undefined;
+      const header = (setCookie ?? []).join('\n');
+      expect(header).toContain('adaptalabs_session=;');
     });
 
     it('should handle session destruction errors', async () => {

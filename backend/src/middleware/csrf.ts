@@ -1,5 +1,6 @@
 import { doubleCsrf } from 'csrf-csrf';
 import { Request } from 'express';
+import { csrfCookieName } from '../utils/hostCookie';
 
 declare module 'express-session' {
   interface SessionData {
@@ -9,7 +10,6 @@ declare module 'express-session' {
 
 export const CSRF_ERROR_CODE = 'INVALID_CSRF_TOKEN';
 export const CSRF_HEADER = 'x-csrf-token';
-const CSRF_COOKIE_NAME = 'adaptalabs_csrf';
 
 // Routes that authenticate by other means and receive no browser cookies
 // (cron triggers: CRON_SECRET bearer), plus logout - it only destroys the
@@ -37,7 +37,11 @@ export function buildCsrfProtection(options: CsrfProtectionOptions) {
   const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
     getSecret: () => options.secret,
     getSessionIdentifier: (req: Request) => req.session?.id ?? '',
-    cookieName: CSRF_COOKIE_NAME,
+    // __Host- prefixed when cookies are secure (production) so a sibling
+    // *.adaptavist.net host cannot toss a duplicate CSRF cookie (#97); bare
+    // otherwise, because a __Host- name requires Secure and supertest's jar
+    // drops Secure cookies over http, which would break the double-submit test.
+    cookieName: csrfCookieName(options.secureCookies),
     cookieOptions: {
       httpOnly: true,
       path: '/',
