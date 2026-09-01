@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, Lock, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, Info, Lock, ShieldCheck } from 'lucide-react';
 
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
@@ -143,6 +143,20 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
     () => templateId === CUSTOM_CONSENT_TEMPLATE_ID
   );
 
+  /**
+   * The THIRD consent state (#100): empty wording on a moderated study.
+   *
+   * Emptying the field is how a moderated author says "this session stores
+   * nothing, no consent is asked at booking" - the save sends `consent_text:
+   * null`. But empty text matches no template, so `resolveConsentTemplate`
+   * returns `custom`, and the badge/help/diff would otherwise accuse the author
+   * of an unapproved deviation while they do the sanctioned thing. Only
+   * moderated has this state: the study kinds' consent is REQUIRED, so their
+   * empty text is an unfilled field, not a deliberate "no consent" - which is
+   * why this is gated on `kind` and not on emptiness alone.
+   */
+  const asksNoConsent = kind === 'moderated' && consentText.trim() === '';
+
   const applyText = (text: string) => {
     // Resolved against the template this session STARTED on, not against
     // whatever the field currently claims. Passing the live claim would mean
@@ -228,14 +242,20 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
           kind={kind}
           templateId={templateId}
           templateVersion={templateVersion}
+          asksNoConsent={asksNoConsent}
         />
-        <blockquote
-          className="mt-3 ps-3"
-          data-testid="consent-read-only-text"
-          style={{ borderLeft: '3px solid var(--border-color, #ced4da)' }}
-        >
-          {consentText}
-        </blockquote>
+        {/* No empty blockquote passed off as this study's wording (#100): a
+            moderated study that stores nothing has none to show, and the badge
+            above already says so. */}
+        {asksNoConsent ? null : (
+          <blockquote
+            className="mt-3 ps-3"
+            data-testid="consent-read-only-text"
+            style={{ borderLeft: '3px solid var(--border-color, #ced4da)' }}
+          >
+            {consentText}
+          </blockquote>
+        )}
       </div>
     );
   }
@@ -272,6 +292,7 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
         kind={kind}
         templateId={templateId}
         templateVersion={templateVersion}
+        asksNoConsent={asksNoConsent}
       />
 
       {refusal}
@@ -308,19 +329,26 @@ const ConsentStep: React.FC<ConsentStepProps> = ({
               onBlur={onBlur}
             />
             <div className="form-text mt-1" style={{ fontSize: '0.875rem' }}>
-              {templateId === CUSTOM_CONSENT_TEMPLATE_ID
+              {asksNoConsent
+                ? 'Leave this empty and no consent is asked at booking. Nothing is recorded against the study; it is not treated as an unapproved deviation.'
+                : templateId === CUSTOM_CONSENT_TEMPLATE_ID
                 ? 'This wording has not been approved. It is recorded as custom, and shown as custom wherever this study appears.'
                 : 'This still matches the approved wording, so the study is recorded as running on the template.'}
             </div>
           </div>
 
-          <div className="mt-3">
-            <ConsentDiffView
-              approvedText={baseTemplate.text}
-              currentText={consentText}
-              templateName={baseTemplate.name}
-            />
-          </div>
+          {/* Nothing to compare against when the field is empty (#100): the
+              diff would render the whole template as removed, which reads as an
+              enormous deviation from the very thing "no consent" opts out of. */}
+          {asksNoConsent ? null : (
+            <div className="mt-3">
+              <ConsentDiffView
+                approvedText={baseTemplate.text}
+                currentText={consentText}
+                templateName={baseTemplate.name}
+              />
+            </div>
+          )}
 
           <button
             type="button"
@@ -371,7 +399,24 @@ const ConsentTemplateBadge: React.FC<{
   kind: ConsentKind;
   templateId: string;
   templateVersion: number | null;
-}> = ({ kind, templateId, templateVersion }) => {
+  /**
+   * Moderated study with the wording emptied (#100): asks no consent at
+   * booking. Checked FIRST, because empty text resolves to `custom` and would
+   * otherwise be badged as an unapproved deviation - the exact false claim
+   * #100 is about.
+   */
+  asksNoConsent: boolean;
+}> = ({ kind, templateId, templateVersion, asksNoConsent }) => {
+  if (asksNoConsent) {
+    return (
+      <div className="alert alert-secondary mb-0" role="status" data-testid="consent-template-state">
+        <Info size={16} className="me-2" aria-hidden="true" />
+        <strong>No consent asked.</strong> This study asks participants to accept
+        no wording before booking, and stores nothing for the session.
+      </div>
+    );
+  }
+
   // Resolved here rather than by the caller so the badge can distinguish the
   // three answers it actually has. `describeConsentTemplate` collapses two of
   // them: it falls back to the CURRENT version when the id is known but the
