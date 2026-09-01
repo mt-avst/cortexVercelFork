@@ -164,6 +164,11 @@ weaken the connection.
 - [x] **API logging** – Routes use `logger` (not `console`) for errors.
 - [x] **Health check** – The backend serves `GET /health` (used by the Kubera liveness/readiness probes on port 3001); the frontend serves its own `/health` probe. These are internal probes, not a public JSON status page.
 - [x] **DB connectivity** – After deploy, verify `GET /api/opportunities` returns 200 (confirms DB + env through the nginx proxy). A **413** from this route is not a connectivity fault: it is the ceiling on embedded sessions (`MAX_SESSIONS_RETURNED = 5000` in `backend/src/routes/opportunities.ts`), which refuses rather than silently truncating, and it applies to anonymous callers too.
+  Since `!323` the two callers count different things: an anonymous or non-admin request embeds only
+  sessions that can still be acted on (`end_time > NOW()`), so its count tracks the live schedule,
+  while an admin request still fans out over every session ever created and is the one whose count
+  only grows (cto/AdaptaLabs#103). A 413 for an admin and a 200 for a signed-out visitor on the same
+  deployment is therefore expected, not a contradiction.
 - [x] **RDS Multi-AZ declared** – `multiAz: true` in `.kubera/playground-backend.yaml`: a synchronous standby in a second AZ with automatic failover. Change it there, not in the AWS console, to avoid manifest/instance drift – it is the likeliest of the three to get toggled off to trim spend. Listed here rather than under Data and backups because it is an availability control, not a backup – it replicates mistakes as faithfully as it replicates good writes. See [docs/BACKUP_STRATEGY.md](BACKUP_STRATEGY.md).
 - [ ] ⛔ BLOCKED (needs AWS RDS read access, which Nick does not have) **RDS Multi-AZ applied** – Unverified: confirming the live instance reports `MultiAZ: true` needs AWS RDS read access.
 

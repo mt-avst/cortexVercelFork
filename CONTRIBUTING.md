@@ -516,6 +516,19 @@ import { requireAdmin } from '../middleware/authenticate';
 
 - Unit tests: `__tests__/` folder next to the file
 - Integration tests: `__tests__/` folder in routes directory
+- Tests for anything under `scripts/`: beside the script, as `<name>.test.js`, using `node:test`
+
+### A test under `scripts/` does not run until you list it
+
+`npm run test:scripts` names every file it runs, explicitly, in `package.json` - there is no glob.
+CI runs that same command, so a new `scripts/*.test.js` that nobody adds to the list passes locally
+when you invoke it directly and **never runs on the gate that blocks a merge**. Add the file to the
+script, then confirm the total moved: the count is the only thing that shows the difference between
+a test that ran and a test that was not collected.
+
+The same trap has a second shape. A test file that fails to COMPILE reports as *zero tests*, not as
+a failure, and a sibling file's passes make the run look green. Both were hit on 2026-09-01 and both
+were caught by the count rather than by the output.
 
 ---
 
@@ -541,4 +554,6 @@ If you're unsure which approach to use, ask in code review or check existing cod
 
 ---
 
-*Last updated: 2026-07-23 - Removed the retired Vercel serverless (`api/**`) patterns; the backend is Express-only.*
+*Last updated: 2026-09-01 - Added how tests under `scripts/` are collected, and why an uncollected or
+non-compiling test reads as green. Previous: 2026-07-23, removed the retired Vercel serverless
+(`api/**`) patterns; the backend is Express-only.*

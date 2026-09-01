@@ -60,10 +60,10 @@ Never scope the canary below the full manifest: a filtered run is structurally b
 pre-existing entry the same diff broke (that reddened main once already). The path gate
 above is job-level and all-or-nothing, which is the only safe shape.
 
-Running it LOCALLY needs a real Postgres. Of the 208 entries (re-measured
-2026-08-29, post-!315), 16 are database-backed. By FILE PATH they split 194
-`backend/`, 12 `shared/`, 2 `frontend/`; by `project` - a different thing, and
-a real manifest field since !307 - it is 206 backend to 2 frontend, because
+Running it LOCALLY needs a real Postgres. Of the 217 entries (re-measured
+2026-09-01, post-!326), 17 are database-backed. By FILE PATH they split 199
+`backend/`, 12 `shared/`, 6 `frontend/`; by `project` - a different thing, and
+a real manifest field since !307 - it is 211 backend to 6 frontend, because
 the 12 `shared/` entries run their specs in the backend project. Grep the
 manifest rather than trusting any of these counts. The
 runner **refuses to start** rather than skipping them - correctly, because a skipped entry
