@@ -3,15 +3,25 @@ import { Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
-import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv } from '../api/client';
+import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
 import { Opportunity } from '../api/types';
-import { getParticipantFacingType, getTypeBadgeClass } from '../utils/opportunityUtils';
+import { getParticipantFacingType, getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
+import {
+  getRecruitment,
+  getSessionsThisWeek,
+  getStudiesClosingSoon,
+  getNextMilestone,
+  getDisplayStatus,
+  matchesQuickFilter,
+  relativeDayLabel,
+  QuickFilter,
+} from '../utils/adminDashboard';
 import { logger } from '../utils/logger';
 import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, CalendarCheck, Users, Clock, CheckCircle, List, History, MessageSquare, Calendar, Download, Clapperboard } from 'lucide-react';
+import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, CalendarClock } from 'lucide-react';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
@@ -52,6 +62,15 @@ const Admin: React.FC = () => {
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string>('');
+  // Counts for the tab badges and the "Needs attention" panel. Fetched here so
+  // the badge shows a number without opening the tab; the tab components still
+  // own their own full fetch.
+  const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number | null>(null);
+  const [feedbackCount, setFeedbackCount] = useState<{ count: number; hasMore: boolean } | null>(null);
+  const [quickFilter, setQuickFilter] = useState<QuickFilter | null>(null);
+  // One clock reading per mount, shared by every "now"-relative derivation on
+  // the page so the snapshot and the table agree with each other.
+  const now = useMemo(() => new Date(), []);
 
 
   // Filter opportunities based on debounced search query (memoized for performance)
@@ -65,9 +84,17 @@ const Admin: React.FC = () => {
     );
   }, [opportunities, debouncedSearchQuery]);
 
+  // Quick-filter chips narrow the search results further, client-side over the
+  // already-loaded list. Each predicate reads only real fields (status, session
+  // capacity, closing time) - see adminDashboard.ts.
+  const quickFilteredOpportunities = useMemo(() => {
+    if (!quickFilter) return filteredOpportunities;
+    return filteredOpportunities.filter((opp) => matchesQuickFilter(opp, quickFilter, now));
+  }, [filteredOpportunities, quickFilter, now]);
+
   // Sort filtered opportunities (memoized for performance)
   const sortedOpportunities = useMemo(() => {
-    return [...filteredOpportunities].sort((a, b) => {
+    return [...quickFilteredOpportunities].sort((a, b) => {
       let aValue: string | number = a[sortField];
       let bValue: string | number = b[sortField];
       
@@ -87,7 +114,11 @@ const Admin: React.FC = () => {
         return aValue < bValue ? 1 : -1;
       }
     });
-  }, [filteredOpportunities, sortField, sortDirection]);
+  }, [quickFilteredOpportunities, sortField, sortDirection]);
+
+  // "Needs attention" and "Sessions this week" derive from the loaded studies.
+  const studiesClosingSoon = useMemo(() => getStudiesClosingSoon(opportunities, now), [opportunities, now]);
+  const sessionsThisWeek = useMemo(() => getSessionsThisWeek(opportunities, now), [opportunities, now]);
 
   const handleSort = (field: 'title' | 'created_at' | 'type' | 'status') => {
     if (field === sortField) {
@@ -96,6 +127,21 @@ const Admin: React.FC = () => {
       setSortField(field);
       setSortDirection('asc');
     }
+  };
+
+  const toggleQuickFilter = (filter: QuickFilter) => {
+    setQuickFilter((current) => (current === filter ? null : filter));
+  };
+
+  // Whether any Research Studies filter is active - drives the "Clear filters"
+  // affordance and the empty-state copy.
+  const hasActiveFilters = Boolean(searchQuery || statusFilter || typeFilter || quickFilter);
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setStatusFilter('');
+    setTypeFilter('');
+    setQuickFilter(null);
   };
 
   // Memoised on the filters it actually reads. Both effects below name it in
@@ -151,14 +197,39 @@ const Admin: React.FC = () => {
     }
   }, []);
 
+  // Counts for the tab badges and the approvals attention card. A failure here
+  // must not blank the page - it just leaves the badge absent, so warn and move
+  // on rather than surfacing an error banner over a working dashboard.
+  const loadCounts = useCallback(async () => {
+    try {
+      const approvals = await getPendingApprovals();
+      setPendingApprovalsCount(Array.isArray(approvals) ? approvals.length : 0);
+    } catch (error: unknown) {
+      logger.warn('Failed to load pending-approvals count', {
+        component: 'Admin',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+    try {
+      const feedback = await getFeedback();
+      setFeedbackCount({ count: feedback.items.length, hasMore: feedback.has_more });
+    } catch (error: unknown) {
+      logger.warn('Failed to load feedback count', {
+        component: 'Admin',
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (user?.role === 'researcher_admin' || user?.role === 'superadmin') {
       loadOpportunities();
       loadDashboardStats();
+      loadCounts();
     }
     // statusFilter and typeFilter are not listed directly: loadOpportunities is
     // memoised on them, so its identity already changes when they do.
-  }, [user, loadOpportunities, loadDashboardStats]);
+  }, [user, loadOpportunities, loadDashboardStats, loadCounts]);
 
   // Refresh opportunities when returning from editing or creating
   useEffect(() => {
@@ -247,15 +318,6 @@ const Admin: React.FC = () => {
     setOpenDropdownId(null);
   };
 
-  const getStatusBadgeClass = (status: string) => {
-    switch (status) {
-      case 'published': return 'badge status-published text-white';
-      case 'draft': return 'badge status-draft'; // Draft uses black text, no text-white class
-      case 'closed': return 'badge status-closed text-white';
-      default: return 'badge status-closed text-white';
-    }
-  };
-
   // Wait for initial auth check to complete before making redirect decisions
   // This ensures we don't redirect away if auth check is still in progress
   // CRITICAL: When returning from login, wait for auth to complete before redirecting
@@ -325,104 +387,153 @@ const Admin: React.FC = () => {
               </div>
             )}
 
-            {/* Dashboard Statistics Cards.
+            {/* Needs attention - triage panel. Only renders cards that have
+                something to act on; when nothing does, the whole panel is
+                absent rather than showing an empty "all clear" shell. The
+                "needs recruitment" card the wireframe showed is deliberately
+                omitted: it needs a per-study participant target the backend
+                does not expose. */}
+            {((pendingApprovalsCount ?? 0) > 0 || studiesClosingSoon.length > 0) && (
+              <section className="admin-attention" aria-labelledby="admin-attention-heading">
+                <div className="admin-attention__head">
+                  <Flag size={16} aria-hidden />
+                  <h2 id="admin-attention-heading" className="admin-attention__title">Needs attention</h2>
+                </div>
+                <div className="admin-attention__grid">
+                  {(pendingApprovalsCount ?? 0) > 0 && (
+                    <button
+                      type="button"
+                      className="admin-attention__card"
+                      onClick={() => setActiveTab('approvals')}
+                    >
+                      <span className="admin-attention__icon"><Clock size={20} aria-hidden /></span>
+                      <span className="admin-attention__body">
+                        <span className="admin-attention__lead">
+                          {pendingApprovalsCount} {pendingApprovalsCount === 1 ? 'approval' : 'approvals'} waiting
+                        </span>
+                        <span className="admin-attention__sub">Completion reports need review</span>
+                        <span className="admin-attention__link">View approvals <ArrowRight size={14} aria-hidden /></span>
+                      </span>
+                    </button>
+                  )}
+                  {studiesClosingSoon.length > 0 && (
+                    <button
+                      type="button"
+                      className="admin-attention__card"
+                      onClick={() => {
+                        if (studiesClosingSoon.length === 1) {
+                          navigate(`/admin/opportunities/${studiesClosingSoon[0].id}/edit`);
+                        } else {
+                          setQuickFilter('closing-soon');
+                          setActiveTab('opportunities');
+                        }
+                      }}
+                    >
+                      <span className="admin-attention__icon"><Calendar size={20} aria-hidden /></span>
+                      <span className="admin-attention__body">
+                        <span className="admin-attention__lead">
+                          {studiesClosingSoon.length === 1
+                            ? '1 study closes soon'
+                            : `${studiesClosingSoon.length} studies close soon`}
+                        </span>
+                        <span className="admin-attention__sub">
+                          {studiesClosingSoon.length === 1
+                            ? studiesClosingSoon[0].title
+                            : 'Recruitment windows ending in the next few days'}
+                        </span>
+                        <span className="admin-attention__link">
+                          {studiesClosingSoon.length === 1 ? 'View study' : 'View studies'} <ArrowRight size={14} aria-hidden />
+                        </span>
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Operational snapshot.
                 These numbers are OWNER-SCOPED for a researcher admin - the
                 backend filters every query on owner_user_id - and global for a
                 superadmin. Same cards, different meaning, and the page used to
-                say neither, so "Research Studies 11" read as the platform
-                total to the person who owned 11 of 15. */}
+                say neither, so a count read as the platform total to the person
+                who owned part of it. The scope note keeps that honest.
+                "Overdue sessions" from the wireframe is omitted: the frontend
+                has no per-session completion flag to compute it from. */}
             {dashboardStats && (
-              <>
-              <p className="stat-scope-note">
-                {user?.role === 'superadmin'
-                  ? 'Across every researcher on Cortex'
-                  : 'Your studies only'}
-              </p>
-              <div className="admin-stat-grid mb-3">
-                <div className="stat-card-col">
-                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                    <div className="card-body stat-card-body">
-                      <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Research Studies</span>
-                        <div className="stat-icon-wrapper">
-                          <ClipboardList size={20} className="stat-icon" />
+              <section className="admin-snapshot" aria-labelledby="admin-snapshot-heading">
+                <div className="admin-section-head">
+                  <h2 id="admin-snapshot-heading" className="admin-section-title">Operational snapshot</h2>
+                  <span className="stat-scope-note">
+                    {user?.role === 'superadmin'
+                      ? 'Across every researcher on Cortex'
+                      : 'Your studies only'}
+                  </span>
+                </div>
+                <div className="admin-stat-grid mb-3">
+                  <div className="stat-card-col">
+                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
+                      <div className="card-body stat-card-body">
+                        <div className="stat-card-header">
+                          <span className="text-uppercase stat-label">Active studies</span>
+                          <div className="stat-icon-wrapper">
+                            <ClipboardList size={20} className="stat-icon" />
+                          </div>
                         </div>
+                        <h2 className="mb-0 stat-value">
+                          {dashboardStats.published_opportunities + dashboardStats.draft_opportunities}
+                        </h2>
+                        <small className="stat-subtitle">
+                          {dashboardStats.published_opportunities} live · {dashboardStats.draft_opportunities} draft
+                        </small>
                       </div>
-                      <h2 className="mb-0 stat-value">{dashboardStats.total_opportunities}</h2>
-                      <small className="stat-subtitle">
-                        {dashboardStats.published_opportunities} live · {dashboardStats.draft_opportunities} draft
-                        {dashboardStats.closed_opportunities > 0 &&
-                          ` · ${dashboardStats.closed_opportunities} closed`}
-                      </small>
+                    </div>
+                  </div>
+                  <div className="stat-card-col">
+                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
+                      <div className="card-body stat-card-body">
+                        <div className="stat-card-header">
+                          <span className="text-uppercase stat-label">Participants</span>
+                          <div className="stat-icon-wrapper">
+                            <Users size={20} className="stat-icon" />
+                          </div>
+                        </div>
+                        <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
+                        <small className="stat-subtitle">People who booked</small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="stat-card-col">
+                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
+                      <div className="card-body stat-card-body">
+                        <div className="stat-card-header">
+                          <span className="text-uppercase stat-label">Sessions this week</span>
+                          <div className="stat-icon-wrapper">
+                            <CalendarClock size={20} className="stat-icon" />
+                          </div>
+                        </div>
+                        <h2 className="mb-0 stat-value">{sessionsThisWeek.total}</h2>
+                        <small className="stat-subtitle">
+                          {sessionsThisWeek.upcoming} upcoming · {sessionsThisWeek.completed} completed
+                        </small>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="stat-card-col">
+                    <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
+                      <div className="card-body stat-card-body">
+                        <div className="stat-card-header">
+                          <span className="text-uppercase stat-label">Open slots</span>
+                          <div className="stat-icon-wrapper">
+                            <Clock size={20} className="stat-icon" />
+                          </div>
+                        </div>
+                        <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
+                        <small className="stat-subtitle">Across all live studies</small>
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="stat-card-col">
-                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                    <div className="card-body stat-card-body">
-                      <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Bookings</span>
-                        <div className="stat-icon-wrapper">
-                          <CalendarCheck size={20} className="stat-icon" />
-                        </div>
-                      </div>
-                      <h2 className="mb-0 stat-value">{dashboardStats.total_bookings}</h2>
-                      <small className="stat-subtitle">
-                        {dashboardStats.upcoming_bookings} up · {dashboardStats.past_bookings} past
-                      </small>
-                    </div>
-                  </div>
-                </div>
-                <div className="stat-card-col">
-                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                    <div className="card-body stat-card-body">
-                      <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Participants</span>
-                        <div className="stat-icon-wrapper">
-                          <Users size={20} className="stat-icon" />
-                        </div>
-                      </div>
-                      <h2 className="mb-0 stat-value">{dashboardStats.total_participants}</h2>
-                      <small className="stat-subtitle">
-                        People who booked
-                      </small>
-                    </div>
-                  </div>
-                </div>
-                <div className="stat-card-col">
-                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                    <div className="card-body stat-card-body">
-                      <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Slots free</span>
-                        <div className="stat-icon-wrapper">
-                          <Clock size={20} className="stat-icon" />
-                        </div>
-                      </div>
-                      <h2 className="mb-0 stat-value">{dashboardStats.available_slots}</h2>
-                      <small className="stat-subtitle">
-of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
-                      </small>
-                    </div>
-                  </div>
-                </div>
-                <div className="stat-card-col">
-                  <div className="card border-0 shadow-sm h-100 stat-card admin-stat-card">
-                    <div className="card-body stat-card-body">
-                      <div className="stat-card-header">
-                        <span className="text-uppercase stat-label">Sessions completed</span>
-                        <div className="stat-icon-wrapper">
-                          <CheckCircle size={20} className="stat-icon" />
-                        </div>
-                      </div>
-                      <h2 className="mb-0 stat-value">{dashboardStats.sessions_completed}</h2>
-                      <small className="stat-subtitle">
-                        already run
-                      </small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              </>
+              </section>
             )}
 
             {/* M7: Recent bookings list (with session times) */}
@@ -454,8 +565,8 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                 lands on whichever table has a cell there - which is how this
                                 one inherited the other's Type-column geometry. */}
                             <tr>
+                              <th scope="col" className="col-recent-session">Date &amp; time</th>
                               <th scope="col" className="col-recent-study">Study</th>
-                              <th scope="col" className="col-recent-session">Session</th>
                               <th scope="col" className="col-recent-participant">Participant</th>
                               <th scope="col" className="col-recent-status">Status</th>
                             </tr>
@@ -467,15 +578,6 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                               </tr>
                             ) : (dashboardStats.recent_bookings || []).map((b) => (
                               <tr key={b.id}>
-                                <td className="col-recent-study">
-                                  <button
-                                    type="button"
-                                    className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
-                                    onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
-                                  >
-                                    {b.opportunity_title}
-                                  </button>
-                                </td>
                                 {/* The zone is per ROW, not a column header. A header computed once at page
                                     load states the offset NOW, while each row is formatted at its own
                                     instant - so a December session listed in August rendered under a
@@ -503,12 +605,21 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                     </>
                                   ) : '—'}
                                 </td>
+                                <td className="col-recent-study">
+                                  <button
+                                    type="button"
+                                    className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
+                                    onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
+                                  >
+                                    {b.opportunity_title}
+                                  </button>
+                                </td>
                                 <td className="col-recent-participant">
                                   <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
                                 </td>
                                 <td className="col-recent-status">
-                                  <span className={`badge ${b.status === 'booked' ? 'bg-success' : 'bg-secondary'}`}>
-                                    {b.status === 'booked' ? 'Booked' : b.status}
+                                  <span className={`admin-status-pill ${b.status === 'booked' ? 'admin-status-pill--confirmed' : 'admin-status-pill--pending'}`}>
+                                    {b.status === 'booked' ? 'Confirmed' : b.status === 'pending' ? 'Pending' : b.status}
                                   </span>
                                 </td>
                               </tr>
@@ -536,6 +647,9 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                   >
                     <List size={16} className="me-2" />
                     <span>Research Studies</span>
+                    {opportunities.length > 0 && (
+                      <span className="admin-tab-count">{opportunities.length}</span>
+                    )}
                   </button>
                 </li>
                 <li className="nav-item" role="presentation">
@@ -549,6 +663,9 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                   >
                     <History size={16} className="me-2" />
                     <span>Completion Approvals</span>
+                    {(pendingApprovalsCount ?? 0) > 0 && (
+                      <span className="admin-tab-count admin-tab-count--alert">{pendingApprovalsCount}</span>
+                    )}
                   </button>
                 </li>
                 {/* Feedback tab - all admins (researcher_admin and superadmin) */}
@@ -563,6 +680,11 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                   >
                     <MessageSquare size={16} className="me-2" />
                     <span>Feedback</span>
+                    {feedbackCount && feedbackCount.count > 0 && (
+                      <span className="admin-tab-count">
+                        {feedbackCount.count}{feedbackCount.hasMore ? '+' : ''}
+                      </span>
+                    )}
                   </button>
                 </li>
               </ul>
@@ -631,6 +753,38 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                     </div>
                   </div>
 
+                  {/* Quick filters - client-side chips over the loaded list. Each
+                      reads only real fields; "Needs recruitment" is open-slot
+                      capacity, NOT a participant target (which does not exist). */}
+                  <div className="admin-quick-filters">
+                    <span className="admin-quick-filters__label">Quick filters</span>
+                    {([
+                      { key: 'needs-recruitment', label: 'Needs recruitment' },
+                      { key: 'draft', label: 'Draft' },
+                      { key: 'closing-soon', label: 'Closing soon' },
+                      { key: 'fully-booked', label: 'Fully booked' },
+                    ] as { key: QuickFilter; label: string }[]).map((chip) => (
+                      <button
+                        key={chip.key}
+                        type="button"
+                        className={`admin-chip ${quickFilter === chip.key ? 'admin-chip--active' : ''}`}
+                        aria-pressed={quickFilter === chip.key}
+                        onClick={() => toggleQuickFilter(chip.key)}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        className="admin-clear-filters"
+                        onClick={clearAllFilters}
+                      >
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+
                   {/* Error State */}
                   {error && (
                     <ErrorState
@@ -657,14 +811,20 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                     <div className="text-center py-5">
                       <h4 className="admin-empty-title">No research studies found</h4>
                                   <p className="admin-empty-text">
-                        {searchQuery || statusFilter || typeFilter ? 'No research studies match your search or filters.' : 'Create your first research study to get started.'}
+                        {hasActiveFilters ? 'No research studies match your search or filters.' : 'Create your first research study to get started.'}
                       </p>
-                      <button 
-                        className="btn btn-primary"
-                        onClick={() => navigate('/admin/opportunities/new')}
-                      >
-                        Create Research Study
-                      </button>
+                      {hasActiveFilters ? (
+                        <button className="btn btn-outline-secondary" onClick={clearAllFilters}>
+                          Clear filters
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-primary"
+                          onClick={() => navigate('/admin/opportunities/new')}
+                        >
+                          Create Research Study
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -679,7 +839,7 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                         <thead>
                           <tr>
                             <th className="admin-th col-title" onClick={() => handleSort('title')}>
-                              Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
+                              Study {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
                             <th className="admin-th col-type" onClick={() => handleSort('type')}>
                               Type {sortField === 'type' && (sortDirection === 'asc' ? '↑' : '↓')}
@@ -687,13 +847,13 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                             <th className="admin-th col-status" onClick={() => handleSort('status')}>
                               Status {sortField === 'status' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
+                            {/* Recruitment replaces the old "Booked" column - same booked/capacity
+                                figure the "Booked" cell showed, now with the percentage the
+                                progress bar was already drawing. There is deliberately no
+                                Capacity column beside it: that duplicated the denominator. */}
+                            <th className="admin-th col-recruitment">Recruitment</th>
                             <th className="admin-th col-metric col-numeric">Clicks</th>
-                            {/* No Capacity column. It reduced `sessions` over `capacity` and
-                                printed the result one cell to the left of Booked, which renders
-                                that same sum as its own denominator - the same number twice,
-                                side by side. Dropping it also gives Booked the width its ratio
-                                needs: at 9% every "2 / 3" wrapped after the slash. */}
-                            <th className="admin-th col-metric col-booked col-numeric">Booked</th>
+                            <th className="admin-th col-next">Next session / deadline</th>
                             <th className="admin-th col-date" onClick={() => handleSort('created_at')}>
                               Created {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
                             </th>
@@ -701,8 +861,11 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                           </tr>
                         </thead>
                         <tbody>
-                          {sortedOpportunities.map((opportunity) => (
-                            <tr 
+                          {sortedOpportunities.map((opportunity) => {
+                            const recruitment = getRecruitment(opportunity);
+                            const milestone = getNextMilestone(opportunity, now);
+                            return (
+                            <tr
                               key={opportunity.id}
                               className="admin-row-clickable"
                               onClick={(e) => {
@@ -753,40 +916,57 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                 </span>
                               </td>
                               <td className="col-status">
-                                <span className={getStatusBadgeClass(opportunity.status)}>
-                                  {opportunity.status === 'published' ? 'live' : opportunity.status}
+                                <span className={`admin-study-status admin-study-status--${opportunity.status}`}>
+                                  {getDisplayStatus(opportunity.status)}
                                 </span>
                                 {opportunity.status === 'closed' && (
                                   <span className="badge bg-dark ms-1">Auto-closed</span>
                                 )}
                               </td>
-                              <td className="col-metric col-numeric">
-                                {(opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated') ? (
-                                  opportunity.clicks_total ?? 0
+                              {/* Recruitment: booked / capacity across the study's sessions, with
+                                  the same progress bar the old Booked cell drew plus the percentage.
+                                  A study with no sessions (poll, survey, one-question) has no slots
+                                  to recruit into, so it shows a dash rather than "0 / 0". */}
+                              <td className="col-recruitment">
+                                {recruitment ? (
+                                  <div className="admin-recruitment">
+                                    <div className="admin-recruitment__top">
+                                      <span className="admin-recruitment__ratio">{recruitment.booked} / {recruitment.capacity}</span>
+                                      <span className="admin-recruitment__pct">{recruitment.pct}%</span>
+                                    </div>
+                                    <div className="progress-mini progress-mini--block">
+                                      <div className="progress-mini__fill" style={{ width: `${recruitment.pct}%` }} />
+                                    </div>
+                                  </div>
                                 ) : (
-                                  ''
+                                  <span className="admin-cell-empty">–</span>
                                 )}
                               </td>
-                              <td className="col-metric col-booked col-numeric">
-                                {(opportunity.type === 'test' || opportunity.type === 'interview') && opportunity.sessions && opportunity.sessions.length > 0 ? (
-                                  (() => {
-                                    const totalSlots = opportunity.sessions.reduce((sum, s) => sum + s.capacity, 0);
-                                    const bookedSlots = opportunity.sessions.reduce((sum, s) => sum + (s.booked_count || 0), 0);
-                                    const percentage = totalSlots > 0 ? (bookedSlots / totalSlots) * 100 : 0;
-                                    return (
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                                        <span>{bookedSlots} / {totalSlots}</span>
-                                        <div className="progress-mini">
-                                          <div 
-                                            className="progress-mini__fill" 
-                                            style={{ width: `${percentage}%` }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })()
+                              <td className="col-metric col-numeric">
+                                {opportunity.clicks_total ?? 0}
+                              </td>
+                              {/* Next session / deadline: the soonest upcoming slot, else a future
+                                  closing time, else "Completed" once every slot has passed. All
+                                  from real fields - no invented session ordinal. */}
+                              <td className="col-next">
+                                {milestone ? (
+                                  <div className="admin-next">
+                                    <span className="admin-next__date">
+                                      {formatStudyDate(milestone.date.toISOString())}
+                                      {milestone.kind === 'session' && (
+                                        <span className="admin-next__time">{formatClockTime(milestone.date.toISOString())}</span>
+                                      )}
+                                    </span>
+                                    <span className={`admin-next__note admin-next__note--${milestone.kind}`}>
+                                      {milestone.kind === 'completed'
+                                        ? 'Completed'
+                                        : milestone.kind === 'deadline'
+                                          ? `Closes · ${getTimeRemainingUntil(milestone.date).text ?? 'soon'}`
+                                          : relativeDayLabel(milestone.date, now) ?? ''}
+                                    </span>
+                                  </div>
                                 ) : (
-                                  ''
+                                  <span className="admin-cell-empty">–</span>
                                 )}
                               </td>
                               <td className="col-date">
@@ -795,6 +975,22 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                 </small>
                               </td>
                               <td className="col-actions">
+                                <div className="admin-action-group">
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline-secondary btn-sm admin-action-primary"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (opportunity.status === 'draft') {
+                                        navigate(`/admin/opportunities/${opportunity.id}/edit`);
+                                      } else {
+                                        navigate(`/opportunities/${opportunity.id}`);
+                                      }
+                                    }}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                  >
+                                    {opportunity.status === 'draft' ? 'Edit' : 'View'}
+                                  </button>
                                                 <div className="dropdown">
                                                   <button
                                                     className="btn btn-outline-secondary btn-sm admin-action-btn admin-action-btn-kebab"
@@ -881,9 +1077,11 @@ of {dashboardStats.total_slots} · {dashboardStats.booked_slots} booked
                                     </div>
                                   )}
                                 </div>
+                                </div>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

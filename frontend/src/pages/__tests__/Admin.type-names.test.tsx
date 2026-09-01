@@ -77,6 +77,8 @@ vi.mock('../../api/client', () => ({
   deleteOpportunity: vi.fn().mockResolvedValue(undefined),
   duplicateOpportunity: vi.fn().mockResolvedValue(undefined),
   exportBookingsCsv: vi.fn().mockResolvedValue(undefined),
+  getPendingApprovals: vi.fn().mockResolvedValue([]),
+  getFeedback: vi.fn().mockResolvedValue({ items: [], has_more: false }),
 }));
 
 const renderAdmin = () =>
@@ -102,8 +104,10 @@ const allTypes = Object.values(OPPORTUNITY_TYPES);
 describe('Admin dashboard type names', () => {
   it('badges a study with the same name every other surface uses', async () => {
     renderAdmin();
-    const titleHeader = await screen.findByRole('columnheader', { name: /^title/i });
-    const table = titleHeader.closest('table') as HTMLElement;
+    // Anchor on "Type" - unique to the studies table since the Recent bookings
+    // table gained its own "Study" header in the redesign.
+    const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
+    const table = typeHeader.closest('table') as HTMLElement;
 
     // The lozenge is uppercased by CSS, not by the string, so assert on the
     // text content the component actually renders.
@@ -113,8 +117,10 @@ describe('Admin dashboard type names', () => {
 
   it('never badges a study with the admin-only taxonomy', async () => {
     renderAdmin();
-    const titleHeader = await screen.findByRole('columnheader', { name: /^title/i });
-    const table = titleHeader.closest('table') as HTMLElement;
+    // Anchor on "Type" - unique to the studies table since the Recent bookings
+    // table gained its own "Study" header in the redesign.
+    const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
+    const table = typeHeader.closest('table') as HTMLElement;
 
     expect(table.textContent).not.toMatch(/app testing/i);
     expect(table.textContent).not.toMatch(/unmoderated/i);

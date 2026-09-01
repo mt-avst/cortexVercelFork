@@ -77,6 +77,8 @@ vi.mock('../../api/client', () => ({
   deleteOpportunity: vi.fn().mockResolvedValue(undefined),
   duplicateOpportunity: vi.fn().mockResolvedValue(undefined),
   exportBookingsCsv: vi.fn().mockResolvedValue(undefined),
+  getPendingApprovals: vi.fn().mockResolvedValue([]),
+  getFeedback: vi.fn().mockResolvedValue({ items: [], has_more: false }),
 }));
 
 // The header buttons and the non-admin gate both navigate via react-router. Render Admin
@@ -128,9 +130,11 @@ describe('Admin page', () => {
     expect(await screen.findByText('Checkout usability test')).toBeInTheDocument();
     expect(screen.getByText('See where participants stumble at checkout')).toBeInTheDocument();
 
-    // "Research Studies" appears twice once stats load: the stat-card label (Admin.tsx:298,
-    // the !77 relabel of the old ambiguous "Studies") and the tab (Admin.tsx:457).
-    expect(screen.getAllByText('Research Studies')).toHaveLength(2);
+    // "Research Studies" now names only the tab. The stat card that used to
+    // share the label is the redesigned "Active studies" (published + draft),
+    // so the phrase appears exactly once - the two senses no longer collide.
+    expect(screen.getAllByText('Research Studies')).toHaveLength(1);
+    expect(screen.getByText('Active studies')).toBeInTheDocument();
   });
 
   it('navigates to Task Lists from the header', async () => {
