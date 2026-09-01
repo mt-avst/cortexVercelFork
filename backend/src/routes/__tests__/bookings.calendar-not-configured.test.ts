@@ -24,14 +24,14 @@ import { listening } from '../../__tests__/helpers/listening';
  *      every cancellation of every legacy booking, and a warning that always
  *      fires means nothing
  *
- * ponytail: the RESCHEDULE path's not-configured short-circuit is not covered
- *   here -> cto/AdaptaLabs#93. Deleting it passes the whole backend suite, and the cost is
- *   three false WARNs per reschedule of any legacy booking rather than any
- *   incorrect behaviour. An attempt to cover it stalled on the fixture: the
- *   handler loads both the booking and the target session from the TRANSACTION
- *   client and then 500s in this harness with nothing reaching the mocked
- *   logger, so the mock is missing something the route needs and finding it is
- *   its own task rather than a line in this one.
+ * The RESCHEDULE path's not-configured short-circuit is covered too now
+ *   (cto/AdaptaLabs#93, the describe block at the bottom of this file), and
+ *   pinned by the `reschedule-not-configured-short-circuits-calendar-update`
+ *   mutation-canary entry. The fixture the earlier attempt stalled on: the
+ *   handler loads the booking (which JOINs `sessions s`) and the target session
+ *   (`FROM sessions s`) from the TRANSACTION client, so the mock must dispatch
+ *   on `FROM bookings b` BEFORE `FROM sessions s` or the booking read answers
+ *   the target query too and a guardrail 500s.
  *
  * The calendar service is deliberately NOT mocked: the point is the real
  * refusal reaching the real mapping.
@@ -246,6 +246,104 @@ describe('POST /api/bookings/:id/cancel on a booking holding a fabricated id (#8
 
     expect(messages(mockInfo)).not.toContainEqual(
       expect.stringContaining('No calendar event deleted')
+    );
+  });
+});
+
+/**
+ * cto/AdaptaLabs#93, gap 1. The reschedule path short-circuits its calendar
+ * UPDATE on `CALENDAR_NOT_CONFIGURED` instead of falling through to
+ * delete+create - and deleting that short-circuit passed the whole backend
+ * suite, because nothing exercised it. The cost of the regression is three
+ * false WARNs per reschedule of any legacy booking, in the log stream the
+ * create path was cleaned up to protect.
+ *
+ * The fixture the earlier attempt was missing: the reschedule handler's client
+ * loads TWO different rows from the transaction client - the booking (JOIN
+ * sessions s) and the target session (FROM sessions s) - so the mock must
+ * dispatch on `FROM bookings b` before `FROM sessions s`, or the booking join's
+ * own `JOIN sessions s` swallows the target read and a guardrail throws a 500.
+ */
+describe('POST /api/bookings/:id/reschedule with no calendar configured (#93)', () => {
+  const rescheduleClient = (gcalEventId: string | null) => ({
+    query: jest.fn(async (sql: unknown) => {
+      const text = String(sql);
+      // ORDER MATTERS: the booking SELECT also JOINs `sessions s`, so it must be
+      // matched on its own table first or it answers the target read too.
+      if (text.includes('FROM bookings b')) {
+        return {
+          rows: [
+            {
+              id: 'b1',
+              user_id: 'u1',
+              session_id: 's-old',
+              status: 'booked',
+              gcal_event_id: gcalEventId,
+              current_opportunity_id: 'opp-1',
+              opportunity_title: 'A study',
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      if (text.includes('FROM sessions s')) {
+        return {
+          rows: [
+            {
+              id: 's-new',
+              opportunity_id: 'opp-1',
+              opportunity_status: 'published',
+              opportunity_title: 'A study',
+              purpose_one_liner: 'A study',
+              owner_user_id: null, // skips the post-commit owner lookup on pool
+              start_time: FUTURE,
+              end_time: FUTURE,
+              capacity: 5,
+              booked_count: 0,
+              location_or_meet_link_optional: 'Room 3B',
+            },
+          ],
+          rowCount: 1,
+        };
+      }
+      // BEGIN, the old-session FOR UPDATE lock, the UPDATEs and COMMIT: none
+      // read rows, so a bare success is enough.
+      return { rows: [], rowCount: 1 };
+    }),
+    release: jest.fn(),
+  });
+
+  it('short-circuits the calendar update at INFO rather than three delete-and-create WARNs', async () => {
+    mockConnect.mockImplementation(async () => rescheduleClient('evt-live-123'));
+
+    const res = await request(listening(appAs('employee', 'u1')))
+      .post('/api/bookings/b1/reschedule')
+      .send({ target_session_id: 's-new' });
+
+    expect(res.status).toBe(200);
+    expect(messages(mockInfo)).toContainEqual(
+      expect.stringContaining('calendar is not configured')
+    );
+    // Deleting the short-circuit falls through to delete+create, whose first
+    // line is this WARN - the regression that passed the whole suite.
+    expect(messages(mockWarn)).not.toContainEqual(
+      expect.stringContaining('Calendar event update failed')
+    );
+  });
+
+  it('says nothing when the booking never held an event id', async () => {
+    // The control. The INFO line must be reached BECAUSE the calendar is
+    // unconfigured for a booking that HAS an event, not unconditionally: a
+    // booking with no gcal_event_id skips the calendar block entirely.
+    mockConnect.mockImplementation(async () => rescheduleClient(null));
+
+    const res = await request(listening(appAs('employee', 'u1')))
+      .post('/api/bookings/b1/reschedule')
+      .send({ target_session_id: 's-new' });
+
+    expect(res.status).toBe(200);
+    expect(messages(mockInfo)).not.toContainEqual(
+      expect.stringContaining('calendar is not configured')
     );
   });
 });

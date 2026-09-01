@@ -2201,6 +2201,38 @@
     "test": "a production log line names the failure but never the note"
   },
   {
+    "id": "reschedule-not-configured-short-circuits-calendar-update",
+    "why": "cto/AdaptaLabs#93 gap 1. POST /api/bookings/:id/reschedule short-circuits its calendar UPDATE when updateEvent reports CALENDAR_NOT_CONFIGURED, instead of falling through to delete+create. Deleting the short-circuit was proved by a gate to pass the whole backend suite (1553 tests), because nothing exercised the reschedule not-configured branch - the cost being three false WARNs per reschedule of any legacy booking (update failed / could not delete / recreation failed), permanently, in the log stream the create path was cleaned up to protect. This mutation makes the branch never fire (`else if (false)`), so the reschedule falls through to the WARN; caught by the named test. Anchored on `updateResult` so it is unique against the create (`createResult`) and cancel (`deleteResult`) not-configured branches in the same file.",
+    "file": "backend/src/routes/bookings.ts",
+    "anchor": "        } else if (updateResult.error === CALENDAR_NOT_CONFIGURED) {",
+    "mutation": "        } else if (false) {",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/bookings.calendar-not-configured.test.ts",
+    "test": "short-circuits the calendar update at INFO rather than three delete-and-create WARNs"
+  },
+  {
+    "id": "manual-slot-prune-keeps-protected-slots-first",
+    "why": "cto/AdaptaLabs#93 gap 2. pruneOverlaps sorts protected (hand-entered) slots first so that when a manual slot overlaps a generated one, the manual one is added to the non-overlapping set and the generated one is dropped - not the other way round. Dropping this comparator discards a hand-entered slot before rendering while it stays selected and creatable, so the researcher confirms a slot they can no longer see. jsdom has no layout, but the DROP is a data effect: the named test asserts the manual slot is still drawn. This mutation neuters the protected-first tiebreak.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "    if (a.isProtected !== b.isProtected) return a.isProtected ? -1 : 1;",
+    "mutation": "    // protected-first removed",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.manual-slots.test.tsx",
+    "test": "draws a hand-entered slot the generated grid cannot express"
+  },
+  {
+    "id": "manual-slot-is-marked-protected-at-a-generated-instant",
+    "why": "cto/AdaptaLabs#93 gap 2. A hand-entered slot is ALWAYS added to manualSlotKeys, even when it coincides exactly with a generated grid instant - the third shape of the same defect: an unprotected slot at a generated instant is pruned away by a protected neighbour and stays selected. This mutation drops slotKey from the set (`new Set([...prev])`), so the manual slot is not protected and loses the prune; caught by the on-boundary named test. Anchored on the two lines together because the bare `setManualSlotKeys(prev => {` recurs at the deselect site with a different body.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "    setManualSlotKeys(prev => {\n      const next = new Set([...prev, slotKey]);",
+    "mutation": "    setManualSlotKeys(prev => {\n      const next = new Set([...prev]);",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.manual-slots.test.tsx",
+    "test": "keeps drawing an on-boundary manual slot after the duration control moves"
+  },
+  {
     "id": "out-of-range-sessions-are-drawn-where-they-can-be-clicked",
     "why": "The whole of cto/AdaptaLabs#95 is this predicate: with it false, a session outside the drawn 07:00-23:00 goes back onto the timeline, where getTimePosition clamps it to ~0.01% height on an edge - present in the DOM, counted, and impossible to click. The per-slot click is the ONLY per-session removal on this screen, so such a session is stuck there permanently. jsdom has no layout, so clicking the sliver in a test SUCCEEDS: only the placement and geometry arms can see this, and nothing else in the suite asserts them.",
     "file": "frontend/src/components/AdminSessionManager.tsx",
