@@ -14,6 +14,25 @@ import {
 import type { StoredResponse } from './survey-results';
 import { logger } from '../utils/logger';
 
+/*
+ * THE HALF OF THIS DESIGN NO TEST IN THIS REPOSITORY CAN REACH.
+ *
+ * Every failure path below destroys the socket rather than ending the response,
+ * so a failure part-way through cannot become a short CSV that parses. That is
+ * proven here and on the wire. What is NOT proven anywhere is the INGRESS: a
+ * buffering proxy in front of the app collects the whole body before forwarding
+ * a byte, and a destroyed socket then reaches the researcher as a
+ * complete-looking truncated file with a Content-Length on it. The refusal
+ * design is defeated in production, silently, and no local check can see it
+ * (cto/AdaptaLabs#11).
+ *
+ * `scripts/csv-stream-check.mjs` is that check, made runnable in five minutes
+ * against a real export with a session cookie. Its own tests measure it against
+ * a streaming server and a buffering one, so its verdict means something before
+ * anyone relies on it. Run it before the first real study collects responses -
+ * that is the first moment a truncated file could reach a researcher.
+ */
+
 /**
  * The whole export's wall-clock budget.
  *
