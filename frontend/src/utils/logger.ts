@@ -1,6 +1,63 @@
 import { LogContext } from '@shared/types';
 
 /**
+ * WHAT AN AXIOS ERROR LOOKS LIKE ONCE JSON.stringify HAS TOUCHED IT.
+ *
+ * `JSON.stringify` calls a value's `toJSON()` BEFORE any replacer sees it,
+ * and `AxiosError.toJSON()` returns a plain object whose `config` carries
+ * `data` - the whole request body. For most routes that is harmless; for
+ * `PUT /api/bookings/:id/notes` and the approve/reject pair it is a
+ * researcher's free-text judgement about a named colleague, printed to the
+ * console on every failed save (cto/AdaptaLabs#88). Nothing ships console
+ * output today, which is exactly why this is fixed centrally now: the first
+ * error-reporting integration would have shipped the leak with it, and
+ * nobody adding one would think to look here.
+ */
+type SerialisedAxiosShape = {
+  config?: { method?: unknown; url?: unknown; data?: unknown } | null;
+  [key: string]: unknown;
+};
+
+const carriesRequestBody = (value: unknown): value is SerialisedAxiosShape => {
+  if (value === null || typeof value !== 'object') return false;
+  const config = (value as SerialisedAxiosShape).config;
+  if (config === null || typeof config !== 'object') return false;
+  // `data` OR `headers`, not `data` alone: axios's toJSONObject DROPS
+  // undefined values, so a bodiless request (every DELETE, the cancel POST)
+  // has no `data` key at all - and a data-only predicate passed the whole
+  // config through, live X-CSRF-Token header included. Both review gates
+  // reproduced that independently through the real client interceptor.
+  return 'data' in config || 'headers' in config;
+};
+
+/**
+ * The replacer applied to EVERY log line this logger emits. Central rather
+ * than per call site, because a per-call-site fix is the shape that goes
+ * stale the next time somebody adds a route. What it matches is the
+ * serialised-axios-config SHAPE - an object whose `config` carries `data` or
+ * `headers` - and for a match it keeps method and URL, drops the body, and
+ * drops the headers (they carry the live CSRF token on every mutating call,
+ * and Authorization material generally). It does NOT cover content logged
+ * under other shapes, and it cannot reach an error-reporting SDK that
+ * captures unhandled rejections with its own serialiser - that integration
+ * needs its own beforeSend scrubber (cto/AdaptaLabs#102).
+ */
+export const redactRequestBodies = (_key: string, value: unknown): unknown => {
+  if (!carriesRequestBody(value)) return value;
+  const { config, ...rest } = value;
+  return {
+    ...rest,
+    config: {
+      method: config?.method,
+      url: config?.url,
+      // The marker only where a body existed - a bodiless call must not be
+      // labelled as though something was hidden from the reader.
+      ...(config && 'data' in config ? { data: '[REDACTED: request body]' } : {}),
+    },
+  };
+};
+
+/**
  * Logger class for structured logging with different levels and contexts
  * 
  * Provides consistent logging across the frontend application with support for:
@@ -50,11 +107,26 @@ class Logger {
       ...context,
     };
 
-    if (this.isDevelopment) {
-      return JSON.stringify(logEntry, null, 2);
-    }
+    // The replacer runs on BOTH branches: a leak that only exists in
+    // production logging is the kind nobody sees until it ships. And the one
+    // function every log call funnels through must not itself throw out of a
+    // catch block - a circular context (unreachable from a real AxiosError,
+    // whose toJSON omits request and response, but reachable from a hand-built
+    // context) gets a minimal line instead of taking the error path with it.
+    try {
+      if (this.isDevelopment) {
+        return JSON.stringify(logEntry, redactRequestBodies, 2);
+      }
 
-    return JSON.stringify(logEntry);
+      return JSON.stringify(logEntry, redactRequestBodies);
+    } catch {
+      return JSON.stringify({
+        timestamp,
+        level,
+        message,
+        logging_error: 'context was not serialisable and was dropped',
+      });
+    }
   }
 
   /**
