@@ -270,9 +270,65 @@ test('git failing at all is a refusal, not a clean tree', async () => {
     message: /dubious ownership/
   });
 
+  // cto/AdaptaLabs#73: git failing for a reason OTHER than being absent - an
+  // index.lock it could not write, a full disk - exits non-zero with EMPTY
+  // stdout. That empty output must refuse, not read as a clean tree, which is
+  // the exact case that once saw the tree clean at its dirtiest.
+  assert.throws(() => porcelainFrom({ status: 1, stdout: '', stderr: '' }), Refusal);
+
   // And a working git still returns its output.
   assert.equal(porcelainFrom({ status: 0, stdout: ' M a.ts\n' }), 'M a.ts');
   assert.equal(porcelainFrom({ status: 0, stdout: '' }), '');
+});
+
+test('restoreFiles restores every writable file and names the ones it cannot (#73)', async () => {
+  const { restoreFiles } = await load();
+  const os = require('node:os');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canary-restore-'));
+  const good = path.join(dir, 'good.txt');
+  fs.writeFileSync(good, 'MUTATED');
+  // An unwritable target: its parent is a FILE, so writeFileSync throws
+  // (ENOTDIR/ENOENT) deterministically without needing chmod semantics.
+  const blocker = path.join(dir, 'blocker');
+  fs.writeFileSync(blocker, 'x');
+  const bad = path.join(blocker, 'child.txt');
+
+  const logs = [];
+  // The failing file is FIRST, so a bare `for … writeFileSync` loop throws
+  // before it ever reaches `good` - which is the exact abandonment #73 is about.
+  const failed = restoreFiles(
+    new Map([[bad, 'ORIGINAL'], [good, 'ORIGINAL']]),
+    (message) => logs.push(message)
+  );
+
+  // `good`, which comes AFTER the failing write, is still restored.
+  assert.equal(fs.readFileSync(good, 'utf8'), 'ORIGINAL');
+  // The failure is returned AND named by path in the loud report.
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0].file, bad);
+  assert.match(logs.join('\n'), new RegExp(bad.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('restoreFiles reports nothing when every file restores (#73 control)', async () => {
+  // The control, for the usual reason: a report-on-failure that fired always,
+  // or never, would pass the arm above just as well.
+  const { restoreFiles } = await load();
+  const os = require('node:os');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'canary-restore-ok-'));
+  const a = path.join(dir, 'a.txt');
+  const b = path.join(dir, 'b.txt');
+  fs.writeFileSync(a, 'MUTATED');
+  fs.writeFileSync(b, 'MUTATED');
+
+  const logs = [];
+  const failed = restoreFiles(new Map([[a, 'ORIG'], [b, 'ORIG']]), (m) => logs.push(m));
+
+  assert.deepEqual(failed, []);
+  assert.equal(logs.length, 0, 'a clean restore says nothing');
+  assert.equal(fs.readFileSync(a, 'utf8'), 'ORIG');
+  assert.equal(fs.readFileSync(b, 'utf8'), 'ORIG');
 });
 
 test('an empty SESSION_SECRET is replaced, not kept', async () => {

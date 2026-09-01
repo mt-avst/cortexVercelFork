@@ -186,6 +186,47 @@ export function applyMutation(source, anchor, mutation) {
 }
 
 /**
+ * Restore every mutated file, attempting ALL of them even when one write fails,
+ * and report by path the ones it could not (cto/AdaptaLabs#73).
+ *
+ * The old form was a bare `for … writeFileSync` loop, and a bare loop throws on
+ * the FIRST failing write and abandons the rest - leaving more live mutations
+ * in the tree than the single one that failed. Worse, it threw from inside the
+ * `exit`/`SIGINT`/`SIGTERM` handlers and the run's `finally`, so the post-run
+ * dirty check that would otherwise catch it never ran. Observed live when a
+ * machine hit `ENOSPC` mid-run and a `MAX_TIME_SLOTS_PER_REQUEST * 1000`
+ * mutation was left sitting in a checkout.
+ *
+ * DOES NOT THROW. The whole value of this call is putting the tree back, so it
+ * makes every attempt it can and RETURNS what it could not restore rather than
+ * aborting - every caller is a handler or a `finally`, and the downstream
+ * dirty check still fails the run if anything is left behind. The report is
+ * loud and names each file, because "a file silently not restored" is exactly
+ * the harness corrupting the thing it exists to protect.
+ *
+ * `log` is injectable so the failure path can be asserted without stubbing a
+ * global; it defaults to the real stderr sink.
+ */
+export function restoreFiles(originals, log = console.error) {
+  const failed = [];
+  for (const [file, source] of originals) {
+    try {
+      writeFileSync(file, source);
+    } catch (error) {
+      failed.push({ file, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  if (failed.length > 0) {
+    log(
+      `\nFAILED TO RESTORE ${failed.length} mutated file(s) - a LIVE MUTATION remains in ` +
+        'the working tree. Restore each by hand before committing (git checkout -- <file>):\n' +
+        failed.map(({ file, message }) => `  ${file}: ${message}`).join('\n')
+    );
+  }
+  return failed;
+}
+
+/**
  * `git status --porcelain`'s output, or a refusal.
  *
  * FAILS CLOSED, and it did not before: returning `(stdout ?? '').trim()` gave
@@ -1174,9 +1215,10 @@ async function main() {
 
   const reportDir = mkdtempSync(path.join(tmpdir(), 'mutation-canary-'));
   const originals = new Map();
-  const restoreAll = () => {
-    for (const [file, source] of originals) writeFileSync(file, source);
-  };
+  // Attempts every file and reports (never throws) - see restoreFiles (#73). A
+  // throw here would abort the exit/signal handlers and the finally below,
+  // which is the failure that left a live mutation in the tree.
+  const restoreAll = () => restoreFiles(originals);
 
   // A harness that dies with a mutation applied hands the next reader a defect
   // wearing this file's name.
