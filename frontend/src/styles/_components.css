@@ -2973,8 +2973,8 @@ body.admin-page .header .container {
    min-width is not honoured, so a column gets exactly its share and no more.
    Title gives up the 3% that Status needs for its widest badge. */
 .admin-data-table .col-title {
-  width: 22%;
-  min-width: 300px;
+  width: 20%;
+  min-width: 280px;
 }
 
 /* Column 2: Type - centered lozenges. Sized for the longest type name, which is
@@ -3025,11 +3025,21 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Clicks: a bare right-aligned count. */
+/* Clicks: a bare right-aligned count. nowrap header so it never breaks to "Click / s". */
 .admin-data-table .col-metric {
-  width: 7%;
+  width: 8%;
   min-width: 72px;
   text-align: right;
+}
+
+/* Short headers stay on one line; only "Next session / deadline" is allowed the
+   intentional two-line wrap. Stops "Clicks"/"Actions" breaking mid-word. */
+.admin-data-table th.admin-th {
+  white-space: nowrap;
+}
+
+.admin-data-table th.col-next {
+  white-space: normal;
 }
 
 /* Recruitment carries a ratio AND a progress bar, so it needs more than a bare
@@ -3044,7 +3054,7 @@ body.admin-page .header .container {
 /* Next session / deadline: a date, an optional time, and a relative note that
    can run to "Ends tomorrow" - sized to keep all three on their own lines. */
 .admin-data-table .col-next {
-  width: 15%;
+  width: 16%;
   min-width: 170px;
 }
 
@@ -13109,6 +13119,29 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-secondary);
 }
 
+/* All-clear: the panel stays present but collapses to a single slim row -
+   "Needs attention" on the left, an all-caught-up note pushed to the right. */
+.admin-attention--clear {
+  padding: 0.85rem 1.25rem;
+}
+
+.admin-attention--clear .admin-attention__head {
+  margin-bottom: 0;
+}
+
+.admin-attention__allclear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.admin-attention__allclear svg {
+  color: var(--status-success);
+}
+
 .admin-attention__title {
   font-size: 0.9rem;
   font-weight: 600;
@@ -13355,23 +13388,29 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .admin-next {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  line-height: 1.35;
+  align-items: flex-start;
+  gap: 0.25rem;
+  line-height: 1.3;
 }
 
+/* The note is forced onto its own row (own flex line) so it can never sit
+   beside the date - that collision read as "16:00Today". The date/time line may
+   wrap WITHIN the column when tight; it must not be nowrap, or in this
+   fixed-layout table it spills into the Created column instead of wrapping. */
 .admin-next__date {
+  display: block;
+  width: 100%;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-/* The time sits beside the date, separated by a middot, and the pair may wrap
-   together - it never runs into the note below it. */
 .admin-next__time {
-  margin-left: 0.4rem;
+  margin-left: 0.35rem;
   font-weight: 400;
   font-size: 0.85rem;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap; /* keep "18:09" and its middot together; the date may wrap */
 }
 
 .admin-next__time::before {
@@ -13379,8 +13418,11 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   color: var(--text-muted);
 }
 
+/* Its own line, and visibly a caption rather than a continuation of the date. */
 .admin-next__note {
-  font-size: 0.76rem;
+  display: block;
+  width: 100%;
+  font-size: 0.75rem;
   color: var(--text-muted);
 }
 
@@ -13408,4 +13450,27 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 
 .admin-action-primary {
   font-weight: 600;
+}
+
+/* --- Tabbed panel card ---------------------------------------------------
+   Research Studies / Approvals / Feedback share one rounded card with the same
+   treatment as Recent bookings. The tab bar sits flush at the top edge; the
+   content below gets the side/bottom padding the zero-padding tab classes
+   strip out (scoped here so other usages are untouched). */
+.admin-tabs-card {
+  overflow: hidden; /* clip the full-width tab bar to the card's radius */
+}
+
+.admin-tabs-card .admin-tabs-container {
+  border-bottom: 1px solid var(--border-subtle-current);
+}
+
+.admin-tabs-card .card-body-transparent {
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+@media (max-width: 575px) {
+  .admin-tabs-card .card-body-transparent {
+    padding: 1rem 0.85rem 1.15rem;
+  }
 }

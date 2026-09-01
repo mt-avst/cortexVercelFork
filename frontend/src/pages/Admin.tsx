@@ -21,7 +21,7 @@ import PendingApprovals from '../components/PendingApprovals';
 import AdminFeedback from '../components/AdminFeedback';
 import ErrorState from '../components/ErrorState';
 import ConfirmationModal from '../components/ConfirmationModal';
-import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, CalendarClock } from 'lucide-react';
+import { Settings, ClipboardList, Users, Clock, List, History, MessageSquare, Calendar, Download, Clapperboard, Flag, ArrowRight, CalendarClock, CheckCircle } from 'lucide-react';
 
 import { formatStudyDate, formatClockTime, formatTimeZoneLabel } from '../utils/datetime';
 const Admin: React.FC = () => {
@@ -119,6 +119,9 @@ const Admin: React.FC = () => {
   // "Needs attention" and "Sessions this week" derive from the loaded studies.
   const studiesClosingSoon = useMemo(() => getStudiesClosingSoon(opportunities, now), [opportunities, now]);
   const sessionsThisWeek = useMemo(() => getSessionsThisWeek(opportunities, now), [opportunities, now]);
+  // The panel is permanent: it shows action cards when there is something to do,
+  // and a slim all-clear line otherwise.
+  const attentionClear = (pendingApprovalsCount ?? 0) === 0 && studiesClosingSoon.length === 0;
 
   const handleSort = (field: 'title' | 'created_at' | 'type' | 'status') => {
     if (field === sortField) {
@@ -387,18 +390,27 @@ const Admin: React.FC = () => {
               </div>
             )}
 
-            {/* Needs attention - triage panel. Only renders cards that have
-                something to act on; when nothing does, the whole panel is
-                absent rather than showing an empty "all clear" shell. The
+            {/* Needs attention - a PERMANENT triage panel. It shows action cards
+                when there are approvals waiting or studies closing soon, and a
+                slim all-clear line otherwise, so it always has a presence. The
                 "needs recruitment" card the wireframe showed is deliberately
                 omitted: it needs a per-study participant target the backend
                 does not expose. */}
-            {((pendingApprovalsCount ?? 0) > 0 || studiesClosingSoon.length > 0) && (
-              <section className="admin-attention" aria-labelledby="admin-attention-heading">
-                <div className="admin-attention__head">
-                  <Flag size={16} aria-hidden />
-                  <h2 id="admin-attention-heading" className="admin-attention__title">Needs attention</h2>
-                </div>
+            <section
+              className={`admin-attention${attentionClear ? ' admin-attention--clear' : ''}`}
+              aria-labelledby="admin-attention-heading"
+            >
+              <div className="admin-attention__head">
+                <Flag size={16} aria-hidden />
+                <h2 id="admin-attention-heading" className="admin-attention__title">Needs attention</h2>
+                {attentionClear && (
+                  <span className="admin-attention__allclear">
+                    <CheckCircle size={16} aria-hidden />
+                    All caught up — nothing needs action
+                  </span>
+                )}
+              </div>
+              {!attentionClear && (
                 <div className="admin-attention__grid">
                   {(pendingApprovalsCount ?? 0) > 0 && (
                     <button
@@ -448,8 +460,8 @@ const Admin: React.FC = () => {
                     </button>
                   )}
                 </div>
-              </section>
-            )}
+              )}
+            </section>
 
             {/* Operational snapshot.
                 These numbers are OWNER-SCOPED for a researcher admin - the
@@ -633,7 +645,12 @@ const Admin: React.FC = () => {
               </div>
             )}
 
-            {/* Navigation Tabs */}
+            {/* Research Studies / Approvals / Feedback in one rounded card,
+                matching the Recent bookings treatment - tabs at the top edge,
+                padded content below, spanning the same width. */}
+            <div className="row mb-3">
+              <div className="col-12">
+                <div className="card border-0 shadow-sm admin-tabs-card">
             <div className="admin-tabs-container tabs-container">
               <ul className="nav nav-tabs nav-fill" role="tablist" style={{ border: 'none', margin: 0 }}>
                 <li className="nav-item" role="presentation">
@@ -1106,6 +1123,9 @@ const Admin: React.FC = () => {
                   aria-labelledby="feedback-tab-button"
                 >
                   <AdminFeedback />
+                </div>
+              </div>
+            </div>
                 </div>
               </div>
             </div>
