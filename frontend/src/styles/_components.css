@@ -2973,8 +2973,8 @@ body.admin-page .header .container {
    min-width is not honoured, so a column gets exactly its share and no more.
    Title gives up the 3% that Status needs for its widest badge. */
 .admin-data-table .col-title {
-  width: 25%;
-  min-width: 320px;
+  width: 22%;
+  min-width: 300px;
 }
 
 /* Column 2: Type - centered lozenges. Sized for the longest type name, which is
@@ -2989,7 +2989,7 @@ body.admin-page .header .container {
    count is not the measurement: the previous longest name was two characters
    shorter but only 11.8px narrower. */
 .admin-data-table .col-type {
-  width: 16%;
+  width: 13%;
   min-width: 152px;
   text-align: center;
 }
@@ -3015,7 +3015,7 @@ body.admin-page .header .container {
 /* Column 3: Status - centered badges. Wide enough for "Auto-closed", the widest
    badge that can appear here, which a closed study renders under its status. */
 .admin-data-table .col-status {
-  width: 12%;
+  width: 10%;
   min-width: 100px;
   text-align: center;
 }
@@ -3025,19 +3025,27 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Columns 4, 5: Metrics (Clicks, Booked) */
+/* Clicks: a bare right-aligned count. */
 .admin-data-table .col-metric {
-  width: 9%;
-  min-width: 90px;
+  width: 7%;
+  min-width: 72px;
   text-align: right;
 }
 
-/* Booked carries a ratio AND a progress bar, so it needs more than a bare count
-   column. It inherits the 9% above and every "2 / 3" wrapped after the slash;
-   the width freed by dropping the duplicate Capacity column goes here. */
-.admin-data-table .col-booked {
-  width: 14%;
+/* Recruitment carries a ratio AND a progress bar, so it needs more than a bare
+   count column - it replaced the old "Booked" column and renders "2 / 3" with a
+   percentage and a block bar beneath. There is no separate Capacity column: that
+   duplicated this cell's denominator. */
+.admin-data-table .col-recruitment {
+  width: 13%;
   min-width: 150px;
+}
+
+/* Next session / deadline: a date, an optional time, and a relative note that
+   can run to "Ends tomorrow" - sized to keep all three on their own lines. */
+.admin-data-table .col-next {
+  width: 15%;
+  min-width: 170px;
 }
 
 .admin-data-table td.col-metric {
@@ -3048,7 +3056,7 @@ body.admin-page .header .container {
 /* Column 6: Created Date. Wide enough for a full "Sun 16 Aug 2026" on one line -
    at 11% the year wrapped underneath the month. */
 .admin-data-table .col-date {
-  width: 14%;
+  width: 12%;
   min-width: 110px;
 }
 
@@ -3057,10 +3065,11 @@ body.admin-page .header .container {
   vertical-align: middle;
 }
 
-/* Column 8: Actions - compact */
+/* Actions - an inline View/Edit button plus the kebab menu, so wider than the
+   bare-kebab column it replaced. */
 .admin-data-table .col-actions {
-  width: 70px;
-  min-width: 70px;
+  width: 8%;
+  min-width: 132px;
   text-align: center;
 }
 
@@ -3544,7 +3553,8 @@ body.theme-dark .admin-data-table td.col-date {
 }
 
 /* Column widths are owned by the semantic .col-* classes above (.col-title,
-   .col-type, .col-status, .col-metric, .col-booked, .col-date, .col-actions).
+   .col-type, .col-status, .col-recruitment, .col-metric, .col-next, .col-date,
+   .col-actions).
  *
  * There used to be a SECOND width system here: a block of
  * `table.table-hover thead th:nth-child(N)` rules, one per column, which
@@ -12918,6 +12928,14 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
   gap: 12px;
 }
 
+/* The operational snapshot has exactly four cards. auto-fit only fit three in
+   the card's inner width, orphaning the fourth; pin four across on desktop. */
+@media (min-width: 992px) {
+  .admin-snapshot .admin-stat-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 /* The full "Wed 19 Aug 2026, 23:00 GMT+1" overflowed the SESSION column into
    PARTICIPANT. In a table the zone is said once, in the header. */
 .admin-col-zone {
@@ -13042,4 +13060,352 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 .error-summary__link:hover,
 .error-summary__link:focus-visible {
   text-decoration-thickness: 2px;
+}
+
+/* ============================================================
+   ADMIN DASHBOARD UX REWORK (feat/admin-ux-rework)
+   Needs-attention panel, operational snapshot heading, tab
+   count badges, quick-filter chips, restyled status pills,
+   recruitment + next-milestone cells, inline row actions.
+   Theme-aware throughout via the *-current tokens.
+   ============================================================ */
+
+/* Section heading shared by the snapshot and attention panels */
+.admin-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 0.75rem;
+  flex-wrap: wrap;
+}
+
+.admin-section-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.admin-snapshot {
+  margin-bottom: 1.5rem;
+}
+
+/* --- Needs attention ---------------------------------------------------- */
+.admin-attention {
+  margin: 0 0 1.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  background: var(--surface-card-current);
+  box-shadow: var(--shadow-card-current);
+}
+
+.admin-attention__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+}
+
+.admin-attention__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.admin-attention__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.admin-attention__card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem;
+  text-align: left;
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-md);
+  background: var(--surface-glass-current);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.admin-attention__card:hover,
+.admin-attention__card:focus-visible {
+  border-color: var(--color-cortex-orange);
+  box-shadow: var(--shadow-card-current);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.admin-attention__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  color: var(--text-secondary);
+}
+
+.admin-attention__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.admin-attention__lead {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.admin-attention__sub {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-attention__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  /* --link, not raw brand orange: on light surfaces --color-cortex-orange
+     (#ff7a33) measures 2.52:1 and fails WCAG AA. --link resolves to the
+     theme's accessible accent (dark orange on light, bright on dark). */
+  color: var(--link);
+}
+
+/* --- Tab count badges --------------------------------------------------- */
+.admin-tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  margin-left: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--surface-glass-current);
+  border: 1px solid var(--border-subtle-current);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.admin-tab-count--alert {
+  background: var(--status-warning);
+  border-color: transparent;
+  color: #1a1205;
+}
+
+/* --- Quick-filter chips ------------------------------------------------- */
+.admin-quick-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 1.25rem;
+}
+
+.admin-quick-filters__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+.admin-chip {
+  padding: 0.35rem 0.85rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong-current);
+  background: var(--surface-glass-current);
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.admin-chip:hover {
+  border-color: var(--color-cortex-orange);
+  color: var(--text-primary);
+}
+
+.admin-chip--active {
+  background: var(--color-cortex-orange);
+  border-color: var(--color-cortex-orange);
+  color: #1a1205;
+}
+
+.admin-clear-filters {
+  margin-left: auto;
+  padding: 0.35rem 0.25rem;
+  border: none;
+  background: none;
+  /* Accessible accent - see .admin-attention__link */
+  color: var(--link);
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* --- Status pills (Recent bookings + studies table) -------------------- */
+.admin-status-pill,
+.admin-study-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.admin-status-pill--confirmed {
+  background: color-mix(in srgb, var(--status-success) 16%, transparent);
+  border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
+  color: var(--status-success);
+}
+
+.admin-status-pill--pending {
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
+  color: color-mix(in srgb, var(--status-warning) 78%, var(--text-primary));
+}
+
+/* Study lifecycle - the RAW status, restyled as outlined pills. Deliberately
+   not a derived RECRUITING/RUNNING/ANALYSIS state (no field backs that). */
+.admin-study-status--published {
+  background: color-mix(in srgb, var(--status-success) 16%, transparent);
+  border-color: color-mix(in srgb, var(--status-success) 40%, transparent);
+  color: var(--status-success);
+}
+
+.admin-study-status--draft {
+  background: color-mix(in srgb, var(--status-warning) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+}
+
+.admin-study-status--closed {
+  background: var(--surface-glass-current);
+  border-color: var(--border-strong-current);
+  color: var(--text-muted);
+}
+
+/* --- Recruitment cell --------------------------------------------------- */
+.admin-recruitment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: stretch;
+}
+
+.admin-recruitment__top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.admin-recruitment__ratio {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-recruitment__pct {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A full-width bar variant of the inline progress-mini for table cells */
+.progress-mini--block {
+  display: block;
+  width: 100%;
+  margin-left: 0;
+}
+
+/* --- Next session / deadline cell -------------------------------------- */
+.admin-next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  line-height: 1.35;
+}
+
+.admin-next__date {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The time sits beside the date, separated by a middot, and the pair may wrap
+   together - it never runs into the note below it. */
+.admin-next__time {
+  margin-left: 0.4rem;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-next__time::before {
+  content: '· ';
+  color: var(--text-muted);
+}
+
+.admin-next__note {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.admin-next__note--deadline {
+  color: color-mix(in srgb, var(--status-warning) 80%, var(--text-primary));
+  font-weight: 600;
+}
+
+.admin-next__note--completed {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.admin-cell-empty {
+  color: var(--text-muted);
+}
+
+/* --- Inline row actions ------------------------------------------------- */
+.admin-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  justify-content: center;
+}
+
+.admin-action-primary {
+  font-weight: 600;
 }

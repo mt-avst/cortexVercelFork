@@ -96,6 +96,8 @@ vi.mock('../../api/client', () => ({
   deleteOpportunity: vi.fn().mockResolvedValue(undefined),
   duplicateOpportunity: vi.fn().mockResolvedValue(undefined),
   exportBookingsCsv: vi.fn().mockResolvedValue(undefined),
+  getPendingApprovals: vi.fn().mockResolvedValue([]),
+  getFeedback: vi.fn().mockResolvedValue({ items: [], has_more: false }),
 }));
 
 const renderAdmin = () =>
@@ -150,18 +152,24 @@ describe('Recent bookings: the session cell must be able to wrap', () => {
 // it as `opportunity_title` - so every query below is scoped to the studies
 // table, reached through the one column header the other table does not have.
 const findStudiesTable = async (): Promise<HTMLElement> => {
-  const titleHeader = await screen.findByRole('columnheader', { name: /^title/i });
-  const table = titleHeader.closest('table');
+  // Anchor on "Type", which only the studies table has. Since the redesign the
+  // Study column exists on the Recent bookings table too, so "Study" no longer
+  // distinguishes them - Type still does.
+  const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
+  const table = typeHeader.closest('table');
   expect(table).not.toBeNull();
   return table as HTMLElement;
 };
 
 describe('Research Studies table: Capacity and Booked said the same thing', () => {
-  it('has no Capacity column, because Booked already carries the capacity as its denominator', async () => {
+  it('has no Capacity column, because Recruitment already carries the capacity as its denominator', async () => {
     renderAdmin();
     const table = await findStudiesTable();
 
-    expect(within(table).getByRole('columnheader', { name: /^booked$/i })).toBeInTheDocument();
+    // The old "Booked" column is now "Recruitment" - same booked/capacity ratio,
+    // now with the percentage. The guard is unchanged: still no separate Capacity
+    // column re-rendering the denominator.
+    expect(within(table).getByRole('columnheader', { name: /^recruitment$/i })).toBeInTheDocument();
     expect(within(table).queryByRole('columnheader', { name: /^capacity$/i })).toBeNull();
   });
 
