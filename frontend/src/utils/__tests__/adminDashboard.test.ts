@@ -11,6 +11,7 @@ import {
   getDisplayStatus,
   getNextMilestone,
   relativeDayLabel,
+  getAdminTypeLabel,
 } from '../adminDashboard';
 import { Opportunity, Session } from '../../api/types';
 
@@ -233,6 +234,20 @@ describe('relativeDayLabel', () => {
   it('returns null for a past day or one a week or more out (show the bare date)', () => {
     expect(relativeDayLabel(new Date('2026-08-18T09:00:00'), NOW)).toBeNull();
     expect(relativeDayLabel(new Date('2026-08-30T09:00:00'), NOW)).toBeNull();
+  });
+});
+
+describe('getAdminTypeLabel', () => {
+  it('shortens the two "... session" names for the dense admin table', () => {
+    expect(getAdminTypeLabel('test')).toBe('Live');
+    expect(getAdminTypeLabel('unmoderated')).toBe('Recorded');
+  });
+
+  it('leaves every other type at its canonical participant-facing name', () => {
+    expect(getAdminTypeLabel('interview')).toBe('Interview');
+    expect(getAdminTypeLabel('poll')).toBe('Quick poll');
+    expect(getAdminTypeLabel('survey')).toBe('Survey');
+    expect(getAdminTypeLabel('question')).toBe('One question');
   });
 });
 

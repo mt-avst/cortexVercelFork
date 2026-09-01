@@ -2573,7 +2573,7 @@ body.admin-page .header .container {
 
 .admin-dashboard table tbody td:not(:first-child) > span,
 .admin-dashboard table tbody td:not(:first-child) > small,
-.admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown) {
+.admin-dashboard table tbody td:not(:first-child) > div:not(.dropdown):not(.admin-action-group) {
   display: inline-block;
   text-align: center;
 }
@@ -2973,8 +2973,8 @@ body.admin-page .header .container {
    min-width is not honoured, so a column gets exactly its share and no more.
    Title gives up the 3% that Status needs for its widest badge. */
 .admin-data-table .col-title {
-  width: 20%;
-  min-width: 280px;
+  width: 17%;
+  min-width: 260px;
 }
 
 /* Column 2: Type - centered lozenges. Sized for the longest type name, which is
@@ -3078,7 +3078,7 @@ body.admin-page .header .container {
 /* Actions - an inline View/Edit button plus the kebab menu, so wider than the
    bare-kebab column it replaced. */
 .admin-data-table .col-actions {
-  width: 8%;
+  width: 11%;
   min-width: 132px;
   text-align: center;
 }
@@ -13443,6 +13443,7 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 /* --- Inline row actions ------------------------------------------------- */
 .admin-action-group {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.4rem;
   justify-content: center;
@@ -13467,6 +13468,23 @@ body.theme-dark  .booking-outcome-rejected { color: #F08A5D; }
 
 .admin-tabs-card .card-body-transparent {
   padding: 1.25rem 1.5rem 1.5rem;
+}
+
+/* Bookings tab header - title + Export CSV on one row */
+.admin-bookings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.admin-bookings-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
 }
 
 @media (max-width: 575px) {

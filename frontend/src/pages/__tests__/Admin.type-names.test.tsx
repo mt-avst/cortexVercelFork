@@ -102,17 +102,22 @@ beforeEach(() => {
 const allTypes = Object.values(OPPORTUNITY_TYPES);
 
 describe('Admin dashboard type names', () => {
-  it('badges a study with the same name every other surface uses', async () => {
+  it('uses the short admin type label in the dense table', async () => {
     renderAdmin();
     // Anchor on "Type" - unique to the studies table since the Recent bookings
     // table gained its own "Study" header in the redesign.
     const typeHeader = await screen.findByRole('columnheader', { name: /^type/i });
     const table = typeHeader.closest('table') as HTMLElement;
 
-    // The lozenge is uppercased by CSS, not by the string, so assert on the
-    // text content the component actually renders.
-    expect(within(table).getByText('Live session')).toBeInTheDocument();
-    expect(within(table).getByText('Recorded session')).toBeInTheDocument();
+    // The two "... session" names are shortened for the admin table only
+    // (getAdminTypeLabel), so the type pill does not crowd the status pill.
+    // The full "Live session"/"Recorded session" still live on the participant
+    // browse via getParticipantFacingType - and the filter dropdown below still
+    // uses the full names, asserted in the filter tests.
+    expect(within(table).getByText('Live')).toBeInTheDocument();
+    expect(within(table).getByText('Recorded')).toBeInTheDocument();
+    expect(within(table).queryByText('Live session')).toBeNull();
+    expect(within(table).queryByText('Recorded session')).toBeNull();
   });
 
   it('never badges a study with the admin-only taxonomy', async () => {

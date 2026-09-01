@@ -5,13 +5,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { getOpportunities, deleteOpportunity, duplicateOpportunity, getDashboardStats, DashboardStats, exportBookingsCsv, getPendingApprovals, getFeedback } from '../api/client';
 import { Opportunity } from '../api/types';
-import { getParticipantFacingType, getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
+import { getTypeBadgeClass, getTimeRemainingUntil } from '../utils/opportunityUtils';
 import {
   getRecruitment,
   getSessionsThisWeek,
   getStudiesClosingSoon,
   getNextMilestone,
   getDisplayStatus,
+  getAdminTypeLabel,
   matchesQuickFilter,
   relativeDayLabel,
   QuickFilter,
@@ -55,7 +56,7 @@ const Admin: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
   const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback'>('opportunities');
+  const [activeTab, setActiveTab] = useState<'opportunities' | 'approvals' | 'feedback' | 'bookings'>('opportunities');
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [sortField, setSortField] = useState<'title' | 'created_at' | 'type' | 'status'>('created_at');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -548,104 +549,10 @@ const Admin: React.FC = () => {
               </section>
             )}
 
-            {/* M7: Recent bookings list (with session times) */}
-            {dashboardStats && (
-              <div className="row mb-3">
-                <div className="col-12">
-                  <div className="card border-0 shadow-sm">
-                    <div className="card-header bg-transparent border-bottom d-flex align-items-center justify-content-between flex-wrap gap-2">
-                      <div className="d-flex align-items-center">
-                        <Calendar size={18} className="me-2" aria-hidden />
-                        <h2 className="h6 mb-0">Recent bookings</h2>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary btn-sm"
-                        onClick={() => exportBookingsCsv()}
-                        aria-label="Export all bookings as CSV"
-                      >
-                        <Download size={16} className="me-1" />
-                        Export CSV
-                      </button>
-                    </div>
-                    <div className="card-body p-0">
-                      <div className="table-responsive">
-                        <table className="table table-hover mb-0">
-                          <thead>
-                            {/* Named columns. This table shares `.admin-dashboard` with the
-                                Research Studies table, so anything addressed by POSITION
-                                lands on whichever table has a cell there - which is how this
-                                one inherited the other's Type-column geometry. */}
-                            <tr>
-                              <th scope="col" className="col-recent-session">Date &amp; time</th>
-                              <th scope="col" className="col-recent-study">Study</th>
-                              <th scope="col" className="col-recent-participant">Participant</th>
-                              <th scope="col" className="col-recent-status">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {(dashboardStats.recent_bookings || []).length === 0 ? (
-                              <tr>
-                                <td colSpan={4} className="text-muted text-center py-3">No recent bookings</td>
-                              </tr>
-                            ) : (dashboardStats.recent_bookings || []).map((b) => (
-                              <tr key={b.id}>
-                                {/* The zone is per ROW, not a column header. A header computed once at page
-                                    load states the offset NOW, while each row is formatted at its own
-                                    instant - so a December session listed in August rendered under a
-                                    GMT+1 header while actually being GMT+0. Recent bookings are ordered
-                                    by created_at, so rows routinely straddle a DST boundary. */}
-                                {/* Two units, not one string. Above 992px this table is
-                                    `table-layout: fixed` with `overflow-x: hidden`, so a cell
-                                    that cannot wrap does not widen its column - it draws over
-                                    the next one, which is how "…23:00 GMT+1" ended up on top of
-                                    the participant's name. The date and its time stay together,
-                                    and the zone is what drops to a second line when the column
-                                    is tight. A time and its zone never split. */}
-                                <td className="admin-recent-session col-recent-session">
-                                  {b.session_start ? (
-                                    <>
-                                      <span className="admin-recent-session-date">
-                                        {formatStudyDate(b.session_start)} ·
-                                      </span>{' '}
-                                      <span className="admin-recent-session-time">
-                                        {formatClockTime(b.session_start)}{' '}
-                                        <span className="admin-recent-session-zone">
-                                          {formatTimeZoneLabel(b.session_start)}
-                                        </span>
-                                      </span>
-                                    </>
-                                  ) : '—'}
-                                </td>
-                                <td className="col-recent-study">
-                                  <button
-                                    type="button"
-                                    className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
-                                    onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
-                                  >
-                                    {b.opportunity_title}
-                                  </button>
-                                </td>
-                                <td className="col-recent-participant">
-                                  <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
-                                </td>
-                                <td className="col-recent-status">
-                                  <span className={`admin-status-pill ${b.status === 'booked' ? 'admin-status-pill--confirmed' : 'admin-status-pill--pending'}`}>
-                                    {b.status === 'booked' ? 'Confirmed' : b.status === 'pending' ? 'Pending' : b.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            {/* Recent bookings moved into the Bookings tab below - it was
+                over-prominent above the work area for often-empty data. */}
 
-            {/* Research Studies / Approvals / Feedback in one rounded card,
+            {/* Research Studies / Approvals / Feedback / Bookings in one rounded card,
                 matching the Recent bookings treatment - tabs at the top edge,
                 padded content below, spanning the same width. */}
             <div className="row mb-3">
@@ -701,6 +608,23 @@ const Admin: React.FC = () => {
                       <span className="admin-tab-count">
                         {feedbackCount.count}{feedbackCount.hasMore ? '+' : ''}
                       </span>
+                    )}
+                  </button>
+                </li>
+                {/* Bookings tab - was the prominent "Recent bookings" card */}
+                <li className="nav-item" role="presentation">
+                  <button
+                    className={`custom-tab-button ${activeTab === 'bookings' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('bookings')}
+                    role="tab"
+                    aria-selected={activeTab === 'bookings'}
+                    aria-controls="bookings-tab"
+                    tabIndex={0}
+                  >
+                    <Calendar size={16} className="me-2" />
+                    <span>Bookings</span>
+                    {dashboardStats && dashboardStats.total_bookings > 0 && (
+                      <span className="admin-tab-count">{dashboardStats.total_bookings}</span>
                     )}
                   </button>
                 </li>
@@ -929,7 +853,7 @@ const Admin: React.FC = () => {
                               </td>
                               <td className="col-type">
                                 <span className={`${getTypeBadgeClass(opportunity.type)} badge--${opportunity.type}`}>
-                                  {getParticipantFacingType(opportunity.type)}
+                                  {getAdminTypeLabel(opportunity.type)}
                                 </span>
                               </td>
                               <td className="col-status">
@@ -1116,13 +1040,102 @@ const Admin: React.FC = () => {
                 </div>
 
                 {/* Feedback Tab - all admins (researcher_admin and superadmin) */}
-                <div 
+                <div
                   className={`tab-pane fade ${activeTab === 'feedback' ? 'show active' : ''}`}
                   id="feedback-tab"
                   role="tabpanel"
                   aria-labelledby="feedback-tab-button"
                 >
                   <AdminFeedback />
+                </div>
+
+                {/* Bookings Tab - the recent bookings list, with session times */}
+                <div
+                  className={`tab-pane fade ${activeTab === 'bookings' ? 'show active' : ''}`}
+                  id="bookings-tab"
+                  role="tabpanel"
+                  aria-labelledby="bookings-tab-button"
+                >
+                  <div className="admin-bookings-head">
+                    <h2 className="admin-bookings-title">Recent bookings</h2>
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => exportBookingsCsv()}
+                      aria-label="Export all bookings as CSV"
+                    >
+                      <Download size={16} className="me-1" />
+                      Export CSV
+                    </button>
+                  </div>
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead>
+                        {/* Named columns. This table shares `.admin-dashboard` with the
+                            Research Studies table, so anything addressed by POSITION
+                            lands on whichever table has a cell there - which is how this
+                            one inherited the other's Type-column geometry. */}
+                        <tr>
+                          <th scope="col" className="col-recent-session">Date &amp; time</th>
+                          <th scope="col" className="col-recent-study">Study</th>
+                          <th scope="col" className="col-recent-participant">Participant</th>
+                          <th scope="col" className="col-recent-status">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(dashboardStats?.recent_bookings || []).length === 0 ? (
+                          <tr>
+                            <td colSpan={4} className="text-muted text-center py-4">No recent bookings</td>
+                          </tr>
+                        ) : (dashboardStats?.recent_bookings || []).map((b) => (
+                          <tr key={b.id}>
+                            {/* The zone is per ROW, not a column header. A header computed once at page
+                                load states the offset NOW, while each row is formatted at its own
+                                instant - so a December session listed in August rendered under a
+                                GMT+1 header while actually being GMT+0. Recent bookings are ordered
+                                by created_at, so rows routinely straddle a DST boundary. */}
+                            {/* Two units, not one string. Above 992px this table is
+                                `table-layout: fixed` with `overflow-x: hidden`, so a cell that
+                                cannot wrap does not widen its column - it draws over the next one.
+                                The date and its time stay together, and the zone drops to a second
+                                line when tight. A time and its zone never split. */}
+                            <td className="admin-recent-session col-recent-session">
+                              {b.session_start ? (
+                                <>
+                                  <span className="admin-recent-session-date">
+                                    {formatStudyDate(b.session_start)} ·
+                                  </span>{' '}
+                                  <span className="admin-recent-session-time">
+                                    {formatClockTime(b.session_start)}{' '}
+                                    <span className="admin-recent-session-zone">
+                                      {formatTimeZoneLabel(b.session_start)}
+                                    </span>
+                                  </span>
+                                </>
+                              ) : '—'}
+                            </td>
+                            <td className="col-recent-study">
+                              <button
+                                type="button"
+                                className="btn btn-link p-0 text-start text-decoration-none admin-recent-study-link"
+                                onClick={() => navigate(`/opportunities/${b.opportunity_id}`)}
+                              >
+                                {b.opportunity_title}
+                              </button>
+                            </td>
+                            <td className="col-recent-participant">
+                              <span title={b.participant_email}>{b.participant_name || b.participant_email || '—'}</span>
+                            </td>
+                            <td className="col-recent-status">
+                              <span className={`admin-status-pill ${b.status === 'booked' ? 'admin-status-pill--confirmed' : 'admin-status-pill--pending'}`}>
+                                {b.status === 'booked' ? 'Confirmed' : b.status === 'pending' ? 'Pending' : b.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
