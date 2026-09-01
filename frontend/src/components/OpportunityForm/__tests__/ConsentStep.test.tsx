@@ -10,6 +10,15 @@ import {
   SURVEY_CONSENT_TEMPLATE
 } from '@shared/firsthand/consent-templates';
 
+const moderatedEmpty = {
+  kind: 'moderated',
+  consentText: '',
+  templateId: CUSTOM_CONSENT_TEMPLATE_ID,
+  templateVersion: null,
+  fieldId: 'inline_moderated_consent_text',
+  contentStepTitle: 'Task List'
+} as const;
+
 /**
  * The consent step, which is C1's whole point: the approved wording is the
  * default, it is protected from an accidental edit, and any deviation is
@@ -461,6 +470,80 @@ describe('ConsentStep - the badge never asserts more than the row records', () =
     expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
       /Custom wording/i
     );
+  });
+});
+
+/**
+ * cto/AdaptaLabs#100. Emptying moderated consent is the author saying "this
+ * session stores nothing, no consent is asked at booking" - the save sends
+ * consent_text: null. But empty text resolves to `custom` (it matches no
+ * template), so the step used to accuse the author of an unapproved deviation
+ * while they did the sanctioned thing. Empty is a THIRD state, distinct from
+ * both "approved template" and "custom deviation", and only moderated has it -
+ * the study kinds' consent is required.
+ */
+describe('ConsentStep - the empty moderated "no consent asked" state (#100)', () => {
+  it('badge says no consent is asked, not that custom wording is recorded against it', () => {
+    renderStep(moderatedEmpty);
+
+    const state = screen.getByTestId('consent-template-state');
+    expect(state).toHaveTextContent(/no consent/i);
+    expect(state).not.toHaveTextContent(/recorded against it/i);
+    expect(state).not.toHaveTextContent(/Custom wording/i);
+  });
+
+  it('help text explains that empty means no consent, not an unapproved deviation', () => {
+    renderStep(moderatedEmpty);
+
+    // Empty moderated opens unlocked (templateId is custom), so the field and
+    // its help text are on screen without a click.
+    const help = screen.getByText(/no consent/i, { selector: '.form-text' });
+    expect(help).toBeInTheDocument();
+    expect(
+      screen.queryByText(/has not been approved/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows no diff when there is no wording to compare against', () => {
+    renderStep(moderatedEmpty);
+
+    expect(screen.queryByTestId('consent-diff')).not.toBeInTheDocument();
+  });
+
+  it('states no-consent for a read-only moderated study that stores nothing', () => {
+    renderStep({
+      ...moderatedEmpty,
+      studyIsReadOnly: true,
+      readOnlyReason: 'not-yours'
+    });
+
+    expect(screen.getByTestId('consent-template-state')).toHaveTextContent(
+      /no consent/i
+    );
+    // No empty blockquote passed off as this study's wording.
+    expect(
+      screen.queryByTestId('consent-read-only-text')
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * The control. A STUDY KIND with empty text is not "no consent asked" - its
+   * consent is required, so empty is an unfilled/custom state, not the third
+   * state. This is what keeps the new branch scoped to moderated; without it,
+   * `kind !== undefined && empty` would pass just as well.
+   */
+  it('does NOT treat empty as no-consent for a study kind, whose consent is required', () => {
+    renderStep({
+      kind: 'recorded',
+      consentText: '',
+      templateId: CUSTOM_CONSENT_TEMPLATE_ID,
+      templateVersion: null,
+      validationError: 'Consent text is required'
+    });
+
+    const state = screen.getByTestId('consent-template-state');
+    expect(state).not.toHaveTextContent(/no consent is asked/i);
+    expect(state).toHaveTextContent(/Custom wording/i);
   });
 });
 
