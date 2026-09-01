@@ -2169,5 +2169,16 @@
     "project": "frontend",
     "spec": "src/utils/__tests__/logger.redacts-request-bodies.test.ts",
     "test": "a production log line names the failure but never the note"
+  },
+  {
+    "id": "out-of-range-sessions-are-drawn-where-they-can-be-clicked",
+    "why": "The whole of cto/AdaptaLabs#95 is this predicate: with it false, a session outside the drawn 07:00-23:00 goes back onto the timeline, where getTimePosition clamps it to ~0.01% height on an edge - present in the DOM, counted, and impossible to click. The per-slot click is the ONLY per-session removal on this screen, so such a session is stuck there permanently. jsdom has no layout, so clicking the sliver in a test SUCCEEDS: only the placement and geometry arms can see this, and nothing else in the suite asserts them.",
+    "file": "frontend/src/components/AdminSessionManager.tsx",
+    "anchor": "  return startHours < TIMELINE_START_HOUR || endHours > TIMELINE_END_HOUR;",
+    "mutation": "  return false;",
+    "runner": "vitest",
+    "project": "frontend",
+    "spec": "src/components/__tests__/AdminSessionManager.out-of-range-sessions.test.tsx",
+    "test": "draws one before the timeline starts in the gutter row, at full size"
   }
 ]
