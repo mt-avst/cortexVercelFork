@@ -117,11 +117,34 @@ const dbClient = {
 const STATE_COOKIE = '__Host-adaptalabs_calendar_oauth_state';
 
 /** The state the connect route minted, read out of its own Set-Cookie. */
-const stateFromCookies = (setCookie: string[] | undefined): string => {
+/**
+ * The value of the state cookie, which is what the browser sends back.
+ *
+ * NOT the state itself since cto/AdaptaLabs#92: the cookie now carries a sealed
+ * envelope and the `state` in the authorization URL is only the nonce inside
+ * it. The two are cryptographically bound rather than identical, so the tests
+ * take each from where the real flow puts it - the cookie from Set-Cookie, the
+ * state from the redirect - and `redirects to Google carrying a state bound to
+ * this browser` is the arm that proves they belong together.
+ */
+const sealedCookie = (setCookie: string[] | undefined): string => {
   const cookie = (setCookie ?? []).find((c) => c.startsWith(`${STATE_COOKIE}=`));
   if (!cookie) throw new Error(`no ${STATE_COOKIE} cookie was set`);
   return decodeURIComponent(cookie.split(';')[0].split('=')[1]);
 };
+
+/** The `state` the provider will echo back, taken from the redirect we issued. */
+const stateFromRedirect = (location: string | undefined): string => {
+  const state = new URL(location ?? '', 'https://example.invalid').searchParams.get('state');
+  if (!state) throw new Error(`no state in the redirect: ${location}`);
+  return state;
+};
+
+/** Both halves of a started flow, as the browser holds them. */
+const startedFlow = (res: { headers: Record<string, unknown> }) => ({
+  sealed: sealedCookie(res.headers['set-cookie'] as unknown as string[]),
+  state: stateFromRedirect(res.headers.location as string | undefined),
+});
 
 const setNodeEnv = (value: string) => {
   fakeConfig.NODE_ENV = value;
@@ -151,13 +174,19 @@ describe('GET /api/calendar/auth/connect', () => {
     expect(res.status).toBe(302);
 
     const setCookie = res.headers['set-cookie'] as unknown as string[];
-    const state = stateFromCookies(setCookie);
+    const { sealed, state } = startedFlow(res);
 
-    // The state in the redirect URL and the state bound to the browser are the
-    // SAME value. Two independent values would make the callback's comparison
-    // unsatisfiable, which would look exactly like a working guard.
-    expect(res.headers.location).toContain(`state=${state}`);
+    // The state in the redirect URL is the nonce SEALED INTO the cookie bound to
+    // this browser. Since cto/AdaptaLabs#92 they are no longer the same string -
+    // the cookie carries an encrypted envelope - so the binding is asserted the
+    // only way that still means anything: the callback accepts the pair, and the
+    // arms below prove it refuses every other pairing. Two independent values
+    // would make the callback's comparison unsatisfiable, which would look
+    // exactly like a working guard.
     expect(getAuthUrl).toHaveBeenCalledWith(state);
+    expect(state).toMatch(/^[0-9a-f]{64}$/);
+    // The provider never sees the envelope, only the nonce.
+    expect(res.headers.location).not.toContain(sealed);
 
     const cookie = setCookie.find((c) => c.startsWith(`${STATE_COOKIE}=`))!;
     expect(cookie).toMatch(/HttpOnly/i);
@@ -307,11 +336,11 @@ describe('the callback works WITHOUT the app session cookie (#89)', () => {
     // what the browser actually delivers.
     const withSession = appWithSession('researcher-7');
     const start = await request(listening(withSession)).get('/api/calendar/auth/connect');
-    const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
+    const { sealed, state } = startedFlow(start);
 
     const res = await request(listening(sessionlessApp()))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('calendar=connected');
@@ -341,11 +370,11 @@ describe('the callback works WITHOUT the app session cookie (#89)', () => {
      */
     const initiator = appWithSession('researcher-7');
     const start = await request(listening(initiator)).get('/api/calendar/auth/connect');
-    const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
+    const { sealed, state } = startedFlow(start);
 
     const res = await request(listening(appWithSession('someone-else-9')))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
 
     expect(res.status).toBe(302);
 
@@ -381,11 +410,11 @@ describe('the callback works WITHOUT the app session cookie (#89)', () => {
     // and store no tokens at all.
     const withSession = appWithSession('researcher-9');
     const start = await request(listening(withSession)).get('/api/calendar/auth/connect');
-    const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
+    const { sealed, state } = startedFlow(start);
 
     await request(listening(sessionlessApp()))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
 
     expect(mockConnect).toHaveBeenCalled();
   });
@@ -467,11 +496,11 @@ describe('GET /api/calendar/auth/callback state binding', () => {
     const app = appWithSession();
 
     const start = await request(listening(app)).get('/api/calendar/auth/connect');
-    const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
+    const { sealed, state } = startedFlow(start);
 
     const res = await request(listening(app))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
 
     expect(res.status).toBe(302);
     expect(res.headers.location).toContain('calendar=connected');
@@ -499,8 +528,11 @@ describe('GET /api/calendar/auth/callback state binding', () => {
       .set('Cookie', `${STATE_COOKIE}=deadbeef`);
 
     // The cookie MATCHES the query state here, so this is not the binding check
-    // firing - it is the store check. An attacker who can set a cookie on the
-    // victim's browser still has to have started a flow on this server.
+    // firing - it is the SEAL. Since cto/AdaptaLabs#92 "did this server issue
+    // it?" is answered by whether the envelope opens under this flow's key and
+    // name rather than by a Map only one pod has, and `deadbeef` is not a sealed
+    // envelope. An attacker who can set a cookie on the victim's browser still
+    // has to have started a flow on this server.
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('Invalid state parameter');
     expect(getTokens).not.toHaveBeenCalled();
@@ -514,7 +546,7 @@ describe('GET /api/calendar/auth/callback state binding', () => {
 
     // The attacker starts a real flow and keeps the state...
     const attackerStart = await request(listening(app)).get('/api/calendar/auth/connect');
-    const attackerState = stateFromCookies(attackerStart.headers['set-cookie'] as unknown as string[]);
+    const { state: attackerState } = startedFlow(attackerStart);
 
     // ...then lures the victim to the callback with it. The victim carries no
     // state cookie because the victim never began a flow. Without the browser
@@ -534,16 +566,16 @@ describe('GET /api/calendar/auth/callback state binding', () => {
     // Explicit cookie, not the agent jar - see the control above for why.
     const app = appWithSession();
     const start = await request(listening(app)).get('/api/calendar/auth/connect');
-    const state = stateFromCookies(start.headers['set-cookie'] as unknown as string[]);
+    const { sealed, state } = startedFlow(start);
 
     const first = await request(listening(app))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
     expect(first.status).toBe(302);
 
     const replay = await request(listening(appWithSession()))
       .get(`/api/calendar/auth/callback?code=real-code&state=${state}`)
-      .set('Cookie', `${STATE_COOKIE}=${state}`);
+      .set('Cookie', `${STATE_COOKIE}=${sealed}`);
 
     expect(replay.status).toBe(400);
     expect(replay.body.error).toBe('State parameter already used');

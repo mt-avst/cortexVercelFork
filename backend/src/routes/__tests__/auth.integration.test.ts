@@ -21,16 +21,31 @@ jest.mock('openid-client', () => ({
   },
 }));
 
+// The nonce the state guard mints, pinned so /auth/login's redirect carries a
+// known literal. 32 bytes, because that is what the guard asks for.
+const MOCK_NONCE_BYTE = 7;
+const MOCK_STATE = '07'.repeat(32);
+
 // Mock crypto.randomBytes only — preserve the rest of the real module (createHash etc.),
 // which express-session needs internally to hash/compare session state on every request.
-// randomBytes always returning 'mock-state' means the OIDC state token issued by /login
-// is always the literal string 'mock-state' in this file.
-jest.mock('crypto', () => ({
-  ...jest.requireActual('crypto'),
-  randomBytes: jest.fn(() => ({
-    toString: jest.fn(() => 'mock-state'),
-  })),
-}));
+//
+// IT RETURNS A REAL BUFFER, and that is not a detail. This mock used to answer
+// every call with `{ toString: () => 'mock-state' }`, which is not a Buffer and
+// cannot be used as one: once the state guard began sealing its cookie
+// (cto/AdaptaLabs#92) the 12-byte AES IV came back as that object and
+// `createCipheriv` threw, so /auth/login answered 500. A fixture that returns
+// something the real API cannot return is a fixture that will eventually lie
+// about the code under it - so the size is honoured, and only the 32-byte call
+// (the guard's nonce) is made deterministic.
+jest.mock('crypto', () => {
+  const actual = jest.requireActual('crypto') as typeof import('crypto');
+  return {
+    ...actual,
+    randomBytes: jest.fn((size: number) =>
+      size === 32 ? Buffer.alloc(32, MOCK_NONCE_BYTE) : actual.randomBytes(size)
+    ),
+  };
+});
 
 // Builds a mock OIDC client. callbackParams reflects the *actual* request query
 // (mirroring real openid-client behavior) rather than a hardcoded value, so tests
@@ -135,7 +150,7 @@ describe('Auth Routes Integration Tests', () => {
         .expect(302);
 
       expect(response.headers.location).toContain('https://oidc-provider.com/auth');
-      expect(response.headers.location).toContain('state=mock-state');
+      expect(response.headers.location).toContain(`state=${MOCK_STATE}`);
     });
 
     it('should handle OIDC client initialization error', async () => {
