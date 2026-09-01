@@ -123,6 +123,22 @@ const TIMELINE_START_HOUR = 7;
 const TIMELINE_END_HOUR = 23;
 
 /**
+ * How far into the past a slot's start may lie before the grid treats it as
+ * unselectable (cto/AdaptaLabs#101).
+ *
+ * A LITERAL MIRROR of the server's `NEW_SESSION_PAST_GRACE_MS`
+ * (backend/src/validation/schemas.ts): the create routes refuse a start more
+ * than one minute in the past (#90), so the grid must not offer such a slot for
+ * selection. Written as the same literal and pinned in the component test, so
+ * the two can only drift on purpose - the server stays the real gate either way.
+ */
+export const PAST_SLOT_GRACE_MS = 60_000;
+
+/** A slot whose start is far enough in the past that the server would refuse it. */
+export const slotIsPast = (slot: { start: string }): boolean =>
+  new Date(slot.start).getTime() < Date.now() - PAST_SLOT_GRACE_MS;
+
+/**
  * Whether the timeline can draw a slot WHERE IT ACTUALLY IS.
  *
  * `getTimePosition` clamps, so a slot outside the drawn hours lands at height
@@ -452,6 +468,10 @@ const CalendarView: React.FC<CalendarViewProps> = ({
     const isConfirmed = isSlotConfirmed(slot);
     const isBusy = isSlotBusy(slot);
     const isAllocated = isSlotAllocated(slot);
+    // A start the server would refuse (#101). Only meaningful for a FREE slot
+    // the researcher might newly select - an existing past session stays drawn
+    // as a session, and blocked slots keep their own reason.
+    const isPast = slotIsPast(slot) && !session && !isConfirmed && !isBusy && !isAllocated;
     // Busy, full and allocated slots are not the researcher's to act on.
     const isBlocked = isBusy || (!!session && session.remaining <= 0) || isAllocated;
 
@@ -466,12 +486,16 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       slotClass += ' calendar-slot-admin-allocated';
     } else if (isBusy) {
       slotClass += ' calendar-slot-admin-busy';
+    } else if (isPast) {
+      // Greyed and unselectable; the inline style at the render site carries
+      // the appearance so this stays out of the shared stylesheet.
+      slotClass += ' calendar-slot-admin-past';
     } else {
       // Available slot - matches user calendar ghost style
       slotClass += ' calendar-slot-admin-available';
     }
 
-    return { session, isSelected, isConfirmed, isBusy, isAllocated, isBlocked, slotClass };
+    return { session, isSelected, isConfirmed, isBusy, isAllocated, isPast, isBlocked, slotClass };
   };
 
   type SlotStatus = ReturnType<typeof describeSlot>;
@@ -479,7 +503,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   const slotTooltip = (slot: AvailableSlot, status: SlotStatus): string => {
     try {
       const timeSpan = `${formatTime(slot.start)} to ${formatTime(slot.end)}`;
-      const { session, isBusy, isAllocated, isSelected, isConfirmed } = status;
+      const { session, isBusy, isAllocated, isSelected, isConfirmed, isPast } = status;
 
       if (session) {
         return `${timeSpan} - Session: ${session.capacity} capacity, ${session.booked_count} booked, ${session.remaining} remaining`;
@@ -488,6 +512,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({
       if (isAllocated) return `${timeSpan} - This slot is allocated to another opportunity`;
       if (isSelected) return `${timeSpan} - Selected for session creation`;
       if (isConfirmed) return `${timeSpan} - Session confirmed`;
+      if (isPast) return `${timeSpan} - This time is in the past and cannot be scheduled`;
       return `${timeSpan} - Available time slot`;
     } catch (error) {
       logger.error('Error formatting tooltip', { errorMessage: String(error), slotStart: slot.start });
@@ -522,19 +547,29 @@ const CalendarView: React.FC<CalendarViewProps> = ({
   };
 
   const clickSlot = (slot: AvailableSlot, status: SlotStatus) => {
-    const { session, isSelected, isConfirmed, isBusy, isAllocated, isBlocked } = status;
+    const { session, isSelected, isConfirmed, isBusy, isAllocated, isPast, isBlocked } = status;
     logger.debug('Slot clicked:', {
       slotKey: slotKeyOf(slot),
       isSelected,
       isConfirmed,
       isBusy,
       isAllocated,
+      isPast,
       hasSession: !!session,
       sessionId: session?.id,
     });
 
     if (isBlocked) {
       logger.debug('Slot click blocked - busy, full, or allocated');
+      return;
+    }
+
+    // A past free slot cannot be selected (#101): the server refuses it, so
+    // offering the click only produces a whole-batch refusal at Confirm.
+    // isPast is already false for an existing session or a confirmed slot, so
+    // this never traps a deselect.
+    if (isPast) {
+      logger.debug('Slot click blocked - start is in the past');
       return;
     }
 
@@ -1012,7 +1047,11 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                               padding: '2px 4px',
                               overflow: 'hidden',
                               zIndex: isSelected || isConfirmed ? 5 : 1,
-                              pointerEvents: 'auto'
+                              pointerEvents: 'auto',
+                              // Past free slots read as unavailable and take no
+                              // click (#101). Inline so the appearance stays out
+                              // of the shared stylesheet the admin-UX work owns.
+                              ...(status.isPast ? { opacity: 0.4, cursor: 'not-allowed' } : {})
                             }}
                             title={slotTooltip(slot, status)}
                             onClick={() => clickSlot(slot, status)}
@@ -1129,8 +1168,8 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                   key={slotKeyOf(slot)}
                                   className={`${status.slotClass} calendar-gutter-slot`}
                                   role="button"
-                                  tabIndex={status.isBlocked ? -1 : 0}
-                                  aria-disabled={status.isBlocked || undefined}
+                                  tabIndex={status.isBlocked || status.isPast ? -1 : 0}
+                                  aria-disabled={status.isBlocked || status.isPast || undefined}
                                   title={slotTooltip(slot, status)}
                                   onClick={() => clickSlot(slot, status)}
                                   onKeyDown={(e) => {
@@ -1146,7 +1185,9 @@ const CalendarView: React.FC<CalendarViewProps> = ({
                                     minHeight: '28px',
                                     padding: '4px 8px',
                                     fontSize: '0.7rem',
-                                    cursor: status.isBlocked ? 'default' : 'pointer'
+                                    cursor: status.isBlocked || status.isPast ? 'not-allowed' : 'pointer',
+                                    // Past slots read as unavailable here too (#101).
+                                    ...(status.isPast ? { opacity: 0.4 } : {})
                                   }}
                                 >
                                   <span className="timeslot-label" style={{ opacity: 1 }}>
@@ -2366,12 +2407,24 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
       await loadCalendarData();
       
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: { error?: string } }; message?: string };
-      logger.error('Error creating sessions', { 
+      const axiosError = err as {
+        response?: { data?: { error?: string; details?: string[] } };
+        message?: string;
+      };
+      logger.error('Error creating sessions', {
         error: err instanceof Error ? err : undefined,
-        errorMessage: err instanceof Error ? err.message : String(err) 
+        errorMessage: err instanceof Error ? err.message : String(err)
       });
-      setError(axiosError.response?.data?.error || 'Failed to create sessions');
+      // Prefer the per-item breakdown when the server sent one (#101): a
+      // past-slot batch answers `details: ['Session 1: Start time must not be
+      // in the past', ...]`, which names the rule, over the bare
+      // `error: 'Validation failed'`.
+      const data = axiosError.response?.data;
+      const message =
+        data?.details && data.details.length > 0
+          ? data.details.join(' ')
+          : data?.error || 'Failed to create sessions';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -2644,10 +2697,14 @@ const AdminSessionManager: React.FC<AdminSessionManagerProps> = ({
                   type="date"
                   className="form-control form-control-sm"
                   value={toDateInputValue(startDate)}
+                  // The server refuses a session that starts in the past (#90),
+                  // so the picker must not offer a past day (#101). Intra-day
+                  // past times are greyed in the grid below; this bounds the day.
+                  min={toDateInputValue(new Date())}
                   onChange={(e) => {
                     const [year, month, day] = e.target.value.split('-');
                     const newDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0);
-                    
+
                     // Validate that start date is not after end date
                     if (newDate <= endDate) {
                       setStartDate(newDate);

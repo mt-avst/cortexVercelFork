@@ -161,6 +161,17 @@ export const errorHandler = (
       requestId,
     };
 
+    // Carry the per-item breakdown when the error has one (cto/AdaptaLabs#101).
+    // ValidationError is thrown with a `details` array, and this branch used to
+    // drop it - so a batch refusal (e.g. POST /api/sessions with a past slot)
+    // reached the client as a bare "Validation failed", while the sentence
+    // naming the rule sat unused in the array. The ZodError branch below already
+    // includes details; this aligns the two so every 400 that HAS specifics can
+    // show them, rather than each route hand-building its own body to do so.
+    if (error.details && error.details.length > 0) {
+      response.details = error.details;
+    }
+
     return res.status(error.statusCode).json(response);
   }
 
