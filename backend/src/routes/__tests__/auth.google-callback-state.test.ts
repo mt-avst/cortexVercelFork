@@ -184,6 +184,32 @@ describe('GET /auth/google-callback state validation (login CSRF, #82)', () => {
     expect(victim.headers['set-cookie']).toBeUndefined();
   });
 
+  it('refuses a state that is not the one sealed into this browser cookie', async () => {
+    /*
+     * THE BROWSER BINDING, at the flow level. A victim who has begun their own
+     * login holds a valid state cookie, and that is the case every other arm
+     * here misses: the attacker-minted arm gives the victim NO cookie, so it is
+     * refused one check earlier and cannot see this.
+     *
+     * Proven by mutation: deleting the nonce comparison in `consume` passed all
+     * 55 tests across this file, its calendar sibling and the module's own
+     * suite. With it deleted, this arm fails by name - and what it lets through
+     * is cto/AdaptaLabs#82 itself, an attacker's code exchanged in the victim's
+     * browser.
+     */
+    const login = await request(listening(app)).get('/auth/google-login').expect(302);
+    const stateCookie = stateCookieFrom(login.headers['set-cookie'] as unknown as string[]);
+
+    installAttackerFetch();
+    const res = await request(listening(app))
+      .get(`/auth/google-callback?code=attacker-code&state=${'d'.repeat(64)}`)
+      .set('Cookie', stateCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid state parameter');
+    expect(res.headers['set-cookie']).toBeUndefined();
+  });
+
   it('accepts a state minted by google-login exactly once then refuses a replay', async () => {
     // A real browser keeps the state cookie /google-login set, so the callback
     // is driven WITH that cookie re-presented - a plain client would drop it and

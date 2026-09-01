@@ -195,6 +195,15 @@ deployment:
   # a readiness SELECT 1 becomes defensible again - raising the replica count
   # is the real fix, and this note should be revisited alongside it.
   #
+  # WHAT RAISING IT USED TO BREAK, recorded here because this is the file the
+  # person raising it is editing: OAuth state lived in a per-process Map, so a
+  # login callback load-balanced to another pod answered `Invalid state
+  # parameter` - intermittently, for (n-1)/n of attempts, on both the Okta login
+  # and the calendar connect. That is fixed (cto/AdaptaLabs#92): the state now
+  # travels sealed in the browser cookie and any pod can open it. The one
+  # residual is that replay-detection is per-pod, which costs nothing while
+  # authorization codes are single-use at the provider.
+  #
   # The database is reported at GET /api/health instead - visibility without
   # touching traffic routing. Issue #3.
   #

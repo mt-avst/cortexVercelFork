@@ -1806,20 +1806,20 @@
   },
   {
     "id": "google-callback-consumes-oauth-state-once",
-    "why": "cto/AdaptaLabs#82 replay half, now living in utils/oauthState.ts after #89 extracted the guard so the login and calendar-connect flows share ONE implementation. `consume` marks a state used so one captured state cannot drive a second callback (session fixation). This mutation leaves used=false, so a state re-presented WITH its original cookie is accepted again. The named test isolates this from the cookie-clearing by re-sending the state cookie, so only the used flag can refuse the replay. Proven KILLED before entry: the replay returns 302 instead of 400. The anchor moved FILE in #89 and this entry went ANCHOR_MISSING in CI, which is the manifest doing its job - a moved security line must be re-pointed, never deleted.",
+    "why": "cto/AdaptaLabs#82's replay half. RE-POINTED by cto/AdaptaLabs#92: the old anchor was `stateData.used = true` on a per-process Map, and that Map is gone - state is now sealed into the browser cookie so any pod can complete a callback. Single use is now recorded here instead. Delete this line and a state re-presented WITH its original cookie is accepted a second time (session fixation). The named test isolates that from the cookie-clearing by re-sending the state cookie, so only this line can refuse the replay. The entry went ANCHOR_MISSING in CI when the rewrite landed, which is the manifest doing its job: a moved security line is re-pointed, never deleted.",
     "file": "backend/src/utils/oauthState.ts",
-    "anchor": "      stateData.used = true;",
-    "mutation": "      stateData.used = false;",
+    "anchor": "      spent.set(envelope.n, Date.now());",
+    "mutation": "",
     "runner": "jest",
     "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
     "test": "refuses a consumed state even when the browser re-sends the state cookie"
   },
   {
     "id": "oauth-state-is-browser-bound",
-    "why": "cto/AdaptaLabs#82, the actual login-CSRF fix, now living in utils/oauthState.ts after #89 extracted the guard for the calendar-connect flow. The state store is a process-global map any caller can populate, so the security gate demonstrated an attacker could mint a valid unused state, capture their own code, and lure a victim to the callback with both - logging the victim into the attacker's identity. `consume` binds the state to a cookie set on the initiating browser. This mutation drops the cookie binding (keeps `bound` referenced so it still builds), restoring the exploit. Proven KILLED before entry: the cross-browser replay returns 302 instead of 400. It now guards BOTH flows from one place, so this single entry is worth more than it was.",
+    "why": "cto/AdaptaLabs#82, the login-CSRF fix itself. RE-POINTED by cto/AdaptaLabs#92: the binding used to be `state !== bound` against a value in a process-global store; the state now travels AES-256-GCM sealed in the cookie, so the binding starts by REQUIRING that cookie. Drop the presence check (keeping `state` referenced so it still builds) and a callback carrying an attacker-minted state reaches the flow from a browser that never began it - the exploit the gate demonstrated, logging the victim into the attacker's identity. Killed by hand twice before this re-point. The sibling entry `oauth-state-is-bound-to-the-nonce-in-the-cookie` guards the OTHER half, the nonce comparison; both halves are load-bearing and neither implies the other.",
     "file": "backend/src/utils/oauthState.ts",
-    "anchor": "      const bound = cookies?.[cookieName];\n\n      // Browser binding FIRST: no valid cookie means this callback did not begin\n      // on this browser, whatever the store holds.\n      if (typeof state !== 'string' || !bound || state !== bound) {\n        return { ok: false, error: 'Invalid state parameter' };\n      }",
-    "mutation": "      const bound = cookies?.[cookieName];\n      void bound;\n\n      if (typeof state !== 'string') {\n        return { ok: false, error: 'Invalid state parameter' };\n      }",
+    "anchor": "      if (typeof state !== 'string' || !sealed) {",
+    "mutation": "      if (typeof state !== 'string') {",
     "runner": "jest",
     "spec": "src/routes/__tests__/auth.google-callback-state.test.ts",
     "test": "refuses an attacker-minted state replayed from a different browser"
@@ -2180,6 +2180,16 @@
     "project": "frontend",
     "spec": "src/components/__tests__/AdminSessionManager.out-of-range-sessions.test.tsx",
     "test": "draws one before the timeline starts in the gutter row, at full size"
+  },
+  {
+    "id": "oauth-state-is-bound-to-the-nonce-in-the-cookie",
+    "why": "cto/AdaptaLabs#82's browser binding, and it had NO oracle at all before the arms added with cto/AdaptaLabs#92: deleting this comparison passed all 55 tests across the module suite and both flow suites, because every other arm either presents the matching state or presents no cookie and is refused one check earlier. Without it `consume` accepts ANY state string as long as one of our envelopes opens, so a victim who has begun their own login - and therefore holds a valid cookie - can be lured to the callback carrying an attacker's authorization code.",
+    "file": "backend/src/utils/oauthState.ts",
+    "anchor": "        !crypto.timingSafeEqual(presented, expected)",
+    "mutation": "        false",
+    "runner": "jest",
+    "spec": "src/utils/__tests__/oauthState.test.ts",
+    "test": "refuses a state that is not the nonce inside the cookie"
   },
   {
     "id": "opportunities-fanout-reads-only-actionable-sessions-for-participants",
