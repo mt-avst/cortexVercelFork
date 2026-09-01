@@ -12,7 +12,7 @@
  * time, which reuses the existing `getTimeRemainingUntil` in opportunityUtils.
  */
 import { Opportunity, Session } from '../api/types';
-import { getClosingTime } from './opportunityUtils';
+import { getClosingTime, getParticipantFacingType } from './opportunityUtils';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -206,6 +206,26 @@ export const relativeDayLabel = (date: Date, now: Date): string | null => {
   if (days === 1) return 'Tomorrow';
   if (days < 7) return `in ${days} days`;
   return null;
+};
+
+/**
+ * The TYPE-column label for the admin studies table. A DELIBERATE, admin-only
+ * divergence from getParticipantFacingType (the one-name-everywhere source):
+ * the two "... session" names are dropped to "Live" / "Recorded" so the type
+ * pill does not crowd the status pill in this dense table. Every other type
+ * keeps its canonical participant-facing name, and the participant browse still
+ * shows the full "Live session" / "Recorded session" - the short form lives
+ * only here.
+ */
+export const getAdminTypeLabel = (type: Opportunity['type']): string => {
+  switch (type) {
+    case 'test':
+      return 'Live';
+    case 'unmoderated':
+      return 'Recorded';
+    default:
+      return getParticipantFacingType(type);
+  }
 };
 
 /**
