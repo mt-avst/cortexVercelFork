@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { isAdminRole } from '../../types';
 
 /**
  * Manual mock of the auth middleware for ROUTE integration suites.
@@ -30,7 +31,7 @@ export const requireAdmin = (req: Request, res: Response, next: NextFunction) =>
   if (!req.session?.user) {
     return res.status(401).json({ error: 'Authentication required' });
   }
-  if (req.session.user.role !== 'researcher_admin' && req.session.user.role !== 'superadmin') {
+  if (!isAdminRole(req.session.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   req.user = req.session.user;

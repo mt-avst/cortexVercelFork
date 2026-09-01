@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, requireAdmin, requireSuperadmin, withLiveRole } from '../middleware/authenticate';
+import { isAdminRole } from '../types';
 import { getAppliedDbTlsModes } from '../config/dbTls';
 import { pool } from '../config/index';
 import { asyncHandler } from '../utils/errorHandler';
@@ -69,7 +70,7 @@ router.get('/dashboard', requireAuth, withLiveRole, asyncHandler(async (req: Req
   const user = req.user!;
 
   // Check admin role - live as of this request, courtesy of `withLiveRole`.
-  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {
+  if (!isAdminRole(user.role)) {
     return res.status(403).json({ error: 'Forbidden: Admin access required' });
   }
 
@@ -342,7 +343,7 @@ router.post('/request', requireAuth, withLiveRole, asyncHandler(async (req: Requ
   const user = req.user!;
 
   // Check if user already has admin or superadmin role - live, not as of login.
-  if (user.role === 'researcher_admin' || user.role === 'superadmin') {
+  if (isAdminRole(user.role)) {
     return res.status(400).json({ error: 'You already have admin access' });
   }
   

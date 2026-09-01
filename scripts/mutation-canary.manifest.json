@@ -1282,8 +1282,8 @@
     "id": "admin-dashboard-gate-reads-live-role",
     "why": "The dashboard's in-handler admin gate, which stays in the handler because this is the 'am I an admin' surface every signed-in user loads and the 403 is part of its contract - requireAdmin cannot cover it. Pre-#38 it read the session role, so a FULLY revoked admin kept the whole dashboard for up to SESSION_MAX_AGE_MS = 24h. Distinct from the two scope entries above: this one pins the refusal, they pin what is withheld from a caller the refusal correctly admits. Reading the session role type-checks and restores the stale gate; the named jest test sets the DB role to employee and asserts a 403.",
     "file": "backend/src/routes/admin.ts",
-    "anchor": "  if (user.role !== 'researcher_admin' && user.role !== 'superadmin') {",
-    "mutation": "  if (req.session!.user!.role !== 'researcher_admin' && req.session!.user!.role !== 'superadmin') {",
+    "anchor": "  if (!isAdminRole(user.role)) {",
+    "mutation": "  if (!isAdminRole(req.session!.user!.role)) {",
     "runner": "jest",
     "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
     "test": "refuses an admin whose database role was revoked after login"
@@ -1292,8 +1292,8 @@
     "id": "admin-request-reads-live-role",
     "why": "POST /api/admin/request is how a non-admin ASKS to become one, so it admits non-admins and cannot sit on requireAdmin either. Read off the session it told a REVOKED admin 'You already have admin access' and refused the request, leaving them unable to ask for it back until their cookie expired (cto/AdaptaLabs#38). No escalation, but the same stale read and wrong in a user-visible way. Reading the session role type-checks and restores the dead end; the named jest test sets the DB role to employee and asserts the request is accepted.",
     "file": "backend/src/routes/admin.ts",
-    "anchor": "  if (user.role === 'researcher_admin' || user.role === 'superadmin') {",
-    "mutation": "  if (req.session!.user!.role === 'researcher_admin' || req.session!.user!.role === 'superadmin') {",
+    "anchor": "  if (isAdminRole(user.role)) {",
+    "mutation": "  if (isAdminRole(req.session!.user!.role)) {",
     "runner": "jest",
     "spec": "src/routes/__tests__/admin.dashboard-and-request-read-live-role.test.ts",
     "test": "lets a revoked admin ask for access again"
@@ -1342,7 +1342,7 @@
     "id": "catalogue-live-role-read-is-narrowed-to-admin-sessions",
     "why": "THE PERFORMANCE HALF OF #45's DECISION, and it needs its own entry because the entry above cannot speak for it: re-reading MORE often keeps every liveness assertion green. GET /api/opportunities is the catalogue every signed-in user loads, and currentDbRole's own docblock used to justify its price on the grounds that it never touched a hot participant path. The narrowing is what keeps that true - a re-read can only take privilege AWAY, so a session whose stored role is not already an admin role has nothing to gain from the query and is handed straight on. The mutation is option 1 from the issue, re-reading for any session at all: it type-checks, it is a defensible design, and it silently puts one SELECT on every authenticated catalogue load. Only the query-count arms can see it, and they pin 0 and 1 as literals rather than deriving them from the code.",
     "file": "backend/src/middleware/authenticate.ts",
-    "anchor": "  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {",
+    "anchor": "  if (!isAdminRole(storedRole)) {",
     "mutation": "  if (storedRole === undefined) {",
     "runner": "jest",
     "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
@@ -1359,14 +1359,24 @@
     "test": "gives an admin whose database role was revoked after login the participant view"
   },
   {
-    "id": "catalogue-live-role-read-covers-superadmin-sessions",
-    "why": "THE SUPERADMIN HALF OF THE NARROWING, and it needs its own entry because the researcher_admin half cannot speak for it - that is not a theory, it is what happened. The refute gate on !264 deleted `&& storedRole !== 'superadmin'` and measured 1301 passed / 1301 over two interleaved runs: every liveness arm drove a researcher_admin session, so the superadmin term had no enforcement at all and one character silently re-opened cto/AdaptaLabs#45 for every superadmin. The symmetric mutation, dropping researcher_admin and keeping superadmin, failed 25 tests - 0 against 25 is the finding. It is reachable in production: admin.ts deliberately refuses in-API superadmin revocation as a recorded #14 decision, so a superadmin is demoted by script or direct SQL, which is exactly the channel this family exists to honour. The named jest test drives a superadmin session whose users.role says employee and asserts the participant view.",
-    "file": "backend/src/middleware/authenticate.ts",
-    "anchor": "  if (storedRole !== 'researcher_admin' && storedRole !== 'superadmin') {",
-    "mutation": "  if (storedRole !== 'researcher_admin') {",
+    "id": "is-admin-role-includes-superadmin",
+    "why": "cto/AdaptaLabs#57: the admin-role SET now lives in one predicate (shared/types isAdminRole) instead of being spelled inline at 16 sites. Dropping `superadmin` here makes every admin gate stop recognising a superadmin. Pinned by the direct unit assertion, NOT an integration test: because the same predicate now feeds both withLiveRoleIfPresent and the handler's own isAdmin, dropping superadmin makes BOTH treat a superadmin as a participant, so the end-to-end \"revoked superadmin gets the participant view\" outcome is still reached by a different path and the integration test cannot see the change (measured: it SURVIVED). Its sibling is-admin-role-includes-researcher-admin pins the other direction; a single assertion cannot see the other role removed.",
+    "file": "shared/types/index.ts",
+    "anchor": "  return role === 'researcher_admin' || role === 'superadmin';",
+    "mutation": "  return role === 'researcher_admin';",
     "runner": "jest",
-    "spec": "src/routes/__tests__/opportunities.inline-admin-gates-read-live-role.test.ts",
-    "test": "gives a superadmin whose database role was revoked the participant view"
+    "spec": "src/types/__tests__/isAdminRole.test.ts",
+    "test": "treats superadmin as an admin role"
+  },
+  {
+    "id": "is-admin-role-includes-researcher-admin",
+    "why": "cto/AdaptaLabs#57: the mirror of is-admin-role-includes-superadmin. Drops `researcher_admin` from the single admin-role predicate, so every admin gate stops recognising an ordinary research admin. Killed by the named unit test asserting isAdminRole('researcher_admin') is true. Pinned as its own entry because the superadmin-direction test cannot see researcher_admin being removed - the property is BOTH roles in the set, and each direction needs its own arm.",
+    "file": "shared/types/index.ts",
+    "anchor": "  return role === 'researcher_admin' || role === 'superadmin';",
+    "mutation": "  return role === 'superadmin';",
+    "runner": "jest",
+    "spec": "src/types/__tests__/isAdminRole.test.ts",
+    "test": "treats researcher_admin as an admin role"
   },
   {
     "id": "catalogue-listing-chain-order-is-load-bearing",
@@ -1908,7 +1918,7 @@
     "id": "researcher-notes-write-reads-live-role",
     "why": "cto/AdaptaLabs#79, same liveness family as #14: the role that decides is the one in the users table now, not the one snapshotted into the session at login. This mutation keeps the existence check and drops the role check, so a demoted-to-employee session with a stale admin claim writes notes about a colleague. The named test's session claims researcher_admin while the live-role query answers employee. Proven KILLED before entry.",
     "file": "backend/src/routes/bookings.ts",
-    "anchor": "  if (userResult.rows.length === 0 || (userResult.rows[0].role !== 'researcher_admin' && userResult.rows[0].role !== 'superadmin')) {\n    throw new ForbiddenError('Only admins can edit researcher notes');\n  }",
+    "anchor": "  if (userResult.rows.length === 0 || !isAdminRole(userResult.rows[0].role)) {\n    throw new ForbiddenError('Only admins can edit researcher notes');\n  }",
     "mutation": "  if (userResult.rows.length === 0) {\n    throw new ForbiddenError('Only admins can edit researcher notes');\n  }",
     "runner": "jest",
     "spec": "src/routes/__tests__/bookings.researcher-notes.test.ts",
