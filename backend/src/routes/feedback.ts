@@ -91,7 +91,9 @@ router.post('/', asyncHandler(async (req: Request, res: Response) => {
  * ponytail: past FEEDBACK_LIST_LIMIT rows the UI shows only the newest cap
  *   and the streamed CSV export is the route to the rest.
  *   -> #86, the (created_at, id) cursor rework, triggered if `has_more: true`
- *      ever shows up in production responses.
+ *      ever shows up in production responses - which the handler now LOGS, so
+ *      the trigger is greppable rather than dependent on an admin mentioning
+ *      the notice in the UI.
  */
 router.get('/', requireAdmin, asyncHandler(async (req: Request, res: Response) => {
   const result = await pool.query(
@@ -104,6 +106,24 @@ router.get('/', requireAdmin, asyncHandler(async (req: Request, res: Response) =
 
   const hasMore = result.rows.length > FEEDBACK_LIST_LIMIT;
   const rows = hasMore ? result.rows.slice(0, FEEDBACK_LIST_LIMIT) : result.rows;
+
+  if (hasMore) {
+    /*
+     * THE TRIGGER FOR cto/AdaptaLabs#86, MADE OBSERVABLE.
+     *
+     * The cap is a deliberate deferral and it comes with a condition for
+     * revisiting it: the table outgrowing the cap. That condition was detectable
+     * only by an admin noticing the notice in the UI and mentioning it to
+     * someone - which is a hope rather than a signal, and the sort of trigger
+     * that is discovered years later in a support conversation.
+     *
+     * `warn` rather than `info` so it survives a level filter, and one line per
+     * list request is bounded by admin activity rather than by the table.
+     */
+    logger.warn('Feedback list truncated at its cap; the keyset rework is cto/AdaptaLabs#86', {
+      cap: FEEDBACK_LIST_LIMIT,
+    });
+  }
 
   res.json({ success: true, data: rows, has_more: hasMore });
 }));

@@ -11,6 +11,7 @@ jest.mock('../../config', () => ({
 }));
 
 import feedbackRouter, { FEEDBACK_LIST_LIMIT } from '../feedback';
+import { logger } from '../../utils/logger';
 import { pool } from '../../config';
 import { errorHandler } from '../../utils/errorHandler';
 
@@ -127,6 +128,43 @@ describe('GET /api/feedback is bounded', () => {
 
     expect(res.body.data).toHaveLength(1000);
     expect(res.body.has_more).toBe(true);
+  });
+
+  it('logs the ceiling being hit, so the #86 trigger does not depend on an admin mentioning it', async () => {
+    /*
+     * The deferral on this cap comes with a condition for revisiting it, and a
+     * condition nobody can observe is not a trigger. Before this the only
+     * signal was the notice in the admin UI - which fires in one person's
+     * browser and reaches an engineer only if they think to say so.
+     */
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      mockQuery.mockResolvedValue({ rows: rowsOf(1001), rowCount: 1001 } as never);
+
+      await request(listening(app())).get('/api/feedback');
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('cto/AdaptaLabs#86'),
+        expect.objectContaining({ cap: 1000 })
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('stays silent below the ceiling, so the signal means something when it fires', async () => {
+    // The control. A line logged on every list request is a line nobody reads,
+    // and the trigger would be indistinguishable from ordinary traffic.
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    try {
+      mockQuery.mockResolvedValue({ rows: rowsOf(1000), rowCount: 1000 } as never);
+
+      await request(listening(app())).get('/api/feedback');
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('keeps the rows in the order the database returned them', async () => {
