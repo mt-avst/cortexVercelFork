@@ -3419,64 +3419,9 @@ body.theme-light .sales-section--dim {
   border-bottom: 1px solid var(--border-subtle-current);
 }
 
-/* All sales cards - uses card token system */
-/* Higher specificity with .card to override momentum-card styles */
-body.theme-light .card.sales-pitch-card,
-body.theme-light .card.sales-step-card,
-body.theme-light .card.sales-role-card,
-body.theme-light .card.sales-feature-tile {
-  background: var(--surface-card-current);
-  border: 1px solid var(--border-subtle-current);
-  border-radius: var(--radius-card);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: var(--shadow-card-current);
-}
-
-/* Hover states - lift effect */
-body.theme-light .card.sales-pitch-card:hover,
-body.theme-light .card.sales-step-card:hover,
-body.theme-light .card.sales-role-card:hover,
-body.theme-light .card.sales-feature-tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strong-current);
-}
-
-/* CTA stripe - uses panel tokens */
-body.theme-light .sales-cta-stripe {
-  background: var(--surface-panel-current);
-  border: 1px solid var(--border-strong-current);
-  border-radius: var(--radius-panel);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  box-shadow: var(--shadow-panel-current);
-}
-
 /* Section separators - subtle */
 body.theme-light .sales-section + .sales-section {
   border-top-color: var(--border-subtle-current);
-}
-
-/* Step index - uses glass surface */
-body.theme-light .sales-step-index {
-  background: var(--surface-glass-current);
-  border-color: var(--brand-primary);
-}
-
-/* FAQ borders */
-body.theme-light .sales-faq-item {
-  border-color: var(--border-subtle-current);
-}
-
-/* Walkthrough button */
-body.theme-light .sales-walkthrough-btn {
-  color: #374151;
-  border-color: var(--border-strong-current);
-}
-
-body.theme-light .sales-walkthrough-btn:hover {
-  border-color: var(--brand-primary);
-  color: var(--accent-text-on-light);
 }
 
 /* ============================================================
@@ -3501,53 +3446,9 @@ body.theme-dark .sales-section--dim {
   border-bottom: 1px solid var(--border-subtle-current);
 }
 
-/* All sales cards - uses card token system */
-/* Higher specificity with .card to override momentum-card styles */
-body.theme-dark .card.sales-pitch-card,
-body.theme-dark .card.sales-step-card,
-body.theme-dark .card.sales-role-card,
-body.theme-dark .card.sales-feature-tile {
-  background: var(--surface-card-current);
-  border: 1px solid var(--border-subtle-current);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card-current);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
-/* Hover states - lift effect */
-body.theme-dark .card.sales-pitch-card:hover,
-body.theme-dark .card.sales-step-card:hover,
-body.theme-dark .card.sales-role-card:hover,
-body.theme-dark .card.sales-feature-tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strong-current);
-}
-
-/* CTA stripe - uses panel tokens */
-body.theme-dark .sales-cta-stripe {
-  background: var(--surface-panel-current);
-  border: 1px solid var(--border-strong-current);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel-current);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-
 /* Section separators - subtle border */
 body.theme-dark .sales-section + .sales-section {
   border-top-color: var(--border-subtle-current);
-}
-
-/* FAQ items - uses border token */
-body.theme-dark .sales-faq-item {
-  border-color: var(--border-subtle-current);
-}
-
-/* Step index - uses glass surface */
-body.theme-dark .sales-step-index {
-  background: var(--surface-glass-current);
-  border-color: var(--brand-primary);
 }
 
 /* ============================================================
@@ -3603,11 +3504,6 @@ body.theme-light .cortex-highlight-orange {
 /* Warning as text - the fill keeps --status-warning (see the token note) */
 body.theme-light .text-warning {
   color: var(--accent-amber-text);
-}
-
-/* 20px, below the 24px large-text threshold */
-body.theme-light .sales-step-index {
-  color: var(--accent-text-on-light);
 }
 
 /* ============================================================

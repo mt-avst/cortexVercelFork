@@ -8,7 +8,8 @@ import SalesSections from '../SalesSections';
  * The below-the-fold landing copy went unedited from 7.1.2 to 7.55.x and drifted
  * into claims the product could not support: invented usage metrics, two
  * unattributed testimonials, a participant-matching engine that has never
- * existed, an "Insight trails" feature, and a Jira/Confluence integration.
+ * existed, an "Insight trails" feature, and a Jira/Confluence integration. It
+ * has since been replaced with Dr Nick Fine's v11 narrative.
  *
  * These tests are the guard on that. The banned phrases are written as LITERALS
  * rather than derived from the component's data arrays, because an expectation
@@ -44,7 +45,7 @@ const renderSections = (onAccessCortex = vi.fn(), isLoading = false) => {
 };
 
 describe('SalesSections', () => {
-  it('renders exactly the six sections, and no social proof section', () => {
+  it('renders exactly the six narrative sections, and no social proof section', () => {
     const { container } = renderSections();
 
     const sections = Array.from(container.querySelectorAll('[data-section]')).map((el) =>
@@ -54,11 +55,11 @@ describe('SalesSections', () => {
     // A literal list, so a section added or removed fails here until somebody
     // writes down a verdict for it.
     expect(sections).toEqual([
-      'pitch',
-      'how-it-works',
-      'value-by-role',
-      'features',
-      'faq',
+      'loop',
+      'audiences',
+      'methods',
+      'promises',
+      'voice',
       'final-cta',
     ]);
     expect(sections).not.toContain('social-proof');
@@ -81,62 +82,46 @@ describe('SalesSections', () => {
     expect(bannedClaimsIn('nothing objectionable here')).toEqual([]);
   });
 
-  it('tells participants that recorded studies capture screen and voice', () => {
+  it('discloses that recorded studies capture screen and voice', () => {
     // The one disclosure on this page that is about the participant rather than
-    // about the product. It is why the FAQ grew a fourth entry.
-    renderSections();
+    // the product: a recorded study captures screen and voice. It appears both
+    // in the methods table and in the recorded-study explainer.
+    const { container } = renderSections();
 
-    const answer = screen.getByText(/capture your screen and your voice/i);
-    expect(answer).toBeInTheDocument();
-    expect(answer.textContent).toMatch(/consent wording/i);
+    expect(container.textContent?.toLowerCase()).toContain('screen and voice captured');
+    expect(container.textContent?.toLowerCase()).toContain('screen and voice playback');
   });
 
-  it('does not send a signed-out reader to a control that is behind the sign-in', () => {
-    // "Submit Research Request" and the account menu both render only for a
-    // signed-in user (Header.tsx), and this page is only ever shown signed out
-    // (Home.tsx renders <Landing /> when !user). Naming them without saying to
-    // sign in first describes a header the reader is not looking at.
+  it('closes the loop: participants are told they hear what happened', () => {
+    // The promise that makes the loop worth running twice. It is the reason the
+    // narrative exists, so it is pinned rather than left to drift.
     renderSections();
 
-    const answer = screen.getByText(/Submit Research Request/i);
-    expect(answer.textContent).toMatch(/sign in first/i);
+    expect(screen.getByText(/You hear what happened/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Results are shared back to everyone who took part/i)
+    ).toBeInTheDocument();
   });
 
-  it('says Submit Research Request leaves Cortex for the service desk', () => {
-    // There is no in-app request form. Header.tsx renders this control as an
-    // external anchor to the service desk portal with target="_blank"; the
-    // in-app form that implied otherwise was unrouted dead code, deleted in
-    // #46. Copy that says only "raises it with the research team" reads as an
-    // in-app path, so the destination is asserted rather than the intent.
-    renderSections();
-
-    const answer = screen.getByText(/Submit Research Request/i);
-    expect(answer.textContent).toMatch(/service desk/i);
-    expect(answer.textContent).toMatch(/new tab/i);
-  });
-
-  it('says studies can be browsed without signing in', () => {
-    renderSections();
-
-    expect(screen.getByText(/browse published studies without signing in/i)).toBeInTheDocument();
-  });
-
-  it('runs the access handler from the final CTA', () => {
+  it('runs the access handler from a closing door', () => {
     const { onAccessCortex } = renderSections();
 
-    fireEvent.click(screen.getByRole('button', { name: /Access Cortex/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Run a study/i }));
 
     expect(onAccessCortex).toHaveBeenCalledTimes(1);
   });
 
-  it('disables the final CTA while a sign-in is in flight', () => {
+  it('disables both closing doors while a sign-in is in flight', () => {
     const onAccessCortex = vi.fn();
     renderSections(onAccessCortex, true);
 
-    const cta = screen.getByRole('button', { name: /Access Cortex/i });
-    expect(cta).toBeDisabled();
+    const runStudy = screen.getByRole('button', { name: /Run a study/i });
+    const takePart = screen.getByRole('button', { name: /Take part/i });
+    expect(runStudy).toBeDisabled();
+    expect(takePart).toBeDisabled();
 
-    fireEvent.click(cta);
+    fireEvent.click(runStudy);
+    fireEvent.click(takePart);
     expect(onAccessCortex).not.toHaveBeenCalled();
   });
 
@@ -144,7 +129,9 @@ describe('SalesSections', () => {
     const { container } = renderSections();
 
     expect(container.querySelector('h1')).toBeNull();
-    // One per section, including the CTA stripe.
+    // The loop, methods, promises and final-cta sections carry one h2 each;
+    // the audiences section carries two (one per reader); voice carries none.
+    // A literal count, so a heading gained or lost fails here.
     expect(container.querySelectorAll('h2').length).toBe(6);
   });
 });
