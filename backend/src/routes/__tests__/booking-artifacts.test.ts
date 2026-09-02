@@ -20,6 +20,8 @@ import { listening } from '../../__tests__/helpers/listening';
  *  - finalize trusts only the pending row and HeadObject: unknown key 403,
  *    expired 410, missing object 422, oversize deleted-then-413
  *  - responses never carry relative_path - the media route mints URLs
+ *  - every route carries its decided rate-limit bucket (cto/AdaptaLabs#99),
+ *    after the auth gate never before, the !201 `METHOD /path` table pattern
  */
 
 jest.mock('../../middleware/authenticate');
@@ -72,7 +74,12 @@ import bookingArtifactsRouter, {
   ARTIFACT_ETAG_MISSING,
   ARTIFACT_MEDIA_UNVERIFIED,
   ARTIFACT_MEDIA_CHANGED,
+  artifactReadLimiter,
+  artifactWriteLimiter,
+  artifactMediaLimiter,
+  resetArtifactLimits,
 } from '../booking-artifacts';
+import { requireAdmin } from '../../middleware/authenticate';
 import { pool } from '../../config';
 import {
   createPresignedRecordingUploadUrl,
@@ -239,6 +246,14 @@ const PRESIGN_RECORDING = {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // The limiters' counters live in an in-process MemoryStore that outlives an
+  // individual test - without this, dozens of prior tests calling these
+  // routes as the same caller exhaust a 30-a-minute write bucket long before
+  // this file finishes, and every later assertion fails as a 429 instead of
+  // whatever it meant to test.
+  resetArtifactLimits(OWNER);
+  resetArtifactLimits('somebody-else');
+  resetArtifactLimits('super-1');
   mockHead.mockResolvedValue({ sizeBytes: 1024, etag: '"etag-abc123"' } as never);
   mockDeleteObject.mockResolvedValue(undefined as never);
   mockPresign.mockResolvedValue('https://s3.example/put-url' as never);
@@ -946,4 +961,100 @@ describe('delete removes the object first, then the row', () => {
     expect(res.status).toBe(500);
     expect(callFor('DELETE FROM booking_artifacts')).toBeUndefined();
   });
+});
+
+describe('per-user rate limits (cto/AdaptaLabs#99): three buckets, the !201 pattern', () => {
+  /** Fire one endpoint n times and return the status codes in order. */
+  const hammer = async (n: number, call: () => request.Test): Promise<number[]> => {
+    const codes: number[] = [];
+    for (let i = 0; i < n; i += 1) {
+      codes.push((await call()).status);
+    }
+    return codes;
+  };
+
+  /**
+   * THE CLASS, not the instances, and WHICH bucket rather than merely that
+   * there is one - the same two holes the !201 gate found in firsthand.ts's
+   * first version of this test: naming one route per assertion misses every
+   * route not named, and asking only "carries one of the limiters" cannot
+   * tell a route on the WRONG bucket from one on its own. A route added here
+   * later without a table entry fails this test rather than silently
+   * inheriting whichever bucket its copy-paste source used.
+   */
+  const EXPECTED_LIMITER: Record<string, unknown> = {
+    'POST /:bookingId/artifacts/presign': artifactWriteLimiter,
+    'POST /:bookingId/artifacts/finalize': artifactWriteLimiter,
+    'GET /:bookingId/artifacts': artifactReadLimiter,
+    'DELETE /:bookingId/artifacts/:artifactId': artifactWriteLimiter,
+    'GET /:bookingId/artifacts/:artifactId/media': artifactMediaLimiter,
+  };
+
+  it('mounts the RIGHT limiter on every route, after the auth gate', () => {
+    const stack = (bookingArtifactsRouter as unknown as {
+      stack: Array<{
+        handle?: unknown;
+        route?: {
+          path: string;
+          methods: Record<string, boolean>;
+          stack: Array<{ handle: unknown; name: string }>;
+        };
+      }>;
+    }).stack;
+
+    const layers = stack.filter((entry) => entry.route);
+
+    // If this ever reads zero the assertions below are vacuous and the whole
+    // test passes while checking nothing.
+    expect(layers.length).toBeGreaterThanOrEqual(5);
+
+    const seen: string[] = [];
+
+    for (const layer of layers) {
+      const route = layer.route!;
+      const method = Object.keys(route.methods)[0].toUpperCase();
+      const key = `${method} ${route.path}`;
+      seen.push(key);
+
+      const handlers = route.stack.map((entry) => entry.handle);
+      const authIndex = handlers.indexOf(requireAdmin as unknown);
+      const limiterIndex = handlers.findIndex((handle) => handle === EXPECTED_LIMITER[key]);
+
+      expect({ key, authed: authIndex >= 0 }).toEqual({ key, authed: true });
+      // Absent from the table, or on a different bucket than the table says.
+      expect({ key, onItsBucket: limiterIndex >= 0 }).toEqual({ key, onItsBucket: true });
+      // AFTER the auth gate, never before - mounted first the limiter spends
+      // a bucket on requests that never authenticated, and every one of them
+      // keys to the same 'unauthenticated' fallback: one shared bucket any
+      // anonymous caller could exhaust to refuse every admin in the estate.
+      expect({ key, ordered: limiterIndex > authIndex }).toEqual({ key, ordered: true });
+    }
+
+    // And the table has no entries for routes that no longer exist.
+    expect(seen.sort()).toEqual(Object.keys(EXPECTED_LIMITER).sort());
+  });
+
+  it(
+    'refuses a 121st media request in a minute, and not the 120th - the gap #99 named as unthrottled',
+    async () => {
+      arrange({ artifact: {} });
+      // ONE app, reused every call - `appAs` builds a fresh Express app per
+      // call, and `listening` binds a fresh port per distinct app, so a loop
+      // calling `appAs` itself would exhaust the test port reservoir instead
+      // of exercising the limiter.
+      const app = appAs(OWNER);
+
+      const codes = await hammer(121, () =>
+        request(listening(app)).get(
+          `/api/bookings/${BOOKING}/artifacts/artifact-1/media`
+        )
+      );
+
+      // Both halves, not the 429 alone - asserting only the refusal would
+      // pass against a ceiling of one, which would break ordinary seeking.
+      expect(codes.slice(0, 120).every((code) => code !== 429)).toBe(true);
+      expect(codes[120]).toBe(429);
+    },
+    30_000
+  );
 });

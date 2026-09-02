@@ -2274,5 +2274,36 @@
     "spec": "src/routes/__tests__/opportunities.list-upcoming-sessions-postgres.test.ts",
     "test": "hands an admin the recent and live sessions but not one past the window",
     "needsDatabase": true
+  },
+  {
+    "id": "booking-artifact-media-is-rate-limited",
+    "why": "cto/AdaptaLabs#99. GET /:bookingId/artifacts/:artifactId/media runs a HeadObject on EVERY request - including each Range request a seeking player fires - then a GetObject, and until this entry the route carried no ceiling at all, the specific gap #99 named alongside the ETag's own MD5-collision limitation. This repo's standard for a limiter (routes/firsthand.ts) is a named test PLUS a canary entry; this is that second half. Proven KILLED before entry: with artifactMediaLimiter removed from the route, the 121st request in a minute answers whatever the handler would (200/404/409) instead of 429.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "  requireAdmin,\n  artifactMediaLimiter,\n  asyncHandler(async (req: Request, res: Response) => {\n    const booking = await loadOwnedBooking(req);\n    const { artifactId } = req.params;",
+    "mutation": "  requireAdmin,\n  asyncHandler(async (req: Request, res: Response) => {\n    const booking = await loadOwnedBooking(req);\n    const { artifactId } = req.params;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "refuses a 121st media request in a minute, and not the 120th - the gap #99 named as unthrottled"
+  },
+  {
+    "id": "booking-artifact-limiter-sits-after-the-auth-gate",
+    "why": "The !201 ordering rule (routes/firsthand.ts), re-proven for this router's own three limiter instances: mounted ahead of requireAdmin a limiter spends a bucket on requests that never authenticated, and every one of them keys to the same 'unauthenticated' fallback - one shared bucket any anonymous caller could exhaust to refuse every researcher_admin in the estate. The table test's per-route 'ordered' check is what catches a reversal on any one of the five routes; this entry anchors the media route as the representative case.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "  requireAdmin,\n  artifactMediaLimiter,",
+    "mutation": "  artifactMediaLimiter,\n  requireAdmin,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "mounts the RIGHT limiter on every route, after the auth gate"
+  },
+  {
+    "id": "booking-artifact-media-scope-binding-against-real-postgres",
+    "why": "cto/AdaptaLabs#99. Same defect as booking-artifact-media-scope-binding, proven against a REAL database rather than a mock. That entry's own gate found the mocked pool's first version vacuous (a fixture null did the refusing, not the clause) and fixed it with a parameter-honouring mock plus a text pin - but a mock, however faithful, still cannot execute a real join across two real rows. This spec seeds two bookings under ONE owner (so a 404 can only be the booking_id clause, never the ownership gate) and a real artefact row on booking B, then requests it through booking A. Proven KILLED before entry: widening the clause to `(a.booking_id = $2 OR TRUE)` turns the 404 into a 200 serving booking B's artefact through booking A's path.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "      WHERE a.id = $1 AND a.booking_id = $2",
+    "mutation": "      WHERE a.id = $1 AND (a.booking_id = $2 OR TRUE)",
+    "runner": "vitest",
+    "spec": "src/routes/__tests__/booking-artifacts-scope-postgres.test.ts",
+    "test": "404s an artefact requested through a booking that does not own it",
+    "needsDatabase": true
   }
 ]
