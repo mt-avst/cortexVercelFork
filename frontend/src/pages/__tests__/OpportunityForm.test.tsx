@@ -741,10 +741,11 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
 
+    // Different pages per task genuinely cannot be carried by the one
+    // study-level URL, so this stays refused - now with the specific reason
+    // (#106) rather than the opaque "cannot show" sentence.
     expect(
-      await screen.findByText(
-        /use something this form cannot show, so copying them here would drop part of them/i
-      )
+      await screen.findByText(/open different pages/i)
     ).toBeInTheDocument();
     // Nothing was hydrated: no provenance note, and the chooser is still on
     // screen rather than the editor.
@@ -937,6 +938,36 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
     expect(
       (screen.getByLabelText(/What the participant sees/i) as HTMLTextAreaElement).value
     ).toBe('What did you try first?');
+  });
+
+  it('copies a task list whose tasks do not all carry the same starting URL (#106)', async () => {
+    // The Task Lists editor makes an author fill only ONE task's URL, so a
+    // perfectly ordinary list has some blank. That used to be refused with an
+    // opaque "cannot show" message; the reuse form carries one study-level URL
+    // and applies it to every task, so it now copies.
+    vi.mocked(getFirstHandStudy).mockResolvedValueOnce(
+      linkedStudy({
+        steps: [
+          { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket', target_url: 'https://shop.test/basket' },
+          { step_id: 'study_demo_step_2', order: 2, type: 'instruction', prompt: 'Now check out' },
+        ],
+      })
+    );
+    renderForm();
+    selectType('unmoderated');
+    fireEvent.change(screen.getByLabelText(/^Title/i), { target: { value: 'Checkout flow walkthrough' } });
+    fireEvent.change(screen.getByLabelText(/purpose/i), { target: { value: 'Find out where people stall in the checkout flow' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /Task List/i }));
+    fireEvent.click(await screen.findByRole('radio', { name: /Start from an existing task list/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
+
+    expect(await screen.findByText(/Copied from/i)).toBeInTheDocument();
+    expect(screen.queryByText(/use something this form cannot show/i)).toBeNull();
+    // The one URL that was set is carried up as the study-level Starting URL.
+    expect((screen.getByLabelText(/Starting URL/i) as HTMLInputElement).value).toBe(
+      'https://shop.test/basket'
+    );
   });
 
   it('offers inline authoring when editing an unmoderated draft that has no task list yet', async () => {
@@ -1482,9 +1513,7 @@ describe('OpportunityForm - unmoderated is FirstHand-only (A1)', () => {
       fireEvent.click(await screen.findByRole('button', { name: /^Start from this Demo Study$/ }));
 
       expect(
-        await screen.findByText(
-          /use something this form cannot show, so copying them here would drop part of them/i
-        )
+        await screen.findByText(/open different pages/i)
       ).toBeInTheDocument();
       // Still open: the author is left where they were, not bounced back to
       // the note as though the refused pick had worked.

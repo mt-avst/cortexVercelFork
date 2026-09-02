@@ -299,6 +299,56 @@ export const studyRoundTripsCleanly = (
 };
 
 /**
+ * Why a stored recorded task list can or cannot be COPIED into the opportunity
+ * form. Distinct from `studyRoundTripsCleanly`, which the in-place EDIT path
+ * needs and which must stay strictly lossless.
+ *
+ * The copy path deliberately flattens a task list onto ONE study-level Starting
+ * URL - `copiedRecordedFields` reads `getPrimaryTargetUrl` and the form carries
+ * no per-step URL. So a list that uses a SINGLE URL, even with some tasks left
+ * blank, is safe to copy: the form applies that one URL to every task, which is
+ * what the recorded runtime does with it anyway. The Task Lists editor lets an
+ * author set the URL per task and only requires ONE to be filled, so a partial
+ * list is the ordinary result of that editor - and a bare round-trip check
+ * refused it, leaving a perfectly usable task list un-reusable with the one
+ * opaque "cannot show" sentence and no way forward (cto/AdaptaLabs#106).
+ *
+ * `'divergent-urls'` is separated from `'unrepresentable'` so the caller can
+ * name the cause and the remedy. Only tasks that genuinely open DIFFERENT pages
+ * cannot be carried by a single field; everything else the form cannot author -
+ * a step type it does not offer, a per-question config it would drop - stays
+ * refused as before.
+ */
+export type RecordedCopyability = 'ok' | 'divergent-urls' | 'unrepresentable';
+
+export const recordedStudyCopyability = (
+  steps: StudyStep[],
+  studyId: string
+): RecordedCopyability => {
+  const authored = authoredStepsOf(steps);
+  const distinctUrls = [
+    ...new Set(
+      authored
+        .map((step) => step.target_url?.trim())
+        .filter((url): url is string => Boolean(url))
+    )
+  ];
+  if (distinctUrls.length >= 2) {
+    return 'divergent-urls';
+  }
+
+  // Collapse every task onto the single URL (or none) and require the REST to
+  // round-trip. This is exactly the shape the copy stores, so a pass proves the
+  // copy loses nothing beyond the per-task URL distinction the form is designed
+  // to remove; a failure means something else the form cannot author.
+  const singleUrl = distinctUrls[0];
+  const normalised = steps.map((step) =>
+    step.type === 'end' ? step : { ...step, target_url: singleUrl }
+  );
+  return studyRoundTripsCleanly(normalised, 'recorded', studyId) ? 'ok' : 'unrepresentable';
+};
+
+/**
  * The form fields a copy sets, and nothing else.
  *
  * Kept separate from the edit-mode hydration in `loadOpportunity` even though

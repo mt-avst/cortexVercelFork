@@ -69,6 +69,7 @@ import {
   copiedRecordedFields,
   copiedSurveyFields,
   isAwaitingCopiedContent,
+  recordedStudyCopyability,
   studyRoundTripsCleanly,
   toInlineStudyStep,
   toSurveyQuestion,
@@ -4199,7 +4200,20 @@ const OpportunityForm: React.FC = () => {
         : 'That is a set of survey questions, not a task list, so it cannot be copied here.';
     }
 
-    if (!studyRoundTripsCleanly(loaded.steps, kind, loaded.study.id)) {
+    // The recorded path flattens a task list onto ONE study-level Starting URL,
+    // so it tolerates a list that uses a single URL (or none, some tasks blank)
+    // where a bare round-trip check would refuse it - see recordedStudyCopyability.
+    // Only genuinely different per-task pages, or a shape the form cannot author,
+    // are refused, and each gets its own sentence rather than one opaque message.
+    if (kind === 'recorded') {
+      const copyability = recordedStudyCopyability(loaded.steps, loaded.study.id);
+      if (copyability === 'divergent-urls') {
+        return 'These tasks open different pages, and a reused task list uses one page for every task. Make the task page URL the same on all of them in the Task Lists area, then copy it here.';
+      }
+      if (copyability === 'unrepresentable') {
+        return `Those ${noun} use something this form cannot show, so copying them here would drop part of them.`;
+      }
+    } else if (!studyRoundTripsCleanly(loaded.steps, kind, loaded.study.id)) {
       return `Those ${noun} use something this form cannot show, so copying them here would drop part of them.`;
     }
 
