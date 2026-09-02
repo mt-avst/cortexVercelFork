@@ -243,6 +243,8 @@ The form says where the copy came from, and so does the opportunity when you reo
 Only launched task lists appear, and only recorded ones - a set of survey questions is a different thing and cannot be copied here.
 If the list is empty and you know one exists, it is probably still a draft, and the form says how many are waiting.
 
+A copied task list uses **one page for the whole session**. A list that leaves the Starting URL blank on some tasks copies fine - the one page you did set is applied to every task. But if a list opens a *different* page on different tasks, it cannot be copied here: the form says so and asks you to make the task page URL the same on every task in the Task Lists area first. (The runtime supports a page per task; the opportunity form carries a single Starting URL, which is why the two can differ.)
+
 Changing your mind is safe: switching back to **Create tasks for this opportunity** keeps everything the copy brought in.
 
 > **This replaced reuse-by-link.** Until 7.44 an opportunity could point at another opportunity's task list, and editing that list changed what every opportunity using it served, with nothing on screen saying so. Existing links were converted to copies when this shipped; nothing a participant sees changed.
