@@ -63,8 +63,12 @@ truncated export could reach a researcher:
 ```bash
 node scripts/csv-stream-check.mjs \
   --url "https://adaptalabs.kubera-playground.adaptavist.net/api/opportunities/<id>/survey-results.csv" \
-  --cookie "connect.sid=<session>"
+  --cookie "__Host-adaptalabs_session=<value from DevTools>"
 ```
+
+This said `connect.sid`, which is the express-session default and is not what this app sets - the same mistake #11's own description makes.
+The name also differs by environment, because #97 applies the `__Host-` prefix only where the cookie is actually `Secure`: `__Host-adaptalabs_session` against playground, bare `adaptalabs_session` locally.
+Copy whatever DevTools shows rather than the string written here.
 
 The streamed export destroys the socket on every failure path, so a failure part-way through cannot
 become a short CSV that parses. Nothing local can check the other half: if a buffering proxy sits in
@@ -390,10 +394,15 @@ Against playground, seeding needs a port-forward (the guard only ever writes to 
 ```bash
 npx tsx backend/probe/csv-interrupt.ts probe \
   --target https://adaptalabs.kubera-playground.adaptavist.net \
-  --cookie "adaptalabs_session=<value from DevTools>"
+  --cookie "__Host-adaptalabs_session=<value from DevTools>"
 ```
 
-The cookie is `adaptalabs_session`, not `connect.sid`: #11's description names the express-session default and `backend/src/index.ts` renames it.
+The cookie is not `connect.sid`: #11's description names the express-session default and `backend/src/index.ts` renames it.
+Its name then differs by environment, and copying the wrong one is an auth failure the probe cannot diagnose for you: `__Host-adaptalabs_session` against playground, bare `adaptalabs_session` locally.
+#97 applies that prefix only where the cookie is `Secure`, because express-session refuses it over http.
+
+The probe sends whatever `--cookie` you give it, verbatim.
+Its own jar parser matches the bare name only, and that is correct rather than an oversight - it reads a jar minted by `/api/auth/admin-login`, a route that exists only when `NODE_ENV` is development, which is exactly where the prefix does not apply.
 
 `probe` exits 0 only when all three arms pass, so it is usable as a gate rather than as output somebody has to interpret:
 
