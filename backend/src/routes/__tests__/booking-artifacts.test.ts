@@ -19,6 +19,10 @@ import { listening } from '../../__tests__/helpers/listening';
  *  - the object key is server-derived; a hostile file name cannot steer it
  *  - finalize trusts only the pending row and HeadObject: unknown key 403,
  *    expired 410, missing object 422, oversize deleted-then-413
+ *  - finalize COPIES to a key no presigned URL ever addressed
+ *    (cto/AdaptaLabs#99), conditioned on the inspected ETag so even the
+ *    finalize-time race is closed atomically; the media route therefore never
+ *    re-verifies the object against S3 at all - there is nothing left to swap
  *  - responses never carry relative_path - the media route mints URLs
  *  - every route carries its decided rate-limit bucket (cto/AdaptaLabs#99),
  *    after the auth gate never before, the !201 `METHOD /path` table pattern
@@ -41,6 +45,11 @@ jest.mock('../../firsthand/runtime-object-storage-s3', () => ({
   createPresignedRecordingUploadUrl: jest.fn(async () => 'https://s3.example/put-url'),
   headS3ObjectStat: jest.fn(async () => ({ sizeBytes: 1024, etag: '"etag-abc123"' })),
   deleteS3Object: jest.fn(async () => undefined),
+  copyS3ObjectIfMatch: jest.fn(async () => ({ etag: '"etag-abc123"' })),
+  // A real class, not a jest.fn: the route does `instanceof ArtifactCopyRaceError`,
+  // and both the route and this test file resolve the same mocked module -
+  // a bare function stand-in would make that check always false.
+  ArtifactCopyRaceError: class ArtifactCopyRaceError extends Error {},
   createS3TranscriptArtifactResponse: jest.fn(
     async () =>
       new Response('WEBVTT\n', {
@@ -72,8 +81,7 @@ import bookingArtifactsRouter, {
   ARTIFACT_TRANSCRIPT_MIME_REFUSED,
   ARTIFACT_RECORDING_MIME_REFUSED,
   ARTIFACT_ETAG_MISSING,
-  ARTIFACT_MEDIA_UNVERIFIED,
-  ARTIFACT_MEDIA_CHANGED,
+  ARTIFACT_CHANGED_BEFORE_FINALIZE,
   artifactReadLimiter,
   artifactWriteLimiter,
   artifactMediaLimiter,
@@ -86,6 +94,8 @@ import {
   createS3TranscriptArtifactResponse,
   headS3ObjectStat,
   deleteS3Object,
+  copyS3ObjectIfMatch,
+  ArtifactCopyRaceError,
 } from '../../firsthand/runtime-object-storage-s3';
 import { createRecordingAssetResponse } from '../../firsthand/object-storage';
 import { errorHandler } from '../../utils/errorHandler';
@@ -94,6 +104,7 @@ const mockQuery = pool.query as unknown as jest.Mock;
 const mockHead = headS3ObjectStat as unknown as jest.Mock;
 const mockPresign = createPresignedRecordingUploadUrl as unknown as jest.Mock;
 const mockDeleteObject = deleteS3Object as unknown as jest.Mock;
+const mockCopy = copyS3ObjectIfMatch as unknown as jest.Mock;
 const mockRecordingResponse = createRecordingAssetResponse as unknown as jest.Mock;
 const mockTranscriptResponse = createS3TranscriptArtifactResponse as unknown as jest.Mock;
 
@@ -257,6 +268,7 @@ beforeEach(() => {
   mockHead.mockResolvedValue({ sizeBytes: 1024, etag: '"etag-abc123"' } as never);
   mockDeleteObject.mockResolvedValue(undefined as never);
   mockPresign.mockResolvedValue('https://s3.example/put-url' as never);
+  mockCopy.mockResolvedValue({ etag: '"etag-abc123"' } as never);
   // mockImplementation, not mockResolvedValue: a Response body is consumable
   // once, so each call must mint a fresh one.
   mockRecordingResponse.mockImplementation(
@@ -680,13 +692,71 @@ describe('finalize trusts the pending row and HeadObject, nothing else', () => {
     expect(res.status).toBe(201);
     const values = callFor('INSERT INTO booking_artifacts')![1] as unknown[];
     expect(values).toContain(555);
-    // The ETag rides into the row: the presigned URL outlives finalize, so a
-    // re-PUT can swap the bytes - the stored ETag is what lets the step 3
-    // media route refuse the swapped object.
+    // The ETag still rides into the row, informationally - it is what the
+    // copy step below verified against, not a value anything re-checks later.
     expect(values).toContain('"etag-555"');
     // And the pending row is consumed - a finalize that leaves it behind can
     // be replayed.
     expect(callFor('DELETE FROM pending_booking_artifact_uploads')).toBeDefined();
+  });
+
+  describe('cto/AdaptaLabs#99: copies to a key no presigned URL ever addressed', () => {
+    it('copies the pending object to a finalized/ key, deletes the old key, and stores the new one', async () => {
+      arrange({ pending: {} });
+
+      const res = await request(listening(appAs(OWNER)))
+        .post(`/api/bookings/${BOOKING}/artifacts/finalize`)
+        .send({ object_key: `booking-artifacts/${BOOKING}/key.webm` });
+
+      expect(res.status).toBe(201);
+      // Copied FROM the pending key, conditioned on the ETag HeadObject
+      // inspected, TO a key under finalized/ - the whole point being that no
+      // presign was ever issued for that destination.
+      expect(mockCopy).toHaveBeenCalledWith(
+        `booking-artifacts/${BOOKING}/key.webm`,
+        expect.stringMatching(new RegExp(`^booking-artifacts/finalized/${BOOKING}/`)),
+        '"etag-abc123"'
+      );
+      // The now-superseded pending key is cleaned up - a re-PUT to it after
+      // this point touches nothing anyone will ever serve.
+      expect(mockDeleteObject).toHaveBeenCalledWith(`booking-artifacts/${BOOKING}/key.webm`);
+      // And the ROW points at the new key, not the old one.
+      const insert = callFor('INSERT INTO booking_artifacts')!;
+      const relativePath = (insert[1] as unknown[])[5];
+      expect(String(relativePath)).toMatch(
+        new RegExp(`^booking-artifacts/finalized/${BOOKING}/`)
+      );
+    });
+
+    it('refuses by sentence, 409, when the object changed just before it could be copied - and leaves the pending row for a retry', async () => {
+      arrange({ pending: {} });
+      mockCopy.mockRejectedValueOnce(new ArtifactCopyRaceError('key') as never);
+
+      const res = await request(listening(appAs(OWNER)))
+        .post(`/api/bookings/${BOOKING}/artifacts/finalize`)
+        .send({ object_key: `booking-artifacts/${BOOKING}/key.webm` });
+
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe(ARTIFACT_CHANGED_BEFORE_FINALIZE);
+      // Nothing committed, and nothing consumed: a client retry re-reads
+      // whatever is at the pending key now and races again on a fresh
+      // HeadObject, rather than replaying a decision made on stale data.
+      expect(callFor('INSERT INTO booking_artifacts')).toBeUndefined();
+      expect(callFor('DELETE FROM pending_booking_artifact_uploads')).toBeUndefined();
+      expect(mockDeleteObject).not.toHaveBeenCalled();
+    });
+
+    it('lets an unrelated storage error propagate as a 500, not the race sentence', async () => {
+      arrange({ pending: {} });
+      mockCopy.mockRejectedValueOnce(new Error('S3 fell over') as never);
+
+      const res = await request(listening(appAs(OWNER)))
+        .post(`/api/bookings/${BOOKING}/artifacts/finalize`)
+        .send({ object_key: `booking-artifacts/${BOOKING}/key.webm` });
+
+      expect(res.status).toBe(500);
+      expect(callFor('INSERT INTO booking_artifacts')).toBeUndefined();
+    });
   });
 });
 
@@ -740,7 +810,7 @@ describe('finalize refuses an upload the store returned no ETag for', () => {
   });
 });
 
-describe('the media route: gate chain, then the ETag tripwire, then bytes', () => {
+describe('the media route: gate chain, then bytes - no live tripwire (cto/AdaptaLabs#99)', () => {
   it('streams a recording with the security headers and only allowlisted storage headers', async () => {
     arrange({ artifact: {} });
 
@@ -778,51 +848,26 @@ describe('the media route: gate chain, then the ETag tripwire, then bytes', () =
     );
   });
 
-  it('refuses when the live ETag differs from the stored one, by sentence, serving nothing', async () => {
+  it('never re-verifies the object against S3 before serving - finalize already made that check unnecessary', async () => {
+    // The class-level pin for the whole tripwire's removal: finalize now
+    // copies to a key no presigned URL was ever issued for (see the finalize
+    // describe block), so there is nothing left for this route to compare a
+    // live HeadObject against. A live check reappearing here - even if it
+    // never actually refused anything - would silently reopen the doubled
+    // S3-call cost cto/AdaptaLabs#99 named.
     arrange({ artifact: {} });
-    mockHead.mockResolvedValue({ sizeBytes: 1024, etag: '"etag-SWAPPED"' } as never);
 
-    const res = await request(listening(appAs(OWNER)))
+    await request(listening(appAs(OWNER)))
       .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe(ARTIFACT_MEDIA_CHANGED);
-    // The refusal happens BEFORE a byte is read - the object is not opened.
-    expect(mockRecordingResponse).not.toHaveBeenCalled();
+    expect(mockHead).not.toHaveBeenCalled();
   });
 
-  it('compares ETags shape-blind: a live tag without quotes still matches a stored quoted one', async () => {
-    // The control for the mismatch test above: the tripwire fires on the
-    // VALUE changing, never on quoting. A compare that read quoted-vs-bare as
-    // different would refuse every serve forever - which looks exactly like
-    // the tripwire working.
+  it('a missing object is a clean 404, not a served hole', async () => {
     arrange({ artifact: {} });
-    mockHead.mockResolvedValue({ sizeBytes: 1024, etag: 'etag-abc123' } as never);
-
-    const res = await request(listening(appAs(OWNER)))
-      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
-
-    expect(res.status).toBe(200);
-  });
-
-  it.each([
-    ['stored', { artifact: { etag: null } }, { sizeBytes: 1024, etag: '"etag-abc123"' }],
-    ['live', { artifact: {} }, { sizeBytes: 1024, etag: null }],
-  ])('fails closed when the %s ETag is null, by its own sentence', async (_side, over, head) => {
-    arrange(over as Parameters<typeof arrange>[0]);
-    mockHead.mockResolvedValue(head as never);
-
-    const res = await request(listening(appAs(OWNER)))
-      .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
-
-    expect(res.status).toBe(409);
-    expect(res.body.error).toBe(ARTIFACT_MEDIA_UNVERIFIED);
-    expect(mockRecordingResponse).not.toHaveBeenCalled();
-  });
-
-  it('a missing object is a 404, not a served hole', async () => {
-    arrange({ artifact: {} });
-    mockHead.mockResolvedValue(null as never);
+    const missing = new Error('missing');
+    missing.name = 'NoSuchKey';
+    mockRecordingResponse.mockRejectedValueOnce(missing as never);
 
     const res = await request(listening(appAs(OWNER)))
       .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
@@ -837,7 +882,6 @@ describe('the media route: gate chain, then the ETag tripwire, then bytes', () =
       .get(`/api/bookings/${BOOKING}/artifacts/artifact-from-elsewhere/media`);
 
     expect(res.status).toBe(404);
-    expect(mockHead).not.toHaveBeenCalled();
     expect(mockRecordingResponse).not.toHaveBeenCalled();
     // The CLAUSE, pinned by text: the params-honouring mock makes the 404
     // above real behaviour, but a mutated SQL that dropped the binding would
@@ -858,7 +902,6 @@ describe('the media route: gate chain, then the ETag tripwire, then bytes', () =
       .get(`/api/bookings/${BOOKING}/artifacts/artifact-1/media`);
 
     expect(res.status).toBe(404);
-    expect(mockHead).not.toHaveBeenCalled();
   });
 
   it('sends a clean 500 with no stale content headers when the stream errors before any bytes', async () => {
@@ -892,7 +935,7 @@ describe('the media route: gate chain, then the ETag tripwire, then bytes', () =
     expect(res.headers['accept-ranges']).toBeUndefined();
   });
 
-  it('serves a transcript as text through the transcript path, ETag-checked like a recording', async () => {
+  it('serves a transcript as text through the transcript path', async () => {
     arrange({ artifact: { kind: 'transcript', file_name: 't.vtt', mime_type: 'text/vtt', relative_path: `booking-artifacts/${BOOKING}/t.vtt` } });
 
     const res = await request(listening(appAs(OWNER)))

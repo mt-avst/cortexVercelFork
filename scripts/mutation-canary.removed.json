@@ -2,5 +2,9 @@
   {
     "id": "catalogue-live-role-read-covers-superadmin-sessions",
     "reason": "Renamed to is-admin-role-includes-superadmin in cto/AdaptaLabs#57. The inline `storedRole !== 'researcher_admin' && storedRole !== 'superadmin'` set check it anchored in withLiveRoleIfPresent no longer exists - it is now `!isAdminRole(storedRole)` - and the property it pinned (superadmin is an admin role) moved onto the isAdminRole predicate, where is-admin-role-includes-superadmin pins it against a direct unit assertion. No coverage lost: set membership is now pinned in BOTH directions on the predicate."
+  },
+  {
+    "id": "booking-artifact-media-etag-tripwire",
+    "reason": "cto/AdaptaLabs#99's core fix deletes the code this entry anchored: the live HeadObject-plus-ETag comparison the media route ran on every request (etagValuesDiffer, ARTIFACT_MEDIA_CHANGED, ARTIFACT_MEDIA_UNVERIFIED) is retired entirely, replaced by finalize copying to a booking-artifacts/finalized/ key no presigned URL was ever issued for - the swap this tripwire detected can no longer happen, so there is nothing left to compare. No coverage lost: the replacement mechanism is pinned by three new entries (booking-artifact-finalize-copies-to-an-unpresigned-key, booking-artifact-media-never-reverifies-against-s3, booking-artifact-finalize-refuses-a-changed-object-retryably), and the primitive itself (copyS3ObjectIfMatch's CopySourceIfMatch race guard) is proven against real MinIO in s3-upload-integration.test.ts (local-only, same as every other test in that file - not canary-runnable, since the canary sets FIRSTHAND_SKIP_S3_TESTS=1)."
   }
 ]

@@ -2088,16 +2088,6 @@
     "test": "refuses presign with neither, by the exact sentence"
   },
   {
-    "id": "booking-artifact-media-etag-tripwire",
-    "why": "cto/AdaptaLabs#79 step 3. The presigned PUT URL from step 2 outlives finalize - S3 cannot revoke a signature - so a re-PUT can swap the bytes under a finalized artefact row. The stored ETag is the record of what was finalized, and this refusal is the ONLY point that compares it against the live object before serving; dropping it serves swapped bytes to a reviewer as if they were the reviewed artefact, silently. Proven by mutation before entry: replacing the refusal with a no-op comment (the block compiles, the if stays) left every suite green except the named test, which fails 200-vs-409 asserting the exported ARTIFACT_MEDIA_CHANGED sentence with the storage read proven un-consulted.",
-    "file": "backend/src/routes/booking-artifacts.ts",
-    "anchor": "      return res.status(409).json({ error: ARTIFACT_MEDIA_CHANGED });",
-    "mutation": "      /* mutated: mismatch refusal removed */",
-    "runner": "jest",
-    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
-    "test": "refuses when the live ETag differs from the stored one, by sentence, serving nothing"
-  },
-  {
     "id": "booking-artifact-ownership-gate",
     "why": "cto/AdaptaLabs#79 step 3 (gate created in step 2, pinned here with the media route). loadOwnedBooking is the single owner-or-superadmin gate ALL five booking-artifact routes share - presign, finalize, list, delete and the media route; this line is where it refuses. Neutering it lets any researcher_admin ingest, list, stream and delete recordings of another researcher's participants - a cross-tenant participant-data leak on every route at once. Proven by mutation before entry: appending '&& false' to the condition (compiles, gate never fires) failed exactly the five named ownership tests, one per route, each asserting the exported refusal sentence.",
     "file": "backend/src/routes/booking-artifacts.ts",
@@ -2305,5 +2295,45 @@
     "spec": "src/routes/__tests__/booking-artifacts-scope-postgres.test.ts",
     "test": "404s an artefact requested through a booking that does not own it",
     "needsDatabase": true
+  },
+  {
+    "id": "booking-artifact-finalize-copies-to-an-unpresigned-key",
+    "why": "cto/AdaptaLabs#99's core fix, replacing the ETag tripwire this manifest previously carried a separate entry for: finalize copies the pending upload to a booking-artifacts/finalized/ key that no presigned PUT URL was ever issued for, and stores THAT key as the artefact's relative_path - not the pending key the client's URL still addresses. Revert to storing the pending key and a re-PUT to that still-valid URL, at any point after finalize, silently swaps the bytes the media route will serve forever after; nothing downstream would ever know. Proven by mutation before entry: storing pending.relative_path here instead of finalizedKey failed only the named test, which asserts the stored key matches the finalized/ pattern (and, via the same call, that copyS3ObjectIfMatch received the inspected ETag as its condition).",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "        finalizedKey,",
+    "mutation": "        pending.relative_path,",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "copies the pending object to a finalized/ key, deletes the old key, and stores the new one"
+  },
+  {
+    "id": "booking-artifact-media-never-reverifies-against-s3",
+    "why": "cto/AdaptaLabs#99's cost half: because finalize now copies to a key no presigned URL addresses, the media route's per-request HeadObject-plus-ETag-comparison (the tripwire this replaces) has nothing left to verify - the object cannot have been swapped. Reintroducing that call, even harmlessly, silently reopens the doubled S3 call per request the issue named (including once per Range request a seeking player fires). Proven by mutation before entry: inserting a HeadObject call before the response is built failed only the named test, which asserts headS3ObjectStat is never called when serving media.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "    let mediaResponse: globalThis.Response;",
+    "mutation": "    await headS3ObjectStat(artifact.relative_path);\n    let mediaResponse: globalThis.Response;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "never re-verifies the object against S3 before serving - finalize already made that check unnecessary"
+  },
+  {
+    "id": "booking-artifact-finalize-refuses-a-changed-object-retryably",
+    "why": "cto/AdaptaLabs#99: copyS3ObjectIfMatch conditions its copy on the ETag finalize inspected, so an object that changed between that HeadObject and the copy (the finalize-time race the conditional copy exists to close) raises ArtifactCopyRaceError rather than silently copying whatever is there now. Swallowing that error - or letting it fall through to a generic 500 that still commits an artefact row - would finalize bytes nobody reviewed under the reviewed row's identity, or leave the pending row consumed with no artefact to show for it. Proven by mutation before entry: catching ArtifactCopyRaceError and proceeding to INSERT anyway (using the pre-copy objectStat data) failed only the named test, which asserts the row is left uncommitted and the pending row survives for a retry.",
+    "file": "backend/src/routes/booking-artifacts.ts",
+    "anchor": "      if (error instanceof ArtifactCopyRaceError) {\n        // The pending row and its object are left exactly as they were - a\n        // retry re-reads whatever is there now and races again, no cleanup\n        // needed on this arm.\n        return res.status(409).json({ error: ARTIFACT_CHANGED_BEFORE_FINALIZE });\n      }\n      throw error;",
+    "mutation": "      if (error instanceof ArtifactCopyRaceError) {\n        // mutated: race swallowed, finalize proceeds as if the copy succeeded\n      } else {\n        throw error;\n      }",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/booking-artifacts.test.ts",
+    "test": "refuses by sentence, 409, when the object changed just before it could be copied - and leaves the pending row for a retry"
+  },
+  {
+    "id": "copy-s3-object-if-match-conditions-on-the-etag",
+    "why": "cto/AdaptaLabs#99's whole security property, and until this entry it was proven ONLY by s3-upload-integration.test.ts's real-MinIO tests - which every CI backend job and the local mutation canary both skip (FIRSTHAND_SKIP_S3_TESTS=1, that file's own docblock and mutation-canary.mjs's runNamedTest). Every other reference mocks copyS3ObjectIfMatch wholesale, so nothing CI-runnable inspected what was actually sent to S3. A security gate measured this directly: deleting CopySourceIfMatch from the CopyObjectCommand left the full CI-runnable suite green - 1787 jest, 691 vitest, typecheck unchanged - meaning a future refactor could remove the finalize-time race guard with a fully green pipeline, reopening the HeadObject-then-copy window a re-PUT can land in. Proven by mutation before entry: this exact deletion failed only the named test, which asserts the CopyObjectCommand's own input carries CopySourceIfMatch.",
+    "file": "backend/src/firsthand/runtime-object-storage-s3.ts",
+    "anchor": "        CopySource: encodeURI(`${config.bucket}/${sourceKey}`),\n        CopySourceIfMatch: expectedEtag",
+    "mutation": "        CopySource: encodeURI(`${config.bucket}/${sourceKey}`)",
+    "runner": "vitest",
+    "spec": "src/firsthand/__tests__/copy-s3-object-if-match.test.ts",
+    "test": "conditions the copy on the ETag the caller inspected - the finalize-time race guard itself"
   }
 ]

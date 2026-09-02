@@ -5,8 +5,11 @@ import { CreateBucketCommand, S3Client } from "@aws-sdk/client-s3";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  ArtifactCopyRaceError,
+  copyS3ObjectIfMatch,
   createPresignedRecordingUploadUrl,
-  headS3ObjectSize
+  headS3ObjectSize,
+  headS3ObjectStat
 } from "./runtime-object-storage-s3";
 import { createRecordingAssetResponse } from "./object-storage";
 
@@ -172,4 +175,75 @@ describe.skipIf(skipS3Tests)("s3 direct upload primitives (MinIO)", () => {
     );
     expect(size).toBeNull();
   }, 30_000);
+
+  // cto/AdaptaLabs#99: booking-artefact finalize copies the pending upload to
+  // a key no presigned PUT URL ever addressed, so a post-finalize re-PUT to
+  // the OLD key can no longer touch what gets served. These two prove the
+  // primitive against real MinIO rather than a mock of the AWS SDK's own
+  // conditional-copy behaviour.
+  describe("copyS3ObjectIfMatch (#99)", () => {
+    it("copies to the new key when the ETag matches, leaving the source untouched", async () => {
+      const sourceKey = "booking-artifacts/booking_1/pending-abc.webm";
+      const destKey = "booking-artifacts/finalized/booking_1/final-abc.webm";
+      const bytes = new Uint8Array(1024).fill(0x42);
+
+      const uploadUrl = await createPresignedRecordingUploadUrl({
+        objectKey: sourceKey,
+        contentType: "video/webm",
+        expiresInSeconds: 900
+      });
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "video/webm" },
+        body: bytes
+      });
+
+      const stat = await headS3ObjectStat(sourceKey);
+      expect(stat?.etag).not.toBeNull();
+
+      await copyS3ObjectIfMatch(sourceKey, destKey, stat!.etag!);
+
+      // The copy landed at the NEW key with identical bytes...
+      const copied = await headS3ObjectSize(destKey);
+      expect(copied).toBe(bytes.byteLength);
+      // ...and the finalize route deletes the source itself (proven at the
+      // route level); the primitive alone does not, so it still exists here.
+      const sourceStillThere = await headS3ObjectSize(sourceKey);
+      expect(sourceStillThere).toBe(bytes.byteLength);
+    }, 30_000);
+
+    it("refuses the copy when the object changed since it was inspected - the race this exists to close", async () => {
+      const sourceKey = "booking-artifacts/booking_2/pending-def.webm";
+      const destKey = "booking-artifacts/finalized/booking_2/final-def.webm";
+
+      const uploadUrl = await createPresignedRecordingUploadUrl({
+        objectKey: sourceKey,
+        contentType: "video/webm",
+        expiresInSeconds: 900
+      });
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "video/webm" },
+        body: new Uint8Array(16).fill(0x01)
+      });
+
+      const staleEtag = (await headS3ObjectStat(sourceKey))!.etag!;
+
+      // The re-PUT a compromised or racing uploader would fire between
+      // HeadObject and the copy - same key, different bytes, so the SAME
+      // presigned URL still works and the ETag changes underneath it.
+      await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "video/webm" },
+        body: new Uint8Array(16).fill(0x02)
+      });
+
+      await expect(
+        copyS3ObjectIfMatch(sourceKey, destKey, staleEtag)
+      ).rejects.toThrow(ArtifactCopyRaceError);
+
+      // No half-copy: the destination was never created.
+      expect(await headS3ObjectSize(destKey)).toBeNull();
+    }, 30_000);
+  });
 });

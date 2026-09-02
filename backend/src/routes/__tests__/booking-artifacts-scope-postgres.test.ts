@@ -35,14 +35,18 @@ const skipDbTests = process.env.FIRSTHAND_SKIP_DB_TESTS === "1";
 // A transcript artefact is used throughout: it skips the recording
 // playable-mime re-check and the Range-forwarding path, neither of which this
 // file is about. Only the storage layer is stubbed - the scope clause itself
-// runs against the real database.
-const headS3ObjectStat = vi.fn();
+// runs against the real database. headS3ObjectStat/copyS3ObjectIfMatch are
+// finalize-only (cto/AdaptaLabs#99: the media route no longer calls either) -
+// stubbed only because the mocked module must provide every name the route
+// file imports; this file never exercises finalize, so neither is asserted on.
 const createS3TranscriptArtifactResponse = vi.fn();
 
 vi.mock("../../firsthand/runtime-object-storage-s3", () => ({
   createPresignedRecordingUploadUrl: vi.fn(),
   deleteS3Object: vi.fn(),
-  headS3ObjectStat,
+  headS3ObjectStat: vi.fn(),
+  copyS3ObjectIfMatch: vi.fn(),
+  ArtifactCopyRaceError: class ArtifactCopyRaceError extends Error {},
   createS3TranscriptArtifactResponse
 }));
 
@@ -181,14 +185,12 @@ describe.skipIf(skipDbTests)(
       await pool.query(
         "TRUNCATE bookings, sessions, opportunities, users, booking_artifacts CASCADE"
       );
-      headS3ObjectStat.mockReset();
       createS3TranscriptArtifactResponse.mockReset();
       // A default for BOTH tests, including the 404 one: if a scope
       // regression ever lets that request reach storage, it should read as
       // the wrong artefact being served (200), not as an unrelated mock
       // throwing on an unstubbed call - the failure this test exists to name
       // is the scope clause, not the fixture.
-      headS3ObjectStat.mockResolvedValue({ sizeBytes: 100, etag: '"etag-b"' });
       createS3TranscriptArtifactResponse.mockResolvedValue(
         new Response("WEBVTT\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } })
       );
@@ -206,7 +208,7 @@ describe.skipIf(skipDbTests)(
       // is provably not the ownership gate (both bookings share one owner)
       // and not a missing artefact (the control below serves the identical
       // row through its own booking).
-      expect(headS3ObjectStat).not.toHaveBeenCalled();
+      expect(createS3TranscriptArtifactResponse).not.toHaveBeenCalled();
     });
 
     it("CONTROL: the identical artefact id serves through its own booking", async () => {
@@ -217,7 +219,9 @@ describe.skipIf(skipDbTests)(
         .set("x-test-user-id", ownerId);
 
       expect(res.status).toBe(200);
-      expect(headS3ObjectStat).toHaveBeenCalledWith(`booking-artifacts/${bookingB}/t.vtt`);
+      expect(createS3TranscriptArtifactResponse).toHaveBeenCalledWith(
+        `booking-artifacts/${bookingB}/t.vtt`
+      );
     });
   }
 );
