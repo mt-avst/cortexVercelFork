@@ -7,6 +7,7 @@ import OpportunityForm from '../OpportunityForm';
 import { RECORDED_CONSENT_TEMPLATE } from '@shared/firsthand/consent-templates';
 import {
   authoredStepsOf,
+  recordedStudyCopyability,
   studyRoundTripsCleanly,
   toInlineStudyPayloadStep,
   toInlineStudyStep,
@@ -367,6 +368,79 @@ describe('the pure hydration helpers', () => {
       { step_id: 'study_demo_step_end', order: 2, type: 'end', prompt: 'Thanks' }
     ];
     expect(studyRoundTripsCleanly(padded, 'recorded', 'study_demo')).toBe(true);
+  });
+});
+
+/**
+ * The copy path is more tolerant than the edit path about ONE thing: the
+ * per-task Starting URL. #106 - the Task Lists editor only makes an author fill
+ * ONE task's URL, so an ordinary task list has some blank, which
+ * studyRoundTripsCleanly refused and which the reuse form (one study-level URL)
+ * can carry perfectly well. Only genuinely different pages per task cannot be.
+ */
+describe('recordedStudyCopyability - the reuse-path tolerance', () => {
+  const withEnd = (steps: StudyStep[]): StudyStep[] => [
+    ...steps,
+    { step_id: 'study_demo_step_end', order: steps.length + 1, type: 'end', prompt: 'Thanks' }
+  ];
+
+  it('copies a list where one task has the URL and the rest are blank', () => {
+    // The exact shape #106 refused: the Task Lists editor forces one URL, not all.
+    const partial = withEnd([
+      { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket', target_url: 'https://shop.test/basket' },
+      { step_id: 'study_demo_step_2', order: 2, type: 'instruction', prompt: 'Now check out' }
+    ]);
+    expect(recordedStudyCopyability(partial, 'study_demo')).toBe('ok');
+    // And it stays refused by the STRICT edit-path check, which must not change.
+    expect(studyRoundTripsCleanly(partial, 'recorded', 'study_demo')).toBe(false);
+  });
+
+  it('copies a list with no task URLs at all', () => {
+    expect(
+      recordedStudyCopyability(
+        withEnd([
+          { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Say what you notice' }
+        ]),
+        'study_demo'
+      )
+    ).toBe('ok');
+  });
+
+  it('copies a list where every task already shares one URL', () => {
+    expect(
+      recordedStudyCopyability(
+        withEnd([
+          { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket', target_url: 'https://shop.test/x' },
+          { step_id: 'study_demo_step_2', order: 2, type: 'instruction', prompt: 'Check out', target_url: 'https://shop.test/x' }
+        ]),
+        'study_demo'
+      )
+    ).toBe('ok');
+  });
+
+  it('refuses, by URL, a list whose tasks open genuinely different pages', () => {
+    expect(
+      recordedStudyCopyability(
+        withEnd([
+          { step_id: 'study_demo_step_1', order: 1, type: 'instruction', prompt: 'Open the basket', target_url: 'https://shop.test/basket' },
+          { step_id: 'study_demo_step_2', order: 2, type: 'instruction', prompt: 'Check out', target_url: 'https://shop.test/checkout' }
+        ]),
+        'study_demo'
+      )
+    ).toBe('divergent-urls');
+  });
+
+  it('refuses, as unrepresentable, a step type the task list cannot author - even with one URL', () => {
+    // A single URL must not paper over a genuine loss: a rating step is not an
+    // authorable task type, so the form still cannot show it.
+    expect(
+      recordedStudyCopyability(
+        withEnd([
+          { step_id: 'study_demo_step_1', order: 1, type: 'rating', prompt: 'Rate it', config: { scale_max: 5 }, target_url: 'https://shop.test/x' }
+        ]),
+        'study_demo'
+      )
+    ).toBe('unrepresentable');
   });
 });
 
