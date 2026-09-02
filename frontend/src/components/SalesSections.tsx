@@ -1,22 +1,26 @@
 import React from 'react';
 import { Card, CardBody } from './ui/Card';
-import { Badge } from './ui/Badge';
 
 /**
  * SalesSections Component
- * 
- * Below-the-fold sales content for the Cortex landing page.
- * Structured as internal components for maintainability.
- * 
- * All headings are h2 or below (h1 is in the hero).
- * Each section carries a data-section attribute, which is how the unit test
- * addresses it. Nothing reads these for analytics, so do not say that they do.
  *
- * Every claim below is meant to be checkable against the product. The copy sat
- * unchanged from 7.1.2 to 7.55.x and drifted into three fabrications - invented
- * usage metrics, unattributed testimonials, and a participant-matching engine
- * that has never existed. SalesSections.test.tsx pins those by literal so they
- * cannot come back quietly.
+ * Below-the-fold landing content for Cortex - the narrative the "New to Cortex?"
+ * scroll tab leads to. This is Dr Nick Fine's v11 narrative, laid into the live
+ * dark/glass design system: the loop, the two audiences, the methods, the
+ * promises, the founder voice, and the closing doors.
+ *
+ * All headings are h2 or below (h1 is in the hero). Each section carries a
+ * data-section attribute, which is how SalesSections.test.tsx addresses it.
+ * Nothing reads these for analytics, so do not say that they do.
+ *
+ * Every claim here is meant to be checkable against the product. The copy that
+ * shipped before this went unedited from 7.1.2 to 7.55.x and drifted into
+ * fabrications - invented usage metrics, unattributed testimonials, a
+ * participant-matching engine that has never existed, a Jira/Confluence
+ * integration. SalesSections.test.tsx pins those banned phrases by literal so
+ * they cannot come back quietly. When editing this copy, keep it honest: the
+ * mechanism is that anyone at Adaptavist can find a published study and book a
+ * slot, not that Cortex actively matches people to requests.
  */
 
 interface SalesSectionsProps {
@@ -25,242 +29,384 @@ interface SalesSectionsProps {
 }
 
 // ============================================================
-// DATA ARRAYS - Keeps copy changes trivial and future-proof
+// DATA - Keeps copy changes trivial and future-proof
 // ============================================================
 
-const PITCH_CARDS = [
+interface AudienceBeat {
+  index: number;
+  title: string;
+  text: string;
+}
+
+interface Audience {
+  who: string;
+  lead: string;
+  outcome: string;
+  beats: ReadonlyArray<AudienceBeat>;
+}
+
+const AUDIENCES: ReadonlyArray<Audience> = [
   {
-    badge: 'Studies',
-    title: 'Run every kind of study',
-    description: 'Interviews, tests, polls, surveys and self-guided recorded studies, authored in one place.',
+    who: 'The people building it',
+    lead: 'You don’t need to be a researcher. You need a question.',
+    outcome:
+      'Fewer arguments, fewer rebuilds and a feature you can defend with what people actually said. The question that would have taken a month to ask takes a week.',
+    beats: [
+      {
+        index: 1,
+        title: 'Ask it',
+        text: 'Write the question, pick a format. Interview, test, poll, survey or a recorded task. The form checks each step as you go.',
+      },
+      {
+        index: 2,
+        title: 'The right people turn up',
+        text: 'Anyone at Adaptavist can find your study and book a slot. No chasing, no spreadsheet of names, no favours.',
+      },
+      {
+        index: 3,
+        title: 'Decide on evidence',
+        text: 'Recordings, transcripts, answers and analytics on one page. Take it into the room instead of an opinion.',
+      },
+    ],
   },
   {
-    badge: 'Participation',
-    title: 'Reach people across Adaptavist',
-    description: 'Publish a study and anyone at Adaptavist can find it, book a time, or start it there and then.',
-  },
-  {
-    badge: 'Rewards',
-    title: 'Recognise contribution',
-    description: 'AdaptaBits, levels and achievements, with a monthly prize for the top contributor.',
+    who: 'The people who’ll tell the truth about it',
+    lead: 'Fifteen minutes, your own browser, no prep.',
+    outcome:
+      'The tools you use next year shaped by what you said this year, and your contribution on the record, not your answers, rather than lost in a Slack thread.',
+    beats: [
+      {
+        index: 1,
+        title: 'Get asked',
+        text: 'Someone building something wants to know what you think, about a thing you use or a thing you’ve never seen. Book a slot that suits you.',
+      },
+      {
+        index: 2,
+        title: 'Say it straight',
+        text: 'Say what you’d say to a colleague you trust, not what you’d say in a review. Your manager doesn’t see it. Stop whenever you like.',
+      },
+      {
+        index: 3,
+        title: 'See what changed',
+        text: 'You get the results and the owner tells you what they did with them. If the answer was nothing, they tell you that too.',
+      },
+    ],
   },
 ];
 
-const STEPS = [
+interface Method {
+  method: string;
+  what: string;
+  when: string;
+  get: string;
+  gives: string;
+  highlight: boolean;
+}
+
+// Participant durations are placeholders until real studies have run.
+const METHODS: ReadonlyArray<Method> = [
   {
-    index: 1,
-    title: 'Author the study',
-    description: 'Pick a type, write the task list or the questions, and set the consent wording. The form checks each step as you go.',
+    method: 'Interview',
+    what: 'A booked conversation, recorded and transcribed',
+    when: 'You don’t know what the problem is yet',
+    get: 'Recording, transcript, the language people use',
+    gives: '30–45 min, booked',
+    highlight: false,
   },
   {
-    index: 2,
-    title: 'People take part',
-    description: 'Participants book a slot, answer inside Cortex, or run a recorded session in their own browser.',
+    method: 'Usability test',
+    what: 'A participant works through real tasks while you observe',
+    when: 'You suspect something is confusing',
+    get: 'Observed behaviour, where people stall, recording',
+    gives: '30 min, booked',
+    highlight: false,
   },
   {
-    index: 3,
-    title: 'Read the results',
-    description: 'Recordings, transcripts, answers and analytics all land on the study\'s own page, with CSV export.',
+    method: 'Recorded study',
+    what: 'Participants do the tasks alone in their browser, screen and voice captured',
+    when: 'Same as a test but you can’t be in the room',
+    get: 'Screen and voice playback, transcript, no diary juggling',
+    gives: '15 min, any time',
+    highlight: true,
+  },
+  {
+    method: 'Poll',
+    what: 'One question, quick answer, inside Cortex',
+    when: 'You need one answer from many people fast',
+    get: 'A count you can quote in the meeting',
+    gives: '1 min, any time',
+    highlight: false,
+  },
+  {
+    method: 'Survey',
+    what: 'Several questions, native or via the survey tool the team already licences',
+    when: 'You need several answers from many people',
+    get: 'Structured responses, CSV export',
+    gives: '5–10 min, any time',
+    highlight: false,
   },
 ];
 
-const ROLE_CARDS = [
+interface Promise {
+  to: string;
+  title: string;
+  text: string;
+}
+
+const PROMISES: ReadonlyArray<Promise> = [
   {
-    title: 'Product and engineering',
-    description: 'Ship features backed by real input, not assumptions. Validate ideas and releases with colleagues who use the tools every day.',
+    to: 'to participants',
+    title: 'Your answers go to the study owner only',
+    text: 'Not your manager, not every admin. Recordings and transcripts are owner-gated.',
   },
   {
-    title: 'UX and research',
-    description: 'Moderated interviews, native surveys and self-guided recorded studies, with bookings, consent and incentives handled in one place.',
+    to: 'to participants',
+    title: 'You hear what happened',
+    text: 'Results are shared back to everyone who took part. That is the owner’s job and the one rule of running a study.',
   },
   {
-    title: 'Study owners',
-    description: 'Track your own studies from the admin dashboard. Per-study analytics, responses and recordings stay with the researcher who ran them.',
+    to: 'to participants',
+    title: 'You can stop mid-way',
+    text: 'No reason needed, and what you agreed to stays on record.',
   },
   {
-    title: 'Everyone',
-    description: 'Contribute your experience, join studies that match your skills, and earn AdaptaBits for taking part.',
+    to: 'to study owners',
+    title: 'Recruitment is done for you',
+    text: 'Publish once. Booking, time zones and calendar clashes are handled.',
+  },
+  {
+    to: 'to study owners',
+    title: 'The method is built in',
+    text: 'Task lists, consent wording and question checks happen in the form, not in your head.',
+  },
+  {
+    to: 'to both',
+    title: 'Contribution is visible',
+    text: 'AdaptaBits record who took part. What they said stays with the study owner. Recognition, not payment, with a monthly prize for the top contributor.',
   },
 ];
 
-const FEATURES = [
+interface Door {
+  who: string;
+  title: string;
+  cta: string;
+}
+
+const CLOSING_DOORS: ReadonlyArray<Door> = [
   {
-    title: 'Every study type in one place',
-    description: 'Interviews, tests, polls, surveys, questions and recorded studies.',
+    who: 'The people building it',
+    title: 'Write the question. Cortex does the rest',
+    cta: 'Run a study',
   },
   {
-    title: 'Recorded studies in the browser',
-    description: 'Self-guided task lists with screen and voice captured, then playback and a transcript for the research team.',
-  },
-  {
-    title: 'Polls and surveys inside Cortex',
-    description: 'Ask your questions natively, or hand off to the survey tool your team already licences.',
-  },
-  {
-    title: 'Booking that shows the time zone',
-    description: 'Capacity, automatic closing and calendar conflicts, with every time shown against its offset.',
-  },
-  {
-    title: 'Governed consent',
-    description: 'Versioned consent templates, and any wording a researcher changes is recorded as custom.',
-  },
-  {
-    title: 'Participant data stays owner-gated',
-    description: 'Recordings, transcripts and answers reach the study owner or a superadmin, not every admin.',
+    who: 'The people who’ll tell the truth about it',
+    title: 'See what’s open this week and book a slot',
+    cta: 'Take part',
   },
 ];
 
-const FAQS = [
-  {
-    question: 'Who can use Cortex?',
-    answer: 'Anyone at Adaptavist. You can browse published studies without signing in, and sign in with your company account to take part.',
-  },
-  {
-    question: 'What kinds of study can I run?',
-    answer: 'Three shapes: bookable sessions for interviews and tests, polls and surveys that people answer, and self-guided studies that Cortex records in the browser.',
-  },
-  {
-    question: 'How do I run a study?',
-    // Both routes named here are behind the sign-in, and this page is read
-    // signed out - so say so, rather than naming controls the reader cannot see.
-    //
-    // The second route says where it actually GOES. There is no in-app request
-    // form: Header.tsx sends a non-admin out to the service desk portal in a
-    // new tab, and the in-app form that once implied otherwise was unrouted
-    // dead code, deleted in #46. "Raises it with the research team" was true
-    // but left the reader expecting to stay in Cortex.
-    answer: 'Sign in first, then both routes are in the header. You need admin access to run a study yourself, which anyone can request from the account menu for a superadmin to approve. If you would rather someone else ran the research, Submit Research Request opens the research team\'s service desk in a new tab.',
-  },
-  {
-    question: 'Do studies record me?',
-    answer: 'Only recorded studies do. They capture your screen and your voice while you work through the tasks, you see the consent wording and choose what to share before anything starts, and nothing else on Cortex records you.',
-  },
-  {
-    question: 'How are rewards handled?',
-    answer: 'Taking part earns AdaptaBits, which build levels and achievements and place you on the leaderboard. The top contributor each month wins the monthly prize.',
-  },
-  {
-    question: 'Is my data secure?',
-    answer: 'Cortex is internal to Adaptavist and needs a company sign-in. Roles are checked on the server, click tracking hashes your IP, and your answers and recordings are visible only to the study owner or a superadmin.',
-  },
-];
+// ============================================================
+// LOOP DIAGRAM
+// Ported from the v11 wireframe, re-coloured against design tokens
+// so it themes in light and dark. Node geometry unchanged: four nodes
+// sit evenly on a true ellipse, one arrowhead per clockwise segment.
+// ============================================================
+
+const LoopDiagram: React.FC = () => (
+  <svg
+    className="sales-loop-svg"
+    viewBox="0 0 520 360"
+    xmlns="http://www.w3.org/2000/svg"
+    role="img"
+    aria-label="The Cortex loop: a question reaches the right people, who give straight answers, which make a better decision, which prompts the next question"
+  >
+    <ellipse cx="260" cy="180" rx="180" ry="120" fill="none" stroke="var(--brand-primary)" strokeWidth="3" />
+    <g fill="var(--brand-primary)">
+      <polygon points="-9,-6 9,0 -9,6" transform="translate(387,95) rotate(34)" />
+      <polygon points="-9,-6 9,0 -9,6" transform="translate(387,265) rotate(146)" />
+      <polygon points="-9,-6 9,0 -9,6" transform="translate(133,265) rotate(214)" />
+      <polygon points="-9,-6 9,0 -9,6" transform="translate(133,95) rotate(326)" />
+    </g>
+    <g fontSize="14" fill="var(--text-primary)" textAnchor="middle">
+      <rect x="196" y="38" width="128" height="44" fill="var(--surface-card-current)" stroke="var(--text-primary)" strokeWidth="2" rx="4" />
+      <text x="260" y="65" fontWeight="600">A question</text>
+
+      <rect x="376" y="158" width="128" height="44" fill="var(--surface-card-current)" stroke="var(--border-strong-current)" strokeWidth="1.5" rx="4" />
+      <text x="440" y="185">The right people</text>
+
+      <rect x="196" y="278" width="128" height="44" fill="var(--surface-card-current)" stroke="var(--text-primary)" strokeWidth="2" rx="4" />
+      <text x="260" y="305" fontWeight="600">Straight answers</text>
+
+      <rect x="16" y="158" width="128" height="44" fill="var(--surface-card-current)" stroke="var(--border-strong-current)" strokeWidth="1.5" rx="4" />
+      <text x="80" y="185">A better decision</text>
+    </g>
+    <g fontSize="11" fill="var(--text-muted)">
+      <text x="260" y="20" textAnchor="middle">start here if you&rsquo;re building it</text>
+      <text x="260" y="346" textAnchor="middle">start here if you&rsquo;ll tell the truth about it</text>
+    </g>
+    <g fill="var(--text-primary)">
+      <polygon points="255,26 265,26 260,34" />
+      <polygon points="255,334 265,334 260,326" />
+    </g>
+    <g textAnchor="middle">
+      <text x="260" y="170" fontSize="15" fontWeight="600" fill="var(--text-primary)">
+        cortex, <tspan fontStyle="italic" fontWeight="400">n.</tspan>
+      </text>
+      <text x="260" y="190" fontSize="13" fill="var(--text-secondary)">the part that thinks.</text>
+      <text x="260" y="207" fontSize="13" fill="var(--text-secondary)">In this case, all of us.</text>
+    </g>
+  </svg>
+);
 
 // ============================================================
 // SECTION COMPONENTS
 // ============================================================
 
-const SalesPitchSection: React.FC = () => (
-  <section className="sales-section sales-section--dim" data-section="pitch">
-    <div className="sales-section-inner sales-grid-2">
-      <div className="sales-copy-block">
-        <h2 className="sales-heading-xl">Cortex turns participation into decisions</h2>
+const LoopSection: React.FC = () => (
+  <section className="sales-section" data-section="loop">
+    <div className="sales-section-inner sales-loop">
+      <div className="sales-loop-figure">
+        <LoopDiagram />
+      </div>
+      <div className="sales-loop-copy">
+        <h2 className="sales-heading-l">One feedback loop for all of us</h2>
         <p className="sales-body">
-          Cortex is Adaptavist&apos;s collective intelligence engine. It connects questions,
-          people, and decisions so every contribution makes the organisation smarter.
+          Someone has a question about a product. Cortex finds the colleagues who can answer it, they answer
+          in their own words, and the decision gets made on what people said rather than what someone assumed.
         </p>
-        <ul className="sales-bullets">
-          <li>Run interviews, tests, polls, surveys and recorded studies from one place</li>
-          <li>Publish once, and anyone at Adaptavist can find the study and take part</li>
-          <li>Reward participation with AdaptaBits and build a culture of contribution</li>
-        </ul>
-      </div>
-      <div className="sales-pitch-cards sales-stack-md">
-        {PITCH_CARDS.map((card) => (
-          <Card key={card.badge} className="sales-pitch-card" variant="glass">
-            <CardBody>
-              <Badge variant="info" className="sales-pitch-badge">{card.badge}</Badge>
-              <h3 className="sales-card-title">{card.title}</h3>
-              <p className="sales-card-text">{card.description}</p>
-            </CardBody>
-          </Card>
-        ))}
+        <p className="sales-body">
+          Then the loop closes. The people who answered hear what happened. That last step is what makes it
+          worth doing twice.
+        </p>
       </div>
     </div>
   </section>
 );
 
-const HowItWorksSection: React.FC = () => (
-  <section className="sales-section" data-section="how-it-works">
+const AudiencesSection: React.FC = () => (
+  <section className="sales-section sales-section--dim" data-section="audiences">
+    <div className="sales-section-inner sales-audiences">
+      {AUDIENCES.map((audience) => (
+        <div className="sales-audience-col" key={audience.who}>
+          <h2 className="sales-heading-l sales-audience-who">{audience.who}</h2>
+          <p className="sales-audience-lead">{audience.lead}</p>
+
+          <Card className="sales-outcome-card" variant="glass" hoverable={false}>
+            <CardBody>
+              <span className="sales-outcome-label">What you get</span>
+              <p className="sales-card-text">{audience.outcome}</p>
+            </CardBody>
+          </Card>
+
+          <ol className="sales-beats">
+            {audience.beats.map((beat) => (
+              <li className="sales-beat" key={beat.index}>
+                <span className="sales-beat-index" aria-hidden="true">{beat.index}</span>
+                <div>
+                  <h3 className="sales-card-title">{beat.title}</h3>
+                  <p className="sales-card-text">{beat.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      ))}
+    </div>
+  </section>
+);
+
+const MethodsSection: React.FC = () => (
+  <section className="sales-section" data-section="methods">
     <div className="sales-section-inner">
-      <h2 className="sales-heading-l sales-heading-center">How Cortex works</h2>
-      <p className="sales-body-muted sales-body-center">
-        A simple three-step flow from question to evidence.
+      <h2 className="sales-heading-l">What kind of question is it?</h2>
+      <p className="sales-micro-copy sales-methods-intro">
+        Pick by the question you have, not the method you know. The form carries the rest.
       </p>
-      <div className="sales-steps-row">
-        {STEPS.map((step) => (
-          <Card key={step.index} className="sales-step-card" variant="glass">
-            <CardBody>
-              <span className="sales-step-index">{step.index}</span>
-              <h3 className="sales-card-title">{step.title}</h3>
-              <p className="sales-card-text">{step.description}</p>
-            </CardBody>
-          </Card>
-        ))}
-      </div>
-      <p className="sales-micro-copy">Every study type follows the same three steps.</p>
-    </div>
-  </section>
-);
 
-const ValueByRoleSection: React.FC = () => (
-  <section className="sales-section sales-section--dim" data-section="value-by-role">
-    <div className="sales-section-inner">
-      <h2 className="sales-heading-l sales-heading-center">Value for every role</h2>
-      <div className="sales-roles-grid">
-        {ROLE_CARDS.map((card) => (
-          <Card key={card.title} className="sales-role-card" variant="glass">
-            <CardBody>
-              <h3 className="sales-card-title">{card.title}</h3>
-              <p className="sales-card-text">{card.description}</p>
-            </CardBody>
-          </Card>
-        ))}
+      <div className="sales-recorded">
+        <div className="sales-video" aria-hidden="true">
+          <span className="sales-video-play" />
+          <span className="sales-video-caption">
+            Sample capture from a recorded session
+            <br />
+            screen + voice, with the transcript running alongside
+          </span>
+        </div>
+        <div className="sales-recorded-copy">
+          <h3 className="sales-card-title">What a recorded study looks like</h3>
+          <p className="sales-card-text">
+            A participant opens the study, reads the task, and talks through what they&rsquo;re doing while
+            their screen is captured. No moderator, no scheduling.
+          </p>
+          <p className="sales-card-text">
+            You get the playback, the transcript and the moment they got stuck, timestamped.
+          </p>
+        </div>
       </div>
-    </div>
-  </section>
-);
 
-const FeaturesSection: React.FC = () => (
-  <section className="sales-section" data-section="features">
-    <div className="sales-section-inner">
-      <h2 className="sales-heading-l sales-heading-center">Key features</h2>
-      <div className="sales-features-grid">
-        {FEATURES.map((feature) => (
-          <Card key={feature.title} className="sales-feature-tile" variant="glass">
-            <CardBody>
-              <h3 className="sales-card-title">{feature.title}</h3>
-              <p className="sales-card-text">{feature.description}</p>
-            </CardBody>
-          </Card>
-        ))}
+      <div className="sales-methods-scroll">
+        <table className="sales-methods-table">
+          <thead>
+            <tr>
+              <th>Method</th>
+              <th>What it is</th>
+              <th>Use it when</th>
+              <th>You get</th>
+              <th>Participant gives</th>
+            </tr>
+          </thead>
+          <tbody>
+            {METHODS.map((row) => (
+              <tr key={row.method} className={row.highlight ? 'is-recommended' : undefined}>
+                <td className="sales-methods-name">{row.method}</td>
+                <td>{row.what}</td>
+                <td>{row.when}</td>
+                <td>{row.get}</td>
+                <td className="sales-methods-time">{row.gives}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   </section>
 );
 
-/*
- * There is deliberately no social proof section. It carried three invented
- * metrics ("200+ completed studies", "3x faster", "1,000+ contributors") and
- * two unattributed quotes, under the heading "Proven inside Adaptavist", while
- * the product was in alpha and every study in the deployment was test data.
- * Nothing in the repository sourced any of the five.
- *
- * To bring it back, bring evidence: quotes with a name and a role, and counts
- * read from the dashboard aggregates rather than typed in here.
- */
-
-const FaqSection: React.FC = () => (
-  <section className="sales-section sales-section--dim" data-section="faq">
+const PromisesSection: React.FC = () => (
+  <section className="sales-section sales-section--dim" data-section="promises">
     <div className="sales-section-inner">
-      <h2 className="sales-heading-l sales-heading-center">Frequently asked questions</h2>
-      <div className="sales-faq-list">
-        {FAQS.map((item) => (
-          <details className="sales-faq-item" key={item.question}>
-            <summary className="sales-faq-question">{item.question}</summary>
-            <p className="sales-faq-answer">{item.answer}</p>
-          </details>
+      <h2 className="sales-heading-l sales-heading-center">What Cortex commits to</h2>
+      <div className="sales-promises-grid">
+        {PROMISES.map((promise) => (
+          <Card key={promise.title} className="sales-promise-card" variant="glass">
+            <CardBody>
+              <span className="sales-promise-to">{promise.to}</span>
+              <h3 className="sales-card-title">{promise.title}</h3>
+              <p className="sales-card-text">{promise.text}</p>
+            </CardBody>
+          </Card>
         ))}
       </div>
+    </div>
+  </section>
+);
+
+const VoiceSection: React.FC = () => (
+  <section className="sales-section" data-section="voice">
+    <div className="sales-section-inner sales-voice">
+      <blockquote className="sales-voice-quote">
+        <p className="sales-body">
+          I&rsquo;ve spent twenty years watching organisations decide what people need instead of finding out.
+          It&rsquo;s friction not laziness, because finding out takes too much effort, recruitment takes too
+          long and the results usually end up in an extended deck that nobody reads.
+        </p>
+        <p className="sales-body">
+          Cortex removes the friction so that finding out is much easier. It enables any of us to find out
+          anything about any of our products or services. It enables all of us to participate with low
+          friction at a convenient time. It makes this all as easy as possible and it scales with us.
+        </p>
+      </blockquote>
+      <p className="sales-voice-sig">Dr Nick Fine, Office of the CTO</p>
     </div>
   </section>
 );
@@ -271,36 +417,38 @@ interface FinalCtaSectionProps {
 }
 
 const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ onAccessCortex, isLoading }) => (
-  <section className="sales-cta-stripe" data-section="final-cta">
-    <div className="sales-section-inner sales-cta-inner">
-      <div className="sales-cta-copy">
-        <h2 className="sales-heading-l">Ready to put Cortex to work?</h2>
-        <p className="sales-body-muted">
-          Access Cortex now or request a guided walkthrough for your team.
-        </p>
+  <section className="sales-section" data-section="final-cta">
+    <div className="sales-section-inner">
+      <h2 className="sales-heading-l sales-heading-center">
+        Got a question? Ask it. Got fifteen minutes? Answer one.
+      </h2>
+      <div className="sales-doors">
+        {CLOSING_DOORS.map((door) => (
+          <div className="sales-door" key={door.cta}>
+            <span className="sales-door-who">{door.who}</span>
+            <h3 className="sales-card-title">{door.title}</h3>
+            <button
+              className={`btn-power ${isLoading ? 'disabled' : ''}`}
+              onClick={onAccessCortex}
+              disabled={isLoading}
+              aria-busy={isLoading}
+              data-cta={door.cta === 'Run a study' ? 'access' : 'take-part'}
+            >
+              {door.cta}
+              <span className="btn-arrow" aria-hidden="true">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+            </button>
+          </div>
+        ))}
       </div>
-      <div className="sales-cta-buttons">
-        <button 
-          className={`btn-power ${isLoading ? 'disabled' : ''}`}
-          onClick={onAccessCortex}
-          disabled={isLoading}
-          data-cta="access"
-        >
-          Access Cortex
-          <span className="btn-arrow" aria-hidden="true">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
-        </button>
-        <a 
-          href="mailto:cortex@adaptavist.com?subject=Cortex%20Walkthrough%20Request"
-          className="btn-outline-secondary sales-walkthrough-btn"
-          data-cta="walkthrough"
-        >
-          Request walkthrough
+      <p className="sales-micro-copy">
+        <a className="sales-feedback-link" href="mailto:cortex@adaptavist.com?subject=Cortex%20landing%20page%20feedback">
+          Tell us what&rsquo;s wrong with this page
         </a>
-      </div>
+      </p>
     </div>
   </section>
 );
@@ -312,15 +460,14 @@ const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ onAccessCortex, isLoa
 const SalesSections: React.FC<SalesSectionsProps> = ({ onAccessCortex, isLoading }) => {
   return (
     <div className="sales-sections-wrapper">
-      <SalesPitchSection />
-      <HowItWorksSection />
-      <ValueByRoleSection />
-      <FeaturesSection />
-      <FaqSection />
+      <LoopSection />
+      <AudiencesSection />
+      <MethodsSection />
+      <PromisesSection />
+      <VoiceSection />
       <FinalCtaSection onAccessCortex={onAccessCortex} isLoading={isLoading} />
     </div>
   );
 };
 
 export default SalesSections;
-

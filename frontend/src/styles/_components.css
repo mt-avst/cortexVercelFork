@@ -11517,17 +11517,12 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 /* Dimmed overlay modifier - uses unified panel surface system */
-/* No gradients, no warm tints - pure neutral surface */
 .sales-section--dim {
-  /* Unified panel surface system */
   background: var(--surface-panel-current);
-  /* No border-radius for full-width sections */
   border-radius: 0;
   margin: 0;
-  /* Subtle top/bottom borders using token system */
   border-top: 1px solid var(--border-subtle-current);
   border-bottom: 1px solid var(--border-subtle-current);
-  /* Relative positioning for optional overlay effects */
   position: relative;
   overflow: hidden;
 }
@@ -11547,122 +11542,8 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 /* ============================================================
-   SALES SPACING UTILITIES
+   SALES TYPOGRAPHY (shared)
    ============================================================ */
-
-.sales-stack-sm {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-}
-
-.sales-stack-md {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-4);
-}
-
-.sales-stack-lg {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-6);
-}
-
-/* ============================================================
-   SALES GRID LAYOUTS - Mobile first
-   ============================================================ */
-
-/* Two-column grid */
-.sales-grid-2 {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacing-8);
-}
-
-@media (min-width: 768px) {
-  .sales-grid-2 {
-    grid-template-columns: 1fr 1fr;
-    gap: var(--spacing-10);
-  }
-}
-
-/* Role cards - 4 columns */
-.sales-roles-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacing-4);
-}
-
-@media (min-width: 768px) {
-  .sales-roles-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1024px) {
-  .sales-roles-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-/* Features grid - 3 columns */
-.sales-features-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacing-4);
-}
-
-@media (min-width: 768px) {
-  .sales-features-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1024px) {
-  .sales-features-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-/* Steps row - horizontal on desktop */
-.sales-steps-row {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacing-6); /* Increased breathing room between steps */
-}
-
-@media (min-width: 768px) {
-  .sales-steps-row {
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-8); /* Even more space on desktop for balance */
-  }
-}
-
-/* ============================================================
-   GENERIC CARD HOVER UTILITY
-   Reusable translateY + shadow lift
-   ============================================================ */
-
-.card-raise-hover {
-  transition: transform var(--transition-card), box-shadow var(--transition-card);
-}
-
-.card-raise-hover:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-card-hover);
-}
-
-/* ============================================================
-   SALES TYPOGRAPHY
-   ============================================================ */
-
-.sales-heading-xl {
-  font-size: clamp(1.75rem, 4vw, 2.5rem);
-  font-weight: var(--font-weight-bold);
-  line-height: var(--line-height-heading);
-  color: var(--text-primary);
-  margin: 0 0 var(--spacing-4) 0;
-}
 
 .sales-heading-l {
   font-size: clamp(1.5rem, 3vw, 2rem);
@@ -11683,17 +11564,6 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   margin: 0 0 var(--spacing-4) 0;
 }
 
-.sales-body-muted {
-  font-size: var(--font-size-body);
-  line-height: var(--line-height-body);
-  color: var(--text-muted);
-  margin: 0 0 var(--spacing-4) 0;
-}
-
-.sales-body-center {
-  text-align: center;
-}
-
 .sales-micro-copy {
   font-size: var(--font-size-small);
   color: var(--text-muted);
@@ -11702,117 +11572,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   font-style: italic;
 }
 
-/* ============================================================
-   SALES COPY BLOCK (Pitch section left column)
-   ============================================================ */
-
-.sales-copy-block {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.sales-bullets {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.sales-bullets li {
-  position: relative;
-  padding-left: var(--spacing-6);
-  margin-bottom: var(--spacing-3);
-  font-size: var(--font-size-body);
-  color: var(--text-secondary);
-  line-height: var(--line-height-body);
-}
-
-.sales-bullets li::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.5em;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--brand-primary);
-}
-
-/* ============================================================
-   SALES CARDS - Pitch, Step, Role, Feature
-   Uses unified surface token system via card-shell pattern
-   ============================================================ */
-
-/* Shared sales card base - inherits from card-shell token system */
-.sales-pitch-card,
-.sales-step-card,
-.sales-role-card,
-.sales-feature-tile {
-  /* Unified surface system */
-  background: var(--surface-card-current);
-  border: 1px solid var(--border-subtle-current);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-card-current);
-  /* Transition for hover effects */
-  transition: transform var(--transition-card), border-color var(--transition-base), box-shadow var(--transition-base);
-}
-
-/* Hover state - subtle lift */
-.sales-pitch-card:hover,
-.sales-step-card:hover,
-.sales-role-card:hover,
-.sales-feature-tile:hover {
-  transform: translateY(-2px);
-  border-color: var(--border-strong-current);
-}
-
-/* Pitch cards - stacked mini-cards (admin padding: 24px) */
-.sales-pitch-card {
-  padding: var(--card-padding);
-}
-
-/* 500 is the identity colour and cannot carry the badge's white label: 3.29 in
-   light, 2.60 in dark. This one failed in BOTH themes, so !195's light-only
-   pass would not have caught it either. */
-.sales-pitch-badge {
-  margin-bottom: var(--spacing-2);
-  background-color: var(--accent-fill-text-safe) !important;
-  color: #FFFFFF !important;
-}
-
-/* Step cards with index number (admin padding: 24px) */
-.sales-step-card {
-  text-align: center;
-  padding: var(--card-padding);
-}
-
-.sales-step-index {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 48px;
-  height: 48px;
-  font-size: var(--font-size-h3);
-  font-weight: var(--font-weight-bold);
-  color: var(--brand-primary);
-  background: var(--bg-card);
-  border: 2px solid var(--brand-primary);
-  border-radius: 50%;
-  margin-bottom: var(--spacing-4);
-}
-
-/* Role cards (admin padding: 24px) */
-.sales-role-card {
-  padding: var(--card-padding);
-  height: 100%;
-}
-
-/* Feature tiles (admin padding: 24px) */
-.sales-feature-tile {
-  padding: var(--card-padding);
-}
-
-/* Card typography */
+/* Card typography, shared by beats, promises, doors and the recorded explainer */
 .sales-card-title {
   font-size: var(--font-size-h4);
   font-weight: var(--font-weight-semibold);
@@ -11827,154 +11587,381 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
   margin: 0;
 }
 
-/* The social proof section and its rules are gone - see the note in
-   SalesSections.tsx. Its metrics and quotes were invented, and rules for a
-   section that does not render are how the next author concludes it should. */
-
-/* ============================================================
-   FAQ SECTION
-   Native details/summary accordion
-   ============================================================ */
-
-.sales-faq-list {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.sales-faq-item {
-  border-bottom: 1px solid var(--border-subtle);
-  padding: var(--spacing-4) 0;
-}
-
-.sales-faq-item:last-child {
-  border-bottom: none;
-}
-
-.sales-faq-question {
-  font-size: var(--font-size-h4);
+/* Small uppercase kicker, reused for audience/promise/door labels */
+.sales-kicker {
+  display: inline-block;
+  font-size: var(--font-size-small);
   font-weight: var(--font-weight-semibold);
-  color: var(--text-primary);
-  cursor: pointer;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-3);
-  line-height: 1.5;
-  padding: 12px 0;
-}
-
-.sales-faq-question::-webkit-details-marker {
-  display: none;
-}
-
-.sales-faq-question::after {
-  content: '+';
-  font-size: 1.5rem;
-  font-weight: var(--font-weight-medium);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
-  transition: transform var(--transition-base);
-}
-
-.sales-faq-item[open] .sales-faq-question::after {
-  content: '−';
-}
-
-.sales-faq-question:focus-visible {
-  outline: var(--focus-outline);
-  outline-offset: var(--focus-outline-offset);
-  border-radius: var(--radius-sm);
-}
-
-.sales-faq-answer {
-  font-size: var(--font-size-body);
-  color: var(--text-secondary);
-  line-height: var(--line-height-body);
-  margin: var(--spacing-3) 0 0 0;
-  padding-right: var(--spacing-8);
-}
-
-/* ============================================================
-   FINAL CTA STRIPE
-   ============================================================ */
-
-/* CTA stripe - uses unified panel surface system */
-.sales-cta-stripe {
-  padding: var(--spacing-12) var(--spacing-4);
-  /* Unified panel surface system */
-  background: var(--surface-panel-current);
-  border: 1px solid var(--border-strong-current);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel-current);
-  /* Margin for the rounded corners to show */
-  margin: var(--spacing-8) auto;
-  max-width: 1200px;
-}
-
-.sales-cta-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: var(--spacing-6);
-}
-
-@media (min-width: 768px) {
-  .sales-cta-inner {
-    flex-direction: row;
-    justify-content: space-between;
-    text-align: left;
-  }
-}
-
-.sales-cta-copy {
-  flex: 1;
-}
-
-.sales-cta-copy .sales-heading-l {
   margin-bottom: var(--spacing-2);
 }
 
-.sales-cta-copy .sales-body-muted {
-  margin-bottom: 0;
+/* ============================================================
+   LOOP - the feedback loop diagram beside its explanation
+   ============================================================ */
+
+.sales-loop {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-8);
+  align-items: center;
 }
 
-.sales-cta-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-3);
-  flex-shrink: 0;
-}
-
-@media (min-width: 480px) {
-  .sales-cta-buttons {
-    flex-direction: row;
+@media (min-width: 768px) {
+  .sales-loop {
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: var(--spacing-10);
   }
 }
 
-/* Walkthrough button - outline style */
-.sales-walkthrough-btn {
+.sales-loop-figure {
+  display: flex;
+  justify-content: center;
+}
+
+.sales-loop-svg {
+  width: 100%;
+  max-width: 460px;
+  height: auto;
+}
+
+.sales-loop-copy .sales-body:last-child {
+  margin-bottom: 0;
+}
+
+/* ============================================================
+   AUDIENCES - two parallel narratives, one per reader
+   ============================================================ */
+
+.sales-audiences {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-10);
+}
+
+@media (min-width: 900px) {
+  .sales-audiences {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--spacing-12);
+  }
+}
+
+.sales-audience-who {
+  margin-bottom: var(--spacing-2);
+}
+
+.sales-audience-lead {
+  font-size: var(--font-size-body);
+  color: var(--text-muted);
+  line-height: var(--line-height-body);
+  margin: 0 0 var(--spacing-6) 0;
+}
+
+/* "What you get" - the payoff card, flagged with an accent edge */
+.sales-outcome-card {
+  margin-bottom: var(--spacing-6);
+  border-left: 3px solid var(--brand-primary);
+}
+
+.sales-outcome-label {
+  display: inline-block;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+.sales-beats {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sales-beat {
+  display: flex;
+  gap: var(--spacing-4);
+  align-items: flex-start;
+  padding: var(--spacing-4) 0;
+  border-top: 1px solid var(--border-subtle-current);
+}
+
+.sales-beat-index {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 1rem 2rem;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  background: transparent;
-  border: 2px solid var(--border-card);
-  border-radius: 100px;
-  text-decoration: none;
-  transition: all var(--transition-base);
-}
-
-.sales-walkthrough-btn:hover {
-  border-color: var(--brand-primary);
+  width: 34px;
+  height: 34px;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-bold);
   color: var(--brand-primary);
-  text-decoration: none;
+  border: 2px solid var(--brand-primary);
+  border-radius: 50%;
 }
 
-.sales-walkthrough-btn:focus-visible {
+/* ============================================================
+   METHODS - recorded-study explainer plus the comparison table
+   ============================================================ */
+
+.sales-methods-intro {
+  text-align: left;
+  font-style: normal;
+  margin-top: var(--spacing-2);
+  margin-bottom: 0;
+}
+
+.sales-recorded {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-6);
+  align-items: center;
+  margin-top: var(--spacing-8);
+}
+
+@media (min-width: 768px) {
+  .sales-recorded {
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: var(--spacing-8);
+  }
+}
+
+/* Placeholder frame for a sample capture until a real one is recorded */
+.sales-video {
+  aspect-ratio: 16 / 9;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-3);
+  padding: var(--spacing-4);
+  text-align: center;
+  border: 2px dashed var(--border-strong-current);
+  border-radius: var(--radius-card);
+  background: var(--surface-card-current);
+}
+
+.sales-video-play {
+  width: 56px;
+  height: 56px;
+  border: 2px solid var(--brand-primary);
+  border-radius: 50%;
+  position: relative;
+}
+
+.sales-video-play::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 54%;
+  transform: translate(-50%, -50%);
+  border-left: 16px solid var(--brand-primary);
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+}
+
+.sales-video-caption {
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  line-height: var(--line-height-body);
+}
+
+.sales-recorded-copy .sales-card-text + .sales-card-text {
+  margin-top: var(--spacing-3);
+}
+
+/* Table scrolls inside its own box on narrow screens */
+.sales-methods-scroll {
+  margin-top: var(--spacing-8);
+  overflow-x: auto;
+}
+
+.sales-methods-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-small);
+  min-width: 720px;
+}
+
+.sales-methods-table th,
+.sales-methods-table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle-current);
+  vertical-align: top;
+  color: var(--text-secondary);
+}
+
+.sales-methods-table th {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  border-bottom: 2px solid var(--border-strong-current);
+  white-space: nowrap;
+}
+
+.sales-methods-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary) !important;
+  white-space: nowrap;
+}
+
+.sales-methods-time {
+  white-space: nowrap;
+  color: var(--text-muted) !important;
+}
+
+/* The recommended row - self-guided recorded studies */
+.sales-methods-table tr.is-recommended td {
+  background: var(--surface-glass-current);
+}
+
+.sales-methods-table tr.is-recommended .sales-methods-name {
+  box-shadow: inset 3px 0 0 var(--brand-primary);
+  color: var(--brand-primary) !important;
+}
+
+/* ============================================================
+   PROMISES - what Cortex commits to
+   ============================================================ */
+
+.sales-promises-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-4);
+  margin-top: var(--spacing-8);
+}
+
+@media (min-width: 640px) {
+  .sales-promises-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .sales-promises-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.sales-promise-card {
+  padding: var(--card-padding);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-subtle-current);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-current);
+  transition: transform var(--transition-card), border-color var(--transition-base);
+}
+
+.sales-promise-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong-current);
+}
+
+.sales-promise-to {
+  display: inline-block;
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--brand-primary);
+  margin-bottom: var(--spacing-2);
+}
+
+/* ============================================================
+   VOICE - the founder note
+   ============================================================ */
+
+.sales-voice {
+  max-width: 680px;
+}
+
+.sales-voice-quote {
+  margin: 0;
+  padding: 0;
+  border-left: 3px solid var(--brand-primary);
+  padding-left: var(--spacing-6);
+}
+
+.sales-voice-quote .sales-body {
+  font-size: var(--font-size-h4);
+  color: var(--text-primary);
+}
+
+.sales-voice-quote .sales-body:last-child {
+  margin-bottom: 0;
+}
+
+.sales-voice-sig {
+  margin: var(--spacing-6) 0 0 var(--spacing-6);
+  padding-left: var(--spacing-6);
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   CLOSE - the two doors and a feedback line
+   ============================================================ */
+
+.sales-doors {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-6);
+  margin-top: var(--spacing-8);
+}
+
+@media (min-width: 768px) {
+  .sales-doors {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.sales-door {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-3);
+  padding: var(--card-padding);
+  background: var(--surface-card-current);
+  border: 1px solid var(--border-strong-current);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card-current);
+}
+
+.sales-door .sales-card-title {
+  margin-bottom: 0;
+}
+
+.sales-door .btn-power {
+  margin-top: auto;
+}
+
+.sales-door-who {
+  font-size: var(--font-size-small);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.sales-feedback-link {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+
+.sales-feedback-link:hover {
+  color: var(--brand-primary);
+}
+
+.sales-feedback-link:focus-visible {
   outline: var(--focus-outline);
   outline-offset: var(--focus-outline-offset);
 }
