@@ -2335,5 +2335,25 @@
     "runner": "vitest",
     "spec": "src/firsthand/__tests__/copy-s3-object-if-match.test.ts",
     "test": "conditions the copy on the ETag the caller inspected - the finalize-time race guard itself"
+  },
+  {
+    "id": "native-delivery-covers-the-one-question-type",
+    "why": "The whole of cto/AdaptaLabs#78 is this predicate's type set. Narrowing it back to poll and survey is a two-word edit that compiles, leaves the authoring form offering the Question step, lets the author write their question and publish - and then answers the participant's mint with a 404, so the control on the study page is the one thing that fails. One predicate now decides this at the publish gate, the API boundary, the wizard's step shape and the participant's call to action, which is what makes a single silent edit reach all four.",
+    "file": "shared/firsthand/delivery.ts",
+    "anchor": "  QUESTION_CARRYING_TYPES.has(type) && (deliveryMode ?? \"external\") === \"native\";",
+    "mutation": "  (type === \"poll\" || type === \"survey\") && (deliveryMode ?? \"external\") === \"native\";",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.test.ts",
+    "test": "mints for a one-question opportunity"
+  },
+  {
+    "id": "one-question-cap-is-a-cap",
+    "why": "A POLICY CONSTANT, pinned as a literal because a test that derives its expectation from the constant cannot see the constant move. Without the cap, `question` and a native `survey` are the same product under two names, and a researcher can publish twelve questions under a badge the participant reads as \"One question\". The mutation is the shape a tidy-up would produce - one ceiling for every type - and it leaks nothing, breaks no schema and refuses nobody, so no gate reading for authorisation or validity would flag it.",
+    "file": "shared/firsthand/survey-authoring.ts",
+    "anchor": "  type === \"question\" ? 1 : INLINE_STUDY_LIMITS.maxSteps;",
+    "mutation": "  INLINE_STUDY_LIMITS.maxSteps;",
+    "runner": "jest",
+    "spec": "src/routes/__tests__/opportunities.test.ts",
+    "test": "refuses a second question"
   }
 ]

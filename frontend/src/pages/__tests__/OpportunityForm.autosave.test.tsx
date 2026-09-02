@@ -513,7 +513,7 @@ describe('what the author is told', () => {
     vi.mocked(createOpportunity).mockRejectedValue({
       response: {
         status: 400,
-        data: { error: 'Only polls and surveys can carry questions' }
+        data: { error: 'Only polls, surveys and one-question opportunities can carry questions' }
       }
     });
 
@@ -524,7 +524,7 @@ describe('what the author is told', () => {
       timeout: PAST_THE_DEBOUNCE
     });
     await waitFor(() =>
-      expect(saveStateText()).toMatch(/Only polls and surveys can carry questions/i)
+      expect(saveStateText()).toMatch(/Only polls, surveys and one-question opportunities can carry questions/i)
     );
 
     // Long enough for four more backoff attempts, had there been any.

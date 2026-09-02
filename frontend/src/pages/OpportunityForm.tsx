@@ -94,6 +94,11 @@ import SlowNeuralBackground from '../components/SlowNeuralBackground';
 import { BasicInfoTab, ConsentStep, ContentDetailsTab, ErrorSummary, ExternalLinkTab, FirstHandStudyTab, ReviewStep, StepActions, StepNav, SurveyQuestionsTab } from '../components/OpportunityForm';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { RATING_SCALE_BOUNDS } from '@shared/firsthand/contract';
+import {
+  QUESTION_CARRYING_TYPES,
+  isQuestionCarryingType,
+  runsNativeSurvey
+} from '@shared/firsthand/delivery';
 import { VALIDATION } from '@shared/constants';
 import {
   CUSTOM_CONSENT_TEMPLATE_ID,
@@ -154,7 +159,7 @@ export const clearTypeConditionalErrors = (
       .filter((key) => key.startsWith('inline_study_steps'))
       .forEach((key) => delete next[key]);
   }
-  if (newType !== 'poll' && newType !== 'survey') {
+  if (!QUESTION_CARRYING_TYPES.has(newType)) {
     delete next.inline_survey_consent_text;
     delete next.inline_survey_duration_minutes;
     Object.keys(next)
@@ -460,19 +465,26 @@ export const getTabsForType = (
     { id: 2, key: 'content', title: 'Content & Details', description: 'Define opportunity content' }
   ];
 
-  // A poll or survey has two shapes now. Native delivery collects the questions
-  // here; external delivery collects the link it hands off to. `question` has
-  // no native path yet and keeps the link tab unconditionally.
-  if (type === 'poll' || type === 'survey') {
+  // Every question-carrying type has two shapes. Native delivery collects the
+  // questions here; external delivery collects the link it hands off to.
+  //
+  // `question` joined them in #78. It used to keep the link step
+  // unconditionally, which was the whole of that issue: the only study type
+  // with no native option, so a one-question study always handed off and Cortex
+  // got back a click count. A single question is a strict subset of what
+  // SurveyRunner already draws, so this is the same two shapes, not a third.
+  if (QUESTION_CARRYING_TYPES.has(type)) {
     tabs.push(
       deliveryMode === 'native'
-        ? { id: 3, key: 'questions', title: 'Questions', description: 'What the participant is asked' }
+        ? {
+            id: 3,
+            key: 'questions',
+            // Singular for the type whose whole promise is that there is one.
+            title: type === 'question' ? 'Question' : 'Questions',
+            description: 'What the participant is asked'
+          }
         : { id: 3, key: 'externalLink', title: 'External Link', description: 'Configure external tool' }
     );
-  }
-
-  if (type === 'question') {
-    tabs.push({ id: 3, key: 'externalLink', title: 'External Link', description: 'Configure external tool' });
   }
 
   if (type === 'unmoderated') {
@@ -505,10 +517,15 @@ export const getTabsForType = (
   //   third-party call; what the participant now agrees to at booking time is
   //   what Cortex may hold afterwards.
   //
-  // A pure hand-off (external link, `question`) keeps no artefacts, so it
-  // still has no Consent step: what its participant agrees to lives in the
-  // tool on the other side of the link, and an empty Consent step there would
-  // imply Cortex has a say in something it does not.
+  // A pure hand-off keeps no artefacts, so it still has no Consent step: what
+  // its participant agrees to lives in the tool on the other side of the link,
+  // and an empty Consent step there would imply Cortex has a say in something
+  // it does not.
+  //
+  // #78 is the "future type" the first bullet predicted, and it arrived for
+  // free: a native `question` gets Consent because it has a `questions` step,
+  // and its external twin does not because it has a link step. Neither outcome
+  // needed a word about `question` here.
   const authoringStep = tabs.find(
     (tab) => tab.key === 'questions' || tab.key === 'taskList'
   );
@@ -1318,8 +1335,7 @@ const OpportunityForm: React.FC = () => {
       const authoringKind: AuthoringKind | null =
         opportunity.type === 'unmoderated'
           ? 'recorded'
-          : (opportunity.type === 'poll' || opportunity.type === 'survey') &&
-              (opportunity.delivery_mode ?? 'external') === 'native'
+          : runsNativeSurvey(opportunity.type, opportunity.delivery_mode)
             ? 'survey'
             : null;
 
@@ -1912,11 +1928,10 @@ const OpportunityForm: React.FC = () => {
       }
     } else if (
       formData.status === 'published' &&
-      (formData.type === 'poll' || formData.type === 'survey') &&
-      deliveryMode === 'native'
+      runsNativeSurvey(formData.type, deliveryMode)
     ) {
-      // A native poll or survey needs its questions, not a link. Mirrors the
-      // backend guard, which refuses the same state.
+      // A natively-answered opportunity needs its questions, not a link.
+      // Mirrors the backend guard, which refuses the same state.
       // The recorded twin's reasoning applies here unchanged.
       if (studyIsReadOnly) {
         if (!formData.firsthand_study_id?.trim()) {
@@ -1929,7 +1944,13 @@ const OpportunityForm: React.FC = () => {
             ? 'Choose a set of questions to start from, or switch to writing them here'
             : 'Add at least one question before publishing';
       }
-    } else if (formData.status === 'published' && ['poll', 'survey', 'question'].includes(formData.type)) {
+    } else if (
+      formData.status === 'published' &&
+      QUESTION_CARRYING_TYPES.has(formData.type)
+    ) {
+      // Reached only by a hand-off: the native arm above catches every shape
+      // that answers in Cortex, so this never asks a native question for a
+      // link. Same ordering as `findPublishProblem`, which this previews.
       if (!formData.external_link_optional?.trim()) {
         errors.external_link_optional =
           'Enter the link participants will follow to take part';
@@ -2001,8 +2022,7 @@ const OpportunityForm: React.FC = () => {
       }
 
       if (
-        (formData.type === 'poll' || formData.type === 'survey') &&
-        deliveryMode === 'native' &&
+        runsNativeSurvey(formData.type, deliveryMode) &&
         formData.inline_survey_questions.length === 0
       ) {
         errors.inline_survey_questions =
@@ -2015,9 +2035,7 @@ const OpportunityForm: React.FC = () => {
     // author switched to an external tool refused every later save, naming a
     // field on a tab that is no longer rendered.
     const authoringQuestions =
-      (formData.type === 'poll' || formData.type === 'survey') &&
-      deliveryMode === 'native' &&
-      !studyIsReadOnly;
+      runsNativeSurvey(formData.type, deliveryMode) && !studyIsReadOnly;
 
     (authoringQuestions ? formData.inline_survey_questions : []).forEach((question, index) => {
       if (!question.prompt.trim()) {
@@ -4372,10 +4390,15 @@ const OpportunityForm: React.FC = () => {
       }
 
       // The reverse coercion. A task list picked before the author switched the
-      // type to a poll or survey stayed in state with no picker on screen, and
-      // was submitted - so the API refused the save with a message about a task
-      // list the form was no longer showing.
-      if (field === 'type' && (value === 'poll' || value === 'survey')) {
+      // type to a question-carrying one stayed in state with no picker on
+      // screen, and was submitted - so the API refused the save with a message
+      // about a task list the form was no longer showing.
+      //
+      // `question` is in this branch since #78 rather than in the fall-through
+      // below, because it now has an authoring surface of its own: leaving a
+      // recorded study id in state would send it to a shape that asks for
+      // survey questions.
+      if (field === 'type' && isQuestionCarryingType(value)) {
         return {
           ...prev,
           ...clearedSource,
@@ -4384,10 +4407,10 @@ const OpportunityForm: React.FC = () => {
         };
       }
 
-      // Every other type change - to `question`, `test` or `interview` - lands
-      // here, and must still drop the source choice. Those types have no
-      // authoring surface at all, so a copy taken before the switch would
-      // otherwise sit in state invisibly and be sent on the next save.
+      // Every other type change - to `test` or `interview` - lands here, and
+      // must still drop the source choice. Those types have no authoring
+      // surface at all, so a copy taken before the switch would otherwise sit
+      // in state invisibly and be sent on the next save.
       return { ...prev, ...clearedSource, [field]: value };
     });
 
@@ -4576,8 +4599,9 @@ const OpportunityForm: React.FC = () => {
                   </p>
                 </div>
                 <div className="d-flex align-items-center gap-3">
-                  {/* Analytics button - only for polls, surveys, and unmoderated tests in edit mode */}
-                  {isEdit && id && (formData.type === 'poll' || formData.type === 'survey' || formData.type === 'unmoderated') && (
+                  {/* Analytics button - only for question-carrying types and
+                      unmoderated tests in edit mode */}
+                  {isEdit && id && (QUESTION_CARRYING_TYPES.has(formData.type) || formData.type === 'unmoderated') && (
                     <button
                       className="btn btn-outline-primary btn-sm text-sm"
                       onClick={() => navigate(`/admin/opportunities/${id}/analytics`)}

@@ -184,7 +184,7 @@ describe('getTabsForType', () => {
    * moderated pair now stores artefacts (recording, transcript, acceptance at
    * booking), so they carry a Consent step; a pure hand-off still does not.
    */
-  it('gives question no consent step, because Cortex keeps nothing of it', () => {
+  it('gives a handed-off question no consent step, because Cortex keeps nothing of it', () => {
     expect(getTabsForType('question').map((tab) => tab.title)).toEqual([
       'Basic Information',
       'Content & Details',
@@ -211,11 +211,44 @@ describe('getTabsForType', () => {
   });
 
   /**
-   * `question` has no native runner, so it keeps the link tab whatever the
-   * delivery mode says. Without this it would lose its only third tab.
+   * #78 replaced this test's premise rather than its assertion.
+   *
+   * It used to read "leaves the one-question type on the external link tab",
+   * because `question` had no native runner and kept the link step whatever
+   * the delivery mode said. It has one now - SurveyRunner, the same one a
+   * poll and a survey use - so the two shapes below are what it must have,
+   * and the pairing is the point: whole-array equality, because the failure
+   * that matters is a step that should have been swapped appearing alongside
+   * its replacement rather than instead of it.
    */
-  it('leaves the one-question type on the external link tab', () => {
-    expect(getTabsForType('question', 'native').map((tab) => tab.title)).toContain(
+  it('keeps the external link tab when a question hands off, which is every existing one', () => {
+    expect(getTabsForType('question', 'external').map((tab) => tab.title)).toEqual([
+      'Basic Information',
+      'Content & Details',
+      'External Link',
+      'Review'
+    ]);
+  });
+
+  it('offers the question tab, and a consent step, when a question runs in Cortex', () => {
+    expect(getTabsForType('question', 'native').map((tab) => tab.title)).toEqual([
+      'Basic Information',
+      'Content & Details',
+      // Singular. The type's whole promise is that there is one.
+      'Question',
+      'Consent',
+      'Review'
+    ]);
+  });
+
+  /**
+   * The default matters more here than for a poll: `delivery_mode` is absent
+   * on every `question` row stored before #78, and the column defaults to
+   * external. If the default flipped, those rows would lose the link step that
+   * is the only way their participants reach the study.
+   */
+  it('defaults a question to handing off, which is what every stored one does', () => {
+    expect(getTabsForType('question').map((tab) => tab.title)).toContain(
       'External Link'
     );
   });
@@ -247,6 +280,113 @@ describe('authoring a native survey', () => {
     );
 
     expect(screen.queryByText(/Where participants answer/i)).toBeNull();
+  });
+
+  /**
+   * #78: the one-question type, end to end through the form.
+   *
+   * Driven rather than asserted on `getTabsForType`, because the step shape
+   * being right proves nothing about the payload: the failure this replaces
+   * was a type whose only third step handed off, so what has to be checked is
+   * that a question authored here actually leaves as `inline_survey` with
+   * native delivery.
+   */
+  describe('a one-question opportunity', () => {
+    const fillQuestionBasics = async (
+      user: ReturnType<typeof userEvent.setup>
+    ) => {
+      await user.selectOptions(
+        screen.getByLabelText(/Research Study Type/i),
+        'question'
+      );
+      await user.type(screen.getByLabelText(/^Title/i), 'One thing');
+      await user.type(
+        screen.getByLabelText(/^Purpose/i),
+        'A single question about the thing you just tried'
+      );
+    };
+
+    it('offers the delivery choice, which it never used to have', async () => {
+      const user = userEvent.setup();
+      renderForm();
+
+      await user.selectOptions(
+        screen.getByLabelText(/Research Study Type/i),
+        'question'
+      );
+
+      expect(screen.getByText(/Where participants answer/i)).toBeInTheDocument();
+    });
+
+    it('sends the authored question as inline_survey, natively delivered', async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillQuestionBasics(user);
+      await user.click(screen.getByLabelText(/In Cortex/i));
+
+      await user.click(screen.getByRole('button', { name: /Question/i }));
+      await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+      await user.type(
+        screen.getByLabelText(/What the participant is asked/i),
+        'What nearly stopped you?'
+      );
+
+      await submitFromLastStep(user, /^Create opportunity$/);
+
+      await waitFor(() => expect(createOpportunity).toHaveBeenCalled());
+
+      const body = vi.mocked(createOpportunity).mock.calls[0][0] as {
+        delivery_mode?: string;
+        inline_survey?: { steps: { type: string; prompt: string }[] };
+      };
+
+      expect(body.delivery_mode).toBe('native');
+      expect(body.inline_survey?.steps).toEqual([
+        {
+          step_key: A_MINTED_IDENTITY,
+          type: 'open_text',
+          prompt: 'What nearly stopped you?'
+        }
+      ]);
+    });
+
+    /**
+     * The cap, where the author meets it. Hidden rather than disabled: there
+     * is nothing they can do on this screen to raise it, so a control that
+     * invites a click and then refuses is worse than no control.
+     *
+     * The control is the survey case below - the same list, same component,
+     * keeps offering the button after one question - without which this test
+     * passes just as well when the button never renders at all.
+     */
+    it('stops offering another question once it has its one', async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillQuestionBasics(user);
+      await user.click(screen.getByLabelText(/In Cortex/i));
+      await user.click(screen.getByRole('button', { name: /Question/i }));
+
+      await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: /^Add question$/i })).toBeNull()
+      );
+    });
+
+    it('keeps offering another question on a survey, which has no such cap', async () => {
+      const user = userEvent.setup();
+      renderForm();
+      await fillBasics(user);
+      await user.click(screen.getByLabelText(/In Cortex/i));
+      await user.click(screen.getByRole('button', { name: /Questions/i }));
+
+      await user.click(screen.getByRole('button', { name: /^Add question$/i }));
+
+      expect(
+        screen.getByRole('button', { name: /^Add question$/i })
+      ).toBeInTheDocument();
+    });
   });
 
   it('swaps the third tab when the author chooses to run it in Cortex', async () => {

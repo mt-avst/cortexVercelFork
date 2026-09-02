@@ -104,9 +104,9 @@ Fill in the required fields:
 - **Product**: Related product or area (optional)
 - **Default Duration**: Default session length in minutes (default: 30)
 
-### Step 3: Where a Poll or Survey is answered
+### Step 3: Where a Poll, Survey or One question is answered
 
-A Poll or a Survey can be answered in either of two places, and you choose on **Basic Information**:
+A Poll, a Survey or a One question can be answered in either of two places, and you choose on **Basic Information**:
 
 - **In an external tool** - you give Cortex the link. SurveyMonkey, Google Forms, Typeform and the rest. Cortex sends people there and counts the clicks, and the answers live in that tool. This is what every poll and survey used to be, and it is still the default
 - **In Cortex** - you write the questions here and the answers come back in Cortex. Nothing is recorded: no screen, no microphone, no camera
@@ -117,7 +117,9 @@ That is where people go when they click "Open Poll/Survey".
 Choosing **In Cortex** replaces that step with a **Questions** step.
 See [Polls and Surveys Answered in Cortex](#polls-and-surveys-answered-in-cortex).
 
-A **One question** opportunity has no native mode and always uses an external link.
+A **One question** opportunity works the same way, with one difference: it asks exactly one question.
+Its native step is called **Question**, and once you have written that question the "Add question" button is gone - there is nothing to add.
+If you want to ask more, use a Poll or a Survey.
 
 ### Step 4: Add Sessions
 

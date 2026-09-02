@@ -111,14 +111,21 @@ describe("findPublishProblem", () => {
 
   describe("question", () => {
     /*
-     * `question` is external-only: `getTabsForType` gives it the External Link
-     * step unconditionally and offers no native alternative. So a published
-     * `question` with no link is a study nobody can take part in - the detail
-     * page renders a disabled "Link unavailable" button, which is the honest
-     * thing to show and the wrong place to find out.
+     * `question` has BOTH shapes since #78. Externally it hands off, and a
+     * published one with no link is a study nobody can take part in - the
+     * detail page renders a disabled "Link unavailable" button, which is the
+     * honest thing to show and the wrong place to find out. The gate said
+     * nothing about this type at all, so that refusal never fired and the
+     * author was never warned.
      *
-     * The gate said nothing about this type at all, so the refusal never fired
-     * and the author was never warned.
+     * Natively it runs in SurveyRunner and needs its question instead, which
+     * is the arm below. The two must not eat each other: the native arm
+     * returns for every shape it covers, so a native question is never asked
+     * for a link, and an external one is never let through without one.
+     *
+     * These tests are stated on the DEFAULT (external) mode, so they keep
+     * holding for the pre-#78 rows: `delivery_mode` defaults to external in
+     * the column and every question ever stored is one.
      */
     it("refuses a publish with no link", () => {
       expect(findPublishProblem(input({ type: "question" }))).toEqual({
@@ -149,6 +156,58 @@ describe("findPublishProblem", () => {
       expect(
         findPublishProblem(input({ type: "question", willBePublished: false }))
       ).toBeNull();
+    });
+
+    describe("running natively (#78)", () => {
+      it("asks for its question rather than for a link", () => {
+        expect(
+          findPublishProblem(input({ type: "question", deliveryMode: "native" }))
+        ).toEqual({ code: "native_survey_study_required" });
+      });
+
+      it("permits a publish on an authored question, with no link at all", () => {
+        expect(
+          findPublishProblem(
+            input({
+              type: "question",
+              deliveryMode: "native",
+              hasInlineSurvey: true
+            })
+          )
+        ).toBeNull();
+      });
+
+      it("permits a publish on a linked set of questions", () => {
+        expect(
+          findPublishProblem(
+            input({
+              type: "question",
+              deliveryMode: "native",
+              hasLinkedStudy: true
+            })
+          )
+        ).toBeNull();
+      });
+
+      /*
+       * The ordering assertion, and the one a reader is most likely to break
+       * by tidying: move the link check above the native arm and this is the
+       * test that goes red. Without it, a native question with its question
+       * written would be refused for want of a link it does not use - and the
+       * author would be sent to a step their shape does not have.
+       */
+      it("never asks a native question for a link", () => {
+        expect(
+          findPublishProblem(
+            input({
+              type: "question",
+              deliveryMode: "native",
+              hasInlineSurvey: true,
+              externalLink: undefined
+            })
+          )
+        ).toBeNull();
+      });
     });
   });
 

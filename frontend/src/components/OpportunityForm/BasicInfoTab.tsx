@@ -1,5 +1,6 @@
 import React from 'react';
 import { SESSION_DURATION } from '@shared/constants';
+import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { OpportunityFormData } from '../../api/types';
 import FieldError from './FieldError';
 
@@ -79,7 +80,14 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
               </label>
               <div id="type-help" className="form-text mb-2" style={{ fontSize: '0.875rem', minHeight: '2.5rem', lineHeight: '1.4' }}>
                 {(formData.type === 'test' || formData.type === 'interview') && 'Creates bookable time slots for interactive sessions'}
-                {formData.type === 'question' && 'Creates bookable time slots for question sessions'}
+                {/* This said "Creates bookable time slots for question
+                    sessions", which was never true - a `question` has no
+                    Session Management step and books nothing. Corrected while
+                    #78 gave it the native option the other two already had. */}
+                {formData.type === 'question' &&
+                  (formData.delivery_mode === 'native'
+                    ? 'One question, answered in Cortex'
+                    : 'Opens an external tool for a single question')}
                 {formData.type === 'poll' &&
                   (formData.delivery_mode === 'native'
                     ? 'Quick responses, answered in Cortex'
@@ -125,9 +133,9 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
           </div>
 
           {/*
-            Where the participant answers. Only polls and surveys have the
-            choice - a recorded study has nowhere external to go, and the
-            bookable types have no link at all.
+            Where the participant answers. Only the question-carrying types
+            have the choice - a recorded study has nowhere external to go, and
+            the bookable types have no link at all.
 
             A radio pair rather than a checkbox: neither option is the
             "unticked" state of the other, and "external" is a real, supported
@@ -135,7 +143,7 @@ const BasicInfoTab: React.FC<BasicInfoTabProps> = ({
             fallback. External stays the default so an author who never looks at
             this gets exactly today's behaviour.
           */}
-          {(formData.type === 'poll' || formData.type === 'survey') && (
+          {QUESTION_CARRYING_TYPES.has(formData.type) && (
             <div className="row mb-4">
               <div className="col-12">
                 <fieldset>

@@ -11,6 +11,7 @@ import {
 } from '@shared/firsthand/contract';
 import {
   authorableSurveyStepTypes,
+  maxQuestionsFor,
   type SurveyQuestion
 } from '@shared/firsthand/survey-authoring';
 import DurationEstimate from './DurationEstimate';
@@ -212,6 +213,26 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
   }, [retryCount, choosingSource]);
 
   const questions = formData.inline_survey_questions ?? [];
+
+  /**
+   * `instruction` is a section page - the runner shows it and moves on without
+   * collecting anything - so it is not offered as the ONE question of a
+   * one-question opportunity, which would otherwise publish a study guaranteed
+   * to collect nothing. A survey keeps it: there it introduces the questions
+   * that follow, and there are some.
+   *
+   * ponytail: a UI filter, not a boundary. A hand-crafted call can still store
+   *   an instruction-only native study, for a `question` or for a survey alike
+   *   - the schema asks for at least one step, never for an ANSWERABLE one.
+   *   The result is an inert study rather than a wrong or unsafe one, and it is
+   *   equally reachable on the poll and survey paths that predate #78, so the
+   *   fix is one answerable-step rule for all three shapes rather than a
+   *   special case here.
+   */
+  const questionTypeVocabulary =
+    formData.type === 'question'
+      ? authorableSurveyStepTypes.filter((type) => type !== 'instruction')
+      : authorableSurveyStepTypes;
 
   /**
    * Only survey-vocabulary studies, and only launched ones.
@@ -417,7 +438,7 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
               noun="question"
               nounPlural="questions"
               typeLabels={QUESTION_TYPE_LABELS}
-              typeVocabulary={authorableSurveyStepTypes}
+              typeVocabulary={questionTypeVocabulary}
               onChangeType={changeQuestionType}
               makeItem={(): SurveyQuestion => ({ type: 'open_text', prompt: '' })}
               promptLabel={(question) =>
@@ -426,6 +447,10 @@ const SurveyQuestionsTab: React.FC<SurveyQuestionsTabProps> = ({
                   : 'What the participant is asked *'
               }
               addLabel="Add question"
+              /* One for a "One question" opportunity, the schema's ceiling for
+                 a poll or a survey. The cap is the only thing separating the
+                 two shapes now that both run in SurveyRunner. */
+              maxItems={maxQuestionsFor(formData.type)}
               emptyMessage="No questions yet. Add the first thing you want to ask."
               answerCounts={answerCounts}
               renderTypeFields={({ item, index, update }) => (

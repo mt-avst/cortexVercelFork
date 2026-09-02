@@ -81,6 +81,19 @@ export interface QuestionListProps<T extends AuthoredItem> {
     update: (patch: Partial<T>) => void;
   }) => React.ReactNode;
   addLabel: string;
+  /**
+   * The most items this list may hold. Unbounded when absent.
+   *
+   * Hides the add control at the cap rather than disabling it: a disabled
+   * button invites a click and then explains nothing, and there is no state in
+   * which the author can raise the cap from this screen - it is a property of
+   * the opportunity TYPE, chosen two steps back.
+   *
+   * Not the enforcement. The server refuses an over-long payload whatever the
+   * UI offers (see `maxQuestionsFor`), because this component is not a
+   * boundary; it just declines to invite the refusal.
+   */
+  maxItems?: number;
   emptyMessage: string;
   /**
    * How many answers each item has already collected, keyed by `_clientId`.
@@ -139,6 +152,7 @@ function QuestionList<T extends AuthoredItem>({
   promptPlaceholder,
   renderTypeFields,
   addLabel,
+  maxItems,
   emptyMessage,
   answerCounts
 }: QuestionListProps<T>) {
@@ -595,9 +609,11 @@ function QuestionList<T extends AuthoredItem>({
         </ol>
       )}
 
-      <button type="button" className="btn btn-outline-primary" onClick={addItem}>
-        {addLabel}
-      </button>
+      {maxItems !== undefined && items.length >= maxItems ? null : (
+        <button type="button" className="btn btn-outline-primary" onClick={addItem}>
+          {addLabel}
+        </button>
+      )}
 
       {/*
         One region for every outcome the list can produce. Moving a card with

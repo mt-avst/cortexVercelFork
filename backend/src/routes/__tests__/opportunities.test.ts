@@ -552,11 +552,15 @@ describe('Opportunities API', () => {
     /**
      * The same rule, on the type that was missing from it.
      *
-     * `question` hands the participant to another site and has no native path
-     * at all, but the publish gate named only `unmoderated`, `poll` and
-     * `survey`. So this call used to answer 201, and the study it created was
-     * one nobody could take part in: the detail page renders a disabled "Link
-     * unavailable" button, which is honest and far too late.
+     * A handed-off `question` sends the participant to another site, but the
+     * publish gate named only `unmoderated`, `poll` and `survey`. So this call
+     * used to answer 201, and the study it created was one nobody could take
+     * part in: the detail page renders a disabled "Link unavailable" button,
+     * which is honest and far too late.
+     *
+     * Still the right assertion after #78 gave the type a native path, because
+     * this request sets no `delivery_mode` - and absent means external, which
+     * is what every `question` row stored before #78 is.
      *
      * At the ROUTE rather than only against `findPublishProblem`, because the
      * predicate being right proves nothing about whether this endpoint asks
@@ -718,6 +722,99 @@ describe('Opportunities API', () => {
         .expect(400);
 
       expect(response.body.error).toMatch(/needs a set of survey questions/);
+    });
+
+    /**
+     * The one-question cap on the LINKING path (#78).
+     *
+     * The picker cannot enforce this and neither can the authoring cap: both
+     * request schemas take `firsthand_study_id`, so a set of three questions
+     * authored as a survey is one hand-crafted call away from a `question`
+     * opportunity - and the participant would meet three of them under a badge
+     * reading "One question".
+     *
+     * The kind check one test up refuses the wrong VOCABULARY; this refuses the
+     * wrong SIZE of the right one, which nothing else on this route can see.
+     */
+    it('refuses to link a multi-question study to a one-question opportunity', async () => {
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_three',
+          title: 'Three questions',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: [
+          { step_id: 's1', order: 1, type: 'open_text', prompt: 'One?' },
+          { step_id: 's2', order: 2, type: 'open_text', prompt: 'Two?' },
+          { step_id: 's3', order: 3, type: 'end', prompt: 'Done' }
+        ]
+      } as never);
+
+      const response = await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid One Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_three',
+          status: 'published'
+        })
+        .expect(400);
+
+      expect(response.body.error).toBe(
+        'A one-question opportunity asks exactly one question; use a poll or a survey to ask more'
+      );
+    });
+
+    /**
+     * The control, and the reason the `end` marker is filtered rather than
+     * counted: this study has exactly one QUESTION and two step rows. Counting
+     * rows would refuse it, and the cap would then reject every legal
+     * one-question link while the test above still passed.
+     */
+    it('links a single-question study to a one-question opportunity, end marker and all', async () => {
+      mockGetStudyById.mockResolvedValueOnce({
+        study: {
+          id: 'study_one',
+          title: 'One question',
+          intro_text: 'Intro',
+          consent_text: 'Consent',
+          status: 'launched' as const,
+          kind: 'survey' as const,
+          owner_user_id: 'test-user-id',
+          copied_from_study_id: null,
+          created_at: '2026-08-17T10:00:00.000Z',
+          updated_at: '2026-08-17T10:00:00.000Z',
+        },
+        steps: [
+          { step_id: 's1', order: 1, type: 'open_text', prompt: 'One?' },
+          { step_id: 's2', order: 2, type: 'end', prompt: 'Done' }
+        ]
+      } as never);
+      mockQuery.mockResolvedValueOnce({ rows: [] });
+      mockQuery.mockResolvedValueOnce({
+        rows: [{ id: '23', type: 'question', created_at: new Date(), updated_at: new Date() }]
+      });
+
+      await request(listening(app))
+        .post('/api/opportunities')
+        .send({
+          type: 'question',
+          title: 'Valid One Question Title',
+          purpose_one_liner: 'This is a valid purpose that meets the minimum length requirement',
+          delivery_mode: 'native',
+          firsthand_study_id: 'study_one',
+          status: 'published'
+        })
+        .expect(201);
     });
 
     /**
@@ -1054,7 +1151,122 @@ describe('Opportunities API', () => {
           .send(body({ type: 'unmoderated', delivery_mode: undefined }))
           .expect(400);
 
-        expect(response.body.error).toBe('Only polls and surveys can carry questions');
+        // The literal, not the exported constant. Deriving the expectation
+        // from the constant would make a reworded refusal invisible - and this
+        // sentence widened once already, when #78 gave `question` a native
+        // path, which is the change this pin caught.
+        expect(response.body.error).toBe(
+          'Only polls, surveys and one-question opportunities can carry questions'
+        );
+      });
+
+      /**
+       * #78: `question` runs natively too, and asks exactly one thing.
+       *
+       * The control for the cap is two tests up - "creates a survey-kind study
+       * and links it" sends the same two-question payload as a `survey` and
+       * expects 201. Without that pairing a cap test passes just as well when
+       * every multi-question save is broken.
+       */
+      describe('a one-question opportunity', () => {
+        const oneQuestion = {
+          consent_text: 'Your answer is stored for research analysis.',
+          steps: [{ type: 'open_text', prompt: 'What nearly stopped you today?' }]
+        };
+
+        it('creates a survey-kind study for a native question, as a poll or survey would', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_q' },
+            steps: []
+          } as never);
+          mockQuery.mockResolvedValueOnce({ rows: [] });
+          mockQuery.mockResolvedValueOnce({
+            rows: [{ id: '21', type: 'question', created_at: new Date(), updated_at: new Date() }]
+          });
+
+          await request(listening(app))
+            .post('/api/opportunities')
+            .send(body({ type: 'question', inline_survey: oneQuestion }))
+            .expect(201);
+
+          // `survey` is the STUDY vocabulary, not the opportunity type: one
+          // question is a survey of one, and SurveyRunner is what draws it.
+          expect(mockCreateStudy).toHaveBeenCalledWith(
+            expect.objectContaining({ kind: 'survey' })
+          );
+        });
+
+        it('publishes on its one question alone, with no link', async () => {
+          mockCreateStudy.mockResolvedValueOnce({
+            study: { id: 'study_q2' },
+            steps: []
+          } as never);
+          mockQuery.mockResolvedValueOnce({ rows: [] });
+          mockQuery.mockResolvedValueOnce({
+            rows: [{ id: '22', type: 'question', created_at: new Date(), updated_at: new Date() }]
+          });
+
+          await request(listening(app))
+            .post('/api/opportunities')
+            .send(
+              body({
+                type: 'question',
+                inline_survey: oneQuestion,
+                external_link_optional: undefined
+              })
+            )
+            .expect(201);
+        });
+
+        it('refuses a second question', async () => {
+          const response = await request(listening(app))
+            .post('/api/opportunities')
+            .send(body({ type: 'question' }))
+            .expect(400);
+
+          // The literal. A cap whose test reads the constant cannot see the
+          // constant move.
+          expect(response.body.error).toBe(
+            'A one-question opportunity asks exactly one question; use a poll or a survey to ask more'
+          );
+        });
+
+        it('still refuses to publish natively with no question at all', async () => {
+          const response = await request(listening(app))
+            .post('/api/opportunities')
+            .send(
+              body({
+                type: 'question',
+                inline_survey: undefined,
+                external_link_optional: undefined
+              })
+            )
+            .expect(400);
+
+          expect(response.body.error).toBe(NATIVE_SURVEY_STUDY_REQUIRED);
+        });
+
+        /**
+         * The half that matters most, because it is the one a picker cannot
+         * enforce: `delivery_mode` absent means external, and an external
+         * question still hands off, so it still needs somewhere to send its
+         * participant. This is the #78 rule NOT eating the original one.
+         */
+        it('still demands a link when it hands off', async () => {
+          const response = await request(listening(app))
+            .post('/api/opportunities')
+            .send({
+              type: 'question',
+              title: 'A quick question',
+              purpose_one_liner: 'Answered somewhere else entirely',
+              status: 'published'
+            })
+            .expect(400);
+
+          expect(response.body.error).toBe(
+            'External link is required for published polls, surveys and one-question opportunities'
+          );
+        });
       });
 
       /**
@@ -5537,6 +5749,45 @@ describe('Opportunities API', () => {
       await request(listening(app)).post('/api/opportunities/1/survey-session').expect(200);
 
       expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    /**
+     * #78: a one-question opportunity is answered here too.
+     *
+     * This route IS the native path. Before it accepted the type there was no
+     * way to answer a `question` inside Cortex at all, whatever the form
+     * offered - so this test is the one that would go red if the type half of
+     * the guard were narrowed back to two types.
+     */
+    it('mints for a one-question opportunity', async () => {
+      mockQuery.mockResolvedValueOnce({ rows: [surveyRow({ type: 'question' })] });
+      mockGetStudyById.mockResolvedValueOnce(surveyStudy);
+      mockCreateSession.mockResolvedValueOnce({
+        ok: true,
+        session: { session_id: 's', session_token: 'fh_q', expires_at: '2026-09-01T00:00:00.000Z' }
+      });
+
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(200);
+
+      expect(mockCreateSession).toHaveBeenCalled();
+    });
+
+    /**
+     * The control for the test above: the MODE half still decides. An external
+     * one-question opportunity hands its participant to another site, so there
+     * is nothing here to mint - and asserting the study was never read is what
+     * proves this 404 comes from the guard rather than from the kind re-check
+     * below it, exactly as the survey twin does.
+     */
+    it('refuses a one-question opportunity that hands off externally', async () => {
+      mockQuery.mockResolvedValueOnce({
+        rows: [surveyRow({ type: 'question', delivery_mode: 'external' })]
+      });
+
+      await request(listening(app)).post('/api/opportunities/1/survey-session').expect(404);
+
+      expect(mockGetStudyById).not.toHaveBeenCalled();
+      expect(mockCreateSession).not.toHaveBeenCalled();
     });
 
     /**

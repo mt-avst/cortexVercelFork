@@ -4,6 +4,7 @@ import {
 } from './estimate-duration';
 import { toInlineStudyPayloadStep, toSurveyPayloadStep } from './hydrate-study';
 import { CUSTOM_CONSENT_TEMPLATE_ID } from '@shared/firsthand/consent-templates';
+import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import type { InlineSurvey as InlineSurveyPayload, SurveyQuestion } from '@shared/firsthand/survey-authoring';
 import type { InlineStudy as InlineStudyPayload, InlineStudyStep } from '@shared/firsthand/inline-study';
 import { normaliseTargetUrl } from '../../utils/targetUrl';
@@ -305,7 +306,7 @@ export const buildSavePayload = ({
     }
   }
 
-  if (formData.type === 'poll' || formData.type === 'survey') {
+  if (QUESTION_CARRYING_TYPES.has(formData.type)) {
     // Sent only when it actually CHANGED.
     //
     // The backend deliberately gates its publish and linkage checks on the
