@@ -45,7 +45,7 @@ const renderSections = (onAccessCortex = vi.fn(), isLoading = false) => {
 };
 
 describe('SalesSections', () => {
-  it('renders exactly the six narrative sections, and no social proof section', () => {
+  it('renders exactly the seven narrative sections, and no social proof section', () => {
     const { container } = renderSections();
 
     const sections = Array.from(container.querySelectorAll('[data-section]')).map((el) =>
@@ -55,6 +55,7 @@ describe('SalesSections', () => {
     // A literal list, so a section added or removed fails here until somebody
     // writes down a verdict for it.
     expect(sections).toEqual([
+      'intro',
       'loop',
       'audiences',
       'methods',
@@ -103,25 +104,27 @@ describe('SalesSections', () => {
     ).toBeInTheDocument();
   });
 
-  it('runs the access handler from a closing door', () => {
+  it('runs the access handler from every door', () => {
     const { onAccessCortex } = renderSections();
 
-    fireEvent.click(screen.getByRole('button', { name: /Run a study/i }));
+    // Four doors in all: the two opening entry doors and the two closing ones.
+    const doorButtons = screen.getAllByRole('button', { name: /Run a study|Take part/i });
+    expect(doorButtons).toHaveLength(4);
 
+    fireEvent.click(doorButtons[0]);
     expect(onAccessCortex).toHaveBeenCalledTimes(1);
   });
 
-  it('disables both closing doors while a sign-in is in flight', () => {
+  it('disables every door while a sign-in is in flight', () => {
     const onAccessCortex = vi.fn();
     renderSections(onAccessCortex, true);
 
-    const runStudy = screen.getByRole('button', { name: /Run a study/i });
-    const takePart = screen.getByRole('button', { name: /Take part/i });
-    expect(runStudy).toBeDisabled();
-    expect(takePart).toBeDisabled();
-
-    fireEvent.click(runStudy);
-    fireEvent.click(takePart);
+    const doorButtons = screen.getAllByRole('button', { name: /Run a study|Take part/i });
+    expect(doorButtons).toHaveLength(4);
+    doorButtons.forEach((button) => {
+      expect(button).toBeDisabled();
+      fireEvent.click(button);
+    });
     expect(onAccessCortex).not.toHaveBeenCalled();
   });
 
@@ -129,9 +132,9 @@ describe('SalesSections', () => {
     const { container } = renderSections();
 
     expect(container.querySelector('h1')).toBeNull();
-    // The loop, methods, promises and final-cta sections carry one h2 each;
-    // the audiences section carries two (one per reader); voice carries none.
+    // intro, loop, methods, promises and final-cta carry one h2 each; the
+    // audiences section carries two (one per reader); voice carries none.
     // A literal count, so a heading gained or lost fails here.
-    expect(container.querySelectorAll('h2').length).toBe(6);
+    expect(container.querySelectorAll('h2').length).toBe(7);
   });
 });

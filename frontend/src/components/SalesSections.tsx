@@ -189,8 +189,25 @@ const PROMISES: ReadonlyArray<Promise> = [
 interface Door {
   who: string;
   title: string;
+  text?: string;
   cta: string;
 }
+
+// The opening doors carry a line of copy; the closing doors are a short reprise.
+const INTRO_DOORS: ReadonlyArray<Door> = [
+  {
+    who: 'The people building it',
+    title: 'Stop guessing what people need',
+    text: 'Ask the colleagues who use it. Cortex finds them, books them and hands you the answers.',
+    cta: 'Run a study',
+  },
+  {
+    who: 'The people who’ll tell the truth about it',
+    title: 'Shape what you’ll be using next year',
+    text: 'See what’s open this week and book a slot. Fifteen minutes, your own words, and you see what changed because of them.',
+    cta: 'Take part',
+  },
+];
 
 const CLOSING_DOORS: ReadonlyArray<Door> = [
   {
@@ -411,12 +428,50 @@ const VoiceSection: React.FC = () => (
   </section>
 );
 
-interface FinalCtaSectionProps {
+interface SectionCtaProps {
   onAccessCortex: () => void;
   isLoading: boolean;
 }
 
-const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ onAccessCortex, isLoading }) => (
+// Signed out, both routes lead to the same sign-in; the labels keep the
+// wireframe's two-audience framing.
+const DoorCard: React.FC<{ door: Door } & SectionCtaProps> = ({ door, onAccessCortex, isLoading }) => (
+  <div className="sales-door">
+    <span className="sales-door-who">{door.who}</span>
+    <h3 className="sales-card-title">{door.title}</h3>
+    {door.text && <p className="sales-card-text">{door.text}</p>}
+    <button
+      className={`btn-power ${isLoading ? 'disabled' : ''}`}
+      onClick={onAccessCortex}
+      disabled={isLoading}
+      aria-busy={isLoading}
+      data-cta={door.cta === 'Run a study' ? 'access' : 'take-part'}
+    >
+      {door.cta}
+      <span className="btn-arrow" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+    </button>
+  </div>
+);
+
+const IntroSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading }) => (
+  <section className="sales-section" data-section="intro">
+    <div className="sales-section-inner sales-intro">
+      <h2 className="sales-heading-l">Cortex turns participation into better products</h2>
+      <p className="sales-intro-sub">Nobody builds the right thing by guessing</p>
+      <div className="sales-doors">
+        {INTRO_DOORS.map((door) => (
+          <DoorCard key={door.cta} door={door} onAccessCortex={onAccessCortex} isLoading={isLoading} />
+        ))}
+      </div>
+    </div>
+  </section>
+);
+
+const FinalCtaSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading }) => (
   <section className="sales-section" data-section="final-cta">
     <div className="sales-section-inner">
       <h2 className="sales-heading-l sales-heading-center">
@@ -424,24 +479,7 @@ const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ onAccessCortex, isLoa
       </h2>
       <div className="sales-doors">
         {CLOSING_DOORS.map((door) => (
-          <div className="sales-door" key={door.cta}>
-            <span className="sales-door-who">{door.who}</span>
-            <h3 className="sales-card-title">{door.title}</h3>
-            <button
-              className={`btn-power ${isLoading ? 'disabled' : ''}`}
-              onClick={onAccessCortex}
-              disabled={isLoading}
-              aria-busy={isLoading}
-              data-cta={door.cta === 'Run a study' ? 'access' : 'take-part'}
-            >
-              {door.cta}
-              <span className="btn-arrow" aria-hidden="true">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </span>
-            </button>
-          </div>
+          <DoorCard key={door.cta} door={door} onAccessCortex={onAccessCortex} isLoading={isLoading} />
         ))}
       </div>
       <p className="sales-micro-copy">
@@ -460,6 +498,7 @@ const FinalCtaSection: React.FC<FinalCtaSectionProps> = ({ onAccessCortex, isLoa
 const SalesSections: React.FC<SalesSectionsProps> = ({ onAccessCortex, isLoading }) => {
   return (
     <div className="sales-sections-wrapper">
+      <IntroSection onAccessCortex={onAccessCortex} isLoading={isLoading} />
       <LoopSection />
       <AudiencesSection />
       <MethodsSection />

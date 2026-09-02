@@ -11908,6 +11908,31 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 /* ============================================================
+   INTRO - opening taglines and the two entry doors
+   ============================================================ */
+
+.sales-intro {
+  text-align: center;
+}
+
+.sales-intro .sales-heading-l {
+  margin-bottom: var(--spacing-2);
+}
+
+.sales-intro-sub {
+  font-size: var(--font-size-h4);
+  color: var(--text-muted);
+  line-height: var(--line-height-body);
+  margin: 0 auto;
+  max-width: 640px;
+}
+
+/* Doors read left-aligned even under the centred intro heading */
+.sales-intro .sales-doors {
+  text-align: left;
+}
+
+/* ============================================================
    CLOSE - the two doors and a feedback line
    ============================================================ */
 
