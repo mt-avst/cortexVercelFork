@@ -198,7 +198,7 @@ const INTRO_DOORS: ReadonlyArray<Door> = [
   {
     who: 'The people building it',
     title: 'Stop guessing what people need',
-    text: 'Ask the colleagues who use it. Cortex finds them, books them and hands you the answers.',
+    text: 'Ask the colleagues who use it. Cortex opens it up, handles the booking and hands you the answers.',
     cta: 'Run a study',
   },
   {
@@ -288,7 +288,7 @@ const LoopSection: React.FC = () => (
       <div className="sales-loop-copy">
         <h2 className="sales-heading-l">One feedback loop for all of us</h2>
         <p className="sales-body">
-          Someone has a question about a product. Cortex finds the colleagues who can answer it, they answer
+          Someone has a question about a product. Cortex opens it to the colleagues who can answer it, they answer
           in their own words, and the decision gets made on what people said rather than what someone assumed.
         </p>
         <p className="sales-body">
