@@ -1,5 +1,6 @@
 
 import {
+  CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
@@ -316,10 +317,12 @@ export async function createPresignedRecordingUploadUrl(input: {
 
 /**
  * Size AND ETag of the object at the key, or null when no object exists. The
- * booking-artifact finalize (#79 step 2) stores the ETag because the presigned
- * PUT URL stays valid for its whole window after finalize - S3 cannot revoke
- * a signature - so a re-PUT can swap the bytes under a finalized row. The
- * stored ETag is what lets the serving route detect the swap.
+ * booking-artifact finalize route (#79 step 2, closed by #99) uses the ETag as
+ * the CopySourceIfMatch condition on `copyS3ObjectIfMatch`: the presigned PUT
+ * URL stays valid for its whole window after finalize - S3 cannot revoke a
+ * signature - and this is what proves the object being copied to its
+ * unpresigned finalized key is still the one just inspected, closing the
+ * finalize-time race atomically rather than merely narrowing it.
  */
 export async function headS3ObjectStat(
   objectKey: string
@@ -342,6 +345,63 @@ export async function headS3ObjectStat(
       (error.name === "NotFound" || error.name === "NoSuchKey")
     ) {
       return null;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Thrown when the object at `sourceKey` changed between the caller's own
+ * HeadObject and the copy actually executing on S3's side - the race
+ * `copyS3ObjectIfMatch`'s conditional copy exists to catch rather than widen.
+ */
+export class ArtifactCopyRaceError extends Error {
+  constructor(objectKey: string) {
+    super(
+      `S3 object ${objectKey} changed before it could be copied to its finalized key.`
+    );
+    this.name = "ArtifactCopyRaceError";
+  }
+}
+
+/**
+ * Copies the object at `sourceKey` to `destKey`, ATOMICALLY conditioned on
+ * the source's ETag still matching `expectedEtag` at the moment S3 executes
+ * the copy (`CopySourceIfMatch`) - this is what makes the booking-artefact
+ * finalize route's copy-to-an-unpresigned-key immune to the exact race a
+ * plain HeadObject-then-copy would still carry: two separate round trips
+ * leave a window where a byte-swap lands between them and gets copied as if
+ * it were the reviewed upload. The condition closes that window outright
+ * rather than narrowing it, because S3 evaluates it as part of the single
+ * copy operation. Returns the copy's own ETag (informational only - nothing
+ * downstream compares against it, because after this call the destination is
+ * never addressed by a presigned URL, so there is nothing left to re-verify).
+ */
+export async function copyS3ObjectIfMatch(
+  sourceKey: string,
+  destKey: string,
+  expectedEtag: string
+): Promise<{ etag: string | null }> {
+  const config = getS3StorageConfig();
+
+  try {
+    const result = await getS3Client(config).send(
+      new CopyObjectCommand({
+        Bucket: config.bucket,
+        Key: destKey,
+        // encodeURI, not encodeURIComponent: CopySource is "bucket/key" and
+        // the key's own "/" separators must survive encoding, only special
+        // characters within a segment need escaping.
+        CopySource: encodeURI(`${config.bucket}/${sourceKey}`),
+        CopySourceIfMatch: expectedEtag
+      })
+    );
+
+    return { etag: result.CopyObjectResult?.ETag ?? null };
+  } catch (error) {
+    if (error instanceof Error && error.name === "PreconditionFailed") {
+      throw new ArtifactCopyRaceError(sourceKey);
     }
 
     throw error;

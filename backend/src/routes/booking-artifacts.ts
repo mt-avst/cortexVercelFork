@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { Readable } from 'node:stream';
 import type { ReadableStream as NodeWebReadableStream } from 'node:stream/web';
 
@@ -20,6 +21,8 @@ import { normalizeRecordingMimeType } from '../firsthand/recording-mime';
 import { isPlayableMimeType } from '../firsthand/session-outputs';
 import { getMaximumRecordingSizeBytes } from '../firsthand/recording-limits';
 import {
+  ArtifactCopyRaceError,
+  copyS3ObjectIfMatch,
   createPresignedRecordingUploadUrl,
   createS3TranscriptArtifactResponse,
   deleteS3Object,
@@ -38,11 +41,11 @@ const router: Router = Router();
  *
  * The list and write routes are plain indexed reads/writes, same shape and
  * ceiling as their `firsthand.ts` twins. The media route is its own bucket,
- * not the list's: every request costs a HeadObject PLUS a GetObject (or a
- * ranged one on every seek - the ETag tripwire runs before each), so its
- * cost profile is closer to `runtimeWriteLimiter`'s participant-facing 120
- * than to a single indexed SELECT. Before this, the surface had no ceiling at
- * all - the gap cto/AdaptaLabs#99 named alongside the ETag's own limitation.
+ * not the list's: it streams a GetObject (a ranged one on every seek a
+ * player fires), so its cost profile is closer to `runtimeWriteLimiter`'s
+ * participant-facing 120 than to a single indexed SELECT. Before this, the
+ * surface had no ceiling at all - the gap cto/AdaptaLabs#99 named alongside
+ * the ETag tripwire's own limitation (since retired - see the finalize route).
  */
 export const artifactReadLimiter = perUserLimiter(
   60,
@@ -95,10 +98,8 @@ export const ARTIFACT_RECORDING_MIME_REFUSED =
   'Recordings are accepted as video or audio types only';
 export const ARTIFACT_ETAG_MISSING =
   'The storage backend returned no integrity tag for this upload, so it cannot be finalized';
-export const ARTIFACT_MEDIA_UNVERIFIED =
-  'This artefact carries no stored integrity tag, so it will not be served';
-export const ARTIFACT_MEDIA_CHANGED =
-  'The stored object no longer matches what was finalized for this artefact, so it will not be served';
+export const ARTIFACT_CHANGED_BEFORE_FINALIZE =
+  'The uploaded object changed just before it could be finalized; try finalizing again';
 
 /**
  * Transcript ceiling, a LITERAL by design (10 MiB): a transcript is text, and
@@ -314,9 +315,13 @@ router.post(
     //   `artifactWriteLimiter` now bounds the loop arm to 30 rows/minute and
     //   live-role re-read on every request cuts it off at revocation, leaving
     //   only the accidental-repeat arm for the sweeper. Same ceiling, third
-    //   arm: an oversize re-PUT through a still-valid URL AFTER finalize sits
-    //   in storage under a small row - detectable at serve via the ETag, but
-    //   only the sweeper reclaims the bytes.
+    //   arm, WORSENED by the #99 fix below: a re-PUT through a still-valid URL
+    //   AFTER finalize is now pure storage cost with NO accounting at all -
+    //   not even a row. Finalize copies to a key the URL never addressed and
+    //   deletes both the pending object and its row, so nothing ever reads
+    //   the re-PUT bytes again and no row-keyed sweeper (the one sketched
+    //   above) can find this orphan class. A bucket lifecycle rule on the
+    //   pending/ prefix is the honest fix, not a row-keyed sweeper.
     await pool.query(
       `
       INSERT INTO pending_booking_artifact_uploads
@@ -425,12 +430,11 @@ router.post(
     }
 
     // The null-ETag decision, made EXPLICITLY (fail closed): AWS returns an
-    // ETag for every object, so a HeadObject without one is essentially never
-    // - and an artefact finalized without one could never pass the media
-    // route's integrity check, becoming a row that stores fine and serves
-    // never. Refusing here keeps the invariant simple downstream: every
-    // finalized artefact has a non-null etag, so a null on a served row is a
-    // data error, not a legitimate legacy state.
+    // ETag for every object, so a HeadObject without one is essentially
+    // never - but `copyS3ObjectIfMatch` needs a real value for
+    // CopySourceIfMatch, and there is no honest unconditional fallback that
+    // would not reopen the finalize-time race this refusal exists to keep
+    // closed.
     if (objectStat.etag === null) {
       return res.status(422).json({ error: ARTIFACT_ETAG_MISSING });
     }
@@ -439,11 +443,44 @@ router.post(
     //   and key shape are verified, bytes are not inspected
     //   -> cto/AdaptaLabs#98, sized there with the mitigation spectrum.
     //
-    // The ETag is stored because the presigned PUT URL stays valid for its
-    // whole window after this row lands - S3 cannot revoke a signature - so a
-    // re-PUT can swap the bytes under a finalized artefact. The step 3 media
-    // route must refuse to serve when the live ETag no longer matches this
-    // one, which turns a silent swap into a named failure.
+    // The presigned PUT URL stays valid for its whole window after this row
+    // would land - S3 cannot revoke a signature - so a re-PUT to the PENDING
+    // key could swap the bytes under a finalized artefact. Rather than detect
+    // that at serve time (a HeadObject + ETag comparison on every read, the
+    // original #99 design), the object is copied HERE to a key under
+    // `finalized/` that no presigned URL was ever issued for - so a re-PUT to
+    // the old key afterwards is inert, touching nothing anyone will ever
+    // serve. `copyS3ObjectIfMatch`'s CopySourceIfMatch closes even the
+    // finalize-time race (HeadObject above vs this copy) atomically on S3's
+    // side, rather than merely narrowing it.
+    //
+    // Derived POSITIVELY from the file name, not by stripping a prefix off
+    // pending.relative_path: a security gate found that a `.replace()` whose
+    // prefix silently failed to match would leave finalizedKey === the
+    // pending key - exactly the state this fix exists to prevent, and today
+    // only caught by S3 rejecting a same-key copy without
+    // MetadataDirective: REPLACE (an unstated dependency on store behaviour).
+    const finalizedKey = `booking-artifacts/finalized/${booking.id}/${path.posix.basename(pending.relative_path)}`;
+    try {
+      await copyS3ObjectIfMatch(pending.relative_path, finalizedKey, objectStat.etag);
+    } catch (error) {
+      if (error instanceof ArtifactCopyRaceError) {
+        // The pending row and its object are left exactly as they were - a
+        // retry re-reads whatever is there now and races again, no cleanup
+        // needed on this arm.
+        return res.status(409).json({ error: ARTIFACT_CHANGED_BEFORE_FINALIZE });
+      }
+      throw error;
+    }
+
+    // ponytail: two concurrent finalize calls for the SAME pending row both
+    //   read it (a SELECT, not a claim), both copy, and only one wins the
+    //   INSERT (relative_path UNIQUE) - the loser's copy can land AFTER the
+    //   winner's row is read back, leaving that row's stored etag briefly
+    //   describing bytes a later copy replaced. Same principal both times,
+    //   identical attestation, sub-second window, no third party reads inside
+    //   it - accepted rather than fixed. Upgrade path: `DELETE ... RETURNING`
+    //   the pending row before copying, so only one caller ever proceeds.
     const artifactResult = await pool.query(
       `
       INSERT INTO booking_artifacts
@@ -462,7 +499,7 @@ router.post(
         pending.file_name,
         pending.mime_type,
         objectSizeBytes,
-        pending.relative_path,
+        finalizedKey,
         req.user!.id,
         objectStat.etag,
         attestationReason
@@ -473,6 +510,21 @@ router.post(
       'DELETE FROM pending_booking_artifact_uploads WHERE id = $1',
       [pending.id]
     );
+
+    // Only NOW, after the artefact row is committed and the pending row is
+    // gone: a security gate found this running BEFORE the INSERT, which on
+    // an INSERT failure left the copy safe at finalizedKey but orphaned (no
+    // row), the pending object deleted, and the pending ROW still there
+    // pointing at nothing - a retry read 422 uploaded_object_missing and the
+    // upload was unrecoverable. Best-effort here: the row is already durable,
+    // so a failure to delete the now-superseded pending key costs storage,
+    // not data - the same tolerance the oversize-delete branch above uses.
+    await deleteS3Object(pending.relative_path).catch((error) => {
+      logger.warn('Superseded pending artifact object could not be deleted', {
+        relativePath: pending.relative_path,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    });
 
     return res.status(201).json(serializeArtifact(artifactResult.rows[0]));
   })
@@ -591,18 +643,6 @@ const FORWARDED_MEDIA_HEADERS = [
   'content-disposition'
 ] as const;
 
-/**
- * ETags compared SHAPE-BLIND on both sides: the SDK returns the tag quoted
- * (`"abc123"`), and the stored value came from the same SDK - but comparing a
- * quoted tag against an unquoted one refuses every serve forever, which reads
- * exactly like the tripwire working. Stripping the quotes from BOTH sides
- * before comparing means the check can only fire on the tag VALUE changing.
- */
-function etagValuesDiffer(stored: string, live: string): boolean {
-  const unquote = (etag: string) => etag.replace(/^"/, '').replace(/"$/, '');
-  return unquote(stored) !== unquote(live);
-}
-
 // GET /api/bookings/:bookingId/artifacts/:artifactId/media - stream one
 // artefact to the opportunity's owner or a superadmin. Same shape as the
 // session-outputs media route: cookie-gated GET (CSRF-exempt, no body parser),
@@ -629,7 +669,7 @@ router.get(
     const artifactResult = await pool.query(
       `
       SELECT a.id, a.kind, a.file_name, a.mime_type, a.file_size_bytes,
-             a.storage_provider, a.relative_path, a.uploaded_at, a.etag
+             a.storage_provider, a.relative_path, a.uploaded_at
       FROM booking_artifacts a
       WHERE a.id = $1 AND a.booking_id = $2
     `,
@@ -658,33 +698,14 @@ router.get(
       throw new NotFoundError('Artifact media');
     }
 
-    // The ETag tripwire this route exists to enforce: the presigned PUT URL
-    // from step 2 outlives finalize (S3 cannot revoke a signature), so a
-    // re-PUT can swap the bytes under a finalized row. The stored ETag is the
-    // record of what was finalized; a live object that no longer matches it is
-    // refused BY NAME rather than served as if it were the reviewed artefact.
-    // ponytail: for a single-part PUT under SSE-S3/none the ETag IS the
-    //   object's MD5, so the uploader who chose the original bytes can defeat
-    //   this with an MD5 collision pair -> cto/AdaptaLabs#99. Upgrade path:
-    //   S3 object versioning + a stored VersionId served back, which makes the
-    //   bytes immutable and retires this HeadObject entirely.
-    // Cost, decided not discovered: this HeadObject runs on EVERY request,
-    // including each Range request of a seeking player - doubling S3 calls
-    // for playback. Deliberate: a tripwire that skips range requests would
-    // let a swap ride in mid-stream.
-    const liveStat = await headS3ObjectStat(artifact.relative_path);
-    if (liveStat === null) {
-      throw new NotFoundError('Artifact media');
-    }
-    if (artifact.etag === null || liveStat.etag === null) {
-      // Fail CLOSED, decided explicitly: finalize refuses a null ETag, so a
-      // null on either side here is a state this route cannot vouch for.
-      return res.status(409).json({ error: ARTIFACT_MEDIA_UNVERIFIED });
-    }
-    if (etagValuesDiffer(artifact.etag, liveStat.etag)) {
-      return res.status(409).json({ error: ARTIFACT_MEDIA_CHANGED });
-    }
-
+    // NO live integrity check here, and that is the point (cto/AdaptaLabs#99):
+    // finalize copies the object to a `finalized/` key that no presigned PUT
+    // URL was ever issued for, so nothing can overwrite what this route
+    // serves - there is no live-vs-stored comparison left to make. The
+    // earlier design re-verified via HeadObject + ETag comparison on every
+    // request (doubling S3 calls, including per Range request of a seeking
+    // player, and still defeasible by an MD5 collision under SSE-S3/none);
+    // that entire check is retired along with the cost it carried.
     let mediaResponse: globalThis.Response;
     try {
       mediaResponse =
@@ -773,8 +794,9 @@ router.get(
     // (with a pipeline() control): the S3 body and its socket stay held
     // until an SDK timeout. Destroying the source releases them at once.
     // ponytail: no NAMED test - deleting this block leaves the suite green
-    //   (a socket-abort assertion is flaky in supertest) -> cto/AdaptaLabs#99,
-    //   where S3 versioning retires the whole tripwire path this feeds.
+    //   (a socket-abort assertion is flaky in supertest). Independent of the
+    //   ETag tripwire cto/AdaptaLabs#99 retired above: this streams from the
+    //   finalized key either way, tripwire or not.
     res.on('close', () => {
       nodeStream.destroy();
     });
@@ -795,9 +817,9 @@ interface ArtifactRow {
   /** Joined at list time only; finalize's RETURNING row has no users join. */
   uploaded_by_name?: string | null;
   uploaded_at: Date;
-  // Deliberately NOT serialised, like relative_path: the ETag is the step 3
-  // media route's server-side integrity check against a post-finalize re-PUT,
-  // and nothing on the wire needs it.
+  // Deliberately NOT serialised, like relative_path: retained for audit only
+  // (it was the value CopySourceIfMatch verified at finalize) - nothing reads
+  // it back afterwards, and nothing on the wire needs it.
   etag: string | null;
   consent_attested_by: string | null;
   consent_attested_at: Date | null;
