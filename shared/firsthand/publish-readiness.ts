@@ -77,6 +77,7 @@ export const PUBLISH_PROBLEM_MESSAGES: Record<PublishProblemCode, string> = {
 import {
   isPublishableExternalLink
 } from "./url-safety";
+import { QUESTION_CARRYING_TYPES, runsNativeSurvey } from "./delivery";
 
 /**
  * The RESULTING state of the opportunity, not the request that produced it.
@@ -137,14 +138,14 @@ export const findPublishProblem = (
     return null;
   }
 
-  // Native delivery exists for a poll and a survey only, so this branch is
-  // asked about those two rather than about `deliveryMode` alone. A `question`
-  // carrying `native` is not a native question - there is no runner for one -
-  // and must still be asked for its link below.
-  if (
-    (input.type === "poll" || input.type === "survey") &&
-    input.deliveryMode === "native"
-  ) {
+  // Asked about the type AND the mode rather than about `deliveryMode` alone,
+  // because a type outside the question-carrying set can hold `native` in a
+  // column that defaults per row and is never cleared by a type change.
+  //
+  // `question` joined that set in #78 and reaches this branch now: a native one
+  // needs its question, not a link. Before #78 it fell through to the link
+  // check below whatever its mode said, because no runner existed for it.
+  if (runsNativeSurvey(input.type, input.deliveryMode)) {
     return input.hasLinkedStudy || input.hasInlineSurvey
       ? null
       : { code: "native_survey_study_required" };
@@ -154,20 +155,16 @@ export const findPublishProblem = (
   // send them.
   //
   // `question` is in this set and was missing from it, which is the whole of
-  // the defect: the gate named three types and `question` was not one, so a
-  // one-question study published with an empty link and the author was told
-  // nothing. What the participant then met was a disabled "Link unavailable"
-  // button - honest, and the wrong place to find out.
+  // the original defect: the gate named three types and `question` was not one,
+  // so a one-question study published with an empty link and the author was
+  // told nothing. What the participant then met was a disabled "Link
+  // unavailable" button - honest, and the wrong place to find out.
   //
-  // It belongs here rather than in a branch of its own because it is external
-  // by construction, not by choice: `getTabsForType` gives it the External Link
-  // step unconditionally and offers no native alternative. If a native path is
-  // ever added (#78), this is one of the places that has to learn about it.
-  if (
-    input.type === "poll" ||
-    input.type === "survey" ||
-    input.type === "question"
-  ) {
+  // Reached only by a hand-off, because the native branch above returns for
+  // every shape it covers. That ordering is what stops a native question being
+  // asked for a link it does not use, and it is the same ordering the client's
+  // own preview chain relies on.
+  if (QUESTION_CARRYING_TYPES.has(input.type)) {
     if (!isPublishableExternalLink(input.externalLink)) {
       return { code: "external_link_required" };
     }

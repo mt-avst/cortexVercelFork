@@ -47,7 +47,17 @@ import type { RecordedStudyBrief } from '../../../shared/types';
 import type { StudyStep } from '../../../shared/firsthand/contract';
 import { toStudySteps, type InlineStudy } from '../../../shared/firsthand/inline-study';
 import { stepKeysAreComplete } from '../../../shared/firsthand/step-identity';
-import { toSurveySteps, type InlineSurvey } from '../../../shared/firsthand/survey-authoring';
+import {
+  QUESTION_CARRYING_TYPES,
+  runsNativeSurvey
+} from '../../../shared/firsthand/delivery';
+import {
+  TOO_MANY_QUESTIONS_MESSAGE,
+  countAskedQuestions,
+  maxQuestionsFor,
+  toSurveySteps,
+  type InlineSurvey
+} from '../../../shared/firsthand/survey-authoring';
 import type { StudyKind } from '../../../shared/firsthand/study-input';
 import {
   PUBLISH_PROBLEM_MESSAGES,
@@ -244,10 +254,11 @@ export const NATIVE_SURVEY_STUDY_REQUIRED =
  * Which study vocabulary an opportunity of this shape can run.
  *
  * An `unmoderated` opportunity runs the recorded runner, which draws no widget
- * for a rating or a multi-choice and stores nothing for them. A native poll or
- * survey runs SurveyRunner, which has no recording, no task window and nothing
- * to do with a step carrying a page to open. Linking the wrong one produces a
- * participant-facing screen that looks authored and collects nothing.
+ * for a rating or a multi-choice and stores nothing for them. A native poll,
+ * survey or one-question opportunity runs SurveyRunner, which has no recording,
+ * no task window and nothing to do with a step carrying a page to open. Linking
+ * the wrong one produces a participant-facing screen that looks authored and
+ * collects nothing.
  *
  * Checked at the API boundary rather than only in the picker, because the
  * picker is not the boundary: create and update both accept
@@ -259,7 +270,7 @@ const requiredStudyKindFor = (
   deliveryMode: string
 ): StudyKind | null => {
   if (type === 'unmoderated') return 'recorded';
-  if ((type === 'poll' || type === 'survey') && deliveryMode === 'native') {
+  if (runsNativeSurvey(type, deliveryMode)) {
     return 'survey';
   }
   // Every other shape links no study at all.
@@ -279,6 +290,21 @@ export const STUDY_KIND_MISMATCH: Record<StudyKind, string> = {
   survey:
     'This opportunity needs a set of survey questions, and that is a recorded task list'
 };
+
+/**
+ * The two refusals that guard `inline_survey`, named once because create and
+ * PATCH both make them.
+ *
+ * They were two literal sentences written out twice, and #78 had to widen the
+ * type half of both - which is the moment a pair of copies becomes a pair that
+ * disagrees. Both name the shapes rather than restating a hardcoded list, so
+ * adding a fourth question-carrying type does not leave a sentence naming
+ * three.
+ */
+export const ONLY_QUESTION_TYPES_CARRY_QUESTIONS =
+  'Only polls, surveys and one-question opportunities can carry questions';
+export const QUESTIONS_NEED_NATIVE_DELIVERY =
+  'Questions are only used when the opportunity runs in Cortex; set delivery_mode to native';
 
 /**
  * Moderated consent (#79) is for the two moderated types and nothing else.
@@ -430,6 +456,29 @@ async function assertLinkedStudyKindMatches(
 
   if (checkOwnership && !canWriteStudy(stored.study.owner_user_id, requester)) {
     throw new ForbiddenError(STUDY_OWNERSHIP_REFUSAL[required]);
+  }
+
+  // The one-question cap on the LINKING path, not only on the authoring one.
+  //
+  // Capping the authored payload alone would make the promise decorative: the
+  // same body accepts `firsthand_study_id`, so a set of twelve questions
+  // authored as a survey could be pointed at a `question` opportunity in one
+  // call, and the participant would meet twelve questions under a badge reading
+  // "One question". The kind check above exists for exactly this class of
+  // mismatch; this is the same check on the other axis.
+  //
+  // BELOW the ownership check, unlike that kind check, and the asymmetry is
+  // deliberate. How many questions a study holds is a fact about its CONTENT,
+  // so answering it to a caller who may not write the study would disclose
+  // something the ownership refusal is there to withhold. `kind` is disclosed
+  // above because a caller who picked the study from the unfiltered list
+  // already knows which vocabulary it speaks.
+  //
+  // It still runs when `checkOwnership` is false - the form resending an id it
+  // is not changing - because that path can still be the one establishing the
+  // over-long state.
+  if (countAskedQuestions(stored.steps) > maxQuestionsFor(type)) {
+    throw new ValidationError(TOO_MANY_QUESTIONS_MESSAGE);
   }
 }
 
@@ -1576,17 +1625,22 @@ router.post('/', requireAdmin, opportunityWriteLimiter, validateRequest(CreateOp
   }
 
   // The survey counterpart, with the mirror-image restriction. A recorded study
-  // cannot carry questions and a poll or survey cannot carry a task list: the
-  // two vocabularies are not interchangeable, which is the whole reason `kind`
-  // exists.
-  if (data.inline_survey && data.type !== 'poll' && data.type !== 'survey') {
-    throw new ValidationError('Only polls and surveys can carry questions');
+  // cannot carry questions and a question-carrying type cannot carry a task
+  // list: the two vocabularies are not interchangeable, which is the whole
+  // reason `kind` exists.
+  if (data.inline_survey && !QUESTION_CARRYING_TYPES.has(data.type)) {
+    throw new ValidationError(ONLY_QUESTION_TYPES_CARRY_QUESTIONS);
   }
 
   if (data.inline_survey && (data.delivery_mode ?? 'external') !== 'native') {
-    throw new ValidationError(
-      'Questions are only used when the poll or survey runs in Cortex; set delivery_mode to native'
-    );
+    throw new ValidationError(QUESTIONS_NEED_NATIVE_DELIVERY);
+  }
+
+  if (
+    data.inline_survey &&
+    countAskedQuestions(data.inline_survey.steps) > maxQuestionsFor(data.type)
+  ) {
+    throw new ValidationError(TOO_MANY_QUESTIONS_MESSAGE);
   }
 
   if (linkedStudyId && data.inline_study) {
@@ -2040,9 +2094,7 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
   }
 
   if (inlineSurveyInput && newDeliveryMode !== 'native') {
-    throw new ValidationError(
-      'Questions are only used when the poll or survey runs in Cortex; set delivery_mode to native'
-    );
+    throw new ValidationError(QUESTIONS_NEED_NATIVE_DELIVERY);
   }
 
   // An inline study can only fill a gap, never replace a link. Rejected rather
@@ -2051,12 +2103,18 @@ router.patch('/:id', requireAdmin, opportunityWriteLimiter, validateRequest(Upda
     throw new ValidationError('Only unmoderated opportunities can carry a task list');
   }
 
+  if (inlineSurveyInput && !QUESTION_CARRYING_TYPES.has(existingType)) {
+    throw new ValidationError(ONLY_QUESTION_TYPES_CARRY_QUESTIONS);
+  }
+
+  // `existingType` is the RESULTING type, merged over the stored row by the
+  // block above - so a PATCH that turns a survey into a `question` is capped by
+  // the cap it is moving to, not the one it is leaving.
   if (
     inlineSurveyInput &&
-    existingType !== 'poll' &&
-    existingType !== 'survey'
+    countAskedQuestions(inlineSurveyInput.steps) > maxQuestionsFor(existingType)
   ) {
-    throw new ValidationError('Only polls and surveys can carry questions');
+    throw new ValidationError(TOO_MANY_QUESTIONS_MESSAGE);
   }
 
   // Authored content against an opportunity that ALREADY has a study used to be
@@ -3039,17 +3097,18 @@ router.post('/:id/survey-session', requireAuth, participantSessionMintLimiter, p
   if (loaded) {
     const row = loaded.row;
 
-    // BOTH conditions, not either. `delivery_mode` says the researcher meant
-    // this to run in Cortex; the study's `kind` says the questions are actually
-    // written in a vocabulary this runner can draw. A switch to external
-    // delivery leaves the study linked, so the mode alone would let a stale
-    // link run; and a recorded task list on a native survey would render
-    // instructions meant to be performed aloud with nothing recording.
-    if (row.type !== 'poll' && row.type !== 'survey') {
-      throw new NotFoundError('Survey');
-    }
-
-    if ((row.delivery_mode ?? 'external') !== 'native') {
+    // Shape AND kind, not either. `runsNativeSurvey` says the researcher meant
+    // this to run in Cortex - and a switch to external delivery leaves the
+    // study linked, so its mode half alone would let a stale link run. The
+    // study's `kind`, checked below, says the questions are actually written in
+    // a vocabulary this runner can draw: a recorded task list on a native
+    // survey would render instructions meant to be performed aloud with nothing
+    // recording.
+    //
+    // The type half covers `question` since #78; the route is still named for
+    // the survey RUNTIME, which is what all three shapes share, rather than for
+    // any one of the types that reach it.
+    if (!runsNativeSurvey(row.type, row.delivery_mode)) {
       throw new NotFoundError('Survey');
     }
 

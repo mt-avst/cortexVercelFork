@@ -5,6 +5,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getOpportunityAnalytics, getOpportunity, getOpportunitySessionEvents, getOpportunitySurveyResults, getOpportunityBookings, updateBookingResearcherNotes, opportunitySurveyResultsCsvUrl, type OpportunityAnalytics, type AnalyticsPeriod } from '../api/client';
 import { SurveyResults, type SurveyResultsData } from '../components/survey/SurveyResults';
 import { getActionMeaning } from '../utils/opportunityUtils';
+import { QUESTION_CARRYING_TYPES } from '@shared/firsthand/delivery';
 import { Opportunity, SessionEvent, OpportunityBookingRow } from '../api/types';
 import ErrorState from '../components/ErrorState';
 import SlowNeuralBackground from '../components/SlowNeuralBackground';
@@ -494,7 +495,7 @@ const OpportunityAnalyticsPage: React.FC = () => {
   // An externally-delivered poll that never ran natively has no linked study
   // at all, so it does not reach this either way.
   const showsResults =
-    (opportunity.type === 'poll' || opportunity.type === 'survey') &&
+    QUESTION_CARRYING_TYPES.has(opportunity.type) &&
     Boolean(opportunity.firsthand_study_id);
 
   // The two moderated types (#79). Unconditional for them, unlike the two

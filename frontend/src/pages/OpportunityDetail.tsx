@@ -14,6 +14,7 @@ import ShareOpportunityLink from '../components/ShareOpportunityLink';
 import { RecordedStudyExpectations } from '../components/RecordedStudyExpectations';
 import { getParticipantFacingType, getEligibilityNote, getTypeBadgeClass, getCardHoverColor } from '../utils/opportunityUtils';
 import { logger } from '../utils/logger';
+import { runsNativeSurvey } from '@shared/firsthand/delivery';
 import { isPublishableExternalLink } from '@shared/firsthand/url-safety';
 import { RefreshCw, CheckCircle, CalendarCheck, Info, LayoutGrid, Table2, ExternalLink } from 'lucide-react';
 
@@ -136,10 +137,15 @@ const OpportunityDetail: React.FC = () => {
    * no action. The backend can now publish that state, and the participant
    * runner for it arrives with the survey routing, so until then the honest
    * thing is to say it is not available rather than to offer a dead control.
+   *
+   * Covers a native `question` since #78. It mints through the same
+   * `/survey-session` route and runs in the same SurveyRunner - one question is
+   * a survey of one - so nothing below it needed a third branch.
    */
-  const isNativeSurvey =
-    (opportunity?.type === 'poll' || opportunity?.type === 'survey') &&
-    opportunity?.delivery_mode === 'native';
+  const isNativeSurvey = runsNativeSurvey(
+    opportunity?.type ?? '',
+    opportunity?.delivery_mode
+  );
 
   /**
    * Whether the stored link is one this page will hand a participant.
@@ -1156,7 +1162,11 @@ const OpportunityDetail: React.FC = () => {
                   )}
                   <div className="row">
                     <div className="col-md-4">
-                      {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' ? (
+                      {/* A native `question` joins this branch rather than the
+                          anchor below it: it opens in this tab, in Cortex, and
+                          the anchor's whole job is to hand off. An EXTERNAL
+                          question still takes the anchor, unchanged. */}
+                      {opportunity.type === 'poll' || opportunity.type === 'survey' || opportunity.type === 'unmoderated' || isNativeSurvey ? (
                         <button
                           className="btn btn-primary w-100 mission-cta-btn"
                           onClick={async () => {
@@ -1228,6 +1238,7 @@ const OpportunityDetail: React.FC = () => {
                             firstHandLoading || !hasStartablePath
                           }
                           aria-label={
+                            isNativeSurvey && opportunity.type === 'question' ? 'Answer question in Cortex' :
                             isNativeSurvey ? 'Start survey in Cortex' :
                             opportunity.type === 'poll' ? 'Open poll in new tab' :
                             opportunity.type === 'survey' ? 'Open survey in new tab' :
@@ -1249,6 +1260,8 @@ const OpportunityDetail: React.FC = () => {
                             : isNativeSurvey
                             ? opportunity.type === 'poll'
                               ? 'Start poll'
+                              : opportunity.type === 'question'
+                              ? 'Answer question'
                               : 'Start survey'
                             : opportunity.type === 'poll'
                             ? 'Open Poll'

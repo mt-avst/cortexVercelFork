@@ -1,6 +1,6 @@
 # Research methods - what is complete and what hands off
 
-Status of the six study types Cortex offers, as of 2026-08-26, with the #78 publish gate re-checked on 2026-08-28 and the moderated rows rewritten on 2026-08-29 after cto/AdaptaLabs#79 landed (!311-!315).
+Status of the six study types Cortex offers, as of 2026-08-26, with the #78 publish gate re-checked on 2026-08-28, the moderated rows rewritten on 2026-08-29 after cto/AdaptaLabs#79 landed (!311-!315), and the `question` rows rewritten on 2026-09-02 when cto/AdaptaLabs#78 closed.
 
 Read-only survey of the code, not a plan.
 It records which research methods run end to end inside Cortex and which send the participant to a third-party site, along with what that costs in captured data.
@@ -19,12 +19,14 @@ Cortex has exactly six opportunity types, defined in `shared/constants/index.ts:
 | Poll - native delivery | Same engine as survey | Same | Same | **Complete** |
 | Survey - external delivery | External Link tab | Third-party tool, new tab | Click count only | **Hands off** |
 | Poll - external delivery | External Link tab | Third-party tool, new tab | Click count only | **Hands off** |
-| Question ("one question") | External Link tab, no native option | Third-party tool, new tab | Click count only | **Hands off** |
+| Question ("one question") - native delivery | Question tab + Consent, capped at one question | Same engine as survey | Results view + CSV export | **Complete** |
+| Question ("one question") - external delivery | External Link tab | Third-party tool, new tab | Click count only | **Hands off** |
 | Test ("Live session") | Session Management + Consent | Zoom / Meet / Teams call | Consent acceptance, researcher notes, ingested recording + transcript, playback | **Artefact parity** |
 | Interview | Session Management + Consent | Zoom / Meet / Teams call | Consent acceptance, researcher notes, ingested recording + transcript, playback | **Artefact parity** |
 
-Poll and survey appear twice because `delivery_mode` genuinely splits them into two different products.
+Poll, survey and question each appear twice because `delivery_mode` genuinely splits them into two different products.
 `native` runs in Cortex, `external` is a hand-off, and the author picks per opportunity.
+Question joined them when #78 closed; before that it had the external row only.
 
 **Artefact parity** means the artefacts land in Cortex but the session does not run there.
 The call still happens on a third-party platform; the researcher ingests that platform's own export afterwards.
@@ -72,26 +74,22 @@ There is no speech-to-text in the repo (#79, D2): a transcript artefact is whate
 
 ## What needs work
 
-Three items, in the order they are worth doing.
+Two items. A third - `question` having no native path - closed on 2026-09-02 and is recorded below.
 
-### 1. `question` has no native path at all - tracked as #78
+### Closed: `question` had no native path at all - was #78
 
-Smallest gap, and the engine that would close it already ships.
+It has one now. `question` carries `delivery_mode` exactly as poll and survey do: native gets the Question step, a Consent step, an `inline_survey` of one, a study of kind `survey`, a session at `POST /:id/survey-session`, SurveyRunner at `/survey/:token` and the Responses tab with its CSV export. External delivery is untouched, which is what every stored `question` row is - the column defaults to it.
 
-The form code says it outright at `frontend/src/pages/OpportunityForm.tsx:464`: *"`question` has no native path yet and keeps the link tab unconditionally"*.
-A one-question study is the smallest possible case of the survey runner already built for poll and survey.
+A one-question opportunity asks exactly one question, enforced at the API boundary on both the authored payload and a study arriving by `firsthand_study_id`. Without that cap it and a native survey are one product under two names.
 
-A second defect used to be stacked on it, and is now **fixed**.
+The predicate deciding native delivery now lives once, in `shared/firsthand/delivery.ts`, rather than being written out at each site that asks.
+
+A second defect used to be stacked on this one, and was fixed earlier.
 `findPublishProblem` gated only `unmoderated`, `poll` and `survey`, so a `question` opportunity could be published with no link at all and the participant was shown a disabled "Link unavailable" button.
-That shipped as commit `43ca805` on 2026-08-26 (merge `af2c9f4`): `findPublishProblem` now requires a usable external link before a `question` study can be published, and the reproduce steps in #78 no longer reproduce.
-Five named tests guard it in `backend/src/firsthand/publish-readiness.test.ts`, including `refuses a publish with no link` and `still permits saving an unlinked draft`.
+That shipped as commit `43ca805` on 2026-08-26 (merge `af2c9f4`): `findPublishProblem` requires a usable external link before a handed-off `question` study can be published, and the reproduce steps in #78 no longer reproduce.
+Those tests still guard it in `backend/src/firsthand/publish-readiness.test.ts`, alongside the native arm added when #78 closed.
 
-So #78 is now scoped to the native path alone.
-
-**Scope of the absence assertion**: grepped all `.ts` and `.tsx` under `shared`, `backend/src` and `frontend/src`, excluding test files.
-51 references to the `question` type, none of them touching `native`, `firsthand` or `delivery_mode`.
-
-### 2. External poll and survey return no data - not tracked
+### 1. External poll and survey return no data - not tracked
 
 `external_link_optional` is required before publish, the call to action is a `window.open`, and the only thing that comes back is `trackOpportunityClick(id, 'action')`.
 Started, abandoned, completed and the answers themselves are all invisible to Cortex.
@@ -100,24 +98,22 @@ The existing `backend/src/firsthand/callback-delivery.ts` does **not** cover thi
 It delivers outbound lifecycle events from Cortex to an integrator (`session_started`, `session_completed`, `session_abandoned`, `session_failed`), not inbound results from Typeform, SurveyMonkey or similar.
 Closing this gap means either an inbound ingest path or an explicit decision that an external study's data stays external.
 
-### 3. Consent exists only where Cortex runs the study or stores its artefacts - the pure hand-offs are untracked
+### 2. Consent exists only where Cortex runs the study or stores its artefacts - the pure hand-offs are untracked
 
 The moderated half of this item closed with #79: `test` and `interview` now carry opportunity-anchored consent with an acceptance record at booking, and ingest is gated on it (see above).
-The old argument - "a booked session has no study, so there is no consent for this product to govern" - expired the moment Cortex began storing a moderated session's recording, and the comment at `frontend/src/pages/OpportunityForm.tsx:490` now says so.
+The old argument - "a booked session has no study, so there is no consent for this product to govern" - expired the moment Cortex began storing a moderated session's recording, and the comment beside the Consent step in `frontend/src/pages/OpportunityForm.tsx` now says so.
 
-What remains is the pure hand-off paths: external poll, external survey and `question`.
-Their consent lives in the tool on the other side of the link, deliberately, because Cortex keeps no artefacts of them and an empty Consent step would imply Cortex has a say in something it does not.
+What remains is the pure hand-off paths: external poll, external survey and external `question`.
+A NATIVE question left this list when #78 closed - it authors a study, so it gets a Consent step derived from that step rather than from its type, which is the rule the wizard already applied to poll and survey.
+For the hand-offs, consent lives in the tool on the other side of the link, deliberately, because Cortex keeps no artefacts of them and an empty Consent step would imply Cortex has a say in something it does not.
 For those paths Cortex still holds no consent record for a study it recruited participants for.
-Worth revisiting as research governance rather than as a bug - together with item 2, since ingesting external results would expire the argument for those paths exactly as artefact storage expired it for the moderated ones.
+Worth revisiting as research governance rather than as a bug - together with item 1, since ingesting external results would expire the argument for those paths exactly as artefact storage expired it for the moderated ones.
 
 ## Recommended order
 
-Build the native path for `question` first (#78).
-It is a `delivery_mode` branch plus a one-question reuse of SurveyRunner, and it is the only one of the three that adds no new machinery.
-
-Items 2 and 3 are deliberately untracked.
+Both remaining items are deliberately untracked.
 Both are decisions about what Cortex is for rather than defects in what it does, and neither has an owner asking for it.
-Raise them when someone does - and raise them together, because ingesting external results (item 2) would change the consent answer (item 3).
+Raise them when someone does - and raise them together, because ingesting external results (item 1) would change the consent answer (item 2).
 
 ## Naming
 

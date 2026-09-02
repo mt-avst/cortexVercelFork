@@ -195,6 +195,38 @@ export const inlineSurveySchema = z
   });
 
 /**
+ * How many questions an opportunity of this type may ask.
+ *
+ * A `question` opportunity asks exactly one, and that is the whole of what
+ * distinguishes it from a native survey now that both run in SurveyRunner.
+ * Without this cap the two types are the same product wearing two names, and
+ * the name the PARTICIPANT is shown - "One question" on the browse card and on
+ * the study page - is the one that would be lying.
+ *
+ * A number rather than a boolean because the schema's own `.max()` is the other
+ * bound and the two read against each other: this narrows that ceiling for one
+ * type, it never widens it.
+ */
+export const maxQuestionsFor = (type: string): number =>
+  type === "question" ? 1 : INLINE_STUDY_LIMITS.maxSteps;
+
+export const TOO_MANY_QUESTIONS_MESSAGE =
+  "A one-question opportunity asks exactly one question; use a poll or a survey to ask more";
+
+/**
+ * The questions a participant is actually asked, out of steps in either shape.
+ *
+ * Authored questions (`inline_survey.steps`) carry no `end` marker and stored
+ * steps do - `toSurveySteps` appends it - so a count taken over a stored study
+ * is one too many unless it is filtered here. Counting the marker would refuse
+ * a perfectly legal one-question study on the linking path while accepting the
+ * identical one on the authoring path.
+ */
+export const countAskedQuestions = (
+  steps: readonly { type: string }[]
+): number => steps.filter((step) => step.type !== "end").length;
+
+/**
  * Pre-filled into the required Consent field on every new native survey.
  *
  * NOT `DEFAULT_CONSENT_TEXT` from inline-study.ts, which is about a session that
