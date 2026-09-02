@@ -41,10 +41,21 @@
  *
  *   npx tsx backend/probe/csv-interrupt.ts probe \
  *     --target https://adaptalabs.kubera-playground.adaptavist.net \
- *     --cookie "adaptalabs_session=<value from DevTools>"
+ *     --cookie "__Host-adaptalabs_session=<value from DevTools>"
  *
- * The cookie is `adaptalabs_session`, NOT `connect.sid`: #11's description
- * names the express-session default, and index.ts renames it.
+ * The cookie is NOT `connect.sid`: #11's description names the express-session
+ * default, and index.ts renames it.
+ *
+ * THE NAME DIFFERS BY ENVIRONMENT, and copying the wrong one is an auth
+ * failure the operator has to debug rather than a message the probe can give.
+ * #97 added the `__Host-` prefix, and only where the cookie is actually
+ * `Secure` - express-session refuses that prefix over http, so:
+ *
+ *   playground / production   `__Host-adaptalabs_session`
+ *   local development         `adaptalabs_session`
+ *
+ * Copy the name DevTools shows you rather than the one written here. Whatever
+ * you pass in `--cookie` is sent verbatim; the probe does not rewrite it.
  *
  * ────────────────────────────────────────────────────────────────────────────
  * THE THREE ARMS, and why the first one is the one that matters
@@ -415,8 +426,10 @@ export function assertSeedTargetSafe(databaseUrl: string, confirmDb: string | nu
  *
  * A SUFFIX, not a substring. `host.includes('kubera-playground')` admitted
  * `kubera-playground.evil.example`, and the probe then sent the operator's
- * `adaptalabs_session` cookie to it - a credential handed to an attacker-chosen
- * host by a guard written to protect data.
+ * session cookie to it - a credential handed to an attacker-chosen host by a
+ * guard written to protect data. Named by role rather than by string: the
+ * cookie is `__Host-`prefixed against playground and bare locally (#97), and
+ * the guard protects it under either name.
  */
 const PLAYGROUND_SUFFIX = '.kubera-playground.adaptavist.net';
 
@@ -759,6 +772,20 @@ function fetchLocalAdminCookie(target: URL, jar: string): string | null {
     // name, value, tab separated. Read out as a header value rather than
     // handed to curl as a jar, because the `stall` arm is a raw socket and
     // needs the same credential in the same form.
+    //
+    // THE BARE NAME IS CORRECT HERE, and #105 asked for the opposite. This
+    // parser reads a jar minted by `/api/auth/admin-login` immediately above -
+    // a route that exists only when NODE_ENV is development, which is exactly
+    // the environment where #97 does NOT apply the `__Host-` prefix, because
+    // express-session refuses `Secure` over http. Against playground this
+    // function is not even reached: `probeArms` resolves the credential as
+    // `cookie ?? fetchLocalAdminCookie(...)`, so an operator who passed
+    // `--cookie` never gets here.
+    //
+    // Accepting `__Host-adaptalabs_session` as well would therefore be a
+    // branch nothing can execute. The environment difference is real and it
+    // lives in the `--cookie` usage text at the top of this file, which is
+    // where the operator meets it.
     for (const line of readFileSync(jar, 'utf8').split('\n')) {
       const fields = line.split('\t');
       if (fields.length >= 7 && fields[5] === 'adaptalabs_session') {
@@ -1009,8 +1036,9 @@ async function probeArms(
   const cookieHeader = cookie ?? fetchLocalAdminCookie(target, cookieJar);
   if (!cookieHeader) {
     throw new Error(
-      'No admin session. Pass --cookie "adaptalabs_session=<value>" taken from DevTools ' +
-        'for an account that owns the seeded opportunity.'
+      'No admin session. Pass --cookie "<name>=<value>" taken from DevTools for an ' +
+        'account that owns the seeded opportunity. The name is ' +
+        '__Host-adaptalabs_session against playground and adaptalabs_session locally.'
     );
   }
   if (!cookie) {
@@ -1249,7 +1277,8 @@ async function main() {
     'usage: npx tsx backend/probe/csv-interrupt.ts <seed|probe|clean> [options]\n' +
       '\n' +
       '  seed   --owner <email> --database-url <url> --confirm-db <name>\n' +
-      '  probe  --target <url> --cookie "adaptalabs_session=..."\n' +
+      '  probe  --target <url> --cookie "__Host-adaptalabs_session=..."\n' +
+      '         (that name against playground; adaptalabs_session locally)\n' +
       '  clean  --database-url <url> --confirm-db <name>\n' +
       '\n' +
       'See the docblock at the top of this file, and the "Survey CSV interrupt probe"\n' +
