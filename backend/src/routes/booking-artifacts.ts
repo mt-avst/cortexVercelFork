@@ -6,6 +6,7 @@ import { z } from 'zod';
 import type { BookingArtifact } from '../../../shared/types';
 import { pool } from '../config';
 import { requireAdmin } from '../middleware/authenticate';
+import { perUserLimiter } from '../middleware/per-user-rate-limit';
 import {
   ValidationError,
   NotFoundError,
@@ -28,6 +29,47 @@ import { createRecordingAssetResponse } from '../firsthand/object-storage';
 import type { RecordingAssetRecord } from '../firsthand/runtime-records';
 
 const router: Router = Router();
+
+/**
+ * Three buckets, the !201 pattern (routes/firsthand.ts): a TABLE keyed by
+ * `METHOD /path`, asserted in both directions in the test file, so a route
+ * added later without an entry fails rather than inheriting whatever bucket
+ * its copy-paste source happened to carry.
+ *
+ * The list and write routes are plain indexed reads/writes, same shape and
+ * ceiling as their `firsthand.ts` twins. The media route is its own bucket,
+ * not the list's: every request costs a HeadObject PLUS a GetObject (or a
+ * ranged one on every seek - the ETag tripwire runs before each), so its
+ * cost profile is closer to `runtimeWriteLimiter`'s participant-facing 120
+ * than to a single indexed SELECT. Before this, the surface had no ceiling at
+ * all - the gap cto/AdaptaLabs#99 named alongside the ETag's own limitation.
+ */
+export const artifactReadLimiter = perUserLimiter(
+  60,
+  'Too many requests in a short time. Wait a minute and try again.'
+);
+export const artifactWriteLimiter = perUserLimiter(
+  30,
+  'Too many changes in a short time. Wait a minute and try again.'
+);
+export const artifactMediaLimiter = perUserLimiter(
+  120,
+  'Too many media requests in a short time. Wait a minute and try again.'
+);
+
+/**
+ * Clears this router's limiters for one caller. A test seam, and only that -
+ * same reasoning as `resetFirsthandStudyLimits` (routes/firsthand.ts): the
+ * counters live in an in-process MemoryStore that outlives an individual
+ * test, so a suite exercising these routes many times as one owner exhausts
+ * them and every later assertion fails as a 429 rather than what it meant to
+ * test.
+ */
+export function resetArtifactLimits(userId: string): void {
+  artifactReadLimiter.resetKey(userId);
+  artifactWriteLimiter.resetKey(userId);
+  artifactMediaLimiter.resetKey(userId);
+}
 
 /**
  * Booking artefacts (#79 step 2): recordings and transcripts of a moderated
@@ -200,6 +242,7 @@ function resolveConsentGate(
 router.post(
   '/:bookingId/artifacts/presign',
   requireAdmin,
+  artifactWriteLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = presignSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -265,14 +308,14 @@ router.post(
     //   at finalize leaves both. The runtime twin has a sweeper
     //   (runtime-repository-postgres.ts, valid_until + grace, object deleted
     //   with the row); the upgrade path here is the same sweeper plus an
-    //   index on valid_until, and a per-router limiter (the !201 pattern) if
-    //   the surface ever stops being admin-only. An expired row can never
-    //   become an artefact - finalize checks the window - so the ceiling is
-    //   storage cost, reachable by accident or by a compromised admin session
-    //   presigning in a loop; live-role re-read on every request is what cuts
-    //   the second one off at revocation. Same ceiling, third arm: an
-    //   oversize re-PUT through a still-valid URL AFTER finalize sits in
-    //   storage under a small row - detectable at serve via the ETag, but
+    //   index on valid_until. An expired row can never become an artefact -
+    //   finalize checks the window - so the ceiling is storage cost, reachable
+    //   by accident or by a compromised admin session presigning in a loop;
+    //   `artifactWriteLimiter` now bounds the loop arm to 30 rows/minute and
+    //   live-role re-read on every request cuts it off at revocation, leaving
+    //   only the accidental-repeat arm for the sweeper. Same ceiling, third
+    //   arm: an oversize re-PUT through a still-valid URL AFTER finalize sits
+    //   in storage under a small row - detectable at serve via the ETag, but
     //   only the sweeper reclaims the bytes.
     await pool.query(
       `
@@ -311,6 +354,7 @@ router.post(
 router.post(
   '/:bookingId/artifacts/finalize',
   requireAdmin,
+  artifactWriteLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const parsed = finalizeSchema.safeParse(req.body);
     if (!parsed.success) {
@@ -438,6 +482,7 @@ router.post(
 router.get(
   '/:bookingId/artifacts',
   requireAdmin,
+  artifactReadLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const booking = await loadOwnedBooking(req);
 
@@ -467,6 +512,7 @@ router.get(
 router.delete(
   '/:bookingId/artifacts/:artifactId',
   requireAdmin,
+  artifactWriteLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const booking = await loadOwnedBooking(req);
     const { artifactId } = req.params;
@@ -573,6 +619,7 @@ function etagValuesDiffer(stored: string, live: string): boolean {
 router.get(
   '/:bookingId/artifacts/:artifactId/media',
   requireAdmin,
+  artifactMediaLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const booking = await loadOwnedBooking(req);
     const { artifactId } = req.params;
