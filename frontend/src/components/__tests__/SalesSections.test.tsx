@@ -45,7 +45,7 @@ const renderSections = (onAccessCortex = vi.fn(), isLoading = false) => {
 };
 
 describe('SalesSections', () => {
-  it('renders exactly the seven narrative sections, and no social proof section', () => {
+  it('renders exactly the six narrative sections, and no social proof section', () => {
     const { container } = renderSections();
 
     const sections = Array.from(container.querySelectorAll('[data-section]')).map((el) =>
@@ -53,9 +53,9 @@ describe('SalesSections', () => {
     );
 
     // A literal list, so a section added or removed fails here until somebody
-    // writes down a verdict for it.
+    // writes down a verdict for it. The opening doors and the proposition
+    // moved into the hero (Landing.tsx), so there is no intro section here.
     expect(sections).toEqual([
-      'intro',
       'loop',
       'audiences',
       'methods',
@@ -107,9 +107,9 @@ describe('SalesSections', () => {
   it('runs the access handler from every door', () => {
     const { onAccessCortex } = renderSections();
 
-    // Four doors in all: the two opening entry doors and the two closing ones.
+    // The two closing doors. The opening pair lives in the hero, see Landing.test.tsx.
     const doorButtons = screen.getAllByRole('button', { name: /Run a study|Take part/i });
-    expect(doorButtons).toHaveLength(4);
+    expect(doorButtons).toHaveLength(2);
 
     fireEvent.click(doorButtons[0]);
     expect(onAccessCortex).toHaveBeenCalledTimes(1);
@@ -119,8 +119,10 @@ describe('SalesSections', () => {
     const onAccessCortex = vi.fn();
     renderSections(onAccessCortex, true);
 
-    const doorButtons = screen.getAllByRole('button', { name: /Run a study|Take part/i });
-    expect(doorButtons).toHaveLength(4);
+    // In flight, both doors say so instead of their label.
+    const doorButtons = screen.getAllByRole('button', { name: /Connecting/i });
+    expect(doorButtons).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: /Run a study|Take part/i })).toBeNull();
     doorButtons.forEach((button) => {
       expect(button).toBeDisabled();
       fireEvent.click(button);
@@ -132,9 +134,9 @@ describe('SalesSections', () => {
     const { container } = renderSections();
 
     expect(container.querySelector('h1')).toBeNull();
-    // intro, loop, methods, promises and final-cta carry one h2 each; the
-    // audiences section carries two (one per reader); voice carries none.
+    // loop, methods, promises and final-cta carry one h2 each; the audiences
+    // section carries two (one per reader); voice carries none.
     // A literal count, so a heading gained or lost fails here.
-    expect(container.querySelectorAll('h2').length).toBe(7);
+    expect(container.querySelectorAll('h2').length).toBe(6);
   });
 });

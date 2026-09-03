@@ -231,7 +231,8 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 ### Platform / UX
 
 - **Theme:** Light/dark mode toggle; WCAG 2.2 AA–oriented.
-- **Landing:** Branded hero (“CORTEX”, “Collective Intelligence”), primary CTA “Access Cortex” (e.g. Google), then six below-the-fold sections — pitch, “How Cortex works”, value by role, key features, FAQ, final CTA; demo access pills when enabled.
+- **Landing:** Branded hero (“ADAPTAVIST” eyebrow, “Cortex”), then a line-by-line proposition (“Building new things is hard. / Building the right things is harder. / Cortex is where we find out. / Where we ask the people who’ll use it. / Where you say what you actually think.”) closed by the tagline “Collective intelligence”; the two entry doors (“Run a study” / “Take part”, one per reader) sit inside the first viewport, with a quiet “Already using Cortex? Sign in” text control beneath them; demo access pills when enabled. Below the fold, six narrative sections — loop, audiences, methods, promises, voice, final CTA (the closing pair of doors).
+  The hero copy is pinned by literal in `frontend/src/pages/__tests__/Landing.test.tsx`; the door copy lives in `frontend/src/components/DoorCard.tsx`.
   The landing renders only for a signed-out visitor (`Home.tsx`), directly above the browsable list of published studies.
   **There is no social proof section.** It was deleted in the copy refresh: its three metrics and two testimonials were invented, nothing in the repository sourced them, and the product is in alpha with test data only. Bring it back only with attributed quotes and counts read from the dashboard aggregates.
   The copy is guarded by `frontend/src/components/__tests__/SalesSections.test.tsx`, which pins the section list and holds a literal list of banned claims — including the participant-matching engine that has never existed — with a control arm proving the detector still fires.
@@ -278,7 +279,7 @@ Do **not** widen `authorableStepTypes` to do it; that set is the vocabulary of a
 
 ## 10. Naming and docs
 
-- **UI and landing:** Use “Cortex” and “Adaptavist” (e.g. “Access Cortex,” “Cortex Logo,” “Adaptavist Cortex”).
+- **UI and landing:** Use “Cortex” and “Adaptavist” (e.g. “Already using Cortex? Sign in,” “Cortex Logo,” “Adaptavist Cortex”).
 - **Code and older docs:** May still say “AdaptaLabs” or “Adaptalabs Recruitment App”; treat as same product. Forge/Confluence rebuild spec allows “Adaptalabs” or “Cortex / Adaptavist Cortex” as branding.
 
 ---

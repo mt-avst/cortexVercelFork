@@ -1,13 +1,15 @@
 import React from 'react';
 import { Card, CardBody } from './ui/Card';
+import { DoorCard, CLOSING_DOORS } from './DoorCard';
 
 /**
  * SalesSections Component
  *
- * Below-the-fold landing content for Cortex - the narrative the "New to Cortex?"
- * scroll tab leads to. This is Dr Nick Fine's v11 narrative, laid into the live
- * dark/glass design system: the loop, the two audiences, the methods, the
- * promises, the founder voice, and the closing doors.
+ * Below-the-fold landing content for Cortex. This is Dr Nick Fine's v11
+ * narrative, laid into the live dark/glass design system: the loop, the two
+ * audiences, the methods, the promises, the founder voice, and the closing
+ * doors. The opening doors and the proposition sit in the hero (Landing.tsx),
+ * inside the first viewport, so nothing a cold visitor needs is behind a scroll.
  *
  * All headings are h2 or below (h1 is in the hero). Each section carries a
  * data-section attribute, which is how SalesSections.test.tsx addresses it.
@@ -183,42 +185,6 @@ const PROMISES: ReadonlyArray<Promise> = [
     to: 'to both',
     title: 'Contribution is visible',
     text: 'AdaptaBits record who took part. What they said stays with the study owner. Recognition, not payment, with a monthly prize for the top contributor.',
-  },
-];
-
-interface Door {
-  who: string;
-  title: string;
-  text?: string;
-  cta: string;
-}
-
-// The opening doors carry a line of copy; the closing doors are a short reprise.
-const INTRO_DOORS: ReadonlyArray<Door> = [
-  {
-    who: 'The people building it',
-    title: 'Stop guessing what people need',
-    text: 'Ask the colleagues who use it. Cortex opens it up, handles the booking and hands you the answers.',
-    cta: 'Run a study',
-  },
-  {
-    who: 'The people who’ll tell the truth about it',
-    title: 'Shape what you’ll be using next year',
-    text: 'See what’s open this week and book a slot. Fifteen minutes, your own words, and you see what changed because of them.',
-    cta: 'Take part',
-  },
-];
-
-const CLOSING_DOORS: ReadonlyArray<Door> = [
-  {
-    who: 'The people building it',
-    title: 'Write the question. Cortex does the rest',
-    cta: 'Run a study',
-  },
-  {
-    who: 'The people who’ll tell the truth about it',
-    title: 'See what’s open this week and book a slot',
-    cta: 'Take part',
   },
 ];
 
@@ -433,44 +399,6 @@ interface SectionCtaProps {
   isLoading: boolean;
 }
 
-// Signed out, both routes lead to the same sign-in; the labels keep the
-// wireframe's two-audience framing.
-const DoorCard: React.FC<{ door: Door } & SectionCtaProps> = ({ door, onAccessCortex, isLoading }) => (
-  <div className="sales-door">
-    <span className="sales-door-who">{door.who}</span>
-    <h3 className="sales-card-title">{door.title}</h3>
-    {door.text && <p className="sales-card-text">{door.text}</p>}
-    <button
-      className={`btn-power ${isLoading ? 'disabled' : ''}`}
-      onClick={onAccessCortex}
-      disabled={isLoading}
-      aria-busy={isLoading}
-      data-cta={door.cta === 'Run a study' ? 'access' : 'take-part'}
-    >
-      {door.cta}
-      <span className="btn-arrow" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </button>
-  </div>
-);
-
-const IntroSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading }) => (
-  <section className="sales-section" data-section="intro">
-    <div className="sales-section-inner sales-intro">
-      <h2 className="sales-heading-l">Cortex turns participation into better products</h2>
-      <p className="sales-intro-sub">Nobody builds the right thing by guessing</p>
-      <div className="sales-doors">
-        {INTRO_DOORS.map((door) => (
-          <DoorCard key={door.cta} door={door} onAccessCortex={onAccessCortex} isLoading={isLoading} />
-        ))}
-      </div>
-    </div>
-  </section>
-);
-
 const FinalCtaSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading }) => (
   <section className="sales-section" data-section="final-cta">
     <div className="sales-section-inner">
@@ -498,7 +426,6 @@ const FinalCtaSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading 
 const SalesSections: React.FC<SalesSectionsProps> = ({ onAccessCortex, isLoading }) => {
   return (
     <div className="sales-sections-wrapper">
-      <IntroSection onAccessCortex={onAccessCortex} isLoading={isLoading} />
       <LoopSection />
       <AudiencesSection />
       <MethodsSection />
