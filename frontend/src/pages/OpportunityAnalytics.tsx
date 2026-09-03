@@ -547,80 +547,9 @@ const OpportunityAnalyticsPage: React.FC = () => {
         </div>
         
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {/* Sessions for a FirstHand-linked unmoderated study; Responses for a
-              natively-answered poll or survey; Participants for the two
-              moderated types. Mutually exclusive by type, so the strip
-              carries Overview plus whichever applies. */}
-          {(showsSessions || showsResults || showsParticipants) && (
-            <div className="cortex-date-selector" role="tablist" aria-label="Analytics section">
-              <button
-                role="tab"
-                type="button"
-                className={`cortex-period-btn ${activeTab === 'overview' ? 'cortex-period-btn--active' : ''}`}
-                aria-selected={activeTab === 'overview'}
-                onClick={() => setActiveTab('overview')}
-              >
-                Overview
-              </button>
-              {showsSessions && (
-                <button
-                  role="tab"
-                  type="button"
-                  className={`cortex-period-btn ${activeTab === 'sessions' ? 'cortex-period-btn--active' : ''}`}
-                  aria-selected={activeTab === 'sessions'}
-                  onClick={() => {
-                    setActiveTab('sessions');
-                    if (sessionEvents.length === 0) {
-                      void loadSessionEvents();
-                    }
-                  }}
-                >
-                  Sessions
-                </button>
-              )}
-              {showsResults && (
-                <button
-                  role="tab"
-                  type="button"
-                  className={`cortex-period-btn ${activeTab === 'results' ? 'cortex-period-btn--active' : ''}`}
-                  aria-selected={activeTab === 'results'}
-                  onClick={() => {
-                    setActiveTab('results');
-                    // Refetched on every visit rather than cached on first
-                    // load: answers arrive while the researcher has the page
-                    // open, and a stale tally is the one thing this view must
-                    // not show.
-                    void loadSurveyResults();
-                  }}
-                >
-                  Responses
-                </button>
-              )}
-              {showsParticipants && (
-                <button
-                  role="tab"
-                  type="button"
-                  className={`cortex-period-btn ${activeTab === 'participants' ? 'cortex-period-btn--active' : ''}`}
-                  aria-selected={activeTab === 'participants'}
-                  onClick={() => {
-                    setActiveTab('participants');
-                    // Refetched on every visit, same reasoning as Responses:
-                    // bookings arrive while the page is open, and a stale
-                    // roster is the one thing this view must not show.
-                    void loadBookings();
-                  }}
-                >
-                  Participants
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Period Selector - only meaningful on the overview tab, but kept
               mounted (just hidden) on the others so it keeps reserving its
-              width. Unmounting it shrank this flex block, and space-between
-              on .cortex-page-header then pulled the tab strip left with it -
-              the toggle itself appeared to "move" on every tab switch. */}
+              width rather than unmounting and reflowing this row. */}
           <div
             className="cortex-date-selector cortex-period-selector"
             role="group"
@@ -642,6 +571,90 @@ const OpportunityAnalyticsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Section tabs - own full-width strip below the header, matching the
+          underline tab style used on the main admin dashboard (Admin.tsx)
+          rather than the pill/segmented look shared with the Period
+          Selector above. A content-switching control reads as a switch
+          between whole sections this way, distinct from the date filter
+          it used to sit flush against. */}
+      {(showsSessions || showsResults || showsParticipants) && (
+        <div
+          className="admin-tabs-container"
+          style={{ borderBottom: '1px solid var(--border-subtle-current)', marginBottom: 'var(--spacing-6)' }}
+        >
+          <ul className="nav nav-tabs" role="tablist" aria-label="Analytics section" style={{ border: 'none', margin: 0 }}>
+            <li className="nav-item" role="presentation">
+              <button
+                type="button"
+                className={`custom-tab-button ${activeTab === 'overview' ? 'active' : ''}`}
+                role="tab"
+                aria-selected={activeTab === 'overview'}
+                onClick={() => setActiveTab('overview')}
+              >
+                Overview
+              </button>
+            </li>
+            {showsSessions && (
+              <li className="nav-item" role="presentation">
+                <button
+                  type="button"
+                  className={`custom-tab-button ${activeTab === 'sessions' ? 'active' : ''}`}
+                  role="tab"
+                  aria-selected={activeTab === 'sessions'}
+                  onClick={() => {
+                    setActiveTab('sessions');
+                    if (sessionEvents.length === 0) {
+                      void loadSessionEvents();
+                    }
+                  }}
+                >
+                  Sessions
+                </button>
+              </li>
+            )}
+            {showsResults && (
+              <li className="nav-item" role="presentation">
+                <button
+                  type="button"
+                  className={`custom-tab-button ${activeTab === 'results' ? 'active' : ''}`}
+                  role="tab"
+                  aria-selected={activeTab === 'results'}
+                  onClick={() => {
+                    setActiveTab('results');
+                    // Refetched on every visit rather than cached on first
+                    // load: answers arrive while the researcher has the page
+                    // open, and a stale tally is the one thing this view must
+                    // not show.
+                    void loadSurveyResults();
+                  }}
+                >
+                  Responses
+                </button>
+              </li>
+            )}
+            {showsParticipants && (
+              <li className="nav-item" role="presentation">
+                <button
+                  type="button"
+                  className={`custom-tab-button ${activeTab === 'participants' ? 'active' : ''}`}
+                  role="tab"
+                  aria-selected={activeTab === 'participants'}
+                  onClick={() => {
+                    setActiveTab('participants');
+                    // Refetched on every visit, same reasoning as Responses:
+                    // bookings arrive while the page is open, and a stale
+                    // roster is the one thing this view must not show.
+                    void loadBookings();
+                  }}
+                >
+                  Participants
+                </button>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
 
       {activeTab === 'results' ? (
         loadingSurveyResults ? (
