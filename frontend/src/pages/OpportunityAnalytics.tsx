@@ -616,21 +616,30 @@ const OpportunityAnalyticsPage: React.FC = () => {
             </div>
           )}
 
-          {/* Period Selector - only shown in overview tab */}
-          {activeTab === 'overview' && (
-            <div className="cortex-date-selector cortex-period-selector" role="group" aria-label="Time period">
-              {([7, 14, 30] as AnalyticsPeriod[]).map((period) => (
-                <button
-                  key={period}
-                  type="button"
-                  className={`cortex-period-btn ${selectedPeriod === period ? 'cortex-period-btn--active' : ''}`}
-                  onClick={() => handlePeriodChange(period)}
-                >
-                  {period}d
-                </button>
-              ))}
-            </div>
-          )}
+          {/* Period Selector - only meaningful on the overview tab, but kept
+              mounted (just hidden) on the others so it keeps reserving its
+              width. Unmounting it shrank this flex block, and space-between
+              on .cortex-page-header then pulled the tab strip left with it -
+              the toggle itself appeared to "move" on every tab switch. */}
+          <div
+            className="cortex-date-selector cortex-period-selector"
+            role="group"
+            aria-label="Time period"
+            aria-hidden={activeTab !== 'overview'}
+            style={activeTab !== 'overview' ? { visibility: 'hidden' } : undefined}
+          >
+            {([7, 14, 30] as AnalyticsPeriod[]).map((period) => (
+              <button
+                key={period}
+                type="button"
+                tabIndex={activeTab === 'overview' ? 0 : -1}
+                className={`cortex-period-btn ${selectedPeriod === period ? 'cortex-period-btn--active' : ''}`}
+                onClick={() => handlePeriodChange(period)}
+              >
+                {period}d
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
