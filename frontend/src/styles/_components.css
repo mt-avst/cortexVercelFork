@@ -9352,44 +9352,99 @@ body.theme-dark .landing-page-wrapper {
 /* Light mode: orange grid pattern on pure white */
 body.theme-light .landing-page-wrapper {
   background: #FFFFFF;
-  background-image: 
+  background-image:
     linear-gradient(to right, rgba(255, 85, 0, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 85, 0, 0.05) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 
-/* Layout container - full-screen flexbox */
+/* Light mode's node graphic - compact, anchored to the hero-stack column
+   (not the viewport), so "beside the text, above the doors" holds regardless
+   of the text block's own height. Hidden by default; only shown once the
+   viewport is wide enough for a real quadrant to open up beside the text. */
+.landing-node-graphic {
+  display: none;
+}
+
+/* Horizontally centred on the right-hand door, sitting in the open space
+   above it. The graphic is absolutely positioned inside the hero stack,
+   whose left edge is the text column's (and the doors') shared left edge -
+   so all horizontal maths is relative to that one edge.
+
+   The doors are a two-column 1fr/1fr grid, container width min(58vw, 680px),
+   column gap 1.5rem (--spacing-6). The right column therefore spans from
+   (W + gap)/2 to W, so its centre sits at (3W + gap)/4 from the shared left
+   edge. `left` places the graphic's own width (--ng-w) centred on that point.
+   Width is bound to one variable so the centring maths and the rendered width
+   cannot drift apart.
+
+   Breakpoint 1180px, not the old 1400px: at 1400 the graphic was hidden from
+   a real ~1280px laptop window, the machine it most needed to work on. Below
+   1180 the doors narrow and the graphic would crowd the copy, so it stays
+   hidden there. Verified by DOM measurement at 1281px: graphic centre lands
+   on the right door's centre, clear of both the copy and the doors. */
+@media (min-width: 1180px) {
+  .landing-node-graphic {
+    --ng-w: min(23.5vw, 337px);
+    display: block;
+    position: absolute;
+    top: 4.5rem;
+    left: calc((3 * min(58vw, 680px) + 1.5rem) / 4 - var(--ng-w) / 2);
+    width: var(--ng-w);
+    height: auto;
+    z-index: 0;
+    pointer-events: none;
+  }
+}
+
+/* Layout container - full-screen flexbox
+   Hard left, not left-of-centre: the column sits at a fixed inset and stays
+   there regardless of viewport width, instead of centring as a unit. The
+   inset is shared by the hero stack, the doors and the sign-in link below,
+   so they read as one left edge rather than three independently-placed
+   blocks. */
 .landing-layout-container {
   position: relative;
   z-index: 20;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center; /* True center instead of space-between */
-  min-height: 100vh;
-  min-height: 100dvh; /* Dynamic viewport height for mobile */
+  /* A little under the full viewport, so the narrative flows in underneath the
+     hero with a tasteful gap rather than sitting a whole screen down. Content
+     grows the box past this floor on short screens. */
+  min-height: calc(100vh - 24rem);
+  min-height: calc(100dvh - 24rem); /* Dynamic viewport height for mobile */
   width: 100%;
-  padding: 4rem 1.5rem 2rem;
-  /* Optical centering: lifts content above mathematical center
-     to account for visual weight of browser chrome/taskbar */
-  padding-bottom: 10vh;
+  --hero-inset: clamp(1.5rem, 6vw, 5rem);
+  padding: 4rem 0 2rem;
+  /* Optical centering: lifts content above mathematical center to account for
+     visual weight of browser chrome/taskbar. Kept small so the gap to the
+     narrative below stays tight. */
+  padding-bottom: 2.5vh;
   overflow: hidden;
 }
 
-/* Hero stack - optically centered content */
+/* A tasteful gap above the narrative's first heading, so the section flows in
+   under the hero with breathing room rather than butting straight up. Scoped
+   to the landing narrative so other uses of .sales-section keep their spacing. */
+#cortex-sales .sales-section:first-child {
+  padding-top: 3rem;
+}
+
+/* Hero stack - left-aligned, pinned to the shared inset */
 .landing-hero-stack {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
   z-index: 10;
-  text-align: center;
+  text-align: left;
   width: 100%;
-  /* Constrain width to keep text well inside particle ring */
-  max-width: min(90vw, 600px);
-  /* Add some breathing room */
-  padding: 2rem 1rem;
+  /* Content-sized column, not the full container width */
+  max-width: min(85vw, 36rem);
+  margin-left: var(--hero-inset);
+  padding: 2rem 0;
 }
 
 /* Shadow shield - dark mode only, fluid sizing */
@@ -9416,7 +9471,17 @@ body.theme-dark .landing-shadow-shield {
   );
 }
 
-/* Parent brand eyebrow */
+/* Light mode needs one too: on a phone the ring closes in behind the copy */
+body.theme-light .landing-shadow-shield {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 255, 255, 0.72) 45%,
+    transparent 72%
+  );
+}
+
+/* Parent brand eyebrow - tight above the wordmark, sharing its left edge */
 .landing-parent-brand {
   font-family: var(--font-family-base);
   font-weight: 600;
@@ -9424,7 +9489,7 @@ body.theme-dark .landing-shadow-shield {
   font-size: clamp(0.75rem, 1vw + 0.5rem, 1.4rem);
   letter-spacing: 0.3em;
   color: var(--color-cortex-orange);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.2rem;
 }
 
 body.theme-dark .landing-parent-brand {
@@ -9440,6 +9505,7 @@ body.theme-light .landing-parent-brand {
    Fluid typography: shrinks smoothly on smaller viewports
    to maintain breathing room from particle ring */
 .landing-product-name {
+  position: relative;
   font-family: var(--font-family-base);
   font-weight: 700;
   /* Disable auto optical sizing — at display sizes, auto opsz makes Fraunces
@@ -9450,6 +9516,40 @@ body.theme-light .landing-parent-brand {
   line-height: 0.9;
   letter-spacing: normal;
   margin: 0 0 1.5rem 0;
+}
+
+/* Beta label - sits top-right of the wordmark, sized on its own scale so it
+   stays legible at the mobile end of the wordmark's clamp */
+.landing-beta-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  transform: translate(55%, -55%);
+  font-family: var(--font-family-base);
+  font-weight: 600;
+  font-size: clamp(0.55rem, 0.35vw + 0.45rem, 0.75rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 0.3em 0.55em;
+  border-radius: 999px;
+  border: 1px solid var(--color-cortex-orange);
+  color: var(--color-cortex-orange);
+  /* The wordmark it sits on is gradient-clipped text in dark mode, which
+     makes -webkit-text-fill-color: transparent inherit onto this span and
+     erase the label even though `color` is correct. Override it back. */
+  -webkit-text-fill-color: var(--color-cortex-orange);
+}
+
+body.theme-dark .landing-beta-badge {
+  background: rgba(3, 3, 5, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+body.theme-light .landing-beta-badge {
+  background: rgba(255, 255, 255, 0.85);
 }
 
 /* Dark mode: gradient text with glow */
@@ -9473,30 +9573,6 @@ body.theme-light .landing-product-name {
   -webkit-text-fill-color: #0f172a;
   color: #0f172a;
   filter: none;
-}
-
-/* Tagline - fluid scaling with max-width */
-.landing-tagline {
-  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  font-weight: 400;
-  /* Fluid scaling: 1.1rem (mobile) → 1.5rem (4K) - increased by 25% */
-  font-size: clamp(1.1rem, 0.5vw + 0.95rem, 1.5rem);
-  letter-spacing: 0.02em;
-  margin: 0;
-  /* Fluid max-width for readability */
-  max-width: clamp(280px, 40vw, 600px);
-}
-
-body.theme-dark .landing-tagline {
-  color: #D4D4D4;
-  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-}
-
-body.theme-light .landing-tagline {
-  color: #475569; /* Slate-600 - stronger contrast */
-  font-weight: 500; /* Medium weight for better readability */
-  letter-spacing: 0.02em;
-  text-shadow: none;
 }
 
 /* Demo footer - Fixed position at bottom-right corner */
@@ -9608,438 +9684,212 @@ body.theme-light .landing-demo-pill:hover {
 }
 
 /* ============================================================
-   HERO SCROLL TAB
-   Bottom-anchored scroll hint for landing page
+   HERO PROPOSITION, DOORS AND SIGN-IN
+   The first viewport answers what Cortex is, who it is for and
+   what to do. The two doors reuse the sales door card so the
+   opening and closing pairs read as one thing.
    ============================================================ */
 
-.hero-scroll-tab {
-  /* Reset button styles */
-  appearance: none;
-  -webkit-appearance: none;
-  font-family: inherit;
-  
-  /* Layout - column for stacked content + arrow */
+/* Proposition - three short blocks, each line on its own line, ragged
+   right. Shares the hero stack's left edge - the lockup above it. */
+.landing-proposition {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  
-  /* Sizing - taller to accommodate arrow on new line */
-  height: auto;
-  padding: 10px 20px 12px;
-  border-radius: 10px;
-  font-size: 0.875rem;
-  cursor: pointer;
-  
-  /* Positioning - raised for dark mode (avoid clipping) */
-  position: absolute;
-  bottom: 160px;
-  left: 50%;
-  transform: translateX(-50%);
+  align-items: flex-start;
+  text-align: left;
+  gap: var(--spacing-4);
+  margin: 0;
+  width: 100%;
+}
+
+.landing-proposition p {
+  margin: 0;
+}
+
+.landing-hammers span,
+.landing-find-out span {
+  display: block;
+  /* A line that has to wrap on a phone wraps in two even halves, no orphan */
+  text-wrap: balance;
+}
+
+/* The two hammers - heavier, the lead */
+.landing-hammers {
+  font-family: var(--font-family-base);
+  font-weight: 600;
+  font-size: clamp(1.15rem, 0.5vw + 1rem, 1.5rem);
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+/* What Cortex is and the two things it is for */
+.landing-find-out {
+  font-family: var(--font-family-base);
+  font-weight: 400;
+  font-size: clamp(1rem, 0.35vw + 0.9rem, 1.2rem);
+  line-height: 1.55;
+}
+
+/* Tagline - the closing line, small, in the mono face it always had */
+.landing-tagline {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-weight: 500;
+  font-size: clamp(0.8rem, 0.25vw + 0.7rem, 0.95rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body.theme-dark .landing-hammers {
+  color: #F5F5F5;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+body.theme-dark .landing-find-out {
+  color: #D4D4D4;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+body.theme-dark .landing-tagline {
+  color: var(--color-cortex-orange);
+  text-shadow: 0 0 20px rgba(255, 85, 0, 0.35);
+}
+
+body.theme-light .landing-hammers {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+body.theme-light .landing-find-out {
+  color: #334155; /* Slate-700 */
+  text-shadow: none;
+}
+
+body.theme-light .landing-tagline {
+  color: #C2410C;
+  text-shadow: none;
+}
+
+/* Doors in the fold - their own object, not scaled to the copy column's
+   width. They share its left edge and run wider than it, into the space
+   the hard-left column freed up.
+   Carries .sales-doors too, so the margin needs both classes to outrank it */
+.landing-doors.sales-doors {
+  position: relative;
   z-index: 10;
-  
-  /* Allow neural pulse sparks to be visible on the border */
-  overflow: visible;
-  
-  /* Dark mode default styling */
-  background: rgba(255, 255, 255, 0.10);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  width: 100%;
+  max-width: min(58vw, 680px);
+  margin-top: var(--spacing-6);
+  margin-left: var(--hero-inset);
+  text-align: left;
+}
+
+/* The door surface must hold up over the particle field */
+body.theme-dark .landing-doors .sales-door {
+  background: rgba(10, 10, 14, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+body.theme-light .landing-doors .sales-door {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* Sign-in for the returning visitor - a text control, not a third orange
+   button. margin-left nets out its own left padding, so the link's TEXT
+   lines up with the shared edge, not the button's invisible hit-area. */
+.landing-signin-link {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  z-index: 10;
+  background: none;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  margin-left: calc(var(--hero-inset) - 0.75rem);
+  margin-top: var(--spacing-5);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-small);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: color 0.2s ease;
+}
+
+body.theme-dark .landing-signin-link {
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+
+/* Soft backing so the underline does not fight the particle ring beneath it */
+body.theme-light .landing-signin-link {
+  color: #475569;
+  background: rgba(255, 255, 255, 0.78);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  color: rgba(255, 255, 255, 0.88);
-  
-  /* Transitions */
-  transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-/* Neural pulse - dual paths from top-left converging at bottom-right */
-
-/* Shared styles for both pulse paths */
-.hero-scroll-tab::before,
-.hero-scroll-tab::after {
-  content: "";
-  position: absolute;
-  pointer-events: none;
-  border-radius: 50%;
-  background: radial-gradient(
-    circle at center,
-    rgba(255, 255, 255, 1) 0%,
-    rgba(252, 211, 77, 1) 20%,
-    rgba(249, 115, 22, 0.8) 50%,
-    transparent 80%
-  );
-  transition: opacity 0.3s ease;
+.landing-signin-link:hover {
+  color: var(--color-cortex-orange);
 }
 
-/* Path 1: Top edge → Right edge */
-.hero-scroll-tab::before {
-  animation: neural-path-top-right 3s ease-in-out infinite;
+/* The light-theme orange is 3.1:1 on the backing; the darker one the tagline uses passes */
+body.theme-light .landing-signin-link:hover {
+  color: #C2410C;
 }
 
-/* Path 2: Left edge → Bottom edge */
-.hero-scroll-tab::after {
-  animation: neural-path-left-bottom 3s ease-in-out infinite;
-}
-
-/* Intensify on hover/focus */
-.hero-scroll-tab:hover::before {
-  animation: neural-path-top-right-hover 1.8s ease-in-out infinite;
-}
-
-.hero-scroll-tab:hover::after {
-  animation: neural-path-left-bottom-hover 1.8s ease-in-out infinite;
-}
-
-.hero-scroll-tab:focus-visible::before {
-  animation: neural-path-top-right-hover 1.8s ease-in-out infinite;
-}
-
-.hero-scroll-tab:focus-visible::after {
-  animation: neural-path-left-bottom-hover 1.8s ease-in-out infinite;
-}
-
-/* Path along top edge, then down right edge */
-@keyframes neural-path-top-right {
-  0%, 2% {
-    /* Start: top-left corner, on the border */
-    width: 12px;
-    height: 12px;
-    top: -6px;
-    left: -6px;
-    right: auto;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  42% {
-    /* End of top edge: top-right corner */
-    width: 12px;
-    height: 12px;
-    top: -6px;
-    left: calc(100% - 6px);
-    right: auto;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  58% {
-    /* After corner turn: starting down right edge */
-    width: 12px;
-    height: 12px;
-    top: -6px;
-    left: auto;
-    right: -6px;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  88% {
-    /* Approaching end, still visible */
-    width: 12px;
-    height: 12px;
-    top: calc(100% - 10px);
-    left: auto;
-    right: -6px;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  98%, 100% {
-    /* End: fade out at bottom-right corner */
-    width: 12px;
-    height: 12px;
-    top: calc(100% - 6px);
-    left: auto;
-    right: -6px;
-    bottom: auto;
-    opacity: 0;
-  }
-}
-
-/* Path along left edge, then along bottom edge */
-@keyframes neural-path-left-bottom {
-  0%, 2% {
-    /* Start: top-left corner, on the border */
-    width: 12px;
-    height: 12px;
-    top: -6px;
-    left: -6px;
-    right: auto;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  42% {
-    /* End of left edge: bottom-left corner */
-    width: 12px;
-    height: 12px;
-    top: calc(100% - 6px);
-    left: -6px;
-    right: auto;
-    bottom: auto;
-    opacity: 0.85;
-  }
-  58% {
-    /* After corner turn: starting along bottom edge */
-    width: 12px;
-    height: 12px;
-    top: auto;
-    left: -6px;
-    right: auto;
-    bottom: -6px;
-    opacity: 0.85;
-  }
-  88% {
-    /* Approaching end, still visible */
-    width: 12px;
-    height: 12px;
-    top: auto;
-    left: calc(100% - 10px);
-    right: auto;
-    bottom: -6px;
-    opacity: 0.85;
-  }
-  98%, 100% {
-    /* End: fade out at bottom-right corner */
-    width: 12px;
-    height: 12px;
-    top: auto;
-    left: calc(100% - 6px);
-    right: auto;
-    bottom: -6px;
-    opacity: 0;
-  }
-}
-
-/* Hover versions - bigger, brighter and faster */
-@keyframes neural-path-top-right-hover {
-  0%, 2% {
-    width: 16px;
-    height: 16px;
-    top: -8px;
-    left: -8px;
-    right: auto;
-    bottom: auto;
-    opacity: 1;
-  }
-  42% {
-    width: 16px;
-    height: 16px;
-    top: -8px;
-    left: calc(100% - 8px);
-    right: auto;
-    bottom: auto;
-    opacity: 1;
-  }
-  58% {
-    width: 16px;
-    height: 16px;
-    top: -8px;
-    left: auto;
-    right: -8px;
-    bottom: auto;
-    opacity: 1;
-  }
-  88% {
-    width: 16px;
-    height: 16px;
-    top: calc(100% - 12px);
-    left: auto;
-    right: -8px;
-    bottom: auto;
-    opacity: 1;
-  }
-  98%, 100% {
-    width: 16px;
-    height: 16px;
-    top: calc(100% - 8px);
-    left: auto;
-    right: -8px;
-    bottom: auto;
-    opacity: 0;
-  }
-}
-
-@keyframes neural-path-left-bottom-hover {
-  0%, 2% {
-    width: 16px;
-    height: 16px;
-    top: -8px;
-    left: -8px;
-    right: auto;
-    bottom: auto;
-    opacity: 1;
-  }
-  42% {
-    width: 16px;
-    height: 16px;
-    top: calc(100% - 8px);
-    left: -8px;
-    right: auto;
-    bottom: auto;
-    opacity: 1;
-  }
-  58% {
-    width: 16px;
-    height: 16px;
-    top: auto;
-    left: -8px;
-    right: auto;
-    bottom: -8px;
-    opacity: 1;
-  }
-  88% {
-    width: 16px;
-    height: 16px;
-    top: auto;
-    left: calc(100% - 12px);
-    right: auto;
-    bottom: -8px;
-    opacity: 1;
-  }
-  98%, 100% {
-    width: 16px;
-    height: 16px;
-    top: auto;
-    left: calc(100% - 8px);
-    right: auto;
-    bottom: -8px;
-    opacity: 0;
-  }
-}
-
-/* Text hierarchy */
-.hero-scroll-tab__label {
-  font-weight: 400;
-  opacity: 0.85;
-  line-height: 1.2;
-}
-
-.hero-scroll-tab__action {
-  font-weight: 500;
-  display: block;
-  text-align: center;
-  line-height: 1.2;
-}
-
-/* Arrow - separate line, centered */
-.hero-scroll-tab__arrow {
-  display: block;
-  text-align: center;
-  font-size: 1em;
-  line-height: 1;
-  margin-top: 2px;
-  animation: hero-scroll-arrow 2.5s ease-in-out infinite;
-}
-
-@keyframes hero-scroll-arrow {
-  0%, 100% {
-    transform: translateY(0);
-    opacity: 0.45;
-  }
-  50% {
-    transform: translateY(5px);
-    opacity: 0.75;
-  }
-}
-
-/* Hover state - subtle, no competing with btn-power */
-.hero-scroll-tab:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
-
-/* Focus state */
-.hero-scroll-tab:focus-visible {
+.landing-signin-link:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
-/* Light mode variant - positioned higher within the ring */
-/* Hide neural pulse animation in light mode */
-body.theme-light .hero-scroll-tab::before,
-body.theme-light .hero-scroll-tab::after {
-  display: none;
-}
-
-body.theme-light .hero-scroll-tab {
-  /* Position within the clear circle area, well above the footer */
-  bottom: 28vh;
-  
-  /* Styling */
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  color: rgba(0, 0, 0, 0.75);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-}
-
-body.theme-light .hero-scroll-tab:hover {
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .hero-scroll-tab__arrow {
-    animation: none;
-    opacity: 0.6;
-  }
-  
-  /* Disable neural pulse animation */
-  .hero-scroll-tab::before,
-  .hero-scroll-tab::after {
-    animation: none;
-    opacity: 0;
+/* Box-shadow rings vanish under forced colours; give the ring a real outline there */
+@media (forced-colors: active) {
+  .landing-signin-link:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
   }
 }
 
-/* Mobile: static positioning */
+.landing-signin-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Desktop: shift the whole hard-left column further right, about 2 inches
+   (192px) at typical laptop/desktop widths. Scoped to >=768px, where the
+   doors are already two-up and there is room - the tighter mobile/tablet
+   inset below is untouched. */
+@media (min-width: 768px) {
+  .landing-layout-container {
+    --hero-inset: clamp(11rem, 19vw, 17rem);
+  }
+}
+
+/* Mobile: doors stack, so the fold scrolls - give the stack room to breathe.
+   The desktop asymmetry (narrow copy column, doors capped narrower still)
+   has no room to work with on a phone, so both widen back out - they keep
+   the shared left inset, but stop being deliberately narrower than the
+   viewport. */
 @media (max-width: 640px) {
-  .hero-scroll-tab {
-    position: static;
-    transform: none;
-    margin-top: 1.5rem;
-  }
-  
   .landing-hero-stack {
-    padding-bottom: var(--spacing-8);
+    max-width: min(90vw, 600px);
+    padding-bottom: var(--spacing-4);
   }
-}
 
-/* ============================================================
-   RESPONSIVE: Scroll-tab inline variant
-   When inside the hero-stack, uses flow layout to prevent CTA overlap.
-   On large screens with enough height, positions at bottom as before.
-   ============================================================ */
-
-/* Inline variant - default to static flow positioning */
-/* Use high specificity to override base absolute positioning */
-.hero-scroll-tab.hero-scroll-tab--inline {
-  position: static !important;
-  transform: none !important;
-  margin-top: 1.5rem !important;
-  bottom: auto !important;
-  left: auto !important;
-}
-
-body.theme-light .hero-scroll-tab.hero-scroll-tab--inline,
-body.theme-dark .hero-scroll-tab.hero-scroll-tab--inline {
-  position: static !important;
-  transform: none !important;
-  margin-top: 1.5rem !important;
-  bottom: auto !important;
-  left: auto !important;
-}
-
-/* On very large screens with sufficient height, optionally reposition to bottom */
-@media (min-width: 1400px) and (min-height: 1000px) {
-  .hero-scroll-tab.hero-scroll-tab--inline {
-    position: absolute !important;
-    transform: translateX(-50%) !important;
-    margin-top: 0 !important;
-    bottom: 160px !important;
-    left: 50% !important;
+  /* The copy runs nearly edge to edge on a phone, so the shield does too */
+  .landing-shadow-shield {
+    width: 100vw;
+    max-width: 100vw;
+    height: min(75vh, 560px);
   }
-  
-  body.theme-light .hero-scroll-tab.hero-scroll-tab--inline {
-    bottom: 28vh !important;
+
+  .landing-doors.sales-doors {
+    max-width: min(92vw, 960px);
+    margin-top: var(--spacing-4);
   }
 }
 
@@ -10047,9 +9897,9 @@ body.theme-dark .hero-scroll-tab.hero-scroll-tab--inline {
    Note: Most sizing is now handled by clamp() functions above.
    These media queries handle layout adjustments only. */
 @media (max-width: 480px) {
-  /* Extra small screens: tighter spacing */
+  /* Extra small screens: tighter sides and top; the bottom keeps the 640px value */
   .landing-hero-stack {
-    padding: 0 1rem;
+    padding: 0 1rem var(--spacing-4);
   }
 }
 
@@ -11908,32 +11758,7 @@ body.theme-light .col-actions .dropdown-menu .dropdown-divider {
 }
 
 /* ============================================================
-   INTRO - opening taglines and the two entry doors
-   ============================================================ */
-
-.sales-intro {
-  text-align: center;
-}
-
-.sales-intro .sales-heading-l {
-  margin-bottom: var(--spacing-2);
-}
-
-.sales-intro-sub {
-  font-size: var(--font-size-h4);
-  color: var(--text-muted);
-  line-height: var(--line-height-body);
-  margin: 0 auto;
-  max-width: 640px;
-}
-
-/* Doors read left-aligned even under the centred intro heading */
-.sales-intro .sales-doors {
-  text-align: left;
-}
-
-/* ============================================================
-   CLOSE - the two doors and a feedback line
+   DOORS - the two entry doors (hero and close) and a feedback line
    ============================================================ */
 
 .sales-doors {

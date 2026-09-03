@@ -476,8 +476,13 @@ body.theme-light .landing-page .header {
   box-shadow: none;
 }
 
-/* Landing: main bottom padding left a transparent strip above the footer; fixed canvas showed through */
+/* Landing is full-bleed: the global .main vertical padding (spacing-8) leaves a
+   band at each edge where the white landing wrapper stops and the App's cream
+   background shows through as a darker beige strip. Zero both edges so the
+   wrapper reaches the very top and bottom.
+   (Bottom also stopped the fixed dark-mode canvas showing through above the footer.) */
 body.landing-page .main {
+  padding-top: 0;
   padding-bottom: 0;
 }
 

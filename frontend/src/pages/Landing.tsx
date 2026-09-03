@@ -1,26 +1,46 @@
-import React, { useState, memo, useEffect, useRef } from 'react';
-import { demoLogin, demoAdminLogin, demoSuperadminLogin, oidcLogin } from '../api/client';
+import React, { useState, memo, useEffect } from 'react';
+import { oidcLogin } from '../api/client';
 import OrganicNeuralBackground from '../components/OrganicNeuralBackground';
-import StaticNeuralBackground from '../components/StaticNeuralBackground';
 import { useTheme } from '../contexts/ThemeContext';
 import SalesSections from '../components/SalesSections';
+import { DoorCard, OPENING_DOORS } from '../components/DoorCard';
 
 /**
  * Landing Page Component - Adaptavist Cortex
- * 
- * Premium, immersive design with:
- * - Full-screen neural cloud background
- * - Responsive typography lockup
- * - Glassmorphism UI elements
- * 
- * All styles now use CSS classes from _components.css for proper theming.
+ *
+ * Rendered only while signed out (Home.tsx), so its whole audience is cold or
+ * returning-but-signed-out. The first viewport therefore has to answer, in
+ * order: what is this, is it for me, what do I do. The lockup answers the
+ * first, the proposition the second, and the two doors the third. Nothing a
+ * cold visitor needs sits behind a scroll.
+ *
+ * Full-screen neural cloud background, responsive typography lockup, glass UI.
+ * All styles use CSS classes from _components.css for proper theming.
  */
+
+/**
+ * The hero copy, line by line. Two hammers, then what Cortex is and the two
+ * things it is for, then the tagline it always had, now with a reason above
+ * it. Pinned by literal in Landing.test.tsx so it cannot drift back into a
+ * mood line that tells a cold visitor nothing.
+ */
+const HERO_HAMMERS: ReadonlyArray<string> = [
+  'Building new things is hard.',
+  'Building the right things is harder.',
+];
+
+const HERO_FIND_OUT: ReadonlyArray<string> = [
+  'Cortex is where we find out.',
+  'Where we ask the people who’ll use it.',
+  'Where you say what you actually think.',
+];
+
+const HERO_TAGLINE = 'Our collective intelligence';
 
 const Landing: React.FC = memo(() => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
-  const salesRef = useRef<HTMLDivElement>(null);
-  
+
   // Add landing-page class to body for header transparency
   useEffect(() => {
     document.body.classList.add('landing-page');
@@ -29,140 +49,103 @@ const Landing: React.FC = memo(() => {
     };
   }, []);
 
-  const [loginLoading, setLoginLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-
-  // Scroll to sales sections with motion preference support
-  const handleScrollToSales = () => {
-    if (salesRef.current) {
-      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      salesRef.current.scrollIntoView({ 
-        behavior: prefersReducedMotion ? 'auto' : 'smooth', 
-        block: 'start' 
-      });
-    }
-  };
-
-  const handleDemoLogin = () => {
-    setLoginLoading(true);
-    demoLogin();
-  };
-
-  const handleDemoAdminLogin = () => {
-    setLoginLoading(true);
-    demoAdminLogin();
-  };
-
-  const handleDemoSuperadminLogin = () => {
-    setLoginLoading(true);
-    demoSuperadminLogin();
-  };
 
   const handleLogin = () => {
     setGoogleLoading(true);
     oidcLogin();
   };
 
-  const isLoading = googleLoading || loginLoading;
+  const isLoading = googleLoading;
 
   return (
     <div className="landing-page-wrapper">
-      {/* Conditional Background */}
-      {isDark ? <OrganicNeuralBackground /> : <StaticNeuralBackground />}
-      
+      {/* Dark mode keeps the animated node field, full-screen. Light mode's
+          equivalent is a compact static image anchored to the text column
+          below, not a full-viewport background - see landing-node-graphic. */}
+      {isDark && <OrganicNeuralBackground />}
+
       {/* Main Layout Container - Full-screen Flexbox */}
       <div className="landing-layout-container">
         {/* Top Spacer - for navbar clearance */}
         <div style={{ flexShrink: 0, height: '1px' }} />
 
-        {/* Hero Stack - Optical Center */}
+        {/* Hero Stack - lockup and proposition */}
         <div className="landing-hero-stack">
           {/* Shadow Shield - tight behind text only */}
           <div className="landing-shadow-shield" />
-          
+
+          {/* Light mode only: a compact irregular node-blob, sitting beside
+              the text and above the doors - a metaphor for the company
+              (many connected people), not a decorative field. Anchored to
+              this column so it stays "beside the text" regardless of the
+              text's own height. */}
+          {!isDark && (
+            <img
+              // Cache-bust on every regeneration - the filename is stable but
+              // the content isn't, and this asset has already been served
+              // stale from a browser cache once.
+              src="/images/landing-network-static.svg?v=9"
+              alt=""
+              aria-hidden="true"
+              className="landing-node-graphic"
+            />
+          )}
+
           {/* Eyebrow */}
           <span className="landing-parent-brand">ADAPTAVIST</span>
-          
+
           {/* Hero Title */}
-          <h1 className="landing-product-name">Cortex</h1>
-          
-          {/* Tagline */}
-          <p className="landing-tagline">Collective Intelligence</p>
+          <h1 className="landing-product-name">
+            Cortex
+            <span className="landing-beta-badge">Beta v1</span>
+          </h1>
 
-          {/* CTA Button - "Power" solid orange variant */}
-          <button 
-            onClick={handleLogin}
-            className={`btn-power ${isLoading ? 'disabled' : ''}`}
-            style={{ marginTop: '2.5rem' }}
-            disabled={isLoading}
-            aria-busy={isLoading}
-            aria-label={googleLoading ? "Connecting..." : "Access Cortex"}
-          >
-            {googleLoading ? (
-              <span className="d-flex align-items-center gap-2">
-                <span className="spinner-border spinner-border-sm" aria-hidden="true" />
-                Connecting...
-              </span>
-            ) : (
-              <>
-                Access Cortex
-                {/* Arrow Right Icon */}
-                <span className="btn-arrow" aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </span>
-              </>
-            )}
-          </button>
-
-          {/* Hero Scroll Tab - Inside hero stack for flow layout on smaller screens */}
-          <button
-            type="button"
-            className="hero-scroll-tab hero-scroll-tab--inline"
-            onClick={handleScrollToSales}
-            aria-label="Scroll to learn how Cortex works"
-          >
-            <span className="hero-scroll-tab__label">New to Cortex?</span>
-            <span className="hero-scroll-tab__action">See how it works</span>
-            <span className="hero-scroll-tab__arrow" aria-hidden="true">↓</span>
-          </button>
-
+          {/* Proposition - each line its own line, on purpose */}
+          <div className="landing-proposition">
+            <p className="landing-hammers">
+              {HERO_HAMMERS.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </p>
+            <p className="landing-find-out">
+              {HERO_FIND_OUT.map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </p>
+            <p className="landing-tagline">{HERO_TAGLINE}</p>
+          </div>
         </div>
 
-        {/* Demo Footer - only when VITE_SHOW_DEMO_LOGIN=true or in development */}
-        {(import.meta.env.DEV || import.meta.env.VITE_SHOW_DEMO_LOGIN === 'true') && (
-          <div className="landing-demo-footer">
-            <span className="landing-demo-label">DEMO ACCESS</span>
-            <div className="landing-demo-pills">
-              <button 
-                onClick={handleDemoLogin}
-                className="landing-demo-pill"
-                disabled={isLoading}
-              >
-                User
-              </button>
-              <button 
-                onClick={handleDemoAdminLogin}
-                className="landing-demo-pill"
-                disabled={isLoading}
-              >
-                Admin
-              </button>
-              <button 
-                onClick={handleDemoSuperadminLogin}
-                className="landing-demo-pill"
-                disabled={isLoading}
-              >
-                Superadmin
-              </button>
-            </div>
-          </div>
-        )}
+        {/* The two doors, in the fold. Signed out, both lead to sign-in. */}
+        <div className="landing-doors sales-doors">
+          {OPENING_DOORS.map((door) => (
+            <DoorCard key={door.cta} door={door} onAccessCortex={handleLogin} isLoading={isLoading} />
+          ))}
+        </div>
+
+        {/* Quiet route in for anyone who already knows which door is theirs */}
+        <button
+          type="button"
+          className="landing-signin-link"
+          onClick={handleLogin}
+          disabled={isLoading}
+          aria-busy={isLoading}
+        >
+          {googleLoading ? (
+            <span className="d-flex align-items-center gap-2">
+              <span className="spinner-border spinner-border-sm" aria-hidden="true" />
+              Connecting...
+            </span>
+          ) : (
+            'Already using Cortex? Sign in'
+          )}
+        </button>
+
       </div>
 
-      {/* Sales Sections - Below the fold */}
-      <div id="cortex-sales" ref={salesRef}>
+      {/* Narrative - below the fold */}
+      <div id="cortex-sales">
         <SalesSections onAccessCortex={handleLogin} isLoading={isLoading} />
       </div>
     </div>
