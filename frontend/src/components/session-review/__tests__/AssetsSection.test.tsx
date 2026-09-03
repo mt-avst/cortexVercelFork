@@ -50,6 +50,17 @@ describe('AssetsSection', () => {
     expect(screen.getByText('recording.webm')).toBeInTheDocument();
   });
 
+  it('sizes the video to its own resolution once metadata loads, capped by the available width', () => {
+    const { container } = render(<AssetsSection assets={[asset()]} />);
+    const video = container.querySelector('video') as HTMLVideoElement;
+    expect(video).toHaveAttribute('preload', 'metadata');
+
+    Object.defineProperty(video, 'videoWidth', { value: 1920, configurable: true });
+    Object.defineProperty(video.parentElement as HTMLElement, 'clientWidth', { value: 800, configurable: true });
+    fireEvent.loadedMetadata(video);
+    expect(video.style.width).toBe('800px');
+  });
+
   it('re-fetches outputs once on a playback error, then offers a manual reload', () => {
     const onRefresh = vi.fn();
     const { container } = render(

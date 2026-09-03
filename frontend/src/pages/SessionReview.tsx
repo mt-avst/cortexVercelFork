@@ -135,6 +135,10 @@ const SessionReviewPage: React.FC = () => {
           outputs={outputs}
           onSelectAttempt={setSelectedAttempt}
         />
+        <AssetsSection
+          assets={outputs.assets}
+          onRefresh={() => loadOutputs(selectedAttempt)}
+        />
         {/* The terminal `end` marker is appended automatically and is never shown
             to the participant, so showing it to the reviewer invents a fifth
             task that nobody was asked to do - and then reports it as having no
@@ -145,10 +149,6 @@ const SessionReviewPage: React.FC = () => {
           transcript={outputs.transcript}
           transcriptStatus={outputs.session.transcript_status}
           transcriptFailureMessage={outputs.session.transcript_failure_message}
-          onRefresh={() => loadOutputs(selectedAttempt)}
-        />
-        <AssetsSection
-          assets={outputs.assets}
           onRefresh={() => loadOutputs(selectedAttempt)}
         />
       </div>
