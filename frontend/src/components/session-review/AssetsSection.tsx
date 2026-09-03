@@ -53,6 +53,18 @@ const AssetsSection: React.FC<{
     onRefresh?.();
   };
 
+  // Default the player to the recording's own resolution rather than an
+  // arbitrary small cap - scaled down only if it wouldn't fit the card.
+  // preload="metadata" fetches just the header (duration/dimensions), not
+  // the full file, so this sizing is already correct before anyone presses
+  // play.
+  const handleLoadedMetadata = (event: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = event.currentTarget;
+    const container = video.parentElement;
+    if (!video.videoWidth || !container) return;
+    video.style.width = `${Math.min(video.videoWidth, container.clientWidth)}px`;
+  };
+
   return (
     <div className="cortex-analytics-card" style={{ marginBottom: '24px' }}>
       <div className="cortex-chart-header">
@@ -86,10 +98,11 @@ const AssetsSection: React.FC<{
                     <video
                       key={asset.media_url as string}
                       controls
-                      preload="none"
+                      preload="metadata"
                       src={asset.media_url as string}
                       onError={() => handleError(asset.asset_id)}
-                      style={{ width: '100%', maxWidth: '720px', borderRadius: '6px' }}
+                      onLoadedMetadata={handleLoadedMetadata}
+                      style={{ width: '100%', maxWidth: '100%', borderRadius: '6px' }}
                     />
                   ) : (
                     <audio
