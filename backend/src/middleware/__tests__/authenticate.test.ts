@@ -217,6 +217,76 @@ describe('Authentication Middleware', () => {
     });
   });
 
+  describe('CORTEX_BETA_ALL_ADMIN (temporary beta switch)', () => {
+    const KEY = 'CORTEX_BETA_ALL_ADMIN';
+    const DOMAINS = 'CORTEX_BETA_ALL_ADMIN_DOMAINS';
+    const originalKey = process.env[KEY];
+    const originalDomains = process.env[DOMAINS];
+
+    afterEach(() => {
+      if (originalKey === undefined) delete process.env[KEY];
+      else process.env[KEY] = originalKey;
+      if (originalDomains === undefined) delete process.env[DOMAINS];
+      else process.env[DOMAINS] = originalDomains;
+    });
+
+    it('admits an allow-listed employee through requireAdmin when on, lifted to researcher_admin', async () => {
+      process.env[KEY] = 'true';
+      delete process.env[DOMAINS]; // default allow-list is adaptavist.com
+      const employee = generateMockUser({ role: 'employee', email: 'beta@adaptavist.com' });
+      mockReq.session!.user = employee;
+      dbReturnsRole('employee');
+
+      await requireAdmin(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockNext).toHaveBeenCalled();
+      expect(mockRes.status).not.toHaveBeenCalled();
+      expect(mockReq.user!.role).toBe('researcher_admin');
+    });
+
+    it('STILL refuses a lifted employee at requireSuperadmin when on', async () => {
+      // The whole point of the switch: admin, never superadmin. A lifted
+      // employee reads as researcher_admin, which the superadmin gate rejects.
+      process.env[KEY] = 'true';
+      delete process.env[DOMAINS];
+      const employee = generateMockUser({ role: 'employee', email: 'beta@adaptavist.com' });
+      mockReq.session!.user = employee;
+      dbReturnsRole('employee');
+
+      await requireSuperadmin(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Superadmin access required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('does NOT lift an employee whose email is outside the allow-list, even when on', async () => {
+      process.env[KEY] = 'true';
+      delete process.env[DOMAINS];
+      const outsider = generateMockUser({ role: 'employee', email: 'stranger@gmail.com' });
+      mockReq.session!.user = outsider;
+      dbReturnsRole('employee');
+
+      await requireAdmin(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Admin access required' });
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it('CONTROL: with the switch off, the same allow-listed employee is refused by requireAdmin', async () => {
+      delete process.env[KEY];
+      const employee = generateMockUser({ role: 'employee', email: 'beta@adaptavist.com' });
+      mockReq.session!.user = employee;
+      dbReturnsRole('employee');
+
+      await requireAdmin(mockReq as Request, mockRes as Response, mockNext);
+
+      expect(mockRes.status).toHaveBeenCalledWith(403);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+  });
+
   describe('optionalAuth', () => {
     it('should attach user and call next() when user is authenticated', () => {
       const user = generateMockUser();

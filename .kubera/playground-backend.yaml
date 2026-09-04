@@ -9,6 +9,12 @@ service:
 config:
   data:
     NODE_ENV: production
+    # TEMPORARY (internal beta, 2026-09): elevate every signed-in adaptavist.com
+    # employee to admin for the beta cohort. Off by default in code; this line
+    # turns it on for the playground only. Superadmin is unaffected (Nick stays
+    # the only one via BOOTSTRAP_SUPERADMIN_EMAILS below). REMOVE THIS LINE at
+    # go-live to revert everyone to their real role. See backend betaAllAdmin.ts.
+    CORTEX_BETA_ALL_ADMIN: "true"
     # Verify the database server certificate on every backend pool AND the
     # deploy initContainer's migration runner. The trust store is baked into
     # the image at backend/certs/rds-global-bundle.pem (the RDS roots are

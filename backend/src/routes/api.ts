@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/authenticate';
 import { pool } from '../config';
+import { resolveEffectiveRole } from '../config/betaAllAdmin';
 import { asyncHandler } from '../utils/errorHandler';
 import opportunitiesRouter from './opportunities';
 import sessionsRouter from './sessions';
@@ -20,8 +21,10 @@ import sessionOutputsRouter from './session-outputs';
 const router: Router = Router();
 
 // GET /api/me - Get current user information
+// Reports the request-effective role so the client renders admin navigation for
+// beta-lifted employees (CORTEX_BETA_ALL_ADMIN). Identity when the switch is off.
 router.get('/me', requireAuth, (req, res) => {
-  res.json(req.user);
+  res.json({ ...req.user, role: resolveEffectiveRole(req.user!.role, req.user!.email) });
 });
 
 // GET /api/me/session-events - Get the current user's own FirstHand session events

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { SessionUser, isAdminRole } from '../types';
 import { pool } from '../config';
+import { resolveEffectiveRole } from '../config/betaAllAdmin';
 import { logger } from '../utils/logger';
 
 // Note: Express Request extension is defined in ../types/index.ts
@@ -60,7 +61,11 @@ async function currentDbRole(req: Request, res: Response): Promise<AdminRole | n
       res.status(401).json({ error: 'Authentication required' });
       return null;
     }
-    return result.rows[0].role as AdminRole;
+    // Beta switch (temporary): lift an allow-listed `employee` to
+    // `researcher_admin` when CORTEX_BETA_ALL_ADMIN is on. Bounded by email
+    // domain and never produces `superadmin`, so the superadmin gate below
+    // still refuses a lifted employee. The email is the one verified at login.
+    return resolveEffectiveRole(result.rows[0].role as AdminRole, req.session!.user!.email);
   } catch (error) {
     logger.error('Failed to verify current role for admin gate', { userId, error });
     res.status(503).json({ error: 'Authorization check failed' });

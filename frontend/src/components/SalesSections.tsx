@@ -410,11 +410,9 @@ const FinalCtaSection: React.FC<SectionCtaProps> = ({ onAccessCortex, isLoading 
           <DoorCard key={door.cta} door={door} onAccessCortex={onAccessCortex} isLoading={isLoading} />
         ))}
       </div>
-      <p className="sales-micro-copy">
-        <a className="sales-feedback-link" href="mailto:cortex@adaptavist.com?subject=Cortex%20landing%20page%20feedback">
-          Tell us what&rsquo;s wrong with this page
-        </a>
-      </p>
+      {/* Feedback prompt intentionally omitted here: the global FeedbackFooter
+          (App.tsx) already renders one on every page, and two stacked at the
+          foot of the landing read as a duplicate. */}
     </div>
   </section>
 );
